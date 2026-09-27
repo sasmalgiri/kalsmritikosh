@@ -47,6 +47,45 @@ public struct TopicProsePolisher: Sendable {
         return true
     }
 
+    // MARK: - P1.15 cost bounds
+
+    /// Wall-clock budget for ONE topic build's polish calls. Topics are
+    /// polished most-evidenced first; past the budget a topic keeps its
+    /// deterministic spine (or its still-faithful earlier polish) until the
+    /// next build. Measured: ~70 s per call in the test host, 79 topics.
+    public static let buildBudgetSeconds: Double = 240
+    /// One polish call may not hold the build longer than this.
+    public static let callDeadlineSeconds: Double = 60
+
+    /// P1.15 — may an EARLIER polish stand for this spine without a new call?
+    /// Yes when it passes the fact guard against the NEW spine and names no
+    /// proper noun the spine lacks (the guard alone allows extra words, so a
+    /// polish of an older, larger spine could still mention a removed party).
+    public nonisolated static func stillFaithful(stored: String, spine: String) -> Bool {
+        guard stored != spine, preservesFacts(spine: spine, candidate: stored) else { return false }
+        let spineLower = spine.lowercased()
+        for sentence in stored.split(whereSeparator: { ".!?\n".contains($0) }) {
+            let words = sentence.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
+            for (i, w) in words.enumerated() where w.count >= 3 {
+                guard let first = w.first, first.isUppercase else { continue }
+                let lower = w.lowercased()
+                // A sentence's first word is capitalised by grammar — pass it
+                // only when it is an ordinary opener, never a name.
+                if i == 0, sentenceOpeners.contains(lower) { continue }
+                if !spineLower.contains(lower) { return false }
+            }
+        }
+        return true
+    }
+
+    /// Words prose starts sentences with that are not names.
+    static let sentenceOpeners: Set<String> = [
+        "the", "this", "these", "that", "those", "its", "their", "his", "her", "they", "there",
+        "it", "in", "on", "at", "by", "for", "from", "as", "after", "before", "during", "when",
+        "while", "since", "with", "both", "also", "however", "then", "later", "finally", "between",
+        "over", "under", "each", "all", "one", "two", "three", "most", "some", "an", "a", "following",
+    ]
+
     nonisolated static func numberRuns(_ text: String) -> Set<String> {
         var out: Set<String> = []; var cur = ""
         for ch in text {

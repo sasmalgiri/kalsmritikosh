@@ -211,15 +211,26 @@ extension AppState {
             Notes:
             \(spine)
             """
-            return try? await provider.generate(
-                prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0.2))
+            // P1.15 — one call may not hold the build (see Deadline.swift).
+            return await withDeadline(seconds: TopicProsePolisher.callDeadlineSeconds) {
+                try? await provider.generate(
+                    prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0.2))
+            }
         })
 
         var built = 0
         var polishedCount = 0
+        var reusedCount = 0
+        var overBudgetCount = 0
         var builtSubjects: Set<String> = []
         var eventsByObject: [UUID: [Event]] = [:]
-        for (subject, facts) in factsBySubject {
+        // P1.15 — polish is the build's only costly step (~70 s a call): the
+        // most-evidenced topics go first and the whole build shares one budget.
+        let polishStarted = Date()
+        let ordered = factsBySubject.sorted {
+            $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key < $1.key
+        }
+        for (subject, facts) in ordered {
             // The subject's documents: where its facts were read from, plus (for
             // a resolved matter) every document the spine placed in its family.
             var objects: [UUID] = []
@@ -252,9 +263,31 @@ extension AppState {
             let spineTopic = TopicSpineBuilder.build(
                 subjectIdentifier: subject, facts: facts, events: subjectEvents,
                 factSourceObjectIDs: objects, now: now)
-            let polished = await polisher.polish(spine: spineTopic.narrative)
+            // P1.15 — an earlier polish that still states exactly this spine's
+            // facts stands without a call; otherwise polish within the budget.
+            let polished: String
+            let topicStarted = Date()
+            var how = "spine"
+            // Reuse only while AI prose is allowed — switching AI off must not
+            // keep showing earlier AI prose.
+            if polishEnabled, FeatureFlags.aiRegimeValue().allowsAI,
+               let stored = try? await memoryRepo.current(forSubject: spineTopic.subjectKind,
+                                                          identifier: spineTopic.subjectIdentifier)?.narrative,
+               TopicProsePolisher.stillFaithful(stored: stored, spine: spineTopic.narrative) {
+                polished = stored
+                reusedCount += 1
+                how = "reused"
+            } else if polishEnabled, caps != nil,
+                      Date().timeIntervalSince(polishStarted) >= TopicProsePolisher.buildBudgetSeconds {
+                polished = spineTopic.narrative
+                overBudgetCount += 1
+                how = "over budget"
+            } else {
+                polished = await polisher.polish(spine: spineTopic.narrative)
+                if polished != spineTopic.narrative { polishedCount += 1; how = "polished" }
+            }
             let didPolish = (polished != spineTopic.narrative)
-            if didPolish { polishedCount += 1 }
+            KalsmritikoshLog.app.debug("Topic polish: \(how, privacy: .public) in \(String(format: "%.1f", Date().timeIntervalSince(topicStarted)), privacy: .public)s")
             let topic: MemoryObject = didPolish ? MemoryObject(
                 id: spineTopic.id, subjectKind: spineTopic.subjectKind,
                 subjectIdentifier: spineTopic.subjectIdentifier,
@@ -272,8 +305,8 @@ extension AppState {
         if let removed = try? await memoryRepo.deleteTopicsNotIn(subjectIdentifiers: builtSubjects), removed > 0 {
             KalsmritikoshLog.app.info("Topic build: pruned \(removed, privacy: .public) stale topic(s)")
         }
-        lastTopicBuild = (built, polishedCount)
-        KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics, \(polishedCount, privacy: .public) AI-polished, from \(factsBySubject.count, privacy: .public) subjects")
+        lastTopicBuild = (built, polishedCount + reusedCount)
+        KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics, \(polishedCount, privacy: .public) AI-polished, \(reusedCount, privacy: .public) earlier polish reused, \(overBudgetCount, privacy: .public) past the \(Int(TopicProsePolisher.buildBudgetSeconds), privacy: .public)s budget, polish \(Int(Date().timeIntervalSince(polishStarted)), privacy: .public)s, from \(factsBySubject.count, privacy: .public) subjects")
         return built
     }
 

@@ -198,3 +198,18 @@ struct TopicUbiquitousTermTests {
         #expect(total == 24, "the photo mail's lone fact joined no matter (it stays in the ledger)")
     }
 }
+
+@Suite("P1.15 — topic polish is reused when still faithful")
+struct TopicPolishReuseTests {
+    @Test("An earlier polish stands only while it states exactly the current spine's facts")
+    func stillFaithful() {
+        let spine = "Topic: Patent 555489\nApplicant: Shirshendu Sasmal\nGranted 28 November 2024 via Khurana."
+        let polish = "The patent 555489 was filed by Shirshendu Sasmal and granted on 28 November 2024 via Khurana."
+        #expect(TopicProsePolisher.stillFaithful(stored: polish, spine: spine))
+        #expect(!TopicProsePolisher.stillFaithful(stored: spine, spine: spine), "the spine itself is not a polish")
+        let newerSpine = spine + "\nRenewal fee paid 2025."
+        #expect(!TopicProsePolisher.stillFaithful(stored: polish, spine: newerSpine), "a new fact needs a new polish")
+        let withRemovedParty = polish + " Gopinath advised on it."
+        #expect(!TopicProsePolisher.stillFaithful(stored: withRemovedParty, spine: spine), "names a party the spine no longer has")
+    }
+}
