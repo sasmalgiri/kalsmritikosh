@@ -397,7 +397,16 @@ public struct EntityQualityGate: Sendable {
                   let kind = Entity.Kind(rawValue: kindStr)
             else { continue }
             let entity = Entity(kind: kind, value: value, sourceObjectID: UUID())
-            if let reason = classify(entity) {
+            var reason = classify(entity)
+            // P1.6 — a BARE digit run passes the shape test but is undecidable
+            // by shape ("785718091" is a phone or a record id). Context decides:
+            // it stays a phone only when a phone label introduces it somewhere
+            // in the text it came from.
+            if reason == nil, kind == .phoneNumber, Self.isBareDigitRun(value),
+               try await !Self.anySourceLabelsPhone(entityID: id, value: value, in: database) {
+                reason = "unlabelled-digit-run"
+            }
+            if let reason {
                 if userRestored.contains(id) { skipped += 1; continue }
                 toRetire.append((id, value, normalized, reason))
             }
@@ -457,6 +466,57 @@ public struct EntityQualityGate: Sendable {
             totalEntitiesScanned: rows.count,
             skippedUserRestored: skipped
         )
+    }
+
+    // MARK: - P1.6 phone context
+
+    /// Digits only (no +, space, dash or brackets) — the undecidable shape.
+    public nonisolated static func isBareDigitRun(_ raw: String) -> Bool {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !t.isEmpty && t.allSatisfy(\.isNumber)
+    }
+
+    nonisolated static let phoneLabel: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?:^|[^a-z])(?:phone|ph|tel|telephone|mob|mobile|cell|cellphone|contact|fax|call|whatsapp|landline|helpline|m|t|p)\.?\s*(?:no\.?|number|num|#)?\s*[:=\-]?\s*(?:\+?\d[\d\s\-()]*[,/;]\s*)*$"#,
+        options: [.caseInsensitive])
+
+    /// True when some occurrence of `value` in `text` is introduced by a phone
+    /// label ("Mob: 785718091", "Phone No. 98300…, 785718091").
+    public nonisolated static func phoneLabelPrecedes(_ value: String, in text: String) -> Bool {
+        guard let regex = phoneLabel, !value.isEmpty else { return false }
+        let ns = text as NSString
+        var search = NSRange(location: 0, length: ns.length)
+        while true {
+            let hit = ns.range(of: value, options: [], range: search)
+            guard hit.location != NSNotFound else { return false }
+            // Whole digit run only: "785718091" inside "1785718091" is not it.
+            let before = hit.location > 0 ? ns.substring(with: NSRange(location: hit.location - 1, length: 1)) : " "
+            let afterIdx = hit.location + hit.length
+            let after = afterIdx < ns.length ? ns.substring(with: NSRange(location: afterIdx, length: 1)) : " "
+            if !(before.first?.isNumber ?? false), !(after.first?.isNumber ?? false) {
+                let start = max(0, hit.location - 40)
+                let window = ns.substring(with: NSRange(location: start, length: hit.location - start))
+                if regex.firstMatch(in: window, range: NSRange(location: 0, length: (window as NSString).length)) != nil {
+                    return true
+                }
+            }
+            let next = hit.location + max(hit.length, 1)
+            guard next < ns.length else { return false }
+            search = NSRange(location: next, length: ns.length - next)
+        }
+    }
+
+    /// Any document the entity was mentioned in labels it as a phone.
+    nonisolated static func anySourceLabelsPhone(entityID: UUID, value: String, in database: Database) async throws -> Bool {
+        let rows = try await database.query("""
+        SELECT ko.content FROM knowledge_objects ko
+        WHERE ko.id IN (SELECT source_object_id FROM entities WHERE id = ?
+                        UNION SELECT source_object_id FROM entity_mentions WHERE entity_id = ?);
+        """, [.uuid(entityID), .uuid(entityID)])
+        for r in rows {
+            if let text = r.string(0), phoneLabelPrecedes(value, in: text) { return true }
+        }
+        return false
     }
 
     // MARK: - Heuristics
