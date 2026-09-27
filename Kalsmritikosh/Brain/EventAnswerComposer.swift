@@ -245,7 +245,7 @@ public enum EventAnswerComposer {
         let about = subjectLabel.map { " for \($0)" } ?? ""
         var lines = ["\(distinct.count) \(noun)-related record\(distinct.count == 1 ? "" : "s")\(about):"]
         // "When was ‹X› granted?" — lead with the one dated happening itself.
-        if question.lowercased().hasPrefix("when"),
+        if Self.asksWhen(question),
            let first = distinct.first(where: { !isNotice($0.title) && !isCommunicationKind($0) }) {
             lines.insert("\(first.title) on \(Self.dateFormatter.string(from: first.date)).\n", at: 0)
         }
@@ -582,4 +582,12 @@ public enum EventAnswerComposer {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    /// "When was ‹X› granted?", "On which date was ‹X› granted?", "What date
+    /// was …", "On what day …" — the question asks for the DAY of a happening.
+    nonisolated static func asksWhen(_ question: String) -> Bool {
+        let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.hasPrefix("when") { return true }
+        return q.range(of: #"^(on )?(which|what) (date|day)\b"#, options: .regularExpression) != nil
+    }
 }

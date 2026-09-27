@@ -157,3 +157,16 @@ struct StatusAnswerTests {
         #expect(!when.primaryText.contains("Archived entry"))
     }
 }
+
+@Suite("P4.4 — date questions are 'when' questions")
+struct WhenPhrasingTests {
+    @Test("'On which date was …' asks for the day, as 'When was …' does")
+    func phrasing() {
+        for q in ["When was the patent granted?", "On which date was the patent granted", "What date was the hearing?", "on what day was it filed"] {
+            #expect(EventAnswerComposer.asksWhen(q), "\(q)")
+        }
+        for q in ["What happened at the hearing?", "Which dates matter?", "How many hearings were there?"] {
+            #expect(!EventAnswerComposer.asksWhen(q), "\(q)")
+        }
+    }
+}
