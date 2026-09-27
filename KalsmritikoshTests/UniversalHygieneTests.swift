@@ -105,5 +105,11 @@ struct TextSignatureSniffTests {
         #expect(SourceType.sniffTextSignature(head("Dear Sir,\nPlease find the fee structure.")) == .txt)
         #expect(SourceType.sniffTextSignature(Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x00, 0x01])) == nil, "JPEG is for the magic sniffer")
         #expect(SourceType.sniffTextSignature(Data()) == nil)
+        // P1.7 — generic RFC 822 header blocks (owner copy: returned originals, delivery reports)
+        #expect(SourceType.sniffTextSignature(head("DKIM-Signature: v=1; a=rsa-sha256;\r\n        d=gmail.com\r\nX-Received: by 10.1\r\nSubject: resume\r\n")) == .eml)
+        #expect(SourceType.sniffTextSignature(head("Reporting-MTA: dns; googlemail.com\r\nArrival-Date: Sat, 12 May 2018\r\n\r\nFinal-Recipient: rfc822; a@b.com\r\nAction: failed\r\nStatus: 5.1.1\r\n")) == .eml)
+        // …but a form of labelled lines is not a message, and prose is not either
+        #expect(SourceType.sniffTextSignature(head("Name: Jane Roe\nAge: 30\nCity: Pune\nPhone: 98765\n")) == .txt)
+        #expect(SourceType.sniffTextSignature(head("Note: see below\nDear Sir, the fee is due.")) == .txt)
     }
 }

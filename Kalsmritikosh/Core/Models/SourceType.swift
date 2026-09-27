@@ -372,12 +372,43 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if lower.hasPrefix("from ") && lower.contains("@") { return .mbox }
         if lower.hasPrefix("return-path:") || lower.hasPrefix("received:") || lower.hasPrefix("delivered-to:")
             || lower.hasPrefix("from:") || lower.hasPrefix("mime-version:") { return .eml }
+        // P1.7 — any RFC 822-style HEADER BLOCK is a message: a returned
+        // original opens with "DKIM-Signature:" or "ARC-Seal:", a delivery
+        // report with "Reporting-MTA:". Generic test: the opening lines are
+        // mostly `Name: value` and include a known mail header.
+        if Self.looksLikeMailHeaderBlock(String(trimmed.prefix(2_048))) { return .eml }
         if lower.hasPrefix("{") || lower.hasPrefix("[") { return .json }
         // Plain text: no NUL bytes, almost no control characters.
         let nulls = bytes.filter { $0 == 0 }.count
         let controls = bytes.filter { $0 < 0x09 || ($0 > 0x0D && $0 < 0x20) }.count
         guard nulls == 0, Double(controls) / Double(max(bytes.count, 1)) < 0.02 else { return nil }
         return .txt
+    }
+
+    nonisolated static let mailHeaderNames: Set<String> = [
+        "received", "from", "to", "cc", "subject", "date", "message-id", "dkim-signature",
+        "arc-seal", "arc-message-signature", "authentication-results", "return-path",
+        "reporting-mta", "final-recipient", "action", "status", "diagnostic-code",
+        "content-type", "mime-version", "x-received", "x-google-smtp-source",
+    ]
+
+    /// ≥3 of the first 12 unfolded lines are `Name: value` headers, the first
+    /// line is one, and at least one name is a known mail header.
+    nonisolated static func looksLikeMailHeaderBlock(_ text: String) -> Bool {
+        let lines = text.replacingOccurrences(of: "\r", with: "")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !($0.first?.isWhitespace ?? false) }   // skip folded continuations
+            .prefix(12)
+        func headerName(_ line: Substring) -> String? {
+            guard let colon = line.firstIndex(of: ":") else { return nil }
+            let name = line[..<colon]
+            guard !name.isEmpty, name.count <= 40,
+                  name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" }) else { return nil }
+            return name.lowercased()
+        }
+        guard let first = lines.first, headerName(first) != nil else { return false }
+        let names = lines.compactMap(headerName)
+        return names.count >= 3 && names.contains(where: mailHeaderNames.contains)
     }
 
     /// USF-M2 §1 — compound-container disambiguation. A DOCX/XLSX/PPTX/ODT/ODS/EPUB is itself a ZIP,

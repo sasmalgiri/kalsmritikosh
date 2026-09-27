@@ -83,6 +83,8 @@ public struct DrainReceipt: Sendable {
     /// never reviewed/used, else marked missingEvidence (never destroyed).
     public var orphanClaimsRemoved = 0
     public var orphanClaimsMarked = 0
+    /// P1.7 — 'unknown'-typed documents re-typed from their stored text.
+    public var unknownRetyped = 0
     public var eventsDeleted = 0
     public var eventsWritten = 0
     public var milestonesRebuilt = 0
@@ -108,6 +110,7 @@ public struct DrainReceipt: Sendable {
           events: KOs rewritten    \(eventKOsRewritten) (deleted \(eventsDeleted) stale → wrote \(eventsWritten) v1)
           milestones rebuilt:      \(milestonesRebuilt)
           orphan claims:           \(orphanClaimsRemoved) removed · \(orphanClaimsMarked) marked missing-evidence
+          unknown re-typed:        \(unknownRetyped) (type only — block structure needs the original bytes)
           document_class stamped:  \(documentClassStamped)
           entities stamped v1:     \(entitiesStampedV1)
           untouched: chunks \(chunksCount.before)→\(chunksCount.after) · fts \(chunksFTSCount.before)→\(chunksFTSCount.after) · embeddings \(embeddingsCount.before)→\(embeddingsCount.after) [\(untouchedProven ? "PROVEN" : "VIOLATED — STOP")]
@@ -194,6 +197,14 @@ public final class LedgerDrainCoordinator {
         let purge = try await gate.purgeGarbage(in: database)
         receipt.entitiesRetired = purge.entitiesRetired
         receipt.memoryObjectsRetired = purge.memoryObjectsRetired
+
+        // ── pass 0 (P1.7): RE-TYPE 'unknown' documents from their stored text ─
+        // The intake text sniffer only sees NEW files; a document typed
+        // 'unknown' before it shipped (owner copy: 13 — returned messages,
+        // delivery reports, an SVG) keeps that type forever. Only the TYPE is
+        // corrected here: rebuilding blocks/participants needs the original
+        // bytes, which a drain never re-reads.
+        receipt.unknownRetyped = try await retypeUnknownDocuments()
 
         // Enumerate every KO once; passes 2/3/5 are per-KO.
         var koIDs: [KnowledgeObject.ID] = []
@@ -307,6 +318,24 @@ public final class LedgerDrainCoordinator {
         receipt.embeddingsCount.after = try await count("chunk_embeddings")
         KalsmritikoshLog.knowledge.info("DRAIN: \(receipt.renderLines(), privacy: .public)")
         return receipt
+    }
+
+    // ── pass 0 helper ────────────────────────────────────────────────────────
+
+    private func retypeUnknownDocuments() async throws -> Int {
+        let rows = try await database.query(
+            "SELECT id, substr(content, 1, 4096) FROM knowledge_objects WHERE source_type = 'unknown';", [])
+        var changed = 0
+        for r in rows {
+            guard let id = r.uuid(0), let head = r.string(1), !head.isEmpty,
+                  let sniffed = SourceType.sniffTextSignature(Data(head.utf8)),
+                  sniffed != .unknown else { continue }
+            try await database.exec(
+                "UPDATE knowledge_objects SET source_type = ? WHERE id = ? AND source_type = 'unknown';",
+                [.text(sniffed.rawValue), .uuid(id)])
+            changed += 1
+        }
+        return changed
     }
 
     // ── pass 2d helper ───────────────────────────────────────────────────────

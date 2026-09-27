@@ -100,16 +100,28 @@ public struct ChunkReindexCoordinator {
     /// stamped at the packed era so the pass is a no-op next time. Citations
     /// anchor to blocks, so a chunk rewrite loses nothing; embeddings of
     /// replaced rows are dropped (the pending queue re-embeds the new units).
+    /// Any chunk of `c.object_id` with neither a primary block nor recorded lineage.
+    static let lineagelessChunkExists = """
+        EXISTS (SELECT 1 FROM chunks y WHERE y.object_id = c.object_id AND y.evidence_block_id IS NULL
+                AND NOT EXISTS (SELECT 1 FROM chunk_blocks cb WHERE cb.chunk_id = y.id))
+        """
+
     private func packUndersized(_ receipt: inout ChunkReindexReceipt) async throws {
         let candidates = try await database.query("""
         SELECT c.object_id, COUNT(*), ko.document_class,
                (SELECT source_version_id FROM chunks x WHERE x.object_id = c.object_id AND x.source_version_id IS NOT NULL LIMIT 1)
         FROM chunks c JOIN knowledge_objects ko ON ko.id = c.object_id
         GROUP BY c.object_id
-        HAVING COUNT(*) >= 2
+        HAVING (COUNT(*) >= 2
            AND (SUM(c.evidence_block_id IS NULL) = 0
                 OR EXISTS (SELECT 1 FROM evidence_block_objects e WHERE e.knowledge_object_id = c.object_id))
-           AND MAX(COALESCE(c.chunk_version, 0)) < \(Self.packedChunkVersion);
+           AND MAX(COALESCE(c.chunk_version, 0)) < \(Self.packedChunkVersion))
+            -- P1.8: a document whose chunks carry NO lineage but which now OWNS
+            -- blocks (a mailbox thread stamped before the drain linked them) is
+            -- re-chunked whatever its stamp — the early boot pass had no blocks
+            -- to pack from and stamped it; the links arrived later.
+            OR (\(Self.lineagelessChunkExists)
+                AND EXISTS (SELECT 1 FROM evidence_block_objects e WHERE e.knowledge_object_id = c.object_id));
         """, [])
         guard !candidates.isEmpty else { return }
         let evidence = EvidenceStore(database: database)
@@ -118,6 +130,10 @@ public struct ChunkReindexCoordinator {
         for row in candidates {
             guard let objectID = row.uuid(0) else { continue }
             let before = Int(row.int(1) ?? 0)
+            let lineageless = Int((try await database.query("""
+                SELECT COUNT(*) FROM chunks y WHERE y.object_id = ? AND y.evidence_block_id IS NULL
+                AND NOT EXISTS (SELECT 1 FROM chunk_blocks cb WHERE cb.chunk_id = y.id);
+                """, [.uuid(objectID)])).first?.int(0) ?? 0) > 0
             let docClass = row.string(2).flatMap(DocumentClass.init(rawValue:))
             let sourceVersionID = row.uuid(3)
 
@@ -133,13 +149,15 @@ public struct ChunkReindexCoordinator {
                     .compactMap { $0.uuid(0) }
                 blocks = try await evidence.blocks(ids: ids)
             }
-            guard blocks.count >= 2 else {
+            guard blocks.count >= (lineageless ? 1 : 2) else {
                 try await database.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
                                         [.integer(Int64(Self.packedChunkVersion)), .uuid(objectID)])
                 continue
             }
             let packed = chunker.chunkWithLineage(objectID: objectID, blocks: blocks)
-            guard packed.chunks.count < before, !packed.chunks.isEmpty else {
+            // Replace when packing shrinks the count — or, for a document with
+            // lineage-less chunks, always: citable lineage is the point (P1.8).
+            guard (packed.chunks.count < before || lineageless), !packed.chunks.isEmpty else {
                 try await database.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
                                         [.integer(Int64(Self.packedChunkVersion)), .uuid(objectID)])
                 continue
@@ -209,6 +227,17 @@ public struct ChunkReindexCoordinator {
                 let pageNumber = row.int(4).map(Int.init)
                 let blockID = row.uuid(6)
                 let blockKind = row.string(7)
+                // P1.8 — a PACKED parent's lineage lives in chunk_blocks; the
+                // children must inherit it, matched to the blocks whose text
+                // each piece actually contains (fallback: all of the parent's).
+                let parentLineage = try await database.query("""
+                    SELECT cb.evidence_block_id, COALESCE(NULLIF(b.normalized_text, ''), b.raw_text)
+                    FROM chunk_blocks cb LEFT JOIN evidence_blocks b ON b.id = cb.evidence_block_id
+                    WHERE cb.chunk_id = ? ORDER BY cb.ordinal;
+                    """, [.uuid(id)]).compactMap { r -> (UUID, String)? in
+                        guard let bid = r.uuid(0) else { return nil }
+                        return (bid, r.string(1) ?? "")
+                    }
                 let sourceVersionID = row.uuid(8)
                 let admit = (row.int(9) ?? 1) == 1
                 let docClass = row.string(10).flatMap(DocumentClass.init(rawValue:))
@@ -236,7 +265,7 @@ public struct ChunkReindexCoordinator {
                         sourceVersionID: sourceVersionID,
                         salience: salience,
                         contextTemplateVersion: prefix == nil ? nil : ContextPrefixTemplate.currentVersion)
-                    children.append(child)
+                    children.append(child.withBlockIDs(Self.lineage(for: piece, from: parentLineage)))
                     offset += piece.count
                 }
                 // Replace: drop the parent's embedding rows + the parent, insert
@@ -261,6 +290,24 @@ public struct ChunkReindexCoordinator {
             try? await database.exec("RELEASE reindex_split;", [])
             throw error
         }
+    }
+
+    /// The parent blocks a split piece is made of: those whose opening words
+    /// appear in the piece, or whose text contains the piece's opening; when
+    /// nothing matches, every parent block (lineage is never dropped).
+    nonisolated static func lineage(for piece: String, from parent: [(UUID, String)]) -> [UUID] {
+        guard !parent.isEmpty else { return [] }
+        func norm(_ s: String) -> String {
+            s.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        }
+        let p = norm(piece)
+        let pieceHead = String(p.prefix(60))
+        let matched = parent.filter { (_, text) in
+            let t = norm(text)
+            guard !t.isEmpty else { return false }
+            return p.contains(String(t.prefix(60))) || (!pieceHead.isEmpty && t.contains(pieceHead))
+        }.map(\.0)
+        return matched.isEmpty ? parent.map(\.0) : matched
     }
 
     /// Paragraph-boundary split to ~target, measured in UNICODE SCALARS —
