@@ -79,6 +79,10 @@ public struct DrainReceipt: Sendable {
     /// nothing else reads as "that was all of them".
     public var inductionSkippedForBudget = 0
     public var eventKOsRewritten = 0
+    /// P1.5 — claim projections whose every source is gone: removed when
+    /// never reviewed/used, else marked missingEvidence (never destroyed).
+    public var orphanClaimsRemoved = 0
+    public var orphanClaimsMarked = 0
     public var eventsDeleted = 0
     public var eventsWritten = 0
     public var milestonesRebuilt = 0
@@ -103,6 +107,7 @@ public struct DrainReceipt: Sendable {
           induction:               \(inductionAttempted) document(s) attempted → \(factsInduced) field(s)\(inductionSkipReason.map { " [skipped: \($0)]" } ?? "")\(inductionSkippedForBudget > 0 ? " — \(inductionSkippedForBudget) more candidate(s) left for the next pass (budget)" : "")
           events: KOs rewritten    \(eventKOsRewritten) (deleted \(eventsDeleted) stale → wrote \(eventsWritten) v1)
           milestones rebuilt:      \(milestonesRebuilt)
+          orphan claims:           \(orphanClaimsRemoved) removed · \(orphanClaimsMarked) marked missing-evidence
           document_class stamped:  \(documentClassStamped)
           entities stamped v1:     \(entitiesStampedV1)
           untouched: chunks \(chunksCount.before)→\(chunksCount.after) · fts \(chunksFTSCount.before)→\(chunksFTSCount.after) · embeddings \(embeddingsCount.before)→\(embeddingsCount.after) [\(untouchedProven ? "PROVEN" : "VIOLATED — STOP")]
@@ -280,6 +285,15 @@ public final class LedgerDrainCoordinator {
         """, [])
         receipt.orphanAnchorsSwept = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
 
+        // ── pass 2d (P1.5): ORPHANED CLAIM PROJECTIONS ───────────────────────
+        // A claim is a projection of its sources (claim_lineage). When the
+        // facts/events it projected were rewritten above, the claim outlived
+        // them: the owner copy held 5,718 claims over events that no longer
+        // existed. Unreviewed, unused orphans are removed (replace-class
+        // hygiene, like the orphaned-facts sweep); a claim someone reviewed or
+        // an output used is only marked missingEvidence — never destroyed.
+        try await sweepOrphanClaims(into: &receipt)
+
         // ── pass 6: era-stamp the surviving register ─────────────────────────
         try await database.exec("""
         UPDATE entities SET producer_version = \(DerivedProducerVersions.entities)
@@ -293,6 +307,51 @@ public final class LedgerDrainCoordinator {
         receipt.embeddingsCount.after = try await count("chunk_embeddings")
         KalsmritikoshLog.knowledge.info("DRAIN: \(receipt.renderLines(), privacy: .public)")
         return receipt
+    }
+
+    // ── pass 2d helper ───────────────────────────────────────────────────────
+
+    /// Claims none of whose lineage sources still exist. Sources are the
+    /// kinds ClaimProjectionBackfill projects.
+    static let orphanClaimPredicate = """
+        c.id IN (SELECT l.claim_id FROM claim_lineage l GROUP BY l.claim_id
+                 HAVING SUM(CASE
+                     WHEN l.source_kind = 'event'         AND EXISTS (SELECT 1 FROM events e WHERE e.id = l.source_id) THEN 1
+                     WHEN l.source_kind = 'genericFact'   AND EXISTS (SELECT 1 FROM generic_facts f WHERE f.id = l.source_id) THEN 1
+                     WHEN l.source_kind = 'assertion'     AND EXISTS (SELECT 1 FROM assertions a WHERE a.id = l.source_id) THEN 1
+                     WHEN l.source_kind = 'temporalClaim' AND EXISTS (SELECT 1 FROM temporal_claims t WHERE t.id = l.source_id) THEN 1
+                     WHEN l.source_kind NOT IN ('event', 'genericFact', 'assertion', 'temporalClaim') THEN 1
+                     ELSE 0 END) = 0)
+        """
+
+    private func sweepOrphanClaims(into receipt: inout DrainReceipt) async throws {
+        try await database.exec("SAVEPOINT drain_claims;", [])
+        do {
+            try await database.exec("""
+            DELETE FROM claims AS c WHERE \(Self.orphanClaimPredicate)
+              AND NOT EXISTS (SELECT 1 FROM claim_reviews r WHERE r.claim_id = c.id)
+              AND NOT EXISTS (SELECT 1 FROM claim_usage u WHERE u.claim_id = c.id);
+            """, [])
+            receipt.orphanClaimsRemoved = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
+            try await database.exec("""
+            UPDATE claims AS c SET availability_status = 'missingEvidence'
+            WHERE \(Self.orphanClaimPredicate) AND availability_status != 'missingEvidence';
+            """, [])
+            receipt.orphanClaimsMarked = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
+            // Removed claims' child rows (evidence refs / lineage) go with them.
+            try await database.exec("DELETE FROM claim_evidence_ref WHERE claim_id NOT IN (SELECT id FROM claims);", [])
+            try await database.exec("DELETE FROM claim_lineage WHERE claim_id NOT IN (SELECT id FROM claims);", [])
+            // Sources were rewritten → the projection must see them again.
+            if receipt.eventKOsRewritten > 0 || receipt.factsSourcesRewritten > 0 {
+                try await database.exec(
+                    "DELETE FROM claim_projection_progress WHERE source_kind IN ('event', 'genericFact');", [])
+            }
+            try await database.exec("RELEASE drain_claims;", [])
+        } catch {
+            try? await database.exec("ROLLBACK TO drain_claims;", [])
+            try? await database.exec("RELEASE drain_claims;", [])
+            throw error
+        }
     }
 
     // ── pass 2: facts → v2 for one KO ───────────────────────────────────────
@@ -477,8 +536,8 @@ public final class LedgerDrainCoordinator {
         guard staleCount > 0 else { return }
 
         let koEntities = (try? await entities.findByMentionSource(ko.id)) ?? []
-        let fresh = (try? await RuleEventExtractor().extractEvents(
-            from: ko, chunks: [], entities: koEntities, blocks: [])) ?? []
+        let fresh = EventDeduper.collapse((try? await RuleEventExtractor().extractEvents(
+            from: ko, chunks: [], entities: koEntities, blocks: [])) ?? [])
 
         try await database.exec("SAVEPOINT drain_events;", [])
         do {
@@ -520,8 +579,8 @@ public final class LedgerDrainCoordinator {
                     anchorIDs.append(id)
                 }
             }
-            let milestones = await PatentLegalEventExtractor.extract(
-                text: content, sourceObjectID: koID, entityIDs: anchorIDs)
+            let milestones = EventDeduper.collapse(await PatentLegalEventExtractor.extract(
+                text: content, sourceObjectID: koID, entityIDs: anchorIDs))
             if !milestones.isEmpty {
                 try? await events.insertBatch(milestones)
                 created += milestones.count

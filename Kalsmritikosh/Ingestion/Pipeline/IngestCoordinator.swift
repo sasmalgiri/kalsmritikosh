@@ -1739,9 +1739,12 @@ public actor IngestCoordinator {
                 sourceObjectID: object.id,
                 entityIDs: extractedEntities.map(\.id)
             )
-            let remapped = (rawEvents + milestoneEvents).map { event in
+            // P1.10 — one document states one happening once: same-source
+            // repeats collapse BEFORE insert, so nothing downstream can hold a
+            // dropped id (extractedEvents below is this same list).
+            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
-            }
+            })
             // P1.2 — a failed event INSERT loses dated evidence silently, so
             // the reason is recorded. Not propagated: the KO's entities and
             // chunks are already correct, and losing events is lossy, not

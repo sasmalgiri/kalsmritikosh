@@ -2627,6 +2627,7 @@ public final class AppState {
                 let drainFacts = genericFactsRepo
                 let drainEvidence = evidenceStoreRepo
                 let drainCapabilities = capabilities
+                let drainProjection = self.claimProjection
                 Task.detached(priority: .utility) {
                     do {
                         let stale = try await drainDB.query("""
@@ -2656,7 +2657,12 @@ public final class AppState {
                                 events: drainEvents, facts: drainFacts, evidence: drainEvidence,
                                 inducer: InducedSchemaExtractor(capabilities: drainCapabilities),
                                 inductionAttempts: InducedSchemaAttemptRepository(database: drainDB))
-                            _ = try await coordinator.drain()
+                            let receipt = try await coordinator.drain()
+                            // P1.5 — sources rewritten → re-project their claims
+                            // now (the drain reset the cursor), not next launch.
+                            if receipt.eventKOsRewritten > 0 || receipt.factsSourcesRewritten > 0 {
+                                await drainProjection?.run(at: Date())
+                            }
                         }
                     } catch {
                         KalsmritikoshLog.app.error("Ledger drain failed (will retry next launch): \(error)")

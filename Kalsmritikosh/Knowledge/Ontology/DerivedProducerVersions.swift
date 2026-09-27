@@ -76,5 +76,8 @@ public nonisolated enum DerivedProducerVersions {
     ///        email event's title is the raw subject ("Fwd: Fwd: intimation…");
     ///        a v2 title is the stripped happening. The drain rewrites titles;
     ///        the subject stays on the source document for citation.
-    public static let events = 2
+    ///   2→3 (P1.10, 2026-09-27): same-source repeats collapse to one event
+    ///        (EventDeduper) — the owner copy held 121 repeats of 595, each
+    ///        fanning out into claims. The drain re-derives; no re-ingest.
+    public static let events = 3
 }
