@@ -126,6 +126,12 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
             SELECT e.id FROM entities e
             WHERE e.quality_tier IN ('T1','T2')
               AND e.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber', 'location')
+              AND COALESCE(e.review_status, '') != 'rejected'
+              -- P1.18: a NAME the ledger also holds as a PLACE is a place mistyped
+              -- by NER ("Chennai" as an organization bridged the patent matter to
+              -- unrelated résumés). The ledger's own typing decides; no gazetteer.
+              AND NOT (e.kind IN ('person', 'organization', 'vendor', 'client')
+                       AND e.normalized IN (SELECT l.normalized FROM entities l WHERE l.kind = 'location'))
               AND (SELECT COUNT(DISTINCT x.source_object_id) FROM entity_mentions x
                    WHERE x.entity_id = e.id) <= ?
         )

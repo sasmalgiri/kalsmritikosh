@@ -49,6 +49,13 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
     /// algorithm would collapse the entire graph into one
     /// community.
     private let maxCommunitySize: Int
+    /// P1.18 — the weakest ASSOCIATION an edge may carry to merge: the share
+    /// of the rarer entity's documents that also name the other. Weight alone
+    /// chained a matter to the cap: an address named beside the law firm only
+    /// in three archive-wide reports (of its ten documents) joined the patent
+    /// matter as readily as the firm's own letterhead partners (always beside
+    /// it). Single-linkage needs a relative bar, not just an absolute one.
+    static let minAssociation = 0.5
     private var runTask: Task<Void, Never>?
     private var lastRunStatus = LastRunStatus(serviceID: "kalsmritikosh.community.detect")
     public func currentStatus() -> LastRunStatus { lastRunStatus }
@@ -126,7 +133,10 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
             // of ~350 community members were email date headers, left over
             // from a graph built before CooccurrenceGraphBuilder excluded
             // them. Same kind list as the builder.
+            // P1.18 — retired entities and names the ledger also holds as a
+            // PLACE (NER typed "Chennai" an organization) join nothing.
             let rows = try await database.query("""
+            WITH places AS (SELECT normalized FROM entities WHERE kind = 'location')
             SELECT c.entity_a, c.entity_b, c.weight
             FROM entity_cooccurrences c
             JOIN entities ea ON ea.id = c.entity_a
@@ -134,6 +144,9 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
             WHERE c.weight >= ?
               AND ea.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber', 'location')
               AND eb.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber', 'location')
+              AND COALESCE(ea.review_status, '') != 'rejected' AND COALESCE(eb.review_status, '') != 'rejected'
+              AND NOT (ea.kind IN ('person', 'organization', 'vendor', 'client') AND ea.normalized IN (SELECT normalized FROM places))
+              AND NOT (eb.kind IN ('person', 'organization', 'vendor', 'client') AND eb.normalized IN (SELECT normalized FROM places))
             ORDER BY c.weight DESC, c.entity_a, c.entity_b;
             """, [.integer(Int64(minMergeWeight))])
             edges = rows.compactMap { row -> (UUID, UUID, Int)? in
@@ -184,10 +197,31 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
             return true
         }
 
+        // P1.18 — per-entity document counts for the association bar.
+        var documentCount: [UUID: Int] = [:]
+        do {
+            for row in try await database.query("""
+            SELECT entity_id, COUNT(DISTINCT source_object_id) FROM entity_mentions GROUP BY entity_id;
+            """, []) {
+                if let id = row.uuid(0), let n = row.int(1) { documentCount[id] = Int(n) }
+            }
+        } catch {
+            // Without counts every edge passes the bar — the historical behaviour.
+            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: document counts failed — \(String(describing: error), privacy: .public)")
+        }
+
         // Step 3 — greedy merge in descending weight order.
         var mergeCount = 0
+        var weakSkipped = 0
         for edge in edges {
+            guard Self.associated(weight: edge.w, documentsA: documentCount[edge.a], documentsB: documentCount[edge.b]) else {
+                weakSkipped += 1
+                continue
+            }
             if union(edge.a, edge.b) { mergeCount += 1 }
+        }
+        if weakSkipped > 0 {
+            KalsmritikoshLog.knowledge.info("AgglomerativeCommunityDetector: \(weakSkipped, privacy: .public) weakly associated edge(s) not merged")
         }
 
         // Step 4 — collect membership: { root: [members] }
@@ -276,6 +310,13 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
             runCount: lastRunStatus.runCount
         )
         return membership.count
+    }
+
+    /// True when the co-mentions cover at least `minAssociation` of the rarer
+    /// entity's documents. Unknown counts pass (no evidence to refuse on).
+    nonisolated static func associated(weight: Int, documentsA: Int?, documentsB: Int?) -> Bool {
+        guard let a = documentsA, let b = documentsB, min(a, b) > 0 else { return true }
+        return Double(weight) / Double(min(a, b)) >= minAssociation
     }
 
     // MARK: - Read API

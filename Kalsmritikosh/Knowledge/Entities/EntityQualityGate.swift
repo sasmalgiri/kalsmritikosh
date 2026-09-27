@@ -131,6 +131,10 @@ public struct EntityQualityGate: Sendable {
         // the ledger (retired, reversible), never surfaced as a phone.
         if entity.kind == .phoneNumber, !Self.isPhoneShaped(surface) { return "not-phone-shaped" }
 
+        // P1.18 — an invoice NUMBER carries a digit: "for" and "Serial" were
+        // the words after a "Invoice No." label, not numbers.
+        if entity.kind == .invoiceNumber, !surface.contains(where: \.isNumber) { return "identifier-without-digit" }
+
         let isNameKind = isNounKind(entity.kind)
         guard isNameKind else { return nil }   // non-name kinds are untouched
 
@@ -150,6 +154,18 @@ public struct EntityQualityGate: Sendable {
         // Priya Nair") — false-rejecting a person is the E-2 sin in a new
         // costume. Ships with its innocence fixture.
         if entity.kind == .person, Self.isAutomatedSender(lower) { return "automated-sender" }
+
+        // P1.18 — a "person" that is only forms of address or initials ("Mr",
+        // "Mam", "Shri", "H.S", "S.C") names nobody: NER lifted it from a
+        // salutation or a signature. "Sri Lanka", "Dr. Hyacintha Lobo" and
+        // "A. R. Rahman" keep a real word and pass.
+        if entity.kind == .person, Self.isAddressFormOnly(surface) { return "address-form-only" }
+        // P1.18 — a "person" ending in a street/building word is an address
+        // line ("Senapati Bapat Road", "Shanthi Colony", "Sampada Apartment").
+        if entity.kind == .person, Self.isStreetShaped(surface) { return "street-shaped" }
+        // P1.18 — a one-word organisation that is a document's own furniture
+        // ("Page", "FIG.", "Claims", "OBJECTION", "Invoice") names no party.
+        if entity.kind != .person, Self.isDocumentFurniture(surface) { return "document-furniture" }
 
         // E-1: a filename mis-tagged as a subject ("RESPONSE_29.08.2024.pdf").
         if Self.isFilenameShaped(lower) { return "filename-shaped" }
@@ -189,6 +205,48 @@ public struct EntityQualityGate: Sendable {
     }
 
     // MARK: - L2 shape rules (universal)
+
+    /// Last words of an address line that are not also surnames. "Street",
+    /// "Lane", "Block", "Tower" are left out on purpose: Picabo Street and
+    /// Lois Lane are people, and retiring a person is the gate's worst error.
+    public nonisolated static let streetWords: Set<String> = [
+        "road", "rd", "avenue", "marg", "colony", "nagar", "apartment", "apartments",
+        "building", "bldg", "complex", "society", "enclave", "chowk", "bazar", "bazaar", "layout",
+    ]
+    nonisolated static func isStreetShaped(_ surface: String) -> Bool {
+        let tokens = surface.split { $0.isWhitespace || $0 == "," || $0 == "." }.map { $0.lowercased() }
+        guard tokens.count >= 2, let last = tokens.last else { return false }
+        return streetWords.contains(last)
+    }
+
+    /// A document's own structural words — pages, figures, claims, notices.
+    public nonisolated static let documentFurnitureWords: Set<String> = [
+        "page", "pages", "fig", "figs", "figure", "figures", "table", "tables", "claim", "claims",
+        "invoice", "receipt", "objection", "objections", "annexure", "appendix", "exhibit", "schedule",
+        "form", "section", "clause", "serial", "total", "subtotal", "subject", "ref", "reference",
+        "note", "notes", "attachment", "enclosure", "signature", "date",
+    ]
+    nonisolated static func isDocumentFurniture(_ surface: String) -> Bool {
+        let tokens = surface.split { $0.isWhitespace || $0 == "." || $0 == ":" }.map { $0.lowercased() }
+        guard tokens.count == 1, let only = tokens.first else { return false }
+        return documentFurnitureWords.contains(only)
+    }
+
+    /// Forms of address — a salutation, not a name.
+    public nonisolated static let addressForms: Set<String> = [
+        "mr", "mrs", "ms", "miss", "mx", "dr", "prof", "sir", "madam", "mam", "maam", "ma'am",
+        "shri", "sri", "smt", "kumari", "ji", "sahib", "saheb", "er", "adv",
+    ]
+
+    /// True when every token is a form of address or a one-letter initial.
+    /// Two-letter tokens are NOT initials: "Li Na" is a real name.
+    public nonisolated static func isAddressFormOnly(_ surface: String) -> Bool {
+        let tokens = surface.split { $0.isWhitespace || $0 == "." || $0 == "," }.map { $0.lowercased() }
+        guard !tokens.isEmpty else { return false }
+        return tokens.allSatisfy { t in
+            addressForms.contains(t) || t.filter(\.isLetter).count <= 1
+        }
+    }
 
     public nonisolated static let legalSuffixes: Set<String> = [
         "ltd", "limited", "inc", "llc", "llp", "plc", "pvt", "private", "co", "corp",
@@ -249,7 +307,8 @@ public struct EntityQualityGate: Sendable {
     /// trimmed of punctuation but interior hyphens are kept ("no-reply").
     public nonisolated static let automatedSenderTokens: Set<String> = [
         "bot", "noreply", "no-reply", "donotreply", "do-not-reply",
-        "mailer-daemon", "daemon", "postmaster", "notification", "notifications"
+        "mailer-daemon", "daemon", "postmaster", "notification", "notifications",
+        "subsystem",   // P1.18 — "Mail Delivery Subsystem"
     ]
     /// True iff any whole token of the (lowercased) name is an automation marker.
     public nonisolated static func isAutomatedSender(_ lower: String) -> Bool {
@@ -373,7 +432,7 @@ public struct EntityQualityGate: Sendable {
         // own rejection stand without a duplicate audit entry.
         let rows = try await database.query("""
         SELECT id, kind, value, normalized FROM entities
-        WHERE kind IN ('person','organization','vendor','client','phoneNumber')
+        WHERE kind IN ('person','organization','vendor','client','phoneNumber','invoiceNumber')
           AND (review_status IS NULL OR review_status != 'rejected');
         """)
         // Entities the user explicitly restored (an `accept` review by a human).
