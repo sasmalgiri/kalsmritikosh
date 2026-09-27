@@ -237,7 +237,8 @@ public struct TopicTreeBuilder {
                     """, [.text(nodeID), .uuid(eid), .real(now)])
                 }
                 receipt.levelOneNodes += 1
-                if let label = try await deterministicLabel(for: children, signature: signature) {
+                if let label = try await deterministicLabel(for: children, signature: signature,
+                                                           anchorCanonsForLabels: Set(anchorCanons.keys)) {
                     try await database.exec("""
                     INSERT OR REPLACE INTO community_summaries (community_id, level, title, summary, member_count, top_entity_ids_json, computed_at)
                     VALUES (?, 1, ?, '', ?, '[]', ?);
@@ -255,10 +256,27 @@ public struct TopicTreeBuilder {
         return receipt
     }
 
+    /// P1.17 — a term fit to NAME a node: not a truncated copy of a known
+    /// identifier ("2023310" of 202331019665), not an encoded fragment
+    /// ("capuxmjoemkzvp": ≥10 letters with a run of ≥5 consonants).
+    nonisolated static func isLabelWorthy(_ term: String, anchorCanons: Set<String>) -> Bool {
+        let t = term.lowercased()
+        if t.contains(where: \.isNumber), anchorCanons.contains(where: { $0 != t && $0.hasPrefix(t) }) { return false }
+        if t.count >= 10, t.allSatisfy(\.isLetter) {
+            var run = 0, longest = 0
+            for ch in t {
+                if "aeiouy".contains(ch) { run = 0 } else { run += 1; longest = max(longest, run) }
+            }
+            if longest >= 5 { return false }
+        }
+        return true
+    }
+
     /// The node's label: an anchoring identifier's display form where one
     /// anchors the node (deterministic — smallest identity key wins ties),
     /// else the top corroborated shared terms.
-    private func deterministicLabel(for children: [String], signature: [String: Set<String>]) async throws -> String? {
+    private func deterministicLabel(for children: [String], signature: [String: Set<String>],
+                                    anchorCanonsForLabels: Set<String>) async throws -> String? {
         var counts: [String: Int] = [:]
         for c in children {
             for s in signature[c] ?? [] { counts[s, default: 0] += 1 }
@@ -274,7 +292,8 @@ public struct TopicTreeBuilder {
             }
             return identity
         }
-        let sharedTerms = counts.filter { $0.key.hasPrefix("term:") && $0.value >= 2 }
+        let sharedTerms = counts.filter { $0.key.hasPrefix("term:") && $0.value >= 2
+                                          && Self.isLabelWorthy(String($0.key.dropFirst("term:".count)), anchorCanons: anchorCanonsForLabels) }
             .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
             .prefix(3)
             .map { String($0.key.dropFirst("term:".count)) }

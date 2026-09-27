@@ -54,3 +54,17 @@ struct CommunityDetectorKindTests {
         #expect(members.isSuperset(of: [alice, bob]), "the people still form their community")
     }
 }
+
+@Suite("P1.17 — topic labels are words, not fragments")
+struct TopicLabelHygieneTests {
+    @Test("Encoded fragments and truncated identifiers never label a node; real words and full identifiers do")
+    func labelWorthy() {
+        let canons: Set<String> = ["202331019665"]
+        #expect(!TopicTreeBuilder.isLabelWorthy("capuxmjoemkzvp", anchorCanons: canons))
+        #expect(!TopicTreeBuilder.isLabelWorthy("2023310", anchorCanons: canons))
+        #expect(TopicTreeBuilder.isLabelWorthy("202331019665", anchorCanons: canons))
+        for word in ["pharmaceuticals", "strengths", "attorney", "investigation", "khurana"] {
+            #expect(TopicTreeBuilder.isLabelWorthy(word, anchorCanons: canons), "\(word)")
+        }
+    }
+}
