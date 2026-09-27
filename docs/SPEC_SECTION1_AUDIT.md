@@ -58,7 +58,7 @@ availability posture = pre-release until live.
 ## The OPEN list, in one place (owner's triage at HOLD 2)
 ~~1. Sample-ledger separation + banner~~ — landed 2026-09-27.
 ~~2. Persona picker at onboarding~~ — landed 2026-09-27.
-3. Sources "refreshing N sources" UI line (small).
-4. Timeline axis gap markers (gaps show in panels today).
+~~3. Sources "refreshing N sources" UI line~~ — landed 2026-09-27.
+~~4. Timeline axis gap markers~~ — landed 2026-09-27.
 ~~5. Citation span-level highlight~~ — landed 2026-09-27 (quote-located).
 Everything else in §1 is PRESENT or explicitly T0 by your activation gate.

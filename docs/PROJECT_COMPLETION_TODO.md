@@ -50,7 +50,7 @@ passing is never acceptance on its own._
 |---|---|---|---|
 | ☑ P3.1 | Story/History citations open in the in-app viewer at the quote — shared `CitationSourceSheet` (Ask + Story). Story sentences are composed prose: highlighted only when the source states them verbatim, else the document opens un-highlighted. | agent | HistoryView tap → SourceViewer. |
 | ☑ P3.2 | Sources "Refreshing N records with newer rules…" line — `AppState.ledgerRefreshPending` set when the boot refresh starts, cleared when it (and claim re-projection) finishes or fails. | agent | Line shows during refresh, gone after. |
-| ☐ P3.3 | Timeline axis gap markers. | agent | Gaps from the gaps panel drawn on the axis. |
+| ☑ P3.3 | Timeline axis gap markers — `TimelineGaps`: a stretch with no trustworthy-dated record longer than the zoom threshold (30 d / 90 d / 1 y / 3 y) is drawn between sections ("No dated records for 7 months (Feb 2023 – Sep 2023)"). | agent | Gaps drawn on the axis. |
 | ☐ P3.4 | **Live check of the 2026-09-27 UI** — citation chips (PDF + email), closest-match on a not-found, Technical details, sample archive → banner → back, persona step. | 🔒 owner | Each behaves as described; any defect filed. |
 
 ## PHASE 4 — End-check and merge (branch law: main frozen until this passes)
