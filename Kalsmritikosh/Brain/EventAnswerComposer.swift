@@ -75,7 +75,9 @@ public enum EventAnswerComposer {
                 .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
             return !tokens.isDisjoint(with: stateChange)
         }
-        if let best = milestones.first {
+        // L5 — the state itself outranks its notice ("patent granted" before
+        // "intimation of grant"), then newest first (matches' order).
+        if let best = milestones.first(where: { !isNotice($0.title) && !isListingEntry($0) }) ?? milestones.first {
             let date = Self.dateFormatter.string(from: best.date)
             var text = "Yes — \(lowercasedTitle(best.title)) on \(date)."
             if let intimation = matches.first(where: isCommunication) {
@@ -222,8 +224,11 @@ public enum EventAnswerComposer {
         events: [Event],
         subjectLabel: String?
     ) -> EventAnswerComposition? {
-        guard let matches = matchEvents(question: question, events: events.filter(\.hasTrustworthyDate)),
-              !matches.isEmpty else { return nil }
+        guard let dated = matchEvents(question: question, events: events.filter(\.hasTrustworthyDate)),
+              !dated.isEmpty else { return nil }
+        // Export-listing lines only when nothing else matches.
+        let real = dated.filter { !isListingEntry($0) }
+        let matches = real.isEmpty ? dated : real
         let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
         var seen = Set<String>()
         var distinct: [Event] = []
@@ -239,6 +244,11 @@ public enum EventAnswerComposer {
         let noun = subjectNoun(question) ?? "event"
         let about = subjectLabel.map { " for \($0)" } ?? ""
         var lines = ["\(distinct.count) \(noun)-related record\(distinct.count == 1 ? "" : "s")\(about):"]
+        // "When was ‹X› granted?" — lead with the one dated happening itself.
+        if question.lowercased().hasPrefix("when"),
+           let first = distinct.first(where: { !isNotice($0.title) && !isCommunicationKind($0) }) {
+            lines.insert("\(first.title) on \(Self.dateFormatter.string(from: first.date)).\n", at: 0)
+        }
         for e in distinct.prefix(10) {
             var line = "\(Self.dateFormatter.string(from: e.date)) — \(e.title)"
             if let s = e.summary.flatMap({ cleanSummary($0) }),
@@ -343,13 +353,21 @@ public enum EventAnswerComposer {
         events: [Event],
         documentsSearched: Int
     ) -> EventAnswerComposition? {
-        guard let matches = matchEvents(question: question, events: events) else { return nil }
+        guard let all = matchEvents(question: question, events: events) else { return nil }
+        // L5 — count HAPPENINGS: a notice, reminder, listing line or email about
+        // a hearing is not a hearing. When the record holds the happenings
+        // themselves, only they count, once per day; otherwise (only notices on
+        // file) the historical rule stands.
+        let happenings = all.filter { !isNotice($0.title) && !isListingEntry($0) && !isCommunicationKind($0) && $0.hasTrustworthyDate }
+        let matches = happenings.isEmpty ? all : happenings
         // Distinct occurrences: same title + same DAY collapse (the drain can
         // hold one milestone per source; the count is of happenings, not rows).
         var seen = Set<String>()
         var distinct: [Event] = []
         for e in matches {
-            let key = "\(lowercasedTitle(e.title))|\(Self.dayFormatter.string(from: e.date))"
+            let key = happenings.isEmpty
+                ? "\(lowercasedTitle(e.title))|\(Self.dayFormatter.string(from: e.date))"
+                : Self.dayFormatter.string(from: e.date)
             if seen.insert(key).inserted { distinct.append(e) }
         }
         let noun = subjectNoun(question) ?? "matching events"
@@ -361,8 +379,10 @@ public enum EventAnswerComposer {
                 receiptLine: "Zero matching events — an honest zero, counted not guessed.")
         }
         let dates = distinct.prefix(6).map { Self.dateFormatter.string(from: $0.date) }.joined(separator: ", ")
+        // "1 hearing", never "1 hearings".
+        let counted = distinct.count == 1 && noun.hasSuffix("s") && !noun.hasSuffix("ss") ? String(noun.dropLast()) : noun
         return EventAnswerComposition(
-            primaryText: "\(distinct.count) \(noun): \(dates).",
+            primaryText: "\(distinct.count) \(counted): \(dates).",
             supportingEvents: Array(distinct.prefix(6)),
             isNotFound: false,
             receiptLine: "Counted from the dated event record; every occurrence cited; no model was consulted.")

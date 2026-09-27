@@ -60,7 +60,7 @@ passing is never acceptance on its own._
 | ☐ P4.1 | Full suite to completion (last time ~1,220 of ~4,700 never ran) — rerun every "No result" suite. | agent | Every suite reports; failures = 0 or ruled. |
 | ☐ P4.2 | Double-Boot Zero-Write on the live-shaped copy. | agent | Second boot writes 0 rows. |
 | ☐ P4.3 | Gold wall across persona archives. | agent | Absolute thresholds met; `PERSONA_STATUS.generated.md` regenerated. |
-| ☐ P4.4 | Parity ×5 vs seal #10f, predicted-diff enumerated; bisect any surprise. | agent | observed ⊆ predicted; 5/5 stable. |
+| ☐ P4.4 | Parity ×5 vs seal #10f, predicted-diff enumerated; bisect any surprise. PREDICTED DIFF CLASSES so far (2026-09-27): subject-first answers replace pipeline answers for status / subject-event / who-is / own-jobs / payments / year questions; count answers count happenings not notices (a hearings count drops); existence leads with the state not its intimation; events era 3 + facts era 9 re-derivation; attribute-free communities + star tree (Big Picture labels). | agent | observed ⊆ predicted; 5/5 stable. |
 | ☐ P4.5 | Reseal (#11) + bless note. | agent | Seal captured; blessing written. |
 | ☐ P4.6 | Regenerate scoreboard / kalverify / claims; all 14 guards green. | agent | `ci/guards/run-all.sh` clean; claims gates green. |
 | ☐ P4.7 | PR `v11-implement-all` → main, two-run CI (PR head + main). | agent | Both CI legs green. |

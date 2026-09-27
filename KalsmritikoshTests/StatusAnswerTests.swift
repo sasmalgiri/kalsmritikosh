@@ -131,4 +131,29 @@ struct StatusAnswerTests {
         #expect(!out.primaryText.contains("Undated") && !out.primaryText.contains("Last year"))
         #expect(EventAnswerComposer.composePeriod(year: 1999, events: events) == nil)
     }
+
+    @Test("Happenings, not notices: count, existence and 'when' answers")
+    func happeningsNotNotices() throws {
+        let events = [
+            Event(kind: .other, date: day(2024, 7, 13), title: "Hearing notice issued", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .emailReceived, date: day(2024, 7, 31), title: "Payment made for hearing", sourceObjectID: doc, dateConfidence: 0.95),
+            Event(kind: .other, date: day(2024, 8, 6), title: "Hearing held", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .other, date: day(2024, 8, 6), title: "Hearing held before the Controller", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .other, date: day(2024, 8, 14), title: "Hearing held", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .emailReceived, date: day(2024, 8, 20), title: "Archived entry — Hearing Notice.pdf", sourceObjectID: doc, dateConfidence: 0.85),
+        ]
+        let count = try #require(EventAnswerComposer.composeCount(question: "How many hearings were there?", events: events, documentsSearched: 1))
+        #expect(count.primaryText.hasPrefix("2 hearings:"), "two hearing days; notices, payments and listings are not hearings")
+
+        let grant = [
+            Event(kind: .other, date: day(2024, 11, 28), title: "Intimation of grant issued", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .other, date: day(2024, 11, 28), title: "Patent granted", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .emailReceived, date: day(2024, 3, 22), title: "Archived entry — Intimation of Grant.pdf", sourceObjectID: doc, dateConfidence: 0.85),
+        ]
+        let exists = try #require(EventAnswerComposer.composeExistence(question: "Is the patent granted?", events: grant, documentsSearched: 1))
+        #expect(exists.primaryText.hasPrefix("Yes — patent granted on 28 November 2024."))
+        let when = try #require(EventAnswerComposer.composeSubjectEvents(question: "When was the patent granted?", events: grant, subjectLabel: nil))
+        #expect(when.primaryText.hasPrefix("Patent granted on 28 November 2024."))
+        #expect(!when.primaryText.contains("Archived entry"))
+    }
 }
