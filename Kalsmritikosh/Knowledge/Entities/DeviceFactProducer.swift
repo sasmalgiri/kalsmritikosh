@@ -29,9 +29,11 @@ import Foundation
 
 public struct DeviceFactProducer: Sendable {
 
-    /// Bumped when this producer's output changes, so a re-ingest can tell its
-    /// own rows apart from an older generation's.
-    public nonisolated static let producerVersion = 1
+    /// P1.1 (2026-09-27) — device facts live in `generic_facts`, whose era is
+    /// `DerivedProducerVersions.facts`. A private "1" here made every device
+    /// fact permanently era-stale, so the drain's orphan sweep deleted them on
+    /// every refresh. The producer now speaks the table's era.
+    public nonisolated static var producerVersion: Int { DerivedProducerVersions.facts }
 
     public nonisolated init() {}
 
@@ -39,12 +41,20 @@ public struct DeviceFactProducer: Sendable {
     /// does not state a device identifier, which is almost all of them — this
     /// runs on every ingest, so it must be cheap and silent when irrelevant.
     public nonisolated func facts(from doc: ParsedDocument, subjectLabel: String) -> [GenericFact] {
+        facts(sourceType: doc.detectedType, blocks: doc.blocks, subjectLabel: subjectLabel)
+    }
+
+    /// P1.1 — the same derivation from STORED evidence blocks, so the ledger
+    /// drain re-derives device facts exactly like ingest does (a facts-era bump
+    /// must not silently drop them).
+    public nonisolated func facts(sourceType: SourceType, blocks: [EvidenceBlock],
+                                  subjectLabel: String) -> [GenericFact] {
         let claims: [DeviceIdentity.Claim]
-        switch doc.detectedType {
+        switch sourceType {
         case .custodyManifest:
-            claims = DeviceIdentity.claims(from: Self.custodyRecord(from: doc))
+            claims = DeviceIdentity.claims(from: Self.custodyRecord(from: blocks))
         case .plist, .registryHive, .extractionManifest:
-            claims = DeviceIdentity.claims(fromKeyValues: Self.keyValues(from: doc))
+            claims = DeviceIdentity.claims(fromKeyValues: Self.keyValues(from: blocks))
         default:
             // Deliberately nothing. A device identifier appearing in a PDF or an
             // email is prose, and anchoring a device on prose would be a guess.
@@ -54,7 +64,7 @@ public struct DeviceFactProducer: Sendable {
 
         // The block a claim came from, so each fact cites the exact row it was
         // read from rather than the whole document.
-        let blockByValue = Self.blockIndex(of: doc)
+        let blockByValue = Self.blockIndex(of: blocks)
         return claims.map { claim in
             let blockIDs = blockByValue[claim.statedValue].map { [$0] } ?? []
             return GenericFact(
@@ -82,8 +92,12 @@ public struct DeviceFactProducer: Sendable {
     /// rendered prose line — string surgery on our own output would break the
     /// moment the rendering changed.
     nonisolated static func keyValues(from doc: ParsedDocument) -> [(key: String, value: String)] {
+        keyValues(from: doc.blocks)
+    }
+
+    nonisolated static func keyValues(from blocks: [EvidenceBlock]) -> [(key: String, value: String)] {
         var pairs: [(key: String, value: String)] = []
-        for block in doc.blocks {
+        for block in blocks {
             func attribute(_ name: String) -> String? {
                 if case .string(let v)? = block.attributes[name]?.value, !v.isEmpty { return v }
                 return nil
@@ -101,9 +115,13 @@ public struct DeviceFactProducer: Sendable {
     /// Rebuilds the custody record from the document's own blocks, so the
     /// producer reads what the parser recorded rather than re-parsing the file.
     nonisolated static func custodyRecord(from doc: ParsedDocument) -> CustodyRecord {
+        custodyRecord(from: doc.blocks)
+    }
+
+    nonisolated static func custodyRecord(from blocks: [EvidenceBlock]) -> CustodyRecord {
         var identifier: String?
         var device: String?
-        for block in doc.blocks {
+        for block in blocks {
             guard case .string(let field)? = block.attributes["custodyField"]?.value else { continue }
             // "Label: value" is the parser's own shape for a custody fact, and the
             // label is a constant this file does not need to know — everything
@@ -121,9 +139,9 @@ public struct DeviceFactProducer: Sendable {
 
     /// Maps a stated value back to the block that carried it, so the fact's
     /// citation points at the row and not the file.
-    nonisolated static func blockIndex(of doc: ParsedDocument) -> [String: UUID] {
+    nonisolated static func blockIndex(of blocks: [EvidenceBlock]) -> [String: UUID] {
         var index: [String: UUID] = [:]
-        for block in doc.blocks {
+        for block in blocks {
             if case .string(let value)? = block.attributes["value"]?.value, index[value] == nil {
                 index[value] = block.id
             }

@@ -11,7 +11,7 @@ passing is never acceptance on its own._
 
 | ID | Task | Owner | Acceptance |
 |---|---|---|---|
-| ☐ P1.1 | **Device-facts era bug** — `DeviceFactProducer` stamps `producer_version = 1`; the drain's orphan sweep (LedgerDrainCoordinator pass 2b) deletes every device fact each refresh. Stamp `DerivedProducerVersions.facts`. | agent | Unit test: device fact survives a drain; second drain writes 0. |
+| ☑ P1.1 | **Device-facts era bug** — `DeviceFactProducer` stamps `producer_version = 1`; the drain's orphan sweep (LedgerDrainCoordinator pass 2b) deletes every device fact each refresh. Stamp `DerivedProducerVersions.facts`. | agent | Unit test: device fact survives a drain; second drain writes 0. |
 | ☐ P1.2 | **Finish the L3 real-ledger measurement** — rerun `OwnerLedgerRollupProbeTests` (audit folder `.txt`, now prints stale rows) with a 3-min cap. | agent | Stale facts reach 0; résumé classes, fact subjects, tree L1 sizes, current-history count printed. |
 | ☐ P1.3 | **226-member topic-tree node** — confirm the df ceiling split it; if not, find the fusing terms. | agent | No L1 node > 25% of members on the owner copy. |
 | ☐ P1.4 | **Receipt/invoice → counterparty rollup** (L3 remainder) — file a commercial document's facts under the issuing party, universal fallback = title/stem. | agent | Fixture receipts from 3 vendors → 3 subjects; non-commercial docs unchanged. |

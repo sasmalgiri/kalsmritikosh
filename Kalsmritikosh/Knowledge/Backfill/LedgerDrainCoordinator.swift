@@ -359,6 +359,11 @@ public final class LedgerDrainCoordinator {
                     substantive.map { ($0.id, $0.rawText) },
                     uniquingKeysWith: { a, _ in a }))
         }
+        // P1.1 — device identifiers, exactly as ingest derives them
+        // (IngestCoordinator.deriveGenericFacts): without this, a facts-era bump
+        // re-derived a plist/registry/custody document with NO device facts.
+        derived += DeviceFactProducer().facts(sourceType: ko.sourceType, blocks: blocks,
+                                              subjectLabel: subjectLabel)
         var merged = DomainFactExtractor.merge(derived)
 
         // ── P3.3 — INDUCTION, and only where every rule found nothing ────────
