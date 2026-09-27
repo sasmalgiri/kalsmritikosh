@@ -135,6 +135,58 @@ struct MatterCommunityHygieneTests {
     }
 }
 
+@Suite("P1.18b — a message listing relates nobody", .serialized)
+struct ListingDocumentEdgeTests {
+
+    @Test("People named side by side only in report listings get no edge; the same pair in real documents does; mail is exempt")
+    func listingsContributeNoEdge() async throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("list18-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+
+        let listing = (1...3).map { "\($0). From: a\($0)@x.com Subject: Matter \($0) Date: 2024" }.joined(separator: "\n")
+        let quotedMail = (1...3).map { "> From: a\($0)@x.com\n> Subject: Re: plan" }.joined(separator: "\n")
+        func ko(_ type: String, _ content: String) async throws -> UUID {
+            let file = UUID(), id = UUID()
+            try await db.exec("INSERT INTO files (id, url, source_type) VALUES (?, ?, ?);",
+                              [.uuid(file), .text("file:///\(id).\(type)"), .text(type)])
+            try await db.exec("""
+            INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0);
+            """, [.uuid(id), .uuid(file), .text(type), .text(content)])
+            return id
+        }
+        let reports = [try await ko("pdf", listing), try await ko("pdf", listing)]
+        let letters = [try await ko("pdf", "Dear Alice, Bob will call."), try await ko("pdf", "Alice and Bob met.")]
+        let mails = [try await ko("eml", quotedMail), try await ko("eml", quotedMail)]
+        let alice = UUID(), bob = UUID(), carol = UUID(), dan = UUID(), erin = UUID(), frank = UUID()
+        for (id, v) in [(alice, "Alice Rao"), (bob, "Bob Sen"), (carol, "Carol Das"), (dan, "Dan Roy"), (erin, "Erin Paul"), (frank, "Frank Lee")] {
+            try await db.exec("INSERT INTO entities (id, kind, value, normalized, source_object_id) VALUES (?, 'person', ?, ?, ?);",
+                              [.uuid(id), .text(v), .text(v.lowercased()), .uuid(reports[0])])
+        }
+        func mention(_ e: UUID, _ k: UUID) async throws {
+            try await db.exec("""
+            INSERT INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id, confidence)
+            VALUES (?, ?, 'person', 's', ?, ?, 1.0);
+            """, [.uuid(UUID()), .uuid(e), .text(UUID().uuidString), .uuid(k)])
+        }
+        for k in reports { try await mention(carol, k); try await mention(dan, k) }
+        for k in letters { try await mention(alice, k); try await mention(bob, k) }
+        for k in mails { try await mention(erin, k); try await mention(frank, k) }
+
+        _ = await CooccurrenceGraphBuilder(database: db).runOnce()
+        let pairs = Set(try await db.query("SELECT entity_a, entity_b FROM entity_cooccurrences;", []).compactMap { r -> Set<UUID>? in
+            guard let a = r.uuid(0), let b = r.uuid(1) else { return nil }
+            return [a, b]
+        })
+        #expect(pairs.contains([alice, bob]), "two real documents relate them")
+        #expect(pairs.contains([erin, frank]), "a mail thread's quoted headers are conversation, not a listing")
+        #expect(!pairs.contains([carol, dan]), "named side by side only in message listings")
+    }
+}
+
 @Suite("P1.17 — topic labels are words, not fragments")
 struct TopicLabelHygieneTests {
     @Test("Encoded fragments and truncated identifiers never label a node; real words and full identifiers do")
