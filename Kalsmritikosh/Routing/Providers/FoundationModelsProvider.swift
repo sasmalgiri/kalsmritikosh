@@ -82,6 +82,18 @@ public struct FoundationModelsProvider: ModelProvider {
         return "AI-written prose requires macOS 26 or later with Apple Intelligence on supported hardware."
     }
 
+    /// P2.7 — load the on-device model ahead of a request (Apple: call when a
+    /// request is likely at least a second away, e.g. the person starts
+    /// typing). Best effort; never throws; no-op when unavailable.
+    public nonisolated static func prewarm() {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, iOS 26.0, *) {
+            guard case .available = SystemLanguageModel.default.availability else { return }
+            LanguageModelSession(instructions: "You are Kalsmritikosh, a precise knowledge-OS assistant.").prewarm()
+        }
+        #endif
+    }
+
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, iOS 26.0, *) {

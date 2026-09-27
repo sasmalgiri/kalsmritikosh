@@ -359,6 +359,11 @@ public struct AskView: View {
                 .padding(.vertical, 11)
                 .focused($inputFocused)
                 .onSubmit(submit)
+                // P2.7 — the person started typing: a question is seconds away,
+                // so load the on-device model now (Apple's prewarm guidance).
+                .onChange(of: question.isEmpty) { wasEmpty, isEmpty in
+                    if wasEmpty, !isEmpty { AppState.prewarmOnDeviceModel() }
+                }
             Button(action: attachFiles) {
                 Image(systemName: "paperclip").font(.system(size: 15)).frame(width: 32, height: 32)
             }

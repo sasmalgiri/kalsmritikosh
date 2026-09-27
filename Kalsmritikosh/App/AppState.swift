@@ -904,6 +904,15 @@ public final class AppState {
     // though every real call site is @MainActor. Splitting into two
     // initialisers keeps the ergonomic default for the in-app case
     // while letting tests/eval explicitly pass an isolated store.
+    /// P2.7 — best-effort model warm-up; respects the Fully-private switch.
+    public nonisolated static func prewarmOnDeviceModel() {
+        guard !UserDefaults.standard.bool(forKey: "kalsmritikosh.privacy.offlineNoLLM") else { return }
+        FoundationModelsProvider.prewarm()
+    }
+
+    /// P2.7 — how long optional query expansion may hold retrieval.
+    nonisolated static let hydeDeadlineSeconds: Double = 6
+
     public init(bookmarks: BookmarkStore) {
         self.bookmarks = bookmarks
         self.brain = MasterBrain()
@@ -1315,11 +1324,16 @@ public final class AppState {
             // Consulted only when a query's literal vector pass is weak; returns
             // nil (no expansion) when no reasoning model is available.
             let hydeExpander = HypotheticalQueryExpander(reason: { [capabilities] prompt in
-                let spec = CapabilitySpec.reasoning(contextTokens: 1_000, purpose: "retrieval.hyde")
-                guard let provider = try? await capabilities.resolve(spec),
-                      await provider.isAvailable() else { return nil }
-                return try? await provider.generate(
-                    prompt: prompt, options: GenerationOptions(maxTokens: 120, temperature: 0.3))
+                // P2.7 — HyDE is optional recall help, never a gate: on the owner
+                // copy a cold on-device model held the FIRST question 4–7 minutes
+                // here. Past the deadline, retrieval proceeds without expansion.
+                await withDeadline(seconds: Self.hydeDeadlineSeconds) {
+                    let spec = CapabilitySpec.reasoning(contextTokens: 1_000, purpose: "retrieval.hyde")
+                    guard let provider = try? await capabilities.resolve(spec),
+                          await provider.isAvailable() else { return nil }
+                    return try? await provider.generate(
+                        prompt: prompt, options: GenerationOptions(maxTokens: 120, temperature: 0.3))
+                }
             })
             let retriever = HybridRetriever(
                 memory: memoryRepo,
@@ -2620,6 +2634,8 @@ public final class AppState {
             }
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
+            // P2.7 — load the on-device model now, not on the first question.
+            Self.prewarmOnDeviceModel()
 
             // W-4b — THE DRAIN RUNS IN THE APP: when any derived row is
             // behind its producer era (a fix shipped since it was written),
