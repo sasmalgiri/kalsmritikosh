@@ -116,11 +116,15 @@ public struct TermSalienceComputer {
                 .filter { seenTerms.insert($0.term).inserted }
                 .prefix(Self.winnersPerDocument)
 
+                // Two maintenance triggers can overlap (boot pass + an explicit
+                // rebuild): DELETE-then-INSERT interleaved across runners collided
+                // on the (object_id, term) key. The winners are deterministic, so
+                // an overlapping runner writes the same rows — REPLACE is safe.
                 try await database.exec(
                     "DELETE FROM document_terms WHERE object_id = ?;", [.uuid(ko)])
                 for w in winners {
                     try await database.exec("""
-                    INSERT INTO document_terms (object_id, term, score, is_identifier, corroboration, producer_version)
+                    INSERT OR REPLACE INTO document_terms (object_id, term, score, is_identifier, corroboration, producer_version)
                     VALUES (?, ?, ?, ?, ?, ?);
                     """, [.uuid(ko), .text(w.term), .real(w.score),
                           .integer(w.isID ? 1 : 0), .integer(Int64(w.corroboration)),
