@@ -1164,8 +1164,12 @@ public actor IngestCoordinator {
             }
         }
 
-        _ = try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
-        _ = try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+        do {
+            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+        } catch {
+            KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        }
         guard !perFileKOs.isEmpty else {
             // No usable content. A preserved-only / unsupported plugin is a real limitation; anything
             // else is an empty-but-complete text extraction (ready with zero units — NOT search-ready).

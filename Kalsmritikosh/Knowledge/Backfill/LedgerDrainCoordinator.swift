@@ -613,8 +613,12 @@ public final class LedgerDrainCoordinator {
             let milestones = EventDeduper.collapse(await PatentLegalEventExtractor.extract(
                 text: content, sourceObjectID: koID, entityIDs: anchorIDs))
             if !milestones.isEmpty {
-                try? await events.insertBatch(milestones)
-                created += milestones.count
+                do {
+                    try await events.insertBatch(milestones)
+                    created += milestones.count
+                } catch {
+                    KalsmritikoshLog.knowledge.error("LedgerDrain: milestone insert failed — \(String(describing: error), privacy: .public)")
+                }
             }
         }
         return created

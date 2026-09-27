@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import OSLog
 import CryptoKit
 
 public struct ContainerProcessingCoordinator: Sendable {
@@ -42,14 +43,22 @@ public struct ContainerProcessingCoordinator: Sendable {
         // Recognized-but-undecodable containers (RAR/7z): custody preserved, contents not enumerated.
         // "Unsupported with unknown contents" ≠ "empty container" — the manifest EXISTS to say so.
         if containerType == .rar || containerType == .sevenZip {
-            _ = try? await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
+            do {
+                _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
                                           status: .unsupported, members: [], at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: manifest record failed — \(String(describing: error), privacy: .public)")
+            }
             return
         }
         let enumeration = ZIPContainerInspector.inspect(url: byteURL, containerType: containerType, policy: policy)
         guard !enumeration.unreadable, let reader = enumeration.reader else {
-            _ = try? await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
+            do {
+                _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
                                           status: .failed, members: [], at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: manifest record failed — \(String(describing: error), privacy: .public)")
+            }
             return
         }
 
@@ -127,8 +136,12 @@ public struct ContainerProcessingCoordinator: Sendable {
         }
 
         let status: ContainerManifestStatus = sawProblem ? .partial : .complete
-        _ = try? await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
+        do {
+            _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
                                       status: status, members: members, at: now)
+        } catch {
+            KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: manifest record failed — \(String(describing: error), privacy: .public)")
+        }
     }
 
     // MARK: - Helpers

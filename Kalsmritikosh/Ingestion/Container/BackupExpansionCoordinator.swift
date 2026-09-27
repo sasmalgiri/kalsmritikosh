@@ -25,6 +25,7 @@
 //
 
 import Foundation
+import OSLog
 
 public actor BackupExpansionCoordinator {
 
@@ -53,9 +54,13 @@ public actor BackupExpansionCoordinator {
                        context: ContainerTraversalContext, now: Date,
                        ingestMember: IngestMember) async {
         guard let bundleRoot else {
-            _ = try? await repository?.record(
+            do {
+                _ = try await repository?.record(
                 sourceVersionID: manifestVersionID, containerType: .extractionManifest,
                 status: .unsupported, members: [], at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("BackupExpansionCoordinator: manifest record failed — \(String(describing: error), privacy: .public)")
+            }
             return
         }
 
@@ -66,9 +71,13 @@ public actor BackupExpansionCoordinator {
         } catch {
             // Custody is already preserved by intake; the backup's CONTENTS could
             // not be enumerated, and "unenumerable" is not "empty".
-            _ = try? await repository?.record(
+            do {
+                _ = try await repository?.record(
                 sourceVersionID: manifestVersionID, containerType: .extractionManifest,
                 status: .failed, members: [], at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("BackupExpansionCoordinator: manifest record failed — \(String(describing: error), privacy: .public)")
+            }
             return
         }
 
@@ -165,8 +174,12 @@ public actor BackupExpansionCoordinator {
         let status: ContainerManifestStatus = members.isEmpty
             ? .unsupported
             : (sawProblem ? .partial : .complete)
-        _ = try? await repository?.record(
+        do {
+            _ = try await repository?.record(
             sourceVersionID: manifestVersionID, containerType: .extractionManifest,
             status: status, members: members, at: now)
+        } catch {
+            KalsmritikoshLog.ingestion.error("BackupExpansionCoordinator: manifest record failed — \(String(describing: error), privacy: .public)")
+        }
     }
 }
