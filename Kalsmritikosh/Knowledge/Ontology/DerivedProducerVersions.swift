@@ -60,7 +60,11 @@ public nonisolated enum DerivedProducerVersions {
     ///        never the mailbox file name ("Sent"); a receipt/invoice (or a
     ///        stem-labelled payment screenshot) naming one counterparty files
     ///        under that counterparty. The drain re-extracts.
-    public static let facts = 10
+    /// v11 — P4.4: identifier attestation counts evidence blocks (the W-5.6
+    ///        re-fielding of "Patent No. ‹application number›" never fired on
+    ///        a merged ledger). A current-era ledger never drains, so the bump
+    ///        is what carries the fix to it. The drain re-extracts.
+    public static let facts = 11
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
@@ -87,5 +91,8 @@ public nonisolated enum DerivedProducerVersions {
     ///   2→3 (P1.10, 2026-09-27): same-source repeats collapse to one event
     ///        (EventDeduper) — the owner copy held 121 repeats of 595, each
     ///        fanning out into claims. The drain re-derives; no re-ingest.
-    public static let events = 3
+    ///   3→4 (P4.4, 2026-09-27): milestone dates are UTC-midnight calendar
+    ///        days (were the day before on an IST machine) with stable ids.
+    ///        The bump is what makes a current ledger drain and rebuild them.
+    public static let events = 4
 }
