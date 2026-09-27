@@ -121,34 +121,70 @@ public struct TopicTreeBuilder {
             signature[cid] = sig.filter { (spread[$0] ?? 0) <= hubCeiling }
         }
 
-        // 3 — level-1 nesting by CONTAINMENT-like overlap: two level-0 nodes
-        //     join one parent when their signatures share an anchor, or share
-        //     ≥3 corroborated terms. Union-find, edges walked in total order.
-        var parentOf: [String: String] = [:]
-        func find(_ x: String) -> String {
-            var r = x
-            while let p = parentOf[r], p != r { r = p }
-            return r
-        }
-        func union(_ a: String, _ b: String) {
-            let ra = find(a), rb = find(b)
-            guard ra != rb else { return }
-            // Total order: the lexicographically smaller root wins.
-            if ra < rb { parentOf[rb] = ra } else { parentOf[ra] = rb }
-        }
+        // 3 — level-1 nesting as STARS, never chains (P1.3, 2026-09-27). The
+        //     first version was union-find over "share an anchor OR ≥3 terms",
+        //     which is transitive: on the owner's archive 57 of 81 level-0
+        //     communities (319 entities — résumés, GDPR reports, bounces) chained
+        //     into one "Patent" node through one weak link at a time.
+        //     (a) An anchored community joins the node of its MOST SPECIFIC
+        //         shared anchor (fewest communities carry it; ties by key) — it
+        //         sits under a matter only if it names that matter itself.
+        //     (b) A term-only community attaches to its single best match, and
+        //         only ONE hop out: a follower never pulls further followers in.
+        //         "Best" is overlap RELATIVE TO SIZE (Jaccard ≥ 0.15, ≥3 shared
+        //         terms): a raw count let two 100-entity communities, whose
+        //         signatures hold hundreds of terms, adopt ~40 unrelated
+        //         followers (email date headers, job-site addresses).
         let cids = members.keys.sorted()
-        for c in cids { parentOf[c] = c }
-        for i in 0..<cids.count {
-            for j in (i + 1)..<cids.count {
-                let a = signature[cids[i]] ?? [], b = signature[cids[j]] ?? []
-                let shared = a.intersection(b)
-                let sharedAnchor = shared.contains { $0.hasPrefix("anchor:") }
-                let sharedTerms = shared.filter { $0.hasPrefix("term:") }.count
-                if sharedAnchor || sharedTerms >= 3 { union(cids[i], cids[j]) }
+        var anchorSpread: [String: Int] = [:]
+        for sig in signature.values {
+            for s in sig where s.hasPrefix("anchor:") { anchorSpread[s, default: 0] += 1 }
+        }
+        var groupOf: [String: String] = [:]     // community → group key
+        var isFollower = Set<String>()          // joined by (b); may not recruit
+        for c in cids {
+            let anchors = (signature[c] ?? []).filter { $0.hasPrefix("anchor:") && (anchorSpread[$0] ?? 0) >= 2 }
+            if let best = anchors.min(by: { (anchorSpread[$0] ?? 0, $0) < (anchorSpread[$1] ?? 0, $1) }) {
+                groupOf[c] = best
+            }
+        }
+        let termSets = signature.mapValues { $0.filter { $0.hasPrefix("term:") } }
+        func termSimilarity(_ a: String, _ b: String) -> Double? {
+            let ta = termSets[a] ?? [], tb = termSets[b] ?? []
+            let shared = ta.intersection(tb).count
+            guard shared >= 3 else { return nil }
+            let jaccard = Double(shared) / Double(ta.union(tb).count)
+            return jaccard >= 0.15 ? jaccard : nil
+        }
+        for c in cids where groupOf[c] == nil {
+            var best: (id: String, j: Double)? = nil
+            for d in cids where d != c {
+                guard let j = termSimilarity(c, d) else { continue }
+                if best == nil || j > best!.j || (j == best!.j && d < best!.id) { best = (d, j) }
+            }
+            guard let partner = best?.id else { continue }
+            if let g = groupOf[partner] {
+                guard !isFollower.contains(partner) else { continue }   // one hop only
+                groupOf[c] = g
+                isFollower.insert(c)
+            } else {
+                // Two term-only communities found each other: the smaller id roots it.
+                let root = min(c, partner)
+                groupOf[c] = "terms:" + root
+                groupOf[partner] = "terms:" + root
+                isFollower.insert(c == root ? partner : c)
             }
         }
         var groups: [String: [String]] = [:]
-        for c in cids { groups[find(c), default: []].append(c) }
+        for c in cids {
+            // Ungrouped communities stay leaves; the root is the smallest member id.
+            guard let g = groupOf[c] else { groups[c, default: []].append(c); continue }
+            groups[g, default: []].append(c)
+        }
+        groups = Dictionary(uniqueKeysWithValues: groups.values.map { kids in
+            let sortedKids = kids.sorted()
+            return (sortedKids[0], sortedKids)
+        })
 
         // A6 idempotence (parity caught it): a wholesale rewrite every boot
         // moves the ledger stamp every run. Skip when NOTHING level-0 changed

@@ -12,8 +12,8 @@ passing is never acceptance on its own._
 | ID | Task | Owner | Acceptance |
 |---|---|---|---|
 | ☑ P1.1 | **Device-facts era bug** — `DeviceFactProducer` stamps `producer_version = 1`; the drain's orphan sweep (LedgerDrainCoordinator pass 2b) deletes every device fact each refresh. Stamp `DerivedProducerVersions.facts`. | agent | Unit test: device fact survives a drain; second drain writes 0. |
-| ☐ P1.2 | **Finish the L3 real-ledger measurement** — rerun `OwnerLedgerRollupProbeTests` (audit folder `.txt`, now prints stale rows) with a 3-min cap. | agent | Stale facts reach 0; résumé classes, fact subjects, tree L1 sizes, current-history count printed. |
-| ☐ P1.3 | **226-member topic-tree node** — confirm the df ceiling split it; if not, find the fusing terms. | agent | No L1 node > 25% of members on the owner copy. |
+| ☑ P1.2 | **Finish the L3 real-ledger measurement** — rerun `OwnerLedgerRollupProbeTests` (audit folder `.txt`, now prints stale rows) with a 3-min cap. | agent | Stale facts reach 0; résumé classes, fact subjects, tree L1 sizes, current-history count printed. |
+| ☑ P1.3 | **226-member topic-tree node** — confirm the df ceiling split it; if not, find the fusing terms. | agent | No L1 node > 25% of members on the owner copy. |
 | ☐ P1.4 | **Receipt/invoice → counterparty rollup** (L3 remainder) — file a commercial document's facts under the issuing party, universal fallback = title/stem. | agent | Fixture receipts from 3 vendors → 3 subjects; non-commercial docs unchanged. |
 | ☐ P1.5 | **Claims inflation** — 5,718 claims / 276 distinct (one event claim × every participant scope). One claim per event, participants as scope links. | agent | Owner copy: claims ≈ distinct count; claim→evidence still resolves 100%. |
 | ☐ P1.6 | **Nine-digit "phone" residue (803)** — decide by context (label, country code, neighbouring words), never by shape alone. | agent | Labelled phones kept; unlabelled IDs typed `identifier`; no real name retired. |
@@ -21,6 +21,10 @@ passing is never acceptance on its own._
 | ☐ P1.8 | **Block-less chunks from parser-less attachments** — give 'unknown'-type text a paragraph structural parse so chunks carry block lineage. | agent | 0 chunks without `allBlockIDs` on the owner copy. |
 | ☐ P1.9 | **Participant occurrences + co-occurrence graph** — `email_participant_occurrences` = 0 and `entity_cooccurrences` = 0 on the audit copy; backfill + find why co-occurrence stayed empty. | agent | Both tables populated on the owner copy; second boot writes 0. |
 | ☐ P1.10 | **Event dedup** — the "21 hearings" (each reminder email minted one). Merge same-kind/same-date events, keep all sources. | agent | Hearings count = distinct hearing dates; every source still cited. |
+| ☐ P1.12 | **Legacy duplicate histories** — rows from 2026-09-25 (two builds per anchor) are still both `current`; supersede-on-rebuild only fires for subjects rebuilt. One-time drain pass: keep the newest per (anchor_key, request_shape). | agent | Owner copy: ≤1 current history per subject. |
+| ☐ P1.13 | **Transport/stem subjects** — "Delivery Status Notification (Failure)", "Undeliverable", `image-bc523fd4`, `GDPR_Report_…` still head facts and topics. Bounce notices are transport, not matters; a filename stem is a last resort label, never a topic. | agent | Owner copy: no bounce/stem-named topic; their facts re-homed or marked transport. |
+| ☐ P1.14 | **Date-header strings as entities** — "Mon, 26 Jul 2021 20:02:20" is stored as an entity and inflates level-0 communities (100 / 87 members). Entity gate: a value that parses as a date/time is a date, never an entity. | agent | Owner copy: 0 date-shaped entities; level-0 max size drops. |
+| ☐ P1.15 | **Topic AI-polish cost** — 12 topics ≈ 14 min (~70 s each) on the idle pass. Budget + batch it, never blocks boot. | agent | Polish pass time per topic logged; idle build of 79 topics bounded. |
 | ☐ P1.11 | **L4 LedgerContractCheck** — invariants run in CI on every build: every fact has a resolved subject + evidence; no fact value is CSS/transport header/table furniture; every derived row cites a source; second boot writes zero. | agent | New CI guard/test green; fails red on a seeded violation of each rule. |
 
 ## PHASE 2 — Answers read the ledger (where the owner sees the difference)
