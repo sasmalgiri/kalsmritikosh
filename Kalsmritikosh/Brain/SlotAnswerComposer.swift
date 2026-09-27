@@ -35,8 +35,9 @@ public struct SlotAnswerComposition: Sendable {
     /// W-5.5 — how many distinct values are in conflict (0 when none);
     /// the disagreement note reads "both values" only when it is two.
     public var conflictValueCount: Int = 0
-    /// P2.3 — the single value AS WRITTEN in its source (raw match, else the
-    /// value): the slot law cites it so the viewer can find and highlight it.
+    /// P2.3 — the single value the slot law cites (the stored value — never
+    /// `rawMatch`, which is extraction provenance); the viewer finds it
+    /// case-insensitively in the source.
     public var citedValue: String?
 }
 
@@ -204,7 +205,7 @@ public enum SlotAnswerComposer {
                 singleCanonicalValue: true,
                 structuredSource: best.isAuthority || best.presentation == .fact || best.presentation == .corroborated,
                 alsoOnFile: also, requestedLabel: label)
-            single.citedValue = best.fact.rawMatch ?? best.fact.value
+            single.citedValue = best.fact.value
             return single
         }
 

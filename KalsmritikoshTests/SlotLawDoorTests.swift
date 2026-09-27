@@ -62,7 +62,7 @@ struct SlotLawDoorTests {
         let answered = try await verifier.verify(intent: intent("Who is the applicant of the patent?"), findings: [], retrieval: clean)
         #expect(!answered.refused)
         #expect(answered.citations.map(\.objectID) == [form])
-        #expect(answered.citations.first?.snippet == "SHIRSHENDU SASMAL")
+        #expect(answered.citations.first?.snippet == "shirshendu sasmal", "the stored value, never rawMatch")
         #expect(answered.answerText?.contains("SHIRSHENDU SASMAL") == true || answered.body.contains("SHIRSHENDU SASMAL")
                 || answered.body.lowercased().contains("shirshendu sasmal"))
 

@@ -29,12 +29,15 @@ struct DeadlineTests {
     func nonCooperative() async {
         let started = Date()
         let value = await withDeadline(seconds: 0.2) { () async -> String? in
-            // A busy wait never checks Task.isCancelled — like a model mid-generation.
-            let end = Date().addingTimeInterval(1.5)
-            while Date() < end {}
-            return "too late"
+            // Work that never checks Task.isCancelled and finishes on another
+            // queue — like a model mid-generation behind an XPC call. (Not a
+            // busy wait: that hogs a cooperative thread and, under a full-suite
+            // load, measures the scheduler instead of the deadline.)
+            await withCheckedContinuation { (c: CheckedContinuation<String?, Never>) in
+                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { c.resume(returning: "too late") }
+            }
         }
         #expect(value == nil)
-        #expect(Date().timeIntervalSince(started) < 1.0, "returned at the deadline, not when the work finished")
+        #expect(Date().timeIntervalSince(started) < 2.0, "returned at the deadline, not when the work finished (3 s)")
     }
 }
