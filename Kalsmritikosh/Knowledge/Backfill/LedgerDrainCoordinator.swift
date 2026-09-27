@@ -660,11 +660,18 @@ public final class LedgerDrainCoordinator {
     private func identifierAttestation() async throws -> [String: [String: Int]] {
         let placeholders = Self.identifierFields.map { "'\($0)'" }.joined(separator: ",")
         let rows = try await database.query("""
-        SELECT lower(field), value, COUNT(*) FROM generic_facts
+        SELECT lower(field), value,
+               SUM(MAX(1, COALESCE(json_array_length(source_blocks_json), 1))) FROM generic_facts
         WHERE lower(field) IN (\(placeholders))
         GROUP BY lower(field), value;
         """, [])
-        var out: [String: [String: Int]] = [:]   // field → value → row count
+        // P4.4 — attestation = evidence blocks, not rows. The gates below were
+        // calibrated when every occurrence was its own row; since the per-
+        // distinct-fact merge one row carries every block that states it, so
+        // COUNT(*) put the application number (115 sources) at 1 "row" and the
+        // "Patent No. ‹application number›" mislabel was never re-fielded —
+        // parity vs seal #10f: "granted patent number" became a false conflict.
+        var out: [String: [String: Int]] = [:]   // field → value → attesting blocks
         for row in rows {
             guard let f = row.string(0), let v = row.string(1) else { continue }
             out[f, default: [:]][v] = Int(row.int(2) ?? 0)

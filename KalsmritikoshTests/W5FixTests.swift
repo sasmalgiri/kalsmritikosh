@@ -185,3 +185,31 @@ struct W5FixTests {
         #expect(!line.lowercased().contains("claim"), "the quality strip still says 'claims': \(line)")
     }
 }
+
+@Suite("P4.4 — cross-field re-fielding counts evidence, not merged rows", .serialized)
+struct CrossFieldAttestationTests {
+    @Test("One merged application-number row with 12 sources still re-fields two 'Patent No.' mislabels")
+    func mergedShape() async throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("xfa-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        let facts = GenericFactRepository(database: db)
+        func fact(_ field: String, _ value: String, blocks: Int, label: String) -> GenericFact {
+            GenericFact(subjectLabel: label, field: field, value: value, status: .sourceAsserted,
+                        confidence: 0.8, sourceBlockIDs: (0..<blocks).map { _ in UUID() },
+                        producerVersion: DerivedProducerVersions.facts)
+        }
+        try await facts.upsert(fact("applicationnumber", "202331019665", blocks: 12, label: "Patent"))   // merged: 1 row, 12 sources
+        try await facts.upsert(fact("patentnumber", "202331019665", blocks: 1, label: "Hearing 1"))
+        try await facts.upsert(fact("patentnumber", "202331019665", blocks: 1, label: "Hearing 2"))
+        try await facts.upsert(fact("patentnumber", "555489", blocks: 3, label: "Grant"))
+        let drain = LedgerDrainCoordinator(database: db, objects: KnowledgeObjectRepository(database: db),
+                                           entities: EntitiesRepository(database: db), events: EventsRepository(database: db),
+                                           facts: facts, evidence: EvidenceStore(database: db))
+        let moves = try await drain.crossBlockCollisions()
+        #expect(moves.contains { $0.intruded == "patentnumber" && $0.home == "applicationnumber" && $0.value == "202331019665" },
+                "got \(moves)")
+    }
+}
