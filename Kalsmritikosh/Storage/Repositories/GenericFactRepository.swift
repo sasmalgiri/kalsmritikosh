@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import OSLog
 
 public actor GenericFactRepository {
     private let database: Database
@@ -122,10 +123,24 @@ public actor GenericFactRepository {
             sourceBlockIDs: existingBlocks, producerVersion: fact.producerVersion,
             rawMatch: fact.rawMatch, sourceCount: nil, reassignedFrom: fact.reassignedFrom,
             derivation: existingDerivation)
-        let merged = canonicalSeed.mergedWith(fact)
+        var merged = canonicalSeed.mergedWith(fact)
+        // Collapse any stray duplicate rows (older schema/pre-merge writes) —
+        // P4.2: their source blocks join the canonical row first. Deleting them
+        // bare dropped provenance: a document whose only row was a stray lost
+        // its facts, re-derived them next boot, and lost them again.
+        let strayRows = rows.dropFirst()
+        for row in strayRows {
+            guard let json = row.string(1), let data = json.data(using: .utf8),
+                  let blocks = try? Self.decoder.decode([UUID].self, from: data), !blocks.isEmpty else { continue }
+            merged = merged.mergedWith(GenericFact(
+                subjectID: merged.subjectID, subjectLabel: merged.subjectLabel, field: merged.field,
+                value: merged.value, unit: merged.unit, assessment: merged.assessment,
+                confidence: row.double(2) ?? merged.confidence, sourceBlockIDs: blocks,
+                producerVersion: merged.producerVersion,
+                derivation: row.string(3).flatMap { FactDerivation(rawValue: $0) }))
+        }
         try await upsert(merged)
-        // Collapse any stray duplicate rows (older schema/pre-merge writes).
-        let strays = rows.dropFirst().compactMap { $0.uuid(0) }
+        let strays = strayRows.compactMap { $0.uuid(0) }
         if !strays.isEmpty { try await delete(ids: strays) }
     }
 
@@ -261,18 +276,38 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// Most block ids one lookup covers, in OR-scans of `blockLookupBatch`.
+    public nonisolated static let blockLookupCap = 2_048
+    nonisolated static let blockLookupBatch = 64
+
     public func facts(forBlockIDs blockIDs: [UUID]) async throws -> [GenericFact] {
-        let ids = Array(Set(blockIDs)).prefix(64)   // bound the OR-scan cost
-        guard !ids.isEmpty else { return [] }
-        let clauses = ids.map { _ in "source_blocks_json LIKE ?" }.joined(separator: " OR ")
-        let binds = ids.map { SQLValue.text("%\($0.uuidString)%") }
-        let rows = try await database.query("""
-        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from, derivation
-        FROM generic_facts WHERE \(clauses) ORDER BY confidence DESC;
-        """, binds)
-        return rows.compactMap(Self.decode)
+        // P4.2 — was `Array(Set(blockIDs)).prefix(64)`: a RANDOM 64 of the
+        // blocks (Set order changes per process), so a large document found
+        // "no facts" on some runs and the drain re-derived it on every boot —
+        // the fixed-point violation measured on the owner's copy. Now the ids
+        // are sorted and scanned in batches: deterministic, and complete up to
+        // the (logged) cap.
+        let unique = Array(Set(blockIDs)).sorted { $0.uuidString < $1.uuidString }
+        guard !unique.isEmpty else { return [] }
+        if unique.count > Self.blockLookupCap {
+            KalsmritikoshLog.storage.info("facts(forBlockIDs:): \(unique.count, privacy: .public) blocks, first \(Self.blockLookupCap, privacy: .public) scanned")
+        }
+        let ids = Array(unique.prefix(Self.blockLookupCap))
+        var seen = Set<UUID>()
+        var out: [GenericFact] = []
+        for start in stride(from: 0, to: ids.count, by: Self.blockLookupBatch) {
+            let batch = ids[start..<min(start + Self.blockLookupBatch, ids.count)]
+            let clauses = batch.map { _ in "source_blocks_json LIKE ?" }.joined(separator: " OR ")
+            let binds = batch.map { SQLValue.text("%\($0.uuidString)%") }
+            let rows = try await database.query("""
+            SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+                   evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+                   producer_version, raw_match, source_count, reassigned_from, derivation
+            FROM generic_facts WHERE \(clauses);
+            """, binds)
+            for f in rows.compactMap(Self.decode) where seen.insert(f.id).inserted { out.append(f) }
+        }
+        return out.sorted { $0.confidence != $1.confidence ? $0.confidence > $1.confidence : $0.id.uuidString < $1.id.uuidString }
     }
 
     /// V5 DRAIN ONLY — remove stale derived fact rows so the drain can replace

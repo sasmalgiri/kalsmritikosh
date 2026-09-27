@@ -74,3 +74,37 @@ struct SlotLawDoorTests {
         #expect(refused.refused, "two values need the full path, which shows both sources")
     }
 }
+
+@Suite("P4.2 — fact lookups by block are complete and deterministic", .serialized)
+struct FactBlockLookupTests {
+    @Test("A document with more than 64 blocks finds its fact whichever block carries it; a stray row's blocks survive the merge")
+    func lookupAndStrays() async throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("fbl-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        let repo = GenericFactRepository(database: db)
+
+        let blocks = (0..<300).map { _ in UUID() }
+        let carrier = blocks.sorted { $0.uuidString < $1.uuidString }.last!   // the block a 64-prefix would skip
+        let f = GenericFact(subjectLabel: "Whole Stock", field: "date", value: "1918",
+                            status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [carrier])
+        try await repo.upsert(f)
+        for _ in 0..<3 {
+            let found = try await repo.facts(forBlockIDs: blocks.shuffled())
+            #expect(found.map(\.id) == [f.id], "found on every run, not on a random subset")
+        }
+
+        // A stray duplicate row (pre-merge write) carrying another document's block.
+        let other = UUID()
+        let stray = GenericFact(subjectLabel: "Whole Stock", field: "date", value: "1918",
+                                status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [other])
+        try await repo.upsert(stray)
+        try await repo.mergeUpsert(GenericFact(subjectLabel: "Whole Stock", field: "date", value: "1918",
+                                               status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [carrier]))
+        let survivors = try await repo.facts(forBlockIDs: [other])
+        #expect(survivors.count == 1, "the stray's document still finds the fact after the collapse")
+        #expect(Set(survivors.first?.sourceBlockIDs ?? []) == [carrier, other])
+    }
+}
