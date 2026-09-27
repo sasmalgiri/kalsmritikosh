@@ -22,14 +22,24 @@ read the `=====ANSWER PROBE=====` block, delete the file again. Never commit it.
 | 8 | Who drafted the claims? | The examiner's instruction ("shall be drafted afresh") · 311 s | The first-person drafting reports' senders (Khurana & Khurana staff), quoted · 0.0 s | ✅ |
 | 9 | When was the patent granted? | List padded with export-listing lines | "Patent granted on 28 November 2024." · 0.0 s | ✅ |
 | 10 | How many hearings were there? | "8 hearings" (counted notices, a reminder, a payment) | "2 hearings" · via the pipeline, 1 call | ✅ (slow cold) |
-| 11 | Who is the applicant of the patent? | "Applicant: Shirshendu Sasmal." | same (lower-case form as stated) · 21 s | ✅ |
+| 11 | Who is the applicant of the patent? | "Applicant: Shirshendu Sasmal." | Slot law (P2.3): "Applicant: Shirshendu Sasmal." · 0.80 · 1 citation · 12 s (was 0.30–0.80 with the model) | ✅ |
 | 12 | Is the patent granted? | "Yes — intimation of grant…" | "Yes — patent granted on 28 November 2024." · 24 s | ✅ |
 
 **Totals:** answered correctly 12/12 (baseline 3/12 fully right). Deterministic, zero-model answers: 10/12.
 Refusal on the absent subject: 1.0. No answer cites a document outside its subject.
 
+## Module deltas (P2.3, 2026-09-27 — one module off per run)
+| Module off | Q1–Q9, Q7 refusal | Q10 | Q11 | Q12 |
+|---|---|---|---|---|
+| none (3 runs) | identical | 2 hearings | 0.80 slot sentence | yes, granted |
+| HyDE expansion | identical | same | 0.40 — model abstained, fact dump | same |
+| Corrective re-retrieval | identical | same | 0.30 — prose, also names the agent | same |
+| Cross-encoder rerank | identical | same | 0.80 | same |
+
+No module is shown negative; the Q11 swing is the model's. Q11 is now answered by the slot law before the model.
+
 ## Known limits (measured, not hidden)
-- Q10–Q12 still go through the general pipeline and pay the on-device model; cold in a fresh process the
+- Q10 and Q12 still go through the general pipeline and pay the on-device model (Q11 makes one query-expansion call); cold in a fresh process the
   first such call took 289 s in the test host (P2.7: HyDE is now deadline-bounded and the model pre-warmed;
   live latency is the owner's measurement).
 - Event dates bind to the nearest date in the text: two hearings are dated 5 and 13 Aug where the documents say
