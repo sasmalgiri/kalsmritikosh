@@ -110,3 +110,14 @@ struct StableEventIDTests {
         #expect(a.title == "Patent granted" && a.sourceObjectID == src, "content untouched")
     }
 }
+
+@Suite("P4.4 — milestone dates are the document's calendar day")
+struct MilestoneDateDayTests {
+    @Test("29/11/2024 reads as 29 November 2024 whatever the machine's timezone")
+    func utcDay() {
+        let dates = PatentLegalEventExtractor.dateMatches(in: "recorded in the Register of Patents on the 29/11/2024. Hearing dated 06/08/2024")
+        let shown = dates.map { EventAnswerComposer.dateFormatter.string(from: $0.date) }
+        #expect(shown.contains("29 November 2024"), "got \(shown)")
+        #expect(shown.contains("6 August 2024"), "got \(shown)")
+    }
+}

@@ -155,8 +155,19 @@ public enum PatentLegalEventExtractor {
         return (best.date, best.loc)
     }
 
+    /// P4.4 — dates are calendar days stored as UTC midnight, the convention
+    /// every reader formats in (EventAnswerComposer's UTC formatter). A local-
+    /// timezone calendar stored "29/11/2024" as 28 Nov 18:30 UTC on an IST
+    /// machine and every answer printed the day BEFORE the document's date
+    /// (the grant, both hearings: 29/11 → 28 Nov, 06/08 → 5 Aug, 14/08 → 13 Aug).
+    static let utcCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0) ?? .current
+        return c
+    }()
+
     private static func dayKey(_ d: Date) -> String {
-        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: d)
+        let c = utcCalendar.dateComponents([.year, .month, .day], from: d)
         return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
     }
 
@@ -174,7 +185,7 @@ public enum PatentLegalEventExtractor {
         func add(_ y: Int, _ m: Int, _ d: Int, _ loc: Int) {
             guard (1900...2100).contains(y), (1...12).contains(m), (1...31).contains(d) else { return }
             var c = DateComponents(); c.year = y; c.month = m; c.day = d
-            if let date = Calendar(identifier: .gregorian).date(from: c) { out.append((date, loc)) }
+            if let date = utcCalendar.date(from: c) { out.append((date, loc)) }
         }
         // dd/mm/yyyy  (also dd-mm-yyyy)
         if let rx = try? NSRegularExpression(pattern: #"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b"#) {
