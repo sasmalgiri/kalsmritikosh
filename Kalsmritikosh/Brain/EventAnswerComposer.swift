@@ -200,7 +200,7 @@ public enum EventAnswerComposer {
             let lines = earlier.suffix(6).map { "\(Self.dateFormatter.string(from: $0.date)) — \($0.title)" }
             text += "\n\nEarlier milestones:\n" + lines.joined(separator: "\n")
         }
-        if let later = events.filter(isCommunication).filter({ $0.hasTrustworthyDate && $0.date >= latest.date })
+        if let later = events.filter(isCommunication).filter({ $0.hasTrustworthyDate && !isListingEntry($0) && $0.date >= latest.date })
             .min(by: { $0.date < $1.date }) {
             text += "\n\nLatest correspondence after it: \(later.title) (\(Self.dateFormatter.string(from: later.date)))."
         }
@@ -253,6 +253,87 @@ public enum EventAnswerComposer {
             supportingEvents: Array(distinct.prefix(10)),
             isNotFound: false,
             receiptLine: "Answered from this subject's own dated records (\(distinct.count) matching); every line cited; no model was consulted.")
+    }
+
+    // MARK: - L5 — what happened in a period
+
+    /// The calendar year a "what happened in ‹year›" question names.
+    public nonisolated static func askedYear(_ question: String) -> Int? {
+        let q = question.lowercased()
+        guard ["what happened", "what went on", "events in", "timeline of", "summary of", "what did i do", "what did we do"]
+            .contains(where: { q.contains($0) }) else { return nil }
+        guard let re = try? NSRegularExpression(pattern: #"\b(19|20)\d{2}\b"#),
+              let m = re.firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
+              let r = Range(m.range, in: q) else { return nil }
+        return Int(q[r])
+    }
+
+    /// Month-by-month record of a year: per month, lifecycle milestones first,
+    /// then distinct correspondence subjects (≤ 4 lines a month), every line
+    /// cited; trustworthy dates only. nil = nothing dated in that year.
+    public nonisolated static func composePeriod(year: Int, events: [Event]) -> EventAnswerComposition? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        let inYear = events.filter { $0.hasTrustworthyDate && cal.component(.year, from: $0.date) == year }
+        guard !inYear.isEmpty else { return nil }
+        let months = Dictionary(grouping: inYear) { cal.component(.month, from: $0.date) }
+        let monthName = DateFormatter()
+        monthName.locale = Locale(identifier: "en_US_POSIX")
+        var lines = ["\(inYear.count) dated record\(inYear.count == 1 ? "" : "s") in \(year), across \(months.count) month\(months.count == 1 ? "" : "s"):"]
+        var cited: [Event] = []
+        for month in months.keys.sorted() {
+            let evs = months[month] ?? []
+            let milestones = evs.filter { !lifecycleWords($0.title).isEmpty && !isCommunicationKind($0) }
+            let mail = evs.filter { isCommunicationKind($0) }
+            var seen = Set<String>()
+            var picked: [Event] = []
+            // Tiers: milestones, then real correspondence, then listing lines.
+            func tier(_ e: Event) -> Int {
+                if isListingEntry(e) { return 2 }
+                return lifecycleWords(e.title).isEmpty ? 1 : 0
+            }
+            let realExists = (milestones + mail).contains { !isListingEntry($0) }
+            for e in (milestones + mail).sorted(by: { a, b in
+                if tier(a) != tier(b) { return tier(a) < tier(b) }
+                return a.date != b.date ? a.date < b.date : a.id.uuidString < b.id.uuidString
+            }) where !(realExists && isListingEntry(e)) {
+                let key = e.title.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+                guard !key.isEmpty, key != "email", seen.insert(key).inserted else { continue }
+                picked.append(e)
+                if picked.count == 4 { break }
+            }
+            guard !picked.isEmpty else { continue }
+            lines.append("")
+            lines.append("\(monthName.monthSymbols[month - 1]) \(year) — \(evs.count) record\(evs.count == 1 ? "" : "s")")
+            for e in picked.sorted(by: { $0.date < $1.date }) {
+                lines.append("\(Self.dateFormatter.string(from: e.date)) — \(e.title)")
+            }
+            cited += picked
+        }
+        return EventAnswerComposition(
+            primaryText: lines.joined(separator: "\n"),
+            supportingEvents: Array(cited.prefix(40)),
+            isNotFound: false,
+            receiptLine: "Composed from the year's dated records, milestones first, every line cited; undated items are left out; no model was consulted.")
+    }
+
+    /// A period question that also names a subject ("what happened with the
+    /// patent in 2024") is a subject question, not an archive-wide year.
+    public nonisolated static func hasSubjectReference(_ question: String) -> Bool {
+        let tokens = question.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        if tokens.contains(where: { $0.count >= 6 && $0.contains(where: \.isNumber) }) { return true }
+        return tokens.contains { SubjectResolver.definiteReferences[$0] != nil }
+    }
+
+    /// A dated line of an archive/export LISTING (EventExtractor's
+    /// "Archived entry — ‹file›"), kept under the keep-all-data rule but never
+    /// allowed to crowd out a real happening.
+    nonisolated static func isListingEntry(_ e: Event) -> Bool {
+        e.title.hasPrefix("Archived entry — ")
+    }
+
+    nonisolated static func isCommunicationKind(_ e: Event) -> Bool {
+        e.kind == .emailReceived || e.kind == .emailSent
     }
 
     // MARK: - count

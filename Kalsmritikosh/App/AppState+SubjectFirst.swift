@@ -24,6 +24,21 @@ extension AppState {
         guard access.scope.isGlobalOwnerBypass else { return nil }
         guard let entities, let events else { return nil }
         if let person = await composePersonAnswer(question: question) { return person }
+        // A year question: the year's own dated records, month by month.
+        if let year = EventAnswerComposer.askedYear(question),
+           !EventAnswerComposer.hasSubjectReference(question) {
+            var c = DateComponents(); c.year = year; c.month = 1; c.day = 1
+            var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+            if let start = cal.date(from: c), let end = cal.date(byAdding: .year, value: 1, to: start),
+               let yearEvents = try? await events.between(start: start, end: end, limit: 5_000),
+               let composed = EventAnswerComposer.composePeriod(year: year, events: yearEvents) {
+                KalsmritikoshLog.brain.info("subject-first: period \(year, privacy: .public) answered from \(yearEvents.count, privacy: .public) event(s)")
+                return Self.deterministicAnswer(composed.primaryText, receipt: composed.receiptLine,
+                    citations: composed.supportingEvents.map {
+                        VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: $0.title)
+                    })
+            }
+        }
         let shape = QuestionShapeRouter.route(question).shape
         let asksStatus = shape == .status
         let namesEvent = !EventAnswerComposer.vocabularyTerms(in: question).isEmpty

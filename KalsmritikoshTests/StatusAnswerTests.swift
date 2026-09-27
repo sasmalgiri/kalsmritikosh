@@ -106,4 +106,29 @@ struct StatusAnswerTests {
                 == "[and hearing held on 06/08/2024 ] a patent is hereby granted")
         #expect(EventAnswerComposer.cleanSummary("short") == nil)
     }
+
+    @Test("A year question: month by month, milestones first, ≤4 lines a month, undated left out; subject questions excluded")
+    func period() throws {
+        #expect(EventAnswerComposer.askedYear("What happened in 2024?") == 2024)
+        #expect(EventAnswerComposer.askedYear("Is 2024 a leap year?") == nil)
+        #expect(EventAnswerComposer.hasSubjectReference("What happened to application 202331019665 in 2024?"))
+        #expect(!EventAnswerComposer.hasSubjectReference("What happened in 2024?"))
+        let events = [
+            Event(kind: .emailReceived, date: day(2024, 3, 2), title: "Quote for spec drafting", sourceObjectID: doc, dateConfidence: 0.95),
+            Event(kind: .other, date: day(2024, 3, 9), title: "Application filed", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .emailReceived, date: day(2024, 3, 10), title: "Quote for spec drafting", sourceObjectID: doc, dateConfidence: 0.95),
+            Event(kind: .other, date: day(2024, 11, 28), title: "Patent granted", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .other, date: day(2024, 6, 1), title: "Undated thing", sourceObjectID: doc, dateConfidence: 0.24),
+            Event(kind: .emailReceived, date: day(2024, 3, 1), title: "Archived entry — GDPR_Report.pdf", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .other, date: day(2023, 5, 1), title: "Last year", sourceObjectID: doc, dateConfidence: 0.85),
+        ]
+        let out = try #require(EventAnswerComposer.composePeriod(year: 2024, events: events))
+        let lines = out.primaryText.components(separatedBy: "\n")
+        #expect(lines[0] == "5 dated records in 2024, across 2 months:")
+        #expect(!out.primaryText.contains("Archived entry"), "a listing line never crowds out a real happening")
+        #expect(out.primaryText.contains("March 2024 — 4 records\n2 March 2024 — Quote for spec drafting\n9 March 2024 — Application filed"))
+        #expect(out.primaryText.contains("November 2024 — 1 record\n28 November 2024 — Patent granted"))
+        #expect(!out.primaryText.contains("Undated") && !out.primaryText.contains("Last year"))
+        #expect(EventAnswerComposer.composePeriod(year: 1999, events: events) == nil)
+    }
 }
