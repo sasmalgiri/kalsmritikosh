@@ -160,6 +160,27 @@ public enum TransactionDomainPack {
                            rawMatch: win.raw, sourceCount: 1)
     }
 
+    /// A receipt whose OCR put "Paid to" on its own line and the name on the
+    /// following lines ("Khurana and Khurana" / "Advocates and IP Attorneys"):
+    /// the name is read across up to three following blocks, stopping at a
+    /// masked/numeric run or payment furniture. nil when no marker block exists.
+    public nonisolated static func documentLevelPayee(
+        blocks: [(id: UUID, text: String)], subjectLabel: String
+    ) -> GenericFact? {
+        let markers: Set<String> = ["paid to", "payee", "beneficiary", "transferred to", "paid to:", "payee:"]
+        for (i, b) in blocks.enumerated() {
+            let t = b.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard markers.contains(t) else { continue }
+            let following = blocks.dropFirst(i + 1).prefix(3).map(\.text).joined(separator: " ")
+            guard let name = counterparty(in: "paid to " + following) else { continue }
+            return GenericFact(subjectLabel: subjectLabel, field: "counterparty", value: name,
+                               status: .sourceAsserted, confidence: 0.65,
+                               sourceBlockIDs: [b.id] + blocks.dropFirst(i + 1).prefix(2).map(\.id),
+                               producerVersion: DerivedProducerVersions.facts, rawMatch: name, sourceCount: 1)
+        }
+        return nil
+    }
+
     /// The furniture of a bank/UPI receipt — OCR splits a screenshot into
     /// blocks, so the amount's own block ("Powered by YES BANK ·10,000") may not
     /// carry "paid to". Only ever used for the OCR-lost-sign amount.

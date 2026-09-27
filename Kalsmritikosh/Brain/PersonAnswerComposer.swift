@@ -205,7 +205,14 @@ public enum PaymentAnswerComposer {
         }
         let tokens = words.filter { $0.count >= 4 && !genericPayeeWords.contains($0) }
         guard !tokens.isEmpty else { return nil }
-        return (words.joined(separator: " "), Array(NSOrderedSet(array: tokens).compactMap { $0 as? String }))
+        // Show the payee as the question wrote it ("Khurana & Khurana").
+        let original = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        var phrase = String(original.dropFirst(opener.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?!. "))
+        if let stop = payeeStops.lazy.compactMap({ phrase.lowercased().range(of: " \($0) ") }).first {
+            phrase = String(phrase[..<stop.lowerBound])
+        }
+        return (phrase, Array(NSOrderedSet(array: tokens).compactMap { $0 as? String }))
     }
 
     /// A payee fact names a party (not an e-mail address) carrying one of the tokens.
@@ -235,8 +242,14 @@ public enum PaymentAnswerComposer {
         text += lines.prefix(12).map { l in
             "\(l.date ?? "undated") — \(l.amount.value) (\(l.label))"
         }.joined(separator: "\n")
+        let grouping = NumberFormatter()
+        grouping.numberStyle = .decimal
+        grouping.locale = Locale(identifier: "en_IN")
+        grouping.maximumFractionDigits = 2
+        let symbols = ["INR": "₹", "USD": "$", "EUR": "€", "GBP": "£"]
         let totalLine = totals.sorted { $0.key < $1.key }.map { unit, sum in
-            let formatted = sum == sum.rounded() ? String(Int(sum)) : String(format: "%.2f", sum)
+            let formatted = grouping.string(from: NSNumber(value: sum)) ?? String(sum)
+            if let sym = symbols[unit] { return sym + formatted }
             return unit == "?" ? formatted : "\(unit) \(formatted)"
         }.joined(separator: " + ")
         text += "\n\nTotal on record: \(totalLine)" + (totals.count > 1 ? " (currencies are never mixed)" : "") + "."

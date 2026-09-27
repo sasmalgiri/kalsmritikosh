@@ -92,23 +92,27 @@ extension AppState {
             let labels = Array(NSOrderedSet(array: payees.map(\.subjectLabel)).compactMap { $0 as? String })
             guard !labels.isEmpty else { return nil }
             // Group by SOURCE DOCUMENT, not label: payment screenshots routinely
-            // share a title ("Transaction Successful"), and one label would merge
-            // separate payments.
-            func document(of f: GenericFact) async -> UUID? {
+            // share a title ("Transaction Successful"), and the per-distinct-fact
+            // merge folds the SAME payee / amount from several receipts into ONE
+            // row whose blocks span those receipts — so every owning document of
+            // every block counts, one payment per document.
+            func documents(of f: GenericFact) async -> Set<UUID> {
+                var out = Set<UUID>()
                 for block in f.sourceBlockIDs {
-                    if let ko = try? await evidenceStore.owningObject(forBlock: block) { return ko }
+                    if let ko = try? await evidenceStore.owningObject(forBlock: block) { out.insert(ko) }
                 }
-                return nil
+                return out
             }
             var payeeDocs = Set<UUID>()
-            for p in payees { if let ko = await document(of: p) { payeeDocs.insert(ko) } }
+            for p in payees { payeeDocs.formUnion(await documents(of: p)) }
             let money = (try? await facts.facts(subjectLabels: labels, fields: ["amount", "date"])) ?? []
             var byDoc: [UUID: (label: String, amounts: [GenericFact], dates: [GenericFact])] = [:]
             for f in money {
-                guard let ko = await document(of: f), payeeDocs.contains(ko) else { continue }
-                var entry = byDoc[ko] ?? (label: f.subjectLabel, amounts: [], dates: [])
-                if f.field == "amount" { entry.amounts.append(f) } else { entry.dates.append(f) }
-                byDoc[ko] = entry
+                for ko in await documents(of: f) where payeeDocs.contains(ko) {
+                    var entry = byDoc[ko] ?? (label: f.subjectLabel, amounts: [], dates: [])
+                    if f.field == "amount" { entry.amounts.append(f) } else { entry.dates.append(f) }
+                    byDoc[ko] = entry
+                }
             }
             let docs = byDoc.sorted { $0.key.uuidString < $1.key.uuidString }.map(\.value)
             guard let composed = PaymentAnswerComposer.compose(payeePhrase: phrase, documents: docs) else { return nil }

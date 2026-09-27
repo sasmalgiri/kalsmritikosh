@@ -189,6 +189,11 @@ public struct DomainFactExtractor: Sendable {
         // line with a mangled currency sign; only the DOCUMENT can say it is a
         // payment. Voted across the glyph variants; only when nothing else
         // already supplied an amount.
+        if !facts.contains(where: { $0.field == "counterparty" && !$0.value.contains("@") }),
+           let payee = TransactionDomainPack.documentLevelPayee(
+               blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel) {
+            facts.append(payee)
+        }
         if !facts.contains(where: { $0.field == "amount" }),
            let voted = TransactionDomainPack.documentLevelAmount(
                blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel) {

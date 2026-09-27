@@ -43,6 +43,15 @@ struct PaymentAnswerTests {
             "no payment confirmation, no amount")
     }
 
+    @Test("'Paid to' on its own OCR line: the payee is read from the following lines")
+    func splitPayee() {
+        let lines = ["Transaction Successful", "05:18 pm on 04 Oct 2023", "Paid to", "Khurana and Khurana",
+                     "Advocates and IP Attorneys", "XXXXXXXXXXX1671", "Axis Bank"]
+        let fact = TransactionDomainPack.documentLevelPayee(blocks: lines.map { (id: UUID(), text: $0) }, subjectLabel: "x")
+        #expect(fact?.value == "Khurana and Khurana Advocates and IP Attorneys")
+        #expect(TransactionDomainPack.documentLevelPayee(blocks: [(id: UUID(), text: "Dear team")], subjectLabel: "x") == nil)
+    }
+
     @Test("A '·' figure outside a payment confirmation is not money")
     func noOcrAmountWithoutPayment() {
         let facts = TransactionDomainPack.extractFacts(fromText: "Agenda · 1,200 attendees expected", subjectLabel: "x", blockID: UUID())
@@ -53,6 +62,7 @@ struct PaymentAnswerTests {
     func questionPayee() throws {
         let p = try #require(PaymentAnswerComposer.payee(in: "How much did I pay Khurana & Khurana?"))
         #expect(p.tokens == ["khurana"])
+        #expect(p.phrase == "Khurana & Khurana", "the payee as the question wrote it")
         #expect(PaymentAnswerComposer.payee(in: "How much did I pay the advocates?") == nil)
         #expect(PaymentAnswerComposer.counterpartyMatches("Khurana and Khurana Advocates", tokens: ["khurana"]))
         #expect(!PaymentAnswerComposer.counterpartyMatches("info@khuranaandkhurana", tokens: ["khurana"]),
@@ -73,7 +83,7 @@ struct PaymentAnswerTests {
             (label: "Wire", amounts: [f("amount", "$100", "USD", "Wire")], dates: []),
         ]))
         #expect(out.text.contains("2023-10-04 — ₹10,000 (Receipt A)\n2024-01-10 — ₹5,000 (Receipt B)"))
-        #expect(out.text.contains("Total on record: INR 15000 + USD 100 (currencies are never mixed)."))
+        #expect(out.text.contains("Total on record: ₹15,000 + $100 (currencies are never mixed)."))
         #expect(out.facts.count == 3, "a repeated amount in one document is one payment")
     }
 }
