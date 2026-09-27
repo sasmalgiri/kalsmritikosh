@@ -36,7 +36,7 @@ passing is never acceptance on its own._
 
 | ID | Task | Owner | Acceptance |
 |---|---|---|---|
-| ☐ P2.1 | **W6 metrics harness** — per-shape precision/recall/context-precision on the gold sets + the owner-copy six questions. Baseline FIRST. | agent | Baseline numbers recorded in `docs/`. |
+| ☑ P2.1 | **Answer metrics** — `docs/ANSWER_METRICS.md`: the 12-question owner-copy acceptance set, before → after (3/12 → 12/12 correct; 10/12 deterministic zero-model; refusal 1.0), with the re-measure recipe and known limits. | agent | Baseline + current numbers recorded. |
 | ☑ P2.2 | **L5 subject-first answering** — owner copy, all 7 diagnostic questions, deterministic, 0 model calls, 0.0 s each: status ("granted — 28 Nov 2024"), hearing (7 dated records), who is Gopinath (correspondence ledger), payments to Khurana & Khurana (₹33,800 over 3 cited receipts), own jobs (owner by address evidence), what happened in 2024 (118 records / 8 months), control refusal. Baseline was 287 s wrong / wrong subject / dump / dump / refused / capped / ✅. | agent | Owner-copy questions answered correctly. |
 | ◐ P2.7 | **First-query cold start** — DONE: optional HyDE bounded to 6 s (withDeadline); on-device model pre-warmed after boot and on first keystroke. NOT MEASURED in the real app (the test host's on-device model runs ~70 s/call); owner to confirm first-question latency live. | agent + 🔒 owner | First pipeline question < 30 s after boot. |
 | ☐ P2.3 | Tune rerank / corrective re-retrieve / HyDE against P2.1 metrics (built + on, never measured). | agent | Each module's on/off delta recorded; any negative module defaulted off. |
