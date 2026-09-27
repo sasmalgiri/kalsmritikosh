@@ -87,3 +87,28 @@ struct PaymentAnswerTests {
         #expect(out.facts.count == 3, "a repeated amount in one document is one payment")
     }
 }
+
+@Suite("P2.9 — is there any invoice from ‹party›")
+struct DocumentKindAnswerTests {
+    @Test("The question's kind and party are read; others are not")
+    func reading() {
+        let q = DocumentKindAnswerComposer.read("is there any invoice from Khurana and Khurana")
+        #expect(q?.kinds == [.invoice] && q?.kindWord == "invoice")
+        #expect(q?.partyPhrase == "Khurana and Khurana" && q?.tokens == ["khurana"])
+        #expect(DocumentKindAnswerComposer.read("Do I have receipts from Acme Stores?")?.kinds == [.receipt, .image])
+        #expect(DocumentKindAnswerComposer.read("How much did I pay Khurana?") == nil)
+        #expect(DocumentKindAnswerComposer.read("is there any invoice from the company") == nil, "no distinctive party word")
+    }
+
+    @Test("Yes, numbered, dated and ordered")
+    func compose() {
+        let q = DocumentKindAnswerComposer.read("is there any invoice from Khurana & Khurana")!
+        let a = UUID(), b = UUID()
+        let text = DocumentKindAnswerComposer.compose(q, matches: [
+            .init(objectID: a, title: "24-25_9617.pdf", number: "24-25/9617", date: "2024-12-02"),
+            .init(objectID: b, title: "23-24_9643.pdf", number: "23-24/9643", date: "2023-10-04"),
+        ], searched: 7)
+        #expect(text.hasPrefix("Yes — 2 invoices from Khurana & Khurana on record:"))
+        #expect(text.contains("No. 23-24/9643 — 2023-10-04 (23-24_9643.pdf)\n• No. 24-25/9617"), "oldest first")
+    }
+}

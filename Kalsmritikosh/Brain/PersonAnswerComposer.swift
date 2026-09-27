@@ -340,3 +340,66 @@ public enum ActorAnswerComposer {
         return out.sorted { $0.completed && !$1.completed }
     }
 }
+
+// MARK: - P2.9 — is there any ‹invoice› from ‹party›
+
+/// "Is there any invoice from Khurana & Khurana?" — documents of the asked KIND
+/// whose text names the party. On the owner's archive the pipeline answered
+/// with a quoted signature block (and the sealed baseline with a list of
+/// e-mail addresses) while the firm's tax invoices sat classed in the ledger.
+public enum DocumentKindAnswerComposer {
+
+    public struct Question: Sendable, Equatable {
+        public let kinds: [DocumentClass]
+        public let kindWord: String      // "invoice" / "receipt"
+        public let partyPhrase: String   // as the question wrote it
+        public let tokens: [String]      // distinctive party words (≥4 letters)
+    }
+
+    /// Kind words the question may use → the document classes that answer it.
+    /// A receipt is often a PICTURE (a payment screenshot), so images count.
+    nonisolated static let kindWords: [String: (word: String, classes: [DocumentClass])] = [
+        "invoice": ("invoice", [.invoice]), "invoices": ("invoice", [.invoice]),
+        "bill": ("invoice", [.invoice]), "bills": ("invoice", [.invoice]),
+        "receipt": ("receipt", [.receipt, .image]), "receipts": ("receipt", [.receipt, .image]),
+    ]
+
+    public nonisolated static func read(_ question: String) -> Question? {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = #"^(?i:is there|are there|do i have|do we have|have i got|did i get|did we get|any)\s+(?i:any\s+|an\s+|a\s+)?(?i:(invoices?|bills?|receipts?))\s+(?i:from|by|issued by)\s+(.+?)[\s?.!]*$"#
+        guard let rx = try? NSRegularExpression(pattern: pattern),
+              let m = rx.firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
+              let kindRange = Range(m.range(at: 1), in: q), let partyRange = Range(m.range(at: 2), in: q),
+              let kind = kindWords[q[kindRange].lowercased()] else { return nil }
+        let party = String(q[partyRange]).trimmingCharacters(in: .whitespaces)
+        let tokens = party.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+            .filter { $0.count >= 4 && !PaymentAnswerComposer.genericPayeeWords.contains($0) }
+        guard !tokens.isEmpty else { return nil }
+        return Question(kinds: kind.classes, kindWord: kind.word, partyPhrase: party,
+                        tokens: Array(NSOrderedSet(array: tokens).compactMap { $0 as? String }))
+    }
+
+    public struct Document: Sendable, Equatable {
+        public let objectID: UUID
+        public let title: String
+        public let number: String?
+        public let date: String?
+    }
+
+    /// Yes with every matching document (numbered, dated, cited). Callers never
+    /// compose a "no" from the class alone (a misclassified invoice would make
+    /// it a false not-found); an empty match falls through to the pipeline.
+    public nonisolated static func compose(_ q: Question, matches: [Document], searched: Int) -> String {
+        let plural = q.kindWord + "s"
+        let sorted = matches.sorted { ($0.date ?? "9999", $0.title) < ($1.date ?? "9999", $1.title) }
+        var text = "Yes — \(matches.count) \(matches.count == 1 ? q.kindWord : plural) from \(q.partyPhrase) on record:\n"
+        text += sorted.prefix(12).map { d in
+            var line = "• " + (d.number.map { "No. \($0)" } ?? d.title)
+            if let date = d.date { line += " — \(date)" }
+            if d.number != nil { line += " (\(d.title))" }
+            return line
+        }.joined(separator: "\n")
+        if matches.count > 12 { text += "\n…and \(matches.count - 12) more." }
+        return text
+    }
+}

@@ -165,6 +165,24 @@ public actor KnowledgeObjectRepository {
         return Set(rows.compactMap { $0.uuid(0) })
     }
 
+    /// P2.9 — documents of the given classes whose text names EVERY token
+    /// (case-insensitive), plus how many documents those classes hold.
+    public func objects(ofClasses classes: [DocumentClass], mentioningAll tokens: [String],
+                        limit: Int = 200) async throws -> (matches: [KnowledgeObject.ID], searched: Int) {
+        guard !classes.isEmpty else { return ([], 0) }
+        let marks = classes.map { _ in "?" }.joined(separator: ",")
+        let classBinds = classes.map { SQLValue.text($0.rawValue) }
+        let searched = Int(try await database.query(
+            "SELECT COUNT(*) FROM knowledge_objects WHERE document_class IN (\(marks));", classBinds).first?.int(0) ?? 0)
+        guard !tokens.isEmpty else { return ([], searched) }
+        let likes = tokens.map { _ in "lower(content) LIKE ?" }.joined(separator: " AND ")
+        let rows = try await database.query("""
+        SELECT id FROM knowledge_objects WHERE document_class IN (\(marks)) AND \(likes)
+        ORDER BY id LIMIT ?;
+        """, classBinds + tokens.map { .text("%\($0.lowercased())%") } + [.integer(Int64(limit))])
+        return (rows.compactMap { $0.uuid(0) }, searched)
+    }
+
     public func fetchContent(id: KnowledgeObject.ID) async throws -> String? {
         let rows = try await database.query("""
         SELECT content FROM knowledge_objects WHERE id = ? LIMIT 1;

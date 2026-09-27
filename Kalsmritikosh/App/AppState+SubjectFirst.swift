@@ -24,6 +24,7 @@ extension AppState {
         guard access.scope.isGlobalOwnerBypass else { return nil }
         guard let entities, let events else { return nil }
         if let person = await composePersonAnswer(question: question) { return person }
+        if let document = await composeDocumentKindAnswer(question: question) { return document }
         if let actor = await composeActorAnswer(question: question) { return actor }
         // A year question: the year's own dated records, month by month.
         if let year = EventAnswerComposer.askedYear(question),
@@ -177,6 +178,37 @@ extension AppState {
                 citations: citations)
         }
         return nil
+    }
+
+    /// P2.9 — "is there any ‹invoice› from ‹party›?" from the documents of that
+    /// class that name the party. nil → the pipeline runs.
+    func composeDocumentKindAnswer(question: String) async -> VerifiedAnswer? {
+        guard let q = DocumentKindAnswerComposer.read(question), let objects, let evidenceStore,
+              let facts = genericFacts,
+              let found = try? await objects.objects(ofClasses: q.kinds, mentioningAll: q.tokens) else { return nil }
+        // Only a YES is deterministic: "none" would be a false not-found whenever
+        // the classifier filed the invoice under another class — the pipeline
+        // (which searches everything) answers those.
+        guard !found.matches.isEmpty else { return nil }
+        let names = (try? await objects.sourceFilenames(for: Set(found.matches))) ?? [:]
+        var docs: [DocumentKindAnswerComposer.Document] = []
+        for id in found.matches {
+            var number: String?, date: String?
+            if let version = try? await evidenceStore.currentVersionID(forObject: id),
+               let blocks = try? await evidenceStore.blocks(forVersion: version) {
+                let own = (try? await facts.facts(forBlockIDs: blocks.map(\.id))) ?? []
+                number = own.first { ["invoicenumber", "invoiceno", "receiptnumber", "billnumber"].contains($0.field.lowercased()) }?.value
+                // The most specific date the document states (a day beats a bare year).
+                date = own.filter { ["invoicedate", "date", "billdate"].contains($0.field.lowercased()) }
+                    .max { ($0.value.count, $1.value) < ($1.value.count, $0.value) }?.value
+            }
+            docs.append(.init(objectID: id, title: names[id] ?? "document", number: number, date: date))
+        }
+        let text = DocumentKindAnswerComposer.compose(q, matches: docs, searched: found.searched)
+        KalsmritikoshLog.brain.info("subject-first: \(q.kindWord, privacy: .public) existence answered — \(docs.count, privacy: .public) of \(found.searched, privacy: .public)")
+        return Self.deterministicAnswer(text,
+            receipt: "Documents classed as \(q.kindWord)s whose text names every distinctive word of “\(q.partyPhrase)”; no model was consulted.",
+            citations: docs.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: q.partyPhrase) })
     }
 
     static func deterministicAnswer(_ text: String, receipt: String, citations: [VerifiedAnswer.Citation]) -> VerifiedAnswer {
