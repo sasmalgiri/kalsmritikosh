@@ -133,21 +133,7 @@ public struct AskView: View {
             )
         }
         .sheet(item: $openSource) { target in
-            VStack(spacing: 0) {
-                HStack {
-                    Text(target.url.lastPathComponent)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                    Button("Done") { openSource = nil }
-                        .keyboardShortcut(.cancelAction)
-                }
-                .padding(10)
-                Divider()
-                SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
-            }
-            .frame(minWidth: 640, minHeight: 480)
+            CitationSourceSheet(target: target) { openSource = nil }
         }
         .sheet(item: $activeInvestigation) { inv in
             InvestigationSheet(

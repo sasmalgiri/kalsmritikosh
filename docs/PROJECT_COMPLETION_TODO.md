@@ -48,7 +48,7 @@ passing is never acceptance on its own._
 
 | ID | Task | Owner | Acceptance |
 |---|---|---|---|
-| ☐ P3.1 | Story/History citations open in the in-app viewer at the quote (Ask already does). | agent | HistoryView tap → SourceViewer with highlight. |
+| ☑ P3.1 | Story/History citations open in the in-app viewer at the quote — shared `CitationSourceSheet` (Ask + Story). Story sentences are composed prose: highlighted only when the source states them verbatim, else the document opens un-highlighted. | agent | HistoryView tap → SourceViewer. |
 | ☐ P3.2 | Sources "Refreshing N sources with newer rules…" line while the drain runs. | agent | Line shows during drain, reads 0 after. |
 | ☐ P3.3 | Timeline axis gap markers. | agent | Gaps from the gaps panel drawn on the axis. |
 | ☐ P3.4 | **Live check of the 2026-09-27 UI** — citation chips (PDF + email), closest-match on a not-found, Technical details, sample archive → banner → back, persona step. | 🔒 owner | Each behaves as described; any defect filed. |

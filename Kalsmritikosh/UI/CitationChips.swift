@@ -151,3 +151,33 @@ public enum CitedPassageLocator {
         return (out, map)
     }
 }
+
+/// §1.3 — the sheet a citation opens: the source in the app, at the quote.
+/// Shared by Ask and Story so both open evidence the same way.
+public struct CitationSourceSheet: View {
+    let target: CitationOpenTarget
+    let onDone: () -> Void
+
+    public init(target: CitationOpenTarget, onDone: @escaping () -> Void) {
+        self.target = target
+        self.onDone = onDone
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(target.url.lastPathComponent)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button("Done", action: onDone)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(10)
+            Divider()
+            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
+        }
+        .frame(minWidth: 640, minHeight: 480)
+    }
+}
