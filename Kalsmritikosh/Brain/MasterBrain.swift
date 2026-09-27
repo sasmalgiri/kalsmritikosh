@@ -1419,6 +1419,22 @@ public actor MasterBrain {
         public let purposes: [String]
     }
 
+    /// P2.3 — a `.role` question whose retrieved facts give the slot composer
+    /// one canonical, structured, conflict-free value.
+    nonisolated static func isSlotLawQuestion(intent: UserIntent, retrieval: RetrievalResult) -> Bool {
+        guard QuestionShapeRouter.route(intent.rawQuestion).shape == .role else { return false }
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        guard !plan.slotFieldIDs.isEmpty,
+              let slot = SlotAnswerComposer.compose(
+                slotFieldIDs: plan.slotFieldIDs,
+                facts: retrieval.genericFacts,
+                evaluations: retrieval.claimEvaluations,
+                authorityObjectIDs: retrieval.authorityObjectIDs,
+                documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count))
+        else { return false }
+        return !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
+    }
+
     public func answerWithDiagnostics(
         question: String,
         access: SensitiveAccessContext
@@ -1791,7 +1807,22 @@ public actor MasterBrain {
             access: access,
             sensitivePolicy: sensitivePolicy
         )
-        let findings = await executor.execute(
+        // P2.3 — THE SLOT LAW, before any model: a role question ("who is the
+        // applicant of …") whose retrieved facts carry exactly ONE canonical,
+        // structured, conflict-free value is answered from that value. The
+        // model added nothing here but variance — on the owner's copy the same
+        // question came back as the slot sentence (0.80), a fact dump (0.40) or
+        // prose naming the agent too (0.30) across identical runs. Anything
+        // less than a clean single value (none, a conflict, unstructured) runs
+        // the experts exactly as before.
+        var slotFirst: VerifiedAnswer?
+        if Self.isSlotLawQuestion(intent: intent, retrieval: sharedRetrieval),
+           let answered = try? await verifier.verify(intent: intent, findings: [], retrieval: sharedRetrieval),
+           !answered.refused, !answered.citations.isEmpty {
+            KalsmritikoshLog.brain.info("slot law: answered before the experts from one canonical value")
+            slotFirst = answered
+        }
+        let findings = slotFirst != nil ? [] : await executor.execute(
             intent: intent,
             decision: decision,
             context: context
@@ -1802,11 +1833,15 @@ public actor MasterBrain {
 
         let verified: VerifiedAnswer
         do {
-            verified = try await verifier.verify(
-                intent: intent,
-                findings: findings,
-                retrieval: retrievalForVerifier
-            )
+            if let slotFirst {
+                verified = slotFirst
+            } else {
+                verified = try await verifier.verify(
+                    intent: intent,
+                    findings: findings,
+                    retrieval: retrievalForVerifier
+                )
+            }
         } catch {
             // Verifier itself crashed — chunk RAG fallback so we
             // still hand the user *something* instead of a refusal.

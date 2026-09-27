@@ -885,6 +885,27 @@ public struct EvidenceVerifier: Verifier {
                 report: effectiveReport)
         }
 
+        // P2.3 — THE SLOT LAW: called with no expert findings (MasterBrain's
+        // door for role questions), a clean slot — one canonical, structured,
+        // conflict-free value — is the answer, cited to the document that
+        // carries it. Any other slot state still needs expert claims below.
+        if claims.isEmpty, let slot, !slot.isNotFound, !slot.isConflict,
+           slot.singleCanonicalValue, slot.structuredSource, let source = slot.supportingObjectIDs.first {
+            let rendered = renderAnswer(intent: intent, findings: [], retrieval: retrieval,
+                                        report: effectiveReport, plan: plan, slot: slot,
+                                        resolvedCharter: resolvedCharter)
+            return VerifiedAnswer(
+                body: rendered.body,
+                answerText: rendered.answerText,
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: source, snippet: slot.citedValue ?? slot.primaryText)],
+                confidence: effectiveReport.combined,
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                refusalReason: nil,
+                report: effectiveReport)
+        }
+
         guard !claims.isEmpty,
               effectiveReport.combined >= minimumConfidence,
               citations.count >= minimumCitations
