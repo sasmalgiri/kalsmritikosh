@@ -49,13 +49,14 @@ public enum TopicConsolidator {
             if byKey[key] == nil { keyOrder.append(key) }
             byKey[key, default: []].append(s)
         }
-        let input: [SubjectFacts] = keyOrder.compactMap { key in
+        let merged: [SubjectFacts] = keyOrder.compactMap { key in
             guard let group = byKey[key], let lead = group.max(by: {
                 $0.facts.count != $1.facts.count ? $0.facts.count < $1.facts.count : $0.subject > $1.subject
             }) else { return nil }
             if group.count == 1 { return lead }
             return SubjectFacts(subject: lead.subject, facts: group.flatMap(\.facts))
         }
+        let input = foldTemplateSeries(merged, closed: closed)
         guard input.count > 1 else { return input }
 
         func distinctCount(_ s: SubjectFacts) -> Int {
@@ -128,6 +129,79 @@ public enum TopicConsolidator {
         }
 
         return order.map { SubjectFacts(subject: $0, facts: bucket[$0] ?? []) }
+    }
+
+    // MARK: - P1.19 template series
+
+    /// Shortest shared leading phrase (in words) that marks a template.
+    nonisolated static let seriesMinPrefixWords = 3
+    /// Distinct labels needed before a shared opening counts as a template.
+    nonisolated static let seriesMinMembers = 3
+
+    /// P1.19 — labels minted from ONE template with a varying slot ("Alert
+    /// Generated for sara Koll" / "… for L489000002" / "… for john smidth")
+    /// are one series, not N topics. Three or more open subjects whose labels
+    /// share the same leading ≥3 words fold into one topic named by that
+    /// shared opening ("Alert Generated for …"). The sender signal cannot
+    /// catch these — on the owner's archive they were sent from the owner's own
+    /// address — but the label shape can, for any source. Rewordings of one
+    /// matter ("CV for pharmaceutical production job" / "CV : For
+    /// Pharmaceutical JOB") fold the same way. Closed matters never fold.
+    nonisolated static func foldTemplateSeries(_ input: [SubjectFacts], closed: Set<String>) -> [SubjectFacts] {
+        func words(_ s: String) -> [Substring] {
+            withoutReplyMarkers(s).lowercased().split { !$0.isLetter && !$0.isNumber }
+        }
+        var groups: [String: [Int]] = [:]
+        for (i, s) in input.enumerated() where !closed.contains(s.subject) {
+            let w = words(s.subject)
+            guard w.count > seriesMinPrefixWords else { continue }   // a slot must follow
+            groups[w.prefix(seriesMinPrefixWords).joined(separator: " "), default: []].append(i)
+        }
+        var absorbed = Set<Int>()
+        var replacement: [Int: SubjectFacts] = [:]
+        for (_, members) in groups where members.count >= seriesMinMembers {
+            let lead = members.max {
+                input[$0].facts.count != input[$1].facts.count
+                    ? input[$0].facts.count < input[$1].facts.count : input[$0].subject > input[$1].subject
+            } ?? members[0]
+            // The longest opening every member shares, in the lead's own spelling.
+            let split = members.map { words(input[$0].subject) }
+            var shared = seriesMinPrefixWords
+            while split.allSatisfy({ $0.count > shared + 1 && $0[shared] == split[0][shared] }) { shared += 1 }
+            let label = openingText(of: withoutReplyMarkers(input[lead].subject), words: shared) + " …"
+            replacement[members.min() ?? lead] = SubjectFacts(
+                subject: label, facts: members.flatMap { input[$0].facts })
+            absorbed.formUnion(members)
+        }
+        guard !absorbed.isEmpty else { return input }
+        return input.indices.compactMap { i in
+            if let r = replacement[i] { return r }
+            return absorbed.contains(i) ? nil : input[i]
+        }
+    }
+
+    /// Reply/forward markers are transport, not wording ("Re: Fwd: X" → "X").
+    nonisolated static func withoutReplyMarkers(_ label: String) -> String {
+        var rest = label[...]
+        while let r = rest.range(of: #"^\s*(?i:re|fw|fwd)\s*:\s*"#, options: .regularExpression) {
+            rest = rest[r.upperBound...]
+        }
+        return String(rest)
+    }
+
+    /// The original text of `label` up to the end of its `words`-th word.
+    nonisolated static func openingText(of label: String, words count: Int) -> String {
+        var seen = 0
+        var inWord = false
+        var end = label.startIndex
+        for i in label.indices {
+            let isWordChar = label[i].isLetter || label[i].isNumber
+            if isWordChar && !inWord { seen += 1 }
+            inWord = isWordChar
+            if isWordChar { end = label.index(after: i) }
+            if seen == count, !isWordChar { break }
+        }
+        return String(label[label.startIndex..<end])
     }
 
     // MARK: - P1.13 non-subject labels (universal, shape + small vocabularies)

@@ -157,4 +157,22 @@ import Foundation
         #expect(!out.contains("shirshendu sasmal wants to chat"))
         #expect(out.contains("Patent No. 555489"))
     }
+
+    @Test("P1.19 — one template with a varying slot is one series topic; closed matters and distinct matters are untouched")
+    func templateSeriesFold() {
+        let facts = (1...5).map { ("f\($0)", "v\($0)") }
+        let alerts = ["Alert Generated for sara Koll", "Alert Generated for L489000002", "Re: Alert Generated for john smidth"]
+            .map { subjectFacts($0, facts) }
+        let pair = ["Final shift schedule A", "Final shift schedule B"].map { subjectFacts($0, facts) }
+        let patents = ["Patent No. 555489 grant", "Patent No. 555489 hearing", "Patent No. 555489 fee"]
+            .map { subjectFacts($0, facts) }
+        let out = TopicConsolidator.consolidate(alerts + pair + patents, closed: Set(patents.map(\.subject)))
+        let labels = out.map(\.subject)
+        #expect(labels.contains("Alert Generated for …"))
+        #expect(!labels.contains { $0.hasPrefix("Alert Generated for ") && !$0.hasSuffix("…") })
+        #expect(out.first { $0.subject == "Alert Generated for …" }?.facts.count == 15, "every member's facts are kept")
+        #expect(labels.contains("Final shift schedule A") && labels.contains("Final shift schedule B"), "two are not a series")
+        #expect(patents.allSatisfy { labels.contains($0.subject) }, "closed matters never fold")
+        #expect(TopicConsolidator.openingText(of: "CV : For Pharmaceutical JOB", words: 3) == "CV : For Pharmaceutical")
+    }
 }
