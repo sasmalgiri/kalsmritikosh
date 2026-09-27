@@ -865,6 +865,9 @@ public final class AppState {
     /// backfill; the ingest hook fires incremental per-source projections on this SAME instance
     /// (so a full pass and an incremental refresh never scan concurrently).
     public private(set) var claimProjection: ClaimProjectionBackfill?
+    /// P3.2 — how many derived rows the background refresh is bringing up to
+    /// the current rules (nil = no refresh running). Drives the Sources line.
+    public var ledgerRefreshPending: Int?
     /// The detached, cancellable boot-backfill task. Held so a re-boot cancels the prior pass
     /// (the backfill is single-flight + resumable, so cancellation loses nothing).
     private var claimProjectionBackfillTask: Task<Void, Never>?
@@ -2653,7 +2656,7 @@ public final class AppState {
                 let drainEvidence = evidenceStoreRepo
                 let drainCapabilities = capabilities
                 let drainProjection = self.claimProjection
-                Task.detached(priority: .utility) {
+                Task.detached(priority: .utility) { [weak self] in
                     do {
                         let stale = try await drainDB.query("""
                         SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts))
@@ -2677,6 +2680,8 @@ public final class AppState {
                         }
                         if stale > 0 || inductionNeverRan {
                             KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era\(inductionNeverRan ? " · schema induction has not run yet" : "") — refreshing in the background")
+                            let pending = Int(stale)
+                            await MainActor.run { self?.ledgerRefreshPending = pending }
                             let coordinator = LedgerDrainCoordinator(
                                 database: drainDB, objects: drainObjects, entities: drainEntities,
                                 events: drainEvents, facts: drainFacts, evidence: drainEvidence,
@@ -2688,8 +2693,10 @@ public final class AppState {
                             if receipt.eventKOsRewritten > 0 || receipt.factsSourcesRewritten > 0 {
                                 await drainProjection?.run(at: Date())
                             }
+                            await MainActor.run { self?.ledgerRefreshPending = nil }
                         }
                     } catch {
+                        await MainActor.run { self?.ledgerRefreshPending = nil }
                         KalsmritikoshLog.app.error("Ledger drain failed (will retry next launch): \(error)")
                     }
                     // SPEC A1.4 (the reachability lesson, applied) — the rest

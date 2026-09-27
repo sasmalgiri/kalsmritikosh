@@ -136,6 +136,15 @@ public struct SourcesView: View {
                 Text("\(fileCount) file(s) ingested")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // P3.2 — a background refresh is bringing older records up to
+                // the current rules; say so, and say when it is done.
+                if let pending = appState.ledgerRefreshPending {
+                    Label("Refreshing \(pending.formatted()) record\(pending == 1 ? "" : "s") with newer rules…",
+                          systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Refreshing \(pending) records with newer rules in the background")
+                }
             }
             InfoPopoverButton(
                 title: "Sources = your knowledge base",
