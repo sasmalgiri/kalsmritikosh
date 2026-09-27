@@ -91,12 +91,26 @@ extension AppState {
                 .filter { PaymentAnswerComposer.counterpartyMatches($0.value, tokens: tokens) }
             let labels = Array(NSOrderedSet(array: payees.map(\.subjectLabel)).compactMap { $0 as? String })
             guard !labels.isEmpty else { return nil }
-            let money = (try? await facts.facts(subjectLabels: labels, fields: ["amount", "date"])) ?? []
-            let docs = labels.map { label in
-                (label: label,
-                 amounts: money.filter { $0.subjectLabel == label && $0.field == "amount" },
-                 dates: money.filter { $0.subjectLabel == label && $0.field == "date" })
+            // Group by SOURCE DOCUMENT, not label: payment screenshots routinely
+            // share a title ("Transaction Successful"), and one label would merge
+            // separate payments.
+            func document(of f: GenericFact) async -> UUID? {
+                for block in f.sourceBlockIDs {
+                    if let ko = try? await evidenceStore.owningObject(forBlock: block) { return ko }
+                }
+                return nil
             }
+            var payeeDocs = Set<UUID>()
+            for p in payees { if let ko = await document(of: p) { payeeDocs.insert(ko) } }
+            let money = (try? await facts.facts(subjectLabels: labels, fields: ["amount", "date"])) ?? []
+            var byDoc: [UUID: (label: String, amounts: [GenericFact], dates: [GenericFact])] = [:]
+            for f in money {
+                guard let ko = await document(of: f), payeeDocs.contains(ko) else { continue }
+                var entry = byDoc[ko] ?? (label: f.subjectLabel, amounts: [], dates: [])
+                if f.field == "amount" { entry.amounts.append(f) } else { entry.dates.append(f) }
+                byDoc[ko] = entry
+            }
+            let docs = byDoc.sorted { $0.key.uuidString < $1.key.uuidString }.map(\.value)
             guard let composed = PaymentAnswerComposer.compose(payeePhrase: phrase, documents: docs) else { return nil }
             var citations: [VerifiedAnswer.Citation] = []
             for f in composed.facts {

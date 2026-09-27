@@ -21,6 +21,14 @@ struct PaymentAnswerTests {
         let amount = facts.first(where: { $0.field == "amount" })
         #expect(amount?.value == "₹10,000")
         #expect(amount?.unit == "INR")
+        #expect(facts.first(where: { $0.field == "date" })?.value == "2023-10-04", "a written-month receipt date")
+    }
+
+    @Test("OCR splits a screenshot: the amount's own block ('Powered by YES BANK ·10,000') still yields the amount")
+    func splitBlock() {
+        let facts = TransactionDomainPack.extractFacts(fromText: "UTR: 327780872723 Powered by YES BANK ·10,000 ^ ·10,000",
+                                                       subjectLabel: "x", blockID: UUID())
+        #expect(facts.first(where: { $0.field == "amount" })?.value == "₹10,000")
     }
 
     @Test("A '·' figure outside a payment confirmation is not money")

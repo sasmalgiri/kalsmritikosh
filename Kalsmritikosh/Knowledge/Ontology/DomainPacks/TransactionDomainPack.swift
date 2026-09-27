@@ -63,7 +63,7 @@ public enum TransactionDomainPack {
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: amount, sourceCount: 1))
-        } else if isPaymentConfirmation(text),
+        } else if isPaymentConfirmation(text) || hasReceiptFurniture(text),
                   let ocr = firstMatch(#"[·•]\s?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?"#, in: text) {
             // P2 (payments) — OCR routinely reads a rupee sign as "·" on payment
             // screenshots ("YES BANK ·10,000"). Only in a payment confirmation,
@@ -84,6 +84,12 @@ public enum TransactionDomainPack {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: iso,
                                      status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
+        } else if let raw = firstMatch(#"\b\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?\s\d{4}\b"#, in: text),
+                  let iso = writtenDate(raw) {
+            // Receipts write "05 Dec 2024" — the numeric pattern never saw it.
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: iso,
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
         }
         return facts
     }
@@ -97,6 +103,22 @@ public enum TransactionDomainPack {
         return ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
     }
 
+    nonisolated static func writtenDate(_ raw: String) -> String? {
+        let cleaned = raw.replacingOccurrences(of: ",", with: "").replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: "Sept", with: "Sep").replacingOccurrences(of: "sept", with: "sep")
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        for format in ["d MMM yyyy", "d MMMM yyyy"] {
+            f.dateFormat = format
+            if let d = f.date(from: cleaned) {
+                f.dateFormat = "yyyy-MM-dd"
+                return f.string(from: d)
+            }
+        }
+        return nil
+    }
+
     nonisolated static func normalize(_ amount: String) -> String {
         amount.replacingOccurrences(of: " ", with: "")
     }
@@ -106,6 +128,14 @@ public enum TransactionDomainPack {
         if a.contains("₹") || a.contains("rs") || a.contains("inr") { return "INR" }
         if a.contains("$") { return "USD" }
         return nil
+    }
+
+    /// The furniture of a bank/UPI receipt — OCR splits a screenshot into
+    /// blocks, so the amount's own block ("Powered by YES BANK ·10,000") may not
+    /// carry "paid to". Only ever used for the OCR-lost-sign amount.
+    nonisolated static func hasReceiptFurniture(_ text: String) -> Bool {
+        let t = text.lowercased()
+        return ["utr", "upi", "powered by", "debited", "bank transfer", "transaction id", " bank "].contains { t.contains($0) }
     }
 
     /// A payment CONFIRMATION (not merely a mention of money).
