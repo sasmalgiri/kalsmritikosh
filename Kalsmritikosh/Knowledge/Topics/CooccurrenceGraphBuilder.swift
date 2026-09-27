@@ -115,6 +115,9 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         // affects RETRIEVAL — T3 should not pollute communities).
         // Dates, amounts and phone numbers are attributes, not topic
         // members: "Thu, 29 Aug 2024 16:08:51" joined unrelated emails.
+        // P1.16 — so are places: résumés list cities, spreadsheets list
+        // countries, and on the owner's copy one community of 100 (the cap)
+        // was nothing but locations. They stay in the ledger and retrieval.
         //
         // Ordering by id ensures each pair appears once
         // (entity_a < entity_b lexicographically).
@@ -122,7 +125,7 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         WITH eligible AS (
             SELECT e.id FROM entities e
             WHERE e.quality_tier IN ('T1','T2')
-              AND e.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber')
+              AND e.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber', 'location')
               AND (SELECT COUNT(DISTINCT x.source_object_id) FROM entity_mentions x
                    WHERE x.entity_id = e.id) <= ?
         )

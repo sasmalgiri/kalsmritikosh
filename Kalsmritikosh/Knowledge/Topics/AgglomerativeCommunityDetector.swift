@@ -132,8 +132,8 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
             JOIN entities ea ON ea.id = c.entity_a
             JOIN entities eb ON eb.id = c.entity_b
             WHERE c.weight >= ?
-              AND ea.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber')
-              AND eb.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber')
+              AND ea.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber', 'location')
+              AND eb.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber', 'location')
             ORDER BY c.weight DESC, c.entity_a, c.entity_b;
             """, [.integer(Int64(minMergeWeight))])
             edges = rows.compactMap { row -> (UUID, UUID, Int)? in

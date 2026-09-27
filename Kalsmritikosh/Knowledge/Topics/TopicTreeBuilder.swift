@@ -217,8 +217,16 @@ public struct TopicTreeBuilder {
             try await database.exec("DELETE FROM community_summaries WHERE level = 1;", [])
             let now = Date().timeIntervalSince1970
             for (root, children) in groups.sorted(by: { $0.key < $1.key }) {
-                // A parent with one child adds no structure — leaves stay leaves.
-                guard children.count >= 2 else { continue }
+                // A parent with one child adds no structure — leaves stay leaves —
+                // EXCEPT a matter: one substantial community that names an
+                // identifier anchor IS a top-level topic (P1.16: once hubs and
+                // attributes left the graph, the owner's whole patent matter
+                // formed ONE community, and Big Picture — level-1 only — lost it).
+                if children.count < 2 {
+                    guard let only = children.first,
+                          (members[only]?.count ?? 0) >= 5,
+                          (signature[only] ?? []).contains(where: { $0.hasPrefix("anchor:") }) else { continue }
+                }
                 let allMembers = children.flatMap { members[$0] ?? [] }
                     .sorted { $0.uuidString < $1.uuidString }
                 let nodeID = "L1-" + root
@@ -255,7 +263,8 @@ public struct TopicTreeBuilder {
         for c in children {
             for s in signature[c] ?? [] { counts[s, default: 0] += 1 }
         }
-        let sharedAnchors = counts.filter { $0.key.hasPrefix("anchor:") && $0.value >= 2 }
+        let minShare = children.count == 1 ? 1 : 2   // a one-community matter labels by its own anchor
+        let sharedAnchors = counts.filter { $0.key.hasPrefix("anchor:") && $0.value >= minShare }
             .keys.sorted()
         if let key = sharedAnchors.first {
             let identity = String(key.dropFirst("anchor:".count))
