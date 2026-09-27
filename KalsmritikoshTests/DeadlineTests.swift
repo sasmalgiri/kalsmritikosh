@@ -24,4 +24,17 @@ struct DeadlineTests {
         #expect(slow == nil)
         #expect(Date().timeIntervalSince(started) < 2, "the caller is not held for the slow operation")
     }
+
+    @Test("An operation that IGNORES cancellation still cannot hold the caller past the deadline")
+    func nonCooperative() async {
+        let started = Date()
+        let value = await withDeadline(seconds: 0.2) { () async -> String? in
+            // A busy wait never checks Task.isCancelled — like a model mid-generation.
+            let end = Date().addingTimeInterval(1.5)
+            while Date() < end {}
+            return "too late"
+        }
+        #expect(value == nil)
+        #expect(Date().timeIntervalSince(started) < 1.0, "returned at the deadline, not when the work finished")
+    }
 }
