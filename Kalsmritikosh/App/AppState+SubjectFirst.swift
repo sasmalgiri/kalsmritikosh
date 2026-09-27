@@ -86,10 +86,43 @@ extension AppState {
                     VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: $0.title)
                 })
         }
+        if let (phrase, tokens) = PaymentAnswerComposer.payee(in: question), let facts = genericFacts, let evidenceStore {
+            let payees = ((try? await facts.facts(field: "counterparty", limit: 2_000)) ?? [])
+                .filter { PaymentAnswerComposer.counterpartyMatches($0.value, tokens: tokens) }
+            let labels = Array(NSOrderedSet(array: payees.map(\.subjectLabel)).compactMap { $0 as? String })
+            guard !labels.isEmpty else { return nil }
+            let money = (try? await facts.facts(subjectLabels: labels, fields: ["amount", "date"])) ?? []
+            let docs = labels.map { label in
+                (label: label,
+                 amounts: money.filter { $0.subjectLabel == label && $0.field == "amount" },
+                 dates: money.filter { $0.subjectLabel == label && $0.field == "date" })
+            }
+            guard let composed = PaymentAnswerComposer.compose(payeePhrase: phrase, documents: docs) else { return nil }
+            var citations: [VerifiedAnswer.Citation] = []
+            for f in composed.facts {
+                guard let block = f.sourceBlockIDs.first,
+                      let ko = try? await evidenceStore.owningObject(forBlock: block) else { continue }
+                citations.append(VerifiedAnswer.Citation(objectID: ko, snippet: "amount: \(f.value)"))
+            }
+            guard !citations.isEmpty else { return nil }
+            KalsmritikoshLog.brain.info("subject-first: payments answered from \(labels.count, privacy: .public) payment document(s)")
+            return Self.deterministicAnswer(composed.text,
+                receipt: "Summed from the payment confirmations' own amount facts, per currency; no model was consulted.",
+                citations: citations)
+        }
         if PersonAnswerComposer.asksOwnJobs(question), let facts = genericFacts, let evidenceStore {
             let owners = (try? await participants.likelyOwnerAddresses()) ?? []
+            // The owner's subjects: named as the owner (the names the owner's
+            // address sends under), or stating the owner's FULL address as a
+            // whole token. Other candidates' CVs addressed to the owner carry
+            // at most a truncated form and never qualify.
             var labels: [String] = []
-            for address in owners { labels += (try? await facts.subjectLabels(statingValue: address)) ?? [] }
+            for address in owners {
+                for name in (try? await participants.displayNames(sentBy: address)) ?? [] {
+                    labels += (try? await facts.subjectLabels(named: name)) ?? []
+                }
+                labels += (try? await facts.subjectLabels(containingToken: address)) ?? []
+            }
             let ownerLabels = Array(NSOrderedSet(array: labels).compactMap { $0 as? String }.prefix(6))
             guard !ownerLabels.isEmpty else { return nil }
             let jobFacts = (try? await facts.facts(

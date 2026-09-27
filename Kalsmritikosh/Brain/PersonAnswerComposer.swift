@@ -133,6 +133,12 @@ public enum PersonAnswerComposer {
     nonisolated static let valuePrefixes = ["current organization", "current organisation", "present employer",
                                             "employer", "company", "organization", "organisation", "designation"]
 
+    nonisolated static let industryNouns: Set<String> = [
+        "pharmaceutical", "pharmaceuticals", "pharma", "chemical", "chemicals", "industries", "industry",
+        "solutions", "services", "technologies", "technology", "laboratories", "labs", "healthcare",
+        "enterprises", "systems", "consultants", "consultancy", "international", "global", "group", "india",
+    ]
+
     nonisolated static func cleanValue(_ raw: String) -> String {
         var v = raw.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         for p in valuePrefixes where v.lowercased().hasPrefix(p) {
@@ -151,7 +157,10 @@ public enum PersonAnswerComposer {
             let words = v.lowercased().split(whereSeparator: { $0.isWhitespace })
                 .map { $0.trimmingCharacters(in: .punctuationCharacters) }.filter { !$0.isEmpty }
             let onlySuffixes = words.allSatisfy { EntityQualityGate.legalSuffixes.contains($0) }
-            return letters.count >= 3 && !onlySuffixes
+            // "Pharmaceutical Ltd" — an industry noun plus a suffix is a
+            // truncated capture of a real name, not a name.
+            let onlyGeneric = words.allSatisfy { EntityQualityGate.legalSuffixes.contains($0) || industryNouns.contains($0) }
+            return letters.count >= 3 && !onlySuffixes && !onlyGeneric
         }
         var seen = Set<String>()
         let employers = facts.filter { employerFields.contains($0.field.lowercased()) && keep($0) }
@@ -159,7 +168,7 @@ public enum PersonAnswerComposer {
         let roles = facts.filter { roleFields.contains($0.field.lowercased()) && keep($0) }
             .filter { seen.insert("r|" + cleanValue($0.value).lowercased()).inserted }
         guard !employers.isEmpty || !roles.isEmpty else { return nil }
-        var lines = ["From \(ownerLabel)'s own records (the documents that state your address):"]
+        var lines = ["From your own records (documents named \(ownerLabel) or stating your address):"]
         if !employers.isEmpty {
             lines.append("Employers: " + employers.prefix(10).map { cleanValue($0.value) }.joined(separator: " · "))
         }
@@ -167,5 +176,71 @@ public enum PersonAnswerComposer {
             lines.append("Roles: " + roles.prefix(10).map { cleanValue($0.value) }.joined(separator: " · "))
         }
         return (lines.joined(separator: "\n"), Array((employers + roles).prefix(12)))
+    }
+}
+
+// MARK: - L5 — what did I pay ‹payee›
+
+public enum PaymentAnswerComposer {
+
+    nonisolated static let openers = ["how much did i pay ", "how much have i paid ", "what did i pay ",
+                                      "how much did we pay ", "how much have we paid ", "payments to ",
+                                      "total paid to ", "how much was paid to ", "what have i paid "]
+    nonisolated static let payeeStops: Set<String> = ["for", "in", "on", "since", "during", "between", "so", "till", "until"]
+    nonisolated static let genericPayeeWords: Set<String> = [
+        "and", "the", "&", "advocates", "attorneys", "associates", "company", "co", "ltd", "llp", "pvt", "private",
+        "limited", "inc", "ip", "law", "firm", "services", "india",
+    ]
+
+    /// The payee a payment question names, and its distinctive tokens.
+    public nonisolated static func payee(in question: String) -> (phrase: String, tokens: [String])? {
+        let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let opener = openers.first(where: { q.hasPrefix($0) }) else { return nil }
+        var words: [String] = []
+        for raw in q.dropFirst(opener.count).split(whereSeparator: { $0.isWhitespace }) {
+            let w = raw.trimmingCharacters(in: .punctuationCharacters)
+            if w.isEmpty { continue }
+            if payeeStops.contains(w) { break }
+            words.append(w)
+        }
+        let tokens = words.filter { $0.count >= 4 && !genericPayeeWords.contains($0) }
+        guard !tokens.isEmpty else { return nil }
+        return (words.joined(separator: " "), Array(NSOrderedSet(array: tokens).compactMap { $0 as? String }))
+    }
+
+    /// A payee fact names a party (not an e-mail address) carrying one of the tokens.
+    public nonisolated static func counterpartyMatches(_ value: String, tokens: [String]) -> Bool {
+        let v = value.lowercased()
+        guard !v.contains("@") else { return false }
+        return tokens.contains { v.contains($0) }
+    }
+
+    /// `documents` = per payment document (subject label): its amount + date facts.
+    public nonisolated static func compose(payeePhrase: String, documents: [(label: String, amounts: [GenericFact], dates: [GenericFact])])
+        -> (text: String, facts: [GenericFact])? {
+        struct Line { let date: String?; let amount: GenericFact; let label: String }
+        var lines: [Line] = []
+        for d in documents {
+            var seen = Set<String>()
+            for a in d.amounts where seen.insert(a.value.lowercased()).inserted {
+                lines.append(Line(date: d.dates.first?.value, amount: a, label: d.label))
+            }
+        }
+        guard !lines.isEmpty else { return nil }
+        lines.sort { ($0.date ?? "9999") < ($1.date ?? "9999") }
+        func number(_ v: String) -> Double? { Double(v.filter { $0.isNumber || $0 == "." }) }
+        var totals: [String: Double] = [:]
+        for l in lines { if let n = number(l.amount.value) { totals[l.amount.unit ?? "?", default: 0] += n } }
+        var text = "Payments to \(payeePhrase) on record (\(lines.count)):\n"
+        text += lines.prefix(12).map { l in
+            "\(l.date ?? "undated") — \(l.amount.value) (\(l.label))"
+        }.joined(separator: "\n")
+        let totalLine = totals.sorted { $0.key < $1.key }.map { unit, sum in
+            let formatted = sum == sum.rounded() ? String(Int(sum)) : String(format: "%.2f", sum)
+            return unit == "?" ? formatted : "\(unit) \(formatted)"
+        }.joined(separator: " + ")
+        text += "\n\nTotal on record: \(totalLine)" + (totals.count > 1 ? " (currencies are never mixed)" : "") + "."
+        text += "\nOnly documents that confirm a payment to this payee are counted; a request, quote or invoice is not a payment."
+        return (text, lines.map(\.amount))
     }
 }

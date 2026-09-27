@@ -52,7 +52,10 @@ public nonisolated enum DerivedProducerVersions {
     /// v8 — L3 DOCUMENT SUBJECT: a document headed by a person's name (a résumé,
     ///        a bio-data sheet) files its facts under that person, not the file
     ///        name; the drain re-extracts. No re-ingest.
-    public static let facts = 8
+    /// v9 — P2 payments: a payee stops at masked/numeric runs and payment
+    ///        furniture on one-line OCR receipts; an OCR-lost rupee sign ("·10,000")
+    ///        is recovered in payment confirmations. The drain re-extracts.
+    public static let facts = 9
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor

@@ -63,6 +63,16 @@ public enum TransactionDomainPack {
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: amount, sourceCount: 1))
+        } else if isPaymentConfirmation(text),
+                  let ocr = firstMatch(#"[·•]\s?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?"#, in: text) {
+            // P2 (payments) — OCR routinely reads a rupee sign as "·" on payment
+            // screenshots ("YES BANK ·10,000"). Only in a payment confirmation,
+            // only a thousands-grouped figure: the sign is the one OCR lost.
+            let digits = ocr.drop { !$0.isNumber }
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: "₹" + digits,
+                                     unit: "INR", status: .sourceAsserted,
+                                     confidence: 0.65, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: ocr, sourceCount: 1))
         }
         if let payee = counterparty(in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "counterparty", value: payee,
@@ -98,7 +108,22 @@ public enum TransactionDomainPack {
         return nil
     }
 
-    /// Extract the counterparty after a payee marker (single line, up to punctuation).
+    /// A payment CONFIRMATION (not merely a mention of money).
+    nonisolated static func isPaymentConfirmation(_ text: String) -> Bool {
+        let t = text.lowercased()
+        return ["paid to", "transaction successful", "payment successful", "transferred to",
+                "debited from", "amount paid", "payment of"].contains { t.contains($0) }
+    }
+
+    /// Words that END a payee name on a one-line OCR receipt ("Paid to X
+    /// XXXX1671 Axis Bank Transfer Details Transaction ID …").
+    nonisolated static let payeeStops: Set<String> = [
+        "transfer", "details", "transaction", "txn", "upi", "utr", "ref", "reference", "a/c", "ac",
+        "account", "debited", "credited", "on", "via", "using", "from", "amount", "rs", "inr", "id",
+    ]
+
+    /// Extract the counterparty after a payee marker: up to punctuation, a
+    /// masked or numeric run, a payment-furniture word, or eight words.
     nonisolated static func counterparty(in text: String) -> String? {
         let markers = ["paid to", "payee", "beneficiary", "transferred to", "to:"]
         let lower = text.lowercased()
@@ -106,7 +131,17 @@ public enum TransactionDomainPack {
             guard let r = lower.range(of: m) else { continue }
             let after = text[r.upperBound...]
             let trimmed = after.drop { $0 == ":" || $0 == " " }
-            let name = trimmed.prefix { !"\n.,;|".contains($0) }.trimmingCharacters(in: .whitespaces)
+            let clause = trimmed.prefix { !"\n.,;|".contains($0) }
+            var words: [String] = []
+            for raw in clause.split(whereSeparator: { $0.isWhitespace }) {
+                let w = String(raw)
+                let lw = w.lowercased()
+                if payeeStops.contains(lw) { break }
+                if w.contains(where: \.isNumber) || (w.count >= 4 && w.uppercased().allSatisfy({ $0 == "X" })) { break }
+                words.append(w)
+                if words.count == 8 { break }
+            }
+            let name = words.joined(separator: " ")
             if name.count >= 2 && name.count <= 60 { return name }
         }
         return nil

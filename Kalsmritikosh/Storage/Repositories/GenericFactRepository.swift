@@ -171,6 +171,35 @@ public actor GenericFactRepository {
         return rows.compactMap { $0.string(0) }
     }
 
+    /// L5 — subjects with a fact whose value CONTAINS `token` as a whole token
+    /// (a résumé contact line "9960270472 : owner@example.com"). A truncated
+    /// or embedded-in-a-word occurrence does not count.
+    public func subjectLabels(containingToken token: String, limit: Int = 20) async throws -> [String] {
+        let t = token.lowercased()
+        let rows = try await database.query("""
+        SELECT subject_label, value FROM generic_facts WHERE lower(value) LIKE ? LIMIT 500;
+        """, [.text("%\(t)%")])
+        var counts: [String: Int] = [:]
+        for r in rows {
+            guard let label = r.string(0), let value = r.string(1)?.lowercased(),
+                  let range = value.range(of: t) else { continue }
+            let before = range.lowerBound == value.startIndex ? " " : value[value.index(before: range.lowerBound)]
+            let after = range.upperBound == value.endIndex ? " " : value[range.upperBound]
+            let edge: (Character) -> Bool = { !($0.isLetter || $0.isNumber || $0 == "." || $0 == "@" || $0 == "_") }
+            if edge(before), edge(after) { counts[label, default: 0] += 1 }
+        }
+        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .prefix(limit).map(\.key)
+    }
+
+    /// L5 — subject labels equal (case-insensitively) to a name.
+    public func subjectLabels(named name: String) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT DISTINCT subject_label FROM generic_facts WHERE lower(trim(subject_label)) = lower(trim(?));
+        """, [.text(name)])
+        return rows.compactMap { $0.string(0) }
+    }
+
     /// L5 — every fact of the given subject labels, restricted to fields.
     public func facts(subjectLabels: [String], fields: Set<String>) async throws -> [GenericFact] {
         guard !subjectLabels.isEmpty, !fields.isEmpty else { return [] }

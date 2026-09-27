@@ -139,6 +139,18 @@ public actor EmailParticipantRepository {
         }
     }
 
+    /// L5 — the display names an address SENDS under ("Shirshendu Sasmal"),
+    /// most frequent first.
+    public func displayNames(sentBy address: String, limit: Int = 3) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT display_name, COUNT(*) FROM email_participant_occurrences
+        WHERE lower(raw_address) = lower(?) AND role IN ('from', 'sender')
+          AND TRIM(COALESCE(display_name, '')) != ''
+        GROUP BY lower(display_name) ORDER BY 2 DESC LIMIT ?;
+        """, [.text(address), .integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
     public func occurrenceCount(forSourceObject objectID: KnowledgeObject.ID) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM email_participant_occurrences WHERE source_ko_id = ?;",

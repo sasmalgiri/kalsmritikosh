@@ -60,10 +60,11 @@ struct PersonAnswerTests {
         }
         let out = try #require(PersonAnswerComposer.composeOwnJobs(ownerLabel: "Shirshendu Sasmal", facts: [
             fact("employer", "Current Organization  Hospira India Pvt. Ltd"), fact("employer", "Hospira India Pvt. Ltd"),
-            fact("employer", "Pvt. Ltd"), fact("role", "Production Executive")]))
+            fact("employer", "Pvt. Ltd"), fact("employer", "Pharmaceutical Ltd"), fact("role", "Production Executive")]))
         #expect(out.text.contains("Employers: Hospira India Pvt. Ltd"))
         #expect(!out.text.contains("Current Organization"))
         #expect(!out.text.contains(" · Pvt. Ltd"))
+        #expect(!out.text.contains("Pharmaceutical Ltd"), "an industry noun plus a suffix is a fragment")
         #expect(out.text.contains("Roles: Production Executive"))
         #expect(PersonAnswerComposer.composeOwnJobs(ownerLabel: "x", facts: [fact("employer", "Ltd")]) == nil)
     }
