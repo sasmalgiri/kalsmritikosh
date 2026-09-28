@@ -76,6 +76,14 @@ public struct WorkProductExportService: Sendable {
             if !leaks.isEmpty {
                 throw WorkProductExportError.redactionLeak(terms: Array(Set(leaks.map(\.term))).sorted())
             }
+            // F23 — every ENABLED category, not only custom terms: a second pass over every
+            // user-text field of the redacted document must find nothing left to redact. Generated
+            // metadata (export date, ids, digests) is not user text and is not re-scanned — the
+            // phone pattern also matches ISO dates.
+            let residue = redactor.redact(Self.userText(doc), policy: policy)
+            if residue.redactionCount > 0 {
+                throw WorkProductExportError.redactionLeak(terms: residue.categories.sorted())
+            }
         }
 
         if let text = format.textFormat {
@@ -104,13 +112,55 @@ public struct WorkProductExportService: Sendable {
     /// A copy of the document with all authored text redacted per policy. Citations and the manifest are left
     /// as composed (identifiers/hashes); if a protected term nonetheless appears there, verification refuses
     /// the export rather than emit it.
+    /// Every user-text field of a document, joined — what redaction must have cleaned.
+    static func userText(_ d: ExportableDocument) -> String {
+        var parts: [String] = [d.title]
+        parts += [d.subtitle, d.disclaimer].compactMap { $0 }
+        for s in d.sections { parts.append(s.title); parts += s.paragraphs }
+        if let t = d.table { parts.append(t.title); parts += t.columns; parts += t.rows.flatMap { $0 } }
+        for c in d.citations {
+            parts += [c.displayLabel, c.sourceTitle]
+            parts += [c.authorOrSender, c.locatorText, c.workspaceExhibitLabel].compactMap { $0 }
+            if let b = c.bibliographic { parts += [b.title, b.container, b.url].compactMap { $0 }; parts += b.authors }
+        }
+        parts += [d.manifest.workspaceTitle, d.manifest.reviewStatusSummary].compactMap { $0 }
+        parts += d.manifest.knownLimitations
+        parts += d.manifest.citationMap.map(\.label)
+        return parts.joined(separator: "\n")
+    }
+
+    /// F23 (2026-09-28 review) — EVERY user-text field is redacted, not only the prose: citation
+    /// labels, titles, authors, locators, exhibit labels and bibliographic text, and the manifest's
+    /// workspace title, review summary, limitations and citation-map labels. Identifiers and hashes
+    /// (evidence ids, source-version ids, digests) are immutable evidence identity and stay as-is.
     private func redactedDocument(_ d: ExportableDocument, policy: RedactionPolicy) -> ExportableDocument {
         func r(_ s: String) -> String { redactor.redact(s, policy: policy).redactedText }
         let sections = d.sections.map { ExportSection(title: r($0.title), paragraphs: $0.paragraphs.map(r)) }
         let table = d.table.map { ExportTable(title: r($0.title), columns: $0.columns.map(r), rows: $0.rows.map { $0.map(r) }) }
+        let citations = d.citations.map { c -> CitationRecord in
+            var c = c
+            c.displayLabel = r(c.displayLabel)
+            c.sourceTitle = r(c.sourceTitle)
+            c.authorOrSender = c.authorOrSender.map(r)
+            c.locatorText = c.locatorText.map(r)
+            c.workspaceExhibitLabel = c.workspaceExhibitLabel.map(r)
+            if var b = c.bibliographic {
+                b.title = b.title.map(r)
+                b.authors = b.authors.map(r)
+                b.container = b.container.map(r)
+                b.url = b.url.map(r)
+                c.bibliographic = b
+            }
+            return c
+        }
+        var manifest = d.manifest
+        manifest.workspaceTitle = manifest.workspaceTitle.map(r)
+        manifest.reviewStatusSummary = manifest.reviewStatusSummary.map(r)
+        manifest.knownLimitations = manifest.knownLimitations.map(r)
+        manifest.citationMap = manifest.citationMap.map { e in var e = e; e.label = r(e.label); return e }
         return ExportableDocument(
             title: r(d.title), subtitle: d.subtitle.map(r), sections: sections, table: table,
-            citations: d.citations, citationStyle: d.citationStyle, disclaimer: d.disclaimer.map(r),
-            manifest: d.manifest)
+            citations: citations, citationStyle: d.citationStyle, disclaimer: d.disclaimer.map(r),
+            manifest: manifest)
     }
 }
