@@ -1750,6 +1750,8 @@ public final class AppState {
             let sourceUpgradeJobs = SourceUpgradeJobRepository(database: db)
             await ingest.configureUpgrades(database: db, jobs: sourceUpgradeJobs, priorityGate: priorityGate)
             _ = try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
+            // F20 — the supervised background worker that actually runs scheduled upgrades.
+            await ingest.startUpgradeDrain()
 
             // AEE-M1 — now that the upgrade subsystem is live, give the brain its adaptive
             // evidence bridge so a mission that needs evidence-ready DECISIVE sources can

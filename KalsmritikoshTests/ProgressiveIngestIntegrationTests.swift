@@ -95,6 +95,23 @@ struct ProgressiveIngestIntegrationTests {
         #expect(try await rig.c.completion(sourceVersionID: sv)?.isEvidenceReady == true)
     }
 
+    @Test("F20 — the supervised background drainer completes scheduled work with no foreground call")
+    func supervisedDrainerCompletesWork() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "s.txt", "Supervised body — synthetic, several words.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url, intent: .initialFast).sourceVersionID)
+        _ = try await rig.c.ensureUpgrade(sourceVersionID: sv, goal: .evidenceReady, execution: .background)
+        #expect(try await rig.c.completion(sourceVersionID: sv)?.isEvidenceReady == false)
+        await rig.c.startUpgradeDrain(idleSeconds: 0.2, shouldRun: { true })   // independent of the app's power mode
+        defer { Task { await rig.c.stopUpgradeDrain() } }
+        var ready = false
+        for _ in 0..<100 where !ready {                       // up to ~10 s
+            try await Task.sleep(nanoseconds: 100_000_000)
+            ready = try await rig.c.completion(sourceVersionID: sv)?.isEvidenceReady == true
+        }
+        #expect(ready, "background drainer never completed the scheduled upgrade")
+    }
+
     @Test("A duplicate upgrade request reuses the active job")
     func duplicateRequestReusesJob() async throws {
         let rig = try await makeRig()

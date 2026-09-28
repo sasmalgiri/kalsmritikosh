@@ -498,6 +498,36 @@ public actor IngestCoordinator {
         return await sourceUpgrade.drain(max: max, at: Date())
     }
 
+    private var upgradeDrainTask: Task<Void, Never>?
+
+    /// F20 — the SUPERVISED background upgrade worker. Scheduled upgrades (`.background` ensure,
+    /// auto-scheduled evidence work after a fast initial pass) had no production caller of
+    /// `drainUpgrades`, so they only ran when a foreground question forced them. This loop claims
+    /// eligible jobs in small batches with a fresh clock each time, yields to interactive queries
+    /// (via the coordinator's priority gate), idles while paused / not in full-power mode
+    /// (`shouldRun`), and sleeps `idleSeconds` when nothing is eligible. Idempotent; the app starts
+    /// it once at boot.
+    public func startUpgradeDrain(idleSeconds: TimeInterval = 30,
+                                  shouldRun: @escaping @Sendable () -> Bool = { FeatureFlags.fullPowerModeValue() }) {
+        guard upgradeDrainTask == nil, sourceUpgrade != nil else { return }
+        upgradeDrainTask = Task(priority: .background) { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                if await self.drainPaused || !shouldRun() {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    continue
+                }
+                let ran = await self.drainUpgrades(max: 4)
+                if ran == 0 { try? await Task.sleep(nanoseconds: UInt64(max(0.05, idleSeconds) * 1_000_000_000)) }
+            }
+        }
+    }
+
+    public func stopUpgradeDrain() {
+        upgradeDrainTask?.cancel()
+        upgradeDrainTask = nil
+    }
+
     /// The canonical completion snapshot for an EXACT source version, if the completion service is wired.
     public func completion(sourceVersionID: UUID) async throws -> IngestionCompletionSnapshot? {
         try await completionService?.snapshot(sourceVersionID: sourceVersionID, at: Date())
