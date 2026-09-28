@@ -76,7 +76,9 @@ public struct SpreadsheetLoader: Ingestor {
             content: normalized,
             metadata: [
                 "filename": AnyCodable(.string(url.lastPathComponent)),
-                "rowCount": AnyCodable(.int(Int64(normalized.split(separator: "\n").count)))
+                // F30 — count CSV records (CR / LF / CRLF, quoted newlines), not raw lines.
+                "rowCount": AnyCodable(.int(Int64(CSVRowReader.rows(normalized)
+                    .filter { !($0.count == 1 && $0[0].isEmpty) }.count)))
             ]
         )
     }
