@@ -67,7 +67,7 @@ Every fix: one commit, a small fixture test that FAILS on the old code first, fu
 | ID | Verdict | Finding | Plan | Status |
 |---|---|---|---|---|
 | F01 | ✔ | Plugin adapter reads the whole file into memory and returns all objects | Streaming producer/sink contract with per-batch commit | ☐ |
-| F11 | ◐ | IVF probe loads whole cells before the 4,000 pool check | Page postings within cells; separate memory bound from recall budget | ☐ |
+| F11 | ◐ | IVF probe loads whole cells before the 4,000 pool check | Page postings within cells; separate memory bound from recall budget | ☑ — keyset `postingsPage` on the clustered (cell_id, chunk_id) key; probe reads each cell batch in pages of ≤ `postingPageSize` (2,048), checks cancellation per page, and still stops only at batch boundaries (results identical: page 7 vs default on a dense-cell corpus). Old-index-during-rebuild generation switch not done |
 | F12 | ◐ | Corpus-wide caches; worker caps from boot-time RAM | Byte-accounted caches, bounded queues, pressure-adaptive workers | ☐ |
 
 ## Claim wording — not code defects (owner-decided scope)

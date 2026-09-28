@@ -80,10 +80,16 @@ public actor IVFDiskVectorIndex {
     private var centroids: [[Float]] = []
     private var ready = false
 
-    public init(repository: ANNIndexRepository, modelID: String, dimension: Int) {
+    /// F11 — most postings resident per probe fetch (memory bound, independent of the recall budget).
+    public static let defaultPostingPageSize = 2_048
+    let postingPageSize: Int
+
+    public init(repository: ANNIndexRepository, modelID: String, dimension: Int,
+                postingPageSize: Int = IVFDiskVectorIndex.defaultPostingPageSize) {
         self.repository = repository
         self.modelID = modelID
         self.dimension = dimension
+        self.postingPageSize = max(1, postingPageSize)
     }
 
     // MARK: - State
@@ -268,11 +274,24 @@ public actor IVFDiskVectorIndex {
         var idx = 0
         while idx < ranked.count {
             let end = min(idx + Self.probeCellBatch, ranked.count)
-            for posting in try await repository.postings(inCells: Array(ranked[idx..<end]), for: modelID) {
-                if let score = VectorQuantization.cosineScore(query: query, candidate: posting.q, scale: posting.scale) {
-                    top.offer(posting.chunkID, score)
-                    scored += 1
+            // F11 — the MEMORY bound is separate from the recall budget: a cell batch is read in
+            // keyset pages of at most `postingPageSize` rows, so one pathologically dense cell can no
+            // longer pull its whole posting list into memory at once. Recall is unchanged — the stop
+            // decision is still taken only at batch boundaries, over exactly the same rows.
+            let cells = Array(ranked[idx..<end])
+            var cursor: (cell: Int, chunk: String)? = nil
+            while true {
+                try Task.checkCancellation()
+                let page = try await repository.postingsPage(inCells: cells, for: modelID,
+                                                            after: cursor, limit: postingPageSize)
+                for posting in page {
+                    if let score = VectorQuantization.cosineScore(query: query, candidate: posting.q, scale: posting.scale) {
+                        top.offer(posting.chunkID, score)
+                        scored += 1
+                    }
                 }
+                guard page.count == postingPageSize, let last = page.last else { break }
+                cursor = (last.cellID, last.chunkID.uuidString)
             }
             idx = end
             // Stop once the pool is filled AND we can return a full result set.

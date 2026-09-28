@@ -118,6 +118,35 @@ struct IVFDiskVectorIndexTests {
                 "IVF recall@10 \(recallSum / Double(queries)) below floor")
     }
 
+    @Test("F11 — a tiny posting page bounds every fetch yet returns exactly the same neighbours")
+    func pagedProbeBoundedAndIdentical() async throws {
+        let r = try await rig()
+        let vectors = corpus(count: 300, clusters: 4, seed: 33)   // few clusters → dense cells
+        for v in vectors { try await storeEmbedding(r, v) }
+        try await r.index.rebuild(seed: 7, now: t0)
+        let paged = IVFDiskVectorIndex(repository: r.repo, modelID: model, dimension: dim, postingPageSize: 7)
+        try await paged.rebuild(seed: 7, now: t0)   // warm its centroid cache over the same index
+        for qi in stride(from: 0, to: 300, by: 37) {
+            let a = try await r.index.nearest(embedding: vectors[qi], limit: 10)
+            let b = try await paged.nearest(embedding: vectors[qi], limit: 10)
+            #expect(a.map(\.chunkID) == b.map(\.chunkID), "query \(qi): paging changed the result")
+        }
+        // The repository page itself never exceeds its limit and walks a dense batch exactly once.
+        let cells = Array(0..<IVFDiskVectorIndex.probeCellBatch)
+        var cursor: (cell: Int, chunk: String)? = nil
+        var seen = Set<UUID>(), pages = 0
+        while true {
+            let page = try await r.repo.postingsPage(inCells: cells, for: model, after: cursor, limit: 7)
+            #expect(page.count <= 7)
+            for p in page { #expect(seen.insert(p.chunkID).inserted, "a posting was returned twice") }
+            pages += 1
+            guard page.count == 7, let last = page.last else { break }
+            cursor = (last.cellID, last.chunkID.uuidString)
+        }
+        #expect(seen.count == (try await r.repo.postings(inCells: cells, for: model)).count)
+        #expect(pages > 1)
+    }
+
     @Test("PERF-3: scan-budget probe bounds rows, and the cell ceiling scales sanely with K")
     func scanBudgetAndCeiling() async throws {
         // Candidate pool: a floor of 4000 rows, growing with the result count.

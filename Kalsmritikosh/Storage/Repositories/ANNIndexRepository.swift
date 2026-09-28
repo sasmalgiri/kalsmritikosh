@@ -218,6 +218,32 @@ public actor ANNIndexRepository {
         }
     }
 
+    /// F11 — ONE bounded page of the postings in `cellIDs`, keyset on the table's clustered key
+    /// (cell_id, chunk_id) strictly after `after`. The probe walks a cell batch page by page, so no
+    /// single fetch holds more than `limit` rows even when one cell is pathologically dense.
+    public func postingsPage(inCells cellIDs: [Int], for modelID: String,
+                             after: (cell: Int, chunk: String)?, limit: Int) async throws -> [ANNPosting] {
+        guard !cellIDs.isEmpty, limit > 0 else { return [] }
+        let placeholders = Array(repeating: "?", count: cellIDs.count).joined(separator: ",")
+        var bindings: [SQLValue] = [.text(modelID)] + cellIDs.map { .integer(Int64($0)) }
+        var cursor = ""
+        if let after {
+            cursor = " AND (cell_id > ? OR (cell_id = ? AND chunk_id > ?))"
+            bindings += [.integer(Int64(after.cell)), .integer(Int64(after.cell)), .text(after.chunk)]
+        }
+        bindings.append(.integer(Int64(limit)))
+        let rows = try await database.query("""
+        SELECT cell_id, chunk_id, q, scale FROM ann_postings
+        WHERE model_id = ? AND cell_id IN (\(placeholders))\(cursor)
+        ORDER BY cell_id ASC, chunk_id ASC LIMIT ?;
+        """, bindings)
+        return rows.compactMap { r in
+            guard let cell = r.int(0), let chunk = r.uuid(1),
+                  let q = r.blob(2), let scale = r.double(3) else { return nil }
+            return ANNPosting(cellID: Int(cell), chunkID: chunk, q: q, scale: scale)
+        }
+    }
+
     public func postingCount(for modelID: String) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM ann_postings WHERE model_id = ?;", [.text(modelID)])
