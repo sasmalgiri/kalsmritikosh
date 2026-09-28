@@ -192,11 +192,13 @@ struct FactMemoReportTests {
     func bucketing() async throws {
         let r = try await rig()
         let subject = UUID(), workspace = UUID()
-        try await addMember(r, subject: subject, workspace: workspace)
+        let memberKO = try await addMember(r, subject: subject, workspace: workspace)
         let supported = try await saveClaim(r, subject: subject, statement: "supported fact")
         try await saveClaim(r, subject: subject, statement: "an inference", basis: .inferred, resolvedCitation: false)
         // A workspace-scoped conflict linked to the supported claim → Disputed facts.
-        let conflict = Contradiction(id: UUID(), description: "d", claimA: "SIDE-A", claimB: "SIDE-B", status: .open)
+        // F22 — a real detector records each side's evidence object; an evidence-less side is withheld.
+        let conflict = Contradiction(id: UUID(), description: "d", claimA: "SIDE-A", claimB: "SIDE-B",
+                                     evidenceA: memberKO, evidenceB: memberKO, status: .open)
         await r.contradictions.insert(conflict)
         try await r.claimContradictions.link(claimID: supported, contradictionID: conflict.id)
 
@@ -266,9 +268,11 @@ struct FactMemoReportTests {
     func conflictsWorkspaceScoped() async throws {
         let r = try await rig()
         let subject = UUID(), workspace = UUID()
-        try await addMember(r, subject: subject, workspace: workspace)
+        let memberKO = try await addMember(r, subject: subject, workspace: workspace)
         let inScope = try await saveClaim(r, subject: subject, statement: "in-scope finding")
-        let cIn = Contradiction(id: UUID(), description: "d-in", claimA: "IN-A", claimB: "IN-B", status: .open)
+        // F22 — a real detector records each side's evidence object; an evidence-less side is withheld.
+        let cIn = Contradiction(id: UUID(), description: "d-in", claimA: "IN-A", claimB: "IN-B",
+                                evidenceA: memberKO, evidenceB: memberKO, status: .open)
         await r.contradictions.insert(cIn)
         try await r.claimContradictions.link(claimID: inScope, contradictionID: cIn.id)
         let outsideKO = try await addBareObject(r)
