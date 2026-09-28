@@ -17,7 +17,8 @@ import CryptoKit
 public struct SQLiteStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.sqlite] }
     public nonisolated var parserName: String { "sqlite" }
-    public nonisolated var parserVersion: String { "1" }
+    /// "2" — F05: rows walked in the loader's order and stamped with a shared record key.
+    public nonisolated var parserVersion: String { "2" }
 
     /// Max rows given an individually-citable block, per table. This parser is the
     /// CITATION layer, not the indexing layer: SQLiteLoader emits every row as
@@ -38,9 +39,10 @@ public struct SQLiteStructuralParser: StructuralParser {
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
 
-        func add(_ kind: EvidenceBlockKind, _ raw: String, table: String, key: String?) {
+        func add(_ kind: EvidenceBlockKind, _ raw: String, table: String, key: String?, recordKey: String? = nil) {
             var attrs: [String: AnyCodable] = ["table": AnyCodable(.string(table))]
             if let key { attrs["rowKey"] = AnyCodable(.string(key)) }
+            if let recordKey { attrs[SQLiteRecordKey.attributeKey] = AnyCodable(.string(recordKey)) }
             blocks.append(EvidenceBlock(
                 documentID: documentID, sourceVersionID: sourceVersionID,
                 ordinal: blocks.count, kind: kind, rawText: raw,
@@ -73,10 +75,27 @@ public struct SQLiteStructuralParser: StructuralParser {
                           (r.cells[5].int64 ?? 0) > 0 else { return nil }
                     return name
                 }
-                let rows = (try? db.query("SELECT * FROM \(quoted) LIMIT \(Self.rowCapPerTable);")) ?? []
+                // F05 — walk rows in the SAME order as SQLiteLoader and stamp the same record key, so
+                // each loader page object links to exactly its own row blocks.
+                let plan = SQLiteRecordKey.plan(db: db, quotedTable: quoted, info: info)
+                let rows: [ExternalSQLiteSource.Row]
+                if let alias = plan.rowIDAlias {
+                    rows = (try? db.query("SELECT \(alias), * FROM \(quoted) ORDER BY \(alias) LIMIT \(Self.rowCapPerTable);")) ?? []
+                } else {
+                    rows = (try? db.query("SELECT * FROM \(quoted)\(plan.orderBy) LIMIT \(Self.rowCapPerTable);")) ?? []
+                }
                 add(.table, "Table \"\(table)\": \(rows.count) row(s), \(columns.count) column(s)",
                     table: table, key: nil)
-                for (i, row) in rows.enumerated() {
+                for (i, fullRow) in rows.enumerated() {
+                    var cells = fullRow.cells
+                    let recordKey: String?
+                    if plan.rowIDAlias != nil, let first = cells.first {
+                        recordKey = first.int64.map { SQLiteRecordKey.key(table: table, rowID: $0) }
+                        cells = Array(cells.dropFirst())
+                    } else {
+                        recordKey = SQLiteRecordKey.key(table: table, position: i)
+                    }
+                    let row = ExternalSQLiteSource.Row(cells: cells)
                     let pairs = zip(columns, row.cells).map { "\($0)=\(Self.render($1))" }
                     let keyValue: String = pkCols.isEmpty
                         ? "row \(i + 1)"
@@ -85,7 +104,7 @@ public struct SQLiteStructuralParser: StructuralParser {
                                 idx < row.cells.count ? "\(col)=\(Self.render(row.cells[idx]))" : nil
                             }
                         }.joined(separator: ", ")
-                    add(.tableRow, pairs.joined(separator: " | "), table: table, key: keyValue)
+                    add(.tableRow, pairs.joined(separator: " | "), table: table, key: keyValue, recordKey: recordKey)
                 }
                 if rows.count >= Self.rowCapPerTable {
                     // State the REAL total. "Exceeded the cap" alone leaves an examiner

@@ -79,20 +79,11 @@ public struct SQLiteLoader: Ingestor {
             // name), and the first page has NO lower bound, so rowids ≤ 0 are read.
             // WITHOUT ROWID tables (or all three aliases shadowed) page by
             // LIMIT/OFFSET ordered by the primary key, so pages are stable.
-            let lowerColumns = Set(columns.map { $0.lowercased() })
-            var rowIDAlias = ["rowid", "_rowid_", "oid"].first { !lowerColumns.contains($0) }
-            if let alias = rowIDAlias, (try? db.query("SELECT \(alias) FROM \(quoted) LIMIT 1;")) == nil {
-                rowIDAlias = nil                                    // WITHOUT ROWID
-            }
+            // F05 — the SAME plan the structural parser walks, so both stamp the same record keys.
+            let plan = SQLiteRecordKey.plan(db: db, quotedTable: quoted, info: info)
+            let rowIDAlias = plan.rowIDAlias
             let hasRowID = rowIDAlias != nil
-            let orderBy: String = {
-                let pk = info.compactMap { r -> (Int64, String)? in
-                    guard r.cells.count > 5, let name = r.cells[1].string,
-                          let pos = r.cells[5].int64, pos > 0 else { return nil }
-                    return (pos, "\"" + name.replacingOccurrences(of: "\"", with: "\"\"") + "\"")
-                }.sorted { $0.0 < $1.0 }.map(\.1)
-                return pk.isEmpty ? "" : " ORDER BY " + pk.joined(separator: ", ")
-            }()
+            let orderBy = plan.orderBy
 
             var lastRowID: Int64? = nil
             var offset = 0
@@ -119,13 +110,17 @@ public struct SQLiteLoader: Ingestor {
 
                 var lines: [String] = ["Database \(dbName), table \"\(table)\" "
                                        + "(rows \(emitted + 1)–\(emitted + rows.count) of \(total)):"]
-                for row in rows {
+                var recordKeys: [String] = []
+                for (i, row) in rows.enumerated() {
                     // With rowid the first cell is the rowid itself; drop it from the
                     // rendered pairs but use it to advance the cursor.
                     var cells = row.cells
                     if hasRowID, let first = cells.first {
                         lastRowID = first.int64 ?? lastRowID
+                        if let id = first.int64 { recordKeys.append(SQLiteRecordKey.key(table: table, rowID: id)) }
                         cells = Array(cells.dropFirst())
+                    } else if !hasRowID {
+                        recordKeys.append(SQLiteRecordKey.key(table: table, position: offset + i))
                     }
                     let pairs = zip(columns, cells)
                         .map { "\($0) = \(Self.render($1))" }
@@ -141,7 +136,9 @@ public struct SQLiteLoader: Ingestor {
                     "table": AnyCodable(.string(table)),
                     "page": AnyCodable(.int(Int64(page))),
                     "rowsInPage": AnyCodable(.int(Int64(rows.count))),
-                    "rowsInTable": AnyCodable(.int(total))
+                    "rowsInTable": AnyCodable(.int(total)),
+                    // F05 — the rows this object covers, keyed like the structural row blocks.
+                    SQLiteRecordKey.metadataKey: AnyCodable(.string(SQLiteRecordKey.encode(recordKeys)))
                 ]
                 if emitted >= Self.maxRowsPerTable && Int(total) > Self.maxRowsPerTable {
                     meta["rowBudgetReached"] = AnyCodable(.bool(true))

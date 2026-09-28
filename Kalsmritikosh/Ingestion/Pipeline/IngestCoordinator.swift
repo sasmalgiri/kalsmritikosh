@@ -683,6 +683,15 @@ public actor IngestCoordinator {
         for ko: KnowledgeObject, from all: [EvidenceBlock], singleKO: Bool
     ) -> [EvidenceBlock] {
         if singleKO { return all }
+        // F05 — the GENERIC contract: a loader object lists the parser-native record keys its
+        // text covers, and each structural block names the one record it cites. Any multi-record
+        // format that stamps both sides (SQLite today) links exactly, with no format branch here.
+        if let keys = SQLiteRecordKey.keys(in: ko.metadata) {
+            return all.filter {
+                if case .string(let k)? = $0.attributes[SQLiteRecordKey.attributeKey]?.value { return keys.contains(k) }
+                return false
+            }
+        }
         let wanted: Set<Int>
         if case .int(let idx)? = ko.metadata["messageIndex"]?.value {
             wanted = [Int(idx)]
