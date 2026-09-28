@@ -88,6 +88,49 @@ struct SourceReprocessingTests {
         #expect(try await rig.c.completion(sourceVersionID: sv)?.isEvidenceReady == true)           // re-evidence-ready
     }
 
+    @Test("F16 — a parser whose output differs is NOT stamped: the dimension stays stale, nothing is claimed")
+    func changedParserOutputNotStamped() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "v2.txt", "Version two body — synthetic, several words for structure.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url, intent: .fullAvailable).sourceVersionID)
+        try await downgrade(rig, sv, .structuralExtraction)
+        let committed = try await EvidenceStore(database: rig.db).blocks(forVersion: sv)
+        // A "parser v2" that deliberately yields a different block set for the same bytes.
+        let v2 = SourceReprocessingCoordinator(
+            database: rig.db, readiness: SourceReadinessRepository(database: rig.db),
+            byteResolver: SourceVersionByteResolver(database: rig.db, vault: EvidenceVault(root: rig.dir.appendingPathComponent("vault", isDirectory: true))),
+            reparse: { _, _, _ in
+                ParsedDocument(id: UUID(), logicalSourceID: UUID(), sourceVersionID: sv, filename: "v2.txt",
+                               detectedType: .txt, contentHash: "h",
+                               blocks: committed.map { b in
+                                   EvidenceBlock(documentID: b.documentID, ordinal: b.ordinal, kind: b.kind,
+                                                 rawText: b.rawText + " (v2 split)", locator: b.locator)
+                               })
+            })
+        let staleBefore = try await v2.staleParserDimensions(sourceVersionID: sv, currentParserVersion: "2")
+        #expect(staleBefore.contains(.structuralExtraction))
+        let outcome = try await v2.reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date())
+        #expect(outcome == .changedOutputNotActivated(dimensions: staleBefore))
+        // Still stale: the old structure was never re-labelled as parser v2's output.
+        #expect(try await v2.staleParserDimensions(sourceVersionID: sv, currentParserVersion: "2") == staleBefore)
+        #expect(try await rig.db.query("SELECT producer_version FROM source_readiness_dimensions WHERE source_version_id = ? AND dimension = 'structuralExtraction';",
+                                       [.uuid(sv)]).first?.string(0) == "0")
+    }
+
+    @Test("F16 — a reprocessor with no parser wired refuses to stamp")
+    func noReparserRefuses() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "np.txt", "No parser body — synthetic, several words for structure.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url, intent: .fullAvailable).sourceVersionID)
+        try await downgrade(rig, sv, .structuralExtraction)
+        let bare = SourceReprocessingCoordinator(
+            database: rig.db, readiness: SourceReadinessRepository(database: rig.db),
+            byteResolver: SourceVersionByteResolver(database: rig.db, vault: EvidenceVault(root: rig.dir.appendingPathComponent("vault", isDirectory: true))))
+        await #expect(throws: SourceUpgradeError.self) {
+            _ = try await bare.reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date())
+        }
+    }
+
     @Test("Reprocessing preserves search readiness (loader-produced dimensions untouched)")
     func reprocessPreservesSearch() async throws {
         let rig = try await makeRig()

@@ -12,17 +12,25 @@
 //
 
 import Foundation
+import os
 
 public struct SourceReprocessingCoordinator: Sendable {
 
     private let database: Database
     private let readiness: SourceReadinessRepository
     private let byteResolver: SourceVersionByteResolver
+    private let reparse: Reparse?
 
-    public init(database: Database, readiness: SourceReadinessRepository, byteResolver: SourceVersionByteResolver) {
+    /// F16 — run the CURRENT structural parser over the exact re-verified bytes of a version
+    /// (snapshot + identity URL) and return its document; nil = the type has no structural parser.
+    public typealias Reparse = @Sendable (_ sourceVersionID: UUID, _ snapshotURL: URL, _ identityURL: URL) async throws -> ParsedDocument?
+
+    public init(database: Database, readiness: SourceReadinessRepository, byteResolver: SourceVersionByteResolver,
+                reparse: Reparse? = nil) {
         self.database = database
         self.readiness = readiness
         self.byteResolver = byteResolver
+        self.reparse = reparse
     }
 
     /// The readiness dimensions produced by the structural parser (parser-version dependent).
@@ -31,6 +39,10 @@ public struct SourceReprocessingCoordinator: Sendable {
     public enum Outcome: Sendable, Equatable {
         case upToDate
         case reprocessed(dimensions: [SourceReadinessDimension])
+        /// F16 — the current parser produces a DIFFERENT block set for these bytes. Activating it would
+        /// need a versioned derivation (the committed structure is attach-once), so nothing is re-stamped:
+        /// the dimensions stay honestly stale at their old producer version.
+        case changedOutputNotActivated(dimensions: [SourceReadinessDimension])
     }
 
     /// Parser-dependent, present dimensions whose stored producer version differs from `currentParserVersion`.
@@ -60,7 +72,20 @@ public struct SourceReprocessingCoordinator: Sendable {
         // §18/§40 — re-verify the EXACT bytes before touching anything. A changed / missing referenced
         // source throws here, so the old version's readiness is never refreshed onto different bytes.
         let resolved = try await byteResolver.resolve(sourceVersionID: sourceVersionID, at: now)
-        try? FileManager.default.removeItem(at: resolved.cleanupDirectory)   // only needed for verification
+        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+
+        // F16 — actually RUN the current parser over those bytes. Re-stamping the old proof with the new
+        // version is only honest when the new parser yields the SAME block set; if it yields a different
+        // one the old structure is not what v-current would produce, so nothing is stamped.
+        guard let reparse else {
+            throw SourceUpgradeError.missingDependency("no re-parser wired; refusing to re-stamp without running the parser")
+        }
+        let fresh = try await reparse(sourceVersionID, resolved.snapshotURL, resolved.identityURL)?.blocks ?? []
+        let committed = try await EvidenceStore(database: database).blocks(forVersion: sourceVersionID)
+        guard Self.fingerprint(fresh) == Self.fingerprint(committed) else {
+            KalsmritikoshLog.ingestion.info("reprocess \(sourceVersionID.uuidString, privacy: .public): parser \(currentParserVersion, privacy: .public) output differs from committed structure — not re-stamped")
+            return .changedOutputNotActivated(dimensions: stale)
+        }
 
         // Capture the existing parser-dimension records so the refresh preserves their exact proof.
         let snapshot = try await readiness.snapshot(sourceVersionID: sourceVersionID)
@@ -86,5 +111,16 @@ public struct SourceReprocessingCoordinator: Sendable {
             producerID: "usf-m3.reprocess", producerVersion: currentParserVersion, occurredAt: now))
 
         return .reprocessed(dimensions: stale)
+    }
+
+    /// F16 — the content identity of a block set: ordered (kind, text, locator). Ids and timestamps are
+    /// excluded (a re-parse mints new ids); anything a citation shows or resolves by is included.
+    static func fingerprint(_ blocks: [EvidenceBlock]) -> [String] {
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.sortedKeys]
+        return blocks.sorted { $0.ordinal < $1.ordinal }.map { b in
+            let locator = (try? enc.encode(b.locator)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            return "\(b.kind.rawValue)\u{1F}\(b.rawText)\u{1F}\(locator)"
+        }
     }
 }

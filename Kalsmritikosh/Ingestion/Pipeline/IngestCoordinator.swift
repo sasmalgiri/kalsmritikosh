@@ -465,7 +465,13 @@ public actor IngestCoordinator {
         let upg = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
                                            container: containerRepo, executor: executor, priorityGate: priorityGate)
         self.sourceUpgrade = upg
-        self.reprocessing = SourceReprocessingCoordinator(database: database, readiness: r, byteResolver: resolver)
+        // F16 — reprocessing RUNS the current structural parser (through the ONE registry) over the
+        // re-verified bytes before it may re-stamp anything.
+        self.reprocessing = SourceReprocessingCoordinator(
+            database: database, readiness: r, byteResolver: resolver,
+            reparse: { [weak self] svid, snapshot, identity in
+                try await self?.reparseStructure(sourceVersionID: svid, snapshotURL: snapshot, identityURL: identity)
+            })
         self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
                                                             upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
     }
@@ -580,6 +586,20 @@ public actor IngestCoordinator {
         // USF-010 — stamp the EXACT parser version as the producer version so a later parser upgrade can
         // detect this structure as stale (producer version < current) and reprocess only what changed.
         await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: result.pluginVersion)
+    }
+
+    /// F16 — parse an exact version's re-verified bytes with the CURRENT structural parser (no
+    /// persistence). The reprocessor compares the result with the committed structure.
+    func reparseStructure(sourceVersionID svid: UUID, snapshotURL: URL, identityURL: URL) async throws -> ParsedDocument? {
+        guard let db = upgradeDatabase else { return nil }
+        guard let row = try await db.query(
+            "SELECT logical_source_id, content_hash, detected_type, size_bytes FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(svid)]).first,
+            let logical = row.uuid(0), let hash = row.string(1) else { throw SourceUpgradeError.sourceVersionMissing(svid) }
+        let request = UniversalParserRequest(
+            originalURL: identityURL, processingSnapshotURL: snapshotURL, logicalSourceID: logical,
+            sourceVersionID: svid, sourceType: SourceType(rawValue: row.string(2) ?? "") ?? .unknown,
+            contentHash: hash, sizeBytes: row.int(3) ?? 0, intent: .evidenceStructure)
+        return try await universalExecutor.execute(request).parsedDocument
     }
 
     /// F25 — rebuild the retrieval index for an EXACT source version from its COMMITTED evidence blocks:
