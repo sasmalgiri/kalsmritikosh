@@ -276,38 +276,31 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
-    /// Most block ids one lookup covers, in OR-scans of `blockLookupBatch`.
-    public nonisolated static let blockLookupCap = 2_048
-    nonisolated static let blockLookupBatch = 64
-
     public func facts(forBlockIDs blockIDs: [UUID]) async throws -> [GenericFact] {
-        // P4.2 — was `Array(Set(blockIDs)).prefix(64)`: a RANDOM 64 of the
-        // blocks (Set order changes per process), so a large document found
-        // "no facts" on some runs and the drain re-derived it on every boot —
-        // the fixed-point violation measured on the owner's copy. Now the ids
-        // are sorted and scanned in batches: deterministic, and complete up to
-        // the (logged) cap.
-        let unique = Array(Set(blockIDs)).sorted { $0.uuidString < $1.uuidString }
+        // P4.2 — was `Array(Set(blockIDs)).prefix(64)` OR'd LIKE scans: a RANDOM
+        // 64 of the blocks (Set order changes per process), so a large document
+        // found "no facts" on some runs and the drain re-derived it on every
+        // boot (the owner copy's fixed-point violation). Batching the LIKE scans
+        // fixed that but cost one full-table scan per 64 blocks — a real mbox
+        // drain blew its 45-minute budget. ONE query now: each fact's own block
+        // list joined against the requested set — complete, deterministic, one
+        // pass over the table, no cap.
+        let unique = Array(Set(blockIDs.map(\.uuidString)))
         guard !unique.isEmpty else { return [] }
-        if unique.count > Self.blockLookupCap {
-            KalsmritikoshLog.storage.info("facts(forBlockIDs:): \(unique.count, privacy: .public) blocks, first \(Self.blockLookupCap, privacy: .public) scanned")
-        }
-        let ids = Array(unique.prefix(Self.blockLookupCap))
-        var seen = Set<UUID>()
-        var out: [GenericFact] = []
-        for start in stride(from: 0, to: ids.count, by: Self.blockLookupBatch) {
-            let batch = ids[start..<min(start + Self.blockLookupBatch, ids.count)]
-            let clauses = batch.map { _ in "source_blocks_json LIKE ?" }.joined(separator: " OR ")
-            let binds = batch.map { SQLValue.text("%\($0.uuidString)%") }
-            let rows = try await database.query("""
-            SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-                   evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-                   producer_version, raw_match, source_count, reassigned_from, derivation
-            FROM generic_facts WHERE \(clauses);
-            """, binds)
-            for f in rows.compactMap(Self.decode) where seen.insert(f.id).inserted { out.append(f) }
-        }
-        return out.sorted { $0.confidence != $1.confidence ? $0.confidence > $1.confidence : $0.id.uuidString < $1.id.uuidString }
+        let wanted = (try? String(data: JSONEncoder().encode(unique), encoding: .utf8)) ?? "[]"
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count, reassigned_from, derivation
+        FROM generic_facts
+        WHERE id IN (
+            SELECT DISTINCT f.id FROM generic_facts f,
+                   json_each(CASE WHEN json_valid(f.source_blocks_json) THEN f.source_blocks_json ELSE '[]' END) j
+            WHERE upper(j.value) IN (SELECT upper(value) FROM json_each(?))
+        )
+        ORDER BY confidence DESC, id;
+        """, [.text(wanted)])
+        return rows.compactMap(Self.decode)
     }
 
     /// V5 DRAIN ONLY — remove stale derived fact rows so the drain can replace
