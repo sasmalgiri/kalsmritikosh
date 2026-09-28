@@ -20,6 +20,10 @@ public struct QualityStrip: View {
     /// the captured ReasoningTrace: path, retrieval shape, expert
     /// pipeline membership, assumptions, uncertainties.
     @State private var planExpanded = false
+    /// §1.3 (owner decision 2026-09-27) — ONE "Technical details" disclosure
+    /// holds the reasoning path, the plan, the evidence ranking and the raw
+    /// identifiers, so the answer surface stays plain for everyone else.
+    @State private var technicalExpanded = false
     /// G3 Phase 5 UI — optional callback for walk-step row taps. When
     /// non-nil, tapping a step row hands the first evidence KO id back
     /// so the parent can reveal the source (typically in Finder). nil =
@@ -47,6 +51,7 @@ public struct QualityStrip: View {
             case .contradicted:          return (.orange, "exclamationmark.triangle.fill")
             case .notFound:              return (.secondary, "questionmark.circle")
             case .insufficientlyIndexed: return (.blue, "hourglass")
+            case .unverified:            return (.purple, "eye.trianglebadge.exclamationmark")
             case .unknown:               return (.secondary, "circle")
             }
         }()
@@ -105,15 +110,7 @@ public struct QualityStrip: View {
                     }
                 }
             }
-            if !answer.walkSteps.isEmpty {
-                whyThisAnswer(steps: answer.walkSteps)
-            }
-            if let trace = answer.reasoningTrace {
-                explainPlanDisclosure(trace)
-            }
-            if answer.citations.count >= 2 {
-                evidenceRankingDisclosure(answer.citations)
-            }
+            technicalDetailsDisclosure
             // Legal / accuracy declaration — shown on EVERY answer.
             HStack(alignment: .top, spacing: 5) {
                 Image(systemName: "exclamationmark.triangle")
@@ -126,6 +123,65 @@ public struct QualityStrip: View {
             }
             .padding(.top, 2)
         }
+    }
+
+    // MARK: - §1.3 Technical details
+
+    @ViewBuilder
+    private var technicalDetailsDisclosure: some View {
+        Button {
+            technicalExpanded.toggle()
+        } label: {
+            Label(technicalExpanded ? "Hide technical details" : "Technical details",
+                  systemImage: technicalExpanded ? "chevron.up" : "wrench.and.screwdriver")
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityHint("Shows how the answer was built and the raw identifiers behind it.")
+        if technicalExpanded {
+            VStack(alignment: .leading, spacing: 6) {
+                if !answer.walkSteps.isEmpty {
+                    whyThisAnswer(steps: answer.walkSteps)
+                }
+                if let trace = answer.reasoningTrace {
+                    explainPlanDisclosure(trace)
+                }
+                if answer.citations.count >= 2 {
+                    evidenceRankingDisclosure(answer.citations)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(Array(QualityStrip.technicalLines(answer).enumerated()), id: \.offset) { _, line in
+                        planRow(label: line.label, value: line.value)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 6))
+            }
+            .padding(.leading, 8)
+        }
+    }
+
+    /// The raw identifiers behind an answer — what a support request or an
+    /// audit needs, and what an ordinary reader never has to see. Pure, so the
+    /// receipt of what is disclosed is testable.
+    static func technicalLines(_ answer: VerifiedAnswer) -> [(label: String, value: String)] {
+        var lines: [(String, String)] = []
+        lines.append(("State", answer.answerState.displayName))
+        if let id = answer.ledgerAnswerID { lines.append(("Answer ID", id.uuidString)) }
+        if let state = answer.ledgerState { lines.append(("Ledger", "state \(state)")) }
+        if let resolved = answer.resolvedQuestion, !resolved.isEmpty {
+            lines.append(("Resolved as", resolved))
+        }
+        lines.append(("Confidence", String(format: "%.2f", answer.confidence.value)))
+        lines.append(("Build", BuildIdentity.gitSHA))
+        for (i, c) in answer.citations.enumerated() {
+            var value = "doc \(c.objectID.uuidString.prefix(8))"
+            if let chunk = c.chunkID { value += " · chunk \(chunk.uuidString.prefix(8))" }
+            if let event = c.eventID { value += " · event \(event.uuidString.prefix(8))" }
+            lines.append(("Source \(i + 1)", value))
+        }
+        return lines
     }
 
     /// Phase J.14 — top-3 citations by composite EvidenceScore. The
@@ -363,7 +419,7 @@ public struct QualityStrip: View {
 
         let claimCount = answer.citations.count
         let fileCount = Set(answer.citations.map(\.objectID)).count
-        var evidence = "Evidence: \(claimCount) claim\(plural(claimCount)), \(fileCount) file\(plural(fileCount))"
+        var evidence = "Evidence: \(claimCount) passage\(plural(claimCount)), \(fileCount) file\(plural(fileCount))"
         if let dropped = answer.report?.droppedUnverifiable, dropped > 0 {
             evidence += ", \(dropped) dropped"
         }

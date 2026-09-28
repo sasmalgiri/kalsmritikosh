@@ -10,7 +10,14 @@
 //  suite is CI-green TODAY and FAILS THE DAY THE FIX LANDS — forcing the
 //  wrapper's removal, which is the red→green flip, in the fixing commit
 //  (V2 extractor correctness, V3 entity gate/anchors, unit 1.8 causal
-//  bounding, V6/NF not-found contract, Train 3 C-4 cross-block assembly).
+//  bounding, V6/NF not-found contract, C-4 cross-block assembly).
+//
+//  Flipped since: the OCR-substitution and page-break-split classes are now
+//  GREEN. Both were cases where the value did not arrive WRONG, it arrived not
+//  at all — the strict reader matched nothing and nothing recorded that a
+//  labeled identifier had been seen and abandoned. Both now recover the value
+//  and MARK how, so a repaired reading can never pass as a verbatim one
+//  (`generic_facts.derivation`, schema v129).
 //
 //  Binding #1: rungs 1 / 1n / 2 have fixture-twins here, so batched live
 //  witnesses are confirmation, never first detection.
@@ -80,27 +87,54 @@ struct V0AdversarialFixtureTests {
                 "mislabeled application number stored under patentNumber")
     }
 
-    @Test("RED (deferred): OCR digit substitution recovers no value today — recorded verbatim")
+    /// The stored `derivation` for a field's facts — how each value was
+    /// obtained. NULL (nil here) asserts the value was read verbatim off one
+    /// block; the repair producers stamp their own token.
+    private func storedDerivations(_ rig: FixtureRig, field: String) async throws -> [String?] {
+        let want = field.lowercased().replacingOccurrences(of: " ", with: "")
+        let rows = try await rig.db.query("SELECT field, derivation FROM generic_facts", [])
+        var out: [String?] = []
+        for r in rows {
+            guard let f = r.string(0),
+                  f.lowercased().replacingOccurrences(of: " ", with: "") == want else { continue }
+            out.append(r.string(1))
+        }
+        return out
+    }
+
+    @Test("GREEN (OCR recovery): a scanned page's misread digits are recovered AND flagged")
     func ocrSubstitution() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.ocrGrantLetter, name: "scan.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let values = try await storedValues(rig, field: "patentNumber")
-        print("V0 RED ocr: stored patentNumber values = \(values)")
-        withKnownIssue("OCR-substituted values are not recovered/flagged; generator class recorded (post-V2 normalizer scope)") {
-            #expect(values.contains { $0.contains("7OO321") || $0.filter(\.isNumber).contains("700321") },
-                    "no patentNumber fact recovered from the OCR page")
-        }
+        print("V0→GREEN ocr: stored patentNumber values = \(values)")
+        // The generator writes 0→O and 1→l, so the page says "7OO32l". Before
+        // the fix the strict digits-only pattern matched nothing and the value
+        // was not stored WRONGLY — it was not stored at all, and nothing
+        // recorded that a labeled identifier had been seen and abandoned.
+        #expect(values.contains { $0.filter(\.isNumber).contains("700321") },
+                "no patentNumber fact recovered from the OCR page")
+        // Recovery is never equivalent to a clean reading: the fact must say so.
+        let derivations = try await storedDerivations(rig, field: "patentNumber")
+        print("V0→GREEN ocr: derivations = \(derivations.map { $0 ?? "VERBATIM" })")
+        #expect(derivations.contains { $0 == FactDerivation.ocrCorrected.rawValue },
+                "the recovered value is not marked as an OCR repair")
     }
 
-    @Test("RED (deferred to Train 3 C-4): page break splits label from value — no fact today")
+    @Test("GREEN (C-4): a page break between label and value no longer loses the fact")
     func pageBreakSplit() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.pageBreakSplitLetter, name: "split.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let values = try await storedValues(rig, field: "patentNumber")
-        print("V0 RED pageBreak: stored patentNumber values = \(values)")
-        withKnownIssue("C-4 cross-block assembly is Train 3; this fixture stays red until then") {
-            #expect(values.contains { $0.contains("700321") }, "label/value split across the page break yields no fact")
-        }
+        print("V0→GREEN pageBreak: stored patentNumber values = \(values)")
+        // "Patent No." ends one block and "700321" begins another, so neither
+        // half was ever a fact on the per-block path.
+        #expect(values.contains { $0.contains("700321") },
+                "label/value split across the page break yields no fact")
+        let derivations = try await storedDerivations(rig, field: "patentNumber")
+        print("V0→GREEN pageBreak: derivations = \(derivations.map { $0 ?? "VERBATIM" })")
+        #expect(derivations.contains { $0 == FactDerivation.crossBlockAssembled.rawValue },
+                "the rejoined value is not marked as assembled across blocks")
     }
 
     @Test("GREEN C-1: quoted reply + table + prose restatements collapse to one normalized value")
@@ -242,10 +276,10 @@ struct V0AdversarialFixtureTests {
 
         // The true causal link must exist now AND after the bounding fix.
         #expect(caused >= 1, "the lexical-trigger CAUSED link was not discovered")
-        withKnownIssue("unit 1.8: O(n²) pairwise emission has no per-event cap until the bounding lands") {
-            #expect(contributed <= perEventBound * seeded.count,
-                    "\(contributed) CONTRIBUTED_TO links for \(seeded.count) events — noise manufacturing")
-        }
+        // W-6 (unit 1.8) FLIPPED — the per-event heuristic budget + structural
+        // (entity-overlap) precondition bound the CONTRIBUTED_TO explosion.
+        #expect(contributed <= perEventBound * seeded.count,
+                "\(contributed) CONTRIBUTED_TO links for \(seeded.count) events — noise manufacturing")
     }
 }
 

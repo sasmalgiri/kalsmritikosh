@@ -30,6 +30,8 @@ public struct HistoryView: View {
     @State private var chapters: [NarrativeChapter] = []
     @State private var finalAnswer: VerifiedAnswer?
     @State private var error: String?
+    /// §1.3 / P3.1 — the source a citation pill opens, in the app, at the quote.
+    @State private var openSource: CitationOpenTarget?
     /// Phase G.4 follow-on — when the user picks "Propose counterfactual…"
     /// from a causal-chip context menu we open a sheet to capture the
     /// hypothesis note. The optional carries the seed values; nil = no
@@ -66,6 +68,9 @@ public struct HistoryView: View {
             content
             Divider()
             input
+        }
+        .sheet(item: $openSource) { target in
+            CitationSourceSheet(target: target) { openSource = nil }
         }
         .sheet(item: $counterfactualDraft) { draft in
             counterfactualSheet(draft: draft)
@@ -659,7 +664,7 @@ public struct HistoryView: View {
         HStack(spacing: 4) {
             ForEach(citation.evidenceObjectIDs.prefix(3), id: \.self) { objID in
                 Button {
-                    revealSource(objectID: objID)
+                    revealSource(objectID: objID, quote: quoteForCitation(citation))
                 } label: {
                     Text(objID.uuidString.prefix(4))
                         .font(.caption2.monospaced())
@@ -669,7 +674,7 @@ public struct HistoryView: View {
                         .cornerRadius(4)
                 }
                 .buttonStyle(.plain)
-                .help("Reveal source")
+                .help("Open the source at this passage")
             }
             if citation.evidenceObjectIDs.count > 3 {
                 Text("+\(citation.evidenceObjectIDs.count - 3)")
@@ -680,14 +685,23 @@ public struct HistoryView: View {
         .padding(.top, 2)
     }
 
-    private func revealSource(objectID: UUID) {
+    /// P3.1 — open the cited source in the app (was: reveal in Finder). The
+    /// sentence is composed prose, so the viewer highlights it only when the
+    /// source states it verbatim; otherwise the document opens un-highlighted.
+    private func revealSource(objectID: UUID, quote: String?) {
         Task { @MainActor in
             guard let repo = appState.objects,
                   let url = try? await repo.fetchSourceURL(id: objectID) else { return }
-            #if canImport(AppKit)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-            #endif
+            openSource = CitationOpenTarget(url: url, objectID: objectID, quote: quote)
         }
+    }
+
+    private func quoteForCitation(_ citation: NarrativeClaimCitation) -> String? {
+        for chapter in chapters where chapter.claimCitations.contains(where: { $0 == citation }) {
+            let sentences = splitSentences(chapter.prose)
+            if sentences.indices.contains(citation.sentenceIndex) { return sentences[citation.sentenceIndex] }
+        }
+        return nil
     }
 
     /// Same splitter as `LLMNarrativeComposer.splitSentences` so the

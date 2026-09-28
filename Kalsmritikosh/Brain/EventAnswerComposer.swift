@@ -60,6 +60,36 @@ public enum EventAnswerComposer {
         documentsSearched: Int
     ) -> EventAnswerComposition? {
         guard let matches = matchEvents(question: question, events: events) else { return nil }
+        // W-5.2 — STATE-CHANGE MILESTONES OUTRANK COMMUNICATION EVENTS: the
+        // grant certificate's dated milestone answers "was it granted?", the
+        // intimation email is only the messenger. Milestone = a non-email
+        // event whose title carries a state-change term; when both exist the
+        // answer leads with the milestone and cites the intimation second.
+        // (Document class is not visible here; event kind is the signal.)
+        let stateChange: Set<String> = ["granted", "grant", "issued", "filed",
+                                        "filing", "refused", "rejected", "published"]
+        let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
+        let milestones = matches.filter { e in
+            guard !isCommunication(e) else { return false }
+            let tokens = Set(e.title.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
+            return !tokens.isDisjoint(with: stateChange)
+        }
+        // L5 — the state itself outranks its notice ("patent granted" before
+        // "intimation of grant"), then newest first (matches' order).
+        if let best = milestones.first(where: { !isNotice($0.title) && !isListingEntry($0) }) ?? milestones.first {
+            let date = Self.dateFormatter.string(from: best.date)
+            var text = "Yes — \(lowercasedTitle(best.title)) on \(date)."
+            if let intimation = matches.first(where: isCommunication) {
+                text += " Intimation received \(Self.dateFormatter.string(from: intimation.date))."
+            }
+            let supporting = [best] + matches.filter { $0.id != best.id }
+            return EventAnswerComposition(
+                primaryText: text,
+                supportingEvents: Array(supporting.prefix(3)),
+                isNotFound: false,
+                receiptLine: "Answered from the dated event record — the official milestone leads, correspondence is cited after it; no model was consulted.")
+        }
         if let best = matches.first {
             let date = Self.dateFormatter.string(from: best.date)
             let extras = matches.count > 1 ? " (and \(matches.count - 1) related event\(matches.count > 2 ? "s" : ""))" : ""
@@ -76,6 +106,246 @@ public enum EventAnswerComposer {
             receiptLine: "No matching event on file.")
     }
 
+    // MARK: - L5 — status (where a matter stands NOW)
+
+    /// State-change words (data) — the lifecycle of a matter, any domain:
+    /// filings, examinations, hearings, grants, refusals, signatures, lapses.
+    nonisolated static let lifecycleTerms: Set<String> = [
+        "filed", "filing", "published", "publication", "examination", "examined", "objection",
+        "objections", "hearing", "granted", "grant", "refused", "rejected", "abandoned",
+        "withdrawn", "renewed", "renewal", "lapsed", "recorded", "registered", "issued",
+        "signed", "executed", "terminated", "expired", "settled", "closed", "decided",
+        "approved", "allowed", "opposed", "opposition", "appealed", "appeal", "judgment",
+    ]
+    /// Terminal-ish states rank above procedural ones on the same day.
+    nonisolated static let decisiveTerms: Set<String> = [
+        "granted", "grant", "refused", "rejected", "abandoned", "withdrawn", "lapsed",
+        "terminated", "expired", "settled", "closed", "decided", "approved", "judgment",
+    ]
+
+    /// Words that mark a message ABOUT a state, not the state ("intimation of
+    /// grant", "hearing notice"): on the same day the state itself leads.
+    nonisolated static let noticeWords: Set<String> = [
+        "intimation", "notice", "notification", "reminder", "letter", "communication", "copy",
+    ]
+    /// A lifecycle word as a reader says the state ("grant" → "granted").
+    nonisolated static let stateLabel: [String: String] = [
+        "grant": "granted", "filing": "filed", "renewal": "renewed", "appeal": "appealed",
+        "opposition": "opposed", "publication": "published", "examination": "under examination",
+        "examined": "under examination", "hearing": "hearing held", "objection": "objection raised",
+        "objections": "objection raised", "judgment": "decided",
+    ]
+
+    nonisolated static func isNotice(_ title: String) -> Bool {
+        !Set(title.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted))
+            .isDisjoint(with: noticeWords)
+    }
+
+    /// A stored summary is often a raw passage cut mid-word ("nder [and hearing…");
+    /// start it at the first whole word and never end mid-word.
+    nonisolated static func cleanSummary(_ raw: String, limit: Int = 200) -> String? {
+        var t = raw.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let first = t.first, first.isLowercase, let space = t.firstIndex(of: " ") {
+            t = String(t[t.index(after: space)...])
+        }
+        guard t.count >= 12 else { return nil }
+        if t.count > limit {
+            let cut = t.prefix(limit)
+            t = (cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? String(cut)) + "…"
+        }
+        return t
+    }
+
+    nonisolated static func lifecycleWords(_ title: String) -> Set<String> {
+        Set(title.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }).intersection(lifecycleTerms)
+    }
+
+    /// "What is the status of …?" → the LATEST lifecycle milestone of the
+    /// subject's own events leads; earlier milestones follow, oldest first;
+    /// everything is cited. `events` must already be scoped to the subject
+    /// (the subject fetch does that). nil = no lifecycle milestone on file →
+    /// the pipeline runs (never an invented status).
+    public nonisolated static func composeStatus(
+        question: String,
+        events: [Event],
+        documentsSearched: Int
+    ) -> EventAnswerComposition? {
+        let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
+        // One milestone per (words, day): repeats across documents are one happening.
+        var seen = Set<String>()
+        var milestones: [Event] = []
+        for e in events.sorted(by: {
+            if $0.date != $1.date { return $0.date < $1.date }
+            return $0.id.uuidString < $1.id.uuidString
+        }) where !isCommunication(e) && e.hasTrustworthyDate {
+            let words = lifecycleWords(e.title)
+            guard !words.isEmpty else { continue }
+            let key = words.sorted().joined(separator: "+") + "|" + Self.dayFormatter.string(from: e.date)
+            if seen.insert(key).inserted { milestones.append(e) }
+        }
+        guard let latest = milestones.max(by: { a, b in
+            if a.date != b.date { return a.date < b.date }
+            let ad = !lifecycleWords(a.title).isDisjoint(with: decisiveTerms)
+            let bd = !lifecycleWords(b.title).isDisjoint(with: decisiveTerms)
+            if ad != bd { return !ad }
+            let an = isNotice(a.title), bn = isNotice(b.title)
+            if an != bn { return an }            // the state outranks its notice
+            return a.id.uuidString > b.id.uuidString
+        }) else { return nil }
+        let word = lifecycleWords(latest.title).intersection(decisiveTerms).sorted().first
+            ?? lifecycleWords(latest.title).sorted().first ?? "recorded"
+        let state = stateLabel[word] ?? word
+        var text = "Current status: \(state) — \(lowercasedTitle(latest.title)) on \(Self.dateFormatter.string(from: latest.date))."
+        let earlier = milestones.filter { $0.id != latest.id && $0.date <= latest.date }
+        if !earlier.isEmpty {
+            let lines = earlier.suffix(6).map { "\(Self.dateFormatter.string(from: $0.date)) — \($0.title)" }
+            text += "\n\nEarlier milestones:\n" + lines.joined(separator: "\n")
+        }
+        if let later = events.filter(isCommunication).filter({ $0.hasTrustworthyDate && !isListingEntry($0) && $0.date >= latest.date })
+            .min(by: { $0.date < $1.date }) {
+            text += "\n\nLatest correspondence after it: \(later.title) (\(Self.dateFormatter.string(from: later.date)))."
+        }
+        return EventAnswerComposition(
+            primaryText: text,
+            supportingEvents: [latest] + Array(earlier.suffix(6).reversed()),
+            isNotFound: false,
+            receiptLine: "Status is the latest dated lifecycle milestone of this subject's own records (\(milestones.count) on file); every line is cited; no model was consulted.")
+    }
+
+    // MARK: - L5 — events of a named subject
+
+    /// "What happened at the hearing for ‹X›?" / "When was ‹X› granted?" →
+    /// the subject's own events matching the question's event words, dated
+    /// (trustworthy dates only), oldest first, each cited. nil = the question
+    /// names no event word, or the subject has no such event (pipeline runs).
+    public nonisolated static func composeSubjectEvents(
+        question: String,
+        events: [Event],
+        subjectLabel: String?
+    ) -> EventAnswerComposition? {
+        guard let dated = matchEvents(question: question, events: events.filter(\.hasTrustworthyDate)),
+              !dated.isEmpty else { return nil }
+        // Export-listing lines only when nothing else matches.
+        let real = dated.filter { !isListingEntry($0) }
+        let matches = real.isEmpty ? dated : real
+        let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
+        var seen = Set<String>()
+        var distinct: [Event] = []
+        // Milestones before correspondence on the same day; one line per happening.
+        for e in matches.sorted(by: {
+            if $0.date != $1.date { return $0.date < $1.date }
+            if isCommunication($0) != isCommunication($1) { return !isCommunication($0) }
+            return $0.id.uuidString < $1.id.uuidString
+        }) {
+            let key = lowercasedTitle(e.title) + "|" + Self.dayFormatter.string(from: e.date)
+            if seen.insert(key).inserted { distinct.append(e) }
+        }
+        let noun = subjectNoun(question) ?? "event"
+        let about = subjectLabel.map { " for \($0)" } ?? ""
+        var lines = ["\(distinct.count) \(noun)-related record\(distinct.count == 1 ? "" : "s")\(about):"]
+        // "When was ‹X› granted?" — lead with the one dated happening itself.
+        if Self.asksWhen(question),
+           let first = distinct.first(where: { !isNotice($0.title) && !isCommunicationKind($0) }) {
+            lines.insert("\(first.title) on \(Self.dateFormatter.string(from: first.date)).\n", at: 0)
+        }
+        for e in distinct.prefix(10) {
+            var line = "\(Self.dateFormatter.string(from: e.date)) — \(e.title)"
+            if let s = e.summary.flatMap({ cleanSummary($0) }),
+               s.lowercased() != e.title.lowercased() {
+                line += ": " + s
+            }
+            lines.append(line)
+        }
+        if distinct.count > 10 { lines.append("…and \(distinct.count - 10) more.") }
+        return EventAnswerComposition(
+            primaryText: lines.joined(separator: "\n"),
+            supportingEvents: Array(distinct.prefix(10)),
+            isNotFound: false,
+            receiptLine: "Answered from this subject's own dated records (\(distinct.count) matching); every line cited; no model was consulted.")
+    }
+
+    // MARK: - L5 — what happened in a period
+
+    /// The calendar year a "what happened in ‹year›" question names.
+    public nonisolated static func askedYear(_ question: String) -> Int? {
+        let q = question.lowercased()
+        guard ["what happened", "what went on", "events in", "timeline of", "summary of", "what did i do", "what did we do"]
+            .contains(where: { q.contains($0) }) else { return nil }
+        guard let re = try? NSRegularExpression(pattern: #"\b(19|20)\d{2}\b"#),
+              let m = re.firstMatch(in: q, range: NSRange(q.startIndex..., in: q)),
+              let r = Range(m.range, in: q) else { return nil }
+        return Int(q[r])
+    }
+
+    /// Month-by-month record of a year: per month, lifecycle milestones first,
+    /// then distinct correspondence subjects (≤ 4 lines a month), every line
+    /// cited; trustworthy dates only. nil = nothing dated in that year.
+    public nonisolated static func composePeriod(year: Int, events: [Event]) -> EventAnswerComposition? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        let inYear = events.filter { $0.hasTrustworthyDate && cal.component(.year, from: $0.date) == year }
+        guard !inYear.isEmpty else { return nil }
+        let months = Dictionary(grouping: inYear) { cal.component(.month, from: $0.date) }
+        let monthName = DateFormatter()
+        monthName.locale = Locale(identifier: "en_US_POSIX")
+        var lines = ["\(inYear.count) dated record\(inYear.count == 1 ? "" : "s") in \(year), across \(months.count) month\(months.count == 1 ? "" : "s"):"]
+        var cited: [Event] = []
+        for month in months.keys.sorted() {
+            let evs = months[month] ?? []
+            let milestones = evs.filter { !lifecycleWords($0.title).isEmpty && !isCommunicationKind($0) }
+            let mail = evs.filter { isCommunicationKind($0) }
+            var seen = Set<String>()
+            var picked: [Event] = []
+            // Tiers: milestones, then real correspondence, then listing lines.
+            func tier(_ e: Event) -> Int {
+                if isListingEntry(e) { return 2 }
+                return lifecycleWords(e.title).isEmpty ? 1 : 0
+            }
+            let realExists = (milestones + mail).contains { !isListingEntry($0) }
+            for e in (milestones + mail).sorted(by: { a, b in
+                if tier(a) != tier(b) { return tier(a) < tier(b) }
+                return a.date != b.date ? a.date < b.date : a.id.uuidString < b.id.uuidString
+            }) where !(realExists && isListingEntry(e)) {
+                let key = e.title.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+                guard !key.isEmpty, key != "email", seen.insert(key).inserted else { continue }
+                picked.append(e)
+                if picked.count == 4 { break }
+            }
+            guard !picked.isEmpty else { continue }
+            lines.append("")
+            lines.append("\(monthName.monthSymbols[month - 1]) \(year) — \(evs.count) record\(evs.count == 1 ? "" : "s")")
+            for e in picked.sorted(by: { $0.date < $1.date }) {
+                lines.append("\(Self.dateFormatter.string(from: e.date)) — \(e.title)")
+            }
+            cited += picked
+        }
+        return EventAnswerComposition(
+            primaryText: lines.joined(separator: "\n"),
+            supportingEvents: Array(cited.prefix(40)),
+            isNotFound: false,
+            receiptLine: "Composed from the year's dated records, milestones first, every line cited; undated items are left out; no model was consulted.")
+    }
+
+    /// A period question that also names a subject ("what happened with the
+    /// patent in 2024") is a subject question, not an archive-wide year.
+    public nonisolated static func hasSubjectReference(_ question: String) -> Bool {
+        let tokens = question.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        if tokens.contains(where: { $0.count >= 6 && $0.contains(where: \.isNumber) }) { return true }
+        return tokens.contains { SubjectResolver.definiteReferences[$0] != nil }
+    }
+
+    /// A dated line of an archive/export LISTING (EventExtractor's
+    /// "Archived entry — ‹file›"), kept under the keep-all-data rule but never
+    /// allowed to crowd out a real happening.
+    nonisolated static func isListingEntry(_ e: Event) -> Bool {
+        e.title.hasPrefix("Archived entry — ")
+    }
+
+    nonisolated static func isCommunicationKind(_ e: Event) -> Bool {
+        e.kind == .emailReceived || e.kind == .emailSent
+    }
+
     // MARK: - count
 
     public nonisolated static func composeCount(
@@ -83,13 +353,21 @@ public enum EventAnswerComposer {
         events: [Event],
         documentsSearched: Int
     ) -> EventAnswerComposition? {
-        guard let matches = matchEvents(question: question, events: events) else { return nil }
+        guard let all = matchEvents(question: question, events: events) else { return nil }
+        // L5 — count HAPPENINGS: a notice, reminder, listing line or email about
+        // a hearing is not a hearing. When the record holds the happenings
+        // themselves, only they count, once per day; otherwise (only notices on
+        // file) the historical rule stands.
+        let happenings = all.filter { !isNotice($0.title) && !isListingEntry($0) && !isCommunicationKind($0) && $0.hasTrustworthyDate }
+        let matches = happenings.isEmpty ? all : happenings
         // Distinct occurrences: same title + same DAY collapse (the drain can
         // hold one milestone per source; the count is of happenings, not rows).
         var seen = Set<String>()
         var distinct: [Event] = []
         for e in matches {
-            let key = "\(lowercasedTitle(e.title))|\(Self.dayFormatter.string(from: e.date))"
+            let key = happenings.isEmpty
+                ? "\(lowercasedTitle(e.title))|\(Self.dayFormatter.string(from: e.date))"
+                : Self.dayFormatter.string(from: e.date)
             if seen.insert(key).inserted { distinct.append(e) }
         }
         let noun = subjectNoun(question) ?? "matching events"
@@ -101,8 +379,10 @@ public enum EventAnswerComposer {
                 receiptLine: "Zero matching events — an honest zero, counted not guessed.")
         }
         let dates = distinct.prefix(6).map { Self.dateFormatter.string(from: $0.date) }.joined(separator: ", ")
+        // "1 hearing", never "1 hearings".
+        let counted = distinct.count == 1 && noun.hasSuffix("s") && !noun.hasSuffix("ss") ? String(noun.dropLast()) : noun
         return EventAnswerComposition(
-            primaryText: "\(distinct.count) \(noun): \(dates).",
+            primaryText: "\(distinct.count) \(counted): \(dates).",
             supportingEvents: Array(distinct.prefix(6)),
             isNotFound: false,
             receiptLine: "Counted from the dated event record; every occurrence cited; no model was consulted.")
@@ -120,7 +400,8 @@ public enum EventAnswerComposer {
     ) -> EventAnswerComposition? {
         var seen = Set<String>()
         var distinct: [Event] = []
-        for e in events.sorted(by: {
+        // L5 — an extraction-time date would sit at the end of every chain.
+        for e in events.filter(\.hasTrustworthyDate).sorted(by: {
             if $0.date != $1.date { return $0.date < $1.date }
             if $0.title != $1.title { return $0.title < $1.title }
             return $0.id.uuidString < $1.id.uuidString
@@ -301,4 +582,12 @@ public enum EventAnswerComposer {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    /// "When was ‹X› granted?", "On which date was ‹X› granted?", "What date
+    /// was …", "On what day …" — the question asks for the DAY of a happening.
+    nonisolated static func asksWhen(_ question: String) -> Bool {
+        let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.hasPrefix("when") { return true }
+        return q.range(of: #"^(on )?(which|what) (date|day)\b"#, options: .regularExpression) != nil
+    }
 }

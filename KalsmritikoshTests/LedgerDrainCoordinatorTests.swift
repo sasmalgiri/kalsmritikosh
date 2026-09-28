@@ -90,10 +90,19 @@ struct LedgerDrainCoordinatorTests {
         let receipt = try await rig.drain.drain()
         print(receipt.renderLines())
 
-        // Junk retired (the owner-blessed purge).
+        // Junk RETIRED — and since the owner ruling of 2026-09-25 that means
+        // soft-excluded, not deleted. This assertion used to require the row to
+        // be GONE; it now requires the opposite, because the row surviving is
+        // the point: retirement has to be reversible.
         #expect(receipt.entitiesRetired >= 1, "the Nil Nil ghost must retire")
-        let ghosts = try await rig.db.query("SELECT COUNT(*) FROM entities WHERE value = 'Nil Nil';", [])
-        #expect(Int(ghosts.first?.int(0) ?? -1) == 0)
+        let ghosts = try await rig.db.query(
+            "SELECT COUNT(*) FROM entities WHERE value = 'Nil Nil';", [])
+        #expect(Int(ghosts.first?.int(0) ?? -1) == 1, "the ghost row must SURVIVE retirement")
+        let live = try await rig.db.query("""
+        SELECT COUNT(*) FROM entities
+        WHERE value = 'Nil Nil' AND (review_status IS NULL OR review_status != 'rejected');
+        """, [])
+        #expect(Int(live.first?.int(0) ?? -1) == 0, "…but no ghost may still be LIVE")
 
         // Facts rewritten to the current era, identifier facts BOUND to anchors.
         #expect(receipt.factsSourcesRewritten >= 2, "both aged sources must rewrite")

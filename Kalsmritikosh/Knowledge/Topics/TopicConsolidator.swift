@@ -1,0 +1,274 @@
+//
+//  TopicConsolidator.swift
+//  Kalsmritikosh
+//
+//  Topic-Ledger (owner rule, 2026-09-18) — MINIMIZE topics to the few that
+//  actually carry context. A subject with too little evidence is NOT a real
+//  topic; standing alone it pollutes investigation / history reconstruction.
+//  So a THIN subject is merged into its CLOSEST substantive subject (by shared
+//  content terms), contributing its facts there instead of spawning a noise
+//  topic. When nothing substantive exists, the single largest subject becomes
+//  the sole topic and absorbs the rest. Result: a handful of rich topics, each
+//  backed by real evidence.
+//
+//  Pure and deterministic; operates on subject→facts groups before spines are
+//  built, so the downstream topic build sees only consolidated subjects.
+//
+
+import Foundation
+
+public enum TopicConsolidator {
+
+    public struct SubjectFacts: Sendable, Equatable {
+        public let subject: String
+        public let facts: [GenericFact]
+        public init(subject: String, facts: [GenericFact]) {
+            self.subject = subject; self.facts = facts
+        }
+    }
+
+    /// A subject is substantive when it carries at least `minDistinctFacts`
+    /// distinct field=value facts. Thin subjects merge into the closest one.
+    /// `closed` subjects are matters whose membership was decided by EVIDENCE
+    /// (every document naming the identifier — the subject spine), so they are
+    /// kept but never receive folded facts. A shared word is not evidence: on
+    /// the owner's archive, résumés sharing "sasmal" with the patent folded in
+    /// and the patent topic listed "Bengali: Read – Write – Speak".
+    public nonisolated static func consolidate(
+        _ input: [SubjectFacts], minDistinctFacts: Int = 4, closed: Set<String> = [],
+        nonSubjects: Set<String> = []
+    ) -> [SubjectFacts] {
+        guard input.count > 1 else { return input }
+        // P1.13 — one subject, one topic: labels that differ only in case or
+        // spacing ("HYBRID RELUCTANCE INDUCTION MOTOR" / "Hybrid Reluctance
+        // Induction Motor") merge first. The most-evidenced spelling is kept.
+        var byKey: [String: [SubjectFacts]] = [:]
+        var keyOrder: [String] = []
+        for s in input {
+            let key = s.subject.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+            if byKey[key] == nil { keyOrder.append(key) }
+            byKey[key, default: []].append(s)
+        }
+        let merged: [SubjectFacts] = keyOrder.compactMap { key in
+            guard let group = byKey[key], let lead = group.max(by: {
+                $0.facts.count != $1.facts.count ? $0.facts.count < $1.facts.count : $0.subject > $1.subject
+            }) else { return nil }
+            if group.count == 1 { return lead }
+            return SubjectFacts(subject: lead.subject, facts: group.flatMap(\.facts))
+        }
+        let input = foldTemplateSeries(merged, closed: closed)
+        guard input.count > 1 else { return input }
+
+        func distinctCount(_ s: SubjectFacts) -> Int {
+            Set(s.facts.map { "\($0.field.lowercased())|\($0.value.lowercased())" }).count
+        }
+        // Rank by evidence weight so the "closest / largest" tie-breaks are stable.
+        let ranked = input.sorted {
+            let a = distinctCount($0), b = distinctCount($1)
+            return a != b ? a > b : $0.subject < $1.subject
+        }
+        // A closed matter is always kept, however few its facts.
+        // P1.13 — a label that is not a SUBJECT (a bounce notice, a camera or
+        // attachment stem) is thin however many facts it carries: on the
+        // owner's archive "Delivery Status Notification (Failure)" and
+        // "image-bc523fd4" were standing topics.
+        func isSubstantive(_ s: SubjectFacts) -> Bool {
+            if closed.contains(s.subject) { return true }
+            // P1.19 — `nonSubjects`: labels the CALLER knows are not matters
+            // (subjects of automated mail — "… wants to chat", portal alerts).
+            let lowered = s.subject.lowercased()
+            if nonSubjects.contains(where: { $0.lowercased() == lowered }) { return false }
+            return distinctCount(s) >= minDistinctFacts && !isNonSubjectLabel(s.subject)
+        }
+        let substantive = ranked.filter(isSubstantive)
+        let thin = ranked.filter { !isSubstantive($0) }
+        let hosts = substantive.filter { !closed.contains($0.subject) }
+
+        // No substantive subject at all → the largest becomes the sole topic and
+        // absorbs everyone else (still one real, evidence-backed topic).
+        if substantive.isEmpty {
+            // Prefer a real subject as the sole host; a transport/stem label
+            // hosts only when nothing else exists.
+            let host = ranked.first(where: { !isNonSubjectLabel($0.subject) }) ?? ranked[0]
+            let merged = ranked.filter { $0.subject != host.subject }.flatMap { $0.facts }
+            return [SubjectFacts(subject: host.subject, facts: host.facts + merged)]
+        }
+        // Accumulate each substantive subject's facts; thin subjects fold into the
+        // closest substantive by content-term overlap (ties → the largest).
+        var bucket: [String: [GenericFact]] = [:]
+        var order: [String] = []
+        for s in substantive { bucket[s.subject] = s.facts; order.append(s.subject) }
+
+        // P1.4 — a term most subjects share (the owner's own name and address
+        // on every mail) links nothing: measured on the owner's archive, 28
+        // subject-less photo mails folded into the chat "h r u" through
+        // "shirshendu" + "sasmal" alone. Terms in ≥ 20% of subjects (and at
+        // least `ubiquityFloor` of them) are ignored when choosing a host.
+        var termDF: [String: Int] = [:]
+        let termsBySubject = Dictionary(ranked.map { ($0.subject, terms(of: $0)) }, uniquingKeysWith: { a, _ in a })
+        for set in termsBySubject.values { for term in set { termDF[term, default: 0] += 1 } }
+        let ubiquityCut = max(ubiquityFloor, Int((Double(ranked.count) * 0.2).rounded(.up)))
+        let ubiquitous = Set(termDF.filter { $0.value >= ubiquityCut }.keys)
+        let subTerms: [(subject: String, terms: Set<String>)] =
+            hosts.map { ($0.subject, (termsBySubject[$0.subject] ?? []).subtracting(ubiquitous)) }
+
+        for t in thin {
+            // Only closed matters exist: nothing may absorb by vocabulary.
+            guard let largestHost = hosts.first else { continue }
+            let tt = (termsBySubject[t.subject] ?? terms(of: t)).subtracting(ubiquitous)
+            var bestSubject = largestHost.subject       // fallback: the largest
+            var bestScore = -1.0
+            for cand in subTerms {
+                let score = jaccard(tt, cand.terms)
+                if score > bestScore { bestScore = score; bestSubject = cand.subject }
+            }
+            // With several real topics to choose from, a thin subject sharing NO
+            // term with any of them has no "closest" one. Folding it into the
+            // largest anyway corrupted that topic — on the owner's archive a
+            // shift-schedule spreadsheet collected 41 unrelated sources. It stays
+            // out of the topic layer instead; its facts remain in the ledger.
+            // (With a single host the owner's rule stands: it absorbs everything.)
+            if bestScore <= 0, hosts.count > 1 { continue }
+            // One shared word is not "closest" either: that is how the shift
+            // schedule still gathered 41 sources. With a choice of hosts, a fold
+            // needs at least two shared content terms.
+            if hosts.count > 1,
+               let host = subTerms.first(where: { $0.subject == bestSubject }),
+               tt.intersection(host.terms).count < 2 { continue }
+            bucket[bestSubject, default: []].append(contentsOf: t.facts)
+        }
+
+        return order.map { SubjectFacts(subject: $0, facts: bucket[$0] ?? []) }
+    }
+
+    /// Fewest subjects a term must reach before it counts as ubiquitous — small
+    /// inputs never lose their vocabulary.
+    nonisolated static let ubiquityFloor = 5
+
+    // MARK: - P1.19 template series
+
+    /// Shortest shared leading phrase (in words) that marks a template.
+    nonisolated static let seriesMinPrefixWords = 3
+    /// Distinct labels needed before a shared opening counts as a template.
+    nonisolated static let seriesMinMembers = 3
+
+    /// P1.19 — labels minted from ONE template with a varying slot ("Alert
+    /// Generated for sara Koll" / "… for L489000002" / "… for john smidth")
+    /// are one series, not N topics. Three or more open subjects whose labels
+    /// share the same leading ≥3 words fold into one topic named by that
+    /// shared opening ("Alert Generated for …"). The sender signal cannot
+    /// catch these — on the owner's archive they were sent from the owner's own
+    /// address — but the label shape can, for any source. Rewordings of one
+    /// matter ("CV for pharmaceutical production job" / "CV : For
+    /// Pharmaceutical JOB") fold the same way. Closed matters never fold.
+    nonisolated static func foldTemplateSeries(_ input: [SubjectFacts], closed: Set<String>) -> [SubjectFacts] {
+        func words(_ s: String) -> [Substring] {
+            withoutReplyMarkers(s).lowercased().split { !$0.isLetter && !$0.isNumber }
+        }
+        var groups: [String: [Int]] = [:]
+        for (i, s) in input.enumerated() where !closed.contains(s.subject) {
+            let w = words(s.subject)
+            guard w.count > seriesMinPrefixWords else { continue }   // a slot must follow
+            groups[w.prefix(seriesMinPrefixWords).joined(separator: " "), default: []].append(i)
+        }
+        var absorbed = Set<Int>()
+        var replacement: [Int: SubjectFacts] = [:]
+        for (_, members) in groups where members.count >= seriesMinMembers {
+            let lead = members.max {
+                input[$0].facts.count != input[$1].facts.count
+                    ? input[$0].facts.count < input[$1].facts.count : input[$0].subject > input[$1].subject
+            } ?? members[0]
+            // The longest opening every member shares, in the lead's own spelling.
+            let split = members.map { words(input[$0].subject) }
+            var shared = seriesMinPrefixWords
+            while split.allSatisfy({ $0.count > shared + 1 && $0[shared] == split[0][shared] }) { shared += 1 }
+            let label = openingText(of: withoutReplyMarkers(input[lead].subject), words: shared) + " …"
+            replacement[members.min() ?? lead] = SubjectFacts(
+                subject: label, facts: members.flatMap { input[$0].facts })
+            absorbed.formUnion(members)
+        }
+        guard !absorbed.isEmpty else { return input }
+        return input.indices.compactMap { i in
+            if let r = replacement[i] { return r }
+            return absorbed.contains(i) ? nil : input[i]
+        }
+    }
+
+    /// Reply/forward markers are transport, not wording ("Re: Fwd: X" → "X").
+    nonisolated static func withoutReplyMarkers(_ label: String) -> String {
+        var rest = label[...]
+        while let r = rest.range(of: #"^\s*(?i:re|fw|fwd)\s*:\s*"#, options: .regularExpression) {
+            rest = rest[r.upperBound...]
+        }
+        return String(rest)
+    }
+
+    /// The original text of `label` up to the end of its `words`-th word.
+    nonisolated static func openingText(of label: String, words count: Int) -> String {
+        var seen = 0
+        var inWord = false
+        var end = label.startIndex
+        for i in label.indices {
+            let isWordChar = label[i].isLetter || label[i].isNumber
+            if isWordChar && !inWord { seen += 1 }
+            inWord = isWordChar
+            if isWordChar { end = label.index(after: i) }
+            if seen == count, !isWordChar { break }
+        }
+        return String(label[label.startIndex..<end])
+    }
+
+    // MARK: - P1.13 non-subject labels (universal, shape + small vocabularies)
+
+    /// Mail-transport notices: the message is ABOUT delivery, not a matter.
+    nonisolated static let transportPhrases: [String] = [
+        "delivery status notification", "undeliverable", "undelivered mail",
+        "mail delivery failed", "mail delivery failure", "mail delivery subsystem",
+        "returned mail", "delivery failure", "failure notice", "delivery has failed",
+        "message not delivered", "could not be delivered",
+    ]
+    /// Words that name a FILE KIND, not a subject ("IMG", "Picture", "scan").
+    nonisolated static let genericStemWords: Set<String> = [
+        "img", "image", "images", "picture", "pic", "photo", "photos", "scan", "scanned",
+        "screenshot", "screen", "shot", "dsc", "dscn", "pxl", "whatsapp", "document", "doc",
+        "file", "untitled", "attachment", "new", "copy", "final", "page", "sheet", "book",
+        "pdf", "jpg", "jpeg", "png", "heic", "video", "vid", "audio", "rec", "recording",
+        "wa", "vid", "mov", "mp4", "aud", "ptt",   // WhatsApp media stems ("IMG-20231129-WA0004")
+        "message",   // P1.4 — FactSubjectPartitioner.untitledMessage
+    ]
+
+    /// True when `label` names transport or a file kind rather than a subject.
+    public nonisolated static func isNonSubjectLabel(_ label: String) -> Bool {
+        let lower = label.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !lower.isEmpty else { return true }
+        if transportPhrases.contains(where: { lower.hasPrefix($0) || lower == $0 }) { return true }
+        // Machine stem: after dropping digits and hash-like runs, only file-kind
+        // words (or nothing) remain — "image-bc523fd4", "img20200115_19590228",
+        // "Picture-8776713c", "IMG_4471". A stem with any real word stays a subject.
+        let words = lower.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        let meaningful = words.filter { w in
+            if w.allSatisfy(\.isNumber) { return false }
+            if w.count >= 6, w.allSatisfy({ $0.isHexDigit }), w.contains(where: \.isNumber) { return false }
+            let letters = w.filter(\.isLetter)
+            if genericStemWords.contains(letters) { return false }
+            return !letters.isEmpty
+        }
+        return meaningful.isEmpty
+    }
+
+    nonisolated static func terms(of s: SubjectFacts) -> Set<String> {
+        let selector = PassageAnswerSelector()
+        var out = selector.contentTerms(s.subject)
+        for f in s.facts.prefix(20) {
+            out.formUnion(selector.contentTerms(f.field + " " + f.value))
+        }
+        return out
+    }
+
+    nonisolated static func jaccard(_ a: Set<String>, _ b: Set<String>) -> Double {
+        guard !a.isEmpty || !b.isEmpty else { return 0 }
+        let inter = a.intersection(b).count
+        let uni = a.union(b).count
+        return uni == 0 ? 0 : Double(inter) / Double(uni)
+    }
+}

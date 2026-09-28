@@ -199,6 +199,40 @@ public actor AnswerLedgerRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// G2/Stage-3 — rebuild a VerifiedAnswer from the DURABLE ledger so a
+    /// reopened conversation restores its citations, verification status and
+    /// receipt without persisting a second divergent copy of the truth. The
+    /// body/state/confidence come from the answer header; citations come from
+    /// the stored claims' evidence (object id + the verified claim as the
+    /// snippet). nil when the id is unknown (a legacy/broken link).
+    public func reconstructVerifiedAnswer(answerID: UUID) async throws -> VerifiedAnswer? {
+        let headerRows = try await database.query("""
+        SELECT id, question, answer_state, corpus_snapshot_id, body, confidence, source, created_at
+        FROM answers WHERE id = ? LIMIT 1;
+        """, [.uuid(answerID)])
+        guard let header = headerRows.first.flatMap(decodeRow) else { return nil }
+
+        var citations: [VerifiedAnswer.Citation] = []
+        for claim in (try? await claims(forAnswer: answerID)) ?? [] {
+            for ev in claim.evidence {
+                if let oid = ev.objectID {
+                    citations.append(.init(objectID: oid, snippet: claim.text))
+                } else {
+                    for b in ev.blockIDs.compactMap(UUID.init(uuidString:)) {
+                        citations.append(.init(objectID: b, snippet: claim.text))
+                    }
+                }
+            }
+        }
+        return VerifiedAnswer(
+            body: header.body,
+            answerText: header.body,
+            citations: citations,
+            confidence: Confidence(header.confidence),
+            answerState: header.answerState,
+            ledgerAnswerID: answerID)
+    }
+
     /// One evidence link supporting a stored claim — the A5.10 replay leaf
     /// (object / event / blocks + role).
     public struct StoredClaimEvidence: Sendable, Hashable {

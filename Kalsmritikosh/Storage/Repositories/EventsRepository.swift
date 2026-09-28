@@ -105,6 +105,25 @@ public actor EventsRepository {
     /// P5 residual — the shape-aware fetch's door: events whose title carries
     /// any of the question's vocabulary terms (whole-word, case-insensitive
     /// via LIKE bounds), rejected rows excluded, total-ordered. Bounded.
+    /// L5 — every event of a SUBJECT: events that name one of its anchor
+    /// entities, plus the events of every document that mentions one of them
+    /// (a grant letter names the application number; its "granted" milestone
+    /// belongs to that matter). Bounded; newest first.
+    public func eventsForAnchors(_ anchorIDs: [Entity.ID], limit: Int = 400) async throws -> [Event] {
+        guard !anchorIDs.isEmpty else { return [] }
+        let qs = anchorIDs.map { _ in "?" }.joined(separator: ",")
+        let binds = anchorIDs.map { SQLValue.uuid($0) }
+        let rows = try await database.query("""
+        SELECT e.id FROM events e
+        WHERE e.review_status IS NULL AND (
+              e.id IN (SELECT event_id FROM event_entities WHERE entity_id IN (\(qs)))
+           OR e.source_object_id IN (SELECT source_object_id FROM entity_mentions WHERE entity_id IN (\(qs))
+                                     UNION SELECT source_object_id FROM entities WHERE id IN (\(qs))))
+        ORDER BY e.date DESC LIMIT ?;
+        """, binds + binds + binds + [.integer(Int64(limit))])
+        return try await findByIDs(rows.compactMap { $0.uuid(0) })
+    }
+
     public func findByTitleTokens(_ tokens: [String], limit: Int = 200) async throws -> [Event] {
         guard !tokens.isEmpty else { return [] }
         let conditions = tokens.map { _ in "lower(title) LIKE ?" }.joined(separator: " OR ")
@@ -287,6 +306,21 @@ public actor EventsRepository {
         LIMIT ?;
         """, [.integer(Int64(limit))])
         return rows.compactMap(decode)
+    }
+
+    /// U-3.4 (W-6) — how many events still await narrative-slot backfill.
+    /// The health panel's "backfill pending = 0" invariant reads this; the
+    /// predicate mirrors listEventsMissingNarrativeSlots exactly.
+    public func countEventsMissingNarrativeSlots() async throws -> Int {
+        let rows = try await database.query("""
+        SELECT COUNT(*) FROM events
+        WHERE narrative_slots_json IS NULL
+           OR narrative_slots_json = '{}'
+           OR narrative_slots_json LIKE '%"who":[]%'
+           OR narrative_slots_json LIKE '%"what":[]%'
+           OR narrative_slots_json LIKE '%"when":[]%';
+        """, [])
+        return Int(rows.first?.int(0) ?? 0)
     }
 
     /// G3.20 — read the persisted fact_type for a single row. Returns

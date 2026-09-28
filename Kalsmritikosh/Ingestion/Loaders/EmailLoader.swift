@@ -470,6 +470,19 @@ public struct EmailLoader: Ingestor {
     /// citation offsets.
     nonisolated static let threadMessagesMetaKey = "t_threadMessages"
 
+    /// The `messageIndex` of every message a thread KO carries, read back from
+    /// its `t_threadMessages` bag. Empty when the bag is absent or unreadable.
+    nonisolated static func threadMessageIndices(fromBag json: String) -> Set<Int> {
+        guard let data = json.data(using: .utf8),
+              let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        var out = Set<Int>()
+        for row in rows {
+            if let n = row["messageIndex"] as? Int { out.insert(n) }
+            else if let n = row["messageIndex"] as? NSNumber { out.insert(n.intValue) }
+        }
+        return out
+    }
+
     /// Pre-Move-A path. One KO per mbox message. Active when
     /// `threadCoalescingEnabled == false`. Preserved verbatim from
     /// commit dd93c9e so the production DB shape (526 per-message
@@ -619,6 +632,13 @@ public struct EmailLoader: Ingestor {
     ) -> (textBody: String, attachmentURLs: [URL]) {
         guard let ct = headers["content-type"],
               ct.lowercased().hasPrefix("multipart/") else {
+            // Single-part: transfer-decode quoted-printable / base64 bodies so a
+            // QP soft break can never leave a split email address (or any split
+            // token) in the stored text. All email paths (eml, emlx, mbox)
+            // funnel through here, so this one branch fixes the whole lane.
+            if let decoded = MIMEParser.decodeSinglePartBody(body, headers: headers) {
+                return (decoded, [])
+            }
             return (body, [])
         }
         let baseDir = FileManager.default.temporaryDirectory

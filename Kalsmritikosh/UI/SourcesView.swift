@@ -136,6 +136,15 @@ public struct SourcesView: View {
                 Text("\(fileCount) file(s) ingested")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // P3.2 — a background refresh is bringing older records up to
+                // the current rules; say so, and say when it is done.
+                if let pending = appState.ledgerRefreshPending {
+                    Label("Refreshing \(pending.formatted()) record\(pending == 1 ? "" : "s") with newer rules…",
+                          systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Refreshing \(pending) records with newer rules in the background")
+                }
             }
             InfoPopoverButton(
                 title: "Sources = your knowledge base",
@@ -240,6 +249,8 @@ public struct SourcesView: View {
                                     .lineLimit(2)
                             }
                             Spacer()
+                            // U-3.6 — every file shows an explicit status.
+                            fileStatusChip(for: row)
                             Text(row.sourceType.rawValue.uppercased())
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
@@ -380,6 +391,55 @@ public struct SourcesView: View {
         }
     }
 
+    /// U-3.6 — the honest per-file status chip. Classified from the source
+    /// type and a cheap "produced text" proxy (a non-empty preview), so
+    /// every file in the list carries an account of what happened to it
+    /// without an N-query fan-out.
+    @ViewBuilder
+    private func fileStatusChip(for row: KnowledgeObjectSummaryRow) -> some View {
+        let status = FileIndexStatus.classify(
+            sourceType: row.sourceType,
+            chunkCount: row.preview.isEmpty ? 0 : 1)
+        // A2 (module .importLifecycle) — when on, show the unified lifecycle state
+        // (adds needs-password / failed / partial with omission disclosure). Off ⇒
+        // the original FileIndexStatus label.
+        if KnowledgeModuleFlags.isEnabled(.importLifecycle) {
+            let life = SourceLifecycle.derive(.init(index: status))
+            let lc: Color = {
+                switch life {
+                case .searchable:                 return .green
+                case .partial:                    return .yellow
+                case .processing, .queued:        return .blue
+                case .needsPassword:              return .orange
+                case .failed, .excluded:          return .secondary
+                }
+            }()
+            Text(life.label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(lc)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(lc.opacity(0.12), in: Capsule())
+                .help(life.disclosesOmission
+                      ? "Results may omit this source until it is fully indexed."
+                      : "How this file was read into the knowledge base")
+        } else {
+        let color: Color = {
+            switch status {
+            case .indexed, .transcribed, .expanded: return .green
+            case .limitedScan:                      return .yellow
+            case .notTranscribed, .notExpanded:     return .orange
+            case .unsupported:                      return .secondary
+            }
+        }()
+        Text(status.label)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
+            .help("How this file was read into the knowledge base")
+        }
+    }
+
     private func icon(for type: SourceType) -> String {
         switch type.category {
         case .document: return "doc.text"
@@ -392,6 +452,7 @@ public struct SourcesView: View {
         case .archive: return "archivebox"
         case .chat: return "message"
         case .browserHistory: return "safari"
+        case .hostArtifact: return "cpu"          // HOST-* — machine evidence
         case .unknown: return "doc"
         }
     }

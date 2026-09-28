@@ -21,7 +21,9 @@ import Foundation
 /// The bridge MasterBrain uses to reach the USF exact-version upgrade subsystem. A
 /// concrete adapter wraps IngestCoordinator; tests inject a fake. When no bridge is
 /// wired, AEE simply answers from what is already retrieved (disclosing limitations).
-public protocol AEEEvidenceUpgrading: Sendable {
+/// Explicitly `nonisolated`: implementers are actors (the adapter and test fakes);
+/// default-MainActor module isolation must not make this a global-actor protocol.
+nonisolated public protocol AEEEvidenceUpgrading: Sendable {
     /// The current DERIVED completion state of an exact source version (nil if unknown).
     func completionState(sourceVersionID: UUID) async -> SourceCompletionState?
     /// Ensure ONLY this exact source version reaches the goal via the USF upgrade queue.

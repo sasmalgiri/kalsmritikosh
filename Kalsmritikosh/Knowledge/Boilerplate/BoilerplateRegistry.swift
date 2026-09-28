@@ -104,6 +104,67 @@ public actor BoilerplateRegistry {
     /// derived from the body so a second promotion attempt for the
     /// same bytes is a no-op (PRIMARY KEY conflict).
     @discardableResult
+    // MARK: - P2.4 · `boilerplate_uses` is READ BACK
+    //
+    // recordUses() has written (template_id, ko_id) on every substitution since
+    // the registry landed, and nothing ever selected from it. So the
+    // association between a boilerplate template and the documents carrying it
+    // was recorded and could influence nothing — the embed-skip decision
+    // consulted templates but never their USE counts.
+    //
+    // Reading it back makes two things possible that were not: knowing HOW
+    // WIDELY a template is shared (a footer in 400 documents is stronger
+    // evidence of boilerplate than one in 3), and telling a user WHICH
+    // documents a suppressed passage came from instead of silently dropping it.
+
+    /// How many distinct KnowledgeObjects carry this template.
+    ///
+    /// This is the number that makes "boilerplate" a measurement rather than a
+    /// guess: a template used once is a coincidence, one used in hundreds of
+    /// documents is a letterhead.
+    public func useCount(templateID: String, in database: Database) async throws -> Int {
+        Int((try await database.query(
+            "SELECT COUNT(*) FROM boilerplate_uses WHERE template_id = ?;", [.text(templateID)]))
+            .first?.int(0) ?? 0)
+    }
+
+    /// The documents carrying this template, bounded and in a deterministic
+    /// order. Lets a surface say WHERE a suppressed passage occurs rather than
+    /// suppressing it invisibly.
+    public func users(templateID: String, in database: Database,
+                      limit: Int = 200) async throws -> [KnowledgeObject.ID] {
+        let rows = try await database.query("""
+        SELECT ko_id FROM boilerplate_uses WHERE template_id = ?
+        ORDER BY ko_id ASC LIMIT ?;
+        """, [.text(templateID), .integer(Int64(limit))])
+        return rows.compactMap { $0.uuid(0) }
+    }
+
+    /// Templates carried by ONE document — the per-document explanation of what
+    /// was treated as boilerplate in it.
+    public func templateIDs(forKO koID: KnowledgeObject.ID,
+                            in database: Database) async throws -> [String] {
+        let rows = try await database.query(
+            "SELECT template_id FROM boilerplate_uses WHERE ko_id = ? ORDER BY template_id ASC;",
+            [.uuid(koID)])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// (templateID, useCount) for the most widely shared templates — the
+    /// Ingestion Report's boilerplate section, and the input to any future
+    /// "only skip templates seen in >= N documents" rule.
+    public func mostUsed(in database: Database, limit: Int = 25) async throws
+    -> [(templateID: String, useCount: Int)] {
+        let rows = try await database.query("""
+        SELECT template_id, COUNT(*) AS n FROM boilerplate_uses
+        GROUP BY template_id ORDER BY n DESC, template_id ASC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { r in
+            guard let t = r.string(0) else { return nil }
+            return (templateID: t, useCount: Int(r.int(1) ?? 0))
+        }
+    }
+
     public func promote(
         body: String,
         kind: TemplateKind

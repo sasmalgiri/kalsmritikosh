@@ -18,6 +18,20 @@
 //  read; everything downstream then handles event.date as Date()
 //  in the usual way.
 //
+//  MESSAGE TEXT — FIXED SILENT DATA LOSS. From macOS Ventura / iOS 16
+//  onward Messages often leaves `message.text` NULL and puts the body in
+//  `message.attributedBody`, a legacy typedstream archive. This reader used
+//  to filter `WHERE message.text IS NOT NULL`, so those messages were not
+//  rendered badly — they were DROPPED, with nothing saying so. A modern
+//  conversation could arrive nearly empty and look complete.
+//
+//  Now: every message row is read. Text comes from `message.text` when
+//  present, else from `attributedBody` via AttributedBodyText, and when
+//  NEITHER yields text the message is STILL emitted with its timestamp,
+//  sender and direction plus a stated note. A message never vanishes, and
+//  the recovery counts are recorded in the object's metadata so a thin
+//  conversation can be told apart from a quiet one.
+//
 
 import Foundation
 
@@ -47,26 +61,40 @@ public struct IMessageLoader: Ingestor {
         //
         // Apple's `message.date` is nanoseconds since 2001-01-01.
         // `message.is_from_me = 1` means the local user sent it.
-        let sql = """
-        SELECT
-            chat.guid AS chat_guid,
-            chat.display_name AS chat_display,
-            handle.id AS counterparty,
-            message.text AS body,
-            message.date AS apple_date,
-            message.is_from_me AS from_me
-        FROM message
-        LEFT JOIN chat_message_join ON chat_message_join.message_id = message.ROWID
-        LEFT JOIN chat ON chat.ROWID = chat_message_join.chat_id
-        LEFT JOIN handle ON handle.ROWID = message.handle_id
-        WHERE message.text IS NOT NULL AND message.text != ''
-        ORDER BY chat.ROWID, message.date ASC;
-        """
+        // NO `WHERE message.text IS NOT NULL` filter: that is what dropped
+        // every modern message. Rows with neither text nor a decodable body are
+        // reported, not skipped.
+        func sql(includeAttributedBody: Bool) -> String {
+            """
+            SELECT
+                chat.guid AS chat_guid,
+                chat.display_name AS chat_display,
+                handle.id AS counterparty,
+                message.text AS body,
+                message.date AS apple_date,
+                message.is_from_me AS from_me,
+                \(includeAttributedBody ? "message.attributedBody" : "NULL") AS attributed_body
+            FROM message
+            LEFT JOIN chat_message_join ON chat_message_join.message_id = message.ROWID
+            LEFT JOIN chat ON chat.ROWID = chat_message_join.chat_id
+            LEFT JOIN handle ON handle.ROWID = message.handle_id
+            ORDER BY chat.ROWID, message.date ASC;
+            """
+        }
+        // `attributedBody` does not exist in older chat.db schemas, where
+        // selecting it would fail the whole query and take the entire iMessage
+        // lane down with it. Try the modern shape, fall back to the legacy one.
         let rows: [ExternalSQLiteSource.Row]
+        var readsAttributedBody = true
         do {
-            rows = try src.query(sql)
+            rows = try src.query(sql(includeAttributedBody: true))
         } catch {
-            throw IngestorError.unreadable(url, underlying: error)
+            readsAttributedBody = false
+            do {
+                rows = try src.query(sql(includeAttributedBody: false))
+            } catch {
+                throw IngestorError.unreadable(url, underlying: error)
+            }
         }
         guard !rows.isEmpty else {
             throw IngestorError.empty(url)
@@ -77,13 +105,25 @@ public struct IMessageLoader: Ingestor {
         // content with `=== <conversation> ===` separators so the
         // chunker boundaries land on conversation breaks.
         var conversations: [(label: String, text: String)] = []
+        // Counted so a conversation that reads thin can be told apart from one
+        // that genuinely was.
+        var recoveredFromAttributedBody = 0
+        var unrecoverableText = 0
         var current: (label: String, parts: [String])? = nil
         var messageCount = 0
         for row in rows {
             let chatGuid = row.string(0) ?? "unknown"
             let chatDisplay = row.string(1)?.trimmingCharacters(in: .whitespaces) ?? ""
             let counterparty = row.string(2) ?? "unknown"
-            let body = row.string(3) ?? ""
+            let plainText = row.string(3)
+            let recovered = Self.messageText(plainText: plainText,
+                                             attributedBody: row.data(6))
+            switch recovered.origin {
+            case .plainText: break
+            case .attributedBody: recoveredFromAttributedBody += 1
+            case .unrecoverable: unrecoverableText += 1
+            }
+            let body = recovered.text
             let appleDate = row.int(4) ?? 0
             let fromMe = (row.int(5) ?? 0) != 0
             let label: String = chatDisplay.isEmpty
@@ -122,9 +162,42 @@ public struct IMessageLoader: Ingestor {
                 "filename": AnyCodable(.string(url.lastPathComponent)),
                 "channel": AnyCodable(.string("iMessage")),
                 "conversation_count": AnyCodable(.int(Int64(conversations.count))),
-                "message_count": AnyCodable(.int(Int64(rows.count)))
+                "message_count": AnyCodable(.int(Int64(rows.count))),
+                // Visible accounting, so "few messages" and "few messages READ"
+                // are never the same-looking result.
+                "text_recovered_from_attributed_body": AnyCodable(.int(Int64(recoveredFromAttributedBody))),
+                "text_unrecoverable": AnyCodable(.int(Int64(unrecoverableText))),
+                "reads_attributed_body": AnyCodable(.bool(readsAttributedBody))
             ]
         )
+    }
+
+    // MARK: - Message text
+
+    enum TextOrigin: Sendable, Equatable {
+        case plainText
+        case attributedBody
+        /// Neither column yielded text. The message is still emitted.
+        case unrecoverable
+    }
+
+    /// Text for one message row, and where it came from.
+    ///
+    /// The order matters: `message.text` is Apple's own plain copy and is
+    /// preferred whenever it exists, so the archive decoder is only ever a
+    /// fallback for rows Apple left empty.
+    nonisolated static func messageText(plainText: String?, attributedBody: Data?)
+    -> (text: String, origin: TextOrigin) {
+        if let plainText, !plainText.trimmingCharacters(in: .whitespaces).isEmpty {
+            return (plainText, .plainText)
+        }
+        if let attributedBody, let recovered = AttributedBodyText.decode(attributedBody),
+           !recovered.text.trimmingCharacters(in: .whitespaces).isEmpty {
+            return (recovered.text, .attributedBody)
+        }
+        // The message existed, was sent at a time, by someone, in a direction.
+        // Saying so is evidence; dropping the row is not.
+        return ("[message text not recoverable from this database]", .unrecoverable)
     }
 
     // MARK: - Helpers

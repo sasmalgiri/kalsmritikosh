@@ -41,6 +41,11 @@ public nonisolated enum EvidenceBlockKind: String, Codable, Sendable, Hashable, 
     case spreadsheetRow
     case spreadsheetCell
     case transcriptSegment
+    /// DISC-1 — one authored utterance on a discussion platform (a comment, post,
+    /// reply, live-chat line or direct message). Its own kind rather than
+    /// `.paragraph` because two people's words must never land in one chunk, and
+    /// not `.transcriptSegment` because the provenance is a platform record, not ASR.
+    case discussionMessage
     case logRecord
     case archiveMember
     case unknown
@@ -61,7 +66,7 @@ public nonisolated enum EvidenceBlockKind: String, Codable, Sendable, Hashable, 
     public var isHardChunkBoundary: Bool {
         switch self {
         case .emailBody, .quotedEmail, .attachment, .slideBody, .slideTitle,
-             .table, .tableRow, .transcriptSegment, .archiveMember:
+             .table, .tableRow, .transcriptSegment, .discussionMessage, .archiveMember:
             return true
         default:
             return false

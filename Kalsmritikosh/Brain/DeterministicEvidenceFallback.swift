@@ -22,19 +22,59 @@ public enum DeterministicEvidenceFallback {
         question: String,
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventLinks: EventLinksRepository? = nil
+        eventLinks: EventLinksRepository? = nil,
+        topics: [MemoryObject] = []
     ) async -> VerifiedAnswer? {
         // Prefer dated events (the structured layer); fall back to top chunks.
         // P7.5 — the no-LLM reconstruction must read as a CHRONOLOGICAL timeline,
         // so sort the event cards by date ascending before rendering (retrieval
         // order is relevance-ranked, not temporal).
-        let events = Array(retrieval.events.prefix(12)).sorted { $0.date < $1.date }
+        // Answer-quality W4 — everything shown here must be RELEVANT to the
+        // question. The live diagnostic showed this last-resort composer dumping
+        // every riding fact (Role: Director / Hearingdate … ×30) and unrelated
+        // documents (a patent timeline for "who signed the lease?"). Gate each
+        // section by shared content terms; when nothing relevant survives, return
+        // nil so the caller keeps its honest not-found. Empty question ⇒ keep all.
+        let relevanceSelector = PassageAnswerSelector()
+        let qTerms = relevanceSelector.contentTerms(question)
+        func relevant(_ text: String) -> Bool {
+            guard !qTerms.isEmpty else { return true }
+            return !qTerms.isDisjoint(with: relevanceSelector.contentTerms(text))
+        }
+
+        // Topic-Ledger U7 — LEAD with a built topic when one is relevant, so the
+        // answer composes from the deterministic topic rollup (memory object)
+        // rather than the raw fact/passage pile. Pick the topic whose subject or
+        // narrative shares the most content terms with the question.
+        var leadTopic: MemoryObject?
+        var leadOverlap = 0
+        for t in topics {
+            let terms = relevanceSelector.contentTerms(t.subjectIdentifier + " " + t.narrative)
+            let overlap = qTerms.intersection(terms).count
+            guard overlap > 0 || qTerms.isEmpty else { continue }
+            if leadTopic == nil || overlap > leadOverlap {
+                leadTopic = t
+                leadOverlap = overlap
+            }
+        }
+
+        let events = Array(retrieval.events.prefix(12))
+            .filter { relevant($0.title) }
+            .sorted { $0.date < $1.date }
         let chunks = Array(retrieval.chunks.prefix(8))
-        guard !events.isEmpty || !chunks.isEmpty else { return nil }
+        guard !events.isEmpty || !chunks.isEmpty || leadTopic != nil else { return nil }
 
         var citations: [VerifiedAnswer.Citation] = []
         var seen = Set<KnowledgeObject.ID>()
         var supportLines: [String] = []
+
+        // U7 — the built topic's contributing documents become citations so the
+        // leading topic section is grounded and reopenable.
+        if let leadTopic {
+            for objectID in leadTopic.sourceObjectIDs where seen.insert(objectID).inserted {
+                citations.append(VerifiedAnswer.Citation(objectID: objectID, snippet: leadTopic.subjectIdentifier))
+            }
+        }
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "d MMM yyyy"
@@ -61,7 +101,7 @@ public enum DeterministicEvidenceFallback {
                 .replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: .whitespaces)
                 .prefix(300)
-            guard snippet.count >= 20 else { continue }
+            guard snippet.count >= 20, relevant(String(snippet)) else { continue }
             passageLines.append("- \(snippet)")
             if seen.insert(hit.chunk.objectID).inserted {
                 citations.append(VerifiedAnswer.Citation(
@@ -80,12 +120,47 @@ public enum DeterministicEvidenceFallback {
         // clickable. No fact is shown without a backing chunk in this set.
         var blockToChunk: [UUID: RetrievedChunk] = [:]
         for c in retrieval.chunks {
-            if let b = c.chunk.evidenceBlockID, blockToChunk[b] == nil { blockToChunk[b] = c }
+            for b in c.chunk.allBlockIDs where blockToChunk[b] == nil { blockToChunk[b] = c }
         }
         var factLines: [String] = []
+        var seenFacts = Set<String>()          // W4 — dedup: the same field+value
         for fact in retrieval.genericFacts {
             guard let backing = fact.sourceBlockIDs.lazy.compactMap({ blockToChunk[$0] }).first
             else { continue }   // only facts whose evidence is in THIS surfaced set
+            // W4 — relevance gate + dedup + cap: never dump every riding fact or
+            // repeat the same one. Skip facts the question did not ask about, and
+            // collapse duplicate field+value rows.
+            //
+            // A fact counts as relevant when the question's terms overlap EITHER
+            // the fact itself OR THE PASSAGE IT WAS EXTRACTED FROM. The second
+            // clause is not a loosening — it is what makes the gate correct.
+            // Comparing a question against `field + value` alone asks the user to
+            // have guessed the ledger's field NAME: "where did they work?" yields
+            // the term "work", while the fact reads `employer = Orchid Pharma`,
+            // so the one fact that answers the question was dropped — while the
+            // chunk "Worked at Orchid Pharma as a chemist.", which states the
+            // very same thing, was shown. A fact is a distillation of its
+            // passage; if the question surfaced the passage as relevant, the
+            // fact drawn from it is relevant too.
+            //
+            // This does NOT reopen the dump this gate was added to stop. The
+            // backing chunk must still be in the surfaced set (above) AND share
+            // terms with the question, so the witnessed junk — Role: Director /
+            // Hearingdate ×30 riding a "who signed the lease?" ask — stays out:
+            // those facts' passages are the unrelated documents the same gate
+            // already excludes.
+            //
+            // The third clause is the SHAPE cue: "how much did I pay?" names
+            // the money shape by grammar while sharing no word with either the
+            // `amount` fact or the passage carrying it. See
+            // `SlotFieldResolver.shapeCues`; it admits only, never excludes.
+            guard relevant(fact.field + " " + fact.value)
+                    || relevant(backing.chunk.text)
+                    || SlotFieldResolver.questionRequestsShape(ofField: fact.field, in: question)
+            else { continue }
+            let dedupKey = "\(fact.field.lowercased())|\(fact.value.lowercased())"
+            guard seenFacts.insert(dedupKey).inserted else { continue }
+            guard factLines.count < 12 else { break }
             let field = fact.field.prefix(1).uppercased() + fact.field.dropFirst()
             let unit = fact.unit.map { " \($0)" } ?? ""
             factLines.append("- **\(field):** \(fact.value)\(unit)")
@@ -99,6 +174,11 @@ public enum DeterministicEvidenceFallback {
             }
         }
 
+        // W4 abstention — if nothing relevant to the question survived the gates,
+        // return nil so the caller keeps its honest not-found instead of dumping
+        // an unrelated fact/timeline pile. A relevant built topic (U7) also counts.
+        guard leadTopic != nil || !factLines.isEmpty || !passageLines.isEmpty || !events.isEmpty else { return nil }
+
         // Contradictions are found deterministically (no LLM).
         let contradictions = await MasterBrain.findCrossRetrievalContradictions(
             events: events, eventLinks: eventLinks
@@ -108,6 +188,10 @@ public enum DeterministicEvidenceFallback {
         // holds the answer (grant date, patent number, clause). Then the dated
         // timeline for context.
         var md = ""
+        // U7 — lead with the built topic (deterministic rollup) when relevant.
+        if let leadTopic {
+            md += "## Topic\n\n\(leadTopic.narrative)\n\n"
+        }
         if !factLines.isEmpty {
             md += "## Extracted facts (from your evidence)\n\n"
             md += factLines.joined(separator: "\n") + "\n\n"

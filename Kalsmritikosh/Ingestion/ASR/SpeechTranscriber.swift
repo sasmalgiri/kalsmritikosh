@@ -112,14 +112,12 @@ public actor SpeechTranscriber: AudioTranscribing {
         }
 
         let request = SFSpeechURLRecognitionRequest(url: url)
-        // 2. Privacy-first: keep audio ON DEVICE. Only fall back to Apple's
-        //    servers if the user has explicitly enabled cloud routing.
+        // 2. Privacy-first (U-0): audio stays ON DEVICE in every build —
+        //    there is no cloud fallback. Without on-device recognition the
+        //    remedy is the Dictation language assets, so say exactly that.
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
-        } else if !PrivacyGate.shared.allowCloudRouting {
-            // D-1 (completion instructions) — never point users at a control
-            // that does not exist in Release, and tell them the actual remedy:
-            // the on-device Dictation language assets. Nothing leaves the Mac.
+        } else {
             throw ASRError(Self.languageAssetsMissingMessage)
         }
         if #available(macOS 13.0, iOS 16.0, *) {
@@ -156,10 +154,8 @@ public actor SpeechTranscriber: AudioTranscribing {
         let request = SFSpeechURLRecognitionRequest(url: url)
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
-        } else if !PrivacyGate.shared.allowCloudRouting {
-            // D-1 (completion instructions) — never point users at a control
-            // that does not exist in Release, and tell them the actual remedy:
-            // the on-device Dictation language assets. Nothing leaves the Mac.
+        } else {
+            // U-0: no cloud fallback exists in any build.
             throw ASRError(Self.languageAssetsMissingMessage)
         }
         if #available(macOS 13.0, iOS 16.0, *) { request.addsPunctuation = true }

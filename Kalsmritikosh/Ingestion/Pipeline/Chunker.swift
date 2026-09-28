@@ -275,62 +275,144 @@ public struct Chunker: Sendable {
     }
 
     /// v54 evidence-first chunking — derive retrieval units directly from typed
-    /// EvidenceBlocks instead of re-splitting flattened content. Each chunk
-    /// links to exactly ONE block (exact lineage per the audit); a block larger
-    /// than the budget is split by sentence into multiple chunks all tagged with
-    /// that block's id. Hard chunk boundaries (email body, table, slide,
-    /// transcript, archive member) are honoured for free because blocks are
-    /// never merged across boundaries here. Empty/container blocks (a table or
-    /// section parent that carries no own text) are skipped. `characterRange` is
-    /// a synthetic within-KO cursor — the exact source position now lives on the
-    /// linked block's locator.
+    /// EvidenceBlocks instead of re-splitting flattened content.
+    ///
+    /// L1 (2026-09-26) — PACKED. The first version emitted one chunk per block;
+    /// many parsers make a block per LINE, so 36% of the owner's chunks were under
+    /// 40 characters ("Cell : 9960270472") and retrieval landed on fragments.
+    /// Adjacent small blocks now pack into one chunk up to `targetCharacterCount`,
+    /// never across a HARD boundary:
+    ///   • a different email message / sheet / table / archive member,
+    ///   • a heading (which opens the next chunk so its body packs under it),
+    ///   • a switch between row-shaped blocks (table/spreadsheet/log rows) and prose,
+    ///   • boilerplate (page furniture, signatures), which packs only with boilerplate.
+    /// A block larger than the budget is still split by sentence, every piece
+    /// tied to that block. `evidenceBlockID` is the chunk's FIRST block (so the
+    /// projection invariant and every consumer keep working); the full lineage
+    /// is returned alongside and persisted to `chunk_blocks`.
     public nonisolated func chunk(
         objectID: KnowledgeObject.ID,
         blocks: [EvidenceBlock]
     ) -> [Chunk] {
+        chunkWithLineage(objectID: objectID, blocks: blocks).chunks
+    }
+
+    public struct BlockChunking: Sendable {
+        public let chunks: [Chunk]
+        /// chunk id → every block it was assembled from, in reading order.
+        public let blockIDs: [Chunk.ID: [UUID]]
+    }
+
+    public nonisolated func chunkWithLineage(
+        objectID: KnowledgeObject.ID,
+        blocks: [EvidenceBlock]
+    ) -> BlockChunking {
         var chunks: [Chunk] = []
+        var lineage: [Chunk.ID: [UUID]] = [:]
         var ordinal = 0
         var cursor = 0
 
-        func emit(_ text: String, block: EvidenceBlock) {
+        func emit(_ text: String, blocks group: [EvidenceBlock]) {
+            guard let first = group.first else { return }
             let range = cursor ..< (cursor + text.count)
             cursor += text.count
-            chunks.append(Chunk(
+            // The kind that describes the CONTENT: the first non-heading block
+            // when a heading opened the group, else the first block.
+            let kindBlock = group.first { Self.shape(of: $0.kind) != .heading } ?? first
+            let chunk = Chunk(
                 objectID: objectID,
                 ordinal: ordinal,
                 text: text,
                 characterRange: range,
-                pageNumber: block.locator.page,
-                evidenceBlockID: block.id,
-                blockKind: block.kind.rawValue
-            ))
+                pageNumber: first.locator.page,
+                evidenceBlockID: first.id,
+                blockKind: kindBlock.kind.rawValue,
+                evidenceBlockIDs: group.map(\.id)
+            )
+            chunks.append(chunk)
+            lineage[chunk.id] = group.map(\.id)
             ordinal += 1
+        }
+
+        var buffer: [EvidenceBlock] = []
+        var bufferTexts: [String] = []
+        var bufferLength = 0
+        func flush() {
+            if !buffer.isEmpty { emit(bufferTexts.joined(separator: "\n"), blocks: buffer) }
+            buffer = []; bufferTexts = []; bufferLength = 0
         }
 
         for block in blocks.sorted(by: { $0.ordinal < $1.ordinal }) {
             let source = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
             let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
+            let shape = Self.shape(of: block.kind)
 
-            if text.count <= targetCharacterCount {
-                emit(text, block: block)
-                continue
-            }
-            // Oversized block — split by sentence, keeping every piece tied to
-            // the same block. Fall back to the whole block if the tokenizer
-            // yields nothing.
-            let pieces = sentenceSplit(text, range: 0..<text.utf16.count)
-            if pieces.isEmpty {
-                emit(text, block: block)
-            } else {
-                for sub in pieces {
-                    let subText = sub.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !subText.isEmpty else { continue }
-                    emit(subText, block: block)
+            // Hard boundaries: a new group, a heading, a shape change, boilerplate.
+            if let last = buffer.last {
+                let crossesGroup = Self.hardGroup(of: last) != Self.hardGroup(of: block)
+                let lastShape = Self.shape(of: last.kind)
+                // A shape change always splits (so boilerplate never joins content);
+                // boilerplate lines pack with each other — a docx header's name /
+                // e-mail / phone lines are one unit, not three.
+                let shapeChange = shape != lastShape && lastShape != .heading
+                if crossesGroup || shapeChange || shape == .heading {
+                    flush()
                 }
             }
+
+            // Oversized block — split by sentence, alone, every piece tied to it.
+            if text.count > targetCharacterCount {
+                flush()
+                let pieces = sentenceSplit(text, range: 0..<text.utf16.count)
+                if pieces.isEmpty {
+                    emit(text, blocks: [block])
+                } else {
+                    for sub in pieces {
+                        let subText = sub.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !subText.isEmpty else { continue }
+                        emit(subText, blocks: [block])
+                    }
+                }
+                continue
+            }
+
+            // Would this block overflow the budget? Flush first.
+            if !buffer.isEmpty, bufferLength + 1 + text.count > targetCharacterCount {
+                flush()
+            }
+            buffer.append(block)
+            bufferTexts.append(text)
+            bufferLength += (bufferLength == 0 ? 0 : 1) + text.count
         }
-        return chunks
+        flush()
+        return BlockChunking(chunks: chunks, blockIDs: lineage)
+    }
+
+    /// The packing shape of a block kind. Rows pack with rows, prose with
+    /// prose; a heading opens a chunk; boilerplate stands alone.
+    nonisolated enum PackShape: Sendable { case heading, row, prose, boilerplate }
+
+    nonisolated static func shape(of kind: EvidenceBlockKind) -> PackShape {
+        if kind.isBoilerplate { return .boilerplate }
+        switch kind {
+        case .documentTitle, .documentHeader, .sectionHeading, .slideTitle:
+            return .heading
+        case .table, .tableRow, .tableCell, .spreadsheetSheet, .spreadsheetRow, .spreadsheetCell, .logRecord:
+            return .row
+        default:
+            return .prose
+        }
+    }
+
+    /// The hard group a block belongs to: the email message, sheet, table or
+    /// archive member it sits in. Blocks in different groups never share a chunk.
+    nonisolated static func hardGroup(of block: EvidenceBlock) -> String {
+        var message = ""
+        if case .int(let m)? = block.attributes["messageIndex"]?.value { message = String(m) }
+        let l = block.locator
+        return [message, l.messageID ?? "", l.sheet ?? "", l.tableID ?? "", l.archiveMemberPath ?? "",
+                l.slide.map(String.init) ?? "", l.attachmentID ?? ""].joined(separator: "|")
     }
 
     // MARK: - Block detection

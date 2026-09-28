@@ -52,11 +52,41 @@ struct UniversalParserRegistryTests {
         #expect(try registry.resolve(.mp3).capabilities.producesStructure == false)
     }
 
-    @Test("Media is deferred and never wraps an audio/video loader (no transcription activated)")
+    @Test("Media is deferred and wraps no loader while transcription is off")
     func mediaIsPreservedOnlyDeferred() throws {
         let registry = try standard()
         #expect(try registry.resolve(.mp3) is PreservedOnlyPlugin)
         #expect(try registry.resolve(.mov) is PreservedOnlyPlugin)
+    }
+
+    @Test("Enabling transcription gives audio AND video a real immediate ASR plugin")
+    func mediaTranscriptionActivatesLoaders() throws {
+        let on = try UniversalParserRegistryBuilder.standard(ocr: VisionOCR(), mediaTranscriptionEnabled: true)
+        // Every audio and video type the app recognizes must be owned by a real
+        // plugin — not a subset. A half-wired media lane is how a recording
+        // silently stays mute.
+        for t in SourceType.allCases where t.category == .audio || t.category == .video {
+            let plugin = try on.resolve(t)
+            #expect(plugin is ExistingParserPluginAdapter, "\(t.rawValue) still preserved-only with transcription on")
+            #expect(plugin.executionMode == .immediate, "\(t.rawValue) not immediate with transcription on")
+            #expect(plugin.capabilities.declaredSurfaces.contains(.text), "\(t.rawValue) claims no text surface with transcription on")
+        }
+        // And the flag is genuinely a gate, not decoration.
+        #expect(try standard().resolve(.mp3) is PreservedOnlyPlugin)
+    }
+
+    @Test("Advertised media coverage follows the transcription switch (DEFERRED → PARTIAL)")
+    func mediaCoverageIsHonest() throws {
+        func coverage(_ reg: UniversalParserRegistry, _ t: SourceType) -> ParserCoverage? {
+            ParserCapabilityManifest.generate(registry: reg).first { $0.sourceType == t.rawValue }?.coverage
+        }
+        let off = try standard()
+        #expect(coverage(off, .mp3) == .deferred)
+        #expect(coverage(off, .mov) == .deferred)
+        let on = try UniversalParserRegistryBuilder.standard(ocr: VisionOCR(), mediaTranscriptionEnabled: true)
+        // PARTIAL, never FULL — ASR text without document structure.
+        #expect(coverage(on, .mp3) == .partial)
+        #expect(coverage(on, .mov) == .partial)
     }
 
     @Test("Feature-gated parsers are absent unless enabled")

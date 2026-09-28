@@ -31,7 +31,7 @@ public struct ReasoningExpert: Expert {
         // SEM — the deterministically-extracted domain facts that ride this
         // retrieval are ground truth (not model output), so they LEAD the
         // expert's claims on both paths, cited to their backing document.
-        let factClaims = Self.factClaims(from: result)
+        let factClaims = Self.factClaims(from: result, question: intent.rawQuestion)
 
         let frame = PromptTemplates.reasoningAnalysis(intent: intent,
                                                       retrieval: await context.promptAuthorizer.authorize(authorized))
@@ -54,7 +54,19 @@ public struct ReasoningExpert: Expert {
         // Deterministic fallback (no model): lead with the domain facts, then
         // surface the top retrieved snippets as coarse claims so the expert
         // still contributes offline.
-        let snippetClaims = result.chunks.prefix(5).map { hit in
+        // Answer-quality W4 — a snippet must actually be RELEVANT to the question
+        // (share a content term). This stops the composer quoting boilerplate
+        // ("IN THE MATTER OF PATENT ACT …") or an unrelated document (a power of
+        // attorney for a "who signed the lease?" question); when nothing is
+        // relevant the claims are empty and the expert abstains ("No evidence to
+        // reason over") rather than dumping. Empty question ⇒ keep top hits.
+        let snippetSelector = PassageAnswerSelector()
+        let snippetQTerms = snippetSelector.contentTerms(intent.rawQuestion)
+        let relevantHits = result.chunks.filter { hit in
+            guard !snippetQTerms.isEmpty, !hit.chunk.text.isEmpty else { return true }
+            return !snippetQTerms.isDisjoint(with: snippetSelector.contentTerms(hit.chunk.text))
+        }
+        let snippetClaims = relevantHits.prefix(5).map { hit in
             ExpertFindings.Claim(
                 statement: hit.chunk.text.isEmpty
                     ? "Relevant material via \(hit.viaLayer.rawValue)"
@@ -79,10 +91,19 @@ public struct ReasoningExpert: Expert {
     /// (first backing chunk in the retrieved set). Facts whose block isn't among the
     /// surfaced chunks are skipped, so every claim's supporting id is in the retrieval
     /// set (the claim–evidence contract holds). Pure + testable.
-    nonisolated static func factClaims(from result: RetrievalResult) -> [ExpertFindings.Claim] {
+    nonisolated static func factClaims(from result: RetrievalResult, question: String = "") -> [ExpertFindings.Claim] {
         // Consume the retrieval-produced ClaimEvaluations UNCHANGED (do not re-evaluate or
         // re-resolve evidence). Join with the surfaced facts by ledger id for field/value.
         let evalByID = Dictionary(result.claimEvaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Answer-quality W4 — surface only facts RELEVANT to the question. The live
+        // diagnostic showed "who drafted the claims?" answered with a dump of every
+        // riding fact ("The source says: Applicant …, Application number …"). Keep a
+        // fact only when its field+value shares a content term with the question; a
+        // genuine field question still matches (application number → "application",
+        // "number"), so field lookups are unaffected. Empty question ⇒ keep all
+        // (no signal to filter on), preserving non-chat callers.
+        let relevanceSelector = PassageAnswerSelector()
+        let qTerms = relevanceSelector.contentTerms(question)
         // The per-object retrieval score — the SAME signal EvidenceVerifier ranks
         // citations by (best chunk score per KnowledgeObject). The claim's single
         // representative is chosen by this relevance, so a fact's citation anchor
@@ -100,6 +121,11 @@ public struct ReasoningExpert: Expert {
             guard let eval = evalByID[f.id], eval.decision.maySurface,
                   let obj = Self.stableRepresentative(eval.evidence, scoreByObject: scoreByObject),
                   let presentation = eval.presentation else { continue }
+            // W4 relevance gate — drop facts the question did not ask about.
+            if !qTerms.isEmpty {
+                let factTerms = relevanceSelector.contentTerms(f.field + " " + f.value)
+                if qTerms.isDisjoint(with: factTerms) { continue }
+            }
             // D-12 — humanize the ledger field id ("applicationnumber" →
             // "Application number") and render money canonically; the raw
             // capitalize-first produced "Applicationnumber: …" run-ons.

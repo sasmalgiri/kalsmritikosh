@@ -66,9 +66,27 @@ public struct TopicTreeBuilder {
         """, [])
         for r in anchorRows {
             guard let key = r.string(0) else { continue }
+            // Only an identifier that names a MATTER may join two communities.
+            // A bank account, tax id or personal id printed on a letterhead or
+            // receipt is shared by unrelated matters — on the owner's archive one
+            // account number pulled 332 of 340 members into a single node.
+            let field = String(key.split(separator: "|").first ?? "")
+            guard SubjectSpine.subjectGradeFields.contains(field) else { continue }
             let canon = key.split(separator: "|").dropFirst().joined(separator: "|")
             if !canon.isEmpty { anchorCanons[canon.lowercased()] = key }
         }
+        // A truncated copy ("Application-2023310" in a report's subject list) is
+        // not its own matter: drop any canon that is a strict prefix of another.
+        let allCanons = Array(anchorCanons.keys)
+        for c in allCanons where allCanons.contains(where: { $0 != c && $0.hasPrefix(c) }) {
+            anchorCanons.removeValue(forKey: c)
+        }
+        // L3 — a term that most documents carry ("patent", "khurana", a city on
+        // every letterhead) links everything to everything; on the owner's
+        // archive such terms fused 226 of 340 members into one node. Only terms
+        // corroborated by ≥2 documents AND by at most a fifth of them are links.
+        let totalKOs = Int((try await database.query("SELECT COUNT(*) FROM knowledge_objects;", [])).first?.int(0) ?? 0)
+        let dfCeiling = max(2, totalKOs / 5)
         var signature: [String: Set<String>] = [:]
         for (cid, ents) in members {
             var sig = Set<String>()
@@ -78,8 +96,8 @@ public struct TopicTreeBuilder {
                 let termRows = try await database.query("""
                 SELECT DISTINCT dt.term FROM entities e1
                 JOIN document_terms dt ON dt.object_id = e1.source_object_id
-                WHERE e1.id IN (\(qs)) AND dt.corroboration >= 2;
-                """, slice.map { .uuid($0) })
+                WHERE e1.id IN (\(qs)) AND dt.corroboration >= 2 AND dt.corroboration <= ?;
+                """, slice.map { .uuid($0) } + [.integer(Int64(dfCeiling))])
                 for r in termRows {
                     guard let t = r.string(0) else { continue }
                     if let identity = anchorCanons[t.lowercased()] {
@@ -92,34 +110,81 @@ public struct TopicTreeBuilder {
             signature[cid] = sig
         }
 
-        // 3 — level-1 nesting by CONTAINMENT-like overlap: two level-0 nodes
-        //     join one parent when their signatures share an anchor, or share
-        //     ≥3 corroborated terms. Union-find, edges walked in total order.
-        var parentOf: [String: String] = [:]
-        func find(_ x: String) -> String {
-            var r = x
-            while let p = parentOf[r], p != r { r = p }
-            return r
+        // 2b — HUB CEILING. An anchor or term shared by more than a quarter of
+        //      all communities is a hub, not a link: the owner's archive glued
+        //      226 of 340 members into one node through a single identifier
+        //      carried by reports that list every email.
+        var spread: [String: Int] = [:]
+        for sig in signature.values { for s in sig { spread[s, default: 0] += 1 } }
+        let hubCeiling = max(3, members.count / 4)
+        for (cid, sig) in signature {
+            signature[cid] = sig.filter { (spread[$0] ?? 0) <= hubCeiling }
         }
-        func union(_ a: String, _ b: String) {
-            let ra = find(a), rb = find(b)
-            guard ra != rb else { return }
-            // Total order: the lexicographically smaller root wins.
-            if ra < rb { parentOf[rb] = ra } else { parentOf[ra] = rb }
-        }
+
+        // 3 — level-1 nesting as STARS, never chains (P1.3, 2026-09-27). The
+        //     first version was union-find over "share an anchor OR ≥3 terms",
+        //     which is transitive: on the owner's archive 57 of 81 level-0
+        //     communities (319 entities — résumés, GDPR reports, bounces) chained
+        //     into one "Patent" node through one weak link at a time.
+        //     (a) An anchored community joins the node of its MOST SPECIFIC
+        //         shared anchor (fewest communities carry it; ties by key) — it
+        //         sits under a matter only if it names that matter itself.
+        //     (b) A term-only community attaches to its single best match, and
+        //         only ONE hop out: a follower never pulls further followers in.
+        //         "Best" is overlap RELATIVE TO SIZE (Jaccard ≥ 0.15, ≥3 shared
+        //         terms): a raw count let two 100-entity communities, whose
+        //         signatures hold hundreds of terms, adopt ~40 unrelated
+        //         followers (email date headers, job-site addresses).
         let cids = members.keys.sorted()
-        for c in cids { parentOf[c] = c }
-        for i in 0..<cids.count {
-            for j in (i + 1)..<cids.count {
-                let a = signature[cids[i]] ?? [], b = signature[cids[j]] ?? []
-                let shared = a.intersection(b)
-                let sharedAnchor = shared.contains { $0.hasPrefix("anchor:") }
-                let sharedTerms = shared.filter { $0.hasPrefix("term:") }.count
-                if sharedAnchor || sharedTerms >= 3 { union(cids[i], cids[j]) }
+        var anchorSpread: [String: Int] = [:]
+        for sig in signature.values {
+            for s in sig where s.hasPrefix("anchor:") { anchorSpread[s, default: 0] += 1 }
+        }
+        var groupOf: [String: String] = [:]     // community → group key
+        var isFollower = Set<String>()          // joined by (b); may not recruit
+        for c in cids {
+            let anchors = (signature[c] ?? []).filter { $0.hasPrefix("anchor:") && (anchorSpread[$0] ?? 0) >= 2 }
+            if let best = anchors.min(by: { (anchorSpread[$0] ?? 0, $0) < (anchorSpread[$1] ?? 0, $1) }) {
+                groupOf[c] = best
+            }
+        }
+        let termSets = signature.mapValues { $0.filter { $0.hasPrefix("term:") } }
+        func termSimilarity(_ a: String, _ b: String) -> Double? {
+            let ta = termSets[a] ?? [], tb = termSets[b] ?? []
+            let shared = ta.intersection(tb).count
+            guard shared >= 3 else { return nil }
+            let jaccard = Double(shared) / Double(ta.union(tb).count)
+            return jaccard >= 0.15 ? jaccard : nil
+        }
+        for c in cids where groupOf[c] == nil {
+            var best: (id: String, j: Double)? = nil
+            for d in cids where d != c {
+                guard let j = termSimilarity(c, d) else { continue }
+                if best == nil || j > best!.j || (j == best!.j && d < best!.id) { best = (d, j) }
+            }
+            guard let partner = best?.id else { continue }
+            if let g = groupOf[partner] {
+                guard !isFollower.contains(partner) else { continue }   // one hop only
+                groupOf[c] = g
+                isFollower.insert(c)
+            } else {
+                // Two term-only communities found each other: the smaller id roots it.
+                let root = min(c, partner)
+                groupOf[c] = "terms:" + root
+                groupOf[partner] = "terms:" + root
+                isFollower.insert(c == root ? partner : c)
             }
         }
         var groups: [String: [String]] = [:]
-        for c in cids { groups[find(c), default: []].append(c) }
+        for c in cids {
+            // Ungrouped communities stay leaves; the root is the smallest member id.
+            guard let g = groupOf[c] else { groups[c, default: []].append(c); continue }
+            groups[g, default: []].append(c)
+        }
+        groups = Dictionary(uniqueKeysWithValues: groups.values.map { kids in
+            let sortedKids = kids.sorted()
+            return (sortedKids[0], sortedKids)
+        })
 
         // A6 idempotence (parity caught it): a wholesale rewrite every boot
         // moves the ledger stamp every run. Skip when NOTHING level-0 changed
@@ -147,10 +212,21 @@ public struct TopicTreeBuilder {
         try await database.exec("SAVEPOINT topic_tree;", [])
         do {
             try await database.exec("DELETE FROM entity_communities WHERE level = 1;", [])
+            // Replace the labels with the nodes: a node that no longer exists
+            // kept its old label, so stale titles outlived every rebuild.
+            try await database.exec("DELETE FROM community_summaries WHERE level = 1;", [])
             let now = Date().timeIntervalSince1970
             for (root, children) in groups.sorted(by: { $0.key < $1.key }) {
-                // A parent with one child adds no structure — leaves stay leaves.
-                guard children.count >= 2 else { continue }
+                // A parent with one child adds no structure — leaves stay leaves —
+                // EXCEPT a matter: one substantial community that names an
+                // identifier anchor IS a top-level topic (P1.16: once hubs and
+                // attributes left the graph, the owner's whole patent matter
+                // formed ONE community, and Big Picture — level-1 only — lost it).
+                if children.count < 2 {
+                    guard let only = children.first,
+                          (members[only]?.count ?? 0) >= 5,
+                          (signature[only] ?? []).contains(where: { $0.hasPrefix("anchor:") }) else { continue }
+                }
                 let allMembers = children.flatMap { members[$0] ?? [] }
                     .sorted { $0.uuidString < $1.uuidString }
                 let nodeID = "L1-" + root
@@ -161,7 +237,8 @@ public struct TopicTreeBuilder {
                     """, [.text(nodeID), .uuid(eid), .real(now)])
                 }
                 receipt.levelOneNodes += 1
-                if let label = try await deterministicLabel(for: children, signature: signature) {
+                if let label = try await deterministicLabel(for: children, signature: signature,
+                                                           anchorCanonsForLabels: Set(anchorCanons.keys)) {
                     try await database.exec("""
                     INSERT OR REPLACE INTO community_summaries (community_id, level, title, summary, member_count, top_entity_ids_json, computed_at)
                     VALUES (?, 1, ?, '', ?, '[]', ?);
@@ -179,15 +256,33 @@ public struct TopicTreeBuilder {
         return receipt
     }
 
+    /// P1.17 — a term fit to NAME a node: not a truncated copy of a known
+    /// identifier ("2023310" of 202331019665), not an encoded fragment
+    /// ("capuxmjoemkzvp": ≥10 letters with a run of ≥5 consonants).
+    nonisolated static func isLabelWorthy(_ term: String, anchorCanons: Set<String>) -> Bool {
+        let t = term.lowercased()
+        if t.contains(where: \.isNumber), anchorCanons.contains(where: { $0 != t && $0.hasPrefix(t) }) { return false }
+        if t.count >= 10, t.allSatisfy(\.isLetter) {
+            var run = 0, longest = 0
+            for ch in t {
+                if "aeiouy".contains(ch) { run = 0 } else { run += 1; longest = max(longest, run) }
+            }
+            if longest >= 5 { return false }
+        }
+        return true
+    }
+
     /// The node's label: an anchoring identifier's display form where one
     /// anchors the node (deterministic — smallest identity key wins ties),
     /// else the top corroborated shared terms.
-    private func deterministicLabel(for children: [String], signature: [String: Set<String>]) async throws -> String? {
+    private func deterministicLabel(for children: [String], signature: [String: Set<String>],
+                                    anchorCanonsForLabels: Set<String>) async throws -> String? {
         var counts: [String: Int] = [:]
         for c in children {
             for s in signature[c] ?? [] { counts[s, default: 0] += 1 }
         }
-        let sharedAnchors = counts.filter { $0.key.hasPrefix("anchor:") && $0.value >= 2 }
+        let minShare = children.count == 1 ? 1 : 2   // a one-community matter labels by its own anchor
+        let sharedAnchors = counts.filter { $0.key.hasPrefix("anchor:") && $0.value >= minShare }
             .keys.sorted()
         if let key = sharedAnchors.first {
             let identity = String(key.dropFirst("anchor:".count))
@@ -197,7 +292,8 @@ public struct TopicTreeBuilder {
             }
             return identity
         }
-        let sharedTerms = counts.filter { $0.key.hasPrefix("term:") && $0.value >= 2 }
+        let sharedTerms = counts.filter { $0.key.hasPrefix("term:") && $0.value >= 2
+                                          && Self.isLabelWorthy(String($0.key.dropFirst("term:".count)), anchorCanons: anchorCanonsForLabels) }
             .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
             .prefix(3)
             .map { String($0.key.dropFirst("term:".count)) }

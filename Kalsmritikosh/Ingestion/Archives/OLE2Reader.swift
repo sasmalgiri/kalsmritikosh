@@ -373,8 +373,26 @@ extension OLE2Reader {
     /// (the fixed-size property blob) for typed scalars: int, bool,
     /// and FILETIME dates.
     public func readMAPIProperties() -> MAPIPropertySet {
+        readMAPIProperties(in: rootChildren())
+    }
+
+    /// MAPI properties of ONE sub-storage (e.g. an `__attach_version1.0_*`
+    /// attachment storage), addressed by its directory index. MSG nests each
+    /// attachment's own `__substg1.0_*` streams inside its storage, so the
+    /// attachment lane needs the same property walk scoped to a child.
+    public func readMAPIProperties(inStorageAt directoryIndex: Int) -> MAPIPropertySet {
+        readMAPIProperties(in: childrenOf(directoryIndex: directoryIndex))
+    }
+
+    /// Root-level `__attach_version1.0_*` storages, in directory order. Each is
+    /// one attachment; read its properties with `readMAPIProperties(inStorageAt:)`.
+    public func attachmentStorages() -> [DirectoryEntry] {
+        rootChildren().filter { $0.name.hasPrefix("__attach_version1.0_") }
+    }
+
+    private func readMAPIProperties(in entries: [DirectoryEntry]) -> MAPIPropertySet {
         var props = MAPIPropertySet()
-        for entry in rootChildren() {
+        for entry in entries {
             if entry.name.hasPrefix("__substg1.0_") {
                 parseSubstgEntry(entry, into: &props)
             } else if entry.name.lowercased() == "__properties_version1.0" {

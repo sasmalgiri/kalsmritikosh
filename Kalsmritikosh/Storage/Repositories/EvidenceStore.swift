@@ -239,6 +239,34 @@ public actor EvidenceStore: EvidenceBlockResolving {
 
     // MARK: - Read
 
+    /// L1 — the blocks a KnowledgeObject OWNS (via evidence_block_objects), in
+    /// reading order. A mailbox thread owns only its own messages' blocks, where
+    /// `blocks(forVersion:)` would return the whole file's.
+    public func blocks(forObject koID: KnowledgeObject.ID) async throws -> [EvidenceBlock] {
+        let rows = try await database.query("""
+        SELECT b.id, b.document_id, b.source_version_id, b.parent_block_id, b.ordinal, b.kind, b.raw_text, b.normalized_text, b.locator, b.extraction_method, b.extraction_confidence, b.language, b.attributes
+        FROM evidence_blocks b
+        JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
+        WHERE ebo.knowledge_object_id = ? ORDER BY b.ordinal ASC;
+        """, [.uuid(koID)])
+        return rows.compactMap(decodeBlock)
+    }
+
+    /// L1 — specific blocks by id, in reading order.
+    public func blocks(ids: [UUID]) async throws -> [EvidenceBlock] {
+        guard !ids.isEmpty else { return [] }
+        var out: [EvidenceBlock] = []
+        for slice in stride(from: 0, to: ids.count, by: 400).map({ Array(ids[$0..<min($0 + 400, ids.count)]) }) {
+            let qs = slice.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes
+            FROM evidence_blocks WHERE id IN (\(qs));
+            """, slice.map { .uuid($0) })
+            out.append(contentsOf: rows.compactMap(decodeBlock))
+        }
+        return out.sorted { $0.ordinal < $1.ordinal }
+    }
+
     /// Blocks for a source version, in reading order.
     public func blocks(forVersion versionID: UUID) async throws -> [EvidenceBlock] {
         let rows = try await database.query("""
@@ -299,6 +327,13 @@ public actor EvidenceStore: EvidenceBlockResolving {
     /// IS the KnowledgeObject id. This is what lets a GenericFact-derived HistoryItem
     /// carry a reopenable objectID+blockID citation instead of an empty evidence array.
     /// Order is not guaranteed; the caller keys by blockID.
+    /// L5 — the document a block belongs to (first owner), for citing a fact.
+    public func owningObject(forBlock blockID: EvidenceBlock.ID) async throws -> KnowledgeObject.ID? {
+        try await database.query(
+            "SELECT knowledge_object_id FROM evidence_block_objects WHERE evidence_block_id = ? ORDER BY knowledge_object_id LIMIT 1;",
+            [.uuid(blockID)]).first?.uuid(0)
+    }
+
     public func resolveEvidenceBlocks(_ blockIDs: [EvidenceBlock.ID]) async throws -> [ResolvedEvidenceReference] {
         guard !blockIDs.isEmpty else { return [] }
         let placeholders = blockIDs.map { _ in "?" }.joined(separator: ", ")

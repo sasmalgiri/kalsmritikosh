@@ -32,6 +32,13 @@ public struct SlotAnswerComposition: Sendable {
     public let alsoOnFile: String?
     /// Human label of the (first) requested field.
     public let requestedLabel: String
+    /// W-5.5 — how many distinct values are in conflict (0 when none);
+    /// the disagreement note reads "both values" only when it is two.
+    public var conflictValueCount: Int = 0
+    /// P2.3 — the single value the slot law cites (the stored value — never
+    /// `rawMatch`, which is extraction provenance); the viewer finds it
+    /// case-insensitively in the source.
+    public var citedValue: String?
 }
 
 public enum SlotAnswerComposer {
@@ -191,13 +198,15 @@ public enum SlotAnswerComposer {
             // sentence reads "Patent No. 900123." not "Patent number:
             // Patent No. 900123."
             let sentence = "\(labeledValue(best.fact, label: label))."
-            return SlotAnswerComposition(
+            var single = SlotAnswerComposition(
                 primaryText: sentence,
                 supportingObjectIDs: [best.objectID],
                 isConflict: false, isNotFound: false,
                 singleCanonicalValue: true,
                 structuredSource: best.isAuthority || best.presentation == .fact || best.presentation == .corroborated,
                 alsoOnFile: also, requestedLabel: label)
+            single.citedValue = best.fact.value
+            return single
         }
 
         // Multiple DIFFERENT canonical values → an explicit conflict, both
@@ -205,12 +214,14 @@ public enum SlotAnswerComposer {
         let lines = groups.prefix(4).map { "• \(renderValue($0.best.fact))" }
         let sentence = "Your archive carries conflicting values for \(label.lowercased()):\n"
             + lines.joined(separator: "\n")
-        return SlotAnswerComposition(
+        var composition = SlotAnswerComposition(
             primaryText: sentence,
             supportingObjectIDs: groups.map(\.best.objectID),
             isConflict: true, isNotFound: false,
             singleCanonicalValue: false, structuredSource: false,
             alsoOnFile: also, requestedLabel: label)
+        composition.conflictValueCount = min(groups.count, 4)
+        return composition
     }
 
     // MARK: - Ranking (D-12 step 3)
@@ -327,6 +338,20 @@ public enum SlotAnswerComposer {
         case "patentnumber":      return "Patent No."
         case "applicationnumber": return "Application No."
         case "publicationnumber": return "Publication No."
+        // Persona-coverage starter-pack identifiers.
+        case "casenumber":        return "Case No."
+        case "accountnumber":     return "Account No."
+        case "idnumber":          return "ID No."
+        // HOST-8d — device identifiers. Registered here so an anchor's display
+        // name is built from a CONSTANT rather than fusing a source spelling,
+        // which is what makes anchor names immune to OCR and spacing noise.
+        case "deviceserialnumber": return DeviceIdentity.Field.deviceSerialNumber.label
+        case "imei":               return DeviceIdentity.Field.imei.label
+        case "meid":               return DeviceIdentity.Field.meid.label
+        case "deviceudid":         return DeviceIdentity.Field.deviceUDID.label
+        case "devicemacaddress":   return DeviceIdentity.Field.deviceMACAddress.label
+        case "computername":       return DeviceIdentity.Field.computerName.label
+        case "deviceproducttype":  return DeviceIdentity.Field.deviceProductType.label
         default:                  return nil
         }
     }

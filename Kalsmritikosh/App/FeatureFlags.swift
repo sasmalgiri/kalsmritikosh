@@ -158,10 +158,116 @@ public enum MaintenanceMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// The AI regime the whole answer/topic stack runs under (owner A/B test,
+/// 2026-09-20). Two positions plus the implicit off-when-no-model floor:
+///   .guided       — AI under our guardrails: every fact cited or rejected,
+///                   fact-lock blocks invented numbers, topic-first, budgeted.
+///   .unconstrained— AI free: the grounding + fact-lock checks become ADVISORY
+///                   (kept + logged, not rejected) so we can see the fluency
+///                   ceiling. Such answers are banner-marked and never enter the
+///                   verified ledger.
+public enum AIMode: String, CaseIterable, Identifiable, Sendable {
+    case guided
+    case unconstrained
+
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .guided:        return "Guided (grounded)"
+        case .unconstrained: return "Unconstrained (free)"
+        }
+    }
+    public var detail: String {
+        switch self {
+        case .guided:        return "AI writes answers but every fact must cite a source or it is dropped — grounded and safe (recommended)."
+        case .unconstrained: return "AI writes freely; grounding + fact-lock checks only WARN. Fluent but may be wrong — answers are marked and kept out of the saved record."
+        }
+    }
+    /// Guided ENFORCES the grounding gate + fact-lock; unconstrained makes them advisory.
+    public var enforcesGrounding: Bool { self == .guided }
+}
+
+/// The single, user-facing AI posture — ONE choice that supersedes the separate
+/// "Fully private" privacy switch and the guided/unconstrained AI-mode picker.
+/// It is a projection over two stored flags (PrivacyGate.offlineNoLLM + AIMode),
+/// so there is exactly one place to choose how much the on-device model may do.
+public enum AIRegime: String, CaseIterable, Identifiable, Sendable {
+    /// No LLM at all — the capability registry refuses every generative request;
+    /// answers and topics are built purely by deterministic rules.
+    case fullyPrivate
+    /// On-device model, evidence-gated: every AI claim must cite a source or abstain.
+    case gated
+    /// On-device model, unconstrained: fluent, may go beyond strict citations.
+    case free
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .fullyPrivate: return "Fully private — no AI"
+        case .gated:        return "AI · evidence-gated (recommended)"
+        case .free:         return "AI · free"
+        }
+    }
+
+    /// Long-form explanation shown under the picker so the choice is unambiguous.
+    public var summary: String {
+        switch self {
+        case .fullyPrivate:
+            return "The on-device AI model is never consulted. Everything — answers, topics, summaries — is built from your documents by deterministic rules. Fastest and lowest energy, and the most private. AI-only features below are unavailable and shown greyed."
+        case .gated:
+            return "Apple's on-device model is used, but only over your own evidence: every AI-written fact must cite a source in your archive or it is dropped, and the answer abstains rather than guess. Nothing is invented and nothing leaves your Mac. Recommended."
+        case .free:
+            return "The on-device model may answer more fluently and reason beyond strict citations. Still 100% on-device, but unconstrained answers are clearly marked and are NOT written into your verified ledger — use it to compare phrasing/coverage against gated mode."
+        }
+    }
+
+    /// True when the model is allowed at all (gated or free).
+    public var allowsAI: Bool { self != .fullyPrivate }
+}
+
 @MainActor
 @Observable
 public final class FeatureFlags {
     public static let shared = FeatureFlags()
+
+    /// M1 — the AI regime selector. Default `.guided` (grounded contract). The
+    /// setter/getter persist to UserDefaults; a nonisolated reader lets the
+    /// answer stack (off the main actor) consult it without a hop.
+    public var aiMode: AIMode {
+        get { Self.aiModeValue() }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kAIMode) }
+    }
+    public nonisolated static func aiModeValue() -> AIMode {
+        guard let raw = UserDefaults.standard.string(forKey: kAIMode),
+              let m = AIMode(rawValue: raw) else { return .guided }
+        return m
+    }
+    public nonisolated static let aiModeKey = kAIMode
+
+    /// The unified AI posture, read from the two underlying flags. Fully-private
+    /// wins (offlineNoLLM is the hard master switch); otherwise the AIMode picks
+    /// gated vs free.
+    public nonisolated static func aiRegimeValue() -> AIRegime {
+        if PrivacyGate.shared.offlineNoLLM { return .fullyPrivate }
+        return aiModeValue() == .unconstrained ? .free : .gated
+    }
+
+    /// Apply a regime by writing BOTH underlying flags atomically-enough for the
+    /// UI (they are independent UserDefaults keys). This is the ONLY writer the
+    /// Settings UI uses, so the two flags can never drift into a confusing combo.
+    public nonisolated static func setAIRegime(_ r: AIRegime) {
+        switch r {
+        case .fullyPrivate:
+            PrivacyGate.shared.offlineNoLLM = true
+        case .gated:
+            PrivacyGate.shared.offlineNoLLM = false
+            UserDefaults.standard.set(AIMode.guided.rawValue, forKey: kAIMode)
+        case .free:
+            PrivacyGate.shared.offlineNoLLM = false
+            UserDefaults.standard.set(AIMode.unconstrained.rawValue, forKey: kAIMode)
+        }
+    }
 
     /// Phase K — iMessage loader (reads ~/Library/Messages/chat.db
     /// when a user-selected folder contains a copy of it). Default
@@ -268,15 +374,16 @@ public final class FeatureFlags {
     /// GK (owner decision, pre-HOLD-2) — the General-Knowledge Lane: after
     /// the archive lane refuses, a separately BANNER-MARKED block may answer
     /// from the on-device AI's general knowledge — never entering the ledger,
-    /// evidence, exports, or the sealed envelope. Default OFF (the
-    /// conservative default for legal/forensic use; self-ruling, the owner
-    /// confirms the default at HOLD 2).
+    /// evidence, exports, or the sealed envelope. Default ON (owner decision
+    /// 2026-09-27, replacing the earlier default-OFF self-ruling); the banner
+    /// law keeps the block unmistakably separate from archive answers.
     public var generalKnowledgeLane: Bool {
         get { Self.generalKnowledgeLaneValue() }
         set { UserDefaults.standard.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
     }
     public nonisolated static func generalKnowledgeLaneValue() -> Bool {
-        UserDefaults.standard.bool(forKey: kGeneralKnowledgeLane)
+        if UserDefaults.standard.object(forKey: kGeneralKnowledgeLane) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kGeneralKnowledgeLane)
     }
 
     /// SURFACE STYLE (owner request 2026-08-22). When ON, analytic jobs present
@@ -403,18 +510,17 @@ public final class FeatureFlags {
         (UserDefaults.standard.object(forKey: kOCRDuringIngest) as? Bool) ?? true
     }
 
-    /// Idle-maintenance mode. Default `.off` — under the minimum-LLM
-    /// contract the ledger is warmed on demand, so no background sweep
-    /// runs unless the user opts in. The generative sweeps (community
-    /// summaries, memory distillation) are separately gated off in the
-    /// v1 release profile; this default also stops the deterministic
-    /// gap/contradiction recalc + nightly compression from contending
-    /// for the DB actor while idle. Users can switch to Notify / Ask /
-    /// Automatic in Settings.
+    /// Idle-maintenance mode. Default `.automatic` (owner decision 2026-09-20 —
+    /// "put the AI on as default"): while the Mac is idle the app silently runs
+    /// the derived-layer builders — dedup, minimized topics, summaries, history,
+    /// gap/contradiction recalc — and, when a reasoning model is available (Apple
+    /// Intelligence on), polishes topic/story prose. The builders themselves are
+    /// deterministic, so this runs safely even with no model; the LLM is only an
+    /// optional polish. Users can switch to Notify / Ask / Off in Settings.
     public var maintenanceMode: MaintenanceMode {
         get {
             guard let raw = UserDefaults.standard.string(forKey: Self.kMaintenanceMode),
-                  let mode = MaintenanceMode(rawValue: raw) else { return .off }
+                  let mode = MaintenanceMode(rawValue: raw) else { return .automatic }
             return mode
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kMaintenanceMode) }
@@ -466,6 +572,7 @@ public final class FeatureFlags {
 
     // MARK: - Storage keys
 
+    private nonisolated static let kAIMode                 = "kalsmritikosh.feature.aiMode"
     private nonisolated static let kFullPower              = "kalsmritikosh.feature.fullPower"
     private nonisolated static let kPreferClassicSurfaces  = "kalsmritikosh.feature.preferClassicSurfaces"
     private nonisolated static let kClassicConformance     = "kalsmritikosh.feature.classicConformance.enabled"

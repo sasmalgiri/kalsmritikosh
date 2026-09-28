@@ -20,7 +20,6 @@ public struct SettingsView: View {
     @State private var providerIDs: [String] = []
     @State private var manifests: [ModelManifest] = []
     @State private var pins: [ModelCapability: String] = [:]
-    @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     @State private var showIngestGuide = false
     /// SURFACE STYLE switch — classic vs catalog-driven analytic launchers.
@@ -66,6 +65,17 @@ public struct SettingsView: View {
     @State private var healthCheckRunning = false
     @State private var healthCheckStatus: String?
     @State private var healthCheckURL: URL?
+    @State private var goldenThreadRunning = false
+    @State private var goldenThreadStatus: String?
+    @State private var goldenThreadURL: URL?
+    @State private var goldenThreadMatch = ""
+    @State private var answerHarnessRunning = false
+    @State private var answerHarnessStatus: String?
+    @State private var answerHarnessURL: URL?
+    @State private var fixedPointRunning = false
+    @State private var fixedPointStatus: String?
+    @State private var fixedPointURL: URL?
+    @State private var confirmFixedPoint = false
     @State private var inventoryRunning = false
     @State private var inventoryStatus: String?
     @State private var inventoryURL: URL?
@@ -97,6 +107,7 @@ public struct SettingsView: View {
     /// Everyday users never need the model/provider/diagnostics machinery —
     /// the app auto-selects the best model for the device. Those sections live
     /// under a collapsed "Advanced" disclosure, off by default.
+    @AppStorage(FeatureFlags.aiModeKey) private var aiModeRaw = AIMode.guided.rawValue
     @AppStorage("kalsmritikosh.settings.showAdvanced") private var showAdvanced = false
     /// Collapses the many individual diagnostic tools so only the single
     /// "release readiness" check is prominent. Off by default.
@@ -145,6 +156,7 @@ public struct SettingsView: View {
                 }
                 #endif
                 settingsGroup("Answering & modes", "slider.horizontal.3", anchor: .answeringModes) { systemModeSection }
+                settingsGroup("Modules", "switch.2", anchor: .modules) { modulesSection }
                 settingsGroup("Privacy", "hand.raised", anchor: .privacy) { privacySection }
                 settingsGroup("Background maintenance", "moon.zzz", anchor: .backgroundMaintenance) { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
@@ -436,6 +448,114 @@ public struct SettingsView: View {
                 }
             }
             if let status = healthCheckStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // A-1 — the Golden Thread. Separate control from the health check on
+            // purpose: that one answers "is the archive healthy?" in aggregate,
+            // this one answers "where did THIS document stop?". Aggregates
+            // cannot localise a break, because a single document failing early
+            // leaves every total looking healthy.
+            Text("Trace One Document — follows a single document through every stage in order (file → version → blocks → derivation → chunks → vectors → keyword → entities → events → facts → retrieval → citation) and reports where the chain breaks. Ends with a LIVE search and citation check, so it proves the document is actually findable and quotable, not merely stored. Leave the box empty to trace the most recent document. Writes golden-thread.md to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                TextField("part of a filename (optional)", text: $goldenThreadMatch)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 240)
+                Button {
+                    Task { await runGoldenThread() }
+                } label: {
+                    if goldenThreadRunning {
+                        Label("Tracing…", systemImage: "hourglass")
+                    } else {
+                        Label("Trace One Document", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    }
+                }
+                .disabled(goldenThreadRunning)
+                if let url = goldenThreadURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open trace", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = goldenThreadStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // C-1 — the answer side. Costs real model calls, so it is a
+            // deliberate action rather than anything automatic.
+            Text("Check Answering — builds a handful of questions FROM your own ledger (a subject it knows, a value it holds, a year it has events for), asks them, and checks each answer carries citations. Then it asks one question about a randomly generated reference that cannot exist, and checks the app REFUSES to answer it. Answering that one would mean the evidence gate is not holding, which is reported above everything else. Uses the on-device model, so it takes a minute. Writes answer-harness.md to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runAnswerHarness() }
+                } label: {
+                    if answerHarnessRunning {
+                        Label("Asking…", systemImage: "hourglass")
+                    } else {
+                        Label("Check Answering", systemImage: "checkmark.bubble")
+                    }
+                }
+                .disabled(answerHarnessRunning)
+                if let url = answerHarnessURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open results", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = answerHarnessStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // D-1 — the only diagnostic here that WRITES, so it is confirmed
+            // first. Every other one is read-only and needs no permission.
+            Text("Check For Drift — runs every background pass three times and checks that the second and third runs change nothing. If they do, some part of your ledger is being rewritten on every launch, which is how counts grow without new documents. UNLIKE THE OTHER CHECKS, THIS ONE WRITES: the property being tested is a property of writing, so it cannot be done read-only. Your original files and stored evidence are never touched. Takes a few minutes on a large archive. Writes fixed-point-check.md to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    confirmFixedPoint = true
+                } label: {
+                    if fixedPointRunning {
+                        Label("Checking…", systemImage: "hourglass")
+                    } else {
+                        Label("Check For Drift", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(fixedPointRunning)
+                if let url = fixedPointURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open result", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = fixedPointStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -855,7 +975,11 @@ public struct SettingsView: View {
             allDiagnosticsURL = result.summaryURL
             let smokeLine: String
             if let smoke = result.smoke {
-                smokeLine = "Smoke: \(smoke.ok ? "✓" : "✗") \(smoke.assertionsPassed.count) passed, \(smoke.assertionsFailed.count) failed"
+                // "verified" rather than "passed": the count excludes checks
+                // that could not run, which it silently included before.
+                smokeLine = "Smoke: \(smoke.ok ? (smoke.fullyVerified ? "✓" : "⚠️") : "✗") "
+                    + "\(smoke.assertionsPassed.count) verified, \(smoke.assertionsFailed.count) failed"
+                    + (smoke.assertionsNotVerified.isEmpty ? "" : ", \(smoke.assertionsNotVerified.count) not verified")
             } else {
                 smokeLine = "Smoke: ⚠️ \(result.smokeError ?? "no result")"
             }
@@ -895,6 +1019,61 @@ public struct SettingsView: View {
         }
     }
 
+    private func runFixedPointCheck() async {
+        fixedPointRunning = true
+        fixedPointStatus = "Running every pass three times…"
+        defer { fixedPointRunning = false }
+        do {
+            let result = try await FixedPointCheck.run(appState)
+            fixedPointURL = result.reportURL
+            fixedPointStatus = """
+            \(result.summary)
+            Result: \(result.reportURL.path)
+            """
+        } catch {
+            fixedPointURL = nil
+            fixedPointStatus = "✗ Could not run: \(error.localizedDescription)"
+        }
+    }
+
+    private func runAnswerHarness() async {
+        answerHarnessRunning = true
+        answerHarnessStatus = "Asking…"
+        defer { answerHarnessRunning = false }
+        do {
+            let result = try await AnswerHarness.run(appState)
+            answerHarnessURL = result.reportURL
+            answerHarnessStatus = """
+            \(result.summary)
+            Results: \(result.reportURL.path)
+            """
+        } catch {
+            answerHarnessURL = nil
+            answerHarnessStatus = "✗ Could not run: \(error.localizedDescription)"
+        }
+    }
+
+    private func runGoldenThread() async {
+        goldenThreadRunning = true
+        goldenThreadStatus = "Tracing…"
+        defer { goldenThreadRunning = false }
+        do {
+            let match = goldenThreadMatch.trimmingCharacters(in: .whitespacesAndNewlines)
+            let result = try await GoldenThread.trace(appState, matching: match.isEmpty ? nil : match)
+            goldenThreadURL = result.reportURL
+            goldenThreadStatus = """
+            \(result.documentPath)
+            \(result.summary)
+            Trace: \(result.reportURL.path)
+            """
+        } catch {
+            goldenThreadURL = nil
+            // A failed trace is NOT a clean document — it means the trace could
+            // not be run, which says nothing about the document either way.
+            goldenThreadStatus = "✗ Could not trace: \(error.localizedDescription)"
+        }
+    }
+
     private func runHealthCheck() async {
         healthCheckRunning = true
         healthCheckStatus = "Auditing live database…"
@@ -902,8 +1081,15 @@ public struct SettingsView: View {
         do {
             let result = try await DataHealthCheck.run(appState)
             healthCheckURL = result.reportURL
+            // NOT "Clean". This audit counts rows and reports gaps; it does not
+            // check a single extracted value against its document, and it
+            // cannot see files that were never added. "Clean" invited reading
+            // the absence of detected problems as proof of correct ingestion —
+            // the exact confusion the report's own "What this does NOT tell
+            // you" section exists to prevent, and it should not be undone by
+            // one reassuring word in the UI.
             let verdict = result.issuesFound == 0
-                ? "✓ Clean — no issues detected"
+                ? "✓ No problems found in what this checks — see the report's limits section for what it does not cover"
                 : "⚠️ \(result.issuesFound) issue(s) flagged — see report"
             healthCheckStatus = """
             \(verdict)
@@ -1009,7 +1195,7 @@ public struct SettingsView: View {
             let result = try await runProjectDeltaSmokeTest()
             smokeFailures = result.assertionsFailed
             smokeStatus = """
-            \(result.ok ? "✓ PASSED" : "✗ FAILED") — \(result.assertionsPassed.count) checks, \(result.assertionsFailed.count) failures
+            \(result.ok ? (result.fullyVerified ? "✓ PASSED" : "⚠️ PASSED with gaps") : "✗ FAILED") — \(result.assertionsPassed.count) verified, \(result.assertionsFailed.count) failures, \(result.assertionsNotVerified.count) not verified
             ingested: \(result.ingested) files · entities: \(result.entityCount) · events: \(result.eventCount) · memory: \(result.memoryObjectCount)
             answer refused: \(result.answer.refused) · citations: \(result.answer.citations.count) · confidence: \(String(format: "%.2f", result.answer.confidence.value))
             """
@@ -1123,9 +1309,21 @@ public struct SettingsView: View {
     /// "Delete all my data" confirmation + status.
     @State private var confirmDeleteAll = false
     @State private var deleteAllStatus: String?
+    @State private var backupStatus: String?
+    @State private var backingUp = false
+    @State private var cleanupStatus: String?
+    @State private var cleaningUp = false
+    @State private var topicsStatus: String?
+    @State private var buildingTopics = false
     /// Which everyday Settings categories are expanded. Empty = all collapsed,
     /// so Settings shows a minimal list of category headers by default.
     @State private var openSettingsGroups: Set<String> = []
+    // Module toggles read/write UserDefaults through KnowledgeModuleFlags, which
+    // SwiftUI does not observe. Bumping this token in each setter forces the
+    // modules section to recompute so the switch reflects its new state.
+    @State private var moduleFlagsVersion = 0
+    // True while a regime change is rebuilding the topic layer in the background.
+    @State private var regimeRebuildRunning = false
 
     /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
     /// historical AI, not a RAG chatbot — it spends its LLM budget on
@@ -1199,6 +1397,94 @@ public struct SettingsView: View {
     /// Settings opens as a short list of headers, expand only what you need.
     /// D-10: every group carries a SettingsAnchor (palette-coverage.sh fails
     /// CI if one is missing) so ⌘K can expand, scroll to, and flash it.
+    /// Modules — one on/off switch per knowledge-synthesis / answer-quality
+    /// capability, grouped and described. Each reads/writes its own persisted
+    /// flag via KnowledgeModuleFlags, so a capability can be tracked and toggled
+    /// in isolation. Only implemented modules are shown.
+    @ViewBuilder
+    private var modulesSection: some View {
+        let groups = Dictionary(grouping: KnowledgeModule.allCases.filter(\.implemented), by: \.group)
+        // Reading the token here ties this view's identity to it, so a setter
+        // bump re-evaluates the body and every toggle re-reads its flag.
+        let _ = moduleFlagsVersion
+        VStack(alignment: .leading, spacing: 16) {
+            // The SINGLE AI posture control (owner request 2026-09-21) — supersedes
+            // the old "Fully private" privacy toggle + guided/unconstrained picker.
+            // One choice, three options, with a full explanation of each. Changing it
+            // re-evaluates every module's availability below (the token bump).
+            let regime = FeatureFlags.aiRegimeValue()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Picker("AI", selection: Binding(
+                    get: { FeatureFlags.aiRegimeValue() },
+                    set: { newRegime in
+                        FeatureFlags.setAIRegime(newRegime)
+                        moduleFlagsVersion &+= 1
+                        // The existing topic layer was built under the PREVIOUS
+                        // regime (e.g. raw spines under Fully-private). Rebuild it
+                        // now so switching to AI takes effect immediately instead
+                        // of silently waiting for the next ingest. Skipped mid-
+                        // ingest (that rebuilds at completion); a no-op with no facts.
+                        if !appState.isBulkIngestActive {
+                            regimeRebuildRunning = true
+                            Task {
+                                await appState.autoBuildTopicsAfterIngest()
+                                await MainActor.run { regimeRebuildRunning = false }
+                            }
+                        }
+                    }
+                )) {
+                    ForEach(AIRegime.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                Text(regime.summary)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if regimeRebuildRunning {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text("Rebuilding topics for the new AI setting…")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Divider()
+            Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(groups.keys.sorted(), id: \.self) { groupName in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                        let reason = KnowledgeModuleFlags.disabledReason(module)
+                        Toggle(isOn: Binding(
+                            get: { KnowledgeModuleFlags.isEnabled(module) },
+                            set: {
+                                KnowledgeModuleFlags.setEnabled(module, $0)
+                                moduleFlagsVersion &+= 1
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.title)
+                                Text(module.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let reason {
+                                    Label(reason, systemImage: "lock.fill")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .disabled(reason != nil)
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func settingsGroup<Content: View>(_ title: String, _ icon: String, anchor: SettingsAnchor, @ViewBuilder _ content: @escaping () -> Content) -> some View {
         DisclosureGroup(isExpanded: Binding(
@@ -1243,6 +1529,7 @@ public struct SettingsView: View {
         switch a {
         case .localModelSetup:       return "Local model setup"
         case .answeringModes:        return "Answering & modes"
+        case .modules:               return "Modules"
         case .privacy:               return "Privacy"
         case .backgroundMaintenance: return "Background maintenance"
         case .ingestOptions:         return "Ingest options"
@@ -1252,10 +1539,205 @@ public struct SettingsView: View {
         }
     }
 
+    /// Back up / restore — a SAFE, read-only copy of the extracted ledger to a
+    /// folder the user picks. It never touches originals and never overwrites the
+    /// live database; restore is verified against the manifest (an incomplete
+    /// backup is refused, not partially restored) via BackupService.
+    private var backupSubsection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "externaldrive.badge.timemachine").foregroundStyle(Theme.brand)
+                Text("Back up your knowledge base").font(.title3.bold())
+            }
+            Text("Save a copy of your extracted ledger (knowledge.sqlite) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button {
+                    backUpNow()
+                } label: {
+                    if backingUp {
+                        Label("Backing up…", systemImage: "hourglass")
+                    } else {
+                        Label("Back up now…", systemImage: "externaldrive.badge.plus")
+                    }
+                }
+                .disabled(backingUp)
+                Button {
+                    inspectBackup()
+                } label: {
+                    Label("Check a backup…", systemImage: "checkmark.seal")
+                }
+                if let s = backupStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// Copy the live database (+ its -wal/-shm sidecars, if present) into a
+    /// timestamped backup folder the user selects. Read-only w.r.t. the app's
+    /// own data; failures are surfaced, never swallowed.
+    private func backUpNow() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Back Up Here"
+        panel.message = "Choose a folder to save your Kalsmritikosh backup into."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        backingUp = true
+        backupStatus = nil
+        Task {
+            let dbURL = DatabaseLocations.defaultDatabaseURL
+            var sidecars: [URL] = []
+            for suffix in ["-wal", "-shm"] {
+                let u = URL(fileURLWithPath: dbURL.path + suffix)
+                if FileManager.default.fileExists(atPath: u.path) { sidecars.append(u) }
+            }
+            let stamp = Int(Date().timeIntervalSince1970)
+            let dest = dir.appendingPathComponent("Kalsmritikosh-Backup-\(stamp)")
+            // CHECKPOINT BEFORE COPYING. The connection runs in WAL mode, so
+            // recent commits can live in `knowledge.sqlite-wal` while the main
+            // file is copied — and copying a live database with an active log
+            // can capture a torn state even though the sidecars travel too.
+            // Folding the log back first makes the copied main file
+            // self-contained. A partial checkpoint is REPORTED, not hidden:
+            // the user needs to know their backup was taken over a busy log.
+            let checkpointed = (try? await appState.database?.checkpointWAL()) ?? nil
+            do {
+                let manifest = try BackupService().createBackup(
+                    databaseURL: dbURL, originalURLs: sidecars, destination: dest,
+                    schemaVersion: SchemaMigrations.latestVersion,
+                    nowEpoch: Date().timeIntervalSince1970)
+                await MainActor.run {
+                    backingUp = false
+                    var msg = "Backed up \(manifest.entries.count) file(s) to “\(dest.lastPathComponent)”."
+                    if checkpointed == false {
+                        msg += " The write-ahead log was busy, so it was copied alongside the database rather than folded into it — the backup is complete, but restore it as a whole folder."
+                    }
+                    backupStatus = msg
+                }
+            } catch {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup failed: \(error.localizedDescription)"
+                }
+            }
+        }
+        #endif
+    }
+
+    /// Validate a chosen backup folder against its manifest WITHOUT copying — the
+    /// honest pre-restore check (present/missing files, schema version).
+    private func inspectBackup() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Check Backup"
+        panel.message = "Choose a backup folder to verify."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        Task {
+            do {
+                let (manifest, verdict) = try BackupService().inspect(backupFolder: dir)
+                await MainActor.run {
+                    backupStatus = verdict.ok
+                        ? "Backup OK — \(manifest.entries.count) file(s), schema v\(manifest.schemaVersion). Verified complete."
+                        : "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                }
+            } catch {
+                await MainActor.run {
+                    backupStatus = "That folder isn't a valid backup (no manifest.json)."
+                }
+            }
+        }
+        #endif
+    }
+
+    /// Clean up the ledger — collapse duplicate facts to one canonical row each
+    /// and drop extraction junk (Topic-Ledger U3). Safe: facts are derived, so
+    /// this never touches your original documents or evidence; it only tidies the
+    /// derived index. Idempotent — running it twice does nothing the second time.
+    private var ledgerCleanupSubsection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.sparkles").foregroundStyle(Theme.brand)
+                Text("Tidy up the knowledge index").font(.title3.bold())
+            }
+            Text("Merge duplicate facts into one entry each (keeping every source) and remove extraction noise. Your original documents and evidence are untouched — this only cleans the derived index. Safe to run any time.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button {
+                    cleaningUp = true
+                    cleanupStatus = nil
+                    Task {
+                        let result = await appState.cleanUpLedger()
+                        await MainActor.run {
+                            cleaningUp = false
+                            if let r = result {
+                                cleanupStatus = "Tidied — \(r.before) → \(r.after) facts."
+                            } else {
+                                cleanupStatus = "Nothing to tidy yet."
+                            }
+                        }
+                    }
+                } label: {
+                    if cleaningUp {
+                        Label("Tidying…", systemImage: "hourglass")
+                    } else {
+                        Label("Tidy up now", systemImage: "wand.and.sparkles")
+                    }
+                }
+                .disabled(cleaningUp)
+                if let s = cleanupStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 12) {
+                Button {
+                    buildingTopics = true
+                    topicsStatus = nil
+                    Task {
+                        let n = await appState.buildTopics()
+                        await MainActor.run {
+                            buildingTopics = false
+                            if let n {
+                                // M3 — show how many topics the AI actually polished.
+                                let polished = appState.lastTopicBuild?.polished ?? 0
+                                let aiNote = polished > 0 ? " · \(polished) AI-polished" : " · none AI-polished (model off?)"
+                                topicsStatus = "Built \(n) topic\(n == 1 ? "" : "s") from your facts\(aiNote)."
+                            } else {
+                                topicsStatus = "Nothing to build yet."
+                            }
+                        }
+                    }
+                } label: {
+                    if buildingTopics {
+                        Label("Building topics…", systemImage: "hourglass")
+                    } else {
+                        Label("Build topics", systemImage: "square.stack.3d.up")
+                    }
+                }
+                .disabled(buildingTopics)
+                if let s = topicsStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     /// Your data — the global "erase everything" control. Always visible so it's
     /// easy to find (the app previously only had a per-folder forget in Sources).
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            backupSubsection
+            Divider().padding(.vertical, 4)
+            ledgerCleanupSubsection
+            Divider().padding(.vertical, 4)
             HStack(spacing: 6) {
                 Image(systemName: "trash").foregroundStyle(.red)
                 Text("Your data").font(.title3.bold())
@@ -1279,13 +1761,35 @@ public struct SettingsView: View {
                 }
             }
         }
+        .alert("Run the drift check?", isPresented: $confirmFixedPoint) {
+            Button("Cancel", role: .cancel) {}
+            Button("Run it") {
+                Task { await runFixedPointCheck() }
+            }
+        } message: {
+            Text("This runs every background pass three times over your ledger. It is the one check that WRITES — a pass that isn't repeatable will have changed your derived data, and that is inseparable from finding out. Your original files and the stored evidence behind every answer are not touched. It can take several minutes on a large archive.")
+        }
         .alert("Delete all your data?", isPresented: $confirmDeleteAll) {
             Button("Cancel", role: .cancel) {}
             Button("Delete everything", role: .destructive) {
                 Task {
                     deleteAllStatus = "Erasing…"
                     let n = await appState.deleteAllData()
-                    deleteAllStatus = "Erased. \(n) tables cleared — re-add folders in Sources to start fresh."
+                    // P4.3 — the erase is VERIFIED, and a failure to verify is
+                    // shown here rather than only logged. "Erased" is a claim
+                    // the user cannot check for themselves and cannot undo, so
+                    // it is only made when the rows were counted back to zero.
+                    let residue = appState.eraseResidue
+                    if residue.isEmpty {
+                        deleteAllStatus = "Erased and verified — \(n) tables cleared, all confirmed empty. Re-add folders in Sources to start fresh."
+                    } else {
+                        let worst = residue.prefix(4)
+                            .map { "\($0.table) (\($0.rows < 0 ? "unreadable" : "\($0.rows) rows")" + ")" }
+                            .joined(separator: ", ")
+                        deleteAllStatus = "⚠️ ERASE INCOMPLETE — \(residue.count) of \(n) tables still hold data: \(worst)"
+                            + (residue.count > 4 ? " and \(residue.count - 4) more." : ".")
+                            + " Do NOT re-ingest yet: new data would be added on top of rows that survived. Try the erase again, and if it keeps failing, quit the app first so nothing is writing during the wipe."
+                    }
                 }
             }
         } message: {
@@ -1394,12 +1898,10 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 2)
 
-            // Fully private (no LLM) — PrivacyGate.
-            Toggle("Fully private (no AI)", isOn: Binding(
-                get: { PrivacyGate.shared.offlineNoLLM },
-                set: { PrivacyGate.shared.offlineNoLLM = $0 }
-            ))
-            Text("Uses NO generative model at all (on-device or cloud). Answers come purely from the rule-based ledger + experts. Maximum privacy and speed; plainer, bullet-style answers. On-device search/embeddings still work.")
+            // Consolidation (owner request 2026-09-21): the AI posture — Fully
+            // private / AI gated / AI free — now lives in ONE place, Modules → AI,
+            // so it can never drift out of sync with a second toggle here.
+            Label("Choose Fully private · AI gated · AI free under Modules → AI. That one control turns AI on or off everywhere.", systemImage: "switch.2")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1410,7 +1912,20 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.generalKnowledgeLane },
                 set: { FeatureFlags.shared.generalKnowledgeLane = $0 }
             ))
-            Text("When your documents don't hold the answer, the on-device AI may add a separate block marked \u{201C}Not from your documents\u{201D}. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. Off by default.")
+            Text("When your documents don't hold the answer, the on-device AI may add a separate block marked \u{201C}Not from your documents\u{201D}. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. On by default; turn it off for legal, compliance, or HR work.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
+            // U-1 — the Unverified policy: show-badged vs abstain when the
+            // evidence check cannot confirm an AI reading. Off by default
+            // (abstain), which preserves the sealed answer behavior.
+            Toggle("Show unconfirmed AI readings (marked)", isOn: Binding(
+                get: { UserDefaults.standard.bool(forKey: UnverifiedAnswerPolicy.defaultsKey) },
+                set: { UserDefaults.standard.set($0, forKey: UnverifiedAnswerPolicy.defaultsKey) }
+            ))
+            Text("When the evidence check cannot confirm what the AI read, show it anyway with the badge \u{201C}Unverified — AI reading; evidence check failed\u{201D} and no sources. Off = such readings are withheld and the answer falls back to checked material only. Keep this off for legal, compliance, or HR work.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1528,21 +2043,13 @@ public struct SettingsView: View {
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Privacy").font(.title3.bold())
-            // RELEASE-READINESS (fifteenth review): the cloud-routing toggle is a
-            // DEV-ONLY control. The release product contract is zero network —
-            // PrivacyGate is compile-locked to no-cloud in Release, so showing a
-            // toggle there would contradict the shipped behavior.
-            #if DEBUG
-            Toggle("Allow cloud-routed providers (dev builds only)", isOn: $allowCloud)
-                .onChange(of: allowCloud) { _, newValue in
-                    PrivacyGate.shared.allowCloudRouting = newValue
-                }
-            Text("Dev-build control. When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. In Release builds this gate is compile-locked off and no cloud or local-network provider is reachable.")
+            // U-0 (privacy invariant closure): the old dev-only cloud toggle
+            // was a false affordance — the product has no network entitlement
+            // in any build, so there is nothing a switch could enable.
+            Label("This app has no network access; there is nothing to toggle.", systemImage: "lock.shield")
+            Text("Every model runs on this Mac. The app is built without the network permission, so no document, question, or answer can leave your computer.")
                 .font(.caption).foregroundStyle(.secondary)
-            #else
-            Label("All processing is on-device. Cloud routing is compiled out of this build.", systemImage: "lock.shield")
-                .font(.caption).foregroundStyle(.secondary)
-            #endif
+                .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 4)
 
@@ -1589,6 +2096,23 @@ public struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+
+            // When is this actually needed? Only as a FALLBACK/dev path — the
+            // shipping engine is Apple Intelligence (on-device) + the bundled
+            // embedder, and this whole section is hidden in release. Say so plainly
+            // so a Debug user with Apple Intelligence available doesn't think they
+            // must install anything.
+            Label {
+                Text("You only need a local model if **Apple Intelligence isn't available** on this Mac (older hardware, macOS earlier than 26, or Apple Intelligence turned off), or for developer model comparisons. If the Live “Apple Intelligence” chip is green, AI already works — you can ignore this. It’s a fallback/developer option and is hidden in the shipping app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(8)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
             switch setup.action {
             case .installOllama:

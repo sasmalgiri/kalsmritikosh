@@ -12,10 +12,11 @@
 //  OpenAI-compat layer, Azure OpenAI, OpenRouter, Together, hosted
 //  Ollama with `OPENAI_API_BASE`, etc.
 //
-//  Privacy contract: this is the ONLY provider in the codebase
-//  permitted to make network calls outside of Routing/Providers/.
-//  PrivacyGate.shared.allowCloudRouting gates whether isAvailable()
-//  returns true at all.
+//  Privacy contract (U-0): the shipped product has no network
+//  entitlement and no cloud path — isAvailable() is hard-false in
+//  every build. The stub stays as tracked structure only; a future
+//  provider experiment would need an explicit owner decision, a new
+//  entitlement, and a CI change, none of which exist.
 //
 
 import Foundation
@@ -96,12 +97,9 @@ public actor CloudProvider: @preconcurrency ModelProvider {
     }
 
     public func isAvailable() async -> Bool {
-        // Cloud routing is opt-in at the user level. PrivacyGate is the
-        // single source of truth — adding an endpoint doesn't override
-        // the user's privacy choice.
-        guard PrivacyGate.shared.allowCloudRouting else { return false }
-        guard enabled, !apiKey.isEmpty else { return false }
-        return true
+        // U-0: never available — no network entitlement, no cloud path,
+        // no toggle. Registering an endpoint cannot change this.
+        return false
     }
 
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {

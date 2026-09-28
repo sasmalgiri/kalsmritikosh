@@ -33,6 +33,10 @@ public struct ConversationTurn: Identifiable, Sendable, Hashable {
     public let role: Role
     public let body: String
     public let createdAt: Date
+    /// G2/Stage-3 — the durable answer this assistant turn was verified from.
+    /// On reopen the citations / status / receipt are restored from this
+    /// ledger row. nil for user turns and legacy turns (honest "not linked").
+    public let answerLedgerID: UUID?
 
     public nonisolated init(
         id: UUID = UUID(),
@@ -40,7 +44,8 @@ public struct ConversationTurn: Identifiable, Sendable, Hashable {
         ordinal: Int,
         role: Role,
         body: String,
-        createdAt: Date = .init()
+        createdAt: Date = .init(),
+        answerLedgerID: UUID? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -48,6 +53,7 @@ public struct ConversationTurn: Identifiable, Sendable, Hashable {
         self.role = role
         self.body = body
         self.createdAt = createdAt
+        self.answerLedgerID = answerLedgerID
     }
 }
 
@@ -102,21 +108,30 @@ public actor ConversationsRepository {
     public func appendTurn(_ turn: ConversationTurn) async throws {
         try await database.exec("""
         INSERT INTO conversation_turns
-            (id, conversation_id, ordinal, role, body, created_at)
-        VALUES (?, ?, ?, ?, ?, ?);
+            (id, conversation_id, ordinal, role, body, created_at, answer_ledger_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(turn.id),
             .uuid(turn.conversationID),
             .integer(Int64(turn.ordinal)),
             .text(turn.role.rawValue),
             .text(turn.body),
-            .date(turn.createdAt)
+            .date(turn.createdAt),
+            .optionalText(turn.answerLedgerID?.uuidString)
         ])
+    }
+
+    /// G2/Stage-3 — bind a saved assistant turn to its durable answer once the
+    /// ledger commit id is known (the answer is persisted after the turn body).
+    public func linkAnswer(turnID: UUID, answerLedgerID: UUID) async throws {
+        try await database.exec(
+            "UPDATE conversation_turns SET answer_ledger_id = ? WHERE id = ?;",
+            [.text(answerLedgerID.uuidString), .uuid(turnID)])
     }
 
     public func turns(for conversationID: UUID) async throws -> [ConversationTurn] {
         let rows = try await database.query("""
-        SELECT id, conversation_id, ordinal, role, body, created_at
+        SELECT id, conversation_id, ordinal, role, body, created_at, answer_ledger_id
         FROM conversation_turns
         WHERE conversation_id = ?
         ORDER BY ordinal ASC;
@@ -137,7 +152,8 @@ public actor ConversationsRepository {
                 ordinal: Int(ordinal),
                 role: role,
                 body: body,
-                createdAt: created
+                createdAt: created,
+                answerLedgerID: row.string(6).flatMap(UUID.init(uuidString:))
             )
         }
     }

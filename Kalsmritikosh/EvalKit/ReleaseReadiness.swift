@@ -685,7 +685,10 @@ public enum ReleaseReadiness {
                 name: "ProjectDelta end-to-end smoke",
                 passed: smoke.ok,
                 detail: smoke.ok
-                    ? "\(smoke.assertionsPassed.count) checks passed; cited \(smoke.answer.citations.count)"
+                    ? "\(smoke.assertionsPassed.count) checks verified"
+                        + (smoke.assertionsNotVerified.isEmpty
+                            ? "" : ", \(smoke.assertionsNotVerified.count) NOT verified")
+                        + "; cited \(smoke.answer.citations.count)"
                     : "\(smoke.assertionsFailed.count) failures — ALL: \(smoke.assertionsFailed.joined(separator: " | "))",
                 blocker: true,
                 secondsTaken: Date().timeIntervalSince(t0)

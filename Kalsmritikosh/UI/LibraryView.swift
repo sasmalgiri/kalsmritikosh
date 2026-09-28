@@ -23,6 +23,12 @@ public struct LibraryView: View {
     /// a sheet that runs the reconstructive composer scoped to the
     /// topic's title. Sheet hosts a stripped HistoryView body.
     @State private var openedTopic: TopicMatch?
+    /// B-1 — loaded only when the list comes back EMPTY, to say why. An empty
+    /// topic layer has at least seven causes wanting different responses, and
+    /// the generic "add files and check back" copy this replaces was correct
+    /// for exactly one of them. Told to a user with thousands of files already
+    /// ingested, it was actively misleading.
+    @State private var emptyReason: TopicLayerDiagnosis?
 
     public init() {}
 
@@ -89,16 +95,32 @@ public struct LibraryView: View {
                 Image(systemName: "book.pages")
                     .font(.system(size: 36))
                     .foregroundStyle(.tint)
-                Text("No topics yet.").font(.title3.weight(.medium))
-                Text("Topics form on their own once your files have been read and classified — add files and check back after the background pass.")
+                Text(emptyReason?.emptyButCorrect == true
+                     ? "No topics — and nothing is wrong."
+                     : "No topics yet.")
+                    .font(.title3.weight(.medium))
+                // The REASON, from the dependency chain, rather than one guess
+                // that happens to be right for a single cause.
+                Text(Self.emptyExplanation(emptyReason))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 480)
-                Button {
-                    SurfaceOpener.open(.sources)
-                } label: { Label("Add your files", systemImage: "folder") }
-                    .buttonStyle(.borderedProminent)
+                if let remedy = emptyReason?.firstMissing?.remedy, !remedy.isEmpty {
+                    Text(remedy)
+                        .font(.callout.weight(.medium))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 480)
+                }
+                // "Add your files" is offered ONLY when adding files is in fact
+                // the answer. Offering it to someone whose archive is already
+                // ingested sends them to do again the thing that did not work.
+                if emptyReason == nil || emptyReason?.firstMissing?.id == .documents {
+                    Button {
+                        SurfaceOpener.open(.sources)
+                    } label: { Label("Add your files", systemImage: "folder") }
+                        .buttonStyle(.borderedProminent)
+                }
             }
             .padding(40)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -252,6 +274,23 @@ public struct LibraryView: View {
         }
     }
 
+    /// Plain-language reason, in the user's terms rather than the chain's.
+    private static func emptyExplanation(_ d: TopicLayerDiagnosis?) -> String {
+        guard let d, let missing = d.firstMissing else {
+            // No diagnosis available is NOT "everything is fine" — it is
+            // unknown, and saying so beats inventing a cause.
+            return "Topics form on their own once your files have been read. "
+                 + "Why this is empty could not be determined just now — the "
+                 + "Data Health report in Settings explains the chain in full."
+        }
+        switch missing.outcome {
+        case .absentExpected(let reason):   return reason.prefix(1).capitalized + reason.dropFirst() + "."
+        case .absentUnexpected(let reason): return reason.prefix(1).capitalized + reason.dropFirst() + "."
+        case .couldNotCheck:                return "Part of the check could not run, so the reason is unknown. See the Data Health report in Settings."
+        case .present:                      return "Topics exist but none could be listed — see the Data Health report in Settings."
+        }
+    }
+
     private func reload() async {
         loading = true
         lastError = nil
@@ -262,5 +301,12 @@ public struct LibraryView: View {
         }
         topics = await retriever.listTopics(limit: 200)
         bigPicture = await retriever.listBigPicture()
+        // Diagnose ONLY on empty. On a populated library this query would be
+        // work nobody asked for, and the answer would not be shown.
+        if topics.isEmpty, let database = appState.database {
+            emptyReason = await TopicLayerDiagnosis.run(database: database)
+        } else {
+            emptyReason = nil
+        }
     }
 }

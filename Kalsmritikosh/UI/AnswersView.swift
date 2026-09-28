@@ -232,6 +232,7 @@ private struct AnswerCard: View {
         case .contradicted:          return "Contradicted"
         case .notFound:              return "Not found"
         case .insufficientlyIndexed: return "Low coverage"
+        case .unverified:            return "Unverified"
         case .unknown:               return "Unknown"
         }
     }
@@ -243,6 +244,7 @@ private struct AnswerCard: View {
         case .contradicted:          return .red
         case .notFound:              return .orange
         case .insufficientlyIndexed: return .orange
+        case .unverified:            return .purple
         case .unknown:               return .secondary
         }
     }

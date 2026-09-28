@@ -202,6 +202,30 @@ public actor Database {
         try execRaw(sql)
     }
 
+    /// Fold the write-ahead log back into the main database file and truncate
+    /// it, so `knowledge.sqlite` is SELF-CONTAINED on disk.
+    ///
+    /// This connection runs `PRAGMA journal_mode=WAL`, which means recent
+    /// commits can live entirely in `knowledge.sqlite-wal`. Anything that
+    /// copies only the main file — the backup feature does exactly that — would
+    /// silently produce a copy missing the newest writes, while its SHA-256
+    /// manifest made the copy look verified. Call this first.
+    ///
+    /// Returns true when the log is fully checkpointed. A `false` return means
+    /// a reader or writer held the log open and the main file is NOT complete;
+    /// the caller must not present that as a clean backup.
+    @discardableResult
+    public func checkpointWAL() throws -> Bool {
+        var busy = true
+        try withStatement("PRAGMA wal_checkpoint(TRUNCATE);") { stmt in
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                // Column 0 is the busy flag: 0 = the whole log was written back.
+                busy = sqlite3_column_int(stmt, 0) != 0
+            }
+        }
+        return !busy
+    }
+
     public func currentUserVersion() throws -> Int {
         var version: Int = 0
         try withStatement("PRAGMA user_version;") { stmt in

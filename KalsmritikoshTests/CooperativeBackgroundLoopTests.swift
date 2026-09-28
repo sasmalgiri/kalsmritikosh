@@ -13,6 +13,8 @@ import Testing
 @testable import Kalsmritikosh
 
 /// A gate whose permit answers are scripted, so a test can flip permission between batches.
+/// `nonisolated` conformance: the test target's default MainActor isolation would otherwise
+/// infer a MainActor-isolated conformance, which an actor cannot satisfy (Xcode 26.6 toolchain).
 private actor ScriptedGate: BackgroundWorkGating {
     private let answers: [Bool]
     private var index = 0

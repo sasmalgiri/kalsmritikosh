@@ -72,6 +72,21 @@ struct HistoryArtifactRepositoryTests {
         #expect(try await repo.evidenceCount(itemID: itemID) == 2)
     }
 
+    @Test("Story-reviewer: a review verdict persists on the item and reads back")
+    func reviewActionPersists() async throws {
+        let repo = HistoryArtifactRepository(database: try await freshDB())
+        let r = result()
+        _ = try await repo.save(r, at: clock)
+        let itemID = r.outline.items[0].id
+        // Freshly saved item is unreviewed.
+        #expect(try await repo.itemReviewStatus(forItemID: itemID) == .unreviewed)
+        // The review ACTION: reject the beat, then correct it — each persists.
+        try await repo.setItemReviewStatus(.rejected, forItemID: itemID)
+        #expect(try await repo.itemReviewStatus(forItemID: itemID) == .rejected)
+        try await repo.setItemReviewStatus(.corrected, forItemID: itemID)
+        #expect(try await repo.itemReviewStatus(forItemID: itemID) == .corrected)
+    }
+
     @Test("Rebuild creates a new artifact + supersedes the old; old stays loadable")
     func versioning() async throws {
         let repo = HistoryArtifactRepository(database: try await freshDB())

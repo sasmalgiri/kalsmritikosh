@@ -17,6 +17,77 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     // PAR-008 — structured text: web/data/config/log formats with a
     // deterministic structure we can parse into typed blocks.
     case html, json, xml, log
+    /// HOST-1 — Apple property list (binary `bplist00`, XML, or legacy OpenStep).
+    /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
+    /// structure is what makes a host artifact citable.
+    case plist
+    /// HOST-3 — a Windows event log (EVTX). Its own type rather than an opaque
+    /// binary: every record carries an exact written time and record id, which is
+    /// what puts a machine's own account of itself on the timeline.
+    case eventLog
+    /// HOST-4 — Linux login accounting: `utmp` (who was on at acquisition time),
+    /// `wtmp` (login/logout/boot history) and `btmp` (FAILED attempts). One type
+    /// for all three because they share a single 384-byte record layout; which
+    /// file it is — and therefore whether a record is a sign-in or a rejected
+    /// attempt — is carried by the filename and resolved in the parser.
+    case loginRecord
+    /// HOST-4b — shell and REPL history (`.bash_history`, `.zsh_history`,
+    /// `fish_history`, `.python_history`, …): what was actually TYPED. Its own
+    /// type rather than plain text because three of the four flavours carry
+    /// per-command TIMESTAMPS that look like nothing to a text reader, and a
+    /// dated command is what places activity on the timeline.
+    case shellHistory
+    /// HOST-6a — a Windows shortcut (`.lnk`). Its own type because a shortcut is
+    /// evidence about a file that may no longer exist: it records the target's
+    /// full path, size, volume serial number and DRIVE TYPE, so a `.lnk` in
+    /// `Recent` is often the only surviving record that a file was opened from a
+    /// particular USB device.
+    case shellLink
+    /// HOST-6c — `Amcache.hve`: Windows's inventory of executables that have
+    /// been PRESENT on the machine, with each one's SHA-1. A registry hive by
+    /// format, but its own type because the schema is what makes it evidence —
+    /// and because presence must never be read as execution.
+    case amcache
+    /// HOST-5 — the NTFS master file table (`$MFT`). Its own type because the
+    /// MFT survives the files it describes: a deleted file's record keeps its
+    /// name, size, parent and four timestamps until the slot is reused, so this
+    /// is the one artifact that says what WAS on a disk.
+    case masterFileTable
+    /// HOST-6b — a Windows jump list (`*.automaticDestinations-ms`,
+    /// `*.customDestinations-ms`): the files one application was used to open.
+    /// Its own type because the ASSOCIATION between an application and a file is
+    /// the fact it adds over a loose shortcut.
+    case jumpList
+    /// HOST-6d — a Windows prefetch file (`*.pf`). Its own type because it is
+    /// the ONE artifact here that evidences EXECUTION: Windows creates it
+    /// because it watched the program run, and records a run count plus (on
+    /// Windows 8+) the last eight run times.
+    case prefetch
+    /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
+    /// without which the backup's 40 000 files are anonymous blobs. Its own type
+    /// because the INVENTORY is a distinct forensic fact from the file contents —
+    /// it answers what the extraction covered, including what it did not.
+    case extractionManifest
+    /// HOST-8 — the examiner's chain-of-custody sidecar for an extraction. A
+    /// document a person authored, not machine evidence, so it carries the
+    /// document category; what makes it special is that it is the ONE artifact
+    /// describing where all the others came from.
+    case custodyManifest
+    /// HOST-7 — Apple's CoreDuet activity store (`knowledgeC.db`): app focus with
+    /// durations, device lock/unlock, screen, media, battery. Its own type rather
+    /// than plain `.sqlite` because its timestamps are APPLE EPOCH and its rows
+    /// only become dated events once a schema-aware parser reads them.
+    case knowledgeC
+    /// HOST-2 — Windows registry hive (REGF): NTUSER.DAT, UsrClass.dat, SOFTWARE,
+    /// SYSTEM, SAM, SECURITY. Usually EXTENSIONLESS, so recognized by filename
+    /// pattern and by the "regf" signature.
+    case registryHive
+    /// DISC-1 — a discussion-platform data export (YouTube Takeout comments,
+    /// Discord package, Reddit CSVs, X archive, Telegram JSON, Twitch chat,
+    /// saved forum threads). One type for all of them: the platform is decided by
+    /// a mapper reading the CONTENT, because export filenames like `comments.csv`
+    /// are not unique to any platform.
+    case discussionExport
 
     // PAR-009 — a generic read-only SQLite database (rows cite db/table/key).
     case sqlite
@@ -73,8 +144,112 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
             || name.contains("signal-") || name.contains("slack-export") {
             return .chatExport
         }
+        // HOST-2 — Windows registry hives are extensionless with fixed names, so
+        // the filename IS the signal. `.dat` would otherwise fall through to
+        // `.unknown` and `SOFTWARE`/`SYSTEM`/`SAM` have no extension at all.
+        // Transaction logs (.LOG1/.LOG2) and backups (.SAV) are deliberately not
+        // claimed here: they are not whole hives and would decode as corrupt.
+        // HOST-6c — before the generic hive check: Amcache IS a hive, and
+        // reading it as one would dump its keys without the schema that makes
+        // them mean anything.
+        if name == "amcache.hve" { return .amcache }
+        // HOST-5 — `$MFT` is extensionless, and examiners routinely export it
+        // as `$MFT`, `mft` or `C.$MFT`. Also matched: the `.mft` extension some
+        // tools add.
+        if Self.masterFileTableNames.contains(name) { return .masterFileTable }
+        if Self.registryHiveNames.contains(name) { return .registryHive }
+        // HOST-4 — Linux login accounting is extensionless with fixed names, and
+        // the name is ALSO what says whether a record is a sign-in (wtmp) or a
+        // rejected attempt (btmp), so it is never guessed from content here.
+        // Rotated logs keep their meaning: wtmp.1, btmp.2 …
+        if Self.isLoginAccountingName(name) { return .loginRecord }
+        // HOST-4b — shell history. Named exactly, never by pattern: `history`
+        // alone is the browser artifact above, and a `.txt` export of a history
+        // is a text document about the file rather than the file.
+        if Self.shellHistoryNames.contains(name) { return .shellHistory }
+        // HOST-7 — must precede the `.db` extension mapping, or the activity store
+        // reads as a generic SQLite file and its Apple-epoch dates stay numbers.
+        if name == "knowledgec.db" || path.contains("/coreduet/knowledge/") { return .knowledgeC }
+        // HOST-8 — must precede the `.json` extension mapping, or the chain of
+        // custody reads as an ordinary JSON document and never reaches the ledger
+        // as custody.
+        if CustodyRecord.manifestNames.contains(name) { return .custodyManifest }
+        // HOST-8b — before the `.db` mapping, or the one file that makes the
+        // backup readable is itself read as an anonymous database.
+        if name == IOSBackupManifest.manifestName { return .extractionManifest }
+        // DISC-1 — discussion exports. Ambiguous names (comments.csv, messages.json)
+        // are claimed ONLY inside a recognizable export tree, so an ordinary
+        // spreadsheet named comments.csv stays a CSV. Unambiguous names stand alone.
+        if Self.discussionExportPathMarkers.contains(where: { path.contains($0) }),
+           Self.discussionExportNames.contains(name) {
+            return .discussionExport
+        }
+        if Self.unambiguousDiscussionExportNames.contains(name) { return .discussionExport }
         return nil
     }
+
+    /// `utmp` / `wtmp` / `btmp`, their BSD/Solaris `*x` spellings, and rotated
+    /// copies (`wtmp.1`, `btmp.2`). A rotated log is the same evidence, so the
+    /// numeric suffix is allowed — but nothing else is, because `wtmpdump.txt` is
+    /// a TEXT report about the file, not the file, and must stay a text document.
+    nonisolated static func isLoginAccountingName(_ lowercasedName: String) -> Bool {
+        let parts = lowercasedName.split(separator: ".", omittingEmptySubsequences: false)
+        guard let base = parts.first, loginAccountingBaseNames.contains(String(base)) else {
+            return false
+        }
+        let suffixes = parts.dropFirst()
+        return suffixes.isEmpty || suffixes.allSatisfy { $0.allSatisfy(\.isNumber) && !$0.isEmpty }
+    }
+
+    /// Names an exported master file table arrives under. Exact, because "mft"
+    /// is short enough to collide with ordinary filenames if matched loosely.
+    nonisolated static let masterFileTableNames: Set<String> = [
+        "$mft", "mft", "$mft.copy0", "$mft.raw", "c.$mft", "$mft.bin", "mft.bin"
+    ]
+
+    /// The history files whose LINES are commands. Deliberately exact and
+    /// deliberately short: `.lesshst` and `.viminfo` are editor state rather
+    /// than commands, and bare `history` belongs to the browser lane.
+    nonisolated static let shellHistoryNames: Set<String> = [
+        ".bash_history", ".sh_history", ".zsh_history", ".zhistory", ".histfile",
+        ".ksh_history", ".ash_history", ".dash_history", "fish_history",
+        ".python_history", ".node_repl_history", ".mysql_history",
+        ".psql_history", ".sqlite_history", ".rediscli_history", ".irb_history",
+        "bash_history", "zsh_history"   // the leading dot is routinely lost in an export
+    ]
+
+    nonisolated static let loginAccountingBaseNames: Set<String> = [
+        "utmp", "wtmp", "btmp", "utmpx", "wtmpx", "btmpx"
+    ]
+
+    /// The canonical Windows hive filenames, lowercased. NTUSER.DAT is per-user
+    /// (desktop/Explorer activity); UsrClass.dat holds shell bags; the rest are
+    /// machine-wide under %SystemRoot%\System32\config.
+    nonisolated static let registryHiveNames: Set<String> = [
+        "ntuser.dat", "usrclass.dat", "software", "system", "sam", "security",
+        "default", "components", "bcd-template", "drivers", "elam"
+    ]
+
+    /// Directory markers that identify an export tree. Present in the paths the
+    /// platforms themselves produce.
+    nonisolated static let discussionExportPathMarkers: [String] = [
+        "/takeout/", "/youtube and youtube music/", "/my activity/",
+        "/messages/", "/discord/", "/reddit/", "/twitch/",
+        "/your_instagram_activity/", "/your_facebook_activity/", "/live chats/", "/comments/"
+    ]
+    /// Generic names that are only a discussion export inside such a tree.
+    nonisolated static let discussionExportNames: Set<String> = [
+        "comments.csv", "live-chats.csv", "posts.csv", "messages.csv",
+        "watch-history.json", "search-history.json", "messages.json",
+        "my-comments.html", "my-live-chat-messages.html",
+        // Reddit writes these at the export root; Discord writes messages.json /
+        // messages.csv under messages/c<channel id>/.
+        "statistics.csv", "chat_history.json"
+    ]
+    /// Names no other artifact uses, so path context is unnecessary.
+    nonisolated static let unambiguousDiscussionExportNames: Set<String> = [
+        "tweets.js", "direct-messages.js", "note-tweet.js"
+    ]
 
     public nonisolated static func detect(from url: URL) -> SourceType {
         // Phase K path/filename patterns take priority over the extension.
@@ -90,7 +265,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "epub": return .epub
         case "html", "htm", "xhtml": return .html
         case "json", "jsonl", "ndjson": return .json
-        case "xml", "plist": return .xml
+        case "xml": return .xml
+        case "plist": return .plist
         case "log": return .log
         case "sqlite", "sqlite3", "db": return .sqlite
         case "xlsx": return .xlsx
@@ -106,6 +282,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "msg": return .msg
         case "emlx": return .appleMail
         case "nsf": return .nsf
+        case "evtx": return .eventLog
+        case "lnk": return .shellLink
+        case "mft": return .masterFileTable
+        case "automaticdestinations-ms", "customdestinations-ms": return .jumpList
+        case "pf": return .prefetch
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -153,7 +334,81 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x50, 0x4B, 0x03, 0x04]) { return .zip }
         // "SQLite format 3\0" — a generic SQLite database (PAR-009).
         if has([0x53, 0x51, 0x4C, 0x69, 0x74, 0x65]) { return .sqlite }   // "SQLite"
+        // HOST-1 — "bplist00": a binary property list. Host artifacts are routinely
+        // extensionless or oddly named, so magic bytes are the reliable signal.
+        if has([0x62, 0x70, 0x6C, 0x69, 0x73, 0x74]) { return .plist }    // "bplist"
+        // HOST-2 — "regf": a Windows registry hive, whatever the examiner named it.
+        if has([0x72, 0x65, 0x67, 0x66]) { return .registryHive }         // "regf"
+        // HOST-3 — "ElfFile": a Windows event log, however it was renamed.
+        if has([0x45, 0x6C, 0x66, 0x46, 0x69, 0x6C, 0x65]) { return .eventLog }   // "ElfFile"
+        // HOST-6a — a Windows shortcut: header size 0x4C followed by the shell
+        // link class id. Sixteen bytes of it are already unambiguous, and a
+        // renamed `.lnk` is routine in an extraction.
+        if has([0x4C, 0x00, 0x00, 0x00] + Array(ShellLinkReader.linkCLSID.prefix(12))) {
+            return .shellLink
+        }
+        // HOST-6d — prefetch: the version tag then "SCCA" at offset 4, or the
+        // "MAM" container Windows 10 wraps it in. Renamed evidence stays found.
+        if b.count >= 8, Array(b[4..<8]) == Array("SCCA".utf8) { return .prefetch }
+        if has([0x4D, 0x41, 0x4D, 0x04]) { return .prefetch }
         return nil
+    }
+
+    /// L2 — a TEXT format recognised from its leading bytes, for a file with no
+    /// usable extension (an e-mail part saved as "attachment-7B4395C2"). Only
+    /// unambiguous openers are claimed; readable text with no opener is `.txt`;
+    /// bytes that are not text return nil. Runs only after the extension check
+    /// has failed, so it can never take a file away from a recognised format.
+    public nonisolated static func sniffTextSignature(_ head: Data) -> SourceType? {
+        guard !head.isEmpty else { return nil }
+        var bytes = Array(head.prefix(4_096))
+        if bytes.starts(with: [0xEF, 0xBB, 0xBF]) { bytes.removeFirst(3) }
+        guard let text = String(bytes: bytes, encoding: .utf8) ?? String(bytes: bytes, encoding: .isoLatin1) else { return nil }
+        let trimmed = text.drop { $0.isWhitespace }
+        let lower = String(trimmed.prefix(64)).lowercased()
+        if lower.hasPrefix("<!doctype html") || lower.hasPrefix("<html") { return .html }
+        if lower.hasPrefix("<?xml") || lower.hasPrefix("<svg") { return .xml }
+        if lower.hasPrefix("{\\rtf") { return .rtf }
+        if lower.hasPrefix("from ") && lower.contains("@") { return .mbox }
+        if lower.hasPrefix("return-path:") || lower.hasPrefix("received:") || lower.hasPrefix("delivered-to:")
+            || lower.hasPrefix("from:") || lower.hasPrefix("mime-version:") { return .eml }
+        // P1.7 — any RFC 822-style HEADER BLOCK is a message: a returned
+        // original opens with "DKIM-Signature:" or "ARC-Seal:", a delivery
+        // report with "Reporting-MTA:". Generic test: the opening lines are
+        // mostly `Name: value` and include a known mail header.
+        if Self.looksLikeMailHeaderBlock(String(trimmed.prefix(2_048))) { return .eml }
+        if lower.hasPrefix("{") || lower.hasPrefix("[") { return .json }
+        // Plain text: no NUL bytes, almost no control characters.
+        let nulls = bytes.filter { $0 == 0 }.count
+        let controls = bytes.filter { $0 < 0x09 || ($0 > 0x0D && $0 < 0x20) }.count
+        guard nulls == 0, Double(controls) / Double(max(bytes.count, 1)) < 0.02 else { return nil }
+        return .txt
+    }
+
+    nonisolated static let mailHeaderNames: Set<String> = [
+        "received", "from", "to", "cc", "subject", "date", "message-id", "dkim-signature",
+        "arc-seal", "arc-message-signature", "authentication-results", "return-path",
+        "reporting-mta", "final-recipient", "action", "status", "diagnostic-code",
+        "content-type", "mime-version", "x-received", "x-google-smtp-source",
+    ]
+
+    /// ≥3 of the first 12 unfolded lines are `Name: value` headers, the first
+    /// line is one, and at least one name is a known mail header.
+    nonisolated static func looksLikeMailHeaderBlock(_ text: String) -> Bool {
+        let lines = text.replacingOccurrences(of: "\r", with: "")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !($0.first?.isWhitespace ?? false) }   // skip folded continuations
+            .prefix(12)
+        func headerName(_ line: Substring) -> String? {
+            guard let colon = line.firstIndex(of: ":") else { return nil }
+            let name = line[..<colon]
+            guard !name.isEmpty, name.count <= 40,
+                  name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" }) else { return nil }
+            return name.lowercased()
+        }
+        guard let first = lines.first, headerName(first) != nil else { return false }
+        let names = lines.compactMap(headerName)
+        return names.count >= 3 && names.contains(where: mailHeaderNames.contains)
     }
 
     /// USF-M2 §1 — compound-container disambiguation. A DOCX/XLSX/PPTX/ODT/ODS/EPUB is itself a ZIP,
@@ -175,7 +430,13 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     public nonisolated var category: Category {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
-             .html, .json, .xml, .log, .sqlite: return .document
+             .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
+        case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
+             .loginRecord, .shellHistory, .shellLink, .amcache,
+             .masterFileTable, .jumpList, .prefetch: return .hostArtifact
+        // People talking — the same ontological shape as a chat thread, which is
+        // what FactTypeClassifier already treats as a conversation between people.
+        case .discussionExport: return .chat
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email
@@ -192,6 +453,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     public enum Category: String, Codable, Sendable {
         case document, spreadsheet, presentation, email, image, audio, video,
              archive, chat, browserHistory, unknown
+        /// HOST-* — machine/OS evidence rather than a document a person wrote:
+        /// registry hives, event logs, filesystem metadata. Processed like a
+        /// document (immediate, text + structure), but semantically it is a record
+        /// OF the machine, which matters when attributing a fact to a person.
+        case hostArtifact
     }
 }
 

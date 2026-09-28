@@ -34,8 +34,17 @@ struct IdentifierAnchorTests {
     func displayByConstant() {
         #expect(IdentifierAnchor.displayName(field: "patentnumber", canonicalValue: "555489") == "Patent No. 555489")
         #expect(IdentifierAnchor.displayName(field: "applicationnumber", canonicalValue: "202211045678") == "Application No. 202211045678")
-        // A field with no label falls back to the bare atom (never fuses a spelling).
-        #expect(IdentifierAnchor.displayName(field: "casenumber", canonicalValue: "44/2024") == "44/2024")
+        // `casenumber` GAINED a label in 7d4c9b5 (persona starter packs) and this
+        // assertion was left pinning the old unlabelled behaviour, so it has been
+        // red since that commit. Both halves of the contract are now asserted
+        // with fields that actually have the property being tested.
+        #expect(IdentifierAnchor.displayName(field: "casenumber", canonicalValue: "44/2024")
+                == "Case No. 44/2024")
+        // A field with no label still falls back to the bare atom, never fusing a
+        // source spelling in.
+        #expect(SlotAnswerComposer.displayLabel(forFieldID: "batchnumber") == nil)
+        #expect(IdentifierAnchor.displayName(field: "batchnumber", canonicalValue: "44/2024")
+                == "44/2024")
     }
 
     @Test("makeAnchor carries the field as data, stores the canonical atom, renders by constant")

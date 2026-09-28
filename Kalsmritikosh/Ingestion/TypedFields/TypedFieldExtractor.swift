@@ -128,6 +128,27 @@ public nonisolated struct TypedFieldExtractor: Sendable {
                 // require the label to start the token or follow whitespace/':').
                 let before = r.lowerBound == lower.startIndex ? " " : String(lower[lower.index(before: r.lowerBound)])
                 guard before == " " || before == "\t" || before == ":" || before == "-" else { continue }
+                // AND a trailing boundary. The leading check alone let a label
+                // match the PREFIX OF A LONGER WORD and then keep the rest of
+                // that word as the value.
+                //
+                // Measured on the owner's archive, 2026-09-25: the line
+                // "…emails, indicating a significant level of…" matched the
+                // label "email" (space before it, so the leading guard passed)
+                // and stored "s, indicating a significant level of" as an EMAIL
+                // ADDRESS. Twelve such fragments reached an answer as
+                // "• s", "• s)", "• s (89.0%)" — unreadable, and presented with
+                // 53 citations.
+                //
+                // The same hole sits under every label in the table: "pan"
+                // inside "panel", "name" inside "names", "address" inside
+                // "addresses", "tin" inside "tinted", "reference" inside
+                // "references". A label must be a whole word.
+                let afterIdx = r.upperBound
+                if afterIdx < lower.endIndex {
+                    let after = lower[afterIdx]
+                    guard !after.isLetter && !after.isNumber else { continue }
+                }
                 var rest = String(line[r.upperBound...])
                 if let colon = rest.firstIndex(of: ":") { rest = String(rest[rest.index(after: colon)...]) }
                 let trimmed = rest.trimmingCharacters(in: CharacterSet(charactersIn: " \t:-#").union(.whitespaces))
@@ -149,10 +170,20 @@ public nonisolated struct TypedFieldExtractor: Sendable {
             return firstMatch(in: value, pattern: Self.datePattern) ?? value
         case .documentNumber, .invoiceNumber, .referenceNumber, .accountIdentifier, .taxIdentifier:
             return firstMatch(in: value, pattern: Self.identifierPattern) ?? value
+        // An email or phone field has ONE unambiguous shape. If the labelled
+        // remainder does not contain that shape, it is not an address or a
+        // number — so return nil and let the candidate be DROPPED, rather than
+        // storing prose in a typed field.
+        //
+        // The old `?? value` made "Email: see attached" a stored email address
+        // and, with the label-boundary bug above, made "s, indicating a
+        // significant level of" one too. A typed field whose type cannot be
+        // verified is worse than a missing one: downstream readers trust the
+        // TYPE, and the identity fast path answers from these values directly.
         case .email:
-            return firstMatch(in: value, pattern: Self.emailPattern) ?? value
+            return firstMatch(in: value, pattern: Self.emailPattern)
         case .phone:
-            return firstMatch(in: value, pattern: Self.phonePattern) ?? value
+            return firstMatch(in: value, pattern: Self.phonePattern)
         default:
             // Names/orgs/addresses: cut at a trailing double-space column or another label.
             return value.trimmingCharacters(in: .whitespaces)

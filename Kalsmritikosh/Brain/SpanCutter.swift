@@ -45,6 +45,9 @@ public enum SpanCutter {
         switch shape {
         case .role:
             return Policy(terms: qTerms + ["applicant", "inventor", "proprietor", "agent", "attorney", "authorize"])
+        case .actor:
+            // "who did X" — reward the action verbs and the acting parties.
+            return Policy(terms: qTerms + ["drafted", "prepared", "filed", "signed", "submitted", "issued", "agent", "attorney"])
         case .aggregation:
             return Policy(terms: qTerms, wantsMoney: true)
         case .count, .existence, .timeline, .list:

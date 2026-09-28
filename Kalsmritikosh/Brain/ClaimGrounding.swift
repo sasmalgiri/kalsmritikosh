@@ -23,9 +23,23 @@ public struct ClaimGrounding: Sendable {
         public let ungroundedTokens: [String]
         /// True when the claim asserts a checkable specific that the evidence does not contain.
         public var hasUngroundedMaterial: Bool { !ungroundedTokens.isEmpty }
-        /// Fraction of material tokens found in the evidence (1.0 when the claim has none).
-        public var groundedFraction: Double {
-            materialTokens.isEmpty ? 1.0 : Double(groundedTokens.count) / Double(materialTokens.count)
+        /// Whether the claim asserts anything checkable at all. A claim with no
+        /// material specifics ("the situation was complex") is unfalsifiable by
+        /// this check — which is different from being verified by it.
+        public var hasCheckableSpecifics: Bool { !materialTokens.isEmpty }
+
+        /// Fraction of material tokens found in the evidence, or nil when the
+        /// claim asserts no checkable specific.
+        ///
+        /// This used to return 1.0 for a claim with nothing to check — "100%
+        /// grounded" over zero specifics. There is no production consumer
+        /// today, but a quality bar reading `> 0.9` would have scored an
+        /// unfalsifiable claim as maximally grounded, which is the strongest
+        /// possible endorsement of a sentence this check never examined. nil
+        /// forces a caller to decide what "nothing to check" means.
+        public var groundedFraction: Double? {
+            guard !materialTokens.isEmpty else { return nil }
+            return Double(groundedTokens.count) / Double(materialTokens.count)
         }
     }
 

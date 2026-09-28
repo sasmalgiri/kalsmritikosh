@@ -226,10 +226,10 @@ public actor CapabilityRegistry {
         case .localNetwork:
             return manifest.privacyLevel == .onDevice || manifest.privacyLevel == .localNetwork
         case .cloud:
-            if manifest.privacyLevel == .cloud {
-                return privacyGate.allowCloudRouting
-            }
-            return true
+            // U-0 (privacy invariant closure): cloud-tier manifests never
+            // resolve — the product has no network entitlement and no cloud
+            // path in any build; there is no toggle.
+            return manifest.privacyLevel != .cloud
         }
     }
 

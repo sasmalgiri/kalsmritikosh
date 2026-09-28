@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import OSLog
 
 public actor GenericFactRepository {
     private let database: Database
@@ -31,8 +32,8 @@ public actor GenericFactRepository {
         INSERT OR REPLACE INTO generic_facts
             (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
              evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-             producer_version, raw_match, source_count, reassigned_from)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             producer_version, raw_match, source_count, reassigned_from, derivation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(fact.id),
             fact.subjectID.map { SQLValue.uuid($0) } ?? .null,
@@ -53,7 +54,9 @@ public actor GenericFactRepository {
             fact.rawMatch.map { SQLValue.text($0) } ?? .null,
             fact.sourceCount.map { SQLValue.integer(Int64($0)) } ?? .null,
             // V2 gate-3: advisory origin field a reassigned mislabel came from.
-            fact.reassignedFrom.map { SQLValue.text($0) } ?? .null
+            fact.reassignedFrom.map { SQLValue.text($0) } ?? .null,
+            // C-4/OCR: NULL means the value was read verbatim from one block.
+            fact.derivation.map { SQLValue.text($0.rawValue) } ?? .null
         ])
     }
 
@@ -61,12 +64,179 @@ public actor GenericFactRepository {
         for f in facts { try await upsert(f) }
     }
 
+    /// Topic-Ledger Rebuild U1 (owner rule 1) — write ONE canonical row per fact
+    /// natural key (subject+field+value+unit). If the fact already exists, MERGE
+    /// the new occurrence into it (union source blocks, bump the distinct-document
+    /// count, keep the higher confidence) instead of minting a duplicate row; any
+    /// stray duplicate rows already present are collapsed into the canonical one.
+    /// This replaces the id-keyed `upsert` on the extraction write path, so
+    /// re-extracting the same fact can no longer inflate the ledger.
+    public func mergeUpsert(_ fact: GenericFact) async throws {
+        // Topic-Ledger U4 — keep extraction noise out of the ledger (the live
+        // audit found `amount="rs,"`, `"$0"`, `"$1"`). Degenerate values are
+        // dropped at the write path, never stored.
+        guard FactValuePlausibility.isAcceptable(field: fact.field, value: fact.value) else { return }
+        let subjectClause: String
+        var binds: [SQLValue] = [.text(fact.field.lowercased()), .text(fact.value.lowercased())]
+        if let sid = fact.subjectID {
+            subjectClause = "subject_id = ?"
+            binds.insert(.uuid(sid), at: 0)
+        } else {
+            subjectClause = "subject_id IS NULL AND lower(subject_label) = ?"
+            binds.insert(.text(fact.subjectLabel.lowercased()), at: 0)
+        }
+        let unitClause: String
+        if let u = fact.unit {
+            unitClause = "lower(unit) = ?"; binds.append(.text(u.lowercased()))
+        } else {
+            unitClause = "unit IS NULL"
+        }
+        let rows = try await database.query("""
+        SELECT id, source_blocks_json, confidence, derivation FROM generic_facts
+        WHERE \(subjectClause) AND lower(field) = ? AND lower(value) = ? AND \(unitClause)
+        ORDER BY created_at ASC;
+        """, binds)
+
+        guard let firstRow = rows.first, let canonicalID = firstRow.uuid(0) else {
+            try await upsert(fact)   // brand-new fact
+            return
+        }
+        // Merge into the earliest (canonical) row; carry its id AND its existing
+        // confidence so the merge keeps the highest across occurrences.
+        var existingBlocks: [UUID] = []
+        if let json = firstRow.string(1),
+           let data = json.data(using: .utf8),
+           let decoded = try? Self.decoder.decode([UUID].self, from: data) {
+            existingBlocks = decoded
+        }
+        let existingConfidence = firstRow.double(2) ?? fact.confidence
+        // Read the STORED derivation, do not assume the incoming one. The seed
+        // takes most of its fields from `fact`, so seeding this from `fact`
+        // would let a repaired occurrence overwrite an already-verbatim row and
+        // defeat the verbatim-wins rule in `mergedWith` — the stored NULL is the
+        // assertion "some block states this value exactly", and it must survive.
+        let existingDerivation = firstRow.string(3).flatMap { FactDerivation(rawValue: $0) }
+        let canonicalSeed = GenericFact(
+            id: canonicalID, subjectID: fact.subjectID, subjectLabel: fact.subjectLabel,
+            field: fact.field, value: fact.value, unit: fact.unit,
+            assessment: fact.assessment, confidence: existingConfidence,
+            sourceBlockIDs: existingBlocks, producerVersion: fact.producerVersion,
+            rawMatch: fact.rawMatch, sourceCount: nil, reassignedFrom: fact.reassignedFrom,
+            derivation: existingDerivation)
+        var merged = canonicalSeed.mergedWith(fact)
+        // Collapse any stray duplicate rows (older schema/pre-merge writes) —
+        // P4.2: their source blocks join the canonical row first. Deleting them
+        // bare dropped provenance: a document whose only row was a stray lost
+        // its facts, re-derived them next boot, and lost them again.
+        let strayRows = rows.dropFirst()
+        for row in strayRows {
+            guard let json = row.string(1), let data = json.data(using: .utf8),
+                  let blocks = try? Self.decoder.decode([UUID].self, from: data), !blocks.isEmpty else { continue }
+            merged = merged.mergedWith(GenericFact(
+                subjectID: merged.subjectID, subjectLabel: merged.subjectLabel, field: merged.field,
+                value: merged.value, unit: merged.unit, assessment: merged.assessment,
+                confidence: row.double(2) ?? merged.confidence, sourceBlockIDs: blocks,
+                producerVersion: merged.producerVersion,
+                derivation: row.string(3).flatMap { FactDerivation(rawValue: $0) }))
+        }
+        try await upsert(merged)
+        let strays = strayRows.compactMap { $0.uuid(0) }
+        if !strays.isEmpty { try await delete(ids: strays) }
+    }
+
+    public func mergeUpsert(_ facts: [GenericFact]) async throws {
+        for f in facts { try await mergeUpsert(f) }
+    }
+
+    /// Topic-Ledger U3 — one-time cleanup of an ALREADY-inflated ledger: collapse
+    /// every duplicate to one canonical row per natural key (union source blocks,
+    /// distinct-document count, highest confidence) and drop degenerate junk
+    /// values (U4). Facts are derived projections, so rewriting them is safe (the
+    /// no-delete law protects sources/evidence). Returns (before, after) counts.
+    /// Idempotent: a second run is a no-op.
+    @discardableResult
+    public func dedupExisting() async throws -> (before: Int, after: Int) {
+        let before = try await count()
+        var everything: [GenericFact] = []
+        var offset = 0
+        while true {
+            let page = try await all(offset: offset, pageSize: 1_000)
+            if page.isEmpty { break }
+            everything.append(contentsOf: page)
+            offset += page.count
+            if page.count < 1_000 { break }
+        }
+        let canonical = GenericFact.canonicalize(everything)
+            .filter { FactValuePlausibility.isAcceptable(field: $0.field, value: $0.value) }
+        let keep = Set(canonical.map(\.id))
+        let drop = everything.map(\.id).filter { !keep.contains($0) }
+        try await delete(ids: drop)
+        for f in canonical { try await upsert(f) }   // rewrite canonical rows (merged blocks/count)
+        let after = try await count()
+        return (before, after)
+    }
+
+    /// L5 — subjects whose facts STATE a value (e.g. a résumé stating the
+    /// owner's own email address). Case-insensitive exact value match.
+    public func subjectLabels(statingValue value: String, limit: Int = 20) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT subject_label, COUNT(*) FROM generic_facts
+        WHERE lower(trim(value)) = lower(trim(?)) GROUP BY subject_label ORDER BY 2 DESC LIMIT ?;
+        """, [.text(value), .integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// L5 — subjects with a fact whose value CONTAINS `token` as a whole token
+    /// (a résumé contact line "9960270472 : owner@example.com"). A truncated
+    /// or embedded-in-a-word occurrence does not count.
+    public func subjectLabels(containingToken token: String, limit: Int = 20) async throws -> [String] {
+        let t = token.lowercased()
+        let rows = try await database.query("""
+        SELECT subject_label, value FROM generic_facts WHERE lower(value) LIKE ? LIMIT 500;
+        """, [.text("%\(t)%")])
+        var counts: [String: Int] = [:]
+        for r in rows {
+            guard let label = r.string(0), let value = r.string(1)?.lowercased(),
+                  let range = value.range(of: t) else { continue }
+            let before = range.lowerBound == value.startIndex ? " " : value[value.index(before: range.lowerBound)]
+            let after = range.upperBound == value.endIndex ? " " : value[range.upperBound]
+            let edge: (Character) -> Bool = { !($0.isLetter || $0.isNumber || $0 == "." || $0 == "@" || $0 == "_") }
+            if edge(before), edge(after) { counts[label, default: 0] += 1 }
+        }
+        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .prefix(limit).map(\.key)
+    }
+
+    /// L5 — subject labels equal (case-insensitively) to a name.
+    public func subjectLabels(named name: String) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT DISTINCT subject_label FROM generic_facts WHERE lower(trim(subject_label)) = lower(trim(?));
+        """, [.text(name)])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// L5 — every fact of the given subject labels, restricted to fields.
+    public func facts(subjectLabels: [String], fields: Set<String>) async throws -> [GenericFact] {
+        guard !subjectLabels.isEmpty, !fields.isEmpty else { return [] }
+        let wanted = fields.map { FactSchemaRegistry.normalizeField($0) }
+        let ls = subjectLabels.map { _ in "?" }.joined(separator: ",")
+        let fs = wanted.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count, reassigned_from, derivation
+        FROM generic_facts WHERE subject_label IN (\(ls)) AND field IN (\(fs))
+        ORDER BY confidence DESC, id ASC;
+        """, subjectLabels.map { .text($0) } + wanted.map { .text($0) })
+        return rows.compactMap(Self.decode)
+    }
+
     /// Facts about a subject for a field (e.g. all "employer" facts for "Sasmal").
     public func facts(subjectLabel: String, field: String) async throws -> [GenericFact] {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from
+               producer_version, raw_match, source_count, reassigned_from, derivation
         FROM generic_facts WHERE subject_label = ? AND field = ? ORDER BY confidence DESC;
         """, [.text(subjectLabel), .text(FactSchemaRegistry.normalizeField(field))])
         return rows.compactMap(Self.decode)
@@ -80,7 +250,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from
+               producer_version, raw_match, source_count, reassigned_from, derivation
         FROM generic_facts WHERE subject_id = ? ORDER BY confidence DESC, id ASC;
         """, [.uuid(subjectID)])
         let all = rows.compactMap(Self.decode)
@@ -100,23 +270,36 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from
+               producer_version, raw_match, source_count, reassigned_from, derivation
         FROM generic_facts WHERE field = ? ORDER BY confidence DESC, id LIMIT ?;
         """, [.text(field), .integer(Int64(limit))])
         return rows.compactMap(Self.decode)
     }
 
     public func facts(forBlockIDs blockIDs: [UUID]) async throws -> [GenericFact] {
-        let ids = Array(Set(blockIDs)).prefix(64)   // bound the OR-scan cost
-        guard !ids.isEmpty else { return [] }
-        let clauses = ids.map { _ in "source_blocks_json LIKE ?" }.joined(separator: " OR ")
-        let binds = ids.map { SQLValue.text("%\($0.uuidString)%") }
+        // P4.2 — was `Array(Set(blockIDs)).prefix(64)` OR'd LIKE scans: a RANDOM
+        // 64 of the blocks (Set order changes per process), so a large document
+        // found "no facts" on some runs and the drain re-derived it on every
+        // boot (the owner copy's fixed-point violation). Batching the LIKE scans
+        // fixed that but cost one full-table scan per 64 blocks — a real mbox
+        // drain blew its 45-minute budget. ONE query now: each fact's own block
+        // list joined against the requested set — complete, deterministic, one
+        // pass over the table, no cap.
+        let unique = Array(Set(blockIDs.map(\.uuidString)))
+        guard !unique.isEmpty else { return [] }
+        let wanted = (try? String(data: JSONEncoder().encode(unique), encoding: .utf8)) ?? "[]"
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from
-        FROM generic_facts WHERE \(clauses) ORDER BY confidence DESC;
-        """, binds)
+               producer_version, raw_match, source_count, reassigned_from, derivation
+        FROM generic_facts
+        WHERE id IN (
+            SELECT DISTINCT f.id FROM generic_facts f,
+                   json_each(CASE WHEN json_valid(f.source_blocks_json) THEN f.source_blocks_json ELSE '[]' END) j
+            WHERE upper(j.value) IN (SELECT upper(value) FROM json_each(?))
+        )
+        ORDER BY confidence DESC, id;
+        """, [.text(wanted)])
         return rows.compactMap(Self.decode)
     }
 
@@ -128,6 +311,25 @@ public actor GenericFactRepository {
         for id in ids {
             try await database.exec("DELETE FROM generic_facts WHERE id = ?;", [.uuid(id)])
         }
+    }
+
+    // MARK: - P3.4 · the ledger's OWN field inventory
+    //
+    // With P3.1's open-field extractor the set of fields the ledger holds is no
+    // longer knowable in advance — `chassisnumber`, `policynumber`,
+    // `containerid` arrive from documents nobody wrote a pack for. The ask side
+    // resolves against THIS, so a question can reach a field that exists
+    // without anyone having enumerated it.
+    //
+    // Bounded and ordered by frequency: a field asserted by many facts is more
+    // likely to be what a question means than one asserted once, and the cap
+    // keeps the set small enough to hold in memory per ask.
+    public func distinctFields(limit: Int = 500) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT lower(field), COUNT(*) AS n FROM generic_facts
+        GROUP BY lower(field) ORDER BY n DESC, lower(field) ASC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
     }
 
     public func count() async throws -> Int {
@@ -167,7 +369,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from
+               producer_version, raw_match, source_count, reassigned_from, derivation
         FROM generic_facts ORDER BY id ASC LIMIT ? OFFSET ?;
         """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
         return rows.compactMap(Self.decode)
@@ -178,7 +380,7 @@ public actor GenericFactRepository {
         let cols = """
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count, reassigned_from
+               producer_version, raw_match, source_count, reassigned_from, derivation
         FROM generic_facts
         """
         let rows: [SQLRow]
@@ -212,6 +414,13 @@ public actor GenericFactRepository {
                            producerVersion: r.int(15).map(Int.init),
                            rawMatch: r.string(16),
                            sourceCount: r.int(17).map(Int.init),
-                           reassignedFrom: r.string(18))   // col 18 (v122): advisory reassignment origin
+                           reassignedFrom: r.string(18),   // col 18 (v122): advisory reassignment origin
+                           // Col 19 (v129): how the value was recovered. NULL —
+                           // every row written before v129, and the ordinary
+                           // case since — decodes to nil, meaning VERBATIM. An
+                           // unrecognized string also decodes to nil rather
+                           // than dropping the row: a fact must never be lost
+                           // because an advisory column is unreadable.
+                           derivation: r.string(19).flatMap { FactDerivation(rawValue: $0) })
     }
 }

@@ -33,6 +33,18 @@ struct EntityQualityGateV3Tests {
         }
     }
 
+    @Test("A hostname-shape email-domain head is gated as hard junk (crash regression)")
+    func hostnameShapeDomainHeadIsGated() {
+        // Regression for the live crash: an address like x@01ce304b.tld makes
+        // writeDomainAliases derive the org label "01ce304b", which must be
+        // classified hard-junk so the ingest path skips it BEFORE the write door
+        // (whose DEBUG chokepoint would otherwise assertionFailure).
+        let org = Entity(kind: .organization, value: "01ce304b", sourceObjectID: UUID())
+        #expect(gate.classify(org) == "hostname-shape")
+        #expect(EntitiesRepository.hardJunkClasses.contains("hostname-shape"))
+        #expect(!gate.shouldKeep(org))
+    }
+
     @Test("Real people and orgs pass; the gate never over-rejects a genuine name")
     func genuineNamesPass() {
         #expect(gate.shouldKeep(person("Shabana Khan")))

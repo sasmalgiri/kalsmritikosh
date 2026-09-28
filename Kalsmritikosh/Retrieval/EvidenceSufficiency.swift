@@ -26,6 +26,20 @@ public struct EvidenceSufficiency: Sendable, Hashable {
     public let missing: [RequestedField]
     /// How many distinct evidence documents were searched (for honest scope disclosure).
     public let documentsSearched: Int
+    /// U-6 (SPEC A1) — the ARCHIVE-WIDE document total. `documentsSearched`
+    /// is the candidate window (retrieved chunks); this is the whole
+    /// archive, so the not-found line says "your 716 documents", not the
+    /// handful the retriever happened to pull. nil falls back to the
+    /// candidate window (legacy callers), so there is no regression.
+    public let archiveDocumentsSearched: Int?
+
+    public nonisolated init(covered: [RequestedField], missing: [RequestedField],
+                            documentsSearched: Int, archiveDocumentsSearched: Int? = nil) {
+        self.covered = covered
+        self.missing = missing
+        self.documentsSearched = documentsSearched
+        self.archiveDocumentsSearched = archiveDocumentsSearched
+    }
 
     public var isComplete: Bool { missing.isEmpty }
     public var coverageRatio: Double {
@@ -34,10 +48,14 @@ public struct EvidenceSufficiency: Sendable, Hashable {
     }
 
     /// A neutral, non-accusatory disclosure line for the answer footer.
+    /// U-6 — reports the archive-wide number when known, with a real plural
+    /// (Language Contract: no "document(s)").
     public nonisolated func disclosure() -> String {
         guard !missing.isEmpty else { return "" }
         let names = missing.map(Self.label).joined(separator: ", ")
-        return "Not found in the \(documentsSearched) document(s) searched: \(names)."
+        let n = archiveDocumentsSearched ?? documentsSearched
+        let noun = n == 1 ? "document" : "documents"
+        return "Not found in the \(n) \(noun) searched: \(names)."
     }
 
     nonisolated static func label(_ f: RequestedField) -> String {

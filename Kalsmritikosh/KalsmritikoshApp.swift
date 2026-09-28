@@ -15,7 +15,11 @@ import TipKit
 
 @main
 struct KalsmritikoshApp: App {
-    @State private var appState = AppState()
+    /// §1.1 — in sample-archive mode the folder store is in-memory only, so
+    /// the user's saved folders are neither loaded nor overwritten.
+    @State private var appState = SampleArchiveMode.isActive
+        ? AppState(bookmarks: BookmarkStore(ephemeral: true))
+        : AppState()
 
     init() {
         #if canImport(TipKit)
@@ -47,7 +51,17 @@ struct KalsmritikoshApp: App {
                     // the engine boots in the chosen mode. Returns at once on
                     // later launches.
                     await appState.awaitModeSelectionIfNeeded()
-                    await appState.boot()
+                    if SampleArchiveMode.isActive, let sampleDB = SampleArchiveMode.databaseURL {
+                        // §1.1 — the sample ledger: its own database file, the
+                        // bundled fixtures as its only folder (the empty-root
+                        // auto-ingest picks them up on first entry).
+                        if let demo = DemoArchive.url() {
+                            try? appState.bookmarks.register(url: demo)
+                        }
+                        await appState.boot(databaseURL: sampleDB)
+                    } else {
+                        await appState.boot()
+                    }
                 }
         }
         .defaultSize(width: 1100, height: 720)

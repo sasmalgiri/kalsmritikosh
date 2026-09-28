@@ -68,6 +68,52 @@ public enum SlotFieldResolver {
         ("patent holder", "applicant", .counterparty, "Applicant", "patent"),
     ]
 
+    /// INTERROGATIVE SHAPE CUES — phrases that name a field's VALUE SHAPE
+    /// rather than its name. "how much did I pay?" asks for money without ever
+    /// saying "amount"; "when was it sent?" asks for a date without saying
+    /// "date". The relevance gates that decide which ledger facts may be shown
+    /// compare question words against a fact's field NAME and value, so
+    /// without this they drop the `amount` fact for "how much?" — the field is
+    /// named by the question's GRAMMAR, not its vocabulary, and no amount of
+    /// synonym listing reaches it.
+    ///
+    /// Deliberately limited to MONEY and DATE — the only two shapes an
+    /// interrogative names unambiguously and that are narrow enough to be safe.
+    /// "who", "what" and "where" are excluded on purpose: the fields they range
+    /// over (applicant, employer, counterparty, location, role …) are all
+    /// `.text`, so a cue for them would admit EVERY text-shaped fact riding the
+    /// retrieval — which is precisely the dump these gates exist to stop.
+    nonisolated static let shapeCues: [(phrases: [String], shapes: Set<FactSchemaRegistry.ValueShape>)] = [
+        (["how much", "how many", "what amount", "total cost", "cost of", "price",
+          "how expensive", "payable"], [.money, .number]),
+        (["when", "what date", "which date", "on what day", "how long ago"], [.date]),
+    ]
+
+    /// The value shapes this question asks for, via `shapeCues`. Empty when the
+    /// question names no shape — which is the common case and means the callers'
+    /// ordinary term-overlap rules decide alone.
+    public nonisolated static func requestedValueShapes(
+        in question: String
+    ) -> Set<FactSchemaRegistry.ValueShape> {
+        let q = question.lowercased()
+        var out: Set<FactSchemaRegistry.ValueShape> = []
+        for cue in shapeCues where cue.phrases.contains(where: { wordBoundedRange(of: $0, in: q) != nil }) {
+            out.formUnion(cue.shapes)
+        }
+        return out
+    }
+
+    /// Whether `question` asks for the shape `field` holds — the cheap check
+    /// the relevance gates call. False when the question names no shape, so it
+    /// only ever ADMITS a fact, never excludes one.
+    public nonisolated static func questionRequestsShape(
+        ofField field: String, in question: String
+    ) -> Bool {
+        let shapes = requestedValueShapes(in: question)
+        guard !shapes.isEmpty else { return false }
+        return shapes.contains(FactSchemaRegistry.expectedShape(of: field))
+    }
+
     /// A2.3 — REGISTRY-ALIAS EXPANSION: when the question carries one alias
     /// of a field ("patent no"), the canonical phrase joins the keyword
     /// query ("patent number") so FTS recall never depends on which spelling
@@ -173,6 +219,121 @@ public enum SlotFieldResolver {
             out = fieldShapedFallback(in: q)
         }
         return out
+    }
+
+    // MARK: - P3.4 · resolve against the LEDGER'S OWN FIELDS
+    //
+    // `vocabulary` holds ~25 hand-written phrases. That was sufficient while
+    // every fact came from eleven domain packs whose fields were known in
+    // advance. With P3.1's open-field extractor the ledger can now hold
+    // `chassisnumber`, `policynumber`, `attendingphysician`, `containerid` —
+    // fields nobody enumerated — and a fixed phrase list can never name them.
+    // Open extraction without open ASKING just fills a ledger nobody can query.
+    //
+    // THE TRICK IS THAT IT IS THE EXACT INVERSE OF THE EXTRACTOR.
+    // `OpenFieldExtractor.normalizeLabel` turns "Chassis Number" into
+    // "chassisnumber" by lowercasing and dropping non-alphanumerics. So to go
+    // back, take consecutive words from the question, normalize them the same
+    // way, and test membership in the field inventory:
+    //
+    //      "what is the chassis number"
+    //        → n-grams: "what", "whatis", "chassis", "chassisnumber", ...
+    //        → "chassisnumber" ∈ knownFields  ✓
+    //
+    // No synonym table, no model, no new vocabulary — and it cannot invent a
+    // field, because a match must be a field the ledger ACTUALLY HOLDS. That
+    // last property is what makes it safe: the worst case is no match, which
+    // falls through to the honest field-named not-found.
+
+    /// Longest n-gram first: "grant date" must beat "date" when the ledger has
+    /// both, or the more specific question resolves to the vaguer field.
+    nonisolated static let maximumFieldNGram = 4
+
+    /// Question words that must never form part of a field name on their own.
+    /// Without this, "what is the date" resolves "date" from the word "date"
+    /// in a question about something else entirely — and more importantly
+    /// "number"/"name" alone are far too generic to answer with.
+    nonisolated static let ungrammaticalAlone: Set<String> = [
+        "what", "which", "who", "whom", "when", "where", "why", "how",
+        "is", "was", "are", "were", "the", "a", "an", "of", "in", "on",
+        "for", "to", "my", "our", "his", "her", "their", "its", "this",
+        "that", "did", "does", "do", "any", "all", "some", "show", "list",
+        "tell", "give", "find", "get", "number", "name", "date", "value",
+        "id", "no", "total", "amount", "type", "kind", "detail", "details",
+    ]
+
+    /// Resolve the question against the ledger's ACTUAL field inventory.
+    ///
+    /// Runs only after `vocabulary`, `comboRules` and the F8 field-shaped
+    /// fallback have all declined — so it never overrides a curated mapping,
+    /// it only reaches fields nobody curated. Returns at most one resolution:
+    /// the longest n-gram match, which is the most specific reading.
+    public nonisolated static func resolveAgainstInventory(
+        _ question: String, knownFields: Set<String>
+    ) -> Resolution? {
+        guard KnowledgeModuleFlags.isEnabled(.openFieldAsking) else { return nil }
+        guard !knownFields.isEmpty else { return nil }
+        let words = question.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        guard !words.isEmpty else { return nil }
+
+        var best: (fieldID: String, length: Int)?
+        for n in stride(from: min(maximumFieldNGram, words.count), through: 1, by: -1) {
+            for start in 0...(words.count - n) {
+                let gram = Array(words[start..<(start + n)])
+                // A single word that is a question word or a bare generic
+                // ("number", "date") is not a field name. Two or more words
+                // are specific enough that the inventory match carries the
+                // weight — "grant date" is a real field, "date" is not a
+                // question.
+                if n == 1, ungrammaticalAlone.contains(gram[0]) { continue }
+                let candidate = gram.joined()
+                guard knownFields.contains(candidate) else { continue }
+                if best == nil || n > best!.length {
+                    best = (fieldID: candidate, length: n)
+                }
+            }
+            // Longest wins; once a length matches there is no better one below.
+            if best != nil { break }
+        }
+        guard let hit = best else { return nil }
+        return Resolution(
+            fieldID: hit.fieldID,
+            // The SHAPE comes from the registry, which is open by design — an
+            // unknown field is `.text`. So a discovered field is typed the same
+            // way a curated one is.
+            requestedField: requestedFieldClass(for: hit.fieldID),
+            humanLabel: humanLabel(forFieldID: hit.fieldID),
+            domainGroup: "discovered")
+    }
+
+    /// Map a value shape onto the `RequestedField` class the planner uses, so a
+    /// discovered field routes exactly like a curated one of the same shape.
+    nonisolated static func requestedFieldClass(for fieldID: String) -> RequestedField {
+        switch FactSchemaRegistry.expectedShape(of: fieldID) {
+        case .identifier:                return .identifier
+        case .date:                      return .date
+        case .money:                     return .monetaryAmount
+        case .email, .phone, .url, .text, .number, .duration, .boolean:
+            return .identifier
+        }
+    }
+
+    /// `resolve` plus the inventory fallback, in one call. This is the entry
+    /// point callers that HAVE the inventory should use; `resolve(in:)` stays
+    /// unchanged for callers that do not, so nothing existing shifts.
+    public nonisolated static func resolve(
+        in question: String, knownFields: Set<String>
+    ) -> [Resolution] {
+        let curated = resolve(in: question)
+        // Only reach for the inventory when nothing curated matched AND the F8
+        // fallback produced nothing either. A curated mapping always wins.
+        if !curated.isEmpty { return curated }
+        if let discovered = resolveAgainstInventory(question, knownFields: knownFields) {
+            return [discovered]
+        }
+        return []
     }
 
     /// The F8 fallback recognizer. Deterministic; first match wins.

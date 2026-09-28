@@ -65,6 +65,10 @@ public nonisolated enum AnswerState: String, Codable, Sendable, Hashable {
     /// Relevant files exist but are still pending OCR / indexing /
     /// enrichment, so the answer may be incomplete.
     case insufficientlyIndexed = "insufficiently_indexed"
+    /// U-1 — the deterministic sweep could not confirm this AI reading
+    /// against any cited source. Ships ONLY when the user's Unverified
+    /// policy says show-badged; carries zero citations by construction.
+    case unverified
     /// Legacy / not-yet-classified (default for pre-v28 callers).
     case unknown
 
@@ -75,6 +79,7 @@ public nonisolated enum AnswerState: String, Codable, Sendable, Hashable {
         case .contradicted:          return "Contradicted"
         case .notFound:              return "Not found"
         case .insufficientlyIndexed: return "Insufficiently indexed"
+        case .unverified:            return "Unverified"
         case .unknown:               return "Unknown"
         }
     }

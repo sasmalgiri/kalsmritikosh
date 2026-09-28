@@ -214,6 +214,32 @@ public enum MIMEParser {
         return headers
     }
 
+    /// SINGLE-PART transfer-decode (owner archive audit 2026-09-23). The multipart
+    /// branch decodes each part, but a single-part message with
+    /// `Content-Transfer-Encoding: quoted-printable` or `base64` was passed through
+    /// RAW — so a QP soft break (`=` at end-of-line) that split an email address
+    /// left the fragment (`algiri@gmail.com`) in the stored text, which the
+    /// whole-document address regex then extracted as a real address (the live
+    /// `sasmalgiri@gmail.com` → 7 truncated variants). Returns the decoded text,
+    /// or nil when the body needs no decoding (7bit/8bit/absent) or when decoding
+    /// yields non-text bytes (never inject garbage; caller keeps the raw body).
+    nonisolated static func decodeSinglePartBody(_ body: String, headers: [String: String]) -> String? {
+        guard let enc = headers["content-transfer-encoding"]?
+            .trimmingCharacters(in: .whitespaces).lowercased(),
+              enc == "base64" || enc == "quoted-printable" else { return nil }
+        var charset: String?
+        if let ct = headers["content-type"]?.lowercased(),
+           let r = ct.range(of: "charset=") {
+            charset = ct[r.upperBound...]
+                .split(whereSeparator: { $0 == ";" || $0 == " " }).first
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"' ")) }
+        }
+        let data = decodeBody(body, encoding: enc, charset: charset)
+        guard !data.isEmpty else { return nil }
+        if let s = String(data: data, encoding: .utf8) { return s }
+        return String(data: data, encoding: .isoLatin1)
+    }
+
     private nonisolated static func decodeBody(_ text: String, encoding: String, charset: String?) -> Data {
         switch encoding {
         case "base64":

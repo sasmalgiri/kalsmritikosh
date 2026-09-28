@@ -112,6 +112,79 @@ public actor EmailParticipantRepository {
     }
 
     /// Count of occurrences for a source KO (used by backfill to skip already-processed KOs).
+    /// L5 — the archive owner's addresses: the recipients mail is most often
+    /// addressed TO (a mailbox is delivered to its owner). Most frequent first.
+    public func likelyOwnerAddresses(limit: Int = 2) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT lower(raw_address), COUNT(DISTINCT source_ko_id) FROM email_participant_occurrences
+        WHERE role = 'to' GROUP BY 1 ORDER BY 2 DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// L5 — every correspondence row of a person named `nameToken` (display
+    /// name or address local part contains it, whole-word-ish, case-insensitive).
+    public func correspondence(nameToken: String, limit: Int = 2_000)
+        async throws -> [(address: String, displayName: String?, sourceObjectID: UUID, role: String)] {
+        let token = nameToken.lowercased()
+        let rows = try await database.query("""
+        SELECT lower(raw_address), display_name, source_ko_id, role FROM email_participant_occurrences
+        WHERE (' ' || lower(COALESCE(display_name, '')) || ' ') LIKE ?
+           OR lower(raw_address) LIKE ?
+        LIMIT ?;
+        """, [.text("% \(token) %"), .text("\(token)%@%"), .integer(Int64(limit))])
+        return rows.compactMap { r in
+            guard let a = r.string(0), let ko = r.uuid(2), let role = r.string(3) else { return nil }
+            return (a, r.string(1), ko, role)
+        }
+    }
+
+    /// L5 — the display names an address SENDS under ("Shirshendu Sasmal"),
+    /// most frequent first.
+    public func displayNames(sentBy address: String, limit: Int = 3) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT display_name, COUNT(*) FROM email_participant_occurrences
+        WHERE lower(raw_address) = lower(?) AND role IN ('from', 'sender')
+          AND TRIM(COALESCE(display_name, '')) != ''
+        GROUP BY lower(display_name) ORDER BY 2 DESC LIMIT ?;
+        """, [.text(address), .integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// P1.19 — the Subject lines of mail whose every sender is AUTOMATED (a
+    /// no-reply / notification / alerts / mailer address). Such mail is about a
+    /// service, not a matter, and never names a topic.
+    public func subjectsOfAutomatedMail() async throws -> Set<String> {
+        let rows = try await database.query("""
+        SELECT o.source_ko_id, lower(o.raw_address), json_extract(k.metadata_json, '$.subject')
+        FROM email_participant_occurrences o JOIN knowledge_objects k ON k.id = o.source_ko_id
+        WHERE o.role IN ('from', 'sender');
+        """, [])
+        var byKO: [UUID: (allAutomated: Bool, subject: String?)] = [:]
+        for r in rows {
+            guard let ko = r.uuid(0), let address = r.string(1) else { continue }
+            let automated = Self.isAutomatedAddress(address)
+            let prior = byKO[ko]
+            byKO[ko] = ((prior?.allAutomated ?? true) && automated, prior?.subject ?? r.string(2))
+        }
+        return Set(byKO.values.filter(\.allAutomated).compactMap { $0.subject?.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty })
+    }
+
+    nonisolated static let automatedLocalTokens: Set<String> = [
+        "noreply", "no-reply", "donotreply", "do-not-reply", "mailer-daemon", "postmaster", "notification",
+        "notifications", "alert", "alerts", "updates", "newsletter", "digest", "bounce", "bounces", "mailer",
+    ]
+
+    /// The local part (before @) names a machine sender.
+    public nonisolated static func isAutomatedAddress(_ address: String) -> Bool {
+        let local = address.lowercased().split(separator: "@").first.map(String.init) ?? ""
+        if automatedLocalTokens.contains(local) { return true }
+        let parts = local.split(whereSeparator: { ".+_-".contains($0) }).map(String.init)
+        return parts.contains { automatedLocalTokens.contains($0) }
+            || automatedLocalTokens.contains(where: { $0.contains("-") && local.contains($0) })
+    }
+
     public func occurrenceCount(forSourceObject objectID: KnowledgeObject.ID) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM email_participant_occurrences WHERE source_ko_id = ?;",

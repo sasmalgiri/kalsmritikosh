@@ -106,6 +106,10 @@ public final class AppState {
     public private(set) var maintenanceActive: Bool = false
     /// Human-readable status line for the maintenance banner.
     public private(set) var maintenanceStatus: String?
+    /// M3 — last topic build: (topics written, of those AI-prose-polished). Lets
+    /// Settings/Live show how many topics the model actually touched vs the
+    /// deterministic spine. nil until the first build.
+    public internal(set) var lastTopicBuild: (built: Int, polished: Int)?
     /// When the last maintenance transition happened (for "· 2m ago").
     public private(set) var maintenanceLastEventAt: Date?
 
@@ -201,6 +205,16 @@ public final class AppState {
     /// enrichment activity, or the idle maintenance scan.
     private var backgroundWorkInFlight: Bool {
         ingestRunState == .running || ingestActiveCount > 0 || idleMaintenanceScan != nil
+    }
+
+    /// True while a bulk (re)ingest is running (or files are still in flight, or a
+    /// pre-count has set the planned total). The idle maintenance pass reads this
+    /// to DEFER topic-building until the whole corpus is in: topics are a whole-
+    /// archive derived layer, so building them mid-ingest stamps a partial,
+    /// document-shaped set (owner Q 2026-09-21). The ingest path itself rebuilds
+    /// topics at clean completion, so nothing is lost by waiting.
+    public var isBulkIngestActive: Bool {
+        ingestRunState == .running || ingestActiveCount > 0 || ingestPlannedFileTotal > 0
     }
 
     /// Owner decision 2026-08-15 (generalized): whenever the user RETURNS
@@ -851,6 +865,9 @@ public final class AppState {
     /// backfill; the ingest hook fires incremental per-source projections on this SAME instance
     /// (so a full pass and an incremental refresh never scan concurrently).
     public private(set) var claimProjection: ClaimProjectionBackfill?
+    /// P3.2 — how many derived rows the background refresh is bringing up to
+    /// the current rules (nil = no refresh running). Drives the Sources line.
+    public var ledgerRefreshPending: Int?
     /// The detached, cancellable boot-backfill task. Held so a re-boot cancels the prior pass
     /// (the backfill is single-flight + resumable, so cancellation loses nothing).
     private var claimProjectionBackfillTask: Task<Void, Never>?
@@ -890,6 +907,15 @@ public final class AppState {
     // though every real call site is @MainActor. Splitting into two
     // initialisers keeps the ergonomic default for the in-app case
     // while letting tests/eval explicitly pass an isolated store.
+    /// P2.7 — best-effort model warm-up; respects the Fully-private switch.
+    public nonisolated static func prewarmOnDeviceModel() {
+        guard !UserDefaults.standard.bool(forKey: "kalsmritikosh.privacy.offlineNoLLM") else { return }
+        FoundationModelsProvider.prewarm()
+    }
+
+    /// P2.7 — how long optional query expansion may hold retrieval.
+    nonisolated static let hydeDeadlineSeconds: Double = 6
+
     public init(bookmarks: BookmarkStore) {
         self.bookmarks = bookmarks
         self.brain = MasterBrain()
@@ -1292,6 +1318,26 @@ public final class AppState {
             let entityTimelineCache = EntityTimeline()
             let entityTrieCache = EntityTrie()
             // A4 — retrieval does not query synthetic-question projections in release.
+            // R2 — the answer-path reranker: cheap keyword tier first, then the
+            // bundled BGE cross-encoder (CoreML). Reorder-only over the final
+            // chunk set, so recall is preserved; the cross-encoder passes through
+            // (no-op) when its model isn't loadable.
+            let answerReranker = RerankerLadder(tiers: [HeuristicKeywordTier(), CoreMLCrossEncoderTier()])
+            // R4 — HyDE expander backed by the on-device reasoning capability.
+            // Consulted only when a query's literal vector pass is weak; returns
+            // nil (no expansion) when no reasoning model is available.
+            let hydeExpander = HypotheticalQueryExpander(reason: { [capabilities] prompt in
+                // P2.7 — HyDE is optional recall help, never a gate: on the owner
+                // copy a cold on-device model held the FIRST question 4–7 minutes
+                // here. Past the deadline, retrieval proceeds without expansion.
+                await withDeadline(seconds: Self.hydeDeadlineSeconds) {
+                    let spec = CapabilitySpec.reasoning(contextTokens: 1_000, purpose: "retrieval.hyde")
+                    guard let provider = try? await capabilities.resolve(spec),
+                          await provider.isAvailable() else { return nil }
+                    return try? await provider.generate(
+                        prompt: prompt, options: GenerationOptions(maxTokens: 120, temperature: 0.3))
+                }
+            })
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -1309,7 +1355,12 @@ public final class AppState {
                 entityTrie: entityTrieCache,
                 entityTimeline: entityTimelineCache,
                 objects: objects,   // T18 §21 — enables the privilege post-filter
-                genericFacts: genericFactsRepo   // SEM — facts ride the surfaced evidence
+                genericFacts: genericFactsRepo,   // SEM — facts ride the surfaced evidence
+                // W-5.4 — thread copies collapse to one independent source
+                // for corroboration (Fwd/Re/quoted copies of one message).
+                independenceProvider: LedgerSourceIndependenceKeyProvider(objects: objects),
+                reranker: answerReranker,
+                hyde: hydeExpander
             )
 
             let expertRegistry = ExpertRegistry()
@@ -1356,12 +1407,16 @@ public final class AppState {
             // engine multiplies final confidence by max(coverage, 0.5).
             let verifier = EvidenceVerifier(
                 ingestCoverageProvider: { [weak files, weak objects] in
-                    guard let files, let objects else { return 1.0 }
-                    let fileCount = (try? await files.count()) ?? 0
-                    guard fileCount > 0 else { return 1.0 }
-                    let koCount = (try? await objects.count()) ?? 0
-                    let raw = Double(koCount) / Double(fileCount)
-                    return min(1.0, max(0.0, raw))
+                    // nil means "could not measure", which the verifier treats
+                    // as the incomplete-ingest floor. Previously a throwing
+                    // count or a deallocated repository returned 1.0 — "the
+                    // whole archive is ingested" — which RAISED confidence on
+                    // the strength of a failure.
+                    guard let files, let objects else { return nil }
+                    let fileCount = try? await files.count()
+                    let koCount = try? await objects.count()
+                    return EvidenceVerifier.ingestCoverage(
+                        fileCount: fileCount, objectCount: koCount)
                 },
                 entityQualityGate: EntityQualityGate.bundled(),
                 reranker: reranker,
@@ -1396,6 +1451,11 @@ public final class AppState {
                 eventsByTitleTokens: { [weak events] tokens in
                     guard let events else { return [] }
                     return (try? await events.findByTitleTokens(tokens)) ?? []
+                },
+                // L5 — the resolved subject's own events (status shape).
+                eventsForAnchors: { [weak events] ids in
+                    guard let events else { return [] }
+                    return (try? await events.eventsForAnchors(ids)) ?? []
                 },
                 // A1.2 — the abstention receipt's archive-wide scope.
                 archiveTotals: { [weak db] in
@@ -1557,10 +1617,22 @@ public final class AppState {
             let workspacesRepo = WorkspaceRepository(database: db)
             let claimsRepo = ClaimRepository(database: db)
             let temporalClaimsRepo = TemporalClaimRepository(database: db)
+            // A3 (module .proseSubjectBinding, default OFF) — resolve a prose fact's
+            // subjectLabel to ONE canonical entity, else nil (never guess when a label
+            // matches several distinct subjects). Consulted only when the module is on.
+            let claimSubjectResolver: @Sendable (String) async -> Entity.ID? = { [entities] label in
+                let hits = (try? await entities.find(byValue: label, limit: 8)) ?? []
+                var canonicals = Set<Entity.ID>()
+                for e in hits {
+                    canonicals.insert((try? await entities.resolveCanonical(e.id)) ?? e.id)
+                }
+                return canonicals.count == 1 ? canonicals.first : nil
+            }
             let claimProducer = ClaimProducer(
                 genericFacts: genericFactsRepo, assertions: assertionsRepo,
                 temporalClaims: temporalClaimsRepo, events: events,
-                claims: claimsRepo, evidence: evidenceStoreRepo)
+                claims: claimsRepo, evidence: evidenceStoreRepo,
+                subjectResolver: claimSubjectResolver)
             let membershipDeriver = WorkspaceMembershipDeriver(database: db, workspaces: workspacesRepo)
             let claimProjectionBackfill = ClaimProjectionBackfill(
                 producer: claimProducer,
@@ -1584,7 +1656,8 @@ public final class AppState {
                 ocr: VisionOCR(),
                 iMessageEnabled: FeatureFlags.shared.iMessageLoaderEnabled,
                 browserHistoryEnabled: FeatureFlags.shared.browserHistoryLoaderEnabled,
-                chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled)
+                chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled,
+                mediaTranscriptionEnabled: KnowledgeModuleFlags.isEnabled(.mediaTranscription))
             let ingest = IngestCoordinator(
                 universalRegistry: universalParserRegistry,
                 chunker: dynamicChunker,
@@ -1608,6 +1681,17 @@ public final class AppState {
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
                 bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache),
+                // FOUND BY THE ENGINE-FIRING SWEEP, 2026-09-25. This was never
+                // passed, so `emailParticipantRepository` defaulted to nil and
+                // the whole participant lane was dead in the real app:
+                // `EmailParticipantRepository` was constructed NOWHERE outside
+                // its own unit test. Ten real .eml files produced 0 rows in
+                // `email_participant_occurrences`, and on a 526-message mailbox
+                // it would have produced none either — for a product whose
+                // primary input is mail, that is the sender/recipient graph
+                // silently missing. The repository worked; nobody handed it to
+                // the coordinator.
+                emailParticipantRepository: EmailParticipantRepository(database: db),
                 // G2-3 — LLM is the final path. No silent heuristic
                 // substitution; the row's context_prefix stays NULL
                 // when the LLM doesn't answer in budget. Timeout sized
@@ -1780,6 +1864,30 @@ public final class AppState {
                     let scan = Task { () -> Int in
                         let gaps = await self.scanForGaps()
                         if !Task.isCancelled { await self.scanForContradictions() }
+                        // L1 — topics are a derived layer, re-built on the same
+                        // idle pass. Deterministic (dedup + minimize + spine):
+                        // collapse duplicate facts, then rebuild the minimized
+                        // topic set so answers lead with real, few topics without
+                        // the owner pressing a button. The optional prose polish
+                        // inside buildTopics runs only if a reasoning model is up.
+                        // Gated by the .autoTopics module switch.
+                        // Skip while a bulk (re)ingest is still running — topics are
+                        // a whole-archive layer; building mid-ingest stamps a partial,
+                        // document-shaped set. The ingest path rebuilds topics itself
+                        // at clean completion (autoBuildTopicsAfterIngest).
+                        let bulkIngestActive = await self.isBulkIngestActive
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.autoTopics), !bulkIngestActive {
+                            _ = await self.cleanUpLedger()
+                            if !Task.isCancelled { _ = await self.buildTopics() }
+                        }
+                        // L2 — deterministic archive summary on the same idle pass.
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
+                            _ = await self.buildSummaries()
+                        }
+                        // L3 — persist per-subject history for the top entities.
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.historyAtIdle) {
+                            _ = await self.buildHistories()
+                        }
                         return gaps
                     }
                     await MainActor.run { self.idleMaintenanceScan = scan }
@@ -1899,12 +2007,25 @@ public final class AppState {
             // narrative_slots_json is the default '{}'). 6-hour
             // cadence with 200-row batches; idempotent (only touches
             // events whose slot bundle is still empty).
+            // L4 (module .eventSlotFill) — the backfiller runs the rule extractor,
+            // then fills the empty why/where/how slots with the on-device model
+            // under a fact-preserving guard (module-gated inside the composite;
+            // off ⇒ rule-only). Reasoner resolves the reasoning capability; nil
+            // when no model is up. This is the BACKGROUND path — the inline ingest
+            // path at ~1615 stays rule-only (minimum-LLM).
+            let slotExtractor = CompositeNarrativeSlotExtractor(reason: { [capabilities] prompt in
+                let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "event.slotFill")
+                guard let provider = try? await capabilities.resolve(spec),
+                      await provider.isAvailable() else { return nil }
+                return try? await provider.generate(
+                    prompt: prompt, options: GenerationOptions(maxTokens: 160, temperature: 0.2))
+            })
             let narrativeSlotBackfiller = NarrativeSlotBackfiller(
                 database: db,
                 events: events,
                 objects: objects,
                 entities: entities,
-                extractor: RuleNarrativeSlotExtractor()
+                extractor: slotExtractor
             )
             await narrativeSlotBackfiller.start()
 
@@ -2477,12 +2598,34 @@ public final class AppState {
             // data_version (a mutation counter, nearly free) at ask start.
             // P4-U4 rung 3 — the story door: story-shaped questions go to the
             // reconstruction engine + renderer + durable artifact persistence.
-            await brain.setStoryComposer { [weak self] question in
-                await self?.composeStoryAnswer(question: question)
+            await brain.setStoryComposer { [weak self] question, access in
+                await self?.composeStoryAnswer(question: question, access: access)
+            }
+            // L5 — the subject-first door (status / subject-event questions).
+            await brain.setSubjectEventAnswer { [weak self] question, access in
+                await self?.composeSubjectEventAnswer(question: question, access: access)
             }
             // A3 — the tool-grounded middle floor.
-            await brain.setToolGroundedFallback { [weak self] question in
-                await self?.composeToolGroundedAnswer(question: question)
+            await brain.setToolGroundedFallback { [weak self] question, access in
+                await self?.composeToolGroundedAnswer(question: question, access: access)
+            }
+            // The absent-subject gate. Wired HERE because AppState owns the
+            // ledger and MasterBrain deliberately does not: the gate needs one
+            // existence query, and the brain stays free of a Database handle.
+            //
+            // Found by running the answer harness over the owner's real
+            // archive: a question about a randomly generated case reference was
+            // answered in 1,159 words with THREE CITATIONS, composed from
+            // documents about a DIFFERENT case that merely shared the question's
+            // shape. See AbsentSubjectGate for the full account.
+            await brain.setAbsentSubjectCheck { [weak database] question in
+                guard let database else { return nil }
+                guard let absence = await AbsentSubjectGate.absence(
+                    in: question, database: database) else { return nil }
+                return AbsentSubjectGate.notFoundAnswer(
+                    for: absence,
+                    intent: UserIntent(kind: .factualLookup, scope: .global,
+                                       rawQuestion: question))
             }
             await brain.setLedgerStateProvider { [weak database] in
                 // C-ii: begin the ask's read snapshot; the returned stamp is
@@ -2494,6 +2637,8 @@ public final class AppState {
             }
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
+            // P2.7 — load the on-device model now, not on the first question.
+            Self.prewarmOnDeviceModel()
 
             // W-4b — THE DRAIN RUNS IN THE APP: when any derived row is
             // behind its producer era (a fix shipped since it was written),
@@ -2509,21 +2654,49 @@ public final class AppState {
                 let drainEvents = events
                 let drainFacts = genericFactsRepo
                 let drainEvidence = evidenceStoreRepo
-                Task.detached(priority: .utility) {
+                let drainCapabilities = capabilities
+                let drainProjection = self.claimProjection
+                Task.detached(priority: .utility) { [weak self] in
                     do {
                         let stale = try await drainDB.query("""
                         SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts))
                              + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
                              + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities));
                         """, []).first?.int(0) ?? 0
-                        if stale > 0 {
-                            KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era — refreshing in the background")
+                        // P3.3 — the drain is also how induction reaches an
+                        // archive, and era-staleness alone would never trigger
+                        // it: on a freshly ingested archive nothing is stale, so
+                        // a switched-on inducer would have sat there doing
+                        // nothing. An EMPTY attempt ledger means induction has
+                        // never run here, which is its own reason to drain once.
+                        // Self-limiting: the first pass writes attempt rows, so
+                        // this stops being true immediately afterwards.
+                        var inductionNeverRan = false
+                        if KnowledgeModuleFlags.isEnabled(.inducedSchema) {
+                            let attempts = (try? await drainDB.query(
+                                "SELECT COUNT(*) FROM induced_schema_attempts;", []
+                            ).first?.int(0)) ?? 0
+                            inductionNeverRan = (attempts ?? 0) == 0
+                        }
+                        if stale > 0 || inductionNeverRan {
+                            KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era\(inductionNeverRan ? " · schema induction has not run yet" : "") — refreshing in the background")
+                            let pending = Int(stale)
+                            await MainActor.run { self?.ledgerRefreshPending = pending }
                             let coordinator = LedgerDrainCoordinator(
                                 database: drainDB, objects: drainObjects, entities: drainEntities,
-                                events: drainEvents, facts: drainFacts, evidence: drainEvidence)
-                            _ = try await coordinator.drain()
+                                events: drainEvents, facts: drainFacts, evidence: drainEvidence,
+                                inducer: InducedSchemaExtractor(capabilities: drainCapabilities),
+                                inductionAttempts: InducedSchemaAttemptRepository(database: drainDB))
+                            let receipt = try await coordinator.drain()
+                            // P1.5 — sources rewritten → re-project their claims
+                            // now (the drain reset the cursor), not next launch.
+                            if receipt.eventKOsRewritten > 0 || receipt.factsSourcesRewritten > 0 {
+                                await drainProjection?.run(at: Date())
+                            }
+                            await MainActor.run { self?.ledgerRefreshPending = nil }
                         }
                     } catch {
+                        await MainActor.run { self?.ledgerRefreshPending = nil }
                         KalsmritikoshLog.app.error("Ledger drain failed (will retry next launch): \(error)")
                     }
                     // SPEC A1.4 (the reachability lesson, applied) — the rest
@@ -2533,8 +2706,25 @@ public final class AppState {
                     // Picture's input) → the advisory twins (budgeted).
                     do {
                         _ = try await ChunkReindexCoordinator(database: drainDB).run()
+                        // Subject spine BEFORE salience + tree: the anchor
+                        // mentions it records are what let one patent's number
+                        // link its hearing notice, grant letter and emails.
+                        if KnowledgeModuleFlags.isEnabled(.subjectSpine) {
+                            _ = try await SubjectSpine(database: drainDB).run()
+                        }
                         _ = try await TermSalienceComputer(database: drainDB).run()
                         _ = try await TopicTreeBuilder(database: drainDB).run()
+                        // P1.9 — EmailParticipantBackfill existed with ZERO app
+                        // callers: mail ingested before OPS-005 never got its
+                        // participant occurrences (owner copy: 0 rows). It skips
+                        // any email that already has them, so a later boot
+                        // writes nothing.
+                        let participants = await EmailParticipantBackfill(
+                            occurrences: EmailParticipantRepository(database: drainDB),
+                            entities: drainEntities, database: drainDB).run(pageSize: 10_000)
+                        if participants > 0 {
+                            KalsmritikoshLog.app.info("Boot maintenance: \(participants, privacy: .public) email participant occurrence(s) backfilled")
+                        }
                         // A6 idempotence (parity finding #2): a per-boot twin
                         // BUDGET means every boot writes until the frontier
                         // drains (~50 docs/200 entities a launch). Loop each
@@ -2545,6 +2735,15 @@ public final class AppState {
                         while try await EventRecordTwin(database: drainDB)
                             .runOnce().documentsExamined > 0 {}
                         KalsmritikoshLog.app.info("Boot maintenance pass complete (reindex, terms, tree, twins)")
+                        // L4 — the ledger contract over the user's own ledger,
+                        // read-only: a violation is logged loudly, never "fixed" here.
+                        let violations = try await LedgerContractCheck(database: drainDB).violations()
+                        let report = LedgerContractCheck.render(violations)
+                        if violations.isEmpty {
+                            KalsmritikoshLog.app.info("\(report, privacy: .public)")
+                        } else {
+                            KalsmritikoshLog.app.error("\(report, privacy: .public)")
+                        }
                     } catch {
                         KalsmritikoshLog.app.error("Boot maintenance pass failed (will retry next launch): \(error)")
                     }
@@ -2556,7 +2755,9 @@ public final class AppState {
             // milestones inline at ingest, so this runs once (flag-guarded) and
             // never blocks boot. Idempotent (backfill clears+regenerates), and
             // suppressed during isolated eval boots to keep them deterministic.
-            if !suppressAutoReingest,
+            // §1.1 — never in the sample ledger: this flag is global, and
+            // consuming it there would skip the backfill on the user's archive.
+            if !suppressAutoReingest, !SampleArchiveMode.isActive,
                !UserDefaults.standard.bool(forKey: "kalsmritikosh.milestones.backfilled.v1") {
                 Task { [weak self] in
                     _ = await self?.backfillLegalMilestones()
@@ -2691,12 +2892,18 @@ public final class AppState {
     /// after every user-facing answer so the ledger records what the
     /// archive looked like when each answer was produced. Best-effort:
     /// failures are logged, never surfaced to the user.
-    public func recordAnswer(question: String, answer: VerifiedAnswer) async {
-        guard let snapshots = corpusSnapshots, let ledger = answerLedger else { return }
+    /// Persist the shipped answer to the durable ledger. G2/Stage-3: returns
+    /// the ledger answer id so the caller can bind the conversation turn to
+    /// this durable revision (for evidence restoration on reopen). nil when
+    /// no ledger is wired or persistence failed.
+    @discardableResult
+    public func recordAnswer(question: String, answer: VerifiedAnswer) async -> UUID? {
+        guard let snapshots = corpusSnapshots, let ledger = answerLedger else { return nil }
         let snapshot = await currentCorpusSnapshot()
+        var persistedID: UUID?
         do {
             if let snapshot { try await snapshots.insert(snapshot) }
-            try await ledger.persist(
+            persistedID = try await ledger.persist(
                 question: question,
                 answer: answer,
                 corpusSnapshotID: snapshot?.id
@@ -2710,6 +2917,7 @@ public final class AppState {
         // next idle scoring pass; the other engines no-op. All mode-
         // specific behaviour now lives in the engine, not here.
         await systemEngine?.onAnswer(answer)
+        return persistedID
     }
 
     /// Build a point-in-time census of the archive from the live repos.
@@ -2741,11 +2949,11 @@ public final class AppState {
     /// suspends until the user picks a mode, so the engine boots in the
     /// chosen mode with no relaunch. On later launches it returns at once.
     public func awaitModeSelectionIfNeeded() async {
-        if FeatureFlags.shared.systemModeChosen { return }
-        showModeChooser = true
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            self.modeSelectionContinuation = cont
-        }
+        // Zero mode choices (owner 2026-09-16): the system mode is pinned to the
+        // single minimum-LLM ledger engine (FeatureFlags.systemMode is fixed),
+        // so there is nothing for the user to choose. Mark it chosen and boot
+        // straight through — the chooser is never presented.
+        if !FeatureFlags.shared.systemModeChosen { FeatureFlags.shared.systemModeChosen = true }
     }
 
     /// Persist the chosen mode and dismiss the chooser. On first run this
@@ -3302,8 +3510,9 @@ public final class AppState {
                 // subject id, not just the NER participants.
                 let anchorIDs = await identifierAnchorIDs(inContent: content, sourceObjectID: id)
                     .filter { !suspectAnchors.contains($0) }   // I-5: split-suspects never thread
-                let milestones = PatentLegalEventExtractor.extract(
-                    text: content, sourceObjectID: id, entityIDs: anchorIDs)
+                // P4.2 — same collapse + stable ids as the drain's rebuild.
+                let milestones = EventDeduper.collapse(PatentLegalEventExtractor.extract(
+                    text: content, sourceObjectID: id, entityIDs: anchorIDs)).map(EventDeduper.withStableID)
                 if !milestones.isEmpty {
                     try? await events.insertBatch(milestones)
                     created += milestones.count
@@ -3734,9 +3943,55 @@ public final class AppState {
         //    (owner witness: 121 MB with every table at 0 rows), which reads
         //    as "my data wasn't deleted" — a promise breach for an erase.
         try? await db.exec("VACUUM;", [])
+
+        // 6. P4.3 — PROVE IT. Everything above is `try? await db.exec(DELETE)`,
+        //    so a table that failed to empty produced no error and was counted
+        //    as cleared anyway. The function then returned the number of DELETE
+        //    statements ATTEMPTED and called it "tables cleared". For the one
+        //    operation in this app a user cannot undo and cannot inspect, that
+        //    is the worst place in the codebase to infer success from the
+        //    absence of a thrown error.
+        //
+        //    So count the rows back. A residue is reported, logged as a fault,
+        //    and left VISIBLE rather than folded into the success number — a
+        //    half-erased ledger that reports a clean erase would have the user
+        //    re-ingest on top of surviving rows and then wonder why their counts
+        //    are wrong.
+        let residue = await Self.eraseResidue(db: db, tables: tables)
+        eraseResidue = residue
         newFilesSinceLaunch = 0
-        KalsmritikoshLog.app.info("Deleted all ingested data (\(tables.count, privacy: .public) tables cleared) — user-initiated full erase")
+        if residue.isEmpty {
+            KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY (user-initiated full erase)")
+        } else {
+            let detail = residue.map { "\($0.table)=\($0.rows)" }.joined(separator: ", ")
+            let residueCount = residue.count
+            KalsmritikoshLog.app.fault("FULL ERASE INCOMPLETE — \(residueCount, privacy: .public) table(s) still hold rows after the wipe: \(detail, privacy: .public)")
+        }
         return tables.count
+    }
+
+    /// Tables that still held rows after the last full erase. EMPTY is the
+    /// expected state; anything here means the erase did not finish and the
+    /// slate is NOT clean. Surfaced in Settings so it cannot only live in a log.
+    public private(set) var eraseResidue: [(table: String, rows: Int)] = []
+
+    /// Count rows back after a wipe. A table whose COUNT cannot be read is
+    /// reported as residue with `rows = -1`: unreadable is not the same as
+    /// empty, and treating it as empty is how an unverified erase passes for a
+    /// verified one.
+    nonisolated static func eraseResidue(
+        db: Database, tables: [String]
+    ) async -> [(table: String, rows: Int)] {
+        var residue: [(table: String, rows: Int)] = []
+        for t in tables {
+            guard let rows = try? await db.query("SELECT COUNT(*) FROM \"\(t)\";", []) else {
+                residue.append((table: t, rows: -1))
+                continue
+            }
+            let n = Int(rows.first?.int(0) ?? 0)
+            if n != 0 { residue.append((table: t, rows: n)) }
+        }
+        return residue.sorted { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
     }
 
     /// One-click "start fresh": erase every ingested row IN PLACE (works even
@@ -3885,6 +4140,12 @@ public final class AppState {
         let saved = try? await repo.save(result, narrative: narrative, at: Date(),
                                          reviewState: "unreviewed", anchorKey: anchorKey,
                                          requestShape: "story", ledgerStamp: stamp)
+        // L3 — a rebuild on a changed ledger REPLACES the subject's previous
+        // history (superseded, not deleted); the older rows stay reopenable.
+        if let saved {
+            _ = try? await repo.supersedePrevious(anchorKey: anchorKey, requestShape: "story",
+                                                  keeping: saved, at: Date())
+        }
         // P4-U2 — the placement twin re-checks the outline against the H-laws
         // AFTER persistence. Checker, never writer: its only output is
         // advisory review rows; the artifact is untouched either way.
@@ -3902,7 +4163,17 @@ public final class AppState {
     /// by kind. Ambiguity lists the candidates; no anchor refuses with the
     /// honest message; an engine failure returns nil so the normal pipeline
     /// carries (never a dead end).
-    public func composeStoryAnswer(question: String) async -> VerifiedAnswer? {
+    public func composeStoryAnswer(question: String, access: SensitiveAccessContext) async -> VerifiedAnswer? {
+        // G1 (Stage 1) — FAIL-CLOSED scope gate. This path reads the ledger
+        // through unscoped repositories, so it may run ONLY under the global
+        // owner scope. Any narrower scope (a case/workspace) refuses here
+        // rather than falling through to unscoped global reads (§5 case 5).
+        // Scoped repository variants are the tracked follow-up that lifts
+        // this restriction for the investigator edition.
+        guard access.scope.isGlobalOwnerBypass else {
+            KalsmritikoshLog.brain.info("composeStoryAnswer: refusing — story path not yet scope-enforced for a narrowed access context")
+            return nil
+        }
         guard let entities, let engine = historyEngine else { return nil }
         let anchors = (try? await entities.allAnchors()) ?? []
         guard let resolution = try? await HistorySubjectResolver(entities: entities)
@@ -3973,7 +4244,15 @@ public final class AppState {
     /// ladder falls through, never a dead end. The receipt carries the
     /// plan, the tools, the model + build stamps, and — when the subject's
     /// anchor lives in a topic node — "scoped to ‹node›" (A2.2).
-    public func composeToolGroundedAnswer(question: String) async -> VerifiedAnswer? {
+    public func composeToolGroundedAnswer(question: String, access: SensitiveAccessContext) async -> VerifiedAnswer? {
+        // G1 (Stage 1) — FAIL-CLOSED scope gate (see composeStoryAnswer). The
+        // tool path reads anchors, facts, events and FTS chunks through
+        // unscoped repositories; under any narrowed scope it refuses rather
+        // than leak unauthorized rows into the model prompt (§5 cases 1–5).
+        guard access.scope.isGlobalOwnerBypass else {
+            KalsmritikoshLog.brain.info("composeToolGroundedAnswer: refusing — tool path not yet scope-enforced for a narrowed access context")
+            return nil
+        }
         guard let entities, let events, let genericFacts = self.genericFacts,
               let chunks, let caps = capabilities, let db = database else { return nil }
         let anchors = (try? await entities.allAnchors()) ?? []
@@ -3988,12 +4267,43 @@ public final class AppState {
                 return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
             })
         // The loop law: history → field lookup → ONE span fetch.
-        var results = await tools.historyOf(question: question)
+        let shape = QuestionShape(rawValue: plan.shape) ?? .unresolved
+        var results: [ToolResult]
+        // R1 — a timeline question with ANY time expression (a year, "between
+        // 2013 and 2015", "since 2020", "before 2016", "last year") gets the
+        // date-windowed slice; TemporalGrammar is the primary parser, the
+        // year-only helper the fallback; otherwise the full history. Bounded to
+        // timeline questions, so nothing else changes.
+        if shape == .timeline, let w = TemporalGrammar.parse(question, now: Date()),
+           w.from != nil || w.to != nil {
+            results = await tools.timelineSlice(question: question, from: w.from, to: w.to)
+        } else if shape == .timeline, let (from, to) = Self.yearWindow(in: question) {
+            results = await tools.timelineSlice(question: question, from: from, to: to)
+        } else {
+            results = await tools.historyOf(question: question)
+        }
         if let field = plan.field { results += await tools.lookupField(field) }
-        results += await tools.fetchSpans(question: question,
-                                          shape: QuestionShape(rawValue: plan.shape) ?? .unresolved)
+        results += await tools.fetchSpans(question: question, shape: shape)
+        // U-7 — the reference-shelf lane: a no-op until a shelf reader is
+        // injected (tools.shelf == nil), so archive answers are unchanged
+        // today; the call sits in the loop for when the shelf lands.
+        if plan.needsGeneralKnowledge {
+            results += await tools.shelfLookup(question)
+        }
         guard let grounded = await ToolGroundedComposer.compose(
-            question: question, plan: plan, results: results, capabilities: caps) else { return nil }
+            question: question, plan: plan, results: results, capabilities: caps,
+            allowUnverified: UnverifiedAnswerPolicy.showBadged) else { return nil }
+
+        // U-1 — the sweep confirmed nothing but the policy says show-badged:
+        // ship the reading marked Unverified, zero citations, low confidence.
+        // Never enters the sealed envelope (policy defaults off).
+        if !grounded.verified {
+            let text = grounded.sentences.map(\.text).joined(separator: " ")
+            let body = text + "\n\n(" + grounded.receiptLines.joined(separator: " · ") + ")"
+            KalsmritikoshLog.brain.info("ledger.compose: shipped UNVERIFIED reading (\(grounded.sentences.count) sentence(s))")
+            return VerifiedAnswer(body: body, answerText: text, citations: [],
+                                  confidence: Confidence(0.2), answerState: .unverified)
+        }
 
         var receipt = grounded.receiptLines
         // A2.2 — the scoping receipt: the anchor's topic node, when one holds it.
@@ -4008,8 +4318,18 @@ public final class AppState {
         }
         let body = grounded.sentences.map(\.text).joined(separator: " ")
             + "\n\n(" + receipt.joined(separator: " · ") + ")"
+        // G1/Stage-2.1 — the citation snippet is the ACTUAL cited tool-result
+        // text (the passage/field the sweep verified), never a generic
+        // "Ledger result" label. Map each cited object id back to the result
+        // that carried it.
+        var snippetByObjectID: [UUID: String] = [:]
+        for r in results {
+            for oid in r.objectIDs where snippetByObjectID[oid] == nil {
+                snippetByObjectID[oid] = r.text
+            }
+        }
         let citations = grounded.citedObjectIDs.prefix(8).map {
-            VerifiedAnswer.Citation(objectID: $0, snippet: "Ledger result")
+            VerifiedAnswer.Citation(objectID: $0, snippet: snippetByObjectID[$0] ?? "Cited ledger passage")
         }
         KalsmritikoshLog.brain.info("ledger.compose: shipped \(grounded.sentences.count) swept sentence(s)")
         return VerifiedAnswer(body: body,
@@ -4138,6 +4458,10 @@ public final class AppState {
         }
         setIngestPlannedTotal(0)
         KalsmritikoshLog.app.info("Auto-reingest pass complete")
+        // Whole corpus is in — build the topic layer now on the FULL ledger
+        // (dedup + AI subject resolution + minimization + prose), so the archive
+        // is answer-ready without a manual button. No-op if the run was stopped.
+        if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
     }
 
     @discardableResult
@@ -4214,6 +4538,13 @@ public final class AppState {
         if !summary.failures.isEmpty {
             KalsmritikoshLog.ingestion.notice("Bulk ingest: \(summary.headline, privacy: .public)")
         }
+        // Whole corpus is in — build the topic layer now on the FULL ledger
+        // (dedup + AI subject resolution + minimization + prose), so the archive
+        // is answer-ready without a manual button. Skipped if the user stopped the
+        // run (a later resume will rebuild). ingestRunState is still `.running`
+        // here (the function's defer resets it), so the idle pass stays deferred
+        // through the build and won't race it.
+        if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
         return succeeded
     }
 
@@ -4293,6 +4624,19 @@ public final class AppState {
     /// Wall-clock milliseconds for the durable ingest-run ledger (the repository
     /// is deterministic and takes caller-supplied timestamps).
     nonisolated static func nowMillis() -> Double { Date().timeIntervalSince1970 * 1000 }
+
+    /// U-7 — parse an explicit 4-digit year (1900–2099) from a question and
+    /// return its [Jan 1, Dec 31] UTC window for timelineSlice. nil when no
+    /// year is named, so a plain "timeline of X" keeps the full chain.
+    nonisolated static func yearWindow(in question: String) -> (from: Date, to: Date)? {
+        guard let m = question.range(of: #"\b(19|20)\d{2}\b"#, options: .regularExpression),
+              let year = Int(question[m]) else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        guard let from = cal.date(from: DateComponents(year: year, month: 1, day: 1)),
+              let to = cal.date(from: DateComponents(year: year, month: 12, day: 31)) else { return nil }
+        return (from, to)
+    }
 
     nonisolated static func withFileTimeout<T: Sendable>(
         _ seconds: Double, _ op: @Sendable @escaping () async throws -> T

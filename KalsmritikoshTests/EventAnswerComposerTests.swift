@@ -58,9 +58,11 @@ struct EventAnswerComposerTests {
                       ev("Patent granted", 200), ev("Hearing held", 100)]
         // Abstains when the question names no event word — the pipeline runs.
         #expect(EventAnswerComposer.composeExistence(question: "what is the meaning", events: events, documentsSearched: 3) == nil)
-        // Count collapses same-title-same-day duplicates; honest zero counts.
+        // Count collapses same-day duplicates of the HAPPENING; a notice about a
+        // hearing is not a hearing (L5 ruling 2026-09-27 — was 2 when the notice
+        // counted). Honest zero counts.
         let count = EventAnswerComposer.composeCount(question: "how many hearings were there", events: events, documentsSearched: 3)
-        #expect(count?.primaryText.hasPrefix("2 hearings") == true, "got \(count?.primaryText ?? "nil")")
+        #expect(count?.primaryText.hasPrefix("1 hearing:") == true, "got \(count?.primaryText ?? "nil")")
         let zero = EventAnswerComposer.composeCount(question: "how many objections were there", events: events, documentsSearched: 3)
         #expect(zero?.isNotFound == true && zero?.primaryText.contains("No objections") == true)
         // Existence picks the newest match and cites it.

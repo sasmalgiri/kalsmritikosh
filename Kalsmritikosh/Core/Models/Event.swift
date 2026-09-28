@@ -85,6 +85,11 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         self.status = status
     }
 
+    /// L5 — the date came from the source (a header, a stated date), not from
+    /// a file's mtime or the time it was extracted (those carry ≤0.30). An
+    /// untrustworthy date must never order, lead or bound an answer.
+    public nonisolated var hasTrustworthyDate: Bool { dateConfidence >= 0.5 }
+
     private enum CodingKeys: String, CodingKey {
         case id, kind, date, endDate, title, summary, entityIDs,
              sourceObjectID, sourceRange, confidence, dateConfidence, attributes,

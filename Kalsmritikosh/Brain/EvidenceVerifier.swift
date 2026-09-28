@@ -198,9 +198,15 @@ public struct EvidenceVerifier: Verifier {
     /// (chunks + entities + events present). The Engine multiplies
     /// final confidence by max(coverage, 0.5) while < 1.0, so the
     /// Quality Strip can honestly say "Answered from X% of your
-    /// archive". `nil` → engine treats it as 1.0 (no-op multiplier).
-    /// T11 close-out.
-    private let ingestCoverageProvider: (@Sendable () async -> Double)?
+    /// archive". T11 close-out.
+    ///
+    /// The provider returns nil when it COULD NOT MEASURE — a repository that
+    /// threw, or one already deallocated. That is deliberately distinct from
+    /// 1.0: an unmeasurable coverage used to arrive as "the whole archive is
+    /// ingested", which granted the engine's full confidence boost at exactly
+    /// the moment the system knew least about its own completeness. See
+    /// `unknownIngestCoverage`.
+    private let ingestCoverageProvider: (@Sendable () async -> Double?)?
     /// Defensive — filters hostname-shape, stoplist, and weekday
     /// strings out of the rendered "Subjects in scope" line even if
     /// they somehow survived ingestion. nil = no filtering, behaviour
@@ -236,17 +242,41 @@ public struct EvidenceVerifier: Verifier {
     /// (factualLookup retrieval ranks chunks, not milestones, so "how many
     /// hearings" never met the hearing rows). nil → retrieval-only (legacy).
     private let eventsByTitleTokens: (@Sendable ([String]) async -> [Event])?
+    /// L5 — the resolved subject's OWN events (its anchors + the documents
+    /// that name them). nil → the status shape is not answered here.
+    private let eventsForAnchors: (@Sendable ([Entity.ID]) async -> [Event])?
     /// SPEC A1.2 — the abstention receipt's ARCHIVE-WIDE scope: total
     /// documents and passages from the ledger, not the candidate window
     /// (the owner's live not-found said "54 documents" on a 716-document
     /// archive). nil → window counts (legacy rigs).
     private let archiveTotals: (@Sendable () async -> (documents: Int, passages: Int))?
 
+    /// What coverage to assume when it could not be measured: the engine's own
+    /// floor for an incomplete ingest. Not a new number — `ingestFactor` already
+    /// clamps at `max(coverage, 0.5)` — and chosen because it cannot INFLATE
+    /// confidence, which 1.0 did.
+    public nonisolated static let unknownIngestCoverage: Double = 0.5
+
+    /// Tier-1 ingest coverage from two counts, with "could not measure" kept
+    /// distinct from "nothing to measure".
+    ///
+    /// - `nil` file count → nil: the denominator is unknown, so the fraction is.
+    /// - measured 0 files → 1.0: an empty archive has nothing un-ingested, so
+    ///   coverage is trivially complete. This is the ONLY case where 1.0 is
+    ///   honest without a measurement of objects.
+    /// - `nil` object count → nil: the numerator is unknown.
+    public nonisolated static func ingestCoverage(fileCount: Int?, objectCount: Int?) -> Double? {
+        guard let fileCount else { return nil }
+        guard fileCount > 0 else { return 1.0 }
+        guard let objectCount else { return nil }
+        return min(1.0, max(0.0, Double(objectCount) / Double(fileCount)))
+    }
+
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
         minimumCitations: Int = 1,
         engine: any ConfidenceEngine = DefaultConfidenceEngine(),
-        ingestCoverageProvider: (@Sendable () async -> Double)? = nil,
+        ingestCoverageProvider: (@Sendable () async -> Double?)? = nil,
         entityQualityGate: EntityQualityGate? = nil,
         reranker: Reranker? = nil,
         sessionProfile: SessionProfile? = nil,
@@ -254,6 +284,7 @@ public struct EvidenceVerifier: Verifier {
         citationResolver: CitationResolver? = nil,
         anchorsProvider: (@Sendable () async -> [Entity])? = nil,
         eventsByTitleTokens: (@Sendable ([String]) async -> [Event])? = nil,
+        eventsForAnchors: (@Sendable ([Entity.ID]) async -> [Event])? = nil,
         archiveTotals: (@Sendable () async -> (documents: Int, passages: Int))? = nil
     ) {
         self.minimumConfidence = minimumConfidence
@@ -267,6 +298,7 @@ public struct EvidenceVerifier: Verifier {
         self.citationResolver = citationResolver
         self.anchorsProvider = anchorsProvider
         self.eventsByTitleTokens = eventsByTitleTokens
+        self.eventsForAnchors = eventsForAnchors
         self.archiveTotals = archiveTotals
     }
 
@@ -284,7 +316,23 @@ public struct EvidenceVerifier: Verifier {
                   let s = tf.start, let e = tf.end, e > s else { return nil }
             return DateInterval(start: s, end: e)
         }()
-        let ingestCoverage: Double = await ingestCoverageProvider?() ?? 1.0
+        // Unknown coverage takes the engine's OWN documented floor for
+        // "ingest incomplete" rather than 1.0. Between over- and
+        // under-confident on data we could not measure, an evidence-gated
+        // product must pick under: 1.0 here silently granted the full boost.
+        let measuredCoverage: Double? = await ingestCoverageProvider?()
+        let ingestCoverage: Double
+        if let measuredCoverage {
+            ingestCoverage = measuredCoverage
+        } else if ingestCoverageProvider == nil {
+            // No provider wired at all (tests, and callers that do not track
+            // coverage): unchanged no-op behaviour.
+            ingestCoverage = 1.0
+        } else {
+            ingestCoverage = Self.unknownIngestCoverage
+            KalsmritikoshLog.brain.warning(
+                "Ingest coverage could not be measured; using the incomplete-ingest floor rather than assuming a fully ingested archive.")
+        }
         var report = await engine.evaluate(
             claims: claims,
             droppedUnverifiable: droppedUnverifiable,
@@ -607,6 +655,35 @@ public struct EvidenceVerifier: Verifier {
         // A1.2 — the receipt speaks for the WHOLE archive.
         let totals = await archiveTotals?()
         let searchedScope = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count
+
+        // L5 — WHERE A MATTER STANDS is answered from the subject's own dated
+        // lifecycle, BEFORE any slot: a stored `status` field holds every
+        // value the archive ever stated at once (filed · amendment · draft),
+        // while the latest dated milestone is the status now. Only when the
+        // subject resolved to anchors; no milestone on file → fall through.
+        if QuestionShapeRouter.route(intent.rawQuestion).shape == .status,
+           let fetch = eventsForAnchors, let charter = resolvedCharter, !charter.anchors.isEmpty {
+            let subjectEvents = await fetch(charter.anchors.map(\.id))
+            if let composed = EventAnswerComposer.composeStatus(
+                question: intent.rawQuestion, events: subjectEvents, documentsSearched: searchedScope) {
+                var body = composed.primaryText
+                if let about = charter.footerText { body += "\n\n" + about }
+                body += "\n\n(\(composed.receiptLine))"
+                KalsmritikoshLog.brain.info("EventAnswerComposer: status answered from \(subjectEvents.count, privacy: .public) subject event(s)")
+                return VerifiedAnswer(
+                    body: body,
+                    answerText: composed.primaryText,
+                    intentKind: intent.kind.rawValue,
+                    citations: composed.supportingEvents.map {
+                        VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: $0.title)
+                    },
+                    confidence: composed.supportingEvents.first?.confidence ?? report.combined,
+                    contradictions: report.contradictions,
+                    refused: false,
+                    report: report)
+            }
+        }
+
         let slot = SlotAnswerComposer.compose(
             slotFieldIDs: plan.slotFieldIDs,
             facts: retrieval.genericFacts,
@@ -745,6 +822,31 @@ public struct EvidenceVerifier: Verifier {
         let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
             framePrefixes.contains { c.statement.hasPrefix($0) }
         }
+        // A1 (module .actorComposer) — a who-did-this question is answered by the
+        // passage that NAMES THE ACTING PARTY performing the action, not a field
+        // dump. Fires only for actor-shaped questions when the quoted sentence both
+        // carries an action verb and names an actor; otherwise falls through to the
+        // generic paths unchanged. Off ⇒ skipped.
+        if KnowledgeModuleFlags.isEnabled(.actorComposer),
+           QuestionShapeRouter.detect(intent.rawQuestion) == .actor,
+           let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            let selector = PassageAnswerSelector()
+            if selector.mentionsActionVerb(quoted.sentence), selector.containsNamedActor(quoted.sentence) {
+                var body = SentenceQuoteComposer.render(quoted)
+                body += "\n\n(\(quoted.receiptLine))"
+                KalsmritikoshLog.brain.info("Actor composer: named-actor answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
+                return VerifiedAnswer(
+                    body: body,
+                    answerText: SentenceQuoteComposer.render(quoted),
+                    intentKind: intentKindRaw,
+                    citations: [VerifiedAnswer.Citation(objectID: quoted.objectID, chunkID: quoted.chunkID,
+                                                        snippet: String(quoted.sentence.prefix(180)))],
+                    confidence: Confidence(0.8),
+                    contradictions: effectiveReport.contradictions,
+                    refused: false,
+                    report: effectiveReport)
+            }
+        }
         if slot == nil, claimsAreDumpOnly,
            let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
             var body = SentenceQuoteComposer.render(quoted)
@@ -780,6 +882,27 @@ public struct EvidenceVerifier: Verifier {
                 contradictions: effectiveReport.contradictions,
                 refused: true,
                 refusalReason: "The question asks for a specific value that no extracted field or quotable sentence carries.",
+                report: effectiveReport)
+        }
+
+        // P2.3 — THE SLOT LAW: called with no expert findings (MasterBrain's
+        // door for role questions), a clean slot — one canonical, structured,
+        // conflict-free value — is the answer, cited to the document that
+        // carries it. Any other slot state still needs expert claims below.
+        if claims.isEmpty, let slot, !slot.isNotFound, !slot.isConflict,
+           slot.singleCanonicalValue, slot.structuredSource, let source = slot.supportingObjectIDs.first {
+            let rendered = renderAnswer(intent: intent, findings: [], retrieval: retrieval,
+                                        report: effectiveReport, plan: plan, slot: slot,
+                                        resolvedCharter: resolvedCharter)
+            return VerifiedAnswer(
+                body: rendered.body,
+                answerText: rendered.answerText,
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: source, snippet: slot.citedValue ?? slot.primaryText)],
+                confidence: effectiveReport.combined,
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                refusalReason: nil,
                 report: effectiveReport)
         }
 
@@ -959,10 +1082,14 @@ public struct EvidenceVerifier: Verifier {
         // answer. Non-slot questions keep the global-agreement behavior.
         if let slot {
             if slot.isConflict {
-                footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — both values are shown above.")
+                // W-5.5 — count-aware: "both" is only honest for two.
+                let phrase = slot.conflictValueCount > 2
+                    ? "all \(slot.conflictValueCount) values are shown above"
+                    : "both values are shown above"
+                footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — \(phrase).")
             }
         } else if report.agreementScore <= 0.6 {
-            footerParts.append("Note: experts disagreed across some of these claims.")
+            footerParts.append("Note: your sources disagree on some of these points.")
         }
         let body: String
         if footerParts.isEmpty {

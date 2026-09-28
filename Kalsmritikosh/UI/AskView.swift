@@ -34,6 +34,10 @@ public struct AskView: View {
     /// UI STATE ONLY, deliberately: never a persisted turn (the brain may read
     /// prior turns as context), never in the ledger, never exportable.
     @State private var generalKnowledgeBlocks: [UUID: String] = [:]
+    /// §1.3 — the closest passage shown under a "not found" answer, keyed by
+    /// the answer's turn. UI state only, like the GK block: never persisted,
+    /// never evidence, never exported.
+    @State private var nearestPassages: [UUID: NearestPassage] = [:]
     /// Phase H — currently-open investigation sheet. Holds the
     /// in-flight Investigation as the runner streams updates. nil
     /// when no sheet is showing.
@@ -56,6 +60,9 @@ public struct AskView: View {
     /// so the very next question can already retrieve and cite it. Chips clear
     /// on send; the ingested knowledge is durable either way.
     @State private var attachments: [AskAttachment] = []
+    /// §1.3 — the source sheet a citation chip (or a walk-step row) opens,
+    /// positioned at the quoted passage.
+    @State private var openSource: CitationOpenTarget?
 
     public init() {}
 
@@ -124,6 +131,9 @@ public struct AskView: View {
                 onDelete: { id in Task { await deleteConversation(id) } },
                 onClose: { showHistory = false }
             )
+        }
+        .sheet(item: $openSource) { target in
+            CitationSourceSheet(target: target) { openSource = nil }
         }
         .sheet(item: $activeInvestigation) { inv in
             InvestigationSheet(
@@ -335,6 +345,11 @@ public struct AskView: View {
                 .padding(.vertical, 11)
                 .focused($inputFocused)
                 .onSubmit(submit)
+                // P2.7 — the person started typing: a question is seconds away,
+                // so load the on-device model now (Apple's prewarm guidance).
+                .onChange(of: question.isEmpty) { wasEmpty, isEmpty in
+                    if wasEmpty, !isEmpty { AppState.prewarmOnDeviceModel() }
+                }
             Button(action: attachFiles) {
                 Image(systemName: "paperclip").font(.system(size: 15)).frame(width: 32, height: 32)
             }
@@ -554,13 +569,16 @@ public struct AskView: View {
                             .help("Copy this answer")
                         }
                     }
-                    // HISTORY follow-on — assistant bodies may carry
-                    // `## Chapter heading` lines from the narrative
-                    // composer's folded VerifiedAnswer.body. Render
-                    // markdown so headings break visually. Falls back
-                    // to plain text when AttributedString parsing
-                    // fails (preserves prior behavior for non-markdown
-                    // bodies). Line splits keep paragraph spacing.
+                    // U-1 — ANSWER/EVIDENCE SEPARATION. The Answer section
+                    // (sentence · badge · one-line trust note) renders first
+                    // and cannot be touched by anything that fails below it;
+                    // the Evidence section (About/footers, quality strip)
+                    // follows with its own complete/partial/failed state.
+                    // The split is byte-preserving — same composer output,
+                    // two sections. HISTORY bodies keep their markdown
+                    // headings via assistantBody.
+                    let sections = AnswerPresentation.split(
+                        body: turn.body, answer: verifiedAnswers[turn.id])
                     Group {
                         if turn.body.isEmpty {
                             // Streaming/verifying — show the animated
@@ -576,22 +594,89 @@ public struct AskView: View {
                             .padding(.vertical, 12)
                             .cardSurface(cornerRadius: 16)
                         } else {
-                            assistantBody(turn.body)
-                                .textSelection(.enabled)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 11)
-                                .cardSurface(cornerRadius: 16)
+                            VStack(alignment: .leading, spacing: 6) {
+                                assistantBody(sections.answer.text)
+                                    .textSelection(.enabled)
+                                if let badge = sections.answer.badge {
+                                    AnswerBadgeChip(badge: badge)
+                                }
+                                if let note = sections.answer.trustNote {
+                                    Text(note)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                            .cardSurface(cornerRadius: 16)
                         }
                     }
                     if let verified = verifiedAnswers[turn.id] {
-                        QualityStrip(
-                            answer: verified,
-                            onEvidenceTap: { objectID in
-                                revealSource(objectID: objectID)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Evidence", systemImage: "doc.text.magnifyingglass")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            switch sections.evidence.state {
+                            case .complete:
+                                EmptyView()
+                            case .partial(let reason):
+                                Label(reason, systemImage: "exclamationmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            case .failed(let reason):
+                                Label(reason, systemImage: "xmark.octagon")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
                             }
-                        )
-                            .padding(.horizontal, 10)
-                            .padding(.bottom, 6)
+                            if !sections.evidence.text.isEmpty {
+                                assistantBody(sections.evidence.text)
+                                    .textSelection(.enabled)
+                            }
+                            CitationChips(citations: verified.citations) { citation in
+                                revealSource(objectID: citation.objectID, quote: citation.snippet)
+                            }
+                            QualityStrip(
+                                answer: verified,
+                                onEvidenceTap: { objectID in
+                                    let quote = verified.citations.first(where: { $0.objectID == objectID })?.snippet
+                                    revealSource(objectID: objectID, quote: quote)
+                                }
+                            )
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Evidence for this answer")
+                    }
+                    // §1.3 — closest match on a not-found answer: explicitly
+                    // NOT an answer, openable at the passage.
+                    if let near = nearestPassages[turn.id] {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Not an answer \u{2014} the closest passage in your documents", systemImage: "scope")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text("\u{201C}\(near.quote)\u{201D}")
+                                .font(.callout)
+                                .textSelection(.enabled)
+                            HStack(spacing: 8) {
+                                Button {
+                                    revealSource(objectID: near.objectID, quote: near.quote)
+                                } label: {
+                                    Label("Open at this passage", systemImage: "doc.text.magnifyingglass")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                Text("Shares: \(near.sharedTerms.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(12)
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3])))
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Not an answer. The closest passage in your documents: \(near.quote)")
                     }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block
@@ -694,18 +779,20 @@ public struct AskView: View {
 
     // MARK: - Walk-step clickthrough
 
-    /// G3 Phase 5 UI — resolve a walk-step evidence KO id to its source
-    /// file URL and reveal it in Finder. Non-fatal when the KO has no
+    /// §1.3 — open a cited source IN THE APP at the quoted passage (the
+    /// SourceViewer finds and highlights `quote`; Reveal in Finder stays one
+    /// click away in its corner menu). Non-fatal when the KO has no
     /// underlying file row (rare; should only happen mid-ingest).
-    private func revealSource(objectID: UUID) {
+    private func revealSource(objectID: UUID, quote: String?) {
         Task { @MainActor in
             guard let repo = appState.objects,
                   let url = try? await repo.fetchSourceURL(id: objectID) else {
+                KalsmritikoshLog.ui.info("Citation open: no source file for \(objectID.uuidString, privacy: .public)")
                 return
             }
-            #if canImport(AppKit)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-            #endif
+            let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
+            openSource = CitationOpenTarget(url: url, objectID: objectID,
+                                            quote: (trimmed?.isEmpty ?? true) ? nil : trimmed)
         }
     }
 
@@ -739,12 +826,24 @@ public struct AskView: View {
     private func openConversation(_ id: UUID) async {
         guard let repo = appState.conversations else { return }
         let existing = (try? await repo.turns(for: id)) ?? []
+        // G2/Stage-3 — restore the durable evidence for each assistant turn
+        // that carries a ledger link: citations, verification status and the
+        // receipt come back from the answer ledger, not from rendered prose.
+        // Turns without a link (legacy, or persistence failed) stay in the
+        // honest "evidence not linked" state (body text only).
+        var restored: [UUID: VerifiedAnswer] = [:]
+        if let ledger = appState.answerLedger {
+            for turn in existing where turn.role == .assistant {
+                if let aid = turn.answerLedgerID,
+                   let verified = try? await ledger.reconstructVerifiedAnswer(answerID: aid) {
+                    restored[turn.id] = verified
+                }
+            }
+        }
         await MainActor.run {
             self.conversationID = id
             self.turns = existing
-            // Verified quality strips only re-hydrate for the live session;
-            // the answer text itself is persisted in each turn's body.
-            self.verifiedAnswers = [:]
+            self.verifiedAnswers = restored
             self.showHistory = false
             self.inputFocused = true
         }
@@ -853,7 +952,26 @@ public struct AskView: View {
 
             // Ledger-AI v28 — persist the answer against a fresh corpus
             // snapshot (closed-corpus contract). Best-effort.
-            await appState.recordAnswer(question: q, answer: answer)
+            // G2/Stage-3 — bind this turn to its durable answer so reopening
+            // the conversation restores citations/status/receipt from the
+            // ledger instead of losing them.
+            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer) {
+                try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
+            }
+
+            // §1.3 — closest match: after a genuine not-found (never a
+            // conversational brush-off, never an out-of-scope question), show
+            // the single passage sharing the most question terms, if any.
+            let notFound = answer.answerState == .notFound
+                || GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason)
+            if notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
+               let chunksRepo = appState.chunks {
+                let hits = (try? await chunksRepo.searchFTS(q, limit: 12)) ?? []
+                if let near = NearestPassageFinder.pick(
+                    question: q, candidates: hits.map { ($0.objectID, $0.text) }) {
+                    await MainActor.run { self.nearestPassages[placeholderID] = near }
+                }
+            }
 
             // GK — the second lane: only AFTER the archive lane finished and
             // REFUSED, only when the setting is on. One model call, zero
@@ -892,6 +1010,14 @@ public struct AskView: View {
         lines.append("")
         lines.append("Confidence: \(QualityStrip.confidenceWord(answer.confidence))"
             + (sources > 0 ? " · \(sources) source\(sources == 1 ? "" : "s")" : ""))
+        // W-5.5 — the ADAPTIVE DISCLAIMER: a model-free answer says so.
+        // Signal: the reasoning trace recorded zero model calls, or the
+        // deterministic composer stamped its no-model receipt in the body.
+        let modelFree = (answer.reasoningTrace.map { $0.llmPurposes.isEmpty } ?? false)
+            || answer.body.contains("no model was consulted")
+        if modelFree, !answer.refused {
+            lines.append("Answered from your records — no AI involved. Verify against the cited sources.")
+        }
         if !answer.contradictions.isEmpty {
             lines.append("⚠ Contradictions:")
             for c in answer.contradictions {
@@ -899,6 +1025,41 @@ public struct AskView: View {
             }
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Answer badge chip (U-1)
+
+/// The badge from the semantics table, rendered as a small chip in the
+/// Answer section. Labels come from `AnswerBadge.label` verbatim — this
+/// view never re-words them.
+private struct AnswerBadgeChip: View {
+    let badge: AnswerBadge
+
+    private var style: (Color, String) {
+        switch badge {
+        case .supported:          return (.green, "checkmark.seal.fill")
+        case .partiallySupported: return (.yellow, "circle.lefthalf.filled")
+        case .unverified:         return (.purple, "eye.trianglebadge.exclamationmark")
+        case .notFound:           return (.secondary, "questionmark.circle")
+        case .twinVerified:       return (.green, "checkmark.shield")
+        case .aiReadingDiffered:  return (.orange, "arrow.triangle.branch")
+        }
+    }
+
+    var body: some View {
+        let (color, icon) = style
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .imageScale(.small)
+            Text(badge.label)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.12), in: Capsule())
+        .accessibilityLabel("Answer status: \(badge.label)")
     }
 }
 

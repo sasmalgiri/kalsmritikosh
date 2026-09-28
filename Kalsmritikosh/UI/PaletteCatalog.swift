@@ -33,6 +33,7 @@ public enum PaletteActionID: String, CaseIterable, Sendable {
 public enum SettingsAnchor: String, CaseIterable, Sendable {
     case localModelSetup
     case answeringModes
+    case modules
     case privacy
     case backgroundMaintenance
     case ingestOptions
@@ -103,6 +104,11 @@ public enum PaletteCatalog {
             PaletteEntry(id: "set.answeringModes", title: "Answering & modes",
                          subtitle: "Settings — answer depth, Fast vs Full Evidence", icon: "slider.horizontal.3",
                          keywords: ["depth", "fast", "full evidence", "modes"], target: .settingsAnchor(.answeringModes)),
+            PaletteEntry(id: "set.modules", title: "Modules",
+                         subtitle: "Settings — turn optional capabilities on and off", icon: "square.grid.2x2",
+                         keywords: ["module", "modules", "feature", "features", "capability",
+                                    "enable", "disable", "toggle", "turn on", "turn off"],
+                         target: .settingsAnchor(.modules)),
             PaletteEntry(id: "set.privacy", title: "Privacy settings",
                          subtitle: "Settings — on-device guarantees and options", icon: "hand.raised",
                          keywords: ["private", "cloud", "threads", "t3"], target: .settingsAnchor(.privacy)),

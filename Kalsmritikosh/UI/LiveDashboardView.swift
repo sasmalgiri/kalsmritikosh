@@ -20,6 +20,10 @@ public struct LiveDashboardView: View {
     @State private var rootCoverage: [(displayName: String, fileCount: Int)] = []
     @State private var tierCounts: [EnrichmentTier: Int] = [:]
     @State private var gapCount: Int = 0
+    // U-3.3 — the Health & Self-check panel, replacing the ad-hoc numbers.
+    @State private var healthReport: HealthReport?
+    @State private var healthRunning = false
+    @State private var topicScore: TopicScoreboard?
 
     public init() {}
 
@@ -32,7 +36,18 @@ public struct LiveDashboardView: View {
                 }
                 if let live = appState.liveMetrics {
                     snapshotRow(live.current)
+                    // U-3.3 — Health & self-check first: invariants a glance,
+                    // then the detail panels below.
+                    if let report = healthReport {
+                        HealthPanelView(report: report, isRunning: healthRunning,
+                                        onRunSelfCheck: { Task { await runSelfCheck() } })
+                            .cardSurface(cornerRadius: 12)
+                        Divider().padding(.vertical, 4)
+                    }
                     llmBudgetPanel(live.current)
+                    if let score = topicScore, score.total > 0 {
+                        topicScoreboardPanel(score)
+                    }
                     enrichmentTiersPanel()
                     pipelineStrip(live.current.pipelineCounters)
                     throughputChart(live.throughput)
@@ -68,6 +83,19 @@ public struct LiveDashboardView: View {
         }
         .task {
             await loadEnrichmentTiers()
+        }
+        // REBUILD WHEN THE SAMPLE MOVES. A plain `.task` runs once at
+        // view-appear and loses the race against `liveMetrics.start()` in
+        // `.onAppear`, so the panel captured an empty sample and then showed
+        // "chunks: 0" beside a card reading 9,611 for the rest of the session.
+        // Keying the task on the sample's capture time rebuilds it each tick,
+        // which is cheap: the coverage rows are struct reads and the two
+        // invariant queries are indexed counts.
+        .task(id: appState.liveMetrics?.current.capturedAt) {
+            healthReport = await HealthReportBuilder.build(appState: appState)
+        }
+        .task {
+            topicScore = await appState.topicScoreboard()
         }
         .onAppear {
             // Phase J.13 — start polling only while the Live tab is
@@ -218,6 +246,62 @@ public struct LiveDashboardView: View {
         .cardSurface(cornerRadius: 12, tint: tint)
     }
 
+    // MARK: - Apple Intelligence status
+
+    /// Live on-device-AI status, read straight from the FoundationModels
+    /// availability API. nil hint = ready; otherwise the exact reason (Apple
+    /// Intelligence off, device not eligible, model still preparing). Answers to
+    /// plain factual LOOKUPS may still say "no model consulted" — that is the
+    /// minimum-LLM design (the deterministic layers answered), not this being off.
+    @ViewBuilder
+    private var appleIntelligenceStatusChip: some View {
+        let hint = FoundationModelsProvider.unavailabilityHint()
+        let ready = (hint == nil)
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: ready ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(ready ? .green : .orange)
+                .font(.caption2)
+            Text(ready
+                 ? "Apple Intelligence: on-device model ready"
+                 : (hint ?? "Apple Intelligence unavailable"))
+                .font(.caption2)
+                .foregroundStyle(ready ? .green : .orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((ready ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    // MARK: - Topic scoreboard (M4 — did AI improve the topic layer?)
+
+    @ViewBuilder
+    private func topicScoreboardPanel(_ s: TopicScoreboard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up.badge.a")
+                    .foregroundStyle(Theme.brand)
+                Text("Topic quality").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Text("\(Int(s.subjectShapedFraction * 100))% real-subject")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(s.subjectShapedFraction >= 0.7 ? .green : .orange)
+            }
+            HStack(spacing: 10) {
+                budgetTile("Topics", s.total, "square.stack.3d.up", .blue)
+                budgetTile("Real subject", s.subjectShaped, "person.crop.circle", .green)
+                budgetTile("Document-shaped", s.documentShaped, "doc", .orange)
+                budgetTile("AI-polished", s.aiPolished, "sparkles", .purple)
+            }
+            Text("Fewer document-shaped topics + more AI-polished = AI subject resolution and prose working. Build topics in Settings → Your data to refresh.")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12)
+    }
+
     // MARK: - LLM budget (ledger-first reduction)
 
     @ViewBuilder
@@ -234,6 +318,7 @@ public struct LiveDashboardView: View {
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.green)
             }
+            appleIntelligenceStatusChip
             HStack(spacing: 10) {
                 budgetTile("Calls run", sample.llmCallsRun, "waveform", .blue)
                 budgetTile("Skipped", sample.llmCallsSkipped, "bolt.slash", .green)
@@ -711,6 +796,13 @@ public struct LiveDashboardView: View {
     }
 
     // MARK: - I/O
+
+    /// U-3.3 — re-gather the health report on demand ("Run self-check").
+    private func runSelfCheck() async {
+        healthRunning = true
+        healthReport = await HealthReportBuilder.build(appState: appState)
+        healthRunning = false
+    }
 
     private func loadRootCoverage() async {
         var rows: [(String, Int)] = []

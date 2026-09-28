@@ -31,7 +31,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case registers
     case workspaces
     case dataLab
-    case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
+    case timeline, history, findings, notebook, dossier, explore, matrix, compareDocs, connections, story
     case reasoning, hypotheses, hrStudio, privilegeStudio, siuStudio, faStudio, jnStudio
     case rsStudio, gnStudio, ccStudio, inStudio
     case sopBoard
@@ -66,6 +66,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .dossier:      return "Dossier"
         case .explore:      return "Explore"
         case .matrix:       return "Cross-Doc Matrix"
+        case .compareDocs:  return "Compare Documents"
         case .connections:  return "Connections"
         case .fundFlow:     return "Fund Flow"
         case .emailThreads: return "Email Threads"
@@ -128,6 +129,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .dossier:      return "person.text.rectangle"
         case .explore:      return "point.3.connected.trianglepath.dotted"
         case .matrix:       return "square.grid.3x3.topleft.filled"
+        case .compareDocs:  return "square.split.2x1"
         case .connections:  return "point.topleft.down.to.point.bottomright.curvepath"
         case .fundFlow:     return "arrow.triangle.branch"
         case .emailThreads: return "envelope.badge.person.crop"
@@ -206,6 +208,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .dossier:      return "Everything known about a person or entity"
         case .explore:      return "Entity graph — see who and what connects"
         case .matrix:       return "Ask one question across every document — what each source says, cited"
+        case .compareDocs:  return "Compare two or more documents field by field — agreements, disagreements, and what no source settles"
         case .connections:  return "Find the shortest chain of relationships linking two people or organizations"
         case .fundFlow:     return "See how money moved between parties — payer to payee — drawn from your evidence"
         case .emailThreads: return "A big email dump, deduplicated and grouped into conversations"
@@ -262,7 +265,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .sutra, .sopBoard, .settings]
@@ -316,23 +319,21 @@ public struct RootView: View {
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
-    /// Interface mode. Simple collapses each sidebar group to its ONE primary surface
-    /// (Group.simplePrimary); Advanced shows every screen. Everything hidden in Simple stays
-    /// reachable via the header search + ⌘K palette. Persisted; default Simple.
-    @AppStorage("kalsmritikosh.settings.simpleMode") private var simpleMode: Bool = true
-    /// ENGINE POWER — same defaults key FeatureFlags.fullPowerMode reads, so
-    /// the sidebar toggle and the engine's value getters stay in lockstep.
+    /// HYBRID MODE (owner request 2026-09-16) — the app runs ONE unified mode
+    /// with NO user toggle. The presentation is the calm primary navigation
+    /// (Stage 7: a new user completes the flagship workflows without learning a
+    /// taxonomy); every specialist surface stays reachable through the header
+    /// search + ⌘K palette, so nothing is lost — only decluttered.
+    private let simpleMode = true
+    /// ENGINE POWER — hybrid: the full stack is always on (embeddings, vector
+    /// search, on-device AI) with the AEE's adaptive escalation providing the
+    /// fast path when full reasoning isn't needed. No user Full/Lightning
+    /// toggle. Same FeatureFlags.fullPowerMode key, forced true at launch.
     @AppStorage("kalsmritikosh.feature.fullPower") private var fullPower: Bool = true
     /// Semantic-index backlog (embedded chunks vs total), refreshed every 30s
     /// — drives the caption under the Engine picker so Lightning's deferred
     /// indexing is never silent.
     @State private var semanticBacklog: (done: Int, total: Int) = (0, 0)
-    /// Engine-switch confirmation. When the user flips Full power ↔ Lightning
-    /// while background work is running, we hold the desired value here and
-    /// raise a Stop all / Keep running / Cancel dialog instead of flipping
-    /// silently — so the switch never strands in-flight work without a choice.
-    @State private var pendingEnginePower: Bool?
-    @State private var showEngineSwitchConfirm = false
     /// Presents the native "Add files" importer (SwiftUI-managed, sizes correctly).
     @State private var showAddFiles = false
     /// Presents the add-folder importer (from the ⌘K palette).
@@ -453,7 +454,7 @@ public struct RootView: View {
              .transcripts, .authenticity, .citations,
              .freshness, .trends, .emailThreads, .query:              return .entities
         case .dataLab:                                                return .dataLab
-        case .connections, .explore, .matrix, .fundFlow:              return .relationships
+        case .connections, .explore, .matrix, .compareDocs, .fundFlow: return .relationships
         case .findings, .notebook, .dossier, .story, .review,
              .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses,
              .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
@@ -488,7 +489,11 @@ public struct RootView: View {
         case .failed(let message):
             failedView(message)
         case .ready:
-            main
+            VStack(spacing: 0) {
+                // §1.1 — the sample ledger announces itself on every screen.
+                if SampleArchiveMode.isActive { SampleArchiveBanner() }
+                main
+            }
         }
     }
 
@@ -577,6 +582,12 @@ public struct RootView: View {
             if newValue != nil { navigate(to: .workCenter) }
         }
         .task {
+            // HYBRID MODE — the engine is always full power (no Lightning toggle).
+            // Force it on at launch so a value persisted by an older build can't
+            // strand the app in the retired Lightning path.
+            if !fullPower { fullPower = true }
+        }
+        .task {
             // ENGINE POWER — refresh the semantic-index backlog caption.
             while !Task.isCancelled {
                 let p = await appState.ingestProgress()
@@ -595,7 +606,7 @@ public struct RootView: View {
             }
         }
         .task {
-            if !onboardingShown && appState.bookmarks.roots.isEmpty {
+            if !onboardingShown && appState.bookmarks.roots.isEmpty && !SampleArchiveMode.isActive {
                 presentingOnboarding = true
                 onboardingShown = true
             }
@@ -650,20 +661,6 @@ public struct RootView: View {
     /// as `pendingEnginePower` and the confirmation dialog decides what happens;
     /// otherwise it flips immediately. The getter always returns the committed
     /// `fullPower`, so the segmented control stays put until the user confirms.
-    private var enginePowerBinding: Binding<Bool> {
-        Binding(
-            get: { fullPower },
-            set: { newValue in
-                guard newValue != fullPower else { return }
-                if appState.hasStoppableBackgroundWork {
-                    pendingEnginePower = newValue
-                    showEngineSwitchConfirm = true
-                } else {
-                    fullPower = newValue
-                }
-            })
-    }
-
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 3) {
@@ -707,48 +704,9 @@ public struct RootView: View {
                         Task { await appState.ingestFiles(urls) }
                     }
                 }
-                // Simple / Advanced interface toggle. Simple shows one primary screen per group;
-                // everything else stays reachable via the header search + ⌘K.
-                Picker("Interface", selection: $simpleMode) {
-                    Text("Simple").tag(true)
-                    Text("Advanced").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
-                // ENGINE POWER (owner request 2026-08-16) — Full power runs the
-                // complete stack (embeddings, vector search, on-device AI);
-                // Lightning answers from structure + full-text alone: fastest,
-                // lowest energy, still evidence-cited. Lossless flip: vectors
-                // resume backfilling the moment Full power returns.
-                Picker("Engine", selection: enginePowerBinding) {
-                    Label("Full power", systemImage: "brain").tag(true)
-                    Label("Lightning", systemImage: "bolt.fill").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
-                .help("Full power: embeddings, vector search and on-device AI. Lightning: structure + full-text only — fastest and lowest energy; answers stay cited to your documents.")
-                .confirmationDialog(
-                    "Background work is running",
-                    isPresented: $showEngineSwitchConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("Stop all and switch", role: .destructive) {
-                        appState.stopAllBackgroundWork()
-                        if let p = pendingEnginePower { fullPower = p }
-                        pendingEnginePower = nil
-                    }
-                    Button("Keep running and switch") {
-                        if let p = pendingEnginePower { fullPower = p }
-                        pendingEnginePower = nil
-                    }
-                    Button("Cancel", role: .cancel) { pendingEnginePower = nil }
-                } message: {
-                    Text("Ingesting, relationship extraction and semantic indexing are still in progress. Switching the engine loses nothing — the work pauses and resumes automatically. Choose Stop all to halt it now instead.")
-                }
+                // HYBRID MODE — the Simple/Advanced and Full power/Lightning
+                // toggles were removed (owner request 2026-09-16): the app runs
+                // one unified mode — full navigation + full-power adaptive engine.
                 // D-6 — the honest deterministic-mode note (CLEAN_MACHINE step 6):
                 // when no on-device generation is available, say WHY — the
                 // FoundationModels unavailability hint — right where the engine
@@ -804,9 +762,10 @@ public struct RootView: View {
                 onboardingTip
                 personaSection
                 if simpleMode {
-                    // Simple mode: exactly one primary per group. Collapsing a single-item group would
-                    // hide it behind a chevron (the "empty sidebar" bug), so show the primaries as a
-                    // flat, always-visible list under one calm caption. Everything else is one ⌘K away.
+                    // Stage 7 — the work-oriented primary destinations: Home,
+                    // Ask (flagship A), Projects, Files, Outputs, then Settings.
+                    // Every other surface is one ⌘K palette / header-search away,
+                    // so nothing is lost — only decluttered.
                     Text("GO TO")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -814,17 +773,16 @@ public struct RootView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 12)
                         .padding(.bottom, 2)
-                    ForEach(Destination.Group.allCases) { group in
-                        SidebarRow(dest: group.simplePrimary, isSelected: selection == group.simplePrimary, namespace: sidebarNS) {
-                            navigate(to: group.simplePrimary)
+                    ForEach(stagePrimaries, id: \.dest) { item in
+                        SidebarRow(dest: item.dest, isSelected: selection == item.dest,
+                                   namespace: sidebarNS,
+                                   labelOverride: item.label, iconOverride: item.icon) {
+                            navigate(to: item.dest)
                         }
                     }
-                    // Even in Simple mode, keep the professional workflow surfaces one
-                    // click away — jobs run their guided workflows in the Work Center.
-                    ForEach([Destination.work, .workCenter], id: \.self) { dest in
-                        SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
-                            navigate(to: dest)
-                        }
+                    Divider().padding(.horizontal, 12).padding(.vertical, 4)
+                    SidebarRow(dest: .settings, isSelected: selection == .settings, namespace: sidebarNS) {
+                        navigate(to: .settings)
                     }
                 } else {
                     // Advanced mode: every screen, grouped and collapsible (groups start expanded).
@@ -929,12 +887,35 @@ public struct RootView: View {
         return t
     }
 
-    /// The last 4 screens the user actually visited, newest first (home
-    /// excluded — it has its own permanent place). Empty until real use.
+    /// Stage 7 primary destinations (label/icon overrides map existing screens
+    /// to the work-oriented names). Home · Ask · Projects · Files · Outputs.
+    /// Settings is shown separately below a divider as the utility destination.
+    private var stagePrimaries: [(dest: Destination, label: String, icon: String)] {
+        [(.home, "Home", "house"),
+         (.ask, "Ask", "bubble.left.and.text.bubble.right"),
+         (.workspaces, "Projects", "folder"),
+         (.sources, "Files", "tray.and.arrow.down.fill"),
+         (.answers, "Outputs", "tray.full")]
+    }
+
+    /// The permanent sidebar destinations always shown under GO TO — the Stage 7
+    /// primaries plus Settings. Recents are deduplicated against this set so
+    /// nothing appears twice (Stage 7).
+    private var permanentSidebarDestinations: Set<Destination> {
+        var set = Set(stagePrimaries.map { $0.dest })
+        set.insert(.settings)
+        return set
+    }
+
+    /// The last 4 screens the user actually visited, newest first, EXCLUDING
+    /// any already pinned under GO TO (Home + the group primaries + work
+    /// surfaces) — so a recent never duplicates a permanent row. Empty until
+    /// there is real, non-duplicate history.
     private var recentDestinations: [Destination] {
-        recentDestinationsBlob.split(separator: ",")
+        let permanent = permanentSidebarDestinations
+        return recentDestinationsBlob.split(separator: ",")
             .compactMap { Destination(rawValue: String($0)) }
-            .filter { $0 != .home }
+            .filter { !permanent.contains($0) }
             .prefix(4)
             .map { $0 }
     }
@@ -1085,47 +1066,28 @@ public struct RootView: View {
     /// Always-visible badge showing the active system mode. Tapping opens
     /// the chooser (a change applies on next launch once booted). Also
     /// surfaces the count of files discovered this launch.
+    /// New-files hint. The MODE chooser was removed (owner 2026-09-16, "zero
+    /// mode choices"): the system runs one pinned engine, so there is nothing
+    /// to choose. This is now a NON-interactive indicator shown only when new
+    /// files arrived this session; when there are none it renders nothing, so
+    /// the sidebar stays calm.
+    @ViewBuilder
     private var modeBadge: some View {
-        let mode = FeatureFlags.shared.systemMode
-        return Button {
-            appState.showModeChooser = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: mode.symbolName)
+        if appState.newFilesSinceLaunch > 0 {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
                     .imageScale(.small)
-                    .foregroundStyle(Theme.brand)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("MODE")
-                        .font(.system(size: 8, weight: .heavy))
-                        .foregroundStyle(.tertiary)
-                        .tracking(0.5)
-                    Text(mode.shortLabel)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if appState.newFilesSinceLaunch > 0 {
-                    Text("\(appState.newFilesSinceLaunch) new")
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Theme.brandAlt.opacity(0.16), in: .capsule)
-                        .foregroundStyle(Theme.brandAlt)
-                }
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.brandAlt)
+                Text("\(appState.newFilesSinceLaunch) new file\(appState.newFilesSinceLaunch == 1 ? "" : "s") added")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Theme.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(Theme.brand.opacity(0.18), lineWidth: 1)
-            )
+            .padding(.vertical, 6)
+            .background(Theme.brandAlt.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .padding(.horizontal, 8)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 8)
     }
 
     /// First-run walkthrough tip (TipKit) — one ordered tip at a time,
@@ -1402,6 +1364,7 @@ public struct RootView: View {
         case .dossier:      DossierView()
         case .explore:      ExplorerView()
         case .matrix:       CrossDocumentMatrixView()
+        case .compareDocs:  StructuredComparisonView()
         case .connections:  ConnectionFinderView()
         case .fundFlow:     FundFlowView()
         case .emailThreads: EmailThreadsView()
@@ -1496,19 +1459,27 @@ private struct SidebarRow: View {
     let dest: Destination
     let isSelected: Bool
     let namespace: Namespace.ID
+    /// Optional presentation overrides — used by the Stage 7 primary rows so a
+    /// destination can show a work-oriented label ("Projects", "Files",
+    /// "Outputs") without renaming the destination globally.
+    var labelOverride: String? = nil
+    var iconOverride: String? = nil
     let onTap: () -> Void
     @State private var hovering = false
+
+    private var label: String { labelOverride ?? dest.title }
+    private var icon: String { iconOverride ?? dest.icon }
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 10) {
-                Image(systemName: dest.icon)
+                Image(systemName: icon)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(isSelected ? .white : Theme.brand)
                     .frame(width: 26, height: 26)
                     .background(iconChip)
                     .symbolEffect(.bounce, value: isSelected)
-                Text(dest.title)
+                Text(label)
                     .font(.callout.weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                 Spacer(minLength: 0)
@@ -1525,7 +1496,7 @@ private struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(dest.title) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
+        .help("\(label) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
         .onHover { h in
             withAnimation(.easeOut(duration: 0.12)) { hovering = h }
         }
@@ -1755,5 +1726,27 @@ private struct PersonaPickerView: View {
         }
         .padding(24)
         .frame(width: 520, height: 560)
+    }
+}
+
+/// §1.1 — the persistent strip shown while the app runs on the sample ledger.
+struct SampleArchiveBanner: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkles")
+            Text("Sample archive \u{2014} you\u{2019}re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched.")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Back to my archive") { SampleArchiveMode.exit() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(Color.purple.opacity(0.14))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sample archive mode. Your own documents are untouched.")
     }
 }

@@ -33,6 +33,19 @@ public nonisolated struct IdentityFieldResolver: Sendable {
     public static func questionFieldType(_ question: String) -> TypedFieldType? {
         let q = question.lowercased()
         func any(_ ks: [String]) -> Bool { ks.contains { q.contains($0) } }
+        // AN AGGREGATE QUESTION IS NOT A FIELD LOOKUP. This path answers "what
+        // IS the <field>" by reading located values; a counting or listing
+        // question wants something the typed-field layer does not hold.
+        //
+        // Measured on the owner's archive, 2026-09-25: "How many emails involve
+        // the data subject patent?" matched `.email` on the bare substring
+        // "email" inside "emails", took this fast path, found several distinct
+        // values and answered "The email is ambiguous across the evidence…"
+        // with a bulleted list of field values — for a question that asked for
+        // a NUMBER. The same misroute would answer "how many invoices are
+        // there?" with an invoice number.
+        if any(["how many", "how much", "count of", "number of times", "total number",
+                "list all", "list every"]) { return nil }
         // Most specific first so "date of issue" isn't swallowed by "date"/"name".
         if any(["date of birth", "d.o.b", " dob", "birth date"]) { return .dateOfBirth }
         if any(["date of issue", "issue date", "issued on", "date issued", "when was it issued", "when was this issued"]) { return .issueDate }
@@ -42,7 +55,11 @@ public nonisolated struct IdentityFieldResolver: Sendable {
         if any(["reference number", "reference no", "ref no"]) { return .referenceNumber }
         if any(["account number", "account no", "iban"]) { return .accountIdentifier }
         if any(["pan number", " pan", "gstin", "tax id", "tax identifier", "national id", "ssn"]) { return .taxIdentifier }
-        if any(["email address", "e-mail", "email"]) { return .email }
+        // "email" must be a WHOLE WORD. Bare-substring matching made the plural
+        // "emails" — which asks about messages, not about an address — resolve
+        // to the email-address field. "What is his email?" still matches,
+        // because a trailing "?" or space is a boundary; "emails" does not.
+        if any(["email address", "e-mail"]) || word("email", in: q) { return .email }
         if any(["phone number", "phone", "mobile number", "contact number"]) { return .phone }
         if any(["organization", "organisation", "company", "issued by", "issuing authority"]) { return .organizationName }
         if any(["address"]) { return .address }
@@ -50,6 +67,22 @@ public nonisolated struct IdentityFieldResolver: Sendable {
                 "who is this document for", "who is this for", "person's name", "name of the holder",
                 "holder name", "name of person"]) { return .personName }
         return nil
+    }
+
+    /// `needle` occurring as a whole word in `haystack` — neither side may be
+    /// adjacent to a letter or digit.
+    static func word(_ needle: String, in haystack: String) -> Bool {
+        var from = haystack.startIndex
+        while let r = haystack.range(of: needle, range: from..<haystack.endIndex) {
+            let prev = r.lowerBound == haystack.startIndex
+                ? nil : haystack[haystack.index(before: r.lowerBound)]
+            let next = r.upperBound == haystack.endIndex ? nil : haystack[r.upperBound]
+            let beforeOK = prev.map { !$0.isLetter && !$0.isNumber } ?? true
+            let afterOK = next.map { !$0.isLetter && !$0.isNumber } ?? true
+            if beforeOK && afterOK { return true }
+            from = r.upperBound
+        }
+        return false
     }
 
     /// Resolve a field type against located fields.

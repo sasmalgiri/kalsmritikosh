@@ -93,6 +93,14 @@ public actor HybridRetriever: Retriever {
     /// after the base retrieval + legacy privilege filter. nil = default
     /// extension (wraps result with zero withheld counts, no enforcement).
     private let sensitivePolicy: SensitiveRetrievalPolicy?
+    /// R2 — optional cross-encoder rerank of the final chunk set. nil ⇒ no-op
+    /// (identity order). Reorder-only: it never drops a chunk, so recall cannot
+    /// fall; it only promotes the most on-target passages for the composer.
+    private let reranker: RerankerLadder?
+    /// R4 — optional HyDE expander. nil ⇒ no-op. Consulted only when the literal
+    /// query's vector pass is weak (vocabulary mismatch), so ordinary questions
+    /// spend no extra model budget.
+    private let hyde: HypotheticalQueryExpander?
 
     public init(
         memory: MemoryRepository,
@@ -116,12 +124,16 @@ public actor HybridRetriever: Retriever {
         objects: KnowledgeObjectRepository? = nil,
         genericFacts: GenericFactRepository? = nil,
         independenceProvider: SourceIndependenceKeyProvider? = nil,
-        sensitivePolicy: SensitiveRetrievalPolicy? = nil
+        sensitivePolicy: SensitiveRetrievalPolicy? = nil,
+        reranker: RerankerLadder? = nil,
+        hyde: HypotheticalQueryExpander? = nil
     ) {
         self.objects = objects
         self.genericFacts = genericFacts
         self.independenceProvider = independenceProvider
         self.sensitivePolicy = sensitivePolicy
+        self.reranker = reranker
+        self.hyde = hyde
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -270,7 +282,22 @@ public actor HybridRetriever: Retriever {
         }
         let densityKOs = Set(mentionCounts.filter { $0.value >= 3 }.map(\.key))
 
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // P3.4 — the ledger's ACTUAL field inventory, so a question can reach a
+        // field the open extractor discovered and nobody enumerated ("what is
+        // the chassis number"). Read here, at the one place that both holds the
+        // facts repo and compiles the plan immediately before slot-aware
+        // retrieval consumes it.
+        //
+        // Cheap and bounded: one grouped COUNT over generic_facts, capped, and
+        // only when the asking module is on. Empty inventory changes nothing —
+        // the discovered-field lane simply never fires.
+        var knownFields: Set<String> = []
+        if KnowledgeModuleFlags.isEnabled(.openFieldAsking), let genericFacts {
+            knownFields = Set((try? await genericFacts.distinctFields()) ?? [])
+        }
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact,
+                                               queryClass: .ordinary,
+                                               knownFields: knownFields)
 
         // Slot-aware retrieval — a registered fact-field question ("what is the
         // patent no") must reach the block that CARRIES that field even when
@@ -446,7 +473,7 @@ public actor HybridRetriever: Retriever {
             resultRelationships = collectedRelationships
         }
 
-        let result = assemble(
+        let result = await assemble(
             chunks: resultChunks,
             events: resultEvents,
             entities: resultEntities,
@@ -456,7 +483,8 @@ public actor HybridRetriever: Retriever {
             shortCircuit: nil,
             walkSteps: walkSteps,
             authorityKOs: authorityKOs,
-            authorityRanking: authorityRanking
+            authorityRanking: authorityRanking,
+            question: intent.rawQuestion
         )
         return await attachGenericFacts(to: result)
     }
@@ -486,7 +514,7 @@ public actor HybridRetriever: Retriever {
     /// a block id. Never throws into the retrieval path.
     private func attachGenericFacts(to result: RetrievalResult) async -> RetrievalResult {
         guard let genericFacts else { return result }
-        let blockIDs = result.chunks.compactMap { $0.chunk.evidenceBlockID }
+        let blockIDs = result.chunks.flatMap { $0.chunk.allBlockIDs }   // L1: every block of a packed chunk
         guard !blockIDs.isEmpty else { return result }                 // zero work when no blocks
         let facts = (try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? []
         guard !facts.isEmpty else { return result }                    // zero work when no facts
@@ -495,9 +523,8 @@ public actor HybridRetriever: Retriever {
         // retrieved chunks — no repo calls, no invented objects). Then resolve independence
         // keys in ONE batch for exactly that set. Skip the batch when nothing resolves.
         var blockToObject: [UUID: KnowledgeObject.ID] = [:]
-        for c in result.chunks where c.chunk.evidenceBlockID != nil {
-            let b = c.chunk.evidenceBlockID!
-            if blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
+        for c in result.chunks {
+            for b in c.chunk.allBlockIDs where blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
         }
         let resolvedObjects = Set(facts.flatMap { $0.sourceBlockIDs.compactMap { blockToObject[$0] } })
         var keys: [KnowledgeObject.ID: String] = [:]
@@ -805,6 +832,21 @@ public actor HybridRetriever: Retriever {
                 hits = (try? await chunks.searchFTS(tokens.joined(separator: " OR "), limit: 25)) ?? []
             }
         }
+        // P2.2 (module .documentLevelFTS) — whole-document keyword fallback.
+        //
+        // chunks_fts indexes each chunk SEPARATELY, so a phrase whose words fall
+        // either side of a chunk boundary can never match it: no indexed row
+        // contains the whole phrase. knowledge_objects_fts indexes the full
+        // document and does match — and had been trigger-maintained since v14
+        // with NOTHING reading it. The write was never waste; the read was
+        // missing.
+        //
+        // Last resort by design. Chunk hits carry the actual passage and stay
+        // the primary lane; this fires only when that lane is empty, so it can
+        // add recall without ever displacing a precise hit.
+        if hits.isEmpty, KnowledgeModuleFlags.isEnabled(.documentLevelFTS) {
+            hits = (try? await chunks.searchDocumentFTS(q)) ?? []
+        }
         var collected: [RetrievedChunk] = hits.enumerated().map { idx, chunk in
             RetrievedChunk(
                 chunk: chunk,
@@ -874,7 +916,11 @@ public actor HybridRetriever: Retriever {
     }
 
     private func summaryLayer(_ intent: UserIntent) async throws -> [Summary] {
+        // U-3.5 (W-6) — CommunitySummarizer classification: a model-generated
+        // summary may steer a search but is never itself citable evidence.
+        // Only deterministic / extractive summaries reach the retrieval set.
         try await summaries.listByLevel(.knowledgeBase, limit: 3)
+            .filter(\.isRetrievalEligible)
     }
 
     private func graphLayer(seeds: [Entity]) async throws -> [Relationship] {
@@ -1020,11 +1066,35 @@ public actor HybridRetriever: Retriever {
             KalsmritikoshLog.storage.notice("Vector layer skipped: no query embedding produced; using structured layers only.")
             return []
         }
-        let hits = try await vectors.nearest(
+        var hits = try await vectors.nearest(
             to: query,
             limit: vectorLayerLimit,
             candidateChunkIDs: candidateChunkIDs
         )
+        // R4 — HyDE: only when the literal query retrieved little (a vocabulary
+        // mismatch), bridge with a hypothetical answer and RRF-fuse its neighbors.
+        // The hypothetical is never surfaced; the intent guard lives in the expander.
+        if let hyde, KnowledgeModuleFlags.isEnabled(.hydeExpansion),
+           hits.count < max(3, vectorLayerLimit / 4),
+           let hypo = await hyde.hypothetical(for: intent.rawQuestion) {
+            let hypoVec = await embedder.embed(hypo)
+            if !hypoVec.isEmpty {
+                let hypoHits = (try? await vectors.nearest(
+                    to: hypoVec, limit: vectorLayerLimit,
+                    candidateChunkIDs: candidateChunkIDs)) ?? []
+                if !hypoHits.isEmpty {
+                    var bestScore: [Chunk.ID: Double] = [:]
+                    for h in hits + hypoHits {
+                        bestScore[h.chunkID] = max(bestScore[h.chunkID] ?? -.greatestFiniteMagnitude, h.score)
+                    }
+                    let fused = HypotheticalQueryExpander.rrfFuse(
+                        [hits.map(\.chunkID), hypoHits.map(\.chunkID)])
+                    hits = fused.prefix(vectorLayerLimit).map {
+                        VectorHit(chunkID: $0, score: bestScore[$0] ?? 0)
+                    }
+                }
+            }
+        }
         let hydrated = try await chunks.findByIDs(hits.map(\.chunkID))
         let byID = Dictionary(uniqueKeysWithValues: hydrated.map { ($0.id, $0) })
         return hits.compactMap { hit in
@@ -1058,8 +1128,9 @@ public actor HybridRetriever: Retriever {
         shortCircuit: RetrievalLayer?,
         walkSteps: [WalkStep] = [],
         authorityKOs: Set<KnowledgeObject.ID> = [],
-        authorityRanking: [KnowledgeObject.ID] = []
-    ) -> RetrievalResult {
+        authorityRanking: [KnowledgeObject.ID] = [],
+        question: String = ""
+    ) async -> RetrievalResult {
         // HISTORY Phase A.4 — tier-aware re-ranking.
         // Entities are sorted by (-tier.defaultWeight, originalIndex)
         // so T1 leads, T2 follows, T3 trails — unless the user has
@@ -1120,7 +1191,8 @@ public actor HybridRetriever: Retriever {
             let rest = fused.filter { !authorityKOs.contains($0.chunk.objectID) }
             prioritized = authorityChunks + rest
         }
-        let diverseChunks = Self.diversify(prioritized)
+        let diverseChunks = await Self.reranked(
+            Self.diversify(prioritized), question: question, reranker: reranker)
 
         // UPDATE_07 — the same hygiene for events: the timeline/reconstruction
         // path was drowning in email noise (empty-title events, internal
@@ -1199,6 +1271,28 @@ public actor HybridRetriever: Retriever {
             out.append(rc)
         }
         return out
+    }
+
+    /// R2 — reorder the final chunks by cross-encoder relevance when a reranker
+    /// is wired. REORDER-ONLY: the returned set is exactly the input set (no
+    /// drops), so recall is preserved; only the ORDER changes to promote the
+    /// most on-target passages for the composer. nil reranker, empty question,
+    /// or ≤1 chunk → identity. Ties keep original order.
+    nonisolated static func reranked(
+        _ chunks: [RetrievedChunk], question: String, reranker: RerankerLadder?
+    ) async -> [RetrievedChunk] {
+        guard let reranker, KnowledgeModuleFlags.isEnabled(.crossEncoderRerank),
+              chunks.count > 1,
+              !question.trimmingCharacters(in: .whitespaces).isEmpty else { return chunks }
+        let cap = Swift.min(chunks.count, 100)
+        let head = Array(chunks.prefix(cap))
+        let tail = Array(chunks.dropFirst(cap))
+        let scores = await reranker.score(question: question, candidates: head.map { $0.chunk.text })
+        guard scores.count == head.count else { return chunks }
+        let ordered = zip(head, scores).enumerated()
+            .sorted { a, b in a.element.1 != b.element.1 ? a.element.1 > b.element.1 : a.offset < b.offset }
+            .map { $0.element.0 }
+        return ordered + tail
     }
 
     /// System-notification / non-substantive email subjects that are never a

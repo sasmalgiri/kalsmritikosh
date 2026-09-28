@@ -54,13 +54,20 @@ public actor ClaimProducer {
     private let events: EventsRepository
     private let claims: ClaimRepository
     private let evidence: EvidenceStore
+    /// A3 (module .proseSubjectBinding) — resolves a subject-less fact's subjectLabel to a
+    /// canonical Entity.ID so a plain-document fact scopes to a subject instead of only its
+    /// source object. nil ⇒ feature unavailable (old behaviour). Consulted ONLY when the
+    /// module is on AND the fact has no persisted subjectID.
+    private let subjectResolver: (@Sendable (String) async -> Entity.ID?)?
 
     public init(genericFacts: GenericFactRepository, assertions: AssertionsRepository,
                 temporalClaims: TemporalClaimRepository, events: EventsRepository,
-                claims: ClaimRepository, evidence: EvidenceStore) {
+                claims: ClaimRepository, evidence: EvidenceStore,
+                subjectResolver: (@Sendable (String) async -> Entity.ID?)? = nil) {
         self.genericFacts = genericFacts; self.assertions = assertions
         self.temporalClaims = temporalClaims; self.events = events
         self.claims = claims; self.evidence = evidence
+        self.subjectResolver = subjectResolver
     }
 
     // MARK: - Backfill (all source types, paged, failure-isolated)
@@ -268,10 +275,18 @@ public actor ClaimProducer {
 
     private func claim(from fact: GenericFact, at now: Date) async throws -> Claim? {
         let refs = try await reopenableRefs(blockIDs: fact.sourceBlockIDs, objectIDs: [], genericFactID: fact.id)
-        guard let scope = Self.scope(subjectID: fact.subjectID, evidence: refs) else { return nil }
+        // A3 — bind a subject-less prose fact to a resolved subject when the module is on.
+        // Default OFF ⇒ effective == fact.subjectID ⇒ behaviour unchanged.
+        var effectiveSubjectID = fact.subjectID
+        if effectiveSubjectID == nil,
+           KnowledgeModuleFlags.isEnabled(.proseSubjectBinding),
+           !fact.subjectLabel.isEmpty, let subjectResolver {
+            effectiveSubjectID = await subjectResolver(fact.subjectLabel)
+        }
+        guard let scope = Self.scope(subjectID: effectiveSubjectID, evidence: refs) else { return nil }
         let statement = fact.unit.map { "\(fact.field): \(fact.value) \($0)" } ?? "\(fact.field): \(fact.value)"
-        return Claim(id: Self.claimID(kind: "genericFact", sourceID: fact.id, subjectID: fact.subjectID),
-                     subjectID: fact.subjectID, subjectLabel: fact.subjectLabel, statement: statement,
+        return Claim(id: Self.claimID(kind: "genericFact", sourceID: fact.id, subjectID: effectiveSubjectID),
+                     subjectID: effectiveSubjectID, subjectLabel: fact.subjectLabel, statement: statement,
                      assessment: fact.assessment, confidence: fact.confidence, evidence: refs,
                      derivedFrom: [DerivedReference(kind: .genericFact, id: fact.id)], scope: scope, createdAt: now)
     }

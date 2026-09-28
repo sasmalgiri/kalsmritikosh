@@ -145,6 +145,29 @@ public enum SourceByteCapture {
         if byExtension != .unknown {
             return (byExtension, .declaredExtension, declaredExtension)
         }
+        // 3.2. L2 — text-format sniff for a file with no usable extension (an e-mail
+        // part saved as "attachment-7B4395C2"): HTML/XML/RTF/mbox/eml/JSON by their
+        // openers, readable text as .txt. After the extension check, so it never
+        // takes a file away from a recognised format.
+        if let text = SourceType.sniffTextSignature(head) {
+            return (text, .structuralProbe, declaredExtension)
+        }
+        // 3.5. HOST-4 — structural probe, LAST resort only. Linux login accounting
+        // has no magic signature, so a `wtmp` copied out under another name would
+        // otherwise be dropped as unknown bytes. This runs only after the
+        // extension check has failed, so it can never take a file away from a
+        // recognized format; the probe itself is strict (every record in the head
+        // must decode under one byte order, and at least one must be a dated
+        // session or boot).
+        if UtmpReader.looksLikeLoginRecords(head) {
+            return (.loginRecord, .structuralProbe, declaredExtension)
+        }
+        // HOST-5 — same last-resort position. "FILE" alone is a weak signature,
+        // so the probe also requires the record header's own offsets to be
+        // self-consistent.
+        if MFTReader.looksLikeAnMFT(head) {
+            return (.masterFileTable, .structuralProbe, declaredExtension)
+        }
         // 4. unknown.
         return (.unknown, .unknown, declaredExtension)
     }

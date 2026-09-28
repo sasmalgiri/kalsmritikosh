@@ -64,4 +64,15 @@ struct GeneralKnowledgeLaneTests {
         #expect(QuestionShapeRouter.route("what is the capital of France").shape == .outOfScope)
         #expect(QuestionShapeRouter.route("what is the granted patent number").shape == .unresolved)
     }
+
+    @Test("Owner decision 2026-09-27: the lane is ON by default; an explicit OFF is honoured")
+    func defaultOn() {
+        let key = "kalsmritikosh.feature.generalKnowledgeLane"
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+        UserDefaults.standard.removeObject(forKey: key)
+        #expect(FeatureFlags.generalKnowledgeLaneValue(), "an unset preference means ON")
+        UserDefaults.standard.set(false, forKey: key)
+        #expect(!FeatureFlags.generalKnowledgeLaneValue(), "the user's OFF wins")
+    }
 }

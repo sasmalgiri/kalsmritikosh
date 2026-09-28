@@ -170,7 +170,7 @@ public actor SensitiveRetrievalPolicy {
         }
 
         // ── Step 4: GenericFacts + ClaimEvaluations ───────────────────────
-        let permittedBlockIDs = Set(filteredChunks.compactMap(\.chunk.evidenceBlockID))
+        let permittedBlockIDs = Set(filteredChunks.flatMap(\.chunk.allBlockIDs))
         let filteredFacts = result.genericFacts.filter { fact in
             guard !fact.sourceBlockIDs.isEmpty else { return true }
             return fact.sourceBlockIDs.contains { permittedBlockIDs.contains($0) }

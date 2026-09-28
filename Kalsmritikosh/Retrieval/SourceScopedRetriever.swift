@@ -84,7 +84,7 @@ public actor SourceScopedRetriever: Retriever {
         var blockIDs = Set<UUID>()
         for f in result.genericFacts { for b in f.sourceBlockIDs { blockIDs.insert(b) } }
         for rc in result.chunks where rc.chunk.sourceVersionID == nil {
-            if let b = rc.chunk.evidenceBlockID { blockIDs.insert(b) }
+            for b in rc.chunk.allBlockIDs { blockIDs.insert(b) }
         }
         var blockVersion = [UUID: UUID]()
         if !blockIDs.isEmpty {

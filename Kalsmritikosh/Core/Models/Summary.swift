@@ -41,6 +41,21 @@ public struct Summary: Codable, Identifiable, Hashable, Sendable {
         self.confidence = confidence
     }
 
+    /// U-3.5 (W-6) — the deterministic/extractive provenance marker. A
+    /// summary written by a deterministic or extractive pass stamps its
+    /// modelID with this prefix; a MODEL-GENERATED summary carries a real
+    /// provider id instead. Retrieval trusts only the former as evidence.
+    public nonisolated static let deterministicModelPrefix = "deterministic:"
+
+    /// U-3.5 — whether this summary may be returned as RETRIEVAL EVIDENCE.
+    /// Model-generated summaries (a real provider id) are routing-only:
+    /// useful to steer a search, never citable as a source. A nil modelID
+    /// (older extractive rows) or the deterministic marker is eligible.
+    public var isRetrievalEligible: Bool {
+        guard let modelID, !modelID.isEmpty else { return true }
+        return modelID.hasPrefix(Summary.deterministicModelPrefix)
+    }
+
     /// 6 levels per the locked Summarization Layer instruction.
     public enum Level: String, Codable, CaseIterable, Sendable {
         case document

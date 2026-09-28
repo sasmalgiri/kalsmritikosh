@@ -85,6 +85,13 @@ public actor ContextPrefixBackfiller: BackgroundService {
         runTask = nil
     }
 
+    /// U-3.4 (W-6) — chunks still awaiting a context prefix. The health
+    /// panel's "backfill pending = 0" invariant and seal quiescence read
+    /// this; 0 means this backfiller is *done*.
+    public func pendingCount() async -> Int {
+        (try? await chunks.countChunksMissingContextPrefix()) ?? 0
+    }
+
     /// One drain pass. Public so an admin command (Settings button)
     /// can also invoke it on demand without waiting for the timer.
     @discardableResult

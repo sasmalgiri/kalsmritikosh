@@ -49,7 +49,7 @@ public actor EmailParticipantBackfill {
         let koRows: [SQLRow]
         do {
             koRows = try await database.query("""
-            SELECT ko.id, ko.metadata
+            SELECT ko.id, ko.metadata_json
               FROM knowledge_objects ko
              WHERE ko.source_type IN (\(placeholders))
                AND NOT EXISTS (
@@ -135,6 +135,19 @@ public actor EmailParticipantBackfill {
             if let dict = v as? [String: Any],
                let s = dict["value"] as? String {
                 out[k.lowercased()] = s
+            }
+        }
+        // P1.9 — a mailbox THREAD keeps each message's headers inside the
+        // `t_threadMessages` JSON array; the thread's own top level has no
+        // from/to. Every message's participants belong to the thread.
+        if let raw = obj["t_threadMessages"] as? String,
+           let data = raw.data(using: .utf8),
+           let messages = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            for key in ["from", "sender", "reply-to", "to", "cc", "bcc"] {
+                let values = messages.compactMap { $0[key] as? String }.filter { !$0.isEmpty }
+                guard !values.isEmpty else { continue }
+                let joined = ([out[key]].compactMap { $0 } + values).joined(separator: ", ")
+                out[key] = joined
             }
         }
         return out

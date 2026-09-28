@@ -125,6 +125,16 @@ public struct EntityQualityGate: Sendable {
         if stoplist.contains(lower) { return "stoplist" }
         if Self.internalIdentifiers.contains(lower) { return "internal-id" }
 
+        // L2 (universal shape typing) — a PHONE must be phone-shaped. NSDataDetector
+        // types bare digit runs as phones; on the owner's ledger 1,765 of 1,817
+        // "phone numbers" were IDs like "0000254722" and "434981693797". Kept in
+        // the ledger (retired, reversible), never surfaced as a phone.
+        if entity.kind == .phoneNumber, !Self.isPhoneShaped(surface) { return "not-phone-shaped" }
+
+        // P1.18 — an invoice NUMBER carries a digit: "for" and "Serial" were
+        // the words after a "Invoice No." label, not numbers.
+        if entity.kind == .invoiceNumber, !surface.contains(where: \.isNumber) { return "identifier-without-digit" }
+
         let isNameKind = isNounKind(entity.kind)
         guard isNameKind else { return nil }   // non-name kinds are untouched
 
@@ -144,6 +154,18 @@ public struct EntityQualityGate: Sendable {
         // Priya Nair") — false-rejecting a person is the E-2 sin in a new
         // costume. Ships with its innocence fixture.
         if entity.kind == .person, Self.isAutomatedSender(lower) { return "automated-sender" }
+
+        // P1.18 — a "person" that is only forms of address or initials ("Mr",
+        // "Mam", "Shri", "H.S", "S.C") names nobody: NER lifted it from a
+        // salutation or a signature. "Sri Lanka", "Dr. Hyacintha Lobo" and
+        // "A. R. Rahman" keep a real word and pass.
+        if entity.kind == .person, Self.isAddressFormOnly(surface) { return "address-form-only" }
+        // P1.18 — a "person" ending in a street/building word is an address
+        // line ("Senapati Bapat Road", "Shanthi Colony", "Sampada Apartment").
+        if entity.kind == .person, Self.isStreetShaped(surface) { return "street-shaped" }
+        // P1.18 — a one-word organisation that is a document's own furniture
+        // ("Page", "FIG.", "Claims", "OBJECTION", "Invoice") names no party.
+        if entity.kind != .person, Self.isDocumentFurniture(surface) { return "document-furniture" }
 
         // E-1: a filename mis-tagged as a subject ("RESPONSE_29.08.2024.pdf").
         if Self.isFilenameShaped(lower) { return "filename-shaped" }
@@ -166,7 +188,85 @@ public struct EntityQualityGate: Sendable {
         // trailing navigation token gives it away; witnessed on the owner's
         // live archive. REJECTED (it is a page title, not a party).
         if Self.isTitleShaped(surface) { return "title-shaped" }
+        // L2 — LAST, after every older class keeps its name: an ORGANISATION
+        // name that is only a legal suffix ("Ltd", "Pvt") or has fewer than
+        // three letters ("Ag", "X") is a fragment, not a party. Two-letter
+        // all-caps acronyms ("EU", "MS") pass — they may be real. NO shape rule
+        // beyond that: a first cut retired "DuPont" and "EtOAc" as gibberish,
+        // which is the false-rejection the gate must never commit; a doubtful
+        // mixed-case token stays live and low-tiered instead.
+        if entity.kind == .organization || entity.kind == .vendor || entity.kind == .client {
+            if Self.legalSuffixes.contains(lower.trimmingCharacters(in: .punctuationCharacters)) { return "bare-legal-suffix" }
+            let letters = surface.filter(\.isLetter)
+            let isShortAcronym = letters.count == 2 && surface == surface.uppercased()
+            if letters.count < 3, !isShortAcronym { return "too-short-name" }
+        }
         return nil
+    }
+
+    // MARK: - L2 shape rules (universal)
+
+    /// Last words of an address line that are not also surnames. "Street",
+    /// "Lane", "Block", "Tower" are left out on purpose: Picabo Street and
+    /// Lois Lane are people, and retiring a person is the gate's worst error.
+    public nonisolated static let streetWords: Set<String> = [
+        "road", "rd", "avenue", "marg", "colony", "nagar", "apartment", "apartments",
+        "building", "bldg", "complex", "society", "enclave", "chowk", "bazar", "bazaar", "layout",
+    ]
+    nonisolated static func isStreetShaped(_ surface: String) -> Bool {
+        let tokens = surface.split { $0.isWhitespace || $0 == "," || $0 == "." }.map { $0.lowercased() }
+        guard tokens.count >= 2, let last = tokens.last else { return false }
+        return streetWords.contains(last)
+    }
+
+    /// A document's own structural words — pages, figures, claims, notices.
+    public nonisolated static let documentFurnitureWords: Set<String> = [
+        "page", "pages", "fig", "figs", "figure", "figures", "table", "tables", "claim", "claims",
+        "invoice", "receipt", "objection", "objections", "annexure", "appendix", "exhibit", "schedule",
+        "form", "section", "clause", "serial", "total", "subtotal", "subject", "ref", "reference",
+        "note", "notes", "attachment", "enclosure", "signature", "date",
+    ]
+    nonisolated static func isDocumentFurniture(_ surface: String) -> Bool {
+        let tokens = surface.split { $0.isWhitespace || $0 == "." || $0 == ":" }.map { $0.lowercased() }
+        guard tokens.count == 1, let only = tokens.first else { return false }
+        return documentFurnitureWords.contains(only)
+    }
+
+    /// Forms of address — a salutation, not a name.
+    public nonisolated static let addressForms: Set<String> = [
+        "mr", "mrs", "ms", "miss", "mx", "dr", "prof", "sir", "madam", "mam", "maam", "ma'am",
+        "shri", "sri", "smt", "kumari", "ji", "sahib", "saheb", "er", "adv",
+    ]
+
+    /// True when every token is a form of address or a one-letter initial.
+    /// Two-letter tokens are NOT initials: "Li Na" is a real name.
+    public nonisolated static func isAddressFormOnly(_ surface: String) -> Bool {
+        let tokens = surface.split { $0.isWhitespace || $0 == "." || $0 == "," }.map { $0.lowercased() }
+        guard !tokens.isEmpty else { return false }
+        return tokens.allSatisfy { t in
+            addressForms.contains(t) || t.filter(\.isLetter).count <= 1
+        }
+    }
+
+    public nonisolated static let legalSuffixes: Set<String> = [
+        "ltd", "limited", "inc", "llc", "llp", "plc", "pvt", "private", "co", "corp",
+        "corporation", "gmbh", "ag", "sa", "bv", "pty", "company",
+    ]
+
+    /// Phone-shaped: 7–15 digits, and either phone punctuation (a leading +,
+    /// parentheses, dashes or grouping spaces) or a plain run a phone could be —
+    /// never a zero-padded record number, never a bare run of 12+ digits with no
+    /// grouping (an account or a tracking id), never one repeated digit.
+    public nonisolated static func isPhoneShaped(_ raw: String) -> Bool {
+        let digits = raw.filter(\.isNumber)
+        guard (7...15).contains(digits.count) else { return false }
+        let hasPunct = raw.contains("+") || raw.contains("(") || raw.contains("-") || raw.contains(" ")
+        if !hasPunct {
+            if digits.hasPrefix("00") { return false }            // "0000254722" — a padded id
+            if digits.count >= 12 { return false }                // "434981693797" — no phone is written so
+        }
+        if Set(digits).count == 1 { return false }               // "0000000000"
+        return true
     }
 
     /// P3-U0 — trailing navigation/page tokens that mark a TITLE, not a name.
@@ -207,7 +307,8 @@ public struct EntityQualityGate: Sendable {
     /// trimmed of punctuation but interior hyphens are kept ("no-reply").
     public nonisolated static let automatedSenderTokens: Set<String> = [
         "bot", "noreply", "no-reply", "donotreply", "do-not-reply",
-        "mailer-daemon", "daemon", "postmaster", "notification", "notifications"
+        "mailer-daemon", "daemon", "postmaster", "notification", "notifications",
+        "subsystem",   // P1.18 — "Mail Delivery Subsystem"
     ]
     /// True iff any whole token of the (lowercased) name is an automation marker.
     public nonisolated static func isAutomatedSender(_ lower: String) -> Bool {
@@ -275,26 +376,78 @@ public struct EntityQualityGate: Sendable {
         return byClass
     }
 
-    // MARK: - Retroactive purge
+    // MARK: - Retroactive retirement (was: purge)
 
     public struct PurgeReport: Sendable {
-        public let entitiesDeleted: Int
-        public let memoryObjectsDeleted: Int
+        /// Junk entities marked `review_status = 'rejected'`. NOT deleted.
+        public let entitiesRetired: Int
+        /// Memory rows marked `status = 'retired'`. NOT deleted.
+        public let memoryObjectsRetired: Int
         public let totalEntitiesScanned: Int
+        /// Entities that FAIL `shouldKeep` but were left live because the user
+        /// had restored them by hand. Their judgement outranks the heuristic.
+        public let skippedUserRestored: Int
     }
 
-    /// Sweep existing canonical noun entities, drop those that fail
-    /// `shouldKeep`, and cascade-delete any memory_objects whose
-    /// subject_identifier matches a dropped entity's value or
-    /// normalized form. Idempotent — running it twice on the same DB
-    /// is a no-op the second time. Pass `dryRun: true` to count without
-    /// modifying.
+    /// Sweep existing canonical noun entities and RETIRE those that fail
+    /// `shouldKeep` — the "Nil Nil" / filename / hostname ghosts.
+    ///
+    /// OWNER RULING 2026-09-25: THIS NO LONGER DELETES ANYTHING.
+    ///
+    /// It used to `DELETE FROM entities` (cascading away entity_mentions and
+    /// entity_aliases) and `DELETE FROM memory_objects` for each one. Of the 47
+    /// delete sites in the app it was the only one that destroyed extracted
+    /// knowledge rather than replacing a derived projection or rolling back a
+    /// failed commit — so it was the one site in genuine tension with the
+    /// preserve-everything directive.
+    ///
+    /// It now uses the soft-exclude mechanism this app already shipped for the
+    /// same purpose (schema v49, whose own comment reads "Honoring the
+    /// preserve-everything directive, a rejected entity is NOT deleted"):
+    ///
+    ///   • entities  → `review_status = 'rejected'`, the SAME value the
+    ///     Knowledge browser's Reject button writes. Deliberately not a new
+    ///     'retired' value: the ~23 existing read filters are a mix of
+    ///     `IS NULL` and `!= 'rejected'`, so a novel value would slip past the
+    ///     second kind and leave ghosts in answers. Retrieval already honours
+    ///     'rejected' (HybridRetriever, LedgerQuery, the entity/chunk/event/
+    ///     relationship repositories), so answers are unchanged.
+    ///   • memory    → `MemoryRepository.retireSubjects`, because memory is
+    ///     keyed by subject NAME, not entity id; retiring the entity alone
+    ///     would not hide it.
+    ///   • every action is logged append-only to `fact_reviews` with
+    ///     `reviewer = "quality-gate"`, so it appears in the Audit trail,
+    ///     is attributable to the machine rather than the user, and is
+    ///     reversible from the existing Restore path.
+    ///
+    /// A USER'S RESTORE NOW WINS. Entities the user has accepted by hand are
+    /// skipped, so the next drain cannot silently re-retire something they
+    /// deliberately brought back. The old delete had no way to express that.
+    ///
+    /// Idempotent — already-rejected entities are not rescanned, so a second
+    /// run neither re-logs reviews nor changes a row (the Fixed-Point Law).
+    /// Pass `dryRun: true` to count without modifying.
     public func purgeGarbage(in database: Database, dryRun: Bool = false) async throws -> PurgeReport {
+        // Skip rows already retired so the pass is idempotent, and let a user's
+        // own rejection stand without a duplicate audit entry.
         let rows = try await database.query("""
         SELECT id, kind, value, normalized FROM entities
-        WHERE kind IN ('person','organization','vendor','client');
+        WHERE kind IN ('person','organization','vendor','client','phoneNumber','invoiceNumber')
+          AND (review_status IS NULL OR review_status != 'rejected');
         """)
-        var toDelete: [(id: UUID, value: String, normalized: String)] = []
+        // Entities the user explicitly restored (an `accept` review by a human).
+        // The heuristic must not overrule a person.
+        var userRestored: Set<UUID> = []
+        let restoredRows = try await database.query("""
+        SELECT DISTINCT subject_id FROM fact_reviews
+        WHERE subject_kind = 'entity' AND action = 'accept' AND reviewer = 'user';
+        """)
+        for row in restoredRows { if let id = row.uuid(0) { userRestored.insert(id) } }
+
+        // The rejection REASON is captured here, against the entity's real kind,
+        // so the audit row records why this specific entity was retired.
+        var toRetire: [(id: UUID, value: String, normalized: String, reason: String)] = []
+        var skipped = 0
         for row in rows {
             guard let id = row.uuid(0),
                   let kindStr = row.string(1),
@@ -303,54 +456,126 @@ public struct EntityQualityGate: Sendable {
                   let kind = Entity.Kind(rawValue: kindStr)
             else { continue }
             let entity = Entity(kind: kind, value: value, sourceObjectID: UUID())
-            if !shouldKeep(entity) {
-                toDelete.append((id, value, normalized))
+            var reason = classify(entity)
+            // P1.6 — a BARE digit run passes the shape test but is undecidable
+            // by shape ("785718091" is a phone or a record id). Context decides:
+            // it stays a phone only when a phone label introduces it somewhere
+            // in the text it came from.
+            if reason == nil, kind == .phoneNumber, Self.isBareDigitRun(value),
+               try await !Self.anySourceLabelsPhone(entityID: id, value: value, in: database) {
+                reason = "unlabelled-digit-run"
+            }
+            if let reason {
+                if userRestored.contains(id) { skipped += 1; continue }
+                toRetire.append((id, value, normalized, reason))
             }
         }
-        guard !toDelete.isEmpty else {
-            return PurgeReport(entitiesDeleted: 0, memoryObjectsDeleted: 0, totalEntitiesScanned: rows.count)
+        guard !toRetire.isEmpty else {
+            return PurgeReport(entitiesRetired: 0, memoryObjectsRetired: 0,
+                               totalEntitiesScanned: rows.count,
+                               skippedUserRestored: skipped)
         }
         if dryRun {
             return PurgeReport(
-                entitiesDeleted: toDelete.count,
-                memoryObjectsDeleted: 0,
-                totalEntitiesScanned: rows.count
+                entitiesRetired: toRetire.count,
+                memoryObjectsRetired: 0,
+                totalEntitiesScanned: rows.count,
+                skippedUserRestored: skipped
             )
         }
+
+        let memory = MemoryRepository(database: database)
+        let reviews = FactReviewsRepository(database: database)
         try await database.beginTransaction()
-        var memoryDeleted = 0
+        var memoryRetired = 0
         do {
-            for entry in toDelete {
-                // Delete memory_objects matching value OR normalized (case-insensitive).
-                let res = try await database.query("""
-                SELECT id FROM memory_objects
-                WHERE lower(subject_identifier) IN (?, ?);
-                """, [.text(entry.value.lowercased()), .text(entry.normalized.lowercased())])
-                memoryDeleted += res.count
-                if !res.isEmpty {
-                    try await database.exec("""
-                    DELETE FROM memory_objects
-                    WHERE lower(subject_identifier) IN (?, ?);
-                    """, [.text(entry.value.lowercased()), .text(entry.normalized.lowercased())])
-                }
-                // Delete the canonical entity (FK cascade removes
-                // entity_mentions + entity_aliases automatically).
+            for entry in toRetire {
+                // Memory first: keyed by subject NAME, so both the displayed
+                // value and its normalized form have to be offered.
+                memoryRetired += try await memory.retireSubjects(
+                    identifiers: [entry.value, entry.normalized])
+                // Soft-exclude the entity. Its mentions and aliases SURVIVE —
+                // under the old delete they were cascaded away, which is what
+                // made the operation unrecoverable.
                 try await database.exec(
-                    "DELETE FROM entities WHERE id = ?;",
+                    "UPDATE entities SET review_status = 'rejected' WHERE id = ?;",
                     [.uuid(entry.id)]
                 )
+                // Append-only audit record, attributable and reversible.
+                let why = "Retired by the entity quality gate (\(entry.reason))"
+                    + " — excluded from answers, not deleted"
+                _ = try await reviews.record(FactReview(
+                    subjectKind: .entity,
+                    subjectID: entry.id,
+                    action: .reject,
+                    priorValue: entry.value,
+                    reviewer: "quality-gate",
+                    reason: why
+                ))
             }
             try await database.commitTransaction()
         } catch {
             await database.rollbackTransaction()
             throw error
         }
-        KalsmritikoshLog.brain.info("EntityQualityGate purge: removed \(toDelete.count, privacy: .public) entities + \(memoryDeleted, privacy: .public) memory rows")
+        KalsmritikoshLog.brain.info("EntityQualityGate: RETIRED (not deleted) \(toRetire.count, privacy: .public) entities + \(memoryRetired, privacy: .public) memory rows; \(skipped, privacy: .public) left live because the user restored them")
         return PurgeReport(
-            entitiesDeleted: toDelete.count,
-            memoryObjectsDeleted: memoryDeleted,
-            totalEntitiesScanned: rows.count
+            entitiesRetired: toRetire.count,
+            memoryObjectsRetired: memoryRetired,
+            totalEntitiesScanned: rows.count,
+            skippedUserRestored: skipped
         )
+    }
+
+    // MARK: - P1.6 phone context
+
+    /// Digits only (no +, space, dash or brackets) — the undecidable shape.
+    public nonisolated static func isBareDigitRun(_ raw: String) -> Bool {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !t.isEmpty && t.allSatisfy(\.isNumber)
+    }
+
+    nonisolated static let phoneLabel: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?:^|[^a-z])(?:phone|ph|tel|telephone|mob|mobile|cell|cellphone|contact|fax|call|whatsapp|landline|helpline|m|t|p)\.?\s*(?:no\.?|number|num|#)?\s*[:=\-]?\s*(?:\+?\d[\d\s\-()]*[,/;]\s*)*$"#,
+        options: [.caseInsensitive])
+
+    /// True when some occurrence of `value` in `text` is introduced by a phone
+    /// label ("Mob: 785718091", "Phone No. 98300…, 785718091").
+    public nonisolated static func phoneLabelPrecedes(_ value: String, in text: String) -> Bool {
+        guard let regex = phoneLabel, !value.isEmpty else { return false }
+        let ns = text as NSString
+        var search = NSRange(location: 0, length: ns.length)
+        while true {
+            let hit = ns.range(of: value, options: [], range: search)
+            guard hit.location != NSNotFound else { return false }
+            // Whole digit run only: "785718091" inside "1785718091" is not it.
+            let before = hit.location > 0 ? ns.substring(with: NSRange(location: hit.location - 1, length: 1)) : " "
+            let afterIdx = hit.location + hit.length
+            let after = afterIdx < ns.length ? ns.substring(with: NSRange(location: afterIdx, length: 1)) : " "
+            if !(before.first?.isNumber ?? false), !(after.first?.isNumber ?? false) {
+                let start = max(0, hit.location - 40)
+                let window = ns.substring(with: NSRange(location: start, length: hit.location - start))
+                if regex.firstMatch(in: window, range: NSRange(location: 0, length: (window as NSString).length)) != nil {
+                    return true
+                }
+            }
+            let next = hit.location + max(hit.length, 1)
+            guard next < ns.length else { return false }
+            search = NSRange(location: next, length: ns.length - next)
+        }
+    }
+
+    /// Any document the entity was mentioned in labels it as a phone.
+    nonisolated static func anySourceLabelsPhone(entityID: UUID, value: String, in database: Database) async throws -> Bool {
+        let rows = try await database.query("""
+        SELECT ko.content FROM knowledge_objects ko
+        WHERE ko.id IN (SELECT source_object_id FROM entities WHERE id = ?
+                        UNION SELECT source_object_id FROM entity_mentions WHERE entity_id = ?);
+        """, [.uuid(entityID), .uuid(entityID)])
+        for r in rows {
+            if let text = r.string(0), phoneLabelPrecedes(value, in: text) { return true }
+        }
+        return false
     }
 
     // MARK: - Heuristics

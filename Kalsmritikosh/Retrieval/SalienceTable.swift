@@ -63,6 +63,7 @@ public enum SalienceTable {
         .emailBody:         neutral,
         .slideBody:         neutral,
         .transcriptSegment: neutral,
+        .discussionMessage: neutral,
         .logRecord:         neutral,
         .quote:             0.5,
         .codeBlock:         0.5,

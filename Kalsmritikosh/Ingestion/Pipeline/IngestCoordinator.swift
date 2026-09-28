@@ -48,6 +48,10 @@ public actor IngestCoordinator {
     /// USF-M2 — safe container expansion + coverage. Nil in lightweight rigs (members still ingest,
     /// but no container manifest is recorded); wired in production so coverage is durable.
     private let containerCoordinator: ContainerProcessingCoordinator?
+    /// HOST-8c — walks an iOS backup's virtual tree. Separate from the container
+    /// coordinator on purpose: a backup member needs no extraction, so nothing in
+    /// the ZIP path is touched.
+    private let backupCoordinator: BackupExpansionCoordinator?
     /// USF-M3 — progressive on-demand upgrade. Nil unless `configureUpgrades` is called with a database
     /// + upgrade-job ledger (production + progressive tests). Existing rigs leave these nil (unchanged).
     private var sourceUpgrade: SourceUpgradeCoordinator? = nil
@@ -55,6 +59,10 @@ public actor IngestCoordinator {
     private var byteResolver: SourceVersionByteResolver? = nil
     private var reprocessing: SourceReprocessingCoordinator? = nil   // USF-010
     private var upgradeDatabase: Database? = nil
+    /// I1 (module .boilerplateEmbedSkip) — learned cross-document boilerplate.
+    /// Built once a database is wired (configureUpgrades). Consulted at the embed
+    /// gate to skip chunks that are mostly a known template; nil ⇒ feature off.
+    private var boilerplateRegistry: BoilerplateRegistry? = nil
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -76,6 +84,11 @@ public actor IngestCoordinator {
     private let events: EventsRepository?
     private let relationships: RelationshipsRepository?
     private let vectors: VectorStore?
+    /// P1.2 — where a TOLERATED failure is recorded instead of vanishing. See
+    /// DerivationFailureRepository for the corrupting-vs-lossy split this
+    /// enforces. Optional so existing call sites and tests compile unchanged;
+    /// when absent, a tolerated failure still reaches OSLog.
+    private let derivationFailures: DerivationFailureRepository?
     /// G2-SYNTHETIC-QUESTIONS — optional repository; when wired, the
     /// ingest pipeline generates and writes hypothetical questions for
     /// each chunk so the retriever can match question-shaped queries
@@ -196,6 +209,7 @@ public actor IngestCoordinator {
         events: EventsRepository? = nil,
         relationships: RelationshipsRepository? = nil,
         vectors: VectorStore? = nil,
+        derivationFailures: DerivationFailureRepository? = nil,
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
         syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil,
         synthQueue: SyntheticQuestionQueue? = nil,
@@ -223,6 +237,7 @@ public actor IngestCoordinator {
         self.custodyModeOverride = custodyModeOverride
         self.intakeCoordinator = intakeCoordinator
         self.containerCoordinator = ContainerProcessingCoordinator(repository: containerInspection)
+        self.backupCoordinator = BackupExpansionCoordinator(repository: containerInspection)
         self.readiness = readiness
         self.typedFields = typedFields
         self.evidenceStore = evidenceStore
@@ -252,6 +267,7 @@ public actor IngestCoordinator {
         self.events = events
         self.relationships = relationships
         self.vectors = vectors
+        self.derivationFailures = derivationFailures
         self.syntheticQuestions = syntheticQuestions
         self.syntheticQuestionGenerator = syntheticQuestionGenerator
             ?? HeuristicSyntheticQuestionGenerator()
@@ -360,8 +376,20 @@ public actor IngestCoordinator {
                     unembeddable.insert(c.id)   // don't retry this one this session
                     continue                     // never persist a zero vector
                 }
-                try? await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
-                embedded += 1
+                // P1.2 — a failed upsert leaves the chunk simply ABSENT from
+                // chunk_embeddings, which reads identically to not-yet-drained.
+                // Coverage could never be honest about failed vs pending, so the
+                // reason is recorded and `embedded` is only incremented on an
+                // actual write.
+                do {
+                    try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
+                    embedded += 1
+                } catch {
+                    await derivationFailures?.record(
+                        stage: "embeddings.upsert", error: error,
+                        knowledgeObjectID: c.objectID)
+                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
             await pipelineMetrics?.bump(.embedded, by: embedded)
             try? await Task.sleep(nanoseconds: embedded == 0 ? 2_000_000_000 : 200_000_000)
@@ -386,8 +414,19 @@ public actor IngestCoordinator {
             var progressed = false
             for (i, c) in batch.enumerated() where i < vecs.count {
                 if vecs[i].isEmpty { continue }
-                try? await vectors.upsert(chunkID: c.id, embedding: vecs[i])
-                progressed = true
+                // P1.2 — same failed-vs-pending distinction as the background
+                // drain. `progressed` must reflect a real write, or the loop's
+                // stop condition below misreads a persistent write failure as
+                // forward progress and spins.
+                do {
+                    try await vectors.upsert(chunkID: c.id, embedding: vecs[i])
+                    progressed = true
+                } catch {
+                    await derivationFailures?.record(
+                        stage: "embeddings.upsert", error: error,
+                        knowledgeObjectID: c.objectID)
+                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
             if !progressed { break }   // embedder can't produce vectors → stop
         }
@@ -406,6 +445,7 @@ public actor IngestCoordinator {
     /// not call this keep the prior behaviour (no completion snapshot, no upgrade scheduling).
     public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil) {
         self.upgradeDatabase = database
+        self.boilerplateRegistry = BoilerplateRegistry(database: database)
         let resolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
         self.byteResolver = resolver
         let r = readiness ?? SourceReadinessRepository(database: database)
@@ -627,13 +667,28 @@ public actor IngestCoordinator {
     /// message's chunks/events/entities link only to that message's blocks. If
     /// the two splitters disagree (no match), returns [] and the caller falls
     /// back to content chunking — degrade, never cross-link.
-    private nonisolated static func blocks(
+    ///
+    /// A THREAD KO (thread coalescing, the default) carries no single
+    /// `messageIndex` — its messages are listed in `t_threadMessages`. Matching
+    /// only the single key returned [] for every thread, so no mailbox block was
+    /// ever linked to its thread and every mailbox fact cited evidence owned by
+    /// the whole file (the owner's ledger: 3,677 unlinked blocks; 252 facts
+    /// filed under the mailbox's file name, "Sent").
+    nonisolated static func blocks(
         for ko: KnowledgeObject, from all: [EvidenceBlock], singleKO: Bool
     ) -> [EvidenceBlock] {
         if singleKO { return all }
-        guard case .int(let idx)? = ko.metadata["messageIndex"]?.value else { return [] }
+        let wanted: Set<Int>
+        if case .int(let idx)? = ko.metadata["messageIndex"]?.value {
+            wanted = [Int(idx)]
+        } else if case .string(let bag)? = ko.metadata[EmailLoader.threadMessagesMetaKey]?.value {
+            wanted = EmailLoader.threadMessageIndices(fromBag: bag)
+        } else {
+            return []
+        }
+        guard !wanted.isEmpty else { return [] }
         return all.filter {
-            if case .int(let bi)? = $0.attributes["messageIndex"]?.value { return bi == idx }
+            if case .int(let bi)? = $0.attributes["messageIndex"]?.value { return wanted.contains(Int(bi)) }
             return false
         }
     }
@@ -827,29 +882,62 @@ public actor IngestCoordinator {
         owningObjectID: KnowledgeObject.ID? = nil,
         documentClass: DocumentClass? = nil
     ) async {
-        let subjectLabel: String = {
-            if let title = doc.blocks.first(where: { $0.kind == .documentTitle }) {
-                let t = title.normalizedText.isEmpty ? title.rawText : title.normalizedText
-                let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return String(trimmed.prefix(120)) }
-            }
-            return url.deletingPathExtension().lastPathComponent
-        }()
+        let subjectLabel = FactSubjectPartitioner.documentLabel(blocks: doc.blocks, fileURL: url)
+        // S2-U3 — class-ordered roots at ingest (D-17 Step 4): the class's own
+        // pack meets the block first; nil keeps the historical order.
+        //
+        // C-4 — the extractor takes the whole ORDERED block list, not one block
+        // at a time, so a field label stranded at the foot of a page can still
+        // reach its value at the head of the next. The per-block minimum length
+        // is applied inside (unchanged at 8 characters); the cross-block pass
+        // deliberately sees every block, because a page whose first line is a
+        // bare "700321" is a six-character block and is the one that matters.
+        // P3.1 — the KINDED entry point: the open-field extractor weights a
+        // table cell above a paragraph and refuses page furniture outright, so
+        // it needs each block's kind, not just its text.
+        //
+        // A mailbox is partitioned per message (FactSubjectPartitioner), so each
+        // message's facts take its Subject line instead of the mailbox's file
+        // name; every other file is one partition, unchanged.
         var derived: [GenericFact] = []
-        for block in doc.blocks {
-            guard !block.kind.isBoilerplate else { continue }
-            let text = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
-            guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { continue }
-            // S2-U3 — class-ordered roots at ingest (D-17 Step 4): the class's
-            // own pack meets the block first; nil keeps the historical order.
-            derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id,
-                                                   documentClass: documentClass)
+        for partition in FactSubjectPartitioner.partitions(blocks: doc.blocks, fallbackLabel: subjectLabel) {
+            let substantive = partition.blocks.filter { !$0.kind.isBoilerplate }
+            guard !substantive.isEmpty else { continue }
+            // P1.4 — a commercial partition files under its counterparty.
+            derived += FactSubjectPartitioner.filedUnderCounterparty(domainFactExtractor.extract(
+                fromKindedBlocks: substantive
+                    .map { (id: $0.id,
+                            text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
+                            kind: $0.kind) },
+                subjectLabel: partition.subjectLabel,
+                documentClass: documentClass,
+                // The layout-preserving text for label detection: rawText keeps the
+                // line breaks that normalization drops, and without them no
+                // `Label: value` after the first is recognisable. See
+                // DomainFactExtractor.extract(fromKindedBlocks:) for the
+                // measurement that found this.
+                layoutTextByBlock: Dictionary(
+                    substantive.map { ($0.id, $0.rawText) },
+                    uniquingKeysWith: { a, _ in a })),
+                label: partition.subjectLabel, documentClass: documentClass)
         }
+        // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of
+        // a plist / registry hive / custody manifest rather than from prose (a
+        // serial regexed out of a sentence is noise). They join `derived` here, so
+        // they take the SAME merge and the SAME bindIdentifierAnchors door as every
+        // other fact — the strong fields are `.identifier`-shaped, which is the
+        // entire wiring: no new call site, no new write path.
+        derived += DeviceFactProducer().facts(from: doc, subjectLabel: subjectLabel)
+
         guard !derived.isEmpty else { return }
         let merged = await bindIdentifierAnchors(DomainFactExtractor.merge(derived),
                                                  owningObjectID: owningObjectID)
         do {
-            try await repo.upsert(merged)
+            // Topic-Ledger U2 — write through the natural-key merge so a fact this
+            // document shares with others collapses into ONE canonical row (union
+            // of source blocks) instead of a duplicate. This is what stops the
+            // ledger inflating (was 9,266 rows / 387 distinct) on re-ingest.
+            try await repo.mergeUpsert(merged)
             KalsmritikoshLog.ingestion.info("Domain facts: \(derived.count, privacy: .public) fact(s) for \(url.lastPathComponent, privacy: .private)")
         } catch {
             KalsmritikoshLog.ingestion.error("Domain-fact persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
@@ -1013,14 +1101,75 @@ public actor IngestCoordinator {
                 context: ctx, now: Date()
             ) { [weak self] byteURL, origin, parentRef in
                 guard let self else { return ContainerProcessingCoordinator.MemberIngestOutcome(childSourceVersionID: nil, contentHash: nil, detectedType: nil) }
-                let r = try? await self.runIngest(fileAt: origin, parentVersion: parentRef, memberByteURL: byteURL)
+                // P1.2 (F-4) — a container member, iOS-backup file or email
+                // attachment that fails to ingest previously yielded nil with the
+                // REASON discarded, and was recorded as childSourceVersionID: nil.
+                // For a forensic tool that is the worst place to lose a reason: the
+                // examiner cannot tell "not in the container" from "failed to
+                // parse". Tolerated (one bad member must not abort the container)
+                // but no longer silent.
+                var r: Result?
+                do {
+                    r = try await self.runIngest(fileAt: origin, parentVersion: parentRef, memberByteURL: byteURL)
+                } catch {
+                    await self.derivationFailures?.record(
+                        stage: "member.ingest", error: error,
+                        filePath: origin.path)
+                    KalsmritikoshLog.ingestion.error("Container member ingest failed for \(origin.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                }
                 return ContainerProcessingCoordinator.MemberIngestOutcome(
                     childSourceVersionID: r?.sourceVersionID, contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
             }
         }
 
-        _ = try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
-        _ = try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+        // HOST-8c — an iOS backup's Manifest.db expands its VIRTUAL TREE: every file
+        // inside is ingested under the path it had on the device
+        // (`HomeDomain/Library/SMS/sms.db`) instead of its SHA-1 name, through this
+        // same pipeline, with the archiveMember relation and a per-member
+        // disposition recorded. Additive and type-scoped: no other source type can
+        // reach this branch, and the container branch above is untouched. The
+        // bundle root is the manifest's own directory — the folder holding the
+        // two-hex subdirectories.
+        if !isMember, type == .extractionManifest, let backupCoordinator {
+            let ctx = ContainerTraversalContext.root(sourceVersionID: handle.sourceVersionID,
+                                                     containerHash: handle.contentHash)
+            await backupCoordinator.expand(
+                manifestVersionID: handle.sourceVersionID, manifestURL: processURL,
+                bundleRoot: url.deletingLastPathComponent(), context: ctx, now: Date()
+            ) { [weak self] byteURL, origin, parentRef in
+                guard let self else {
+                    return ContainerProcessingCoordinator.MemberIngestOutcome(
+                        childSourceVersionID: nil, contentHash: nil, detectedType: nil)
+                }
+                // P1.2 (F-4) — a container member, iOS-backup file or email
+                // attachment that fails to ingest previously yielded nil with the
+                // REASON discarded, and was recorded as childSourceVersionID: nil.
+                // For a forensic tool that is the worst place to lose a reason: the
+                // examiner cannot tell "not in the container" from "failed to
+                // parse". Tolerated (one bad member must not abort the container)
+                // but no longer silent.
+                var r: Result?
+                do {
+                    r = try await self.runIngest(fileAt: origin, parentVersion: parentRef,
+                                                  memberByteURL: byteURL)
+                } catch {
+                    await self.derivationFailures?.record(
+                        stage: "member.ingest", error: error,
+                        filePath: origin.path)
+                    KalsmritikoshLog.ingestion.error("Container member ingest failed for \(origin.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                }
+                return ContainerProcessingCoordinator.MemberIngestOutcome(
+                    childSourceVersionID: r?.sourceVersionID,
+                    contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
+            }
+        }
+
+        do {
+            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+        } catch {
+            KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        }
         guard !perFileKOs.isEmpty else {
             // No usable content. A preserved-only / unsupported plugin is a real limitation; anything
             // else is an empty-but-complete text extraction (ready with zero units — NOT search-ready).
@@ -1065,10 +1214,21 @@ public actor IngestCoordinator {
                    case .string(let json) = value.value {
                     let attachParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .attachment)
                     for attachmentURL in EmailLoader.decodeAttachmentURLs(from: json) {
-                        if let attachmentResult = try? await runIngest(fileAt: attachmentURL, parentVersion: attachParent) {
+                        // P1.2 (F-4) — an email ATTACHMENT that fails to ingest
+                        // was silently absent, indistinguishable from an email
+                        // that had no attachment. Tolerated (one bad attachment
+                        // must not fail the email) but recorded.
+                        do {
+                            let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
                             await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
                             totalChunks += attachmentResult.chunkCount; totalEntities += attachmentResult.entityCount; totalEvents += attachmentResult.eventCount
                             allInvalidations.append(contentsOf: attachmentResult.invalidations)
+                        } catch {
+                            await derivationFailures?.record(
+                                stage: "attachment.ingest", error: error,
+                                sourceVersionID: handle.sourceVersionID,
+                                filePath: attachmentURL.path)
+                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                         }
                     }
                 }
@@ -1088,7 +1248,26 @@ public actor IngestCoordinator {
                                                             documentClass: docClass)
             if structuralReceipt != nil {
                 for link in blockOwnership {
-                    try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
+                    // P1.2 — THE most consequential tolerated failure on this
+                    // path. linkBlocks is the single call that binds evidence
+                    // blocks to their KnowledgeObject; if it fails silently,
+                    // facts derived from those blocks cite evidence that cannot
+                    // resolve, and the claim-evidence contract — the product's
+                    // core promise — breaks with nothing recording it.
+                    //
+                    // Recorded rather than propagated because the blocks and the
+                    // KO both already exist and are correct; what is lost is the
+                    // link, which the report must be able to name so a
+                    // re-link can be targeted.
+                    do {
+                        try await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
+                    } catch {
+                        await derivationFailures?.record(
+                            stage: "evidence.linkBlocks", error: error,
+                            knowledgeObjectID: link.ko, filePath: url.path,
+                            detectedType: type.rawValue)
+                        KalsmritikoshLog.ingestion.error("linkBlocks failed (\(link.blockIDs.count, privacy: .public) blocks) for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    }
                 }
             }
         }
@@ -1216,9 +1395,17 @@ public actor IngestCoordinator {
         // chunk records its evidence_block_id + block_kind. Fall back to the
         // flattened KO.content for formats with no structural parser (and, until
         // Phase1 step 4, for multi-KO mbox messages, which arrive with blocks=[]).
-        var chunked = blocks.isEmpty
-            ? chunker.chunk(objectID: object.id, content: object.content)
-            : chunker.chunk(objectID: object.id, blocks: blocks)
+        // L1 — the block path packs adjacent small blocks into one chunk and
+        // reports the full lineage, persisted to chunk_blocks below.
+        var chunkLineage: [Chunk.ID: [UUID]] = [:]
+        var chunked: [Chunk]
+        if blocks.isEmpty {
+            chunked = chunker.chunk(objectID: object.id, content: object.content)
+        } else {
+            let packed = chunker.chunkWithLineage(objectID: object.id, blocks: blocks)
+            chunked = packed.chunks
+            chunkLineage = packed.blockIDs
+        }
         // Stage 1 ingest quality gate ("do not embed everything") — mark
         // non-substantive chunks (blank, tiny fragment, bare page number, lone
         // nav token) as NOT admitted to the vector index. They are still stored
@@ -1237,6 +1424,29 @@ public actor IngestCoordinator {
             return c.withAdmitEmbedding(admit)
                 .withSourceVersion(sourceVersionID)
                 .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
+        }
+        // I1 (module .boilerplateEmbedSkip) — consult the learned cross-document
+        // registry and skip embedding any chunk that is MOSTLY a known template
+        // (a repeated legal disclaimer, signature block, etc. promoted across ≥3
+        // documents). Additive: only already-admitted chunks can be downgraded,
+        // and the chunk stays FTS-/citation-searchable — only its vector is
+        // skipped. Off / empty registry ⇒ no-op.
+        if KnowledgeModuleFlags.isEnabled(.boilerplateEmbedSkip), let reg = boilerplateRegistry {
+            var reevaluated: [Chunk] = []
+            reevaluated.reserveCapacity(chunked.count)
+            for c in chunked {
+                guard c.admitEmbedding else { reevaluated.append(c); continue }
+                if let (rewritten, used) = try? await reg.substituteKnown(c.text), !used.isEmpty {
+                    let survived = rewritten.filter { !$0.isWhitespace }.count
+                    let original = c.text.filter { !$0.isWhitespace }.count
+                    if original > 0, Double(survived) / Double(original) < 0.4 {
+                        reevaluated.append(c.withAdmitEmbedding(false))
+                        continue
+                    }
+                }
+                reevaluated.append(c)
+            }
+            chunked = reevaluated
         }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the
@@ -1314,7 +1524,7 @@ public actor IngestCoordinator {
         // entities/events/relationships — stays best-effort and re-derivable, so
         // it is intentionally NOT part of the atomic core.)
         do {
-            try await chunks.insertBatch(chunked)
+            try await chunks.insertBatch(chunked, lineage: chunkLineage)
         } catch {
             KalsmritikoshLog.storage.error("chunk insert failed for \(object.id.uuidString.prefix(8), privacy: .public) — rolling back KO: \(String(describing: error), privacy: .public)")
             try? await objects.deleteByID(object.id)
@@ -1391,6 +1601,10 @@ public actor IngestCoordinator {
         var extractedEntities: [Entity] = []
         var extractedEvents: [Event] = []
         var canonicalMapping: [Entity.ID: Entity.ID] = [:]
+        // P1.1 / module .strictDerivation — set when the entity insert failed
+        // and the OFF-path chose to degrade rather than abort. The event stage
+        // MUST honour it: remapping through an empty mapping is the corruption.
+        var entityInsertFailed = false
 
         if let entityExtractor, let entities {
             // T13.2 — seed with loader-provided structured entities
@@ -1409,7 +1623,20 @@ public actor IngestCoordinator {
                     annotate(entity, source: .structuredHeader)
                 })
             }
-            let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked, blocks: blocks)) ?? []
+            // P1.2 — lossy: no entities from NER is less data, not wrong
+            // data, so this is tolerated. But the REASON is recorded, because
+            // "this document produced no people" and "the extractor threw"
+            // must not look identical in the Ingestion Report.
+            var nerExtracted: [Entity] = []
+            do {
+                nerExtracted = try await entityExtractor.extractEntities(from: object, chunks: chunked, blocks: blocks)
+            } catch {
+                await derivationFailures?.record(
+                    stage: "entities.ner", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("NER extraction failed for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
             raw.append(contentsOf: nerExtracted.map { entity in
                 annotate(entity, source: .ner)
             })
@@ -1439,19 +1666,77 @@ public actor IngestCoordinator {
                 raw = entityQualityGate.filter(raw)
             }
             if let entityLinker { raw = entityLinker.link(raw) }
-            canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
+            // P1.1 — THIS ONE PROPAGATES, and that is the whole fix.
+            //
+            // It was `(try? await entities.insertBatch(raw)) ?? [:]`. On failure
+            // `canonicalMapping` became EMPTY, and ~25 lines below
+            // `events.insertBatch(remapped)` writes events remapped THROUGH that
+            // mapping — so one swallowed error did not merely lose entities, it
+            // PERSISTED events whose entity references were never canonicalised.
+            // The corruption sat downstream of the failure and looked like valid
+            // data, which is worse than a dropped write because it can be cited.
+            //
+            // Failing this KO's derivation loudly is the correct trade: the
+            // caller already isolates per-file failures, so one bad file cannot
+            // end the run, and an aborted KO is visible where a corrupt one is
+            // not. NOT recorded in derivation_failures — that ledger is for
+            // TOLERATED losses, and this unit of work does not complete.
+            // Module .strictDerivation — BOTH states are non-corrupting. The
+            // old behaviour (swallow, continue with an empty mapping) is not
+            // one of them and is gone for good: it made the next stage write
+            // events whose entity references were never canonicalised.
+            //   ON  → propagate; this KO's derivation aborts entirely.
+            //   OFF → keep the correct work already done (text, chunks, facts)
+            //         and SKIP only the stage that depends on the mapping.
+            //         `entityInsertFailed` carries that decision to the event
+            //         stage below.
+            if KnowledgeModuleFlags.isEnabled(.strictDerivation) {
+                canonicalMapping = try await entities.insertBatch(raw)
+            } else {
+                do {
+                    canonicalMapping = try await entities.insertBatch(raw)
+                } catch {
+                    entityInsertFailed = true
+                    await derivationFailures?.record(
+                        stage: "entities.insert", error: error,
+                        knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                        detectedType: object.sourceType.rawValue)
+                    KalsmritikoshLog.ingestion.error("Entity insert failed for \(object.sourceFile.lastPathComponent, privacy: .private); SKIPPING the event stage so no event is written with un-canonicalised references: \(String(describing: error), privacy: .public)")
+                }
+            }
             extractedEntities = raw
             await pipelineMetrics?.bump(.entities, by: raw.count)
             await writeDomainAliases(forEntities: raw, in: entities, sourceObjectID: object.id)
         }
 
-        if let eventExtractor, let events {
-            let rawEvents = (try? await eventExtractor.extractEvents(
-                from: object,
-                chunks: chunked,
-                entities: extractedEntities,
-                blocks: blocks
-            )) ?? []
+        // Module .strictDerivation OFF-path guard: the canonical mapping is
+        // empty because the entity insert failed, so remapping through it would
+        // produce exactly the corruption P1.1 exists to prevent. Skipping is the
+        // safe degradation — fewer events, never wrong ones.
+        if entityInsertFailed {
+            await derivationFailures?.record(
+                stage: "events.skippedAfterEntityFailure",
+                reason: "entity insert failed; events skipped to avoid un-canonicalised references",
+                knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                detectedType: object.sourceType.rawValue)
+        }
+        if let eventExtractor, let events, !entityInsertFailed {
+            // P1.2 — lossy: recorded, tolerated.
+            var rawEvents: [Event] = []
+            do {
+                rawEvents = try await eventExtractor.extractEvents(
+                    from: object,
+                    chunks: chunked,
+                    entities: extractedEntities,
+                    blocks: blocks
+                )
+            } catch {
+                await derivationFailures?.record(
+                    stage: "events.extract", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("Event extraction failed for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
             // Legal/patent MILESTONE events — the "story spine" the generic
             // extractor misses (filed / hearing / objection / granted). Dated,
             // high-trust, from official-document boilerplate. Deterministic.
@@ -1460,10 +1745,25 @@ public actor IngestCoordinator {
                 sourceObjectID: object.id,
                 entityIDs: extractedEntities.map(\.id)
             )
-            let remapped = (rawEvents + milestoneEvents).map { event in
+            // P1.10 — one document states one happening once: same-source
+            // repeats collapse BEFORE insert, so nothing downstream can hold a
+            // dropped id (extractedEvents below is this same list).
+            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
+            })
+            // P1.2 — a failed event INSERT loses dated evidence silently, so
+            // the reason is recorded. Not propagated: the KO's entities and
+            // chunks are already correct, and losing events is lossy, not
+            // corrupting.
+            do {
+                try await events.insertBatch(remapped)
+            } catch {
+                await derivationFailures?.record(
+                    stage: "events.insert", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("Event insert failed (\(remapped.count, privacy: .public) events) for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             }
-            try? await events.insertBatch(remapped)
             await pipelineMetrics?.bump(.events, by: remapped.count)
             extractedEvents = remapped
         }
@@ -1525,7 +1825,16 @@ public actor IngestCoordinator {
                     viaEventID: edge.viaEventID
                 )
             }
-            try? await relationships.upsertEdges(upserts, sourceObjectID: object.id)
+            // P1.2 — lossy: relationship edges are additive.
+            do {
+                try await relationships.upsertEdges(upserts, sourceObjectID: object.id)
+            } catch {
+                await derivationFailures?.record(
+                    stage: "relationships.upsert", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("Relationship upsert failed for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
         }
 
         // G3.12 — typed bonds. Runs after the entity-entity edge write
@@ -1559,6 +1868,62 @@ public actor IngestCoordinator {
                 subjects: invalidationSubjects,
                 triggeringObjectID: object.id
             ))
+        }
+
+        // P1.3 — THE COMPLETION MARKER, and it must be the last thing that
+        // happens. Every stage above has returned, so this KO's derivation is
+        // whole; anything that dies before this line leaves a KO whose
+        // `derivation_complete` is NULL.
+        //
+        // WHAT FINDS AND FIXES THOSE — corrected, because an earlier version of
+        // this comment said `resumeIncompleteIngests` would finish them and
+        // that was not true. That function resumes by URL from the FILE-level
+        // attempt ledger (`ingest_attempts` rows still at `.started`); it never
+        // consults this marker. The two ledgers overlap but are not the same
+        // set, and writing the claim into a comment made an unwired query look
+        // wired.
+        //
+        //   · a process KILLED mid-derivation leaves the file attempt at
+        //     `.started` too, so `resumeIncompleteIngests` does re-read and
+        //     re-derive it. That case is genuinely covered.
+        //   · a KO whose file attempt COMPLETED but whose derivation did not —
+        //     the P1.1 tolerated-failure path, where the entity insert failed
+        //     and the dependent stages were skipped — is NOT covered by the URL
+        //     resume, and must not be: re-reading the file would hit the same
+        //     deterministic failure and loop forever. Those are LISTED in the
+        //     Data Health report so they can be looked at, and the drain
+        //     re-derives from stored blocks without re-reading anything.
+        //
+        // AND THE HAZARD THAT MUST NOT BE "FIXED" BY AUTOMATION: every row
+        // predating v131 has a NULL marker, because their completeness is
+        // genuinely unknown. Feeding `incompleteDerivations` into a file
+        // re-ingest would therefore re-read THE ENTIRE ARCHIVE on the first run
+        // after the migration. That is why this marker drives reporting and the
+        // drain, not an automatic re-ingest.
+        //
+        // Not wrapped in a SAVEPOINT with the stages above on purpose: that
+        // sequence interleaves database writes with NER, event extraction and
+        // embedding, so one transaction spanning it would hold a SQLite write
+        // lock across model inference and stall the embedding drain. The
+        // resumable-partial design is the alternative this project's own
+        // acceptance criteria allowed, and it is the one that does not trade a
+        // correctness win for a liveness loss.
+        //
+        // Tolerated-and-recorded rather than propagated: the derivation itself
+        // succeeded, and failing the whole KO because a one-column UPDATE failed
+        // would discard correct work. A missing marker is self-correcting — the
+        // next resume pass re-derives, and re-derivation is idempotent by the
+        // Fixed-Point Law.
+        if KnowledgeModuleFlags.isEnabled(.derivationCompleteMarker) {
+        do {
+            try await objects.markDerivationComplete(id: object.id)
+        } catch {
+            await derivationFailures?.record(
+                stage: "ko.markDerivationComplete", error: error,
+                knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                detectedType: object.sourceType.rawValue)
+            KalsmritikoshLog.ingestion.error("Failed to mark derivation complete for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        }
         }
 
         return ProcessedKO(
@@ -1756,6 +2121,11 @@ public actor IngestCoordinator {
     ) async {
         for entity in entities where entity.kind == .emailAddress {
             let addr = entity.normalizedValue ?? entity.value
+            // Mail infrastructure is neither an organization nor a subject: a
+            // Message-ID host gave the live ledger orgs named "MAIL"
+            // (mail.gmail.com) and "Hxcore" (hxcore.ol). Skip before deriving
+            // any label from the domain.
+            guard !EmailAddressHygiene.isMachineGenerated(addr) else { continue }
             guard let at = addr.firstIndex(of: "@") else { continue }
             let domain = String(addr[addr.index(after: at)...])
             guard let head = domain.split(separator: ".").first.map(String.init),
@@ -1771,6 +2141,17 @@ public actor IngestCoordinator {
                 }
                 .joined(separator: " ")
             guard label.count > 2 else { continue }
+            // Gate-then-fold BEFORE the write door. A domain head can be a
+            // hostname-shape hex fragment (e.g. "01ce304b" from x@01ce304b.tld),
+            // which is not a real organization. Classify and skip hard-junk here
+            // so it never reaches upsertCanonicalOrganization — the door asserts
+            // in DEBUG that every creating path gates upstream, and this is that
+            // gate (release previously relied on the door throwing + a caught log).
+            let candidateOrg = Entity(kind: .organization, value: label, sourceObjectID: sourceObjectID)
+            if let reason = EntityQualityGate().classify(candidateOrg),
+               EntitiesRepository.hardJunkClasses.contains(reason) {
+                continue
+            }
             do {
                 let orgID = try await repo.upsertCanonicalOrganization(
                     label: label,
@@ -1875,6 +2256,11 @@ public actor IngestCoordinator {
         // the MemoryDistiller still fires for this subject.
         for entity in entities where entity.kind == .emailAddress {
             let addr = entity.normalizedValue ?? entity.value
+            // Mail infrastructure is neither an organization nor a subject: a
+            // Message-ID host gave the live ledger orgs named "MAIL"
+            // (mail.gmail.com) and "Hxcore" (hxcore.ol). Skip before deriving
+            // any label from the domain.
+            guard !EmailAddressHygiene.isMachineGenerated(addr) else { continue }
             guard let at = addr.firstIndex(of: "@") else { continue }
             let domain = String(addr[addr.index(after: at)...])
             guard let head = domain.split(separator: ".").first.map(String.init),

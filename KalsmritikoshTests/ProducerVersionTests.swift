@@ -23,9 +23,9 @@ struct ProducerVersionTests {
 
     @Test("Post-V3 bump: fresh rows carry the current era; the legacy NULL fact is stale; the predicate stays live for the next era")
     func stalenessAfterV3Bump() async throws {
-        #expect(DerivedProducerVersions.facts == 4, "A1.1 is the fourth facts bump (the role table: applicant/inventor extraction)")
+        #expect(DerivedProducerVersions.facts == 11, "the eleventh facts bump: P4.4 — identifier attestation counts evidence blocks")
         #expect(DerivedProducerVersions.entities == 2, "U0-b is the second entities bump (RFC display-name splitter; register refresh executed live 2026-09-03)")
-        #expect(DerivedProducerVersions.events == 1, "V3 3c is the first events bump (milestone→anchor threading)")
+        #expect(DerivedProducerVersions.events == 4, "P4.4 is the fourth events bump (milestone dates are the document's day)")
 
         let gen = NoiseFixtureGenerator()
         let rig = try await FixtureRig.make(document: gen.noisyGrantLetter, name: "grant-letter.md")

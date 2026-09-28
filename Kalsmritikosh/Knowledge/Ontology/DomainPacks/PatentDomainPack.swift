@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import os
 
 public enum PatentDomainPack {
 
@@ -51,8 +52,39 @@ public enum PatentDomainPack {
     ///     ((?-i:[A-Z]{2})? with no space): under case-insensitive matching,
     ///     the tail of "granted 202331019665" minted the junk canon
     ///     "ed202331019665" — two prose letters posing as a country code.
+    ///   - W-5.6: the value TAIL is case-sensitive too ((?-i:[A-Z0-9]*)) —
+    ///     under case-insensitive matching it swallowed a following word
+    ///     ("202331019665Applicant" ×82 on the live archive). A real
+    ///     kind-code suffix (B2) is uppercase; prose is not.
     nonisolated static let numberCapturePattern =
-        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>(?-i:[A-Z]{2})?\d[\d,]{4,}[A-Z0-9]*)"#
+        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>(?-i:[A-Z]{2})?\d[\d,]{4,}(?:(?-i:[A-Z][A-Z0-9]{0,3})(?![a-z]))?)"#
+
+    /// The OCR-tolerant twin of `numberCapturePattern`, for SCANNED pages where
+    /// the digits were read as letters ("Patent No. 7OO321"). Identical up to
+    /// the value group, which admits the confusable letters as well as digits —
+    /// and is CASE-SENSITIVE (`(?-i:)`) because only some cases are genuine
+    /// confusions: `B` collides with 8, plain `b` does not. Every match is then
+    /// put through `OCRDigitRecovery`, which refuses far more than it repairs;
+    /// this pattern only decides what is worth ASKING about.
+    ///
+    /// The character class is built from the recovery table so the two cannot
+    /// drift: a letter matched here but unknown there would never be repaired,
+    /// and a letter known there but unmatched here would never be reached.
+    nonisolated static let ocrNumberCapturePattern: String =
+        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>"#
+        + "(?-i:" + OCRDigitRecovery.candidateCharacterClass
+        + "{\(OCRDigitRecovery.lengthRange.lowerBound),\(OCRDigitRecovery.lengthRange.upperBound)})"
+        + ")"
+
+    /// Confidence for a value whose digits were restored from an OCR misread.
+    /// Deliberately below the verbatim tier (0.8): the reading is a candidate
+    /// supported by the glyph shapes, not a value the page states plainly.
+    nonisolated static let ocrRecoveredConfidence = 0.55
+
+    /// Confidence for a value rejoined to its label across a page break. Below
+    /// verbatim because the JOIN is an inference about layout — the page does
+    /// assert both halves, but not their adjacency.
+    nonisolated static let crossBlockAssembledConfidence = 0.7
 
     /// The fields this pack can emit under producer_version=1 — the authority
     /// the completeness invariant (SlotAnswerComposer display contracts) checks
@@ -62,12 +94,104 @@ public enum PatentDomainPack {
          "applicant", "inventor"]
 
     /// A1.1 — role capture patterns (field → regex with a ‹name› group). Data.
+    /// W-5.1 — the POA continuation set is the full formula (having / of /
+    /// son of / daughter of / residing / nationality); what a pattern
+    /// captures must STILL pass `isPlausibleRoleValue` at write.
     nonisolated static let rolePatterns: [(String, String)] = [
         ("applicant", #"applicant[s]?\s*(?:name)?\s*[:\-]\s*(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
-        ("applicant", #"\bI,?\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)\s+(?:having|of|son of|daughter of|resid)"#),
+        // P2.7 — THE POA FORMULA, with the bare `of` REMOVED.
+        //
+        // Owner ruling: keep the grantor's name. But W-5.1 refused it for a real
+        // reason — the live archive produced "acknowledge receipt" x82 and
+        // "need patent agent" x82 through this very pattern, and
+        // `roleStopwords` does NOT catch either (measured). So the casing rule
+        // in isPlausibleRoleValue was load-bearing and could not simply be
+        // relaxed.
+        //
+        // The weak link was never the casing: it was the bare `of`. "I
+        // acknowledge receipt OF the letter" matches `\bI …\s+of`, and so does
+        // half of English correspondence. The remaining alternatives are a
+        // document FORMULA that prose does not imitate — a power of attorney
+        // says "I, <name> having …" / "son of" / "residing" / "nationality".
+        // Removing `of` alone refuses the witnessed junk AT THE PATTERN, which
+        // is stronger than refusing it at the gate: a value that never matches
+        // cannot be mis-scored later.
+        //
+        // "son of" and "daughter of" are kept as COMPOUNDS — they are formula
+        // terms, and losing them would drop the Indian POA phrasing this
+        // archive actually uses.
+        ("applicant", #"\bI,?\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)\s*,?\s+(?:having|son of|daughter of|wife of|resid|nationality|aged)"#),
         ("applicant", #"granted to\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
         ("inventor",  #"inventor[s]?\s*(?:name)?\s*[:\-]\s*(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
     ]
+
+    /// W-5.1 — THE ROLE-VALUE GATE: a captured role value must be a NAME,
+    /// not a clause. The witnessed junk ("am writing to state…", "wish to
+    /// bring to your…") is prose the `\bI\b` pattern swallowed. A value
+    /// passes only when every token is name-shaped and none is a function
+    /// word; the register's junk classifiers (mail-infra, title-shaped,
+    /// automated-sender, nil-family, filename) apply on top. Per the doc's
+    /// law, every token must START uppercase (Title-Case or ALL-CAPS) —
+    /// the live junk ("acknowledge receipt" ×82, "need patent agent" ×82)
+    /// is lowercase prose no stoplist can enumerate. The person's name
+    /// reaches the register through the labeled certificate lines, which
+    /// write it cased; a lowercase POA capture is counted, not stored.
+    nonisolated static let roleStopwords: Set<String> = [
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "the", "a", "an", "to", "that", "this", "these", "those",
+        "of", "and", "or", "in", "on", "at", "for", "with", "by",
+        "have", "has", "had", "will", "would", "shall", "should",
+        "can", "could", "may", "might", "do", "does", "did", "not",
+        "hereby", "herewith", "writing", "write", "state", "submit",
+        "request", "wish", "like", "pleased", "inform", "bring",
+        "attach", "attached", "enclose", "enclosed", "declare",
+        "you", "your", "yours", "my", "our", "us", "we", "it",
+        "undersigned", "applicant", "inventor", "sir", "madam",
+    ]
+
+    nonisolated static func isPlausibleRoleValue(_ name: String) -> Bool {
+        let tokens = name.split(separator: " ").map(String.init)
+        guard (2...5).contains(tokens.count) else { return false }
+        for token in tokens {
+            let bare = token.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+            guard bare.count >= 2 || (token.count == 2 && token.hasSuffix(".")) else { return false }
+            guard bare.allSatisfy({ $0.isLetter }) else { return false }
+            guard bare.first?.isUppercase == true else { return false }
+            if roleStopwords.contains(bare.lowercased()) { return false }
+        }
+        let lower = name.lowercased()
+        if EntityQualityGate.isMailInfraName(name) { return false }
+        if EntityQualityGate.isTitleShaped(name) { return false }
+        if EntityQualityGate.isAutomatedSender(lower) { return false }
+        if EntityQualityGate.isNilFamily(lower) { return false }
+        if EntityQualityGate.isFilenameShaped(lower) { return false }
+        return true
+    }
+
+    /// P2.7 — a lowercase name captured by the POA FORMULA only.
+    ///
+    /// Everything `isPlausibleRoleValue` checks EXCEPT the uppercase-initial
+    /// rule: 2-5 tokens, each alphabetic and >=2 chars, none a function word,
+    /// and none of the register's junk classifiers. The casing rule is what the
+    /// formula pattern has already earned the right to skip; nothing else is
+    /// loosened, so a clause that somehow reached here is still refused.
+    nonisolated static func isPlausibleLowercaseFormulaName(_ name: String) -> Bool {
+        let tokens = name.split(separator: " ").map(String.init)
+        guard (2...5).contains(tokens.count) else { return false }
+        for token in tokens {
+            let bare = token.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+            guard bare.count >= 2 || (token.count == 2 && token.hasSuffix(".")) else { return false }
+            guard bare.allSatisfy({ $0.isLetter }) else { return false }
+            if roleStopwords.contains(bare.lowercased()) { return false }
+        }
+        let lower = name.lowercased()
+        if EntityQualityGate.isMailInfraName(name) { return false }
+        if EntityQualityGate.isTitleShaped(name) { return false }
+        if EntityQualityGate.isAutomatedSender(lower) { return false }
+        if EntityQualityGate.isNilFamily(lower) { return false }
+        if EntityQualityGate.isFilenameShaped(lower) { return false }
+        return true
+    }
 
     nonisolated static func cleanRoleName(_ raw: String) -> String {
         var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -126,12 +250,59 @@ public enum PatentDomainPack {
                                      producerVersion: DerivedProducerVersions.facts,
                                      rawMatch: full.trimmingCharacters(in: .whitespaces), sourceCount: 1))
         }
+        // OCR RECOVERY (V0 noise class 4). On a scanned page the digits arrive
+        // as letters — "Patent No. 7OO321" — and the strict pattern above,
+        // which requires digits, matches nothing. Before this pass that meant
+        // the value was not merely read wrongly: it was never recorded, and
+        // nothing said a labeled identifier had been seen and abandoned. So a
+        // scanned grant letter held no patent number at all.
+        //
+        // This runs SECOND on purpose. `seen` already holds everything the
+        // strict reader captured, so a value read cleanly anywhere in the block
+        // wins and is never re-minted as a repair. What lands here is only what
+        // the clean reader could not see.
+        var unrecoverableOCRCandidates = 0
+        for (full, label, rawValue) in captureGroups(ocrNumberCapturePattern, in: text) {
+            guard let recovered = OCRDigitRecovery.recover(rawValue) else {
+                // Refused by the recovery gates — a word, or too little of it
+                // left to restore. Counted so a page full of unreadable
+                // identifiers is visible in the log rather than being a silent
+                // nothing; never stored, because a guessed identifier can be
+                // cited and a missing one cannot.
+                if rawValue.contains(where: { !$0.isNumber }) { unrecoverableOCRCandidates += 1 }
+                continue
+            }
+            let value = normalizeIdentifier(recovered)
+            guard !value.isEmpty, !isDateShapedNumber(value) else { continue }
+            let field: String
+            switch label.lowercased() {
+            case "application": field = "applicationNumber"
+            case "publication": field = "publicationNumber"
+            default:            field = "patentNumber"
+            }
+            guard seen.insert(field + "|" + value.lowercased()).inserted else { continue }
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: field, value: value,
+                                     status: .sourceAsserted, confidence: ocrRecoveredConfidence,
+                                     sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts,
+                                     // The receipt keeps the SCANNED form, so a
+                                     // reader sees "700321" against
+                                     // "Patent No. 7OO321" and judges the repair.
+                                     rawMatch: full.trimmingCharacters(in: .whitespaces),
+                                     sourceCount: 1,
+                                     derivation: .ocrCorrected))
+        }
+        if unrecoverableOCRCandidates > 0 {
+            KalsmritikoshLog.knowledge.info("PatentDomainPack: \(unrecoverableOCRCandidates) labeled identifier(s) too mangled to recover")
+        }
+
         // A1.1 (W-4c) — THE ROLE TABLE, as data: who stands in which role,
         // read from certificate fields, POA parties, and labeled lines. The
         // owner's witnessed gap: the POA plainly says "I, shirshendu sasmal…"
         // while the answer said "Not found: identity". Names are captured
         // conservatively (2–5 capitalized-or-lowercase word tokens before a
         // delimiter); the validity trim strips titles and trailing clauses.
+        var rejectedRoleValues = 0
         for (field, pattern) in Self.rolePatterns {
             guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
             let ns = text as NSString
@@ -140,6 +311,19 @@ public enum PatentDomainPack {
                 guard r.location != NSNotFound else { continue }
                 let name = Self.cleanRoleName(ns.substring(with: r))
                 guard name.split(separator: " ").count >= 2, name.count <= 60 else { continue }
+                // W-5.1 — the role-value gate at write: clause-shaped values
+                // are rejected and counted, never stored.
+                // P2.7 — the POA formula's capture may be lowercase; every
+                // other pattern still requires Title Case. `poaFormula` is true
+                // only for the `\bI, <name> having/son of/...` pattern, whose
+                // junk was removed at the pattern above, so this relaxation
+                // cannot readmit "acknowledge receipt".
+                let poaFormula = pattern.contains("\\bI,?")
+                let plausible = Self.isPlausibleRoleValue(name)
+                    || (poaFormula
+                        && KnowledgeModuleFlags.isEnabled(.poaGrantorRecovery)
+                        && Self.isPlausibleLowercaseFormulaName(name))
+                guard plausible else { rejectedRoleValues += 1; continue }
                 let key = field + "|" + name.lowercased()
                 guard seen.insert(key).inserted else { continue }
                 facts.append(GenericFact(subjectLabel: subjectLabel, field: field, value: name,
@@ -149,6 +333,11 @@ public enum PatentDomainPack {
             }
         }
 
+        if rejectedRoleValues > 0 {
+            // Counted, never stored — the health panel's junk-in-register
+            // invariant reads zero because of this gate.
+            KalsmritikoshLog.knowledge.info("PatentDomainPack: role-value gate rejected \(rejectedRoleValues) clause-shaped candidate(s)")
+        }
         if let st = status(in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "status", value: st,
                                      status: .sourceAsserted, confidence: 0.75, sourceBlockIDs: [blockID],

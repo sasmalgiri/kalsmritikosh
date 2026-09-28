@@ -154,7 +154,11 @@ public struct FactTypeClassifier: Sendable {
             // to meeting at medium confidence; future v2 may add
             // Interview / Conversation types.
             return Result(type: .meeting, confidence: 0.50, reason: "sourceType.category=transcript (default → Meeting)")
-        case .spreadsheet, .image, .archive, .unknown:
+        // HOST-* artifacts are deliberately unclassified here. A registry hive or
+        // event log is not an invoice, contract or meeting; forcing it into one of
+        // those would put a fabricated document type on machine evidence. Their
+        // structure is already citable via the parser's typed blocks.
+        case .spreadsheet, .image, .archive, .hostArtifact, .unknown:
             return nil
         case .chat:
             // Chat exports / iMessage threads behave like email
@@ -166,6 +170,130 @@ public struct FactTypeClassifier: Sendable {
             // per-visit when it ships.
             return nil
         }
+    }
+
+    // MARK: - P3.2 · the taxonomy is OPEN at the edge
+    //
+    // `classify` returns nil for anything outside the curated `FactType` enum,
+    // and the write path stores `_unclassified`. DataHealthCheck then counts
+    // `fact_type != '_unclassified'` as "typed", so every out-of-taxonomy
+    // document reads as a DEFECT. That conflates two completely different
+    // states:
+    //
+    //   CLASSIFIER FAILED — a contract we should have recognised and did not.
+    //                       A real defect; the rules need work.
+    //   GENUINELY NOVEL   — a vehicle service record, a shipping manifest, a
+    //                       school report. The curated enum is a commercial and
+    //                       project-management taxonomy; these are not in it and
+    //                       never will be, because the space of document kinds
+    //                       is open. Calling this a defect means the health
+    //                       panel goes red for the product working as intended
+    //                       on a universal archive.
+    //
+    // WHERE A NAME FOR A NOVEL TYPE COMES FROM, HONESTLY. I will not guess a
+    // human label — inventing "vehicleServiceRecord" from field names is the
+    // model-style leap this codebase refuses. Instead the derived id is a
+    // FINGERPRINT OF THE DOCUMENT'S OWN FIELD SET:
+    //
+    //      derived:chassisnumber+odometerreading+servicedate
+    //
+    // That is honest (it states only what the document contains), stable (the
+    // same field set always yields the same id), and — the useful part —
+    // GROUPING: two service records from different garages produce the SAME
+    // derived id, so an emergent taxonomy forms from the data instead of from
+    // a list somebody has to maintain. A human label can be attached later by
+    // whoever knows the domain; the grouping works without one.
+    //
+    // Requires P3.1's open-field extractor to have produced field names. With
+    // it off there are no discovered fields, so this correctly declines.
+
+    /// A type the curated enum does not contain, named after its own contents.
+    public struct OpenTypeResult: Sendable, Hashable {
+        /// `derived:<field>+<field>+<field>` — stable and groupable.
+        public let derivedTypeID: String
+        public let confidence: Double
+        public let reason: String
+        /// The fields the fingerprint was built from, in the order used.
+        public let signatureFields: [String]
+    }
+
+    /// How many fields form the signature. Three is the balance found by
+    /// reasoning about the failure modes on both sides: one or two group far
+    /// too loosely (every form has a "name" and a "date"), while five or more
+    /// make the id so specific that two genuinely similar documents with one
+    /// differing field never group — which defeats the whole purpose.
+    public nonisolated static let signatureFieldCount = 3
+
+    /// Fields too generic to identify a document KIND. A signature built from
+    /// these describes nothing: "date+name+number" is every form ever printed.
+    public nonisolated static let nonDistinguishingFields: Set<String> = [
+        "date", "name", "number", "id", "amount", "total", "value", "type",
+        "status", "address", "phone", "email", "reference", "remarks", "notes",
+        "description", "subject", "title", "page", "signature", "place",
+    ]
+
+    /// The prefix that marks a derived type, so no reader can mistake one for
+    /// a curated `FactType`. Queries can also find them all with a LIKE.
+    public nonisolated static let derivedPrefix = "derived:"
+
+    /// Name a novel document type from its discovered fields, or decline.
+    ///
+    /// Declines — rather than guessing — when the document offers too few
+    /// distinguishing fields. An id built from nothing is worse than no id,
+    /// because it would group unrelated documents together and look like
+    /// knowledge.
+    public nonisolated func classifyOpen(fieldIDs: [String]) -> OpenTypeResult? {
+        guard KnowledgeModuleFlags.isEnabled(.openFactTypes) else { return nil }
+        let distinguishing = fieldIDs
+            .map { $0.lowercased() }
+            .filter { !Self.nonDistinguishingFields.contains($0) }
+            // Sorted, so field ORDER in the document cannot change the id. Two
+            // forms listing the same fields in a different order are the same
+            // kind of document.
+            .sorted()
+        // De-duplicate while keeping the sorted order.
+        var unique: [String] = []
+        for f in distinguishing where unique.last != f { unique.append(f) }
+
+        guard unique.count >= Self.signatureFieldCount else { return nil }
+        let signature = Array(unique.prefix(Self.signatureFieldCount))
+        return OpenTypeResult(
+            derivedTypeID: Self.derivedPrefix + signature.joined(separator: "+"),
+            // Deliberately modest. This is a GROUPING, not a recognition: it
+            // says "documents like this one", not "this is a service record".
+            // Anything higher would invite downstream code to treat it as a
+            // recognised type.
+            confidence: 0.45,
+            reason: "derived from \(unique.count) distinguishing field(s)",
+            signatureFields: signature)
+    }
+
+    /// Why a row is untyped — so the health panel can stop calling a universal
+    /// archive broken.
+    public enum UntypedCause: String, Sendable {
+        /// Curated rules matched nothing AND too few distinguishing fields to
+        /// derive a type. Genuinely unknown; a real gap.
+        case unclassifiable
+        /// Curated rules matched nothing, but the document HAS a derivable
+        /// field signature. Working as intended on an unanticipated domain.
+        case novelType
+        /// The open-type module is off, so no derivation was attempted. Absence
+        /// of a type here means nothing was tried — which must never be read as
+        /// "nothing was there".
+        case notAttempted
+    }
+
+    /// Classify the ABSENCE of a curated type. Called only when `classify`
+    /// returned nil.
+    public nonisolated func untypedCause(fieldIDs: [String]) -> UntypedCause {
+        guard KnowledgeModuleFlags.isEnabled(.openFactTypes) else { return .notAttempted }
+        return classifyOpen(fieldIDs: fieldIDs) == nil ? .unclassifiable : .novelType
+    }
+
+    /// Whether a stored `fact_type` string is a derived id rather than a
+    /// curated `FactType` raw value.
+    public nonisolated static func isDerived(_ factType: String) -> Bool {
+        factType.hasPrefix(derivedPrefix)
     }
 
     // MARK: - Helpers

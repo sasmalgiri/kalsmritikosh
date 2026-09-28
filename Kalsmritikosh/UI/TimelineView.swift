@@ -58,11 +58,27 @@ public struct TimelineView: View {
                 placeholder
             } else {
                 List {
-                    ForEach(groupedByZoom(), id: \.0) { header, bucket in
+                    let groups = groupedByZoom()
+                    let silent = TimelineGaps.gaps(in: events.filter(\.hasTrustworthyDate).map(\.date),
+                                                   minimumDays: TimelineGaps.thresholdDays(for: zoom.rawValue))
+                    ForEach(Array(groups.enumerated()), id: \.element.0) { index, group in
+                        let (header, bucket) = group
                         Section(header) {
                             ForEach(bucket) { event in
                                 row(for: event)
                             }
+                        }
+                        // P3.3 — mark a silent stretch before the next (older) section.
+                        if index + 1 < groups.count,
+                           let older = groups[index + 1].1.map(\.date).max(),
+                           let newerStart = bucket.map(\.date).min(),
+                           let gap = silent.first(where: { $0.from >= older && $0.to <= newerStart }) {
+                            Label(TimelineGaps.label(gap), systemImage: "ellipsis")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .listRowBackground(Color.clear)
+                                .accessibilityLabel(TimelineGaps.label(gap))
                         }
                     }
                     if showExcluded && !excludedEvents.isEmpty {
@@ -515,5 +531,49 @@ private struct EventVersionDiffSheet: View {
             self.versions = list
             self.loading = false
         }
+    }
+}
+
+/// P3.3 — silent stretches on the timeline axis. A gap is a run with no
+/// trustworthy-dated record longer than the zoom's threshold; drawn between
+/// sections so an empty year never looks like the month after the last one.
+public enum TimelineGaps {
+    public struct Gap: Equatable, Sendable {
+        public let from: Date
+        public let to: Date
+        public var days: Int { Int(to.timeIntervalSince(from) / 86_400) }
+    }
+
+    /// Minimum silent days worth marking at a zoom.
+    public nonisolated static func thresholdDays(for zoomRaw: String) -> Int {
+        switch zoomRaw {
+        case "day": return 30
+        case "year": return 365
+        case "decade": return 1_095
+        default: return 90
+        }
+    }
+
+    /// Gaps between consecutive trustworthy dates longer than `minimumDays`.
+    public nonisolated static func gaps(in dates: [Date], minimumDays: Int) -> [Gap] {
+        let sorted = dates.sorted()
+        guard sorted.count >= 2 else { return [] }
+        var out: [Gap] = []
+        for (a, b) in zip(sorted, sorted.dropFirst()) where b.timeIntervalSince(a) > Double(minimumDays) * 86_400 {
+            out.append(Gap(from: a, to: b))
+        }
+        return out
+    }
+
+    /// "No dated records for 7 months (Feb 2023 – Sep 2023)".
+    public nonisolated static func label(_ gap: Gap) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM yyyy"
+        let days = gap.days
+        let span: String
+        if days >= 730 { span = "\(days / 365) years" }
+        else if days >= 60 { span = "\(days / 30) months" }
+        else { span = "\(days) days" }
+        return "No dated records for \(span) (\(f.string(from: gap.from)) – \(f.string(from: gap.to)))"
     }
 }

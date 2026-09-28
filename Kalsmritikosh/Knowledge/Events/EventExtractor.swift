@@ -105,7 +105,7 @@ public struct RuleEventExtractor: EventExtractor {
             events.append(.init(
                 kind: .emailReceived,
                 date: primaryDate,
-                title: object.metadata["subject"].flatMap(stringValue) ?? "Email",
+                title: Self.normalizeEventTitle(object.metadata["subject"].flatMap(stringValue) ?? "Email"),
                 summary: nil,
                 entityIDs: entityIDs,
                 sourceObjectID: object.id,
@@ -508,6 +508,37 @@ public struct RuleEventExtractor: EventExtractor {
     private func stringValue(_ codable: AnyCodable) -> String? {
         if case .string(let s) = codable.value { return s }
         return nil
+    }
+
+    /// W-5.3 — the event-title normalizer: an event's title is WHAT
+    /// HAPPENED, not the mail client's routing prefix. Strips fwd:/fw:/re:
+    /// chains (with optional brackets) and leading reference codes; the raw
+    /// subject stays on the source document, so the citation is untouched.
+    /// Events producer v2 — the drain rewrites v1 titles.
+    nonisolated static func normalizeEventTitle(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var changed = true
+        while changed {
+            changed = false
+            let lower = t.lowercased()
+            for prefix in ["fwd:", "fw:", "re:", "fwd :", "fw :", "re :"] where lower.hasPrefix(prefix) {
+                t = String(t.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+                changed = true
+            }
+            // Bracketed routing tags ("[EXTERNAL]", "[SPAM?]") and a leading
+            // reference code line ("Ref: ABC/123 -") also step aside.
+            if t.hasPrefix("["), let close = t.firstIndex(of: "]") {
+                t = String(t[t.index(after: close)...]).trimmingCharacters(in: .whitespaces)
+                changed = true
+            }
+            if t.lowercased().hasPrefix("ref:") || t.lowercased().hasPrefix("ref.") {
+                if let dash = t.firstIndex(where: { $0 == "-" || $0 == "—" }) {
+                    t = String(t[t.index(after: dash)...]).trimmingCharacters(in: .whitespaces)
+                    changed = true
+                }
+            }
+        }
+        return t.isEmpty ? raw.trimmingCharacters(in: .whitespacesAndNewlines) : t
     }
 
     private func titleForKind(_ kind: Event.Kind) -> String {

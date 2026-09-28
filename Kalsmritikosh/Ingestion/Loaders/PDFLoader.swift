@@ -30,6 +30,16 @@ public struct PDFLoader: Ingestor {
         guard let document = PDFDocument(url: url) else {
             throw IngestorError.unreadable(url, underlying: nil)
         }
+        // A4 (module .passwordProtectedFiles) — an encrypted PDF opens LOCKED. Many
+        // are owner-only encrypted and unlock with an EMPTY user password; try that
+        // first. If it stays locked it needs a real password → classify it as
+        // passwordProtected (tracked, not a silent parse failure) instead of
+        // producing empty text. Module OFF ⇒ old behaviour (locked → empty → error).
+        if document.isLocked, KnowledgeModuleFlags.isEnabled(.passwordProtectedFiles) {
+            if !document.unlock(withPassword: "") {
+                throw IngestorError.passwordProtected(url)
+            }
+        }
         var combined = ""
         var pageOffsets: [Int] = []
         var ocrPagesUsed = 0

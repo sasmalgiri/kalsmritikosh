@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 127
+    public static let latestVersion = 133
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -658,7 +658,13 @@ public enum SchemaMigrations {
         (124, v124),
         (125, v125),
         (126, v126),
-        (127, v127)
+        (127, v127),
+        (128, v128),
+        (129, v129),
+        (130, v130),
+        (131, v131),
+        (132, v132),
+        (133, v133)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2009,6 +2015,17 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_blocks_kind ON evidence_blocks(kind);
     CREATE INDEX IF NOT EXISTS idx_blocks_parent ON evidence_blocks(parent_block_id);
 
+    -- P2.6 · DEFERRED-KEPT (owner ruling 2026-09-24: "keep all").
+    -- Verified 2026-09-24: this table has NO producer and NO consumer anywhere
+    -- in non-test source. It is block-to-block graph scaffolding — reply-to,
+    -- continuation, and containment edges between evidence blocks — designed
+    -- and never populated.
+    -- KEPT rather than dropped: the schema costs nothing empty, and the owner
+    -- ruled that nothing is removed. EXEMPT from the coverage guard for the
+    -- same reason: an unbuilt feature with reserved schema is not a wiring gap,
+    -- and counting it as one would hide the real ones.
+    -- To build it, the producer belongs next to persistStructuralDoc, where
+    -- block order and parent/child relations are already known.
     CREATE TABLE evidence_block_edges (
         id            TEXT PRIMARY KEY NOT NULL,
         from_block_id TEXT NOT NULL,
@@ -6483,4 +6500,190 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_history_artifacts_dedup
         ON history_artifacts(anchor_key, request_shape, ledger_stamp);
     """
+
+    // MARK: - v128 — G2/Stage-3: durable conversation reopening
+    //
+    // An assistant conversation turn gains a link to its durable answer in
+    // the answer ledger (answer_ledger_id). On reopen the citations,
+    // verification status and receipt controls are restored from that
+    // ledger row instead of being lost — the turn binds to the durable
+    // revision, never a second divergent copy of verification truth. NULL
+    // for legacy turns (an honest "evidence not linked" state) and for user
+    // turns.
+    private static let v128: String = """
+    ALTER TABLE conversation_turns ADD COLUMN answer_ledger_id TEXT;
+    """
+
+    // MARK: - v129 — C-4 / OCR derivation provenance on generic_facts
+    //
+    // A fact's value is normally read verbatim from ONE block. Two producers
+    // recover values the strict reader cannot see, and both must be
+    // distinguishable from a verbatim capture forever after:
+    //   CROSS_BLOCK_ASSEMBLED — the field label ended one block and its value
+    //     began the next (a page break between "Patent No." and the number).
+    //     Such a fact cites BOTH blocks, because neither alone supports it.
+    //   OCR_CORRECTED — a scanner read digits as letters ("7OO321"); the digits
+    //     were restored and `raw_match` keeps the scanned form as the receipt.
+    // Before this column both cases were invisible: the page-break value was not
+    // extracted at all, and the OCR value was dropped with nothing recording
+    // that a labeled identifier had been seen and abandoned. Confidence alone
+    // cannot carry this — it cannot answer "which values did we repair, and
+    // how?". NULL means verbatim, which is the overwhelming majority of rows
+    // and every row written before this migration. ADVISORY: never sealed (the
+    // evidence-state stamp counts rows, not this column), never gates
+    // surfacing, and QUERYABLE so a derivation-rate spike reads as the rule
+    // defect it would be.
+    private static let v129: String = """
+    ALTER TABLE generic_facts ADD COLUMN derivation TEXT;
+    """
+
+    // MARK: - v130 — P1.2: derivation failures get a REASON that survives
+    //
+    // The ingest path carried 11 `try? await <persist>` sites. Each turned a
+    // real database or extractor failure into silence: the row simply was not
+    // there afterwards, indistinguishable from "there was nothing to write".
+    // For a tool whose product is evidence that is the worst possible loss —
+    // an examiner cannot tell "not in the container" from "failed to parse",
+    // and a chunk missing an embedding reads identically to one not yet
+    // drained.
+    //
+    // This table is where a tolerated failure goes. Stages that CORRUPT on
+    // failure now propagate instead (see P1.1); stages that merely lose
+    // something additive record here and carry on, so the Ingestion Report can
+    // say what was lost and why rather than reporting a smaller number with no
+    // explanation.
+    //
+    // `stage` is a producer id ("entities.insert", "evidence.linkBlocks",
+    // "embeddings.upsert", "member.ingest"); `reason` is the error's
+    // description, truncated at the writer. Both source_version_id and
+    // knowledge_object_id are NULLABLE because some failures happen before
+    // either exists. Derived + advisory: never sealed, never gates an answer.
+    private static let v130: String = """
+    CREATE TABLE IF NOT EXISTS derivation_failures (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        source_version_id   TEXT,
+        knowledge_object_id TEXT,
+        file_path           TEXT,
+        detected_type       TEXT,
+        stage               TEXT NOT NULL,
+        reason              TEXT NOT NULL,
+        occurred_at         REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_derivation_failures_stage
+        ON derivation_failures(stage);
+    CREATE INDEX IF NOT EXISTS idx_derivation_failures_type
+        ON derivation_failures(detected_type);
+    CREATE INDEX IF NOT EXISTS idx_derivation_failures_sv
+        ON derivation_failures(source_version_id);
+    """
+
+    // MARK: - v131 — P1.3: a KO's derivation is either COMPLETE or resumable
+    //
+    // processKnowledgeObject writes in sequence: knowledge_objects → chunks →
+    // synthetic_questions → entities → events → relationships. The transaction
+    // boundary across that sequence was UNKNOWN — recorded as unknown in
+    // PIPELINE_WORKFLOW.md rather than assumed either way. The hazard it leaves
+    // is specific: a process killed between chunks and entities leaves a KO
+    // that LOOKS finished, is counted as finished, and is silently missing its
+    // ledger. On a whole-archive re-ingest a mid-run kill is likely, not
+    // hypothetical, and a partial KO that looks complete is invisible to the
+    // Ingestion Report's counts while being wrong.
+    //
+    // WHY A MARKER AND NOT ONE BIG SAVEPOINT. The sequence interleaves database
+    // writes with long-running async work (NER, event extraction, embedding).
+    // Wrapping all of it in a single SQLite SAVEPOINT would hold a write
+    // transaction open across model inference, blocking the embedding drain and
+    // any concurrent read for the duration. So the choice is the second option
+    // this project's own acceptance criteria allowed: an EXPLICITLY RESUMABLE
+    // PARTIAL. `derivation_complete` is set only after the last stage returns;
+    // anything NULL is a KO whose derivation did not finish, which
+    // resumeIncompleteIngests can finish and the report can count separately
+    // from "derived and empty".
+    //
+    // NULL for every pre-v131 row, which is honest: those KOs were derived
+    // before the marker existed, so their completeness is genuinely unknown
+    // rather than assumed. The backfill rides the drain, never a standalone
+    // rewrite of the archive.
+    private static let v131: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN derivation_complete INTEGER;
+    CREATE INDEX IF NOT EXISTS idx_ko_derivation_complete
+        ON knowledge_objects(derivation_complete);
+    """
+
+    // MARK: - v132 — P3.3: the induction ATTEMPT is the resume marker
+    //
+    // Schema induction (InducedSchemaExtractor) is the first and only writer in
+    // this system whose output a model had a hand in, and therefore the first
+    // that is not reproducible. That collides head-on with the drain's central
+    // promise — "RESUME MARKER = producer_version itself: a second run is a
+    // no-op by construction" — and with the Fixed-Point Law (U-5): running
+    // everything twice must change nothing.
+    //
+    // It collides in a specific place. Induction runs only on documents with
+    // ZERO facts, so a SUCCESSFUL induction is self-limiting: the facts it
+    // writes make the document ineligible next time. The hole is the
+    // UNSUCCESSFUL one. A document where the model proposed nothing verifiable
+    // still has zero facts, so a second drain would call the model again — and
+    // being non-deterministic, it might write on run 2 what it declined to
+    // write on run 1. That is a fixed-point violation, and it would also pay
+    // the model cost again on every drain, forever, for exactly the documents
+    // where it has already failed.
+    //
+    // The fix is not to weaken the law but to give this pass the same kind of
+    // marker every other pass has. One row per SOURCE VERSION says the attempt
+    // happened; the pass skips any version already present. Keyed on the source
+    // version, not the KO, because a NEW version of a file is genuinely new
+    // content and deserves a fresh attempt — the same rule the rest of the
+    // derivation layer follows.
+    //
+    // `decline_reason` is the point of the table beyond idempotence: it
+    // separates "we tried and the model proposed nothing that could be found in
+    // the document" from "we never tried" from "there was no model available".
+    // Those are three different facts about a near-empty ledger and a bare row
+    // count cannot tell them apart — the absence-as-verification defect this
+    // whole program keeps closing. `rejected_*` keep the per-gate tallies, so a
+    // model that has started fabricating is visible as a rise in
+    // `rejected_not_found` rather than as a vague drop in yield.
+    //
+    // Derived + advisory: never sealed, never gates an answer. Dropping this
+    // table costs only the memory of what was attempted.
+    private static let v132: String = """
+    CREATE TABLE IF NOT EXISTS induced_schema_attempts (
+        source_version_id   TEXT PRIMARY KEY NOT NULL,
+        knowledge_object_id TEXT,
+        attempted_at        REAL NOT NULL,
+        fields_written      INTEGER NOT NULL DEFAULT 0,
+        decline_reason      TEXT,
+        rejected_not_found  INTEGER NOT NULL DEFAULT 0,
+        rejected_reserved   INTEGER NOT NULL DEFAULT 0,
+        rejected_other      INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_induced_attempts_ko
+        ON induced_schema_attempts(knowledge_object_id);
+    CREATE INDEX IF NOT EXISTS idx_induced_attempts_written
+        ON induced_schema_attempts(fields_written);
+    """
+
+    // MARK: - v133 — L1 chunk packing: a retrieval chunk's FULL block lineage
+    //
+    // The block-derived chunker emitted one chunk per EvidenceBlock; many
+    // parsers make a block per LINE, so 36% of the owner's chunks were under
+    // 40 characters ("Cell : 9960270472") and the composer quoted fragments.
+    // Adjacent small blocks now pack into one chunk up to the size budget.
+    // `chunks.evidence_block_id` keeps the chunk's FIRST block (every existing
+    // consumer keeps working and the projection invariant still holds); this
+    // table records EVERY block a chunk was assembled from, so a citation can
+    // resolve to the exact block rather than the group's first line.
+    // Derived rows: they follow their chunk (ON DELETE CASCADE).
+    private static let v133: String = """
+    CREATE TABLE IF NOT EXISTS chunk_blocks (
+        chunk_id          TEXT NOT NULL,
+        evidence_block_id TEXT NOT NULL,
+        ordinal           INTEGER NOT NULL,
+        PRIMARY KEY (chunk_id, evidence_block_id),
+        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunk_blocks_block ON chunk_blocks(evidence_block_id);
+    """
+
 }

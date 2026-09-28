@@ -80,6 +80,12 @@ public actor NarrativeSlotBackfiller: BackgroundService {
     /// slot bundle was actually written (non-empty result). Events
     /// whose source KO is gone are skipped, NOT counted as failures
     /// — they may be intentional deletions.
+    ///
+    /// U-3.4 (W-6) — events still awaiting narrative-slot backfill; 0 = done.
+    public func pendingCount() async -> Int {
+        (try? await events.countEventsMissingNarrativeSlots()) ?? 0
+    }
+
     @discardableResult
     public func runOnce() async -> Int {
         let candidates: [Event]

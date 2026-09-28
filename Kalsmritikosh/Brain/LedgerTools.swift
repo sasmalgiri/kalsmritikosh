@@ -93,8 +93,12 @@ public struct LedgerTools: Sendable {
         let rows = await facts(canon)
         var seen = Set<String>()
         return rows.filter { seen.insert($0.value.lowercased()).inserted }.prefix(6).enumerated().map { n, f in
+            // G1/Stage-2.1 — PROVENANCE: a field fact's evidence is the SOURCE
+            // BLOCKS that asserted it (sourceBlockIDs → real passages), never
+            // the subject/entity id. A subjectID masquerading as a document id
+            // produced citations that pointed at an entity, not the text.
             ToolResult(id: "F\(n + 1)", text: "\(canon): \(f.value)",
-                       objectIDs: f.subjectID.map { [$0] } ?? [])
+                       objectIDs: f.sourceBlockIDs)
         }
     }
 
@@ -116,5 +120,38 @@ public struct LedgerTools: Sendable {
         return SpanCutter.cut(question: question, shape: shape, chunks: chunks).map {
             ToolResult(id: $0.id, text: $0.text, objectIDs: [$0.objectID])
         }
+    }
+
+    /// U-7 — timelineSlice: the dated chain for a subject BOUNDED to a date
+    /// window [from, to] (either side open). Same id-bearing shape as
+    /// historyOf; the window is applied deterministically after the fetch so
+    /// a "what happened in 2024?" question gets exactly that slice. ≤12 lines.
+    public func timelineSlice(question: String, from: Date?, to: Date?) async -> [ToolResult] {
+        let terms = EventAnswerComposer.vocabularyTerms(in: question)
+        let matched = await events(terms.isEmpty ? ["granted", "filed", "hearing"] : terms)
+        let windowed = matched.filter { e in
+            (from.map { e.date >= $0 } ?? true) && (to.map { e.date <= $0 } ?? true)
+        }.sorted {
+            $0.date != $1.date ? $0.date < $1.date : $0.id.uuidString < $1.id.uuidString
+        }.prefix(12)
+        let df = DateFormatter(); df.dateFormat = "d MMMM yyyy"
+        df.timeZone = TimeZone(identifier: "UTC"); df.locale = Locale(identifier: "en_US_POSIX")
+        return windowed.enumerated().map { n, e in
+            ToolResult(id: "T\(n + 1)", text: "\(df.string(from: e.date)) — \(e.title)",
+                       objectIDs: [e.sourceObjectID])
+        }
+    }
+
+    /// U-7 — shelfLookup: the reference-shelf lane (RS/three-lane stack),
+    /// T0-ready. When a reference-shelf reader is injected it returns
+    /// id-bearing shelf results ("R‹n›", labeled "From your reference
+    /// shelf"); with no shelf wired it returns [] (the archive and GK lanes
+    /// still answer). Deterministic; shelf facts never mix into archive
+    /// evidence — the caller labels the lane.
+    public var shelf: (@Sendable (String) async -> [ToolResult])? = nil
+
+    public func shelfLookup(_ term: String) async -> [ToolResult] {
+        guard let shelf else { return [] }
+        return await shelf(term)
     }
 }

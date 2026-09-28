@@ -23,7 +23,10 @@ struct ParserCapabilityManifestTests {
 
     @Test("Structural formats are FULL and name their parser")
     func fullFormats() {
-        for t in ["txt", "docx", "doc", "xlsx", "xls", "mbox", "eml"] {
+        // msg / pst / nsf joined this list once their structural parsers landed
+        // (2026-09-23): each has a reader (OLE2/PST/NSF), a loader branch, AND a
+        // StructuralParser, so the manifest now truthfully advertises them FULL.
+        for t in ["txt", "docx", "doc", "xlsx", "xls", "mbox", "eml", "msg", "pst", "nsf"] {
             let e = entry(t)
             #expect(e?.coverage == .full, "\(t) should be FULL")
             #expect(e?.parserName != nil)
@@ -46,7 +49,9 @@ struct ParserCapabilityManifestTests {
 
     @Test("Unhandled document/email formats are PRESERVED-ONLY, not silently claimed")
     func preservedOnly() {
-        for t in ["msg", "pst", "ppt", "keynote"] {
+        // ppt / keynote still have no parser of any kind — they must stay
+        // honestly preserved-only rather than claim coverage they don't have.
+        for t in ["ppt", "keynote"] {
             #expect(entry(t)?.coverage == .preservedOnly, "\(t) should be PRESERVED-ONLY")
             #expect(entry(t)?.parserName == nil)
         }

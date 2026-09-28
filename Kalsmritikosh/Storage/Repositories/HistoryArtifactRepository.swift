@@ -136,6 +136,231 @@ public actor HistoryArtifactRepository {
 
     // MARK: - Load / query
 
+    /// Story-reviewer loop (module .storyReviewerLoop) — the review ACTION: record
+    /// a user's approve/correct/reject verdict on one history item. The outline
+    /// builder already HONORS review_status (rejected items are dropped, corrected
+    /// items prioritized), so a subsequent render of this artifact reflects the
+    /// verdict. Preserve-not-delete: only the derived item's status changes.
+    public func setItemReviewStatus(_ status: HistoryReviewStatus, forItemID id: UUID) async throws {
+        try await database.exec(
+            "UPDATE history_items SET review_status = ? WHERE id = ?;",
+            [.text(status.rawValue), .uuid(id)])
+    }
+
+    /// Read one item's current review status (nil = item not found).
+    public func itemReviewStatus(forItemID id: UUID) async throws -> HistoryReviewStatus? {
+        let rows = try await database.query(
+            "SELECT review_status FROM history_items WHERE id = ?;", [.uuid(id)])
+        return rows.first?.string(0).flatMap(HistoryReviewStatus.init(rawValue:))
+    }
+
+    // MARK: - P2.5 · `history_alternative_accounts` gets a writer
+    //
+    // The table had NO PRODUCER — and `AlternativeAccountsTests` has been green
+    // the whole time, because the suite exercises `AlternativeAccountsBuilder`
+    // in memory and never persists. `history_items.alternative_account_id` has
+    // been waiting for a value since it was added.
+    //
+    // WHY THIS MATTERS MORE THAN ITS SIZE. An alternative account IS a surfaced
+    // conflict — two irreconcilable versions of one field, both evidenced. The
+    // owner's standing rule is that conflicting evidence is shown as a conflict
+    // with both sources, never averaged away. Without persistence, a conflict
+    // detected during one history build vanished when the build ended, so the
+    // same contradiction had to be rediscovered every time and could never be
+    // referenced, reviewed, or carried into an answer.
+
+    /// One persisted unresolved conflict.
+    public struct StoredAlternativeAccount: Sendable {
+        public let id: UUID
+        public let artifactID: UUID
+        /// "<subjectLabel>|<field>" — the conflict's identity.
+        public let subject: String
+        public let account: AlternativeAccount
+        /// What evidence would settle it, when that is known. `nil` means "we
+        /// do not know what would resolve this", which is itself honest and
+        /// must not be rendered as "nothing would".
+        public let decisiveMissingEvidence: String?
+    }
+
+    /// Persist the accounts for an artifact and return the id assigned to each,
+    /// keyed by "<subjectLabel>|<field>" so the caller can stamp
+    /// `history_items.alternative_account_id` on the items involved.
+    ///
+    /// Replaces the artifact's existing rows first: an artifact's conflict set
+    /// is derived, so a rebuild must REPLACE rather than accumulate. That is the
+    /// same append-instead-of-replace defect that grew topics 92 -> 143.
+    @discardableResult
+    public func saveAlternativeAccounts(
+        _ accounts: [AlternativeAccount], artifactID: UUID
+    ) async throws -> [String: UUID] {
+        // Module .historyChapterReadback — OFF skips persistence entirely, so
+        // behaviour returns to today's: conflicts are detected per build and
+        // not remembered. No partial state either way, because the DELETE is
+        // inside the gate with the INSERTs.
+        guard KnowledgeModuleFlags.isEnabled(.historyChapterReadback) else { return [:] }
+        try await database.exec(
+            "DELETE FROM history_alternative_accounts WHERE artifact_id = ?;", [.uuid(artifactID)])
+        var ids: [String: UUID] = [:]
+        for account in accounts {
+            // Only genuine conflicts are persisted. A single version is not an
+            // alternative account, and storing one would invent a disagreement.
+            guard account.isUnresolved else { continue }
+            let key = "\(account.subjectLabel)|\(account.field)"
+            let id = UUID()
+            let payload = AccountPayload(
+                subjectLabel: account.subjectLabel, field: account.field,
+                versions: account.versions.map {
+                    AccountPayload.Version(value: $0.value,
+                                           sourceBlockIDs: $0.sourceBlockIDs,
+                                           status: $0.status.rawValue)
+                })
+            let json = (try? Self.encoder.encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            try await database.exec("""
+            INSERT OR REPLACE INTO history_alternative_accounts
+                (id, artifact_id, subject, account_json, decisive_missing_evidence)
+            VALUES (?,?,?,?,NULL);
+            """, [.uuid(id), .uuid(artifactID), .text(key), .text(json)])
+            ids[key] = id
+        }
+        return ids
+    }
+
+    /// Read the artifact's unresolved conflicts, deterministic order.
+    public func alternativeAccounts(artifactID: UUID) async throws -> [StoredAlternativeAccount] {
+        let rows = try await database.query("""
+        SELECT id, artifact_id, subject, account_json, decisive_missing_evidence
+        FROM history_alternative_accounts WHERE artifact_id = ?
+        ORDER BY subject ASC;
+        """, [.uuid(artifactID)])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let aid = r.uuid(1), let subject = r.string(2),
+                  let json = r.string(3),
+                  let payload = try? Self.decoder.decode(AccountPayload.self, from: Data(json.utf8))
+            else { return nil }
+            let account = AlternativeAccount(
+                subjectLabel: payload.subjectLabel, field: payload.field,
+                versions: payload.versions.map {
+                    AccountVersion(value: $0.value, sourceBlockIDs: $0.sourceBlockIDs,
+                                   status: EvidenceStatus(rawValue: $0.status) ?? .sourceAsserted)
+                })
+            return StoredAlternativeAccount(
+                id: id, artifactID: aid, subject: subject,
+                account: account, decisiveMissingEvidence: r.string(4))
+        }
+    }
+
+    public func alternativeAccountCount(artifactID: UUID) async throws -> Int {
+        Int((try await database.query(
+            "SELECT COUNT(*) FROM history_alternative_accounts WHERE artifact_id = ?;", [.uuid(artifactID)]))
+            .first?.int(0) ?? 0)
+    }
+
+    /// Record what evidence would settle a conflict. Kept separate from the
+    /// write because it is usually learned later — and because `nil` must stay
+    /// distinguishable from "nothing would resolve it".
+    public func setDecisiveMissingEvidence(_ text: String?, forAccountID id: UUID) async throws {
+        try await database.exec("""
+        UPDATE history_alternative_accounts SET decisive_missing_evidence = ? WHERE id = ?;
+        """, [text.map { SQLValue.text($0) } ?? .null, .uuid(id)])
+    }
+
+    /// Codable mirror — `AlternativeAccount` is Hashable but not Codable, and
+    /// making a domain type Codable purely for one storage shape couples the
+    /// two. This keeps the persisted JSON stable even if the domain type moves.
+    struct AccountPayload: Codable {
+        struct Version: Codable {
+            let value: String
+            let sourceBlockIDs: [UUID]
+            let status: String
+        }
+        let subjectLabel: String
+        let field: String
+        let versions: [Version]
+    }
+
+    // MARK: - P2.1 · chapters are READ BACK
+    //
+    // `history_chapters` was written on EVERY history build (see the insert in
+    // `save`) and read by nothing. This repository selected history_items,
+    // history_artifacts, history_gaps and history_item_evidence — never
+    // chapters. So the chaptering work (titles, subtitles, deterministic prose,
+    // the model's rendered prose) was computed, persisted, and thrown away.
+    //
+    // It was invisible because the test that should have caught it is named
+    // "Save persists the full graph and reloads" and asserts header, coverage,
+    // itemCount, gapCount, evidenceCount and review status — with no chapter
+    // assertion and no chapterCount helper to make one with. A suite can be
+    // green and still not check the thing its name claims.
+
+    /// One persisted chapter of a history artifact.
+    public struct StoredChapter: Sendable, Equatable {
+        public let id: UUID
+        public let ordinal: Int
+        public let title: String
+        public let subtitle: String?
+        /// The deterministic rendering — always present, always safe to show.
+        public let deterministicText: String
+        /// The model's prose, when a generative pass ran. `nil` is the ordinary
+        /// case and is NOT a defect: the deterministic text is the fallback, so
+        /// a chapter is readable with no model available.
+        public let generatedText: String?
+        public let confidence: Double
+    }
+
+    /// Chapters for an artifact, in reading order.
+    public func chapters(artifactID: UUID) async throws -> [StoredChapter] {
+        // Module .historyChapterReadback — OFF returns no chapters, and the
+        // caller falls back to the unchaptered item list, which is what every
+        // surface did before this existed. Safe either way.
+        guard KnowledgeModuleFlags.isEnabled(.historyChapterReadback) else { return [] }
+        let rows = try await database.query("""
+        SELECT id, ordinal, title, subtitle, deterministic_text, generated_text, confidence
+        FROM history_chapters WHERE artifact_id = ?
+        ORDER BY ordinal ASC;
+        """, [.uuid(artifactID)])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let title = r.string(2) else { return nil }
+            return StoredChapter(
+                id: id,
+                ordinal: Int(r.int(1) ?? 0),
+                title: title,
+                subtitle: r.string(3),
+                deterministicText: r.string(4) ?? "",
+                generatedText: r.string(5),
+                confidence: r.double(6) ?? 0)
+        }
+    }
+
+    /// Chapter count — the helper whose absence let the "full graph" test pass
+    /// without ever looking at a chapter.
+    public func chapterCount(artifactID: UUID) async throws -> Int {
+        Int((try await database.query(
+            "SELECT COUNT(*) FROM history_chapters WHERE artifact_id = ?;", [.uuid(artifactID)]))
+            .first?.int(0) ?? 0)
+    }
+
+    /// The items belonging to one chapter, in insertion order. Chapters are the
+    /// grouping the outline computed; without this, an item's chapter_id was
+    /// written and unusable.
+    public func itemIDs(chapterID: UUID) async throws -> [UUID] {
+        let rows = try await database.query(
+            "SELECT id FROM history_items WHERE chapter_id = ? ORDER BY rowid ASC;",
+            [.uuid(chapterID)])
+        return rows.compactMap { $0.uuid(0) }
+    }
+
+    /// Chapters WITH their item ids — one call for the surface that renders a
+    /// chaptered history, so it does not N+1 its way through the outline.
+    public func chaptersWithItems(artifactID: UUID) async throws
+    -> [(chapter: StoredChapter, itemIDs: [UUID])] {
+        let cs = try await chapters(artifactID: artifactID)
+        var out: [(chapter: StoredChapter, itemIDs: [UUID])] = []
+        for c in cs {
+            out.append((chapter: c, itemIDs: try await itemIDs(chapterID: c.id)))
+        }
+        return out
+    }
+
     public func header(id: UUID) async throws -> HistoryArtifact? {
         let rows = try await database.query("\(Self.headerColumns) FROM history_artifacts WHERE id = ?;", [.uuid(id)])
         return rows.first.flatMap(Self.decodeHeader)
@@ -183,6 +408,52 @@ public actor HistoryArtifactRepository {
 
     public func supersede(_ oldID: UUID, by newID: UUID, at now: Date) async throws {
         try await database.exec("UPDATE history_artifacts SET superseded_by = ? WHERE id = ?;", [.uuid(newID), .uuid(oldID)])
+    }
+
+    /// L3 — every OTHER current artifact for the same subject and request shape
+    /// is superseded by `newID`. Before this, a rebuild on a changed ledger added
+    /// a new artifact and left the old one current, so the owner's patent had
+    /// two live histories side by side. Returns how many were superseded.
+    @discardableResult
+    public func supersedePrevious(anchorKey: String, requestShape: String,
+                                  keeping newID: UUID, at now: Date) async throws -> Int {
+        let rows = try await database.query("""
+        SELECT id FROM history_artifacts
+        WHERE anchor_key = ? AND request_shape = ? AND superseded_by IS NULL AND id <> ?;
+        """, [.text(anchorKey), .text(requestShape), .uuid(newID)])
+        for r in rows {
+            guard let old = r.uuid(0) else { continue }
+            try await supersede(old, by: newID, at: now)
+        }
+        return rows.count
+    }
+
+    /// P1.12 — heal histories built BEFORE supersede-on-rebuild existed: for
+    /// every subject with more than one current artifact of a shape, the
+    /// newest stays current and the others point at it (superseded, never
+    /// deleted — they stay reopenable). Idempotent. Returns rows superseded.
+    @discardableResult
+    public func collapseDuplicateCurrent(requestShape: String, at now: Date) async throws -> Int {
+        let rows = try await database.query("""
+        SELECT anchor_key, id FROM history_artifacts
+        WHERE request_shape = ? AND superseded_by IS NULL AND anchor_key IN (
+            SELECT anchor_key FROM history_artifacts
+            WHERE request_shape = ? AND superseded_by IS NULL
+            GROUP BY anchor_key HAVING COUNT(*) > 1)
+        ORDER BY anchor_key, created_at DESC, id DESC;
+        """, [.text(requestShape), .text(requestShape)])
+        var newest: [String: UUID] = [:]
+        var superseded = 0
+        for r in rows {
+            guard let key = r.string(0), let id = r.uuid(1) else { continue }
+            if let keep = newest[key] {
+                try await supersede(id, by: keep, at: now)
+                superseded += 1
+            } else {
+                newest[key] = id
+            }
+        }
+        return superseded
     }
 
     public func itemCount(artifactID: UUID) async throws -> Int {

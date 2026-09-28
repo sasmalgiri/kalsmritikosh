@@ -7,7 +7,7 @@ is owner-executable without new code.
 - The deterministic kill-switch already ships: Settings → "Fully private
   (no AI)" forces evidence-only answers (rules + quotes; zero generative AI).
   Support reply: toggle it on, ask the question again — receipts stay intact.
-- Collect the receipt ("Why this answer?") text; file against the gold wall.
+- Collect the receipt line plus the "Technical details" disclosure (answer ID, build, source ids); file against the gold wall.
 
 ## 2. Crash / data-integrity defect
 - Expedited review: submit a 1.1.x patch from the release branch using the

@@ -63,6 +63,16 @@ public enum TransactionDomainPack {
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: amount, sourceCount: 1))
+        } else if isPaymentConfirmation(text) || hasReceiptFurniture(text),
+                  let ocr = firstMatch(#"[·•]\s?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?"#, in: text) {
+            // P2 (payments) — OCR routinely reads a rupee sign as "·" on payment
+            // screenshots ("YES BANK ·10,000"). Only in a payment confirmation,
+            // only a thousands-grouped figure: the sign is the one OCR lost.
+            let digits = ocr.drop { !$0.isNumber }
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: "₹" + digits,
+                                     unit: "INR", status: .sourceAsserted,
+                                     confidence: 0.65, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: ocr, sourceCount: 1))
         }
         if let payee = counterparty(in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "counterparty", value: payee,
@@ -71,6 +81,12 @@ public enum TransactionDomainPack {
         }
         if let raw = firstMatch(#"\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b"#, in: text),
            let iso = PatentDomainPack.normalizeDate(raw) {
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: iso,
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
+        } else if let raw = firstMatch(#"\b\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?\s\d{4}\b"#, in: text),
+                  let iso = writtenDate(raw) {
+            // Receipts write "05 Dec 2024" — the numeric pattern never saw it.
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: iso,
                                      status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
@@ -87,6 +103,22 @@ public enum TransactionDomainPack {
         return ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
     }
 
+    nonisolated static func writtenDate(_ raw: String) -> String? {
+        let cleaned = raw.replacingOccurrences(of: ",", with: "").replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: "Sept", with: "Sep").replacingOccurrences(of: "sept", with: "sep")
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        for format in ["d MMM yyyy", "d MMMM yyyy"] {
+            f.dateFormat = format
+            if let d = f.date(from: cleaned) {
+                f.dateFormat = "yyyy-MM-dd"
+                return f.string(from: d)
+            }
+        }
+        return nil
+    }
+
     nonisolated static func normalize(_ amount: String) -> String {
         amount.replacingOccurrences(of: " ", with: "")
     }
@@ -98,7 +130,81 @@ public enum TransactionDomainPack {
         return nil
     }
 
-    /// Extract the counterparty after a payee marker (single line, up to punctuation).
+    /// A payment document's amount when OCR lost the currency sign: every
+    /// thousands-grouped figure prefixed by a currency-like glyph (·, •, R, ₺,
+    /// ₹) anywhere in the document, the value the most variants agree on (a
+    /// "₹" misread as a leading "2" loses the vote). Only for a document with
+    /// a payment-confirmation block. nil when no figure qualifies.
+    public nonisolated static func documentLevelAmount(
+        blocks: [(id: UUID, text: String)], subjectLabel: String
+    ) -> GenericFact? {
+        guard blocks.contains(where: { isPaymentConfirmation($0.text) }),
+              let re = try? NSRegularExpression(pattern: #"(?:^|[\s\t<>])[·•R₺₹]\s?(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?)(?![\d,])"#)
+        else { return nil }
+        var votes: [String: (count: Int, block: UUID, raw: String)] = [:]
+        for b in blocks {
+            let ns = b.text as NSString
+            for m in re.matches(in: b.text, range: NSRange(location: 0, length: ns.length)) {
+                let value = ns.substring(with: m.range(at: 1))
+                let raw = ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
+                let prior = votes[value]
+                votes[value] = ((prior?.count ?? 0) + 1, prior?.block ?? b.id, prior?.raw ?? raw)
+            }
+        }
+        guard let (value, win) = votes.max(by: { a, b in
+            a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key
+        }) else { return nil }
+        return GenericFact(subjectLabel: subjectLabel, field: "amount", value: "₹" + value, unit: "INR",
+                           status: .sourceAsserted, confidence: win.count >= 2 ? 0.7 : 0.55,
+                           sourceBlockIDs: [win.block], producerVersion: DerivedProducerVersions.facts,
+                           rawMatch: win.raw, sourceCount: 1)
+    }
+
+    /// A receipt whose OCR put "Paid to" on its own line and the name on the
+    /// following lines ("Khurana and Khurana" / "Advocates and IP Attorneys"):
+    /// the name is read across up to three following blocks, stopping at a
+    /// masked/numeric run or payment furniture. nil when no marker block exists.
+    public nonisolated static func documentLevelPayee(
+        blocks: [(id: UUID, text: String)], subjectLabel: String
+    ) -> GenericFact? {
+        let markers: Set<String> = ["paid to", "payee", "beneficiary", "transferred to", "paid to:", "payee:"]
+        for (i, b) in blocks.enumerated() {
+            let t = b.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard markers.contains(t) else { continue }
+            let following = blocks.dropFirst(i + 1).prefix(3).map(\.text).joined(separator: " ")
+            guard let name = counterparty(in: "paid to " + following) else { continue }
+            return GenericFact(subjectLabel: subjectLabel, field: "counterparty", value: name,
+                               status: .sourceAsserted, confidence: 0.65,
+                               sourceBlockIDs: [b.id] + blocks.dropFirst(i + 1).prefix(2).map(\.id),
+                               producerVersion: DerivedProducerVersions.facts, rawMatch: name, sourceCount: 1)
+        }
+        return nil
+    }
+
+    /// The furniture of a bank/UPI receipt — OCR splits a screenshot into
+    /// blocks, so the amount's own block ("Powered by YES BANK ·10,000") may not
+    /// carry "paid to". Only ever used for the OCR-lost-sign amount.
+    nonisolated static func hasReceiptFurniture(_ text: String) -> Bool {
+        let t = text.lowercased()
+        return ["utr", "upi", "powered by", "debited", "bank transfer", "transaction id", " bank "].contains { t.contains($0) }
+    }
+
+    /// A payment CONFIRMATION (not merely a mention of money).
+    nonisolated static func isPaymentConfirmation(_ text: String) -> Bool {
+        let t = text.lowercased()
+        return ["paid to", "transaction successful", "payment successful", "transferred to",
+                "debited from", "amount paid", "payment of"].contains { t.contains($0) }
+    }
+
+    /// Words that END a payee name on a one-line OCR receipt ("Paid to X
+    /// XXXX1671 Axis Bank Transfer Details Transaction ID …").
+    nonisolated static let payeeStops: Set<String> = [
+        "transfer", "details", "transaction", "txn", "upi", "utr", "ref", "reference", "a/c", "ac",
+        "account", "debited", "credited", "on", "via", "using", "from", "amount", "rs", "inr", "id",
+    ]
+
+    /// Extract the counterparty after a payee marker: up to punctuation, a
+    /// masked or numeric run, a payment-furniture word, or eight words.
     nonisolated static func counterparty(in text: String) -> String? {
         let markers = ["paid to", "payee", "beneficiary", "transferred to", "to:"]
         let lower = text.lowercased()
@@ -106,7 +212,17 @@ public enum TransactionDomainPack {
             guard let r = lower.range(of: m) else { continue }
             let after = text[r.upperBound...]
             let trimmed = after.drop { $0 == ":" || $0 == " " }
-            let name = trimmed.prefix { !"\n.,;|".contains($0) }.trimmingCharacters(in: .whitespaces)
+            let clause = trimmed.prefix { !"\n.,;|".contains($0) }
+            var words: [String] = []
+            for raw in clause.split(whereSeparator: { $0.isWhitespace }) {
+                let w = String(raw)
+                let lw = w.lowercased()
+                if payeeStops.contains(lw) { break }
+                if w.contains(where: \.isNumber) || (w.count >= 4 && w.uppercased().allSatisfy({ $0 == "X" })) { break }
+                words.append(w)
+                if words.count == 8 { break }
+            }
+            let name = words.joined(separator: " ")
             if name.count >= 2 && name.count <= 60 { return name }
         }
         return nil

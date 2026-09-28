@@ -55,7 +55,8 @@ public struct AnswerSynthesizer: Sendable {
         citations: [VerifiedAnswer.Citation],
         capabilities: CapabilityRegistry,
         depth: Depth = .groundedDraft,
-        context: LLMRequestContext? = nil
+        context: LLMRequestContext? = nil,
+        topic: String? = nil
     ) async -> String? {
         let findings = verifiedBody.trimmingCharacters(in: .whitespacesAndNewlines)
         guard findings.count >= 2 else { return nil }
@@ -68,6 +69,15 @@ public struct AnswerSynthesizer: Sendable {
         // the draft still fit the 4,096-token window with room for output.
         let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500)
         let evidence = Self.evidenceBlock(citations, maxTokens: 800)
+        // Topic-first (owner request 2026-09-20): when a distilled topic matches,
+        // give it to the model as the PRIMARY orientation so the answer is drawn
+        // from the deduped/minimized knowledge — while every stated fact must still
+        // cite an evidence number below (grounding unchanged).
+        let topicBlock: String = {
+            guard let topic, !topic.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
+            let bounded = TokenBudget.clamp(topic, maxTokens: 500)
+            return "Most relevant distilled topic (answer FROM this first; still cite an evidence number for every fact):\n\(bounded)\n\n"
+        }()
 
         // ── MoE gate → top-k super-experts deliberate IN PARALLEL ──
         // Their perspectives advise the draft; facts stay bound to the
@@ -104,7 +114,7 @@ public struct AnswerSynthesizer: Sendable {
         let draftPrompt = """
         Question: \(question)
 
-        Verified findings (from the domain experts):
+        \(topicBlock)Verified findings (from the domain experts):
         \(boundedFindings)
 
         Supporting evidence snippets:
@@ -167,9 +177,15 @@ public struct AnswerSynthesizer: Sendable {
                 // facts; strip them before tokenizing the candidate.
                 let bare = refined.replacingOccurrences(
                     of: #"\[\d+\]"#, with: "", options: .regularExpression)
-                if FactLockGate.isFactLocked(candidate: bare,
-                                             sources: [answer, boundedFindings, evidence]) {
+                let factLocked = FactLockGate.isFactLocked(candidate: bare,
+                                             sources: [answer, boundedFindings, evidence])
+                if factLocked {
                     KalsmritikoshLog.brain.info("AnswerSynthesizer: applied evidence-checked refine (depth=\(String(describing: depth), privacy: .public))")
+                    answer = refined
+                } else if !FeatureFlags.aiModeValue().enforcesGrounding {
+                    // M1 — UNCONSTRAINED: accept the refine even with new number
+                    // tokens (advisory fact-lock); GUIDED keeps the draft.
+                    KalsmritikoshLog.brain.info("AnswerSynthesizer: unconstrained mode — accepting refine with unverified number tokens (advisory fact-lock)")
                     answer = refined
                 } else {
                     KalsmritikoshLog.brain.info("AnswerSynthesizer: refine rejected — introduced number tokens absent from draft/findings/evidence; keeping draft")
@@ -187,8 +203,14 @@ public struct AnswerSynthesizer: Sendable {
         // we reject the whole synthesis when its grounding is too thin.
         let coverage = Self.citationCoverage(final, citationCount: citations.count)
         if coverage.substantiveSentences >= 2, coverage.citedFraction < 0.5 {
-            KalsmritikoshLog.brain.info("AnswerSynthesizer: rejecting synthesis — only \(Int(coverage.citedFraction * 100), privacy: .public)% of factual sentences carried a citation; keeping grounded deterministic body")
-            return nil
+            // M1 — AI Mode: GUIDED enforces the grounding floor (reject ungrounded
+            // prose → keep the deterministic body); UNCONSTRAINED keeps the fluent
+            // text and only logs (the answer is banner-marked / kept out of the ledger).
+            if FeatureFlags.aiModeValue().enforcesGrounding {
+                KalsmritikoshLog.brain.info("AnswerSynthesizer: rejecting synthesis — only \(Int(coverage.citedFraction * 100), privacy: .public)% of factual sentences carried a citation; keeping grounded deterministic body")
+                return nil
+            }
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: unconstrained mode — keeping fluent draft despite \(Int(coverage.citedFraction * 100), privacy: .public)% citation coverage (advisory)")
         }
         return final
     }

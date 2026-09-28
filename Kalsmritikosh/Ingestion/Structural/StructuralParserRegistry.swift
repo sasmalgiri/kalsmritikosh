@@ -33,8 +33,25 @@ public struct StructuralParserRegistry: Sendable {
         EmailStructuralParser(),
         MBOXStructuralParser(),
         EMLXStructuralParser(),
+        MSGStructuralParser(),       // Outlook .msg (OLE2/MAPI) — typed email blocks
+        PSTStructuralParser(),       // Outlook .pst/.ost (NDB) — typed blocks per message
+        NSFStructuralParser(),       // Lotus/HCL Notes .nsf — typed blocks per mail note
         StructuredTextStructuralParser(),  // PAR-008 — HTML / JSON / XML / log
-        SQLiteStructuralParser()           // PAR-009 — read-only SQLite tables
+        SQLiteStructuralParser(),          // PAR-009 — read-only SQLite tables
+        PlistStructuralParser(),           // HOST-1 — binary / XML / OpenStep plists
+        RegistryHiveStructuralParser(),    // HOST-2 — Windows registry hives (REGF)
+        DiscussionStructuralParser(),      // DISC-1 — discussion-platform exports
+        KnowledgeCStructuralParser(),      // HOST-7 — Apple CoreDuet activity store
+        CustodyManifestStructuralParser(), // HOST-8 — examiner chain of custody
+        ExtractionManifestStructuralParser(), // HOST-8b — iOS backup inventory
+        EVTXStructuralParser(),            // HOST-3 — Windows event logs (EVTX)
+        UtmpStructuralParser(),            // HOST-4 — Linux utmp/wtmp/btmp
+        ShellHistoryStructuralParser(),    // HOST-4b — shell / REPL history
+        ShellLinkStructuralParser(),       // HOST-6a — Windows shortcuts (.lnk)
+        AmcacheStructuralParser(),         // HOST-6c — Windows Amcache inventory
+        MFTStructuralParser(),             // HOST-5 — NTFS master file table
+        JumpListStructuralParser(),        // HOST-6b — Windows jump lists
+        PrefetchStructuralParser()         // HOST-6d — Windows prefetch (.pf)
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

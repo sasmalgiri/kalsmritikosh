@@ -9,9 +9,9 @@ has not said "before ship")._
 |---|---|
 | Requirements card (live-checked AI availability) | PRESENT — OnboardingView (requirements card, deterministic-mode wording) |
 | "Try with sample documents" (bundled archive) | PRESENT — OnboardingView.tryDemoArchive + bundled archive (RC-3) |
-| Sample data in a SEPARATE ledger + banner + switch-back | OPEN — the demo loads into the main ledger today; separation is a T0-adjacent land; the App-Review flow works either way (reviewers start empty) |
+| Sample data in a SEPARATE ledger + banner + switch-back | PRESENT (2026-09-27, owner decision) — App/SampleArchiveMode.swift: relaunch into its own database file + in-memory folder store; SampleArchiveBanner with "Back to my archive" |
 | Add-documents (bookmark, formats, the privacy sentence) | PRESENT — OnboardingView + SourcesView |
-| Persona choice (defaults only) | OPEN — no persona picker; GK default is global-OFF (self-ruling recorded) |
+| Persona choice (defaults only) | PRESENT (2026-09-27) — OnboardingView persona step (writes kalsmritikosh.persona, tailors the sidebar only). GK default is global-ON (owner decision 2026-09-27) |
 
 ## §1.2 Indexing progress
 PRESENT — live counts (RootView/LiveDashboard), honest slower-until-done
@@ -24,12 +24,12 @@ is not yet drawn).
 |---|---|
 | Answer-First per shape (slot/existence/role/count/list/aggregation/comparison/timeline) | PRESENT — composers (P3+A1+A2) |
 | Compelled extras (conflict/evolution/ambiguity/precision) | PRESENT — slot conflict, ambiguity listing, precision-honest dates |
-| Inline citations → open source | PRESENT — QualityStrip evidence tap → revealSource (block-level; span highlight OPEN) |
+| Inline citations → open source | PRESENT (2026-09-27) — CitationChips under every answer open the in-app SourceViewer at the quoted passage (CitedPassageLocator, PDF + text); other formats show the quote beside Reveal/Open |
 | About: footer | PRESENT — charter footer (P3-U0, W-4 cleaned) |
 | Lane labels + GK banner block | PRESENT — GK orange block; shelf lane is T0 |
 | One confidence presentation + badges | PRESENT — QualityStrip + A1.3 fix; badge semantics documented in Help |
-| Abstention card w/ archive-wide numbers + nearest miss | PRESENT — A1.2 receipts + nearest-known-field line (SlotAnswerComposer) |
-| Technical details disclosure | PRESENT (partial) — "Why this answer?" reasoning trace in QualityStrip; plan/tools lines ride A3 receipts. Raw ids stay in the disclosure |
+| Abstention card w/ archive-wide numbers + nearest miss | PRESENT — A1.2 receipts + nearest-known-field line (SlotAnswerComposer) + (2026-09-27) the Ask-surface closest-passage block on every genuine not-found (NearestPassageFinder, ≥2 shared terms) |
+| Technical details disclosure | PRESENT (2026-09-27) — one collapsed "Technical details" in QualityStrip holding the walk path, plan, evidence ranking and raw ids (answer id, ledger state, build, per-citation doc/chunk/event) |
 | Deterministic-mode indicator | PRESENT — settings + twin/GK skip notes |
 
 ## §1.4 Timeline · §1.5 Story · §1.6 Big Picture · §1.7 Sources · §1.8 Entities
@@ -56,9 +56,9 @@ documented in the runbook; screenshots-from-sample rule in the runbook;
 availability posture = pre-release until live.
 
 ## The OPEN list, in one place (owner's triage at HOLD 2)
-1. Sample-ledger separation + banner (T0-adjacent).
-2. Persona picker at onboarding (defaults only).
-3. Sources "refreshing N sources" UI line (small).
-4. Timeline axis gap markers (gaps show in panels today).
-5. Citation span-level highlight (block-level today).
+~~1. Sample-ledger separation + banner~~ — landed 2026-09-27.
+~~2. Persona picker at onboarding~~ — landed 2026-09-27.
+~~3. Sources "refreshing N sources" UI line~~ — landed 2026-09-27.
+~~4. Timeline axis gap markers~~ — landed 2026-09-27.
+~~5. Citation span-level highlight~~ — landed 2026-09-27 (quote-located).
 Everything else in §1 is PRESENT or explicitly T0 by your activation gate.

@@ -53,6 +53,51 @@ public actor KnowledgeObjectRepository {
         return rows.first?.string(0).flatMap(DocumentClass.init(rawValue:))
     }
 
+    // MARK: - P1.3 · derivation completeness
+
+    /// Mark this KO's derivation COMPLETE. Called once, after the last
+    /// derivation stage returns.
+    ///
+    /// Until this is set the KO is a resumable partial: it may have chunks and
+    /// no entities because the process was killed mid-sequence. That state was
+    /// previously indistinguishable from "derived, and there was nothing to
+    /// find" — so a partial KO looked finished, was counted as finished, and
+    /// was silently missing its ledger.
+    public func markDerivationComplete(id: KnowledgeObject.ID) async throws {
+        try await database.exec(
+            "UPDATE knowledge_objects SET derivation_complete = 1 WHERE id = ?;",
+            [.uuid(id)])
+    }
+
+    /// KOs whose derivation did not finish — `derivation_complete` is NULL or 0.
+    ///
+    /// NULL covers two different things and the caller must not conflate them:
+    /// a KO interrupted since v131, and every KO derived BEFORE v131 existed,
+    /// whose completeness is genuinely unknown rather than known-bad. Deciding
+    /// between them needs the producer-version era, not this flag; this returns
+    /// candidates in a deterministic order and lets the caller choose.
+    public func incompleteDerivations(limit: Int = 500) async throws -> [KnowledgeObject.ID] {
+        let rows = try await database.query("""
+        SELECT id FROM knowledge_objects
+        WHERE derivation_complete IS NULL OR derivation_complete = 0
+        ORDER BY id ASC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { $0.uuid(0) }
+    }
+
+    /// (complete, incomplete) counts — the Ingestion Report needs BOTH so a
+    /// coverage figure always carries its denominator, and so "derived and
+    /// empty" never reads the same as "never finished deriving".
+    public func derivationCompleteness() async throws -> (complete: Int, incomplete: Int) {
+        let rows = try await database.query("""
+        SELECT COALESCE(SUM(CASE WHEN derivation_complete = 1 THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN derivation_complete IS NULL OR derivation_complete = 0 THEN 1 ELSE 0 END), 0)
+        FROM knowledge_objects;
+        """, [])
+        guard let r = rows.first else { return (0, 0) }
+        return (complete: Int(r.int(0) ?? 0), incomplete: Int(r.int(1) ?? 0))
+    }
+
     public func count() async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM knowledge_objects;")
         return Int(rows.first?.int(0) ?? 0)
@@ -118,6 +163,24 @@ public actor KnowledgeObjectRepository {
         let rows = try await database.query(
             "SELECT id FROM knowledge_objects WHERE privileged = 1;")
         return Set(rows.compactMap { $0.uuid(0) })
+    }
+
+    /// P2.9 — documents of the given classes whose text names EVERY token
+    /// (case-insensitive), plus how many documents those classes hold.
+    public func objects(ofClasses classes: [DocumentClass], mentioningAll tokens: [String],
+                        limit: Int = 200) async throws -> (matches: [KnowledgeObject.ID], searched: Int) {
+        guard !classes.isEmpty else { return ([], 0) }
+        let marks = classes.map { _ in "?" }.joined(separator: ",")
+        let classBinds = classes.map { SQLValue.text($0.rawValue) }
+        let searched = Int(try await database.query(
+            "SELECT COUNT(*) FROM knowledge_objects WHERE document_class IN (\(marks));", classBinds).first?.int(0) ?? 0)
+        guard !tokens.isEmpty else { return ([], searched) }
+        let likes = tokens.map { _ in "lower(content) LIKE ?" }.joined(separator: " AND ")
+        let rows = try await database.query("""
+        SELECT id FROM knowledge_objects WHERE document_class IN (\(marks)) AND \(likes)
+        ORDER BY id LIMIT ?;
+        """, classBinds + tokens.map { .text("%\($0.lowercased())%") } + [.integer(Int64(limit))])
+        return (rows.compactMap { $0.uuid(0) }, searched)
     }
 
     public func fetchContent(id: KnowledgeObject.ID) async throws -> String? {
@@ -493,6 +556,41 @@ extension KnowledgeObjectRepository {
                 contentHash: row.string(5) ?? "",
                 preview: String(content.prefix(160)),
                 createdAt: created))
+        }
+        return out
+    }
+
+    /// W-5.4 — the identity fields the source-independence key provider
+    /// needs, one batch: the email Subject (when the KO is a message) and
+    /// the source file's content hash. Object id / filename / rank are
+    /// NEVER independence keys (C2.1); this returns only reliable identity.
+    public func independenceIdentities(
+        for ids: Set<KnowledgeObject.ID>
+    ) async throws -> [KnowledgeObject.ID: (emailSubject: String?, contentHash: String?)] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [KnowledgeObject.ID: (String?, String?)] = [:]
+        let all = Array(ids)
+        var start = 0
+        while start < all.count {
+            let batch = Array(all[start..<min(start + 200, all.count)])
+            start += batch.count
+            let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT k.id, k.metadata_json, f.content_hash
+            FROM knowledge_objects k
+            LEFT JOIN files f ON f.id = k.file_id
+            WHERE k.id IN (\(placeholders));
+            """, batch.map { .uuid($0) })
+            for row in rows {
+                guard let id = row.uuid(0) else { continue }
+                var subject: String?
+                if let metaJSON = row.string(1) {
+                    let meta = parseMetadataBag(metaJSON)
+                    let s = meta.first(where: { $0.key.lowercased() == "subject" })?.value
+                    if let s, !s.isEmpty { subject = s }
+                }
+                out[id] = (subject, row.string(2))
+            }
         }
         return out
     }

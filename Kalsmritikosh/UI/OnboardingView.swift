@@ -22,8 +22,12 @@ public struct OnboardingView: View {
     @State private var detectedTier: String = "—"
     @State private var providerCount: Int = 0
     @State private var ramGB: Int = 0
+    /// §1.1 (owner decision 2026-09-27) — the persona chosen during
+    /// onboarding. Same key the sidebar's "For you" section and the
+    /// change-focus sheet read, so there is one source of truth.
+    @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
 
-    enum Step: Int { case welcome, hardware, folder, scope, done }
+    enum Step: Int { case welcome, persona, hardware, folder, scope, done }
 
     /// Counts pulled from the live ledger after the user picks a
     /// folder, so the scope step can say "here's exactly what
@@ -96,6 +100,8 @@ public struct OnboardingView: View {
         switch step {
         case .welcome:
             welcomeStep
+        case .persona:
+            personaStep
         case .hardware:
             hardwareStep
         case .folder:
@@ -165,6 +171,52 @@ public struct OnboardingView: View {
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(minWidth: 60)
+    }
+
+    /// §1.1 — choose your focus. Optional (Continue works without a pick);
+    /// it tailors the sidebar only — every screen stays reachable, and the
+    /// answers themselves never depend on it.
+    private var personaStep: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("What will you use Kalsmritikosh for?").font(.headline)
+            Text("This tailors the sidebar to the screens you\u{2019}ll use most. You can change it any time; answers and evidence are the same for everyone.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(GuideContent.personas) { p in
+                        Button {
+                            personaID = p.id
+                        } label: {
+                            HStack(spacing: 10) {
+                                Text(p.emoji).font(.system(size: 22))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.title).font(.callout.weight(.semibold))
+                                    Text(p.tagline).font(.caption).foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer(minLength: 0)
+                                if p.id == personaID {
+                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
+                                }
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(p.id == personaID ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.08), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(p.title). \(p.tagline)")
+                        .accessibilityAddTraits(p.id == personaID ? .isSelected : [])
+                    }
+                }
+            }
+            .frame(maxHeight: 260)
+        }
+        .frame(maxWidth: 560)
     }
 
     private var welcomeStep: some View {
@@ -249,12 +301,12 @@ public struct OnboardingView: View {
                 Button {
                     tryDemoArchive(at: demoURL)
                 } label: {
-                    Label("Try the demo archive", systemImage: "sparkles")
+                    Label("Try the sample archive", systemImage: "sparkles")
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                 }
                 .controlSize(.small)
-                Text("Loads the bundled ProjectDelta fixture (~8 sample emails + contracts) so you can see Kalsmritikosh reconstruct a project narrative without ingesting your own data first.")
+                Text("Opens the bundled ProjectDelta sample (8 emails and contracts) in its own separate ledger, so you can see Kalsmritikosh reconstruct a project without adding your data \u{2014} nothing is ever mixed with your own documents. The app relaunches; \u{201C}Back to my archive\u{201D} returns you.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)
@@ -276,8 +328,12 @@ public struct OnboardingView: View {
         DemoArchive.url()
     }
 
+    /// §1.1 — the sample opens in its OWN ledger (relaunch), never in the
+    /// user's. `url` stays in the signature: the button only appears when the
+    /// fixtures resolve, and the sample boot re-resolves them itself.
     private func tryDemoArchive(at url: URL) {
-        try? appState.bookmarks.register(url: url)
+        UserDefaults.standard.set(true, forKey: "kalsmritikosh.onboarding.shown")
+        SampleArchiveMode.enter()
     }
 
     private var doneStep: some View {

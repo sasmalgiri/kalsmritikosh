@@ -355,6 +355,24 @@ public actor MasterBrain {
                     continuation.finish()
                     return
                 }
+                // FOUND BY THE OWNER'S ARCHIVE — the absent-subject gate. When
+                // the question names a specific identifier the ledger has never
+                // seen, refuse HERE, before any retrieval or composer. Placed
+                // with the conversational refusal because it has the same
+                // character: no amount of retrieval can make an answer be about
+                // a thing the archive does not contain, and retrieval on a
+                // shape-similar question produces a fluent, CITED answer about
+                // a different subject — which is what happened.
+                if let check = await self.absentSubjectCheck,
+                   let refusal = await check(question) {
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: refusal, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
                 // P3-U1 Q0 — an out-of-scope (world-knowledge) question refuses
                 // HERE: zero retrieval, zero model, sub-second. The route twin
                 // has already had its say (disagreement → never outOfScope, the
@@ -381,9 +399,25 @@ public actor MasterBrain {
                 // returning nil (no door wired, or an engine failure) falls
                 // through to the normal pipeline — never a dead end.
                 if routed.shape == .story, let compose = await self.storyComposer,
-                   let story = await compose(question) {
+                   let story = await compose(question, access) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: story, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
+
+                // L5 — SUBJECT FIRST: a question that names a subject (an
+                // identifier or a definite reference) and asks where it stands
+                // or what happened in it is answered from that subject's OWN
+                // dated records, before retrieval — deterministic, cited, no
+                // model. nil (no subject / nothing on file) → the pipeline runs.
+                if let subjectFirst = await self.subjectEventAnswer,
+                   let answered = await subjectFirst(question, access) {
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: answered, mission: nil,
                         originScopeID: originScopeID) {
                         continuation.yield(update)
                     }
@@ -394,7 +428,8 @@ public actor MasterBrain {
                 // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
                 // its own (unsupported cached prose must not appear as an answer). It surfaces
                 // as analysisProgress; the durable grounded answer follows below.
-                if await self.phase1Instant(question: question, access: access) != nil {
+                if KnowledgeModuleFlags.isEnabled(.progressiveStreaming),
+                   await self.phase1Instant(question: question, access: access) != nil {
                     continuation.yield(.analysisProgress(
                         detail: "Cached context found; verifying against source evidence", chapter: nil))
                 }
@@ -521,7 +556,11 @@ public actor MasterBrain {
             case .chapter(let chapter):
                 // AEE-M2 §25 — chapters stream as analysisProgress artifacts (not an eighth
                 // lifecycle state); the answer itself remains one revision chain.
-                yield(.analysisProgress(detail: "Composing chapter: \(chapter.title)", chapter: chapter))
+                // Module .progressiveStreaming gates whether partials surface; off ⇒
+                // only the final answer is emitted.
+                if KnowledgeModuleFlags.isEnabled(.progressiveStreaming) {
+                    yield(.analysisProgress(detail: "Composing chapter: \(chapter.title)", chapter: chapter))
+                }
             case .completed(let result):
                 narrative = result
             case .failed(let reason):
@@ -869,6 +908,8 @@ public actor MasterBrain {
         // AEE-M1 — use the request's REAL compiled plan when supplied (category/class-
         // accurate fields + corroboration). Falls back to the legacy neutral compile only
         // when no plan is threaded in (kept for the standalone corrective-retrieval tests).
+        // Gated by the .correctiveRetrieval module switch — off ⇒ first pass stands.
+        guard KnowledgeModuleFlags.isEnabled(.correctiveRetrieval) else { return first }
         let plan = providedPlan ?? QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
         let sufficiency = EvidenceSufficiencyAssessor().assess(
             plan: plan, evidenceTexts: first.chunks.map { $0.chunk.text })
@@ -1015,7 +1056,7 @@ public actor MasterBrain {
     /// among these chunks are omitted, so the model can't cite a source it can't see).
     nonisolated static func buildEvidencePrompt(
         question: String, chunks: [RetrievedChunk], facts: [GenericFact],
-        evaluations: [ClaimEvaluation]
+        evaluations: [ClaimEvaluation], topic: MemoryObject? = nil
     ) -> String {
         let blocks = chunks.enumerated().map { idx, c -> String in
             let snippet = c.chunk.text
@@ -1026,7 +1067,7 @@ public actor MasterBrain {
 
         var blockToLabel: [UUID: String] = [:]
         for (idx, c) in chunks.enumerated() {
-            if let b = c.chunk.evidenceBlockID, blockToLabel[b] == nil {
+            for b in c.chunk.allBlockIDs where blockToLabel[b] == nil {
                 blockToLabel[b] = "C\(idx + 1)"
             }
         }
@@ -1035,8 +1076,35 @@ public actor MasterBrain {
         // inferences and conflicts are SEPARATE groups. MasterBrain never strengthens — an
         // attributed/user/inference/conflict claim is never placed in the verified group.
         let evalByID = Dictionary(evaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Answer-quality W4 — do NOT present subject-field facts the question did
+        // not ask about as "prefer these exact values". The live diagnostic showed
+        // "who drafted the claims?" being answered with applicant/application-number
+        // dumps because every fact was injected here. Keep only facts whose
+        // field+value shares a content term with the question; if the question
+        // asks for a specific field it still matches (application number →
+        // "application","number"), so field lookups are unaffected. When nothing
+        // is relevant, inject no fact block and let the cited chunks answer.
+        //
+        // SHAPE CUES (added after this gate dropped the `amount` fact for the
+        // question "how much?"). Term overlap alone requires the user to have
+        // used the ledger's own field vocabulary: "how much" names the money
+        // shape by GRAMMAR, shares no word with `amount = ₹3,800`, and shares
+        // none with the chunk "Amount ₹3,800 paid." either — so the decisive
+        // fact was withheld from the prompt for the commonest phrasing of a
+        // cost question. `SlotFieldResolver.questionRequestsShape` admits a
+        // fact whose field holds the shape the question asked for, and returns
+        // false whenever the question names no shape, so it can only ever admit
+        // — the "who drafted the claims?" dump this gate was added for stays
+        // blocked (no money/date/location cue in it).
+        let selector = PassageAnswerSelector()
+        let qTerms = selector.contentTerms(question)
+        let relevantFacts: [GenericFact] = qTerms.isEmpty ? facts : facts.filter { f in
+            if SlotFieldResolver.questionRequestsShape(ofField: f.field, in: question) { return true }
+            let ft = selector.contentTerms(f.field + " " + f.value)
+            return !qTerms.isDisjoint(with: ft)
+        }
         var byPresentation: [ClaimPresentation: [String]] = [:]
-        for f in facts {
+        for f in relevantFacts {
             guard let eval = evalByID[f.id], let presentation = eval.presentation,
                   let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
             else { continue }
@@ -1060,12 +1128,21 @@ public actor MasterBrain {
         }.joined(separator: "\n\n")
         let verifiedBlock = factBlock.isEmpty ? "" : factBlock + "\n\n\n"
 
+        // A3 — topic-first: when a matched topic is provided, lead the prompt with
+        // its distilled summary as BACKGROUND (orienting the model), while still
+        // requiring every specific to cite a chunk. Never a substitute for evidence.
+        let topicBlock: String = {
+            guard let topic, !topic.narrative.isEmpty else { return "" }
+            let summary = topic.narrative.replacingOccurrences(of: "\n", with: " ").prefix(800)
+            return "Most relevant topic summary (background only — still cite chunks for every specific):\n\(summary)\n\n\n"
+        }()
+
         return """
         Question: \(question)
 
         Use ONLY the chunks below to answer. After every fact, cite the chunk label like [C3]. If the chunks don't contain enough information to answer, say "I don't have enough in your archive to answer this confidently." — do not invent.
 
-        \(verifiedBlock)Chunks:
+        \(topicBlock)\(verifiedBlock)Chunks:
         \(blocks)
 
         Answer:
@@ -1105,9 +1182,14 @@ public actor MasterBrain {
         // (amounts, dates, employers, …), each tagged with the chunk that backs
         // it so the model cites the same [C#] label. Pure prompt construction is
         // in a testable static helper below.
+        // A3 — seed the matched topic (module .topicSeededComposers) so the model
+        // composes over the topic first. Off ⇒ nil ⇒ prompt unchanged.
+        let seededTopic: MemoryObject? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers)
+            ? (try? await memoryRepo?.search(question, limit: 1))?.first
+            : nil
         let prompt = Self.buildEvidencePrompt(
             question: question, chunks: topChunks, facts: retrieval.genericFacts,
-            evaluations: retrieval.claimEvaluations)
+            evaluations: retrieval.claimEvaluations, topic: seededTopic)
         let options = GenerationOptions(
             maxTokens: 500,
             temperature: 0.2,
@@ -1150,8 +1232,20 @@ public actor MasterBrain {
             }
         }
 
-        let refusedShape = body.lowercased().contains("don't have enough")
-            || body.lowercased().contains("not enough")
+        // The model is ASKED (see the prompt above) to emit a specific sentence
+        // when the chunks cannot answer. Detecting only that one wording made
+        // the refusal contract depend on the model's phrasing: on the owner's
+        // archive it answered a question about a nonexistent case reference in
+        // fluent prose, using neither phrase, and the answer shipped.
+        //
+        // Broadened to the ways a refusal is actually written, matched on word
+        // boundaries rather than bare `contains` so an answer that merely
+        // mentions "no record" in passing is not mistaken for a refusal. This
+        // can only turn answers INTO refusals, which is the safe direction for
+        // an evidence-gated product — but it is a backstop, not the fix. The
+        // fix is AbsentSubjectGate, which settles the question deterministically
+        // instead of reading the model's mind.
+        let refusedShape = Self.readsAsRefusal(body)
         let conf: Double = {
             if refusedShape { return 0.2 }
             if citations.isEmpty { return 0.3 }
@@ -1192,13 +1286,45 @@ public actor MasterBrain {
             citations: citations,
             confidence: Confidence(conf),
             contradictions: [],
-            refused: refusedShape && citations.isEmpty,
+            // WAS `refusedShape && citations.isEmpty`. Citations prove passages
+            // were RETRIEVED; they never prove those passages ANSWER the
+            // question asked. Requiring an empty citation list meant that any
+            // loosely-matching chunk overrode the model's own statement that it
+            // could not answer — and retrieval's last-resort layers almost
+            // always return something, so the refusal could essentially never
+            // fire. If the model says it cannot answer, that is a refusal.
+            refused: refusedShape,
             refusalReason: refusedShape ? "Chunk RAG fallback couldn't ground an answer." : nil,
             report: nil,
             walkSteps: retrieval.walkSteps,
             source: .ragFallback,
             reasoningTrace: trace
         )
+    }
+
+    /// Does this answer body read as the model declining to answer?
+    ///
+    /// Phrase list, not sentiment analysis: each entry is a way a refusal is
+    /// actually phrased, and the check is anchored to the answer's OPENING
+    /// (where a refusal belongs) or to a whole clause, so a long answer that
+    /// happens to contain "no record of payment" mid-paragraph is not read as
+    /// declining the whole question.
+    nonisolated static func readsAsRefusal(_ body: String) -> Bool {
+        let lower = body.lowercased()
+        let phrases = [
+            "don't have enough", "do not have enough", "not enough information",
+            "no information", "nothing in your archive", "not in your archive",
+            "could not find", "couldn't find", "cannot find", "can't find",
+            "no record", "no mention", "does not appear", "doesn't appear",
+            "unable to answer", "cannot answer", "can't answer",
+            "no documents", "no evidence",
+        ]
+        // The opening 240 characters: a genuine refusal leads with itself.
+        let opening = String(lower.prefix(240))
+        if phrases.contains(where: { opening.contains($0) }) { return true }
+        // Or a very short body that is a refusal and nothing else.
+        if lower.count < 200, phrases.contains(where: { lower.contains($0) }) { return true }
+        return false
     }
 
     /// Fold a ReconstructedNarrative into a plain-text body for
@@ -1293,6 +1419,22 @@ public actor MasterBrain {
         public let purposes: [String]
     }
 
+    /// P2.3 — a `.role` question whose retrieved facts give the slot composer
+    /// one canonical, structured, conflict-free value.
+    nonisolated static func isSlotLawQuestion(intent: UserIntent, retrieval: RetrievalResult) -> Bool {
+        guard QuestionShapeRouter.route(intent.rawQuestion).shape == .role else { return false }
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        guard !plan.slotFieldIDs.isEmpty,
+              let slot = SlotAnswerComposer.compose(
+                slotFieldIDs: plan.slotFieldIDs,
+                facts: retrieval.genericFacts,
+                evaluations: retrieval.claimEvaluations,
+                authorityObjectIDs: retrieval.authorityObjectIDs,
+                documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count))
+        else { return false }
+        return !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
+    }
+
     public func answerWithDiagnostics(
         question: String,
         access: SensitiveAccessContext
@@ -1329,18 +1471,38 @@ public actor MasterBrain {
     public var askSnapshotEnd: (@Sendable () async -> Void)?
     /// P4-U4 — the story door: wired by AppState to the reconstruction
     /// engine + renderer + durable artifact persistence. nil in rigs.
-    public var storyComposer: (@Sendable (String) async -> VerifiedAnswer?)?
+    /// G1 (Stage 1): carries the caller's SensitiveAccessContext so the
+    /// story path enforces the SAME scope as normal retrieval, fail-closed.
+    public var storyComposer: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    /// L5 — the subject-first door (status / subject-event questions),
+    /// wired by AppState over the anchor register + the event ledger.
+    public var subjectEventAnswer: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    public func setSubjectEventAnswer(_ c: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
+        subjectEventAnswer = c
+    }
     /// A3 — the tool-grounded middle floor: deterministic composer →
     /// THIS → quote floor → deterministic readout. nil in rigs.
-    public var toolGroundedFallback: (@Sendable (String) async -> VerifiedAnswer?)?
-    public func setToolGroundedFallback(_ f: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+    /// G1: carries the access context (see storyComposer).
+    public var toolGroundedFallback: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    /// See `setAbsentSubjectCheck`. Consulted BEFORE any composer runs.
+    public var absentSubjectCheck: (@Sendable (String) async -> VerifiedAnswer?)?
+    public func setToolGroundedFallback(_ f: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
         toolGroundedFallback = f
     }
-    public func setStoryComposer(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+    public func setStoryComposer(_ c: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
         storyComposer = c
     }
     public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
         ledgerStateProvider = p
+    }
+    /// Found by the owner's archive, 2026-09-24 — see AbsentSubjectGate. Asks
+    /// the ledger whether an identifier the QUESTION names exists at all, and
+    /// returns a verified not-found when it does not. Injected as a closure
+    /// because MasterBrain holds no Database by design (experts are stateless
+    /// and read through repositories); AppState, which owns the ledger, wires
+    /// it. nil in rigs, which then keep the previous behaviour.
+    public func setAbsentSubjectCheck(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+        absentSubjectCheck = c
     }
     public func setAskSnapshotEnd(_ p: @escaping @Sendable () async -> Void) {
         askSnapshotEnd = p
@@ -1645,7 +1807,22 @@ public actor MasterBrain {
             access: access,
             sensitivePolicy: sensitivePolicy
         )
-        let findings = await executor.execute(
+        // P2.3 — THE SLOT LAW, before any model: a role question ("who is the
+        // applicant of …") whose retrieved facts carry exactly ONE canonical,
+        // structured, conflict-free value is answered from that value. The
+        // model added nothing here but variance — on the owner's copy the same
+        // question came back as the slot sentence (0.80), a fact dump (0.40) or
+        // prose naming the agent too (0.30) across identical runs. Anything
+        // less than a clean single value (none, a conflict, unstructured) runs
+        // the experts exactly as before.
+        var slotFirst: VerifiedAnswer?
+        if Self.isSlotLawQuestion(intent: intent, retrieval: sharedRetrieval),
+           let answered = try? await verifier.verify(intent: intent, findings: [], retrieval: sharedRetrieval),
+           !answered.refused, !answered.citations.isEmpty {
+            KalsmritikoshLog.brain.info("slot law: answered before the experts from one canonical value")
+            slotFirst = answered
+        }
+        let findings = slotFirst != nil ? [] : await executor.execute(
             intent: intent,
             decision: decision,
             context: context
@@ -1656,11 +1833,15 @@ public actor MasterBrain {
 
         let verified: VerifiedAnswer
         do {
-            verified = try await verifier.verify(
-                intent: intent,
-                findings: findings,
-                retrieval: retrievalForVerifier
-            )
+            if let slotFirst {
+                verified = slotFirst
+            } else {
+                verified = try await verifier.verify(
+                    intent: intent,
+                    findings: findings,
+                    retrieval: retrievalForVerifier
+                )
+            }
         } catch {
             // Verifier itself crashed — chunk RAG fallback so we
             // still hand the user *something* instead of a refusal.
@@ -1689,7 +1870,7 @@ public actor MasterBrain {
             // A3 — the tool-grounded floor runs BEFORE generic chunk RAG:
             // the model sees only id-bearing ledger results and every
             // sentence is swept against the result it cites.
-            if let grounded = await toolGroundedFallback?(question), !grounded.refused {
+            if let grounded = await toolGroundedFallback?(question, access), !grounded.refused {
                 return grounded
             }
             if let rag = await chunkBasedFallback(
@@ -1701,9 +1882,14 @@ public actor MasterBrain {
             // Budget spent / no provider and still ungrounded — render a
             // deterministic evidence readout instead of a bare refusal (§13),
             // but only when there IS something citable to show.
+            // U7 — prefer the deterministic TOPIC rollup: fetch topics that match
+            // the question and let the fallback lead with the best one instead of
+            // a raw fact/passage pile.
+            let topics: [MemoryObject] = (try? await memoryRepo?.search(question, limit: 3)) ?? []
             if let det = await DeterministicEvidenceFallback.build(
                 question: question, intent: intent,
-                retrieval: retrievalForVerifier, eventLinks: eventLinks
+                retrieval: retrievalForVerifier, eventLinks: eventLinks,
+                topics: topics
             ), !det.citations.isEmpty {
                 return det
             }
@@ -1755,8 +1941,16 @@ public actor MasterBrain {
         // request. Volume signals — many docs, long answer, many entities,
         // general wording — deliberately do NOT escalate.
         let escalation = Self.escalationLevel(for: verified, intent: intent, question: question, queryClass: queryClass)
+        // Module .aiComposeEveryAnswer (owner request 2026-09-20) — when on and a
+        // model is available, EVERY grounded answer gets at least a groundedDraft
+        // AI compose pass, so plain lookups read as fluent prose instead of the
+        // terse deterministic body. Grounding is preserved (AnswerSynthesizer
+        // composes over the verified body + citations and is evidence-checked); a
+        // nil result (no model / failure) safely falls back to the deterministic
+        // body. Off ⇒ original adaptive-only behaviour (synthesis when escalated).
+        let composeEveryAnswer = KnowledgeModuleFlags.isEnabled(.aiComposeEveryAnswer)
         var synthesizedBody: String? = nil
-        if escalation != .none,
+        if (escalation != .none || composeEveryAnswer),
            FeatureFlags.llmAnswerSynthesisValue(),
            !verified.refused, !verified.citations.isEmpty {
             let depth: AnswerSynthesizer.Depth
@@ -1765,19 +1959,32 @@ public actor MasterBrain {
             case .complex:         depth = .draftAndEvidenceCheck
             case .investigation:   depth = .councilDraftAndEvidenceCheck
             }
+            // Topic-first: hand the best-matching distilled topic to the
+            // synthesizer as the primary orientation, so the AI answers FROM the
+            // topic (deduped/minimized knowledge) and grounds it in the citations.
+            // Gated by .topicSeededComposers; nil when off / no match.
+            let topicContext: String? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers)
+                ? (try? await memoryRepo?.search(question, limit: 1))?.first?.narrative
+                : nil
             synthesizedBody = await AnswerSynthesizer().synthesize(
                 question: question,
                 verifiedBody: verified.body,
                 citations: verified.citations,
                 capabilities: capabilities,
                 depth: depth,
-                context: llmContext
+                context: llmContext,
+                topic: topicContext
             )
         }
         let tagged = Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
         // §16 — persist the verified answer as a derived ledger object (with
         // provenance) so derived knowledge compounds across sessions.
-        persistDerived(tagged, purposes: trace.expertIDs)
+        // M1 safety: in UNCONSTRAINED mode the grounding/fact-lock checks were only
+        // advisory, so the composed body may carry unverified prose — do NOT compound
+        // it into the durable derived ledger (keep the experiment out of the record).
+        if FeatureFlags.aiModeValue().enforcesGrounding {
+            persistDerived(tagged, purposes: trace.expertIDs)
+        }
         // AEE-M2 — the answer-ledger persistence is NO LONGER fire-and-forget here: the
         // stream's finalizeProgressiveAnswer commits the durable revision chain (working
         // result → review-ready → verifiedFinal) BEFORE verifiedFinal is emitted. The old
