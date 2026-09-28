@@ -222,4 +222,26 @@ struct ResourceControlTests {
         #expect(await gauge.peak <= 5)
         #expect(BoundedFanOut.watcherLimit(capacities: [.cpu: 7, .diskIO: 4, .network: 4]) == 30)
     }
+
+    @Test("Relief re-warms only the caches pressure shed; a budget-shed cache stays cold")
+    func reliefRewarmsPressureShedOnly() async throws {
+        let repo = try await seedEntities(15)
+        let trie = EntityTrie(byteBudget: 64 * 1_048_576)
+        await trie.warm(entities: repo)
+        let memory = MemoryHashCache(byteBudget: 64 * 1_048_576)
+        let governor = MemoryPressureGovernor()
+        await MemoryPressureResponse.install(
+            on: governor, ingest: nil, memory: memory, timeline: nil, trie: trie,
+            rewarm: .init(memory: { Issue.record("a cache pressure never shed must not be re-warmed") },
+                          trie: { await trie.warm(entities: repo) }))
+        await governor.report(.critical)
+        #expect(await !trie.isWarm())
+        // The memory cache then sheds for its OWN reason — relief must leave it alone.
+        await memory.shed(reason: "grew past its budget")
+        await governor.report(.normal)
+        #expect(await trie.isWarm(), "pressure relief rebuilds what pressure took")
+        #expect(await trie.lastShedReason() == nil)
+        #expect(await !trie.resolve("Supplier Number4").isEmpty)
+        #expect(await memory.lastShedReason() == "grew past its budget")
+    }
 }

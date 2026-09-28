@@ -2576,7 +2576,11 @@ public final class AppState {
             let pressure = MemoryPressureGovernor()
             await MemoryPressureResponse.install(on: pressure, ingest: ingest, lanes: laneScheduler,
                                                  memory: memoryHashCache, timeline: entityTimelineCache,
-                                                 trie: entityTrieCache)
+                                                 trie: entityTrieCache,
+                                                 rewarm: .init(
+                                                    memory: { await memoryHashCache.warm(memory: memoryRepo) },
+                                                    timeline: { await entityTimelineCache.warm(events: events) },
+                                                    trie: { await entityTrieCache.warm(entities: entities) }))
             await pressure.startMonitoring()
             self.memoryPressure = pressure
             self.hnswIndex = hnsw
