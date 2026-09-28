@@ -111,7 +111,7 @@ public struct EmailLoader: StreamingIngestor {
 
     /// F01 — per-message mbox streams; thread coalescing needs the whole archive to group, and
     /// PST/NSF readers materialise their message tables, so those keep the `ingestMany` path.
-    public func streamsRecords(type: SourceType) -> Bool {
+    public nonisolated func streamsRecords(type: SourceType) -> Bool {
         type == .mbox && !Self.threadCoalescingEnabled
     }
 

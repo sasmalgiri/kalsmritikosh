@@ -14,6 +14,24 @@ import OSLog
 import CryptoKit
 
 
+/// F01 — the ingest memory budget. Above `streamAboveBytes` a file is read in bounded record
+/// batches when its loader can stream; above `deferWholeFileAboveBytes` a file whose loader cannot
+/// stream is deferred (custody kept, resource limit recorded) rather than loaded whole.
+public struct IngestMemoryBudget: Sendable, Equatable {
+    public let streamAboveBytes: Int64
+    public let deferWholeFileAboveBytes: Int64
+    public let batch: StreamBatchBudget
+
+    public nonisolated init(streamAboveBytes: Int64, deferWholeFileAboveBytes: Int64, batch: StreamBatchBudget = .standard) {
+        self.streamAboveBytes = streamAboveBytes
+        self.deferWholeFileAboveBytes = max(streamAboveBytes, deferWholeFileAboveBytes)
+        self.batch = batch
+    }
+
+    public nonisolated static let standard = IngestMemoryBudget(
+        streamAboveBytes: 64 * 1024 * 1024, deferWholeFileAboveBytes: 4 * 1024 * 1024 * 1024)
+}
+
 public actor IngestCoordinator {
     /// Thrown when a file is intentionally NOT ingested (not a failure). Callers
     /// treat it as "processed, skipped" so it doesn't count as an error.
@@ -63,6 +81,8 @@ public actor IngestCoordinator {
     /// Built once a database is wired (configureUpgrades). Consulted at the embed
     /// gate to skip chunks that are mostly a known template; nil ⇒ feature off.
     private var boilerplateRegistry: BoilerplateRegistry? = nil
+    /// F01 — when a file is too large to hold all of its records in memory at once.
+    private var memoryBudget = IngestMemoryBudget.standard
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -292,6 +312,9 @@ public actor IngestCoordinator {
     /// Pause/Stop hooks for the live ingest controls. `drainPaused` idles the
     /// background embedding loop between batches (Resume clears it).
     private var drainPaused = false
+
+    /// F01 — replace the ingest memory budget (tests lower it to force the streaming path).
+    public func setMemoryBudget(_ budget: IngestMemoryBudget) { memoryBudget = budget }
 
     public func shutdown() {
         embeddingDrainTask?.cancel()
@@ -1196,6 +1219,26 @@ public actor IngestCoordinator {
             originalURL: url, processingSnapshotURL: processURL, logicalSourceID: handle.logicalSourceID,
             sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash,
             sizeBytes: handle.sizeBytes, intent: parserIntent)
+        // F01 — a file too large to hold every record at once. A loader that can stream is fed
+        // batch by batch, each committed before the next is read; one that cannot is deferred with
+        // custody kept (resource limit, retriable) instead of being loaded whole. Containers and
+        // the iOS-backup manifest expand member by member and are not subject to this.
+        let expandsMembers = plugin.executionMode == .container || type == .extractionManifest
+        if !expandsMembers, handle.sizeBytes > memoryBudget.streamAboveBytes {
+            if let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) {
+                return await ingestStreaming(streamer, plugin: plugin, handle: handle, fileRecord: fileRecord,
+                                             url: url, processURL: processURL, type: type, skip: skipResult)
+            }
+            if handle.sizeBytes > memoryBudget.deferWholeFileAboveBytes {
+                let detail = "\(handle.sizeBytes) bytes exceeds the \(memoryBudget.deferWholeFileAboveBytes)-byte "
+                    + "whole-file budget and \(type.rawValue) cannot be read in parts"
+                await advanceReadiness(handle.sourceVersionID, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .blocked, action: .block,
+                                                   condition: .resourceLimit, detail: detail)])
+                return skipResult(.deferred, stage: "resource-deferred", detail: detail)
+            }
+        }
+
         let started = Date()
         let result: UniversalParserResult
         do { result = try await universalExecutor.execute(request) }
@@ -1320,47 +1363,22 @@ public actor IngestCoordinator {
         } : nil
         let allBlocks = structural?.doc.blocks ?? []
         let singleKO = perFileKOs.count == 1
-        var totalChunks = 0, totalEntities = 0, totalEvents = 0
-        var allInvalidations: [SubjectInvalidation.Subject] = []
-        var lastObject = perFileKOs[0]
+        var tally = IngestTally(lastObject: perFileKOs[0])
         var blockOwnership: [(ko: KnowledgeObject.ID, blockIDs: [EvidenceBlock.ID])] = []
 
         for rawKO in perFileKOs {
             do {
                 let koBlocks = Self.blocks(for: rawKO, from: allBlocks, singleKO: singleKO)
-                let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks, sourceVersionID: handle.sourceVersionID)
-                totalChunks += processed.chunkCount; totalEntities += processed.entityCount; totalEvents += processed.eventCount
-                allInvalidations.append(contentsOf: processed.invalidations)
-                lastObject = processed.object
+                try await ingestObject(rawKO, blocks: koBlocks, fileRecord: fileRecord, documentClass: docClass,
+                                       sourceVersionID: handle.sourceVersionID, tally: &tally)
                 if !koBlocks.isEmpty { blockOwnership.append((rawKO.id, koBlocks.map(\.id))) }
-                // Attachments — each ingested with THIS message's version as parent, so the
-                // version relation is recorded (atomically, in intake) even if the child parse fails.
-                if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
-                   case .string(let json) = value.value {
-                    let attachParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .attachment)
-                    for attachmentURL in EmailLoader.decodeAttachmentURLs(from: json) {
-                        // P1.2 (F-4) — an email ATTACHMENT that fails to ingest
-                        // was silently absent, indistinguishable from an email
-                        // that had no attachment. Tolerated (one bad attachment
-                        // must not fail the email) but recorded.
-                        do {
-                            let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
-                            await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
-                            totalChunks += attachmentResult.chunkCount; totalEntities += attachmentResult.entityCount; totalEvents += attachmentResult.eventCount
-                            allInvalidations.append(contentsOf: attachmentResult.invalidations)
-                        } catch {
-                            await derivationFailures?.record(
-                                stage: "attachment.ingest", error: error,
-                                sourceVersionID: handle.sourceVersionID,
-                                filePath: attachmentURL.path)
-                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                        }
-                    }
-                }
             } catch {
                 KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             }
         }
+        let totalChunks = tally.chunks, totalEntities = tally.entities, totalEvents = tally.events
+        let allInvalidations = tally.invalidations
+        let lastObject = tally.lastObject
 
         // USF-002.1 — a structural persist yields a COMMITTED receipt (nil on failure); readiness
         // advances structure/metadata/OCR only from it, and links blocks only on a real commit.
@@ -1405,22 +1423,7 @@ public actor IngestCoordinator {
         // complete AND every substantive block is located.
         if let readiness {
             let svid = handle.sourceVersionID
-            // Search dimensions (loader-produced) — default pipeline producer.
-            var searchUpdates: [SourceReadinessDimensionUpdate] = []
-            let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
-            if coverage.eligible > 0 {
-                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                                    completedUnits: coverage.eligible, totalUnits: coverage.eligible))
-                let fullyIndexed = coverage.indexed == coverage.eligible
-                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
-                                                                    action: fullyIndexed ? .satisfy : .partiallySatisfy,
-                                                                    completedUnits: coverage.indexed, totalUnits: coverage.eligible,
-                                                                    basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
-            } else {
-                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                                    completedUnits: 0, totalUnits: 0))
-            }
-            await advanceReadiness(svid, searchUpdates)
+            await advanceSearchReadiness(svid, readiness: readiness)
 
             // USF-010 — parser-produced dimensions carry the EXACT parser version as producer version so a
             // later parser upgrade can detect this structure as stale and reprocess only what changed.
@@ -1454,6 +1457,165 @@ public actor IngestCoordinator {
         return Result(fileRecord: fileRecord, object: lastObject, chunkCount: totalChunks, entityCount: totalEntities,
                       eventCount: totalEvents, documentClass: docClass, invalidations: allInvalidations,
                       logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID, intakeOutcome: handle.outcome)
+    }
+
+    /// F01 — the bounded-memory path for a file above `memoryBudget.streamAboveBytes` whose loader
+    /// can stream. Records arrive in `memoryBudget.batch`-sized batches and each object is committed
+    /// (KO + chunks + FTS) through the same per-KO pipeline before the next batch is read, so the
+    /// resident set is one batch, not the file. The whole-document structural parse (one atomic
+    /// commit of every block) is NOT run here: structure is recorded as blocked by a resource limit
+    /// with the reason, never claimed. A failure mid-stream keeps every record already committed and
+    /// reports text as partial.
+    private func ingestStreaming(_ streamer: any StreamingIngestor, plugin: any UniversalParserPlugin,
+                                 handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
+                                 type: SourceType,
+                                 skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
+        let svid = handle.sourceVersionID
+        let started = Date()
+        do {
+            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+        } catch {
+            KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        }
+
+        var tally: IngestTally? = nil
+        var docClass: DocumentClass = .other
+        var records = 0, batches = 0
+        var streamError: Error? = nil
+        do {
+            try await streamer.streamRecords(fileAt: processURL, type: type, budget: memoryBudget.batch) { batch in
+                batches += 1
+                for raw in batch {
+                    let ko = Self.rebindingSourceFile(raw, to: url)
+                    // The document class comes from the first record, as on the whole-file path.
+                    if tally == nil {
+                        docClass = classifier.classify(ContentDecoder().decode(cleaner.clean(ko)))
+                        tally = IngestTally(lastObject: ko)
+                    }
+                    records += 1
+                    do {
+                        var t = tally ?? IngestTally(lastObject: ko)
+                        try await ingestObject(ko, blocks: [], fileRecord: fileRecord, documentClass: docClass,
+                                               sourceVersionID: svid, tally: &t)
+                        tally = t
+                    } catch {
+                        KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    }
+                }
+            }
+        } catch {
+            streamError = error
+            KalsmritikoshLog.ingestion.error("Streamed ingest stopped for \(url.lastPathComponent, privacy: .private) after \(records, privacy: .public) records: \(String(describing: error), privacy: .public)")
+        }
+        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
+
+        guard let tally else {
+            // Nothing was read. A loader failure is a parser failure (custody kept, retriable).
+            if let streamError {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
+                                                   detail: String(describing: streamError).prefix(120).description)])
+                return skip(.failed, "parser", String(describing: streamError).prefix(300).description)
+            }
+            await advanceReadiness(svid, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy, completedUnits: 0, totalUnits: 0)])
+            return Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                          chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                          logicalSourceID: handle.logicalSourceID, sourceVersionID: svid, intakeOutcome: handle.outcome)
+        }
+
+        if let readiness {
+            await advanceSearchReadiness(svid, readiness: readiness)
+            if let streamError {
+                // Committed records stay; the text dimension says the file was only partly read.
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .partial, action: .partiallySatisfy,
+                                                   detail: "stream stopped after \(records) records: "
+                                                       + String(describing: streamError).prefix(120))])
+            }
+            if plugin.capabilities.producesStructure, evidenceStore != nil {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(
+                        dimension: .structuralExtraction, state: .blocked, action: .block, condition: .resourceLimit,
+                        detail: "\(handle.sizeBytes)-byte file ingested as \(records) records in \(batches) bounded batches; "
+                            + "whole-document structure exceeds the \(memoryBudget.streamAboveBytes)-byte in-memory budget")],
+                    producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
+            }
+        }
+
+        var result = Result(fileRecord: fileRecord, object: tally.lastObject, chunkCount: tally.chunks,
+                            entityCount: tally.entities, eventCount: tally.events, documentClass: docClass,
+                            invalidations: tally.invalidations, logicalSourceID: handle.logicalSourceID,
+                            sourceVersionID: svid, intakeOutcome: handle.outcome)
+        if let streamError {
+            result.processingStatus = .failed
+            result.processingStage = "parser-stream"
+            result.processingDetail = "partial: \(records) records committed before " + String(describing: streamError).prefix(200)
+        }
+        return result
+    }
+
+    /// Search dimensions (loader-produced) from the exact per-version FTS coverage — default
+    /// pipeline producer. Shared by the whole-file and streamed paths.
+    private func advanceSearchReadiness(_ svid: UUID, readiness: SourceReadinessRepository) async {
+        var searchUpdates: [SourceReadinessDimensionUpdate] = []
+        let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
+        if coverage.eligible > 0 {
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                                completedUnits: coverage.eligible, totalUnits: coverage.eligible))
+            let fullyIndexed = coverage.indexed == coverage.eligible
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                                                action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                                                completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                                                basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
+        } else {
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                                completedUnits: 0, totalUnits: 0))
+        }
+        await advanceReadiness(svid, searchUpdates)
+    }
+
+    /// Running totals for one file across its objects and the attachments they spawn.
+    private struct IngestTally {
+        var chunks = 0, entities = 0, events = 0
+        var invalidations: [SubjectInvalidation.Subject] = []
+        var lastObject: KnowledgeObject
+    }
+
+    /// One object of a file through the per-KO pipeline, then its attachments. Shared by the
+    /// whole-file and streamed paths so both commit an object identically.
+    private func ingestObject(_ rawKO: KnowledgeObject, blocks koBlocks: [EvidenceBlock], fileRecord: FileRecord,
+                              documentClass docClass: DocumentClass, sourceVersionID: UUID,
+                              tally: inout IngestTally) async throws {
+        let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks, sourceVersionID: sourceVersionID)
+        tally.chunks += processed.chunkCount; tally.entities += processed.entityCount; tally.events += processed.eventCount
+        tally.invalidations.append(contentsOf: processed.invalidations)
+        tally.lastObject = processed.object
+        // Attachments — each ingested with THIS message's version as parent, so the
+        // version relation is recorded (atomically, in intake) even if the child parse fails.
+        if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
+           case .string(let json) = value.value {
+            let attachParent = SourceParentReference(parentSourceVersionID: sourceVersionID, relation: .attachment)
+            for attachmentURL in EmailLoader.decodeAttachmentURLs(from: json) {
+                // P1.2 (F-4) — an email ATTACHMENT that fails to ingest
+                // was silently absent, indistinguishable from an email
+                // that had no attachment. Tolerated (one bad attachment
+                // must not fail the email) but recorded.
+                do {
+                    let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
+                    await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
+                    tally.chunks += attachmentResult.chunkCount; tally.entities += attachmentResult.entityCount; tally.events += attachmentResult.eventCount
+                    tally.invalidations.append(contentsOf: attachmentResult.invalidations)
+                } catch {
+                    await derivationFailures?.record(
+                        stage: "attachment.ingest", error: error,
+                        sourceVersionID: sourceVersionID,
+                        filePath: attachmentURL.path)
+                    KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
     }
 
     private struct ProcessedKO: Sendable {

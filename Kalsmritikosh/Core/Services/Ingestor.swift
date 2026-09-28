@@ -61,7 +61,7 @@ public struct StreamBatchBudget: Sendable, Equatable {
 public protocol StreamingIngestor: Ingestor {
     /// Whether `type` streams under the current configuration. False when producing a record
     /// needs the whole file first (e.g. mbox thread coalescing groups across the archive).
-    func streamsRecords(type: SourceType) -> Bool
+    nonisolated func streamsRecords(type: SourceType) -> Bool
 
     /// Emit every record of the file in order, `budget` bounding each batch. Only one batch
     /// is resident in the loader at a time; `emit` may persist and drop it before the next.

@@ -61,7 +61,7 @@ public struct SQLiteLoader: StreamingIngestor {
     }
 
     /// F01 — every page streams: a page is built, handed to `emit`, and dropped.
-    public func streamsRecords(type: SourceType) -> Bool { supportedTypes.contains(type) }
+    public nonisolated func streamsRecords(type: SourceType) -> Bool { supportedTypes.contains(type) }
 
     public func streamRecords(fileAt url: URL, type: SourceType, budget: StreamBatchBudget,
                               emit: ([KnowledgeObject]) async throws -> Void) async throws {

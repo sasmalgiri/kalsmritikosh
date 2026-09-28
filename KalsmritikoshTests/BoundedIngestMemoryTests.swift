@@ -109,4 +109,97 @@ struct BoundedIngestMemoryTests {
         #expect(batches.count == 3)
         #expect(batches.allSatisfy { $0.count <= 2 })
     }
+
+    // MARK: - F01c coordinator streaming path
+
+    private struct Rig { let coordinator: IngestCoordinator; let readiness: SourceReadinessRepository; let db: Database; let dir: URL }
+
+    @MainActor
+    private func makeRig(_ budget: IngestMemoryBudget?) async throws -> Rig {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("bim-rig-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        try await db.exec("PRAGMA foreign_keys = ON;")
+        let readiness = SourceReadinessRepository(database: db)
+        let intake = UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(
+            database: db, vault: EvidenceVault(root: dir.appendingPathComponent("vault", isDirectory: true))))
+        let coordinator = IngestCoordinator(
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()),
+            files: FilesRepository(database: db), objects: KnowledgeObjectRepository(database: db),
+            chunks: ChunksRepository(database: db), evidenceStore: EvidenceStore(database: db),
+            ingestAttempts: IngestAttemptsRepository(database: db),
+            readiness: readiness, intakeCoordinator: intake, custodyModeOverride: .referenced)
+        if let budget { await coordinator.setMemoryBudget(budget) }
+        return Rig(coordinator: coordinator, readiness: readiness, db: db, dir: dir)
+    }
+
+    /// Every file streams; batches of 3 records.
+    private let tinyBudget = IngestMemoryBudget(streamAboveBytes: 1, deferWholeFileAboveBytes: .max,
+                                                batch: StreamBatchBudget(maxObjects: 3, maxContentBytes: .max))
+
+    private func count(_ rig: Rig, _ sql: String, _ id: UUID) async throws -> Int {
+        Int(try await rig.db.query(sql, [.uuid(id)]).first?.int(0) ?? 0)
+    }
+
+    @Test("A streamed mbox commits every message, searchable, exactly as the whole-file path does")
+    @MainActor func streamedMboxMatchesWholeFile() async throws {
+        let mbox = try makeMbox(messages: 10)
+        var shapes: [[Int]] = []
+        for budget in [nil, tinyBudget] {
+            let rig = try await makeRig(budget)
+            let result = try await rig.coordinator.ingest(fileAt: mbox)
+            let v = try #require(result.sourceVersionID)
+            let kos = try await count(rig, "SELECT COUNT(*) FROM knowledge_objects WHERE file_id = ?;", result.fileRecord.id)
+            let chunks = try await count(rig, "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", v)
+            for i in 0..<10 {
+                let hits = try await count(rig, "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND text LIKE '%message number \(i).%';", v)
+                #expect(hits >= 1, "message \(i) must be committed and chunked")
+            }
+            let fts = try await rig.readiness.ftsCoverage(sourceVersionID: v)
+            #expect(result.processingStatus == nil)
+            #expect(chunks > 0 && fts.eligible == chunks && fts.indexed == chunks)
+            let text = try await rig.readiness.snapshot(sourceVersionID: v).dimension(.textExtraction)
+            #expect(text?.state == .ready)
+            // Chunk counts legitimately differ: whole-file chunks from structural blocks, the stream
+            // (structure blocked) from record text. The RECORDS committed must be identical.
+            let metas = try await rig.db.query(
+                "SELECT metadata_json FROM knowledge_objects WHERE file_id = ?;", [.uuid(result.fileRecord.id)])
+            let indices = metas.compactMap { $0.string(0) }.compactMap { json -> Int? in
+                guard let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return nil }
+                return (obj["messageIndex"] as? NSNumber)?.intValue
+            }
+            shapes.append([kos] + indices.sorted())
+        }
+        #expect(shapes[0] == [10] + Array(0..<10), "every message committed with its messageIndex")
+        #expect(shapes[0] == shapes[1], "streamed and whole-file ingest must commit the same records")
+    }
+
+    @Test("A streamed database records structure as blocked by a resource limit, never ready")
+    @MainActor func streamedSQLiteBlocksStructure() async throws {
+        let rig = try await makeRig(tinyBudget)
+        let url = try makeSQLite(rows: 1_750)
+        let result = try await rig.coordinator.ingest(fileAt: url)
+        let v = try #require(result.sourceVersionID)
+        #expect(try await count(rig, "SELECT COUNT(*) FROM knowledge_objects WHERE file_id = ?;", result.fileRecord.id) == 4)
+        #expect(try await count(rig, "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND text LIKE '%row-1750%';", v) >= 1)
+        let structure = try await rig.readiness.snapshot(sourceVersionID: v).dimension(.structuralExtraction)
+        #expect(structure?.state == .blocked)
+        #expect(structure?.condition == .resourceLimit)
+    }
+
+    @Test("An oversize file that cannot stream is deferred with custody kept, not loaded whole")
+    @MainActor func oversizeNonStreamableDefers() async throws {
+        let rig = try await makeRig(IngestMemoryBudget(streamAboveBytes: 8, deferWholeFileAboveBytes: 16))
+        let url = rig.dir.appendingPathComponent("notes.txt")
+        try String(repeating: "A plain text note that cannot be streamed. ", count: 20).write(to: url, atomically: true, encoding: .utf8)
+        let result = try await rig.coordinator.ingest(fileAt: url)
+        let v = try #require(result.sourceVersionID)
+        #expect(result.processingStatus == .deferred)
+        #expect(try await count(rig, "SELECT COUNT(*) FROM source_versions WHERE id = ?;", v) == 1)
+        #expect(try await count(rig, "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", v) == 0)
+        let text = try await rig.readiness.snapshot(sourceVersionID: v).dimension(.textExtraction)
+        #expect(text?.state == .blocked)
+        #expect(text?.condition == .resourceLimit)
+    }
 }

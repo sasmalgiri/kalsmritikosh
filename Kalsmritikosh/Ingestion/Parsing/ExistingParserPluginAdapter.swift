@@ -67,6 +67,14 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         return try Data(contentsOf: url)
     }
 
+    /// F01 — this plugin's loader when it can stream records of `type` under the current
+    /// configuration; nil otherwise. The coordinator uses it to ingest a large file batch by batch.
+    public nonisolated func streamingLoader(for type: SourceType) -> (any StreamingIngestor)? {
+        guard supportedTypes.contains(type), let streaming = loader as? any StreamingIngestor,
+              streaming.streamsRecords(type: type) else { return nil }
+        return streaming
+    }
+
     public func execute(_ request: UniversalParserRequest) async throws -> UniversalParserResult {
         // Read ONLY the immutable snapshot — never the mutable original.
         guard FileManager.default.isReadableFile(atPath: request.processingSnapshotURL.path) else {
