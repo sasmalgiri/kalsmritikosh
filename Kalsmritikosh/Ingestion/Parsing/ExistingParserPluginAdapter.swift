@@ -57,9 +57,19 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         }
     }
 
+    /// F01 — the snapshot's bytes for the structural parser, MEMORY-MAPPED (page-cache backed, paged
+    /// in on demand and evictable) rather than copied onto the heap, and read ONLY when a structural
+    /// parser will actually run. The old eager `Data(contentsOf:)` held a full private copy of every
+    /// file for the whole parse — even for loader-only formats that never looked at it.
+    static func snapshotBytes(_ url: URL) throws -> Data {
+        // A zero-length file cannot be mapped; it is also free to read plainly.
+        if let mapped = try? Data(contentsOf: url, options: .alwaysMapped) { return mapped }
+        return try Data(contentsOf: url)
+    }
+
     public func execute(_ request: UniversalParserRequest) async throws -> UniversalParserResult {
         // Read ONLY the immutable snapshot — never the mutable original.
-        guard let snapshotData = try? Data(contentsOf: request.processingSnapshotURL) else {
+        guard FileManager.default.isReadableFile(atPath: request.processingSnapshotURL.path) else {
             throw UniversalParserError.snapshotUnreadable(pluginID: pluginID)
         }
         // Loader runs ONCE via ingestMany (single-KO formats return one; mbox/pst return many).
@@ -75,6 +85,9 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         let skipStructureForSearchCore = request.intent == .searchCore && loaderProducedText
         var parsedDocument: ParsedDocument? = nil
         if let structural, !skipStructureForSearchCore {
+            guard let snapshotData = try? Self.snapshotBytes(request.processingSnapshotURL) else {
+                throw UniversalParserError.snapshotUnreadable(pluginID: pluginID)
+            }
             do {
                 parsedDocument = try await structural.parse(
                     data: snapshotData, filename: request.originalURL.lastPathComponent, type: request.sourceType,
