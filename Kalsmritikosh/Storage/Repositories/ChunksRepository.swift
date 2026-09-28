@@ -213,6 +213,34 @@ public actor ChunksRepository {
         return chunks
     }
 
+    /// F08 — keyword search restricted to `sourceVersionIDs` INSIDE the query (before ranking/LIMIT),
+    /// so a small authorized scope is not crowded out by higher-ranked chunks from elsewhere. Chunks
+    /// come back stamped with their source version. Large scopes are queried in bounded batches.
+    public func searchFTS(_ query: String, limit: Int, sourceVersionIDs: Set<UUID>) async throws -> [Chunk] {
+        let match = FTSQuerySanitizer.sanitize(query)
+        guard !match.isEmpty, !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        var out: [Chunk] = []
+        for start in stride(from: 0, to: ids.count, by: 400) {
+            let slice = ids[start..<min(start + 400, ids.count)]
+            let qs = slice.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind, c.source_version_id
+            FROM chunks c
+            JOIN chunks_fts ON chunks_fts.rowid = c.rowid
+            WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL AND c.source_version_id IN (\(qs))
+            ORDER BY rank
+            LIMIT ?;
+            """, [.text(match)] + slice.map { .uuid($0) } + [.integer(Int64(limit))])
+            for r in rows {
+                guard let c = decode(r) else { continue }
+                out.append(r.uuid(12).map { c.withSourceVersion($0) } ?? c)
+            }
+            if out.count >= limit { break }
+        }
+        return try await hydrateLineage(Array(out.prefix(limit)))
+    }
+
     public func searchFTS(_ query: String, limit: Int = 50) async throws -> [Chunk] {
         // V1.1 U2.5 — NEVER pass raw query text to FTS5 (task #40: it raised a
         // logic error on ordinary punctuation and the keyword layer went silently
