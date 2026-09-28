@@ -39,12 +39,48 @@ public nonisolated struct HistoryCoverage: Sendable, Codable, Hashable {
     public let assertionCount: Int
     public let genericFactCount: Int
     public let eventCount: Int
+    /// F09 — material that exists for the subject but was NOT collected because a per-kind
+    /// collection limit was reached. Zero = the story saw everything. Surfaced in the UI.
+    public let deferredEventCount: Int
+    public let deferredAssertionCount: Int
+    public let deferredRelationshipCount: Int
+
+    public nonisolated var deferredTotal: Int { deferredEventCount + deferredAssertionCount + deferredRelationshipCount }
+    public nonisolated var isComplete: Bool { deferredTotal == 0 }
+
     public nonisolated init(totalItems: Int, datedItems: Int, undatedItems: Int, earliest: Date?,
                             latest: Date?, evidenceObjectCount: Int, assertionCount: Int,
-                            genericFactCount: Int, eventCount: Int) {
+                            genericFactCount: Int, eventCount: Int,
+                            deferredEventCount: Int = 0, deferredAssertionCount: Int = 0,
+                            deferredRelationshipCount: Int = 0) {
         self.totalItems = totalItems; self.datedItems = datedItems; self.undatedItems = undatedItems
         self.earliest = earliest; self.latest = latest; self.evidenceObjectCount = evidenceObjectCount
         self.assertionCount = assertionCount; self.genericFactCount = genericFactCount; self.eventCount = eventCount
+        self.deferredEventCount = deferredEventCount; self.deferredAssertionCount = deferredAssertionCount
+        self.deferredRelationshipCount = deferredRelationshipCount
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case totalItems, datedItems, undatedItems, earliest, latest, evidenceObjectCount, assertionCount
+        case genericFactCount, eventCount, deferredEventCount, deferredAssertionCount, deferredRelationshipCount
+    }
+
+    /// Stories persisted before F09 carry no deferred counts; they decode as 0 (they were built
+    /// before counts existed — the original, uncapped-claim record is left as it was written).
+    public nonisolated init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        totalItems = try c.decode(Int.self, forKey: .totalItems)
+        datedItems = try c.decode(Int.self, forKey: .datedItems)
+        undatedItems = try c.decode(Int.self, forKey: .undatedItems)
+        earliest = try c.decodeIfPresent(Date.self, forKey: .earliest)
+        latest = try c.decodeIfPresent(Date.self, forKey: .latest)
+        evidenceObjectCount = try c.decode(Int.self, forKey: .evidenceObjectCount)
+        assertionCount = try c.decode(Int.self, forKey: .assertionCount)
+        genericFactCount = try c.decode(Int.self, forKey: .genericFactCount)
+        eventCount = try c.decode(Int.self, forKey: .eventCount)
+        deferredEventCount = try c.decodeIfPresent(Int.self, forKey: .deferredEventCount) ?? 0
+        deferredAssertionCount = try c.decodeIfPresent(Int.self, forKey: .deferredAssertionCount) ?? 0
+        deferredRelationshipCount = try c.decodeIfPresent(Int.self, forKey: .deferredRelationshipCount) ?? 0
     }
 }
 
