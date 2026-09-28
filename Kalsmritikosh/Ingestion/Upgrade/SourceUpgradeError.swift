@@ -24,6 +24,9 @@ public nonisolated enum SourceUpgradeError: Error, Sendable, Equatable {
     case jobNotFound(UUID)
     case sourceVersionMissing(UUID)
     case notAnActiveJob(UUID)
+    /// F21 — a worker tried to finish a job it no longer owns (lease reclaimed, cancelled,
+    /// superseded, or already finished). Its write is rejected; nothing changed.
+    case staleLease(UUID)
     // A handler returned but the expected durable readiness postcondition was not met (§27).
     case postconditionNotSatisfied(kind: SourceUpgradeKind, sourceVersionID: UUID)
 }

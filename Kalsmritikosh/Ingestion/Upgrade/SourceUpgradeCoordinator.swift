@@ -77,7 +77,11 @@ public struct SourceUpgradeCoordinator: Sendable {
     @discardableResult
     public func drain(max: Int = .max, at now: Date) async -> Int {
         var ran = 0
-        while ran < max, await runNext(at: now) { ran += 1 }
+        // F21 — each job gets a FRESH time (the caller's `now` advanced by real elapsed time): reusing
+        // one timestamp for a long drain issues late jobs leases that are already expired in wall time,
+        // so recovery could reclaim a job its worker is still running.
+        let wallStart = Date()
+        while ran < max, await runNext(at: now.addingTimeInterval(Date().timeIntervalSince(wallStart))) { ran += 1 }
         return ran
     }
 
@@ -85,28 +89,30 @@ public struct SourceUpgradeCoordinator: Sendable {
 
     private func executeClaimed(_ claimed: SourceUpgradeJob, at now: Date) async throws {
         guard let svid = claimed.sourceVersionID else { return }
+        // F21 — every outcome below is written under THIS claim's lease token, so a worker whose job
+        // was reclaimed or cancelled meanwhile cannot overwrite the newer state (`staleLease`).
         guard executor.handles(claimed.kind) else {
-            try await jobs.block(claimed.id, reason: "no handler for \(claimed.kind.rawValue)", at: now)
+            try await jobs.block(claimed.id, reason: "no handler for \(claimed.kind.rawValue)", lease: claimed.leaseToken, at: now)
             throw SourceUpgradeError.unsupportedCapability(claimed.kind)
         }
         do {
             try await executor.execute(kind: claimed.kind, sourceVersionID: svid)
         } catch let e as SourceUpgradeError {
             // Permanent blockers (bytes changed/missing, unsupported, policy) block; transient errors retry.
-            if Self.isPermanent(e) { try await jobs.block(claimed.id, reason: "\(e)", at: now) }
-            else { try await jobs.fail(claimed.id, error: "\(e)", at: now) }
+            if Self.isPermanent(e) { try await jobs.block(claimed.id, reason: "\(e)", lease: claimed.leaseToken, at: now) }
+            else { try await jobs.fail(claimed, error: "\(e)", at: now) }
             throw e
         } catch {
-            try await jobs.fail(claimed.id, error: "\(error)", at: now)   // bounded auto-retry
+            try await jobs.fail(claimed, error: "\(error)", at: now)   // bounded auto-retry
             throw error
         }
         // §27 — the job is done ONLY when the durable readiness postcondition is actually met.
         if try await postconditionMet(kind: claimed.kind, sourceVersionID: svid) {
-            try await jobs.succeed(claimed.id, at: now)
+            try await jobs.succeed(claimed, at: now)
         } else {
             // §27 — a handler that ran but did not advance readiness fails TERMINALLY (re-running the
             // same work would not change the durable state), never silently "done", never endless retry.
-            try await jobs.failTerminal(claimed.id, error: "postconditionNotSatisfied", at: now)
+            try await jobs.failTerminal(claimed, error: "postconditionNotSatisfied", at: now)
             throw SourceUpgradeError.postconditionNotSatisfied(kind: claimed.kind, sourceVersionID: svid)
         }
     }
