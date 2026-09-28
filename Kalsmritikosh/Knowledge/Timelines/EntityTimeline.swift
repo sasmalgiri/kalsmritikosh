@@ -27,6 +27,9 @@
 //
 //  Durability: SQLite is the source-of-truth. Cache is non-persistent.
 //
+//  F12 — byte-accounted like MemoryHashCache: past `byteBudget` (or under memory pressure) it
+//  sheds whole and reports cold, and the Timeline layer takes its SQL path.
+//
 
 import Foundation
 import OSLog
@@ -48,8 +51,34 @@ public actor EntityTimeline {
     private var byEntity: [Entity.ID: [Slot]] = [:]
     private var warmed = false
     private var lastStats: Stats?
+    private let byteBudget: Int
+    private var estimatedBytes = 0
+    private var shedReason: String?
+    /// Bumped by every warm and shed; a warm that resumes after a newer one (or a shed) abandons.
+    private var generation = 0
+    /// Estimated resident cost of one slot in a bucket, and of one bucket.
+    nonisolated static let slotBytes = MemoryLayout<Slot>.stride + 8
+    nonisolated static let bucketBytes = 96
 
-    public init() {}
+    public init(byteBudget: Int = CacheByteBudget.defaultBytes()) { self.byteBudget = max(1, byteBudget) }
+
+    /// F12 — the estimated resident bytes, and why the cache last went cold (nil = never shed).
+    public func residentBytes() -> Int { estimatedBytes }
+    public func lastShedReason() -> String? { shedReason }
+
+    /// F12 — drop everything and report cold; retrieval falls back to SQL. Idempotent.
+    public func shed(reason: String) {
+        byEntity = [:]
+        estimatedBytes = 0
+        warmed = false
+        shedReason = reason
+        generation += 1
+        KalsmritikoshLog.knowledge.notice("EntityTimeline: shed — \(reason, privacy: .public)")
+    }
+
+    private func account(newBucket: Bool) {
+        estimatedBytes += Self.slotBytes + (newBucket ? Self.bucketBytes : 0)
+    }
 
     public func isWarm() -> Bool { warmed }
     public func count() -> Int { byEntity.values.reduce(0) { $0 + $1.count } }
@@ -60,6 +89,11 @@ public actor EntityTimeline {
 
     public func warm(events: EventsRepository, pageSize: Int = 2_000) async {
         byEntity.removeAll(keepingCapacity: true)
+        estimatedBytes = 0
+        warmed = false
+        shedReason = nil
+        generation += 1
+        let myGeneration = generation
         let started = Date()
         KalsmritikoshLog.knowledge.info("EntityTimeline: warm starting")
         var offset = 0
@@ -72,13 +106,20 @@ public actor EntityTimeline {
                 KalsmritikoshLog.knowledge.error("EntityTimeline: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
+            // Reentrancy: a shed or a newer warm ran while this page was fetched.
+            guard generation == myGeneration else { return }
             if page.isEmpty { break }
             for (event, entityIDs) in page {
                 let slot = Slot(date: event.date, eventID: event.id, kind: event.kind)
                 for entityID in entityIDs {
+                    account(newBucket: byEntity[entityID] == nil)
                     byEntity[entityID, default: []].append(slot)
                 }
                 total += 1
+            }
+            if estimatedBytes > byteBudget {
+                shed(reason: "warm exceeded the \(byteBudget)-byte budget after \(total) events")
+                return
             }
             offset += page.count
             if page.count < pageSize { break }
@@ -87,6 +128,7 @@ public actor EntityTimeline {
         for (key, slots) in byEntity {
             byEntity[key] = slots.sorted { $0.date < $1.date }
         }
+        guard generation == myGeneration else { return }
         let elapsed = Date().timeIntervalSince(started)
         lastStats = Stats(eventsLoaded: total, entityBuckets: byEntity.count, warmSeconds: elapsed)
         warmed = true
@@ -122,8 +164,11 @@ public actor EntityTimeline {
 
     /// Patch the timeline after a new event is ingested.
     public func note(event: Event, participants: [Entity.ID]) {
+        guard shedReason == nil else { return }   // shed: SQL is serving; do not regrow piecemeal
         let slot = Slot(date: event.date, eventID: event.id, kind: event.kind)
+        defer { if estimatedBytes > byteBudget { shed(reason: "grew past the \(byteBudget)-byte budget") } }
         for entityID in participants {
+            account(newBucket: byEntity[entityID] == nil)
             var bucket = byEntity[entityID] ?? []
             let insertAt = lowerBound(bucket, slot.date)
             bucket.insert(slot, at: insertAt)
