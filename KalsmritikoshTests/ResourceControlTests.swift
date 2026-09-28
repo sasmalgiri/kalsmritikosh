@@ -127,4 +127,99 @@ struct ResourceControlTests {
         #expect(CacheByteBudget.defaultBytes(physicalMemory: 1024 * UInt64(mb)) == 32 * mb)
         #expect(CacheByteBudget.defaultBytes(physicalMemory: 256 * 1024 * UInt64(mb)) == 512 * mb)
     }
+
+    // MARK: - memory pressure (F12a) and adaptive workers (F12c)
+
+    /// Counts concurrent entries so a test can read the peak.
+    private actor Gauge {
+        var now = 0, peak = 0, done = 0
+        func enter() { now += 1; peak = max(peak, now) }
+        func leave() { now -= 1; done += 1 }
+    }
+
+    @Test("Kernel events map to the most severe level they carry")
+    func eventLevels() {
+        #expect(MemoryPressureLevel(event: .normal) == .normal)
+        #expect(MemoryPressureLevel(event: .warning) == .warning)
+        #expect(MemoryPressureLevel(event: [.warning, .critical]) == .critical)
+    }
+
+    @Test("The governor fans each level CHANGE out once, in order, and ignores repeats")
+    func governorFansOutChanges() async {
+        actor Log { var seen: [MemoryPressureLevel] = []; func add(_ l: MemoryPressureLevel) { seen.append(l) } }
+        let log = Log()
+        let governor = MemoryPressureGovernor()
+        await governor.addResponder { await log.add($0) }
+        for level in [MemoryPressureLevel.warning, .warning, .critical, .normal, .normal] { await governor.report(level) }
+        #expect(await log.seen == [.warning, .critical, .normal])
+        #expect(await governor.currentLevel() == .normal)
+    }
+
+    @Test("Critical pressure sheds every retrieval cache; warning leaves them warm")
+    func criticalShedsCaches() async throws {
+        let repo = try await seedEntities(10)
+        let trie = EntityTrie(byteBudget: 64 * 1_048_576)
+        await trie.warm(entities: repo)
+        let timeline = EntityTimeline(byteBudget: 64 * 1_048_576)
+        let memory = MemoryHashCache(byteBudget: 64 * 1_048_576)
+        await memory.note(MemoryObject(subjectKind: .project, subjectIdentifier: "delta", narrative: "n"))
+        let governor = MemoryPressureGovernor()
+        await MemoryPressureResponse.install(on: governor, ingest: nil, memory: memory, timeline: timeline, trie: trie)
+        await governor.report(.warning)
+        #expect(await trie.isWarm())
+        #expect(await memory.count() == 1)
+        await governor.report(.critical)
+        #expect(await !trie.isWarm())
+        #expect(await trie.lastShedReason()?.contains("pressure") == true)
+        #expect(await memory.count() == 0)
+        #expect(await timeline.lastShedReason() != nil)
+    }
+
+    @Test("Lanes narrow under pressure and restore their boot caps on relief")
+    func lanesAdapt() async {
+        let lanes = LaneScheduler(capacities: [.cpu: 8, .diskIO: 4, .neuralEngine: 1, .network: 4])
+        await lanes.setPressure(.warning)
+        #expect(await lanes.capacity(of: .cpu) == 4)
+        #expect(await lanes.capacity(of: .diskIO) == 2)
+        #expect(await lanes.capacity(of: .network) == 4, "network is not memory-bound")
+        await lanes.setPressure(.critical)
+        #expect(await lanes.capacity(of: .cpu) == 1)
+        await lanes.setPressure(.normal)
+        #expect(await lanes.capacity(of: .cpu) == 8)
+    }
+
+    @Test("A narrowed lane never runs more than its cap, and widening admits queued work")
+    func narrowedLaneHoldsCap() async {
+        let lanes = LaneScheduler(capacities: [.cpu: 6])
+        await lanes.setPressure(.critical)
+        let gauge = Gauge()
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<12 {
+                group.addTask {
+                    await lanes.withLane(.cpu) {
+                        await gauge.enter()
+                        try? await Task.sleep(nanoseconds: 5_000_000)
+                        await gauge.leave()
+                    }
+                }
+            }
+            try? await Task.sleep(nanoseconds: 30_000_000)
+            await lanes.setPressure(.normal)
+        }
+        #expect(await gauge.done == 12, "every job still runs")
+        #expect(await gauge.peak <= 6)
+    }
+
+    @Test("Bounded fan-out runs every item with at most maxInFlight alive")
+    func boundedFanOut() async {
+        let gauge = Gauge()
+        await BoundedFanOut.forEach(Array(0..<200), maxInFlight: 5) { _ in
+            await gauge.enter()
+            await Task.yield()
+            await gauge.leave()
+        }
+        #expect(await gauge.done == 200)
+        #expect(await gauge.peak <= 5)
+        #expect(BoundedFanOut.watcherLimit(capacities: [.cpu: 7, .diskIO: 4, .network: 4]) == 30)
+    }
 }

@@ -312,6 +312,10 @@ public actor IngestCoordinator {
     /// Pause/Stop hooks for the live ingest controls. `drainPaused` idles the
     /// background embedding loop between batches (Resume clears it).
     private var drainPaused = false
+    /// F12 — set by the memory-pressure governor; idles the same drains as `drainPaused` but is
+    /// kept separate so the user's Resume never overrides pressure (and relief never un-pauses
+    /// a user's Pause).
+    private var pressurePaused = false
 
     /// F01 — replace the ingest memory budget (tests lower it to force the streaming path).
     public func setMemoryBudget(_ budget: IngestMemoryBudget) { memoryBudget = budget }
@@ -324,6 +328,10 @@ public actor IngestCoordinator {
     /// Pause (true) / resume (false) the background embedding drain. Wired to the
     /// live-panel Pause/Resume controls via AppState.
     public func setDrainPaused(_ paused: Bool) { drainPaused = paused }
+
+    /// F12 — memory pressure pauses (true) / releases (false) the background drains.
+    public func setPressurePaused(_ paused: Bool) { pressurePaused = paused }
+    public func isPressurePaused() -> Bool { pressurePaused }
 
     /// Stop the embedding drain entirely (the Stop control). Cancels the task and
     /// clears the started flag so a later ingest restarts it from the pending set.
@@ -379,7 +387,7 @@ public actor IngestCoordinator {
                     // ENGINE POWER — Lightning mode idles the drain the same way; the
                     // pending set is durable, so flipping back to Full power resumes
                     // embedding exactly where it left off (nothing is lost).
-                    while (self.drainPaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
+                    while (self.drainPaused || self.pressurePaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
                         try? await Task.sleep(nanoseconds: 1_000_000_000)
                     }
                     if Task.isCancelled { return false }
@@ -546,7 +554,8 @@ public actor IngestCoordinator {
         upgradeDrainTask = Task(priority: .background) { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if await self.drainPaused || !shouldRun() {
+                let paused = await self.drainPaused, underPressure = await self.pressurePaused
+                if paused || underPressure || !shouldRun() {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     continue
                 }

@@ -751,6 +751,10 @@ public final class AppState {
     public private(set) var entityTimeline: EntityTimeline?
     /// In-memory Trie + fuzzy index for entity hint resolution.
     public private(set) var entityTrie: EntityTrie?
+    /// F12 — the memory-pressure governor (kernel signal → drains, lanes, caches).
+    public private(set) var memoryPressure: MemoryPressureGovernor?
+    /// The watcher's ingest lanes; kept so memory pressure can narrow them.
+    private var laneScheduler: LaneScheduler?
     /// HNSW ANN index over the `vectors` table. Built at boot in
     /// parallel with the other caches. When built, SQLiteVectorStore
     /// .nearest takes the index path; brute-force is the fallback.
@@ -2147,12 +2151,13 @@ public final class AppState {
             //   network      = 4           (cloud OCR / reasoning)
             // Mixed-format corpora hit ~3× speedup; same-format
             // bursts unchanged (still bounded by their own lane).
-            let laneScheduler = LaneScheduler(
-                capacities: LaneScheduler.defaultCapacities(
-                    processorCount: ProcessInfo.processInfo.activeProcessorCount,
-                    availableRAMBytes: hardware.totalRAMBytes
-                )
+            let laneCapacities = LaneScheduler.defaultCapacities(
+                processorCount: ProcessInfo.processInfo.activeProcessorCount,
+                availableRAMBytes: hardware.totalRAMBytes
             )
+            let laneScheduler = LaneScheduler(capacities: laneCapacities)
+            let watcherInFlightLimit = BoundedFanOut.watcherLimit(capacities: laneCapacities)
+            self.laneScheduler = laneScheduler
             // Phase L — chat + browser loaders are flag-gated for
             // App Store compatibility. Default OFF; user opts in via
             // Settings. Plain-text chat exports default ON since
@@ -2181,20 +2186,17 @@ public final class AppState {
                     if discovered > 0 {
                         await MainActor.run { self.noteDiscoveredFiles(discovered) }
                     }
-                    await withTaskGroup(of: Void.self) { group in
-                        for url in event.urls {
-                            group.addTask { [weak self, weak ingest] in
-                                guard let self, let ingest else { return }
-                                let type = SourceType.detect(from: url)
-                                let lane = loaderRegistry.loader(for: type).primaryLane
-                                await laneScheduler.withLane(lane) {
-                                    await self.withIngestActivity(file: url.lastPathComponent) {
-                                        do {
-                                            _ = try await ingest.ingest(fileAt: url)
-                                        } catch {
-                                            KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                                        }
-                                    }
+                    // F12 — bounded fan-out: only `watcherLimit` files resident at once.
+                    await BoundedFanOut.forEach(event.urls, maxInFlight: watcherInFlightLimit) { [weak self, weak ingest] url in
+                        guard let self, let ingest else { return }
+                        let type = SourceType.detect(from: url)
+                        let lane = loaderRegistry.loader(for: type).primaryLane
+                        await laneScheduler.withLane(lane) {
+                            await self.withIngestActivity(file: url.lastPathComponent) {
+                                do {
+                                    _ = try await ingest.ingest(fileAt: url)
+                                } catch {
+                                    KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                                 }
                             }
                         }
@@ -2569,6 +2571,14 @@ public final class AppState {
             self.memoryCache = memoryHashCache
             self.entityTimeline = entityTimelineCache
             self.entityTrie = entityTrieCache
+            // F12 — memory pressure pauses background drains, narrows the ingest lanes, and at
+            // critical sheds the retrieval caches (retrieval falls back to SQL).
+            let pressure = MemoryPressureGovernor()
+            await MemoryPressureResponse.install(on: pressure, ingest: ingest, lanes: laneScheduler,
+                                                 memory: memoryHashCache, timeline: entityTimelineCache,
+                                                 trie: entityTrieCache)
+            await pressure.startMonitoring()
+            self.memoryPressure = pressure
             self.hnswIndex = hnsw
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
