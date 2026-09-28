@@ -229,4 +229,23 @@ struct SourceUpgradeJobRepositoryTests {
         let seqs = try await repo.events(jobID: j.id).map(\.sequence)
         #expect(seqs == [1, 2, 3])
     }
+
+    @Test("A job enqueued at `now` is claimable at that same `now`, even when the stored REAL rounds up")
+    func claimAtEnqueueInstant() async throws {
+        // Find an instant whose 1970-epoch round trip decodes LATER than itself — the case in which a
+        // Date comparison against the decoded not_before refused the claim.
+        var now = Date(timeIntervalSince1970: 1_790_000_000.123456)
+        var probes = 0
+        while Date(timeIntervalSince1970: now.timeIntervalSince1970) <= now, probes < 100_000 {
+            now = now.addingTimeInterval(0.000_137)
+            probes += 1
+        }
+        let reproduced = Date(timeIntervalSince1970: now.timeIntervalSince1970) > now
+        try #require(reproduced, "no round-up instant found to exercise the defect")
+        let (db, repo) = try await makeRig()
+        let sv = UUID(); try await seedVersion(db, sv)
+        let job = try await repo.enqueue(sourceVersionID: sv, kind: .indexing, at: now)
+        let claimed = try await repo.claim(jobID: job.id, at: now)
+        #expect(claimed?.state == .running, "a foreground claim at the enqueue instant must succeed")
+    }
 }

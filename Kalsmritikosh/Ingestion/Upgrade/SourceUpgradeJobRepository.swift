@@ -76,7 +76,13 @@ public struct SourceUpgradeJobRepository: Sendable {
     public func claim(jobID: UUID, leaseSeconds: TimeInterval = 300, at now: Date) async throws -> SourceUpgradeJob? {
         let sp = "usf_upgrade_claimone_\(jobID.uuidString.prefix(8))"
         return try await database.withSavepoint(sp) { db -> SourceUpgradeJob? in
-            guard let job = try Self.row(db, id: jobID), job.state == .pending, job.notBefore <= now else { return nil }
+            // Eligibility is decided in SQL against the SAME REAL the row stores, as `claimNext` does.
+            // Comparing a decoded Date instead let the 1970↔2001 epoch conversion round `not_before`
+            // up by an ulp, so a job enqueued at `now` intermittently could not be claimed at `now`
+            // and a foreground upgrade silently did nothing.
+            guard try db.query("""
+                SELECT 1 FROM enrichment_jobs WHERE id = ? AND state = 'pending' AND not_before <= ? LIMIT 1;
+                """, [.uuid(jobID), .real(now.timeIntervalSince1970)]).first != nil else { return nil }
             try db.exec("""
                 UPDATE enrichment_jobs SET state = 'running', lease_token = ?, lease_expires_at = ?,
                     attempts = attempts + 1, updated_at = ? WHERE id = ?;
