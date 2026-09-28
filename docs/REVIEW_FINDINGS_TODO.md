@@ -60,7 +60,7 @@ Every fix: one commit, a small fixture test that FAILS on the old code first, fu
 | ID | Verdict | Finding (verified) | Fix | Acceptance test | Status |
 |---|---|---|---|---|---|
 | F08 | ✔ | SourceScopedRetriever filters AFTER global limits → case evidence crowded out (fails closed, recall loss) | Push scope predicates into candidate queries before LIMIT | Authorized rows behind higher-ranked unauthorized duplicates still retrieved | ◐ — **keyword lane**: `SourceScopedRetriever.ScopedRecall` runs `searchFTS(…, sourceVersionIDs:)` with the scope predicate INSIDE the query (before LIMIT), passes the mirrored sensitivity policy + case filter, appends after base hits (no re-rank); wired for the Investigator Ask; test: 30 outranking outside chunks → case chunk recovered, empty scope stays empty. **Open:** scope predicates inside vector / graph / event / entity candidate queries |
-| F09 | ✔ | History collector caps 5,000 events / 5,000 assertions / 500 relationships | Keyset paging + processed/total/deferred counts in the story | Tiny page size → complete traversal, honest deferred count | ☐ |
+| F09 | ✔ | History collector caps 5,000 events / 5,000 assertions / 500 relationships | Keyset paging + processed/total/deferred counts in the story | Tiny page size → complete traversal, honest deferred count | ☑ — collector PAGES events / assertions / relationships (stable ORDER BY, new paged `neighbors`) up to per-kind budgets (100k/100k/20k, were fixed single pages of 5k/5k/500); a budget cut counts the remainder into `MaterialProvenance.deferred*` (`isComplete`); tests: page 4 → every row once; budget cut → exact deferred counts. Surfacing deferred counts in the story UI not done |
 
 ## Wave 5 — scale & resource control (R2 — no large-data claim made)
 

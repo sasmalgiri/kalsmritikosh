@@ -541,6 +541,12 @@ public actor EventsRepository {
     /// that replaces the "recent global events" anti-pattern — results are bounded
     /// to the subject by the event_entities join, never the whole archive.
     /// Deterministic order: date, then id for stable ties. Paged.
+    /// F09 — how many events an entity participates in (for honest deferred counts).
+    public func countForEntity(_ entityID: Entity.ID) async throws -> Int {
+        Int(try await database.query("SELECT COUNT(*) FROM event_entities WHERE entity_id = ?;",
+                                     [.uuid(entityID)]).first?.int(0) ?? 0)
+    }
+
     public func allForEntity(_ entityID: Entity.ID, offset: Int = 0, pageSize: Int = 1_000) async throws -> [Event] {
         let rows = try await database.query("""
         SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id,

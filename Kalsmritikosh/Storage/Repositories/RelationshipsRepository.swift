@@ -161,13 +161,29 @@ public actor RelationshipsRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// F09 — stable pages of an entity's relationships (ORDER BY id) so a caller can traverse all of
+    /// them instead of an unordered first `limit`.
+    public func neighbors(of entityID: Entity.ID, offset: Int, pageSize: Int) async throws -> [Relationship] {
+        try await neighborsQuery(entityID, suffix: "ORDER BY id ASC LIMIT ? OFFSET ?",
+                                 [.integer(Int64(pageSize)), .integer(Int64(offset))])
+    }
+
+    public func neighborCount(of entityID: Entity.ID) async throws -> Int {
+        Int(try await database.query("SELECT COUNT(*) FROM relationships WHERE from_entity_id = ? OR to_entity_id = ?;",
+                                     [.uuid(entityID), .uuid(entityID)]).first?.int(0) ?? 0)
+    }
+
     public func neighbors(of entityID: Entity.ID, limit: Int = 100) async throws -> [Relationship] {
+        try await neighborsQuery(entityID, suffix: "LIMIT ?", [.integer(Int64(limit))])
+    }
+
+    private func neighborsQuery(_ entityID: Entity.ID, suffix: String, _ tail: [SQLValue]) async throws -> [Relationship] {
         let rows = try await database.query("""
         SELECT id, kind, from_entity_id, to_entity_id, via_event_id, source_object_id, confidence
         FROM relationships
         WHERE from_entity_id = ? OR to_entity_id = ?
-        LIMIT ?;
-        """, [.uuid(entityID), .uuid(entityID), .integer(Int64(limit))])
+        \(suffix);
+        """, [.uuid(entityID), .uuid(entityID)] + tail)
 
         return rows.compactMap { row in
             guard
