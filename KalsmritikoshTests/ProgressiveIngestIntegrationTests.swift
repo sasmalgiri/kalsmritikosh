@@ -112,6 +112,27 @@ struct ProgressiveIngestIntegrationTests {
         #expect(ready, "background drainer never completed the scheduled upgrade")
     }
 
+    @Test("F25 — an indexing upgrade rebuilds a deleted index from committed blocks; search finds the text again")
+    func indexingUpgradeRebuildsIndex() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "idx.txt", "Quartermaster ledger mentions the zephyrine consignment twice.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url).sourceVersionID)
+        let chunks = ChunksRepository(database: rig.db)
+        #expect(!(try await chunks.searchFTS("zephyrine", limit: 5)).isEmpty)
+        // Lose ONLY the derived index; the evidence blocks stay.
+        try await rig.db.exec("DELETE FROM chunks WHERE source_version_id = ?;", [.uuid(sv)])
+        #expect(try await chunks.searchFTS("zephyrine", limit: 5).isEmpty)
+        #expect(!(try await EvidenceStore(database: rig.db).blocks(forVersion: sv)).isEmpty)
+
+        _ = try await rig.jobs.enqueue(sourceVersionID: sv, kind: .indexing, priority: .userRequested, at: Date())
+        #expect(await rig.c.drainUpgrades() >= 1)
+        let hits = try await chunks.searchFTS("zephyrine", limit: 5)
+        #expect(!hits.isEmpty, "the rebuilt index must find the known text")
+        // Per-version coverage proves the rebuilt chunks carry THIS exact version and are all in FTS.
+        let coverage = try await SourceReadinessRepository(database: rig.db).ftsCoverage(sourceVersionID: sv)
+        #expect(coverage.eligible > 0 && coverage.indexed == coverage.eligible)
+    }
+
     @Test("A duplicate upgrade request reuses the active job")
     func duplicateRequestReusesJob() async throws {
         let rig = try await makeRig()

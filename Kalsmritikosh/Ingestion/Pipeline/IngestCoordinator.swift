@@ -457,7 +457,11 @@ public actor IngestCoordinator {
         let containerRepo = ContainerInspectionRepository(database: database)
         // The dimension-advancing kinds reopen exact bytes and re-parse through the ONE registry.
         let handler: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeStructure(sourceVersionID: svid) }
-        let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: handler])
+        // F25 — indexing is its OWN handler: it rebuilds retrieval chunks + FTS from committed blocks.
+        // Routing it to the structural handler re-persisted structure, wrote no chunks, and the
+        // (stale) readiness row let the job report success with the index still missing.
+        let indexing: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) }
+        let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: indexing])
         let upg = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
                                            container: containerRepo, executor: executor, priorityGate: priorityGate)
         self.sourceUpgrade = upg
@@ -576,6 +580,59 @@ public actor IngestCoordinator {
         // USF-010 — stamp the EXACT parser version as the producer version so a later parser upgrade can
         // detect this structure as stale (producer version < current) and reprocess only what changed.
         await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: result.pluginVersion)
+    }
+
+    /// F25 — rebuild the retrieval index for an EXACT source version from its COMMITTED evidence blocks:
+    /// for every knowledge object that owns blocks of this version but has no chunks for it, re-derive
+    /// chunks through the same chunker, admission gate, version stamp and salience the ingest path
+    /// uses (FTS follows through the chunks triggers), then advance indexing readiness from the
+    /// measured per-version FTS coverage. Objects that still have chunks are left untouched, so a
+    /// rerun is a no-op. No committed blocks → a missing dependency (structure must exist first).
+    func upgradeIndexing(sourceVersionID svid: UUID) async throws {
+        guard let evidenceStore, let readiness, let db = upgradeDatabase else { return }
+        let blocks = try await evidenceStore.blocks(forVersion: svid)
+        guard !blocks.isEmpty else {
+            throw SourceUpgradeError.missingDependency("no committed evidence blocks for source version \(svid)")
+        }
+        let owners = try await db.query("""
+            SELECT ebo.evidence_block_id, ebo.knowledge_object_id FROM evidence_block_objects ebo
+            JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ?;
+            """, [.uuid(svid)])
+        var koOfBlock: [UUID: UUID] = [:]
+        for r in owners { if let b = r.uuid(0), let k = r.uuid(1), koOfBlock[b] == nil { koOfBlock[b] = k } }
+        var blocksByKO: [UUID: [EvidenceBlock]] = [:]
+        for b in blocks { if let k = koOfBlock[b.id] { blocksByKO[k, default: []].append(b) } }
+        guard !blocksByKO.isEmpty else {
+            throw SourceUpgradeError.missingDependency("committed blocks of \(svid) are not linked to any knowledge object")
+        }
+        for (ko, koBlocks) in blocksByKO.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            let existing = try await db.query("SELECT COUNT(*) FROM chunks WHERE object_id = ? AND source_version_id = ?;",
+                                              [.uuid(ko), .uuid(svid)]).first?.int(0) ?? 0
+            guard existing == 0 else { continue }
+            let docClass = try await db.query("SELECT document_class FROM knowledge_objects WHERE id = ? LIMIT 1;",
+                                              [.uuid(ko)]).first?.string(0).flatMap(DocumentClass.init(rawValue:))
+            let packed = chunker.chunkWithLineage(objectID: ko, blocks: koBlocks.sorted { $0.ordinal < $1.ordinal })
+            let rebuilt = packed.chunks.map { c in
+                let isBoilerplate = c.blockKind.flatMap(EvidenceBlockKind.init(rawValue:))?.isBoilerplate ?? false
+                return c.withAdmitEmbedding(!isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted)
+                    .withSourceVersion(svid)
+                    .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
+            }
+            try await chunks.insertBatch(rebuilt, lineage: packed.blockIDs)
+        }
+        ensureEmbeddingDrain()   // the rebuilt chunks deepen into vectors in the background
+        let coverage = try await readiness.ftsCoverage(sourceVersionID: svid)
+        guard coverage.eligible > 0 else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .indexing, sourceVersionID: svid)
+        }
+        let fullyIndexed = coverage.indexed == coverage.eligible
+        await advanceReadiness(svid, [
+            SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                           completedUnits: coverage.eligible, totalUnits: coverage.eligible),
+            SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                           action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                           completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                           basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString))])
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
