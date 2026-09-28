@@ -40,6 +40,59 @@ extension Ingestor {
     }
 }
 
+/// F01 — how much of a record stream may be resident at once. A batch is flushed as soon as
+/// EITHER ceiling is reached, so one oversized record still travels alone rather than stalling.
+public struct StreamBatchBudget: Sendable, Equatable {
+    public let maxObjects: Int
+    public let maxContentBytes: Int
+
+    public nonisolated init(maxObjects: Int, maxContentBytes: Int) {
+        self.maxObjects = max(1, maxObjects)
+        self.maxContentBytes = max(1, maxContentBytes)
+    }
+
+    public nonisolated static let standard = StreamBatchBudget(maxObjects: 64, maxContentBytes: 8 * 1024 * 1024)
+}
+
+/// F01 — an Ingestor for a many-record format that can hand its records over in bounded
+/// batches instead of materialising every record of the file at once. `ingestMany` stays
+/// the reference path; a streamed run must emit exactly the records it would return, in
+/// the same order, with the same metadata.
+public protocol StreamingIngestor: Ingestor {
+    /// Whether `type` streams under the current configuration. False when producing a record
+    /// needs the whole file first (e.g. mbox thread coalescing groups across the archive).
+    func streamsRecords(type: SourceType) -> Bool
+
+    /// Emit every record of the file in order, `budget` bounding each batch. Only one batch
+    /// is resident in the loader at a time; `emit` may persist and drop it before the next.
+    func streamRecords(fileAt url: URL, type: SourceType, budget: StreamBatchBudget,
+                       emit: ([KnowledgeObject]) async throws -> Void) async throws
+}
+
+/// F01 — accumulates records up to a `StreamBatchBudget` and hands back a full batch.
+struct KnowledgeObjectBatcher {
+    let budget: StreamBatchBudget
+    private var pending: [KnowledgeObject] = []
+    private var pendingBytes = 0
+
+    nonisolated init(budget: StreamBatchBudget) { self.budget = budget }
+
+    /// Adds `object`; returns the batch to flush when a ceiling is reached, else nil.
+    nonisolated mutating func add(_ object: KnowledgeObject) -> [KnowledgeObject]? {
+        pending.append(object)
+        pendingBytes += object.content.utf8.count
+        guard pending.count >= budget.maxObjects || pendingBytes >= budget.maxContentBytes else { return nil }
+        return drain()
+    }
+
+    /// Returns whatever is pending (nil when empty) and resets.
+    nonisolated mutating func drain() -> [KnowledgeObject]? {
+        guard !pending.isEmpty else { return nil }
+        defer { pending = []; pendingBytes = 0 }
+        return pending
+    }
+}
+
 public enum IngestorError: Error, Sendable {
     case unsupportedType(SourceType)
     case unreadable(URL, underlying: Error?)

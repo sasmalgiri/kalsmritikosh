@@ -27,7 +27,7 @@
 
 import Foundation
 
-public struct SQLiteLoader: Ingestor {
+public struct SQLiteLoader: StreamingIngestor {
     /// `.knowledgeC` rides the same generic row reader: every row stays indexed
     /// and searchable, while KnowledgeCStructuralParser adds the dated-event
     /// layer on top. Neither type is feature-gated, so both may be claimed
@@ -52,6 +52,19 @@ public struct SQLiteLoader: Ingestor {
     }
 
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
+        var objects: [KnowledgeObject] = []
+        try await streamRecords(fileAt: url, type: type,
+                                budget: StreamBatchBudget(maxObjects: .max, maxContentBytes: .max)) {
+            objects.append(contentsOf: $0)
+        }
+        return objects
+    }
+
+    /// F01 — every page streams: a page is built, handed to `emit`, and dropped.
+    public func streamsRecords(type: SourceType) -> Bool { supportedTypes.contains(type) }
+
+    public func streamRecords(fileAt url: URL, type: SourceType, budget: StreamBatchBudget,
+                              emit: ([KnowledgeObject]) async throws -> Void) async throws {
         let db: ExternalSQLiteSource
         do { db = try ExternalSQLiteSource(originalPath: url) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
@@ -62,7 +75,8 @@ public struct SQLiteLoader: Ingestor {
         let tables = (tableRows ?? []).compactMap { $0.cells.first?.string }
         guard !tables.isEmpty else { throw IngestorError.empty(url) }
 
-        var objects: [KnowledgeObject] = []
+        var batcher = KnowledgeObjectBatcher(budget: budget)
+        var emittedAny = false
         for table in tables {
             let quoted = "\"" + table.replacingOccurrences(of: "\"", with: "\"\"") + "\""
             let info = (try? db.query("PRAGMA table_info(\(quoted));")) ?? []
@@ -147,16 +161,18 @@ public struct SQLiteLoader: Ingestor {
                                  + "\"\(table)\"; \(Int(total) - emitted) later rows not indexed.]")
                 }
 
-                objects.append(KnowledgeObject(
+                emittedAny = true
+                if let batch = batcher.add(KnowledgeObject(
                     sourceFile: url, sourceType: type,
                     content: lines.joined(separator: "\n"),
-                    metadata: meta, confidence: .high))
+                    metadata: meta, confidence: .high)) {
+                    try await emit(batch)
+                }
                 page += 1
             }
         }
-
-        guard !objects.isEmpty else { throw IngestorError.empty(url) }
-        return objects
+        if let rest = batcher.drain() { try await emit(rest) }
+        guard emittedAny else { throw IngestorError.empty(url) }
     }
 
     /// Cell rendering. Matches SQLiteStructuralParser so the searchable text and
