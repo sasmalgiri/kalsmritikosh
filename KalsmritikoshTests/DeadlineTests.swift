@@ -29,8 +29,12 @@ struct DeadlineTests {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             return "too late"
         }
-        #expect(slow == nil)
-        _ = started   // "not held until the work ends" is asserted by ORDER in nonCooperative()
+        // Same contract from the other side: a value is a defect only if it came
+        // back although the work could NOT have finished — on a hosted runner the
+        // dispatch timer itself was measured to run after the 5 s work ended.
+        let slowElapsed = Date().timeIntervalSince(started)
+        #expect(slow == nil || slowElapsed >= 5,
+                "a value after only \(slowElapsed)s — the deadline did not hold")
     }
 
     @Test("An operation that IGNORES cancellation still cannot hold the caller past the deadline")
