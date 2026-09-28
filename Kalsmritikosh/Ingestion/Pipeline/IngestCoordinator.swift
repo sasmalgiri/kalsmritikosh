@@ -344,56 +344,72 @@ public actor IngestCoordinator {
         var unembeddable = Set<Chunk.ID>()
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         while !Task.isCancelled {
-            // Live Pause — idle between batches until resumed (or cancelled).
-            // ENGINE POWER — Lightning mode idles the drain the same way; the
-            // pending set is durable, so flipping back to Full power resumes
-            // embedding exactly where it left off (nothing is lost).
-            while (drainPaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
+            // F10 — one fair keyset pass over EVERY missing chunk: a page the embedder can't
+            // vectorize is stepped past, so it can no longer starve older, embeddable chunks.
+            let pass = await EmbeddingDrain.pass(
+                fetch: { before in
+                    try await self.chunks.findChunksMissingVectorPage(limit: 256, modelID: modelID, beforeRowID: before)
+                },
+                skip: unembeddable,
+                betweenPages: {
+                    // Live Pause — idle between batches until resumed (or cancelled).
+                    // ENGINE POWER — Lightning mode idles the drain the same way; the
+                    // pending set is durable, so flipping back to Full power resumes
+                    // embedding exactly where it left off (nothing is lost).
+                    while (self.drainPaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
+                    if Task.isCancelled { return false }
+                    // ING-006 — yield to any in-flight interactive query before the next batch.
+                    await self.priorityGate?.awaitClearance()
+                    return !Task.isCancelled
+                },
+                embed: { batch in
+                    let embStart = Date()
+                    let result = await self.embedAndStore(batch, embedder: embedder, vectors: vectors)
+                    await self.pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
+                    await self.pipelineMetrics?.bump(.embedded, by: result.stored)
+                    try? await Task.sleep(nanoseconds: result.stored == 0 ? 2_000_000_000 : 200_000_000)
+                    return result
+                })
+            // Chunks the embedder returned EMPTY for are not retried this session.
+            unembeddable.formUnion(pass.newlyFailed)
             if Task.isCancelled { break }
-            // ING-006 — yield to any in-flight interactive query before the next batch.
-            await priorityGate?.awaitClearance()
-            if Task.isCancelled { break }
-            let fetched = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
-            let batch = fetched.filter { !unembeddable.contains($0.id) }
-            if batch.isEmpty {
-                // Fully drained, or everything still missing is known-unembeddable.
-                // Idle; a later ingest adds new rows this pass will pick up.
-                try? await Task.sleep(nanoseconds: 10_000_000_000)
-                continue
-            }
-            let texts: [String] = batch.map { c in
-                if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
-                return c.text
-            }
-            let embStart = Date()
-            let vectorsList = await embedder.embedAll(texts, batchSize: 64)
-            await pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
-            var embedded = 0
-            for (i, c) in batch.enumerated() where i < vectorsList.count {
-                if vectorsList[i].isEmpty {
-                    unembeddable.insert(c.id)   // don't retry this one this session
-                    continue                     // never persist a zero vector
-                }
-                // P1.2 — a failed upsert leaves the chunk simply ABSENT from
-                // chunk_embeddings, which reads identically to not-yet-drained.
-                // Coverage could never be honest about failed vs pending, so the
-                // reason is recorded and `embedded` is only incremented on an
-                // actual write.
-                do {
-                    try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
-                    embedded += 1
-                } catch {
-                    await derivationFailures?.record(
-                        stage: "embeddings.upsert", error: error,
-                        knowledgeObjectID: c.objectID)
-                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
-                }
-            }
-            await pipelineMetrics?.bump(.embedded, by: embedded)
-            try? await Task.sleep(nanoseconds: embedded == 0 ? 2_000_000_000 : 200_000_000)
+            // Nothing stored in a whole pass: fully drained, or everything still missing is
+            // known-unembeddable. Idle; a later ingest adds new rows the next pass picks up.
+            if pass.embedded == 0 { try? await Task.sleep(nanoseconds: 10_000_000_000) }
         }
+    }
+
+    /// Embed one batch and persist every non-empty vector. Returns how many were stored and which
+    /// chunks the embedder could not vectorize (empty vector — never persisted as a zero vector).
+    private func embedAndStore(_ batch: [Chunk], embedder: any Embedder,
+                               vectors: VectorStore) async -> (stored: Int, unembeddable: [Chunk.ID]) {
+        let texts: [String] = batch.map { c in
+            if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
+            return c.text
+        }
+        let vectorsList = await embedder.embedAll(texts, batchSize: 64)
+        var stored = 0
+        var failed: [Chunk.ID] = []
+        for (i, c) in batch.enumerated() where i < vectorsList.count {
+            guard !vectorsList[i].isEmpty else { failed.append(c.id); continue }
+            // P1.2 — a failed upsert leaves the chunk simply ABSENT from
+            // chunk_embeddings, which reads identically to not-yet-drained.
+            // Coverage could never be honest about failed vs pending, so the
+            // reason is recorded and `stored` is only incremented on an
+            // actual write.
+            do {
+                try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
+                stored += 1
+            } catch {
+                await derivationFailures?.record(
+                    stage: "embeddings.upsert", error: error,
+                    knowledgeObjectID: c.objectID)
+                KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
+        return (stored, failed)
     }
 
     /// PERF.1 — synchronously embed all currently-pending chunks (no sleeps,
@@ -403,32 +419,21 @@ public actor IngestCoordinator {
     public func drainEmbeddingsNow() async {
         guard let embedder, let vectors else { return }
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
+        // F10 — full keyset passes: a front page the embedder can't vectorize no longer ends the
+        // drain before older, embeddable chunks are reached. Stops when a whole pass stores
+        // nothing (drained, or only unembeddable / unwritable chunks remain). `stored` reflects
+        // real writes only (P1.2), so a persistent write failure cannot spin the loop.
+        var unembeddable = Set<Chunk.ID>()
         while !Task.isCancelled {
-            let batch = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
-            if batch.isEmpty { break }
-            let texts: [String] = batch.map { c in
-                if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
-                return c.text
-            }
-            let vecs = await embedder.embedAll(texts, batchSize: 64)
-            var progressed = false
-            for (i, c) in batch.enumerated() where i < vecs.count {
-                if vecs[i].isEmpty { continue }
-                // P1.2 — same failed-vs-pending distinction as the background
-                // drain. `progressed` must reflect a real write, or the loop's
-                // stop condition below misreads a persistent write failure as
-                // forward progress and spins.
-                do {
-                    try await vectors.upsert(chunkID: c.id, embedding: vecs[i])
-                    progressed = true
-                } catch {
-                    await derivationFailures?.record(
-                        stage: "embeddings.upsert", error: error,
-                        knowledgeObjectID: c.objectID)
-                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
-                }
-            }
-            if !progressed { break }   // embedder can't produce vectors → stop
+            let pass = await EmbeddingDrain.pass(
+                fetch: { before in
+                    try await self.chunks.findChunksMissingVectorPage(limit: 256, modelID: modelID, beforeRowID: before)
+                },
+                skip: unembeddable,
+                betweenPages: { !Task.isCancelled },
+                embed: { batch in await self.embedAndStore(batch, embedder: embedder, vectors: vectors) })
+            unembeddable.formUnion(pass.newlyFailed)
+            if pass.embedded == 0 { break }
         }
     }
 

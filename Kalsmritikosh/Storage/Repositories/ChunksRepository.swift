@@ -105,6 +105,28 @@ public actor ChunksRepository {
         return try await hydrateLineage(rows.compactMap(decode))
     }
 
+    /// F10 — one KEYSET page of chunks awaiting a vector for `modelID`, newest first by rowid,
+    /// strictly older than `beforeRowID` (nil = from the newest). `lastRowID` is the cursor for the
+    /// next page (nil when the page is empty). Paging past a page lets the drain move beyond chunks
+    /// the embedder cannot vectorize instead of re-reading the same front page forever.
+    public func findChunksMissingVectorPage(limit: Int, modelID: String,
+                                            beforeRowID: Int64?) async throws -> (chunks: [Chunk], lastRowID: Int64?) {
+        let rows = try await database.query("""
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind, c.rowid
+        FROM chunks c
+        LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
+        WHERE ce.chunk_id IS NULL
+          AND c.admit_embedding = 1
+          AND (? IS NULL OR c.rowid < ?)
+        ORDER BY c.rowid DESC
+        LIMIT ?;
+        """, [.text(modelID),
+              beforeRowID.map { .integer($0) } ?? .null, beforeRowID.map { .integer($0) } ?? .null,
+              .integer(Int64(limit))])
+        let last = rows.last?.int(12)
+        return (try await hydrateLineage(rows.compactMap(decode)), last)
+    }
+
     /// PERF.1 — count of chunks awaiting embedding for the active model.
     public func countChunksMissingVector(modelID: String = "apple.nl.v1") async throws -> Int {
         let rows = try await database.query("""
