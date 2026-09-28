@@ -1156,7 +1156,11 @@ public actor IngestCoordinator {
         }
 
         // Deferred media: custody is registered; defer transcription (never a failure).
-        if type.category == .audio || type.category == .video {
+        // F02 — decided by the RESOLVED plugin, not the category: with the mediaTranscription module
+        // on, the registry installs an immediate on-device ASR plugin and the recording must reach
+        // it (becoming searchable, timecoded text). Only a deferred / missing plugin defers.
+        if type.category == .audio || type.category == .video,
+           universalExecutor.registry.plugin(for: type)?.executionMode != .immediate {
             return skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
         }
         // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser.
