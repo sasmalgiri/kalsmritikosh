@@ -4259,13 +4259,15 @@ public final class AppState {
         let plan = QuestionPlan.derive(question: question, anchors: anchors)
         guard plan.shape != QuestionShape.outOfScope.rawValue else { return nil }
 
-        let tools = LedgerTools(
+        var tools = LedgerTools(
             events: { [weak events] tokens in (try? await events?.findByTitleTokens(tokens)) ?? [] },
             facts: { [weak genericFacts] field in (try? await genericFacts?.facts(field: field)) ?? [] },
             chunksForQuestion: { [weak chunks] q in
                 let hits = (try? await chunks?.searchFTS(SlotFieldResolver.expandAliases(q), limit: 15)) ?? []
                 return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
             })
+        // F06 — field results cite the document that owns their source blocks.
+        if let evidenceStore { tools.blockOwners = LedgerTools.blockOwners(using: evidenceStore) }
         // The loop law: history → field lookup → ONE span fetch.
         let shape = QuestionShape(rawValue: plan.shape) ?? .unresolved
         var results: [ToolResult]
