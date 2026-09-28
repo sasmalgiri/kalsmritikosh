@@ -79,4 +79,4 @@ Every fix: one commit, a small fixture test that FAILS on the old code first, fu
 ---
 
 **Suggested order:** Wave 1 → Wave 2 → Wave 3 → Wave 4; Wave 5 and the wording items after release.
-Counts: 32 findings — 27 ✔ confirmed defects, 3 ◐ design/scale, 2 ⚖ wording. R0: 17 · R1: 12 · R2: 3.
+Counts: 32 findings — 27 ✔ confirmed defects, 3 ◐ design/scale, 2 ⚖ wording. R0: 15 · R1: 12 · R2: 3 · wording: 2.
