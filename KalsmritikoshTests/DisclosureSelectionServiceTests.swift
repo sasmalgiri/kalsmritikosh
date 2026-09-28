@@ -54,12 +54,15 @@ struct DisclosureSelectionServiceTests {
     func onlyLinkedConflicts() async throws {
         let r = try await rig()
         let claimID = UUID()
-        let linked = Contradiction(id: UUID(), description: "d", claimA: "A", claimB: "B", status: .open)
+        let objA = UUID(), objB = UUID()
+        let linked = Contradiction(id: UUID(), description: "d", claimA: "A", claimB: "B",
+                                   evidenceA: objA, evidenceB: objB, status: .open)
         let unrelated = Contradiction(id: UUID(), description: "d", claimA: "C", claimB: "D", status: .open)
         await r.contradictions.insert(linked)
         await r.contradictions.insert(unrelated)                         // exists in the archive, NOT linked
         try await r.links.link(claimID: claimID, contradictionID: linked.id)
-        let out = try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)])
+        let out = try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)],
+                                                permittedObjectIDs: [objA, objB])
         #expect(out.map(\.id) == [linked.id])                            // unrelated does not leak
         #expect(out.first?.sideA == "A" && out.first?.sideB == "B")      // both sides preserved
     }
@@ -72,7 +75,8 @@ struct DisclosureSelectionServiceTests {
         await r.contradictions.insert(c)
         try await r.links.link(claimID: claimID, contradictionID: c.id)
         // The only linking claim is refused → its statement must not leak through the conflict.
-        #expect(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID, refused: true)]).isEmpty)
+        #expect(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID, refused: true)],
+                                             permittedObjectIDs: []).isEmpty)
     }
 
     @Test("A resolved (or dismissed) linked conflict is excluded, never shown as unresolved")
@@ -82,7 +86,8 @@ struct DisclosureSelectionServiceTests {
         let resolved = Contradiction(id: UUID(), description: "d", claimA: "A", claimB: "B", status: .resolved)
         await r.contradictions.insert(resolved)
         try await r.links.link(claimID: claimID, contradictionID: resolved.id)
-        #expect(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)]).isEmpty)
+        #expect(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)],
+                                             permittedObjectIDs: []).isEmpty)
     }
 
     @Test("A linked conflict's two evidence sources are kept as separate sides")
@@ -93,9 +98,48 @@ struct DisclosureSelectionServiceTests {
                               evidenceA: objA, evidenceB: objB, status: .open)
         await r.contradictions.insert(c)
         try await r.links.link(claimID: claimID, contradictionID: c.id)
-        let sel = try #require(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)]).first)
+        let sel = try #require(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)],
+                                                              permittedObjectIDs: [objA, objB]).first)
         #expect(sel.evidence.first { $0.role == .supports }?.objectID == objA)
         #expect(sel.evidence.first { $0.role == .contradicts }?.objectID == objB)
+    }
+
+    @Test("F22 — an out-of-scope opposing side is withheld: no text, no evidence, generic description")
+    func outOfScopeSideWithheld() async throws {
+        let r = try await rig()
+        let claimID = UUID(), inScope = UUID(), otherCase = UUID()
+        let c = Contradiction(id: UUID(), description: "A says granted; B (other case) says rejected",
+                              claimA: "granted on 29 Nov", claimB: "SECRET other-case text",
+                              evidenceA: inScope, evidenceB: otherCase, status: .open)
+        await r.contradictions.insert(c)
+        try await r.links.link(claimID: claimID, contradictionID: c.id)
+        let sel = try #require(try await r.service.conflicts(
+            forSelectedClaims: [selectedClaim(id: claimID, evidenceObject: inScope)],
+            permittedObjectIDs: [inScope]).first)
+        #expect(sel.sideA == "granted on 29 Nov")
+        #expect(sel.sideB == DisclosureSelectionService.withheldSide)
+        #expect(!sel.description.contains("rejected"), "the description may quote the withheld side")
+        #expect(sel.evidence.map(\.objectID) == [inScope], "the opposing object id never reaches the output")
+    }
+
+    @Test("F22 — a side with no evidence stands only when it IS a linked in-scope claim's statement")
+    func evidencelessSideNeedsItsClaim() async throws {
+        let r = try await rig()
+        let claimID = UUID()
+        let c = Contradiction(id: UUID(), description: "d", claimA: "s", claimB: "unverifiable other side", status: .open)
+        await r.contradictions.insert(c)
+        try await r.links.link(claimID: claimID, contradictionID: c.id)
+        let sel = try #require(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)],
+                                                              permittedObjectIDs: []).first)
+        #expect(sel.sideA == "s", "the selected claim's own statement is already in scope")
+        #expect(sel.sideB == DisclosureSelectionService.withheldSide)
+        // Neither side authorized → not surfaced at all.
+        let c2 = Contradiction(id: UUID(), description: "d", claimA: "x", claimB: "y", status: .open)
+        await r.contradictions.insert(c2)
+        let other = UUID()
+        try await r.links.link(claimID: other, contradictionID: c2.id)
+        #expect(try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: other)],
+                                             permittedObjectIDs: []).isEmpty)
     }
 
     @Test("Exact-id contradiction loading handles more than 1,000 ids (chunked past the bind limit)")
@@ -191,7 +235,7 @@ struct DisclosureSelectionServiceTests {
         let r = try await rig()
         await r.contradictions.insert(Contradiction(description: "d", claimA: "A", claimB: "B", status: .open))
         await r.gaps.insert(GapNode(kind: .threadParent, description: "g", reason: "r", evidenceObjectID: UUID()))
-        #expect(try await r.service.conflicts(forSelectedClaims: []).isEmpty)
+        #expect(try await r.service.conflicts(forSelectedClaims: [], permittedObjectIDs: []).isEmpty)
         #expect(try await r.service.gaps(forSelectedClaims: []).isEmpty)
     }
 }

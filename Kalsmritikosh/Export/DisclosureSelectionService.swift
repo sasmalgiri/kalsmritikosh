@@ -30,12 +30,26 @@ public actor DisclosureSelectionService {
     /// Conflicts explicitly linked (claim_contradictions) to SURFACEABLE selected claims. A
     /// refused claim never links a conflict into the output. Only OPEN, two-sided conflicts
     /// are returned; the exact linked ids are fetched by id (no row ceiling).
-    public func conflicts(forSelectedClaims selected: [SelectedClaim]) async throws -> [SelectedConflict] {
+    ///
+    /// F22 (2026-09-28 review) — EACH SIDE is authorized independently before its text or
+    /// evidence reaches the output. A side stands when its evidence object is in
+    /// `permittedObjectIDs` (the caller's effective workspace ∩ sensitivity ∩ case scope), or
+    /// when its text IS the statement of a linked, surfaceable selected claim (already scoped).
+    /// Anything else — an out-of-scope, privileged or unverifiable opposing side — is replaced
+    /// by `Self.withheldSide` with no text and no evidence, and the description (which may
+    /// quote either side) becomes a generic line. Both sides unauthorized → not surfaced.
+    public nonisolated static let withheldSide = "An opposing source outside this export's scope disagrees (withheld)."
+    public nonisolated static let withheldDescription = "Your sources disagree; one side lies outside this export's scope."
+
+    public func conflicts(forSelectedClaims selected: [SelectedClaim],
+                          permittedObjectIDs: Set<UUID>) async throws -> [SelectedConflict] {
         let surfaceable = selected.filter(\.maySurface)
         guard !surfaceable.isEmpty else { return [] }
         var linkers: [Contradiction.ID: [Claim.ID]] = [:]
+        var statementByClaim: [Claim.ID: String] = [:]
         for s in surfaceable {
             let cid = s.resolved.claim.id
+            statementByClaim[cid] = s.resolved.claim.statement
             for contradictionID in try await claimContradictions.contradictionIDs(claimID: cid) {
                 linkers[contradictionID, default: []].append(cid)
             }
@@ -44,12 +58,22 @@ public actor DisclosureSelectionService {
         return (try await contradictions.findByIDs(Array(linkers.keys))).compactMap { c -> SelectedConflict? in
             guard c.status == .open else { return nil }                  // resolved/dismissed excluded
             guard !c.claimA.isEmpty, !c.claimB.isEmpty else { return nil } // both sides represented
-            let evidence = [
-                c.evidenceA.map { EvidenceReference(objectID: $0, role: .supports) },
-                c.evidenceB.map { EvidenceReference(objectID: $0, role: .contradicts) }
-            ].compactMap { $0 }
+            let linkedStatements = Set((linkers[c.id] ?? []).compactMap { statementByClaim[$0] })
+            func authorized(text: String, object: UUID?) -> Bool {
+                if let object, permittedObjectIDs.contains(object) { return true }
+                return linkedStatements.contains(text)
+            }
+            let aOK = authorized(text: c.claimA, object: c.evidenceA)
+            let bOK = authorized(text: c.claimB, object: c.evidenceB)
+            guard aOK || bOK else { return nil }                         // nothing in scope to disclose
+            var evidence: [EvidenceReference] = []
+            if aOK, let a = c.evidenceA, permittedObjectIDs.contains(a) { evidence.append(EvidenceReference(objectID: a, role: .supports)) }
+            if bOK, let b = c.evidenceB, permittedObjectIDs.contains(b) { evidence.append(EvidenceReference(objectID: b, role: .contradicts)) }
             return SelectedConflict(
-                id: c.id, description: c.description, sideA: c.claimA, sideB: c.claimB,
+                id: c.id,
+                description: aOK && bOK ? c.description : Self.withheldDescription,
+                sideA: aOK ? c.claimA : Self.withheldSide,
+                sideB: bOK ? c.claimB : Self.withheldSide,
                 supportingClaimIDs: (linkers[c.id] ?? []).sorted { $0.uuidString < $1.uuidString },
                 evidence: evidence, severity: c.severity)
         }
