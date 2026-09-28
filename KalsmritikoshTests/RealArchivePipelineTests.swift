@@ -38,7 +38,7 @@ import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("REAL ARCHIVE — the owner's own files, end to end", .serialized)
+@Suite("REAL ARCHIVE — the owner's own files, end to end", .serialized, .enabled(if: LocalFixtures.ownerArchiveAvailable, LocalFixtures.archiveReason))
 @MainActor
 struct RealArchivePipelineTests {
 
@@ -383,7 +383,7 @@ struct RealArchivePipelineTests {
 
 // MARK: - 7. Diagnosing the 408-of-526 gap (task #91)
 
-@Suite("MBOX accounting — where the 118 messages went", .serialized)
+@Suite("MBOX accounting — where the 118 messages went", .serialized, .enabled(if: LocalFixtures.ownerArchiveAvailable, LocalFixtures.archiveReason))
 @MainActor
 struct MboxAccountingTests {
 
@@ -526,7 +526,7 @@ struct MboxAccountingTests {
 
 // MARK: - 8. Are the extracted VALUES correct?
 
-@Suite("VALUE CORRECTNESS — facts checked against what the documents say", .serialized)
+@Suite("VALUE CORRECTNESS — facts checked against what the documents say", .serialized, .enabled(if: LocalFixtures.ownerArchiveAvailable, LocalFixtures.archiveReason))
 @MainActor
 struct FactCorrectnessTests {
 

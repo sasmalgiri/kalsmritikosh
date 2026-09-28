@@ -468,7 +468,7 @@ struct FixedPointFingerprintTests {
 
 // MARK: - PERF · the property that made the tokenizer fix shippable
 
-@Suite("BGETokenizer — the fast path emits IDENTICAL ids")
+@Suite("BGETokenizer — the fast path emits IDENTICAL ids", .enabled(if: LocalFixtures.bgeTokenizerBundled, LocalFixtures.tokenizerReason))
 struct BGETokenizerParityTests {
 
     @Test("Length-descending lookup matches the legacy bucket scan exactly")

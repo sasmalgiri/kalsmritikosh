@@ -29,7 +29,7 @@ import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("ENGINE FIRING — does every producer run on a real ingest?", .serialized)
+@Suite("ENGINE FIRING — does every producer run on a real ingest?", .serialized, .enabled(if: LocalFixtures.ownerArchiveAvailable, LocalFixtures.archiveReason))
 @MainActor
 struct EngineFiringTests {
 

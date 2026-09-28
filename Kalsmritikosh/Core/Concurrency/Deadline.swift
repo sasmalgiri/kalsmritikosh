@@ -23,8 +23,11 @@ public nonisolated func withDeadline<T: Sendable>(
         let gate = DeadlineGate(continuation)
         let work = Task { gate.resume(with: await operation()) }
         DispatchQueue.global().asyncAfter(deadline: .now() + max(0, seconds)) {
-            work.cancel()
+            // Resume FIRST, then cancel: cancelling wakes a sleeping operation,
+            // which could otherwise return and win the gate after the deadline
+            // (measured on CI: a 5 s job cancelled at 0.3 s handed back its value).
             gate.resume(with: nil)
+            work.cancel()
         }
     }
 }

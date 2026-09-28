@@ -48,7 +48,7 @@ import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("Near-duplicate inputs — is the ANSWER correct?", .serialized)
+@Suite("Near-duplicate inputs — is the ANSWER correct?", .serialized, .enabled(if: LocalFixtures.ownerArchiveAvailable, LocalFixtures.archiveReason))
 @MainActor
 struct NearDuplicateAnswerCorrectnessTests {
 

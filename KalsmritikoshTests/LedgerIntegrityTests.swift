@@ -52,7 +52,7 @@ import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("LEDGER INTEGRITY — is the database built soundly?", .serialized)
+@Suite("LEDGER INTEGRITY — is the database built soundly?", .serialized, .enabled(if: LocalFixtures.ownerArchiveAvailable, LocalFixtures.archiveReason))
 @MainActor
 struct LedgerIntegrityTests {
 
