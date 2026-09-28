@@ -46,6 +46,8 @@ public enum PDFRedactionError: Error, LocalizedError, Sendable {
     case noMatches([String])
     case renderFailed
     case verificationLeak([String])
+    /// F24 — the produced PDF could not be re-read (or lost pages), so nothing is verified.
+    case verificationUnreadable
 
     public var errorDescription: String? {
         switch self {
@@ -57,13 +59,21 @@ public enum PDFRedactionError: Error, LocalizedError, Sendable {
             return "The redacted PDF could not be rendered."
         case .verificationLeak(let terms):
             return "Redaction verification failed — these terms still survived and no file was produced: \(terms.joined(separator: ", "))."
+        case .verificationUnreadable:
+            return "The redacted PDF could not be re-read to verify it, so no file was produced."
         }
     }
 }
 
 public struct PDFRedactionService: Sendable {
 
-    public init() {}
+    /// Page rasteriser. Injectable ONLY so a test can force a render failure (F24); production
+    /// always uses the built-in flatten.
+    typealias Flattener = @Sendable (PDFPage, CGRect, [CGRect], CGFloat) -> CGImage?
+    private let flattener: Flattener?
+
+    public init() { self.flattener = nil }
+    init(flattener: @escaping Flattener) { self.flattener = flattener }
 
     /// Redact every occurrence of `terms` in the PDF at `source`.
     ///
@@ -118,7 +128,8 @@ public struct PDFRedactionService: Sendable {
 
         var scannedPages = 0
         for i in 0..<doc.pageCount {
-            guard let page = doc.page(at: i) else { continue }
+            // F24 — a page that cannot be read is a failure, never a silently skipped page.
+            guard let page = doc.page(at: i) else { throw PDFRedactionError.renderFailed }
             // A page with no extractable text is likely a scanned image; a term
             // could hide there unseen by text search. Count it as a caveat.
             if (page.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -129,9 +140,11 @@ public struct PDFRedactionService: Sendable {
             ctx.beginPDFPage(info)
             ctx.saveGState()
             if let rects = rectsByPage[i], !rects.isEmpty {
-                if let image = flatten(page: page, box: box, redacting: rects, dpi: dpi) {
-                    ctx.draw(image, in: box)
-                }
+                // F24 — a page that fails to flatten must not become a blank page in a
+                // "verified" output: the redaction is refused.
+                let image = flattener.map { $0(page, box, rects, dpi) } ?? flatten(page: page, box: box, redacting: rects, dpi: dpi)
+                guard let image else { throw PDFRedactionError.renderFailed }
+                ctx.draw(image, in: box)
             } else {
                 // Clean page — keep it as selectable vector content.
                 page.draw(with: .mediaBox, to: ctx)
@@ -143,7 +156,8 @@ public struct PDFRedactionService: Sendable {
         let produced = out as Data
 
         // 3) Fail-closed verification: re-parse and confirm nothing survived.
-        let leaks = residualTerms(in: produced, terms: cleanedTerms, caseSensitive: caseSensitive)
+        let leaks = try Self.residualTerms(in: produced, terms: cleanedTerms, caseSensitive: caseSensitive,
+                                           expectedPageCount: doc.pageCount)
         if !leaks.isEmpty { throw PDFRedactionError.verificationLeak(leaks) }
 
         return PDFRedactionResult(
@@ -206,8 +220,13 @@ public struct PDFRedactionService: Sendable {
 
     /// Re-parse the produced PDF and return any protected term still present
     /// in its extractable text (should be empty).
-    private func residualTerms(in data: Data, terms: [String], caseSensitive: Bool) -> [String] {
-        guard let doc = PDFDocument(data: data) else { return [] }
+    /// F24 — an output that cannot be re-parsed, or that lost pages, THROWS: returning "no
+    /// residual terms" for an unreadable file reported `verified: true` for nothing verified.
+    static func residualTerms(in data: Data, terms: [String], caseSensitive: Bool,
+                              expectedPageCount: Int) throws -> [String] {
+        guard let doc = PDFDocument(data: data), doc.pageCount == expectedPageCount else {
+            throw PDFRedactionError.verificationUnreadable
+        }
         let options: NSString.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
         return terms.filter { !doc.findString($0, withOptions: options).isEmpty }
     }
