@@ -94,25 +94,27 @@ struct ReleaseSecurityGateTests {
         #expect(contains(md, "[REDACTED]"))
     }
 
-    @Test("A protected term inside a citation cannot leak: redaction never rewrites the custody chain, so the export fails closed")
+    @Test("A protected term inside a citation cannot leak: its display text is redacted, its custody identity is kept")
     func citationLeakFailsClosed() throws {
         let svc = WorkProductExportService()
         var doc = leakyDoc()
+        let version = UUID()
         doc = ExportableDocument(
             title: doc.title, subtitle: nil,
             sections: [ExportSection(title: "S", paragraphs: ["clean text"])],
             table: nil,
-            citations: [CitationRecord(sourceVersionID: UUID(),
+            citations: [CitationRecord(sourceVersionID: version,
                                        displayLabel: "Exhibit A",
                                        sourceTitle: "Letter about \(Self.secret)")],
             disclaimer: nil, manifest: manifest())
         let policy = RedactionPolicy(customTerms: [Self.secret])
-        // Citations are custody metadata — the redactor must not rewrite them,
-        // and the fail-closed verification gate must therefore refuse the
-        // export rather than ship a leak.
-        #expect(throws: WorkProductExportError.self) {
-            _ = try svc.data(for: doc, format: .markdown, redaction: policy)
-        }
+        // F23 — citation DISPLAY text is user text and is redacted like the body; the custody
+        // identity (source version id, hashes) is never rewritten. No leak either way.
+        let md = try svc.data(for: doc, format: .markdown, redaction: policy)
+        #expect(!contains(md, Self.secret))
+        #expect(contains(md, "[REDACTED]"))
+        let redacted = svc.redactedDocument(doc, policy: policy)
+        #expect(redacted.citations.first?.sourceVersionID == version)
     }
 
     // MARK: - S4: export write failure leaves no orphan artifacts

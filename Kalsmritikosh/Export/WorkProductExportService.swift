@@ -133,7 +133,7 @@ public struct WorkProductExportService: Sendable {
     /// labels, titles, authors, locators, exhibit labels and bibliographic text, and the manifest's
     /// workspace title, review summary, limitations and citation-map labels. Identifiers and hashes
     /// (evidence ids, source-version ids, digests) are immutable evidence identity and stay as-is.
-    private func redactedDocument(_ d: ExportableDocument, policy: RedactionPolicy) -> ExportableDocument {
+    func redactedDocument(_ d: ExportableDocument, policy: RedactionPolicy) -> ExportableDocument {
         func r(_ s: String) -> String { redactor.redact(s, policy: policy).redactedText }
         let sections = d.sections.map { ExportSection(title: r($0.title), paragraphs: $0.paragraphs.map(r)) }
         let table = d.table.map { ExportTable(title: r($0.title), columns: $0.columns.map(r), rows: $0.rows.map { $0.map(r) }) }
