@@ -1644,9 +1644,16 @@ public struct SettingsView: View {
             do {
                 let (manifest, verdict) = try BackupService().inspect(backupFolder: dir)
                 await MainActor.run {
-                    backupStatus = verdict.ok
-                        ? "Backup OK — \(manifest.entries.count) file(s), schema v\(manifest.schemaVersion). Verified complete."
-                        : "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                    // F17 — the verdict now checks every file's size + checksum; say exactly what failed.
+                    if verdict.ok {
+                        backupStatus = "Backup OK — schema v\(manifest.schemaVersion). \(verdict.note)"
+                    } else if !verdict.unsafe.isEmpty {
+                        backupStatus = "Backup refused — unsafe paths in its manifest: \(verdict.unsafe.joined(separator: ", "))."
+                    } else if !verdict.corrupt.isEmpty {
+                        backupStatus = "Damaged backup — these files don't match their checksum: \(verdict.corrupt.joined(separator: ", "))."
+                    } else {
+                        backupStatus = "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                    }
                 }
             } catch {
                 await MainActor.run {

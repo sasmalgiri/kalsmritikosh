@@ -37,21 +37,24 @@ public struct BackupService: Sendable {
         originalURLs: [URL],
         destination: URL,
         schemaVersion: Int,
-        nowEpoch: Double
+        nowEpoch: Double,
+        coverage: BackupCoverage = .ledgerOnly
     ) throws -> BackupManifest {
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
 
         var entries: [BackupEntry] = []
+        var usedNames = Set<String>()
         func copyIn(_ src: URL, kind: BackupEntry.Kind) throws {
-            let name = src.lastPathComponent
+            // F17 — a UNIQUE relative path per entry: two originals named "letter.txt" used to share
+            // one backup path, so the second overwrote the first and the manifest listed it twice.
+            let name = Self.uniqueName(for: src.lastPathComponent, taken: &usedNames)
             let dst = destination.appendingPathComponent(name)
             if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
             try fm.copyItem(at: src, to: dst)
-            let data = try Data(contentsOf: dst)
-            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            entries.append(BackupEntry(relativePath: name, byteSize: Int64(data.count),
-                                       sha256: digest, kind: kind))
+            let measured = try Self.measure(dst)      // streaming — never the whole file in memory
+            entries.append(BackupEntry(relativePath: name, byteSize: measured.byteSize,
+                                       sha256: measured.sha256, kind: kind))
         }
         try copyIn(databaseURL, kind: .database)
         // NOTE: the `-wal` / `-shm` sidecars are NOT added here. The caller
@@ -63,7 +66,7 @@ public struct BackupService: Sendable {
         for u in originalURLs { try copyIn(u, kind: .originalSource) }
 
         let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion,
-                                              createdAtEpoch: nowEpoch, entries: entries)
+                                              createdAtEpoch: nowEpoch, entries: entries, coverage: coverage)
         let json = try JSONEncoder().encode(manifest)
         try json.write(to: destination.appendingPathComponent(Self.manifestName))
         return manifest
@@ -76,9 +79,43 @@ public struct BackupService: Sendable {
         let manifestURL = backupFolder.appendingPathComponent(Self.manifestName)
         guard let data = try? Data(contentsOf: manifestURL) else { throw BackupError.manifestMissing }
         let manifest = try JSONDecoder().decode(BackupManifest.self, from: data)
-        let present = Set(manifest.entries.map(\.relativePath)
-            .filter { fm.fileExists(atPath: backupFolder.appendingPathComponent($0).path) })
-        return (manifest, RestoreValidator.validate(manifest: manifest, presentPaths: present))
+        // F17 — verify CONTENT: stream-hash every entry that exists (never following an unsafe path
+        // out of the backup folder) and compare size + SHA-256 with the manifest.
+        var observed: [String: ObservedBackupFile] = [:]
+        for entry in manifest.entries where RestoreValidator.isSafeRelativePath(entry.relativePath) {
+            let url = backupFolder.appendingPathComponent(entry.relativePath)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue,
+                  let measured = try? Self.measure(url) else { continue }
+            observed[entry.relativePath] = measured
+        }
+        return (manifest, RestoreValidator.validate(manifest: manifest, observed: observed))
+    }
+
+    /// F17 — size + SHA-256 of a file, streamed in 1 MiB chunks.
+    static func measure(_ url: URL) throws -> ObservedBackupFile {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        var size: Int64 = 0
+        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            hasher.update(data: chunk)
+            size += Int64(chunk.count)
+        }
+        return ObservedBackupFile(byteSize: size, sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined())
+    }
+
+    /// "letter.txt", then "letter-2.txt", "letter-3.txt", … in input order (deterministic).
+    static func uniqueName(for name: String, taken: inout Set<String>) -> String {
+        if taken.insert(name).inserted { return name }
+        let ext = (name as NSString).pathExtension
+        let stem = (name as NSString).deletingPathExtension
+        var n = 2
+        while true {
+            let candidate = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
+            if taken.insert(candidate).inserted { return candidate }
+            n += 1
+        }
     }
 
     /// Restore into `targetFolder` ONLY when the backup is complete. Returns
