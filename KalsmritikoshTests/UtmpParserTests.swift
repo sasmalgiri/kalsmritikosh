@@ -303,7 +303,7 @@ struct UtmpParserTests {
     func junkIsRefused() async throws {
         // 384-byte multiple so the size alone cannot save it — the types and
         // dates have to decode.
-        let junk = Data((0..<(384 * 3)).map { UInt8(($0 * 31 + 17) % 251) })
+        let junk = Self.junkBytes(count: 384 * 3)
         let doc = try await parse(junk, as: "wtmp")
         #expect(doc.extractionStatus == .corrupt)
         #expect(doc.warnings.contains { $0.code == "utmp.not_utmp" })
@@ -373,7 +373,7 @@ struct UtmpParserTests {
     func structuralProbeIsStrict() {
         // It runs on files that would otherwise be unknown, so a loose probe
         // would reclassify unrelated binaries and make them fail to parse.
-        let junk = Data((0..<(384 * 4)).map { UInt8(($0 * 31 + 17) % 251) })
+        let junk = Self.junkBytes(count: 384 * 4)
         #expect(!UtmpReader.looksLikeLoginRecords(junk))
         // All zeros: structurally valid empty slots, but no real event — a wiped
         // or sparse file must not be claimed on the strength of its zeros.
@@ -405,5 +405,17 @@ struct UtmpParserTests {
             registry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()))
         let entry = try #require(entries.first { $0.sourceType == SourceType.loginRecord.rawValue })
         #expect(entry.coverage == .full)
+    }
+
+    /// Deterministic non-utmp bytes. Typed step by step: the one-line closure
+    /// form timed out the hosted CI compiler's type checker.
+    static func junkBytes(count: Int) -> Data {
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(count)
+        for i in 0..<count {
+            let v: Int = (i * 31 + 17) % 251
+            bytes.append(UInt8(v))
+        }
+        return Data(bytes)
     }
 }
