@@ -42,6 +42,7 @@ public struct SourceUpgradeCoordinator: Sendable {
             throw SourceUpgradeError.sourceVersionMissing(sourceVersionID)
         }
         let type = SourceType(rawValue: typeRaw) ?? .unknown
+        try await reconcileIndexing(sourceVersionID, at: now)
         let snapshot = try await readiness.snapshot(sourceVersionID: sourceVersionID)
         let containerStatus = type.category == .archive ? (try? await container?.manifest(sourceVersionID: sourceVersionID)?.status) ?? nil : nil
 
@@ -62,6 +63,24 @@ public struct SourceUpgradeCoordinator: Sendable {
             }
         }
         return enqueued
+    }
+
+    /// F15 — readiness was trusted as recorded: a stored "indexing ready (N units)" stayed ready even
+    /// after the chunks behind it were lost, so nothing ever re-planned the index. Before planning, the
+    /// stored indexing claim is checked against the LIVE per-version FTS coverage; when coverage has
+    /// fallen below what was recorded, the dimension is invalidated so the planner schedules a rebuild.
+    private func reconcileIndexing(_ sourceVersionID: UUID, at now: Date) async throws {
+        let snap = try await readiness.snapshot(sourceVersionID: sourceVersionID)
+        guard let rec = snap.dimension(.indexing), rec.state == .ready || rec.state == .partial else { return }
+        let recorded = rec.completedUnits ?? 0
+        let live = try await readiness.ftsCoverage(sourceVersionID: sourceVersionID)
+        guard recorded > 0, live.indexed < recorded else { return }
+        try await readiness.apply(SourceReadinessUpdatePlan(
+            sourceVersionID: sourceVersionID, expectedRevision: snap.aggregateRevision,
+            updates: [SourceReadinessDimensionUpdate(
+                dimension: .indexing, state: .running, action: .invalidate,
+                detail: "index coverage fell to \(live.indexed)/\(recorded) — rebuild required")],
+            producerID: "usf-m3.reconcile", producerVersion: "1", occurredAt: now))
     }
 
     /// Background drainer step: claim the next eligible job, run + verify it, return whether one ran.

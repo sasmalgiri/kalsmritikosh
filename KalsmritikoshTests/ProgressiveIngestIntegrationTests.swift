@@ -133,6 +133,20 @@ struct ProgressiveIngestIntegrationTests {
         #expect(coverage.eligible > 0 && coverage.indexed == coverage.eligible)
     }
 
+    @Test("F15 — a lost index behind a 'ready' record is detected on request and rebuilt")
+    func lostIndexDetectedAndRepaired() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "lost.txt", "Harbourmaster notes record the velmoraine shipment arriving late.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url).sourceVersionID)
+        let chunks = ChunksRepository(database: rig.db)
+        try await rig.db.exec("DELETE FROM chunks WHERE source_version_id = ?;", [.uuid(sv)])
+        #expect(try await chunks.searchFTS("velmoraine", limit: 5).isEmpty)
+        // The stored record still claims the index is there; asking for search readiness must not trust it.
+        _ = try await rig.c.ensureUpgrade(sourceVersionID: sv, goal: .searchReady, execution: .foreground)
+        #expect(!(try await chunks.searchFTS("velmoraine", limit: 5)).isEmpty, "the lost index was not detected + rebuilt")
+        #expect(try await rig.c.completion(sourceVersionID: sv)?.isSearchReady == true)
+    }
+
     @Test("A duplicate upgrade request reuses the active job")
     func duplicateRequestReusesJob() async throws {
         let rig = try await makeRig()
