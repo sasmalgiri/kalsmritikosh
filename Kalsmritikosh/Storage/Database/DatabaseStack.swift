@@ -116,12 +116,67 @@ public actor Database {
         try? Self.execRaw(handle: snap, sql: "COMMIT;")
     }
 
+    public enum BackupSnapshotError: Error, Sendable {
+        case openFailed(String)
+        case stepFailed(String)
+        case verifyFailed(String)
+    }
+
+    /// F18 — a CONSISTENT copy of the live ledger via SQLite's Online Backup API
+    /// (https://www.sqlite.org/backup.html), written to `destination` as ONE self-contained file
+    /// (WAL content included; no sidecars). It runs as a single synchronous actor operation, so no
+    /// write on this connection can interleave, and SQLite itself guarantees the copy is a coherent
+    /// point-in-time image even while other connections are active (busy/locked pages are retried).
+    /// The finished file must pass `quick_check` or it is deleted and the call throws.
+    public func backupSnapshot(to destination: URL) throws {
+        try? FileManager.default.removeItem(at: destination)
+        var dest: OpaquePointer?
+        guard sqlite3_open_v2(destination.path, &dest, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let destDB = dest else {
+            let msg = dest.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open destination"
+            sqlite3_close(dest)
+            throw BackupSnapshotError.openFailed(msg)
+        }
+        var failure: String?
+        if let backup = sqlite3_backup_init(destDB, "main", rawHandle, "main") {
+            var rc: Int32
+            repeat {
+                rc = sqlite3_backup_step(backup, -1)
+                if rc == SQLITE_BUSY || rc == SQLITE_LOCKED { sqlite3_sleep(25) }
+            } while rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED
+            if rc != SQLITE_DONE { failure = String(cString: sqlite3_errmsg(destDB)) }
+            sqlite3_backup_finish(backup)
+        } else {
+            failure = String(cString: sqlite3_errmsg(destDB))
+        }
+        if failure == nil, sqlite3_errcode(destDB) != SQLITE_OK { failure = String(cString: sqlite3_errmsg(destDB)) }
+        // The copy inherits the live WAL mode; switch it to a rollback journal so the snapshot is ONE
+        // self-contained file that opens anywhere without -wal/-shm sidecars.
+        if failure == nil, sqlite3_exec(destDB, "PRAGMA journal_mode=DELETE;", nil, nil, nil) != SQLITE_OK {
+            failure = String(cString: sqlite3_errmsg(destDB))
+        }
+        sqlite3_close(destDB)
+        if let failure {
+            try? FileManager.default.removeItem(at: destination)
+            throw BackupSnapshotError.stepFailed(failure)
+        }
+        if let problem = Self.quickCheck(fileAt: destination) {
+            try? FileManager.default.removeItem(at: destination)
+            throw BackupSnapshotError.verifyFailed(problem)
+        }
+    }
+
     /// F19 — open a database file READ-ONLY (never modifying it), run `PRAGMA quick_check`, close.
     /// Returns nil when the file is a sound SQLite database, else the failure text. Used to vet a
     /// staged restore before it may replace anything; the raw handle never leaves this function.
     public nonisolated static func quickCheck(fileAt url: URL) -> String? {
         var db: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let opened = db else {
+        // `immutable=1`: read the file as-is — no locks, no -shm creation, never a write.
+        var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        comps?.scheme = "file"
+        comps?.queryItems = [URLQueryItem(name: "immutable", value: "1")]
+        let uri = comps?.string ?? "file:\(url.path)?immutable=1"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK, let opened = db else {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open"
             sqlite3_close(db)
             return msg
