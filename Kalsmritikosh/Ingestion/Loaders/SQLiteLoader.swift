@@ -74,24 +74,45 @@ public struct SQLiteLoader: Ingestor {
             if total == 0 { continue }
 
             // Keyset pagination on rowid keeps a large table linear and gives a
-            // stable order. WITHOUT ROWID tables have no rowid, so those fall back
-            // to LIMIT/OFFSET — correct, just slower.
-            var hasRowID = true
-            if (try? db.query("SELECT rowid FROM \(quoted) LIMIT 1;")) == nil { hasRowID = false }
+            // stable order. F04 — the rowid is addressed through an alias the table
+            // does NOT shadow (a user column literally named "rowid" hijacks that
+            // name), and the first page has NO lower bound, so rowids ≤ 0 are read.
+            // WITHOUT ROWID tables (or all three aliases shadowed) page by
+            // LIMIT/OFFSET ordered by the primary key, so pages are stable.
+            let lowerColumns = Set(columns.map { $0.lowercased() })
+            var rowIDAlias = ["rowid", "_rowid_", "oid"].first { !lowerColumns.contains($0) }
+            if let alias = rowIDAlias, (try? db.query("SELECT \(alias) FROM \(quoted) LIMIT 1;")) == nil {
+                rowIDAlias = nil                                    // WITHOUT ROWID
+            }
+            let hasRowID = rowIDAlias != nil
+            let orderBy: String = {
+                let pk = info.compactMap { r -> (Int64, String)? in
+                    guard r.cells.count > 5, let name = r.cells[1].string,
+                          let pos = r.cells[5].int64, pos > 0 else { return nil }
+                    return (pos, "\"" + name.replacingOccurrences(of: "\"", with: "\"\"") + "\"")
+                }.sorted { $0.0 < $1.0 }.map(\.1)
+                return pk.isEmpty ? "" : " ORDER BY " + pk.joined(separator: ", ")
+            }()
 
-            var lastRowID: Int64 = 0
+            var lastRowID: Int64? = nil
             var offset = 0
             var emitted = 0
             var page = 0
             while emitted < Int(total), emitted < Self.maxRowsPerTable {
                 let rows: [ExternalSQLiteSource.Row]
-                if hasRowID {
-                    rows = (try? db.query(
-                        "SELECT rowid, * FROM \(quoted) WHERE rowid > ? ORDER BY rowid LIMIT ?;",
-                        binds: [.int64(lastRowID), .int(Self.rowsPerObject)])) ?? []
+                if let alias = rowIDAlias {
+                    if let after = lastRowID {
+                        rows = (try? db.query(
+                            "SELECT \(alias), * FROM \(quoted) WHERE \(alias) > ? ORDER BY \(alias) LIMIT ?;",
+                            binds: [.int64(after), .int(Self.rowsPerObject)])) ?? []
+                    } else {
+                        rows = (try? db.query(
+                            "SELECT \(alias), * FROM \(quoted) ORDER BY \(alias) LIMIT ?;",
+                            binds: [.int(Self.rowsPerObject)])) ?? []
+                    }
                 } else {
                     rows = (try? db.query(
-                        "SELECT * FROM \(quoted) LIMIT ? OFFSET ?;",
+                        "SELECT * FROM \(quoted)\(orderBy) LIMIT ? OFFSET ?;",
                         binds: [.int(Self.rowsPerObject), .int(offset)])) ?? []
                 }
                 if rows.isEmpty { break }
@@ -124,6 +145,7 @@ public struct SQLiteLoader: Ingestor {
                 ]
                 if emitted >= Self.maxRowsPerTable && Int(total) > Self.maxRowsPerTable {
                     meta["rowBudgetReached"] = AnyCodable(.bool(true))
+                    meta["rowsDeferred"] = AnyCodable(.int(total - Int64(emitted)))   // F04 — explicit count
                     lines.append("[Row budget of \(Self.maxRowsPerTable) reached for table "
                                  + "\"\(table)\"; \(Int(total) - emitted) later rows not indexed.]")
                 }
