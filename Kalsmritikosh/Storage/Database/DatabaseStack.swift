@@ -116,6 +116,29 @@ public actor Database {
         try? Self.execRaw(handle: snap, sql: "COMMIT;")
     }
 
+    /// F19 — open a database file READ-ONLY (never modifying it), run `PRAGMA quick_check`, close.
+    /// Returns nil when the file is a sound SQLite database, else the failure text. Used to vet a
+    /// staged restore before it may replace anything; the raw handle never leaves this function.
+    public nonisolated static func quickCheck(fileAt url: URL) -> String? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let opened = db else {
+            let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open"
+            sqlite3_close(db)
+            return msg
+        }
+        defer { sqlite3_close(opened) }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(opened, "PRAGMA quick_check;", -1, &stmt, nil) == SQLITE_OK, let prepared = stmt else {
+            return String(cString: sqlite3_errmsg(opened))
+        }
+        defer { sqlite3_finalize(prepared) }
+        guard sqlite3_step(prepared) == SQLITE_ROW, let text = sqlite3_column_text(prepared, 0) else {
+            return String(cString: sqlite3_errmsg(opened))
+        }
+        let result = String(cString: text)
+        return result == "ok" ? nil : result
+    }
+
     public init(url: URL) throws {
         self.url = url
         try FileManager.default.createDirectory(
