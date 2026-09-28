@@ -230,7 +230,8 @@ public struct CanonicalSourceIntakeRepository: Sendable {
             VALUES (?,?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(occurrenceFileID), .uuid(logical), .uuid(sourceVersionID),
                   .text(kind.rawValue), .text(canonicalURL), .text(captured.contentHash),
-                  .text(request.custodyMode.rawValue), .text(preservation.rawValue), .null, .date(now)])
+                  .text(request.custodyMode.rawValue), .text(preservation.rawValue),
+                  Self.receiptDetail(captured), .date(now)])
 
         // Return the exact resolved values.
         let handleDetected = reuseVersion.flatMap { SourceType(rawValue: $0.detectedType) } ?? captured.detectedType
@@ -335,6 +336,15 @@ public struct CanonicalSourceIntakeRepository: Sendable {
             vaultAddress: r.string(4), filename: r.string(5) ?? "",
             detectedType: r.string(6) ?? "unknown", declaredExtension: r.string(7) ?? "",
             mimeType: r.string(8), detectionBasis: r.string(9) ?? "unknown", sizeBytes: r.int(10) ?? 0)
+    }
+
+    /// F03 — the receipt records the acquisition SET for a WAL database: each sidecar's suffix,
+    /// SHA-256 and size (JSON in `detail`). NULL for every other source, as before.
+    nonisolated static func receiptDetail(_ captured: CapturedSource) -> SQLValue {
+        guard !captured.sqliteSidecars.isEmpty,
+              let json = try? JSONEncoder().encode(["sqliteSidecars": captured.sqliteSidecars]),
+              let text = String(data: json, encoding: .utf8) else { return .null }
+        return .text(text)
     }
 }
 

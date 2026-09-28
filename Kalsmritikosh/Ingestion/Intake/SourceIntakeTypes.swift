@@ -173,11 +173,16 @@ public nonisolated struct CapturedSource: Sendable, Hashable {
     public let detectedType: SourceType
     public let detectionBasis: SourceDetectionBasis
     public let mimeType: String?
+    /// F03 — for a WAL-mode SQLite database, the `-wal` sidecar captured WITH the main file as one
+    /// acquisition set (each hashed). Empty for every other source. `contentHash` stays the main
+    /// file's hash — the version identity — and never silently stands for the set.
+    public let sqliteSidecars: [CapturedSidecar]
 
     public nonisolated init(
         contentHash: String, sizeBytes: Int64, modifiedAt: Date?, filename: String,
         declaredExtension: String, detectedType: SourceType,
-        detectionBasis: SourceDetectionBasis, mimeType: String?
+        detectionBasis: SourceDetectionBasis, mimeType: String?,
+        sqliteSidecars: [CapturedSidecar] = []
     ) {
         self.contentHash = contentHash
         self.sizeBytes = sizeBytes
@@ -187,5 +192,19 @@ public nonisolated struct CapturedSource: Sendable, Hashable {
         self.detectedType = detectedType
         self.detectionBasis = detectionBasis
         self.mimeType = mimeType
+        self.sqliteSidecars = sqliteSidecars
     }
+
+    nonisolated func withSQLiteSidecars(_ sidecars: [CapturedSidecar]) -> CapturedSource {
+        CapturedSource(contentHash: contentHash, sizeBytes: sizeBytes, modifiedAt: modifiedAt,
+                       filename: filename, declaredExtension: declaredExtension, detectedType: detectedType,
+                       detectionBasis: detectionBasis, mimeType: mimeType, sqliteSidecars: sidecars)
+    }
+}
+
+/// F03 — one captured SQLite sidecar (e.g. "-wal"): its own SHA-256 and size.
+public nonisolated struct CapturedSidecar: Sendable, Hashable, Codable {
+    public let suffix: String
+    public let contentHash: String
+    public let sizeBytes: Int64
 }

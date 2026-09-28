@@ -53,12 +53,45 @@ public enum SourceByteCapture {
         do {
             let captured = try streamCapture(byteURL, identityURL: identityURL, snapshotHandle: out, snapshotURL: snapshotURL).captured
             try? out.close()
-            return (captured, snapshotURL)
+            let sidecars = try captureSQLiteSidecars(of: byteURL, mainSnapshot: snapshotURL)
+            return (sidecars.isEmpty ? captured : captured.withSQLiteSidecars(sidecars), snapshotURL)
         } catch {
             try? out.close()
             try? FileManager.default.removeItem(at: snapshotURL)
+            try? FileManager.default.removeItem(atPath: snapshotURL.path + "-wal")
             throw error
         }
+    }
+
+    /// F03 — a WAL-mode SQLite database keeps committed-but-uncheckpointed transactions in its
+    /// `-wal` sidecar; a snapshot of the main file alone silently loses them. When the main file
+    /// IS SQLite and a `-wal` exists, the WAL is captured next to the snapshot under the same
+    /// streaming hash + change detection, and the main file is re-verified afterwards so a
+    /// checkpoint during capture makes the whole set refuse (never a mixed, incoherent pair).
+    /// `-shm` is deliberately not captured: it is a derived index SQLite rebuilds from the WAL.
+    private static func captureSQLiteSidecars(of mainURL: URL, mainSnapshot: URL) throws -> [CapturedSidecar] {
+        let wal = URL(fileURLWithPath: mainURL.path + "-wal")
+        guard FileManager.default.fileExists(atPath: wal.path), isSQLite(mainSnapshot) else { return [] }
+        let before = try resourceSnapshot(mainURL)
+        let dest = URL(fileURLWithPath: mainSnapshot.path + "-wal")
+        FileManager.default.createFile(atPath: dest.path, contents: nil)
+        guard let handle = try? FileHandle(forWritingTo: dest) else {
+            throw SourceIntakeError.snapshotCreationFailed(wal)
+        }
+        defer { try? handle.close() }
+        let walCapture = try streamCapture(wal, identityURL: wal, snapshotHandle: handle, snapshotURL: dest).captured
+        let after = try resourceSnapshot(mainURL)
+        guard before.size == after.size, datesEqual(before.modifiedAt, after.modifiedAt) else {
+            throw SourceIntakeError.sourceChangedDuringCapture(mainURL)
+        }
+        return [CapturedSidecar(suffix: "-wal", contentHash: walCapture.contentHash, sizeBytes: walCapture.sizeBytes)]
+    }
+
+    /// The 16-byte SQLite header ("SQLite format 3\0").
+    private static func isSQLite(_ url: URL) -> Bool {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? h.close() }
+        return (try? h.read(upToCount: 16)) == Data("SQLite format 3\u{0}".utf8)
     }
 
     /// Shared bounded streaming pass. Bytes/hash come from `url`; type detection + filename come from
