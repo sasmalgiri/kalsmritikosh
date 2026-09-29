@@ -363,15 +363,18 @@ public struct SourceReadinessRepository: Sendable {
     nonisolated static func lanes(for d: SourceReadinessDimension) -> [String] {
         switch d {
         case .textExtraction:                              return ["chunks"]
-        case .indexing:                                    return ["blocks", "chunks", "ownership"]
+        // F15 (v141) — citation lineage is part of what an index certifies.
+        case .indexing:                                    return ["blocks", "chunks", "lineage", "ownership"]
         case .metadataExtraction, .structuralExtraction, .ocr: return ["blocks", "ownership"]
-        default:                                           return ["blocks", "chunks", "ownership"]
+        default:                                           return ["blocks", "chunks", "lineage", "ownership"]
         }
     }
 
-    /// The stored proof: the revision of each lane the dimension depends on, e.g. `rev1|blocks=4;ownership=2`.
+    /// The stored proof: the revision of each lane the dimension depends on, e.g. `rev2|blocks=4;ownership=2`.
+    /// "rev2" (v141): lineage and the extra block fields were untracked before, so every proof stamped
+    /// under "rev1" is revalidated once rather than trusted.
     nonisolated static func proofToken(_ d: SourceReadinessDimension, _ revs: [String: Int64]) -> String {
-        "rev1|" + lanes(for: d).map { "\($0)=\(revs[$0] ?? 0)" }.joined(separator: ";")
+        "rev2|" + lanes(for: d).map { "\($0)=\(revs[$0] ?? 0)" }.joined(separator: ";")
     }
 
     /// The live per-lane revisions of a version (maintained by v137 triggers; absent lane = 0).

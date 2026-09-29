@@ -20,20 +20,27 @@ public actor ChunksRepository {
     /// L1 — insert chunks and record every block each was assembled from
     /// (`chunk_blocks`). A chunk with no lineage entry records its own
     /// `evidenceBlockID`, so single-block chunks are covered too.
-    public func insertBatch(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]]) async throws {
-        for statement in Self.insertStatements(chunks, lineage: lineage) {
+    public func insertBatch(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]], blocks: [EvidenceBlock] = []) async throws {
+        for statement in Self.insertStatements(chunks, lineage: lineage, blocks: blocks) {
             try await database.exec(statement.sql, statement.binds)
         }
     }
 
     /// The exact statements `insertBatch` runs, so a caller can compose them into its own isolated
     /// savepoint (F28) instead of awaiting this actor across a transaction.
-    nonisolated static func insertStatements(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]] = [:]) -> [(sql: String, binds: [SQLValue])] {
+    /// F15/F25 — `blocks` are the evidence blocks the chunks were derived from (their content binds each
+    /// chunk's `derivation_digest`); a chunk whose lineage names a block not given here gets no digest
+    /// (a later reconciliation records its baseline).
+    nonisolated static func insertStatements(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]] = [:],
+                                             blocks: [EvidenceBlock] = []) -> [(sql: String, binds: [SQLValue])] {
         var out: [(sql: String, binds: [SQLValue])] = []
+        let content = Dictionary(blocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { a, _ in a })
         for chunk in chunks {
+            let chunkLineage = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
+            let digest = ChunkDerivation.digest(text: chunk.text, lineage: chunkLineage, content: content)
             out.append(("""
-            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version, derivation_digest)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(chunk.id),
                 .uuid(chunk.objectID),
@@ -50,10 +57,10 @@ public actor ChunksRepository {
                 chunk.blockKind.map { .text($0) } ?? .null,
                 chunk.sourceVersionID.map { .uuid($0) } ?? .null,
                 .real(chunk.salience),
-                chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null
+                chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null,
+                digest.map { .text($0) } ?? .null
             ]))
-            let blocks = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
-            for (i, blockID) in blocks.enumerated() {
+            for (i, blockID) in chunkLineage.enumerated() {
                 out.append(("INSERT OR IGNORE INTO chunk_blocks (chunk_id, evidence_block_id, ordinal) VALUES (?, ?, ?);",
                             [.uuid(chunk.id), .uuid(blockID), .integer(Int64(i))]))
             }

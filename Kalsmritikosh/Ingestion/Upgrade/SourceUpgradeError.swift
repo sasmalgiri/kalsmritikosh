@@ -24,6 +24,9 @@ public nonisolated enum SourceUpgradeError: Error, Sendable, Equatable {
     case acquisitionIncomplete(UUID)
 
     // Ledger.
+    /// F15 — the version's evidence kept changing while it was being measured; nothing was stamped.
+    /// RETRYABLE: readiness stays unverified (never "satisfied") until a measurement completes unchanged.
+    case evidenceChanging(UUID)
     case jobNotFound(UUID)
     case sourceVersionMissing(UUID)
     case notAnActiveJob(UUID)

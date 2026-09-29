@@ -484,7 +484,10 @@ public actor IngestCoordinator {
 
     /// Wire the on-demand progressive-upgrade machinery (production + progressive tests). Rigs that do
     /// not call this keep the prior behaviour (no completion snapshot, no upgrade scheduling).
-    public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil) {
+    /// `reconcileHook` is a fault-injection seam for tests (runs between reconciliation's measurement and
+    /// its stamp); production passes nil.
+    public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil,
+                                  reconcileHook: (@Sendable (UUID) async -> Void)? = nil) {
         self.upgradeDatabase = database
         self.boilerplateRegistry = BoilerplateRegistry(database: database)
         let resolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
@@ -499,7 +502,8 @@ public actor IngestCoordinator {
         let indexing: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) }
         let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: indexing])
         let upg = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
-                                           container: containerRepo, executor: executor, priorityGate: priorityGate)
+                                           container: containerRepo, executor: executor, priorityGate: priorityGate,
+                                           afterMeasuring: reconcileHook)
         self.sourceUpgrade = upg
         // F16 — reprocessing RUNS the current structural parser (through the ONE registry) over the
         // re-verified bytes before it may re-stamp anything.
@@ -705,14 +709,21 @@ public actor IngestCoordinator {
     /// then advance indexing readiness from the measured per-version FTS coverage. Generation-aware
     /// (F16): see `rebuildIndex`. No committed blocks → a missing dependency (structure must exist first).
     func upgradeIndexing(sourceVersionID svid: UUID) async throws {
-        guard let readiness else { return }
+        guard let readiness, let db = upgradeDatabase else { return }
         try await rebuildIndex(sourceVersionID: svid, objects: nil)
         ensureEmbeddingDrain()   // the rebuilt chunks deepen into vectors in the background
         let coverage = try await readiness.ftsCoverage(sourceVersionID: svid)
         guard coverage.eligible > 0 else {
             throw SourceUpgradeError.postconditionNotSatisfied(kind: .indexing, sourceVersionID: svid)
         }
-        let fullyIndexed = coverage.indexed == coverage.eligible
+        // F15/F25 — a rebuilt index is certified only when every active chunk matches its evidence. An
+        // object whose chunks cannot be re-derived from committed blocks (content-only) and no longer
+        // match is withheld with the reason, never stamped current.
+        let check = try await ChunkDerivation.verify(db, sourceVersionID: svid)
+        let fullyIndexed = coverage.indexed == coverage.eligible && check.mismatchedChunks == 0
+        let mismatchDetail = check.mismatchedChunks > 0
+            ? "\(check.mismatchedChunks) index entr(ies) still do not match their evidence and cannot be re-derived from committed blocks"
+            : nil
         // F04/F15 — rebuilding the index of what IS committed never makes a streamed version's text
         // complete: failed/interrupted records or deferred units keep it partial.
         let incomplete = await resumableIncompleteDetail(svid)
@@ -723,7 +734,8 @@ public actor IngestCoordinator {
             SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
                                            action: fullyIndexed ? .satisfy : .partiallySatisfy,
                                            completedUnits: coverage.indexed, totalUnits: coverage.eligible,
-                                           basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString))])
+                                           basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString),
+                                           detail: mismatchDetail)])
     }
 
     /// F16/F25 — switch each object's search chunks to the ACTIVE derivation. An object is rebuilt when
@@ -765,7 +777,7 @@ public actor IngestCoordinator {
                     .withSourceVersion(svid)
                     .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
             }
-            let inserts = ChunksRepository.insertStatements(rebuilt, lineage: packed.blockIDs)
+            let inserts = ChunksRepository.insertStatements(rebuilt, lineage: packed.blockIDs, blocks: koBlocks)
             let marker = "index:\(UUID().uuidString)"
             try await db.withSavepoint("idx_switch_\(ko.uuidString.prefix(8))") { db in
                 let binds: [SQLValue] = [.uuid(ko), .uuid(svid)]
@@ -795,7 +807,9 @@ public actor IngestCoordinator {
                                    WHERE cb2.evidence_block_id = b.id AND c2.source_version_id = ?2 AND c2.superseded_by_run IS NULL));
             """, [.uuid(ko), .uuid(svid)]).first
         let current = row?.int(0) ?? 0, staleCited = row?.int(1) ?? 0, lineage = row?.int(2) ?? 0, uncited = row?.int(3) ?? 0
-        return current == 0 || staleCited > 0 || (lineage > 0 && uncited > 0)
+        if current == 0 || staleCited > 0 || (lineage > 0 && uncited > 0) { return true }
+        // F15/F25 — the counts hold; the derived content must still match its evidence.
+        return try await ChunkDerivation.verify(db, sourceVersionID: svid, object: ko).mismatchedChunks > 0
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
@@ -2394,7 +2408,7 @@ public actor IngestCoordinator {
         // entities/events/relationships — stays best-effort and re-derivable, so
         // it is intentionally NOT part of the atomic core.)
         do {
-            try await chunks.insertBatch(chunked, lineage: chunkLineage)
+            try await chunks.insertBatch(chunked, lineage: chunkLineage, blocks: blocks)
         } catch {
             KalsmritikoshLog.storage.error("chunk insert failed for \(object.id.uuidString.prefix(8), privacy: .public) — rolling back KO: \(String(describing: error), privacy: .public)")
             try? await objects.deleteByID(object.id)

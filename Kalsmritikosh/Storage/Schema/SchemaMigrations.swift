@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 140
+    public static let latestVersion = 141
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -671,7 +671,8 @@ public enum SchemaMigrations {
         (137, v137),
         (138, v138),
         (139, v139),
-        (140, v140)
+        (140, v140),
+        (141, v141)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6830,6 +6831,31 @@ public enum SchemaMigrations {
         updated_at        REAL NOT NULL,
         PRIMARY KEY (source_version_id, scope)
     ) WITHOUT ROWID;
+    """
+
+    // MARK: - v141 — F15 citation lineage and every material block field move the evidence revision
+    //
+    // v137 counted chunks, blocks and ownership but not `chunk_blocks` — the lineage that says which
+    // blocks a chunk was assembled from (and therefore what a citation resolves to). Deleting, moving or
+    // re-ordering lineage left every revision unchanged, so the readiness fast path skipped reconciling a
+    // version whose citations had changed. A fourth lane, `lineage`, now moves on every insert, delete
+    // and update of `chunk_blocks`, resolved to the source version THROUGH the chunk (a move between
+    // chunks of different versions moves both). A lineage row deleted by the cascade of its chunk can no
+    // longer resolve that chunk — the chunk's own delete trigger has already moved the `chunks` lane,
+    // which every lineage-dependent dimension also depends on. The block update trigger now also covers
+    // `language`, `extraction_confidence` and `document_id`.
+    //
+    // `chunks.derivation_digest` (F15/F25) binds each chunk to what it was derived from — chunker
+    // version, its text and, in lineage order, each block's id, kind and text — so reconciliation can
+    // tell derived output that no longer matches its evidence from output that merely has the right
+    // counts. NULL for rows written before v141 (a first reconciliation records their baseline).
+    private static let v141: String = """
+    ALTER TABLE chunks ADD COLUMN derivation_digest TEXT;
+    CREATE TRIGGER IF NOT EXISTS evrev_lineage_ins AFTER INSERT ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_lineage_del AFTER DELETE ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_lineage_upd AFTER UPDATE ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT NULL AND (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    DROP TRIGGER IF EXISTS evrev_blocks_upd;
+    CREATE TRIGGER evrev_blocks_upd AFTER UPDATE OF raw_text, normalized_text, locator, kind, attributes, ordinal, parent_block_id, extraction_method, extraction_confidence, language, document_id, source_version_id, superseded_by_run ON evidence_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'blocks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'blocks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
     """
 
 }

@@ -21,15 +21,23 @@ public struct SourceUpgradeCoordinator: Sendable {
     private let container: ContainerInspectionRepository?
     private let executor: SourceUpgradeExecutor
     private let priorityGate: QueryPriorityGate?
+    /// Test seam: runs after a reconciliation measured the evidence and before it stamps (fault injection).
+    private let afterMeasuring: (@Sendable (UUID) async -> Void)?
+
+    /// Reconciliation re-measures this many times when the evidence moves during measurement, then
+    /// reports `evidenceChanging` instead of planning from an unverified record.
+    static let maxMeasurementAttempts = 3
 
     public init(database: Database, jobs: SourceUpgradeJobRepository, readiness: SourceReadinessRepository,
-                container: ContainerInspectionRepository?, executor: SourceUpgradeExecutor, priorityGate: QueryPriorityGate? = nil) {
+                container: ContainerInspectionRepository?, executor: SourceUpgradeExecutor, priorityGate: QueryPriorityGate? = nil,
+                afterMeasuring: (@Sendable (UUID) async -> Void)? = nil) {
         self.database = database
         self.jobs = jobs
         self.readiness = readiness
         self.container = container
         self.executor = executor
         self.priorityGate = priorityGate
+        self.afterMeasuring = afterMeasuring
     }
 
     /// Plan + persist the minimal work to reach `goal` for an EXACT source version. Foreground also
@@ -81,7 +89,21 @@ public struct SourceUpgradeCoordinator: Sendable {
     /// re-stamped against the revisions read BEFORE measuring (refused if they moved meanwhile).
     /// Embeddings need no reconciliation here: the embedding drain measures the live missing set on
     /// every pass (F10), so a lost vector is re-embedded by construction.
+    ///
+    /// F15/F25 (v141) — counts and links can all hold while derived text disagrees with its evidence, so
+    /// indexing is reaffirmed only after every active chunk's derivation digest (ChunkDerivation) matches
+    /// the live chunk, lineage and blocks. A measurement the evidence moved under is re-run (up to
+    /// `maxMeasurementAttempts`), then reported as `evidenceChanging` — a refused stamp is never followed
+    /// by planning as if the stale record were verified.
     private func reconcile(_ sourceVersionID: UUID, at now: Date) async throws {
+        for _ in 0..<Self.maxMeasurementAttempts {
+            if try await reconcileOnce(sourceVersionID, at: now) { return }
+        }
+        throw SourceUpgradeError.evidenceChanging(sourceVersionID)
+    }
+
+    /// One measurement + stamp. False when the evidence moved between measuring and stamping.
+    private func reconcileOnce(_ sourceVersionID: UUID, at now: Date) async throws -> Bool {
         let snap = try await readiness.snapshot(sourceVersionID: sourceVersionID)
         let measured = try await readiness.evidenceRevisions(sourceVersionID: sourceVersionID)
         func needsCheck(_ d: SourceReadinessDimension) async throws -> SourceReadinessDimensionRecord? {
@@ -134,6 +156,9 @@ public struct SourceUpgradeCoordinator: Sendable {
                 updates.append(invalidate(.indexing, "\(staleChunks) index entr(ies) come from a superseded derivation — rebuild required"))
             } else if uncited > 0 {
                 updates.append(invalidate(.indexing, "\(uncited) active block(s) are missing from the index of their object — rebuild required"))
+            } else if case let check = try await ChunkDerivation.verify(database, sourceVersionID: sourceVersionID),
+                      check.mismatchedChunks > 0 {
+                updates.append(invalidate(.indexing, "\(check.mismatchedChunks) index entr(ies) no longer match their evidence — rebuild required"))
             } else {
                 updates.append(reaffirm(rec, completed: live.indexed, total: live.eligible))
             }
@@ -162,16 +187,18 @@ public struct SourceUpgradeCoordinator: Sendable {
                 }
             }
         }
-        guard !updates.isEmpty else { return }
+        guard !updates.isEmpty else { return true }
+        await afterMeasuring?(sourceVersionID)
         do {
             try await readiness.apply(SourceReadinessUpdatePlan(
                 sourceVersionID: sourceVersionID, expectedRevision: snap.aggregateRevision,
-                updates: updates, producerID: "usf-m3.reconcile", producerVersion: "3", occurredAt: now,
+                updates: updates, producerID: "usf-m3.reconcile", producerVersion: "4", occurredAt: now,
                 measuredEvidence: measured))
+            return true
         } catch SourceReadinessError.evidenceChangedDuringMeasurement {
-            // Evidence moved while it was being measured: nothing is stamped; the proofs stay stale and
-            // the next reconciliation re-measures the new state.
-            KalsmritikoshLog.ingestion.info("reconcile \(sourceVersionID.uuidString, privacy: .public): evidence changed during measurement — retry later")
+            // Evidence moved while it was being measured: nothing is stamped; re-measure the new state.
+            KalsmritikoshLog.ingestion.info("reconcile \(sourceVersionID.uuidString, privacy: .public): evidence changed during measurement — re-measuring")
+            return false
         }
     }
 
