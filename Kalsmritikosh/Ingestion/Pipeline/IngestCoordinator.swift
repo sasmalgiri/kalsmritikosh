@@ -82,6 +82,8 @@ public actor IngestCoordinator {
     private var byteResolver: SourceVersionByteResolver? = nil
     private var reprocessing: SourceReprocessingCoordinator? = nil   // USF-010
     private var upgradeDatabase: Database? = nil
+    /// F04 — the persisted job queue continuation work is scheduled into.
+    private var upgradeJobs: SourceUpgradeJobRepository? = nil
     /// I1 (module .boilerplateEmbedSkip) — learned cross-document boilerplate.
     /// Built once a database is wired (configureUpgrades). Consulted at the embed
     /// gate to skip chunks that are mostly a known template; nil ⇒ feature off.
@@ -489,6 +491,7 @@ public actor IngestCoordinator {
     public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil,
                                   reconcileHook: (@Sendable (UUID) async -> Void)? = nil) {
         self.upgradeDatabase = database
+        self.upgradeJobs = jobs
         self.boilerplateRegistry = BoilerplateRegistry(database: database)
         let resolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
         self.byteResolver = resolver
@@ -570,9 +573,70 @@ public actor IngestCoordinator {
                     continue
                 }
                 let ran = await self.drainUpgrades(max: 4)
-                if ran == 0 { try? await Task.sleep(nanoseconds: UInt64(max(0.05, idleSeconds) * 1_000_000_000)) }
+                // F04 — idle: schedule the next bounded run of any source with deferred units.
+                if ran == 0, await self.scheduleStreamContinuations().isEmpty {
+                    try? await Task.sleep(nanoseconds: UInt64(max(0.05, idleSeconds) * 1_000_000_000))
+                }
             }
         }
+    }
+
+    /// An actionable failure reason for a record outcome and the readiness detail: a database error
+    /// states SQLite's message (the cause), not the statement text that precedes it.
+    nonisolated static func failureReason(_ error: Error) -> String {
+        switch error {
+        case DatabaseError.stepFailed(_, let message), DatabaseError.prepareFailed(_, let message):
+            return "database: \(message)"
+        default:
+            return String(describing: error)
+        }
+    }
+
+    /// F04 — the producer identity of continuation jobs (dedup is per version + kind + producer, so a
+    /// continuation never collides with a user-requested evidence upgrade of the same version).
+    nonisolated static let continuationProducer = "stream-continuation"
+
+    /// F04 — durable AUTOMATIC continuation of resumable sources. The scheduler's state is durable:
+    /// `stream_cursors` (what is deferred) and the persisted job queue (what is scheduled). For each
+    /// version with deferred units this enqueues ONE background structural-extraction job, which the
+    /// supervised drain runs as one bounded resume (`upgradeStructure` → `resumeStreamedIngest`). A
+    /// version is skipped when:
+    ///   • a record is failed or interrupted — a failure needs an explicit retry, not a hot loop;
+    ///   • a continuation job is already pending/running (single flight per version);
+    ///   • its last continuation job failed or was blocked and the cursor has not advanced since
+    ///     (no progress → no retry until something changes).
+    /// Least-recently-advanced versions go first, and each run re-joins the back of the queue, so
+    /// several deferred sources share the drain in turn. Returns the versions scheduled.
+    @discardableResult
+    public func scheduleStreamContinuations(limit: Int = 8, at now: Date = Date()) async -> [UUID] {
+        guard let db = upgradeDatabase, let jobs = upgradeJobs else { return [] }
+        let producer = Self.continuationProducer
+        let candidates = (try? await db.query("""
+            SELECT t.svid FROM (
+                SELECT source_version_id AS svid, MAX(updated_at) AS moved,
+                       SUM(COALESCE(discovered, processed)) AS discovered, SUM(processed) AS processed
+                  FROM stream_cursors GROUP BY source_version_id) t
+             WHERE t.discovered > t.processed
+               AND NOT EXISTS (SELECT 1 FROM stream_record_outcomes o
+                                WHERE o.source_version_id = t.svid AND o.state IN ('failed', 'attempting'))
+               AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j
+                                WHERE j.source_version_id = t.svid AND j.producer_id = ? AND j.state IN ('pending', 'running'))
+               AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j
+                                WHERE j.source_version_id = t.svid AND j.producer_id = ? AND j.state IN ('failed', 'blocked')
+                                  AND j.updated_at >= t.moved)
+             ORDER BY t.moved ASC LIMIT ?;
+            """, [.text(producer), .text(producer), .integer(Int64(max(1, limit)))]).compactMap { $0.uuid(0) }) ?? []
+        var scheduled: [UUID] = []
+        for svid in candidates {
+            do {
+                _ = try await jobs.enqueue(sourceVersionID: svid, kind: .structuralExtraction, goal: .evidenceReady,
+                                           priority: .background, origin: .backgroundPolicy, producerID: producer, at: now)
+                scheduled.append(svid)
+            } catch {
+                KalsmritikoshLog.ingestion.error("Stream continuation not scheduled for \(svid.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
+        return scheduled
     }
 
     public func stopUpgradeDrain() {
@@ -1675,7 +1739,7 @@ public actor IngestCoordinator {
                     } catch {
                         failedRecords += 1
                         try? await outcomes?.fail(sourceVersionID: svid, position: position,
-                                                  reason: String(describing: error), at: Date())
+                                                  reason: Self.failureReason(error), at: Date())
                         await derivationFailures?.record(stage: "stream.record", error: error, knowledgeObjectID: ko.id,
                                                          filePath: url.path, detectedType: type.rawValue)
                         KalsmritikoshLog.ingestion.error("Streamed record \(position, privacy: .public) failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
@@ -1893,8 +1957,8 @@ public actor IngestCoordinator {
                     }
                     return true
                 } catch {
-                    try? await outcomes.fail(sourceVersionID: svid, position: rec.position, reason: String(describing: error), at: Date())
-                    stopReason = String(describing: error)
+                    try? await outcomes.fail(sourceVersionID: svid, position: rec.position, reason: Self.failureReason(error), at: Date())
+                    stopReason = Self.failureReason(error)
                     await derivationFailures?.record(stage: "stream.record", error: error, knowledgeObjectID: ko.id,
                                                      filePath: url.path, detectedType: type.rawValue)
                     KalsmritikoshLog.ingestion.error("Resumable record \(rec.position, privacy: .public) failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
