@@ -48,6 +48,31 @@ public nonisolated enum SQLiteAcquisition {
     public enum AcquisitionError: Error, Sendable, Equatable {
         case backupFailed(String)
         case verifyFailed(String)
+        /// The source stayed BUSY / LOCKED until the deadline (retryable).
+        case busyUntilDeadline(String)
+        case cancelled
+    }
+
+    /// F03 — how long ONE acquisition may wait on a locked source, and how it waits. The backup step
+    /// itself copies every page under one read transaction (`step(-1)`), so the only unbounded wait was
+    /// the retry loop around a BUSY / LOCKED source; it now stops at `deadline`, backs off
+    /// exponentially up to `maxBackoff`, and checks `isCancelled` (default: the current Task) before
+    /// every retry.
+    public nonisolated struct Limits: Sendable {
+        public let deadline: TimeInterval
+        public let initialBackoff: TimeInterval
+        public let maxBackoff: TimeInterval
+        public let isCancelled: @Sendable () -> Bool
+
+        public init(deadline: TimeInterval = 30, initialBackoff: TimeInterval = 0.025, maxBackoff: TimeInterval = 0.5,
+                    isCancelled: @escaping @Sendable () -> Bool = { Task.isCancelled }) {
+            self.deadline = max(0, deadline)
+            self.initialBackoff = max(0.001, initialBackoff)
+            self.maxBackoff = max(self.initialBackoff, maxBackoff)
+            self.isCancelled = isCancelled
+        }
+
+        public static let standard = Limits()
     }
 
     /// Whether `url` is a SQLite database in WAL mode (header bytes 18/19 = 2) or has a non-empty
@@ -70,12 +95,23 @@ public nonisolated enum SQLiteAcquisition {
     /// main + WAL into a staging directory under a checked boundary (retried when the pair changed)
     /// and backs up the staged pair. Throws `sourceChangedDuringCapture` rather than ever returning a
     /// derivative made from an incoherent pair.
-    public static func acquire(_ url: URL, into destination: URL, now: Date = Date()) throws -> Record {
+    public static func acquire(_ url: URL, into destination: URL, now: Date = Date(),
+                               limits: Limits = .standard) throws -> Record {
         let members = try physicalMembers(url)
-        if (try? backup(from: url, readOnly: true, to: destination)) != nil {
+        let deadline = Date().addingTimeInterval(limits.deadline)
+        do {
+            try backup(from: url, readOnly: true, to: destination, deadline: deadline, limits: limits)
             return Record(method: "sqliteOnlineBackup", source: "live", acquiredAt: now, members: members)
+        } catch AcquisitionError.busyUntilDeadline(let why) {
+            // A locked source is NOT "cannot open": copying its files now would race the lock holder.
+            throw SourceIntakeError.acquisitionTimedOut(url, reason: why)
+        } catch AcquisitionError.cancelled {
+            throw SourceIntakeError.acquisitionCancelled(url)
+        } catch {
+            // The original could not be read in place — fall back to a checked staged copy.
         }
         for _ in 0..<3 {
+            if limits.isCancelled() { throw SourceIntakeError.acquisitionCancelled(url) }
             let staging = FileManager.default.temporaryDirectory
                 .appendingPathComponent("sqlite-acq-\(UUID().uuidString)", isDirectory: true)
             defer { try? FileManager.default.removeItem(at: staging) }
@@ -90,7 +126,13 @@ public nonisolated enum SQLiteAcquisition {
             // The boundary: neither member may have changed across BOTH copies. A checkpoint rewrites
             // main; a commit appends to the WAL; either one makes this pair incoherent.
             guard try stat(url) == before else { continue }
-            try backup(from: stagedMain, readOnly: false, to: destination)
+            do {
+                try backup(from: stagedMain, readOnly: false, to: destination, deadline: deadline, limits: limits)
+            } catch AcquisitionError.busyUntilDeadline(let why) {
+                throw SourceIntakeError.acquisitionTimedOut(url, reason: why)
+            } catch AcquisitionError.cancelled {
+                throw SourceIntakeError.acquisitionCancelled(url)
+            }
             return Record(method: "sqliteOnlineBackup", source: "stagedCopy", acquiredAt: now, members: members)
         }
         throw SourceIntakeError.sourceChangedDuringCapture(url)
@@ -124,9 +166,16 @@ public nonisolated enum SQLiteAcquisition {
         }
     }
 
-    /// Online backup of `source` into a fresh single-file database at `destination`, verified.
-    private static func backup(from source: URL, readOnly: Bool, to destination: URL) throws {
-        try? FileManager.default.removeItem(at: destination)
+    /// Online backup of `source` into a fresh single-file database at `destination`, verified. Every
+    /// exit closes both handles; every failure removes the partial destination (and its journal), so a
+    /// later retry can never mistake it for a snapshot.
+    private static func backup(from source: URL, readOnly: Bool, to destination: URL,
+                               deadline: Date, limits: Limits) throws {
+        func removePartial() {
+            try? FileManager.default.removeItem(at: destination)
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: destination.path + "-journal"))
+        }
+        removePartial()
         var src: OpaquePointer?
         let flags = readOnly ? (SQLITE_OPEN_READONLY | SQLITE_OPEN_URI) : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_URI)
         let uri = readOnly ? "file:\(source.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? source.path)?mode=ro"
@@ -137,36 +186,52 @@ public nonisolated enum SQLiteAcquisition {
             throw AcquisitionError.backupFailed(msg)
         }
         defer { sqlite3_close(srcDB) }
-        sqlite3_busy_timeout(srcDB, 2_000)
+        // Short per-attempt wait inside SQLite; the OVERALL wait is the deadline below.
+        sqlite3_busy_timeout(srcDB, Int32(max(1, min(200, limits.deadline * 1000))))
         var dest: OpaquePointer?
         guard sqlite3_open_v2(destination.path, &dest, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
               let destDB = dest else {
             sqlite3_close(dest)
+            removePartial()
             throw AcquisitionError.backupFailed("cannot open destination")
         }
-        var failure: String?
+        var failure: AcquisitionError?
         if let b = sqlite3_backup_init(destDB, "main", srcDB, "main") {
             var rc: Int32
-            repeat {
+            var backoff = limits.initialBackoff
+            while true {
                 // -1: every page in ONE step, i.e. under one read transaction on the source.
                 rc = sqlite3_backup_step(b, -1)
-                if rc == SQLITE_BUSY || rc == SQLITE_LOCKED { sqlite3_sleep(25) }
-            } while rc == SQLITE_BUSY || rc == SQLITE_LOCKED
-            if rc != SQLITE_DONE { failure = String(cString: sqlite3_errmsg(destDB)) }
-            sqlite3_backup_finish(b)
+                guard rc == SQLITE_BUSY || rc == SQLITE_LOCKED else { break }
+                if limits.isCancelled() { failure = .cancelled; break }
+                let remaining = deadline.timeIntervalSinceNow
+                if remaining <= 0 {
+                    failure = .busyUntilDeadline("source stayed \(rc == SQLITE_BUSY ? "busy" : "locked") for \(limits.deadline)s")
+                    break
+                }
+                let wait = min(backoff, remaining)
+                sqlite3_sleep(Int32(max(1, wait * 1000)))
+                backoff = min(limits.maxBackoff, backoff * 2)
+            }
+            let finish = sqlite3_backup_finish(b)
+            if failure == nil, rc != SQLITE_DONE {
+                failure = .backupFailed(String(cString: sqlite3_errmsg(destDB)))
+            } else if failure == nil, finish != SQLITE_OK {
+                failure = .backupFailed("backup finish failed: \(String(cString: sqlite3_errstr(finish)))")
+            }
         } else {
-            failure = String(cString: sqlite3_errmsg(destDB))
+            failure = .backupFailed(String(cString: sqlite3_errmsg(destDB)))
         }
         if failure == nil, sqlite3_exec(destDB, "PRAGMA journal_mode=DELETE;", nil, nil, nil) != SQLITE_OK {
-            failure = String(cString: sqlite3_errmsg(destDB))
+            failure = .backupFailed(String(cString: sqlite3_errmsg(destDB)))
         }
         sqlite3_close(destDB)
         if let failure {
-            try? FileManager.default.removeItem(at: destination)
-            throw AcquisitionError.backupFailed(failure)
+            removePartial()
+            throw failure
         }
         if let problem = Database.quickCheck(fileAt: destination) {
-            try? FileManager.default.removeItem(at: destination)
+            removePartial()
             throw AcquisitionError.verifyFailed(problem)
         }
     }
