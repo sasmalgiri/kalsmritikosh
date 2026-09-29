@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 137
+    public static let latestVersion = 138
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -668,7 +668,8 @@ public enum SchemaMigrations {
         (134, v134),
         (135, v135),
         (136, v136),
-        (137, v137)
+        (137, v137),
+        (138, v138)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6759,6 +6760,30 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS evrev_owner_ins AFTER INSERT ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
     CREATE TRIGGER IF NOT EXISTS evrev_owner_del AFTER DELETE ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
     CREATE TRIGGER IF NOT EXISTS evrev_owner_upd AFTER UPDATE ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id) IS NOT NULL AND NEW.evidence_block_id IS NOT OLD.evidence_block_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    """
+
+    // MARK: - v138 — F16/F25 search chunks follow the active derivation
+    //
+    // Activating a changed derivation superseded its blocks but left the old derivation's chunks and
+    // vectors serving as current search output. Chunks now carry `superseded_by_run` like blocks: the
+    // index switch stamps the replaced chunks (their rows stay — a historical claim may cite a chunk
+    // id) and a superseded chunk leaves the FTS index (the update trigger re-inserts only an active
+    // chunk). Current-output reads filter it; by-id citation reads do not. The chunk revision trigger
+    // now also counts this column, so a switch moves the chunks lane.
+    private static let v138: String = """
+    ALTER TABLE chunks ADD COLUMN superseded_by_run TEXT;
+    CREATE INDEX IF NOT EXISTS idx_chunks_version_active ON chunks(source_version_id, object_id) WHERE superseded_by_run IS NULL;
+    DROP TRIGGER IF EXISTS chunks_fts_au;
+    CREATE TRIGGER chunks_fts_au AFTER UPDATE ON chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) SELECT 'delete', old.rowid, old.text WHERE old.superseded_by_run IS NULL;
+        INSERT INTO chunks_fts(rowid, text) SELECT new.rowid, new.text WHERE new.superseded_by_run IS NULL;
+    END;
+    DROP TRIGGER IF EXISTS chunks_fts_ad;
+    CREATE TRIGGER chunks_fts_ad AFTER DELETE ON chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) SELECT 'delete', old.rowid, old.text WHERE old.superseded_by_run IS NULL;
+    END;
+    DROP TRIGGER IF EXISTS evrev_chunks_upd;
+    CREATE TRIGGER evrev_chunks_upd AFTER UPDATE OF text, object_id, source_version_id, evidence_block_id, superseded_by_run ON chunks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'chunks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'chunks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
     """
 
 }

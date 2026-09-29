@@ -20,17 +20,22 @@ public struct SourceReprocessingCoordinator: Sendable {
     private let readiness: SourceReadinessRepository
     private let byteResolver: SourceVersionByteResolver
     private let reparse: Reparse?
+    private let reindex: Reindex?
 
     /// F16 — run the CURRENT structural parser over the exact re-verified bytes of a version
     /// (snapshot + identity URL) and return its document; nil = the type has no structural parser.
     public typealias Reparse = @Sendable (_ sourceVersionID: UUID, _ snapshotURL: URL, _ identityURL: URL) async throws -> ParsedDocument?
+    /// F16/F25 — switch the version's search chunks (and retire their vectors) to the active derivation
+    /// and advance indexing readiness from measured coverage.
+    public typealias Reindex = @Sendable (_ sourceVersionID: UUID) async throws -> Void
 
     public init(database: Database, readiness: SourceReadinessRepository, byteResolver: SourceVersionByteResolver,
-                reparse: Reparse? = nil) {
+                reparse: Reparse? = nil, reindex: Reindex? = nil) {
         self.database = database
         self.readiness = readiness
         self.byteResolver = byteResolver
         self.reparse = reparse
+        self.reindex = reindex
     }
 
     /// The readiness dimensions produced by the structural parser (parser-version dependent).
@@ -95,6 +100,7 @@ public struct SourceReprocessingCoordinator: Sendable {
                records.contains(where: { $0.basis?.kind == .parserRun && $0.basis?.identifier != active.parserRunID.uuidString }) {
                 try await stamp(sourceVersionID, snapshot: snapshot, records: records, from: active,
                                 version: currentParserVersion, at: now)
+                try await reindex?(sourceVersionID)
                 return .activated(dimensions: stale, supersededBlocks: 0, activatedBlocks: active.blockCount)
             }
             // Same structure: each dimension keeps its exact prior proof, stamped with the new version.
@@ -126,6 +132,9 @@ public struct SourceReprocessingCoordinator: Sendable {
         }
         try await stamp(sourceVersionID, snapshot: snapshot, records: records, from: activation.receipt,
                         version: currentParserVersion, at: now)
+        // The search chunks follow the active derivation. If this is interrupted, indexing stays
+        // invalidated (see `stamp`) and reconciliation rebuilds it — the old index never passes as current.
+        try await reindex?(sourceVersionID)
         return .activated(dimensions: stale, supersededBlocks: activation.supersededCount,
                           activatedBlocks: activation.activated.count)
     }
@@ -135,7 +144,13 @@ public struct SourceReprocessingCoordinator: Sendable {
                        from receipt: StructuralPersistenceReceipt, version: String, at now: Date) async throws {
         let produced = Dictionary(IngestCoordinator.structuralReadinessUpdates(receipt).map { ($0.dimension, $0) },
                                   uniquingKeysWith: { a, _ in a })
-        try await restamp(svid, snapshot: snapshot, to: records.map { rec in
+        // The index was built from the replaced derivation: it is not current until it is switched.
+        var indexing: [SourceReadinessDimensionUpdate] = []
+        if let idx = snapshot.dimension(.indexing), idx.state == .ready || idx.state == .partial {
+            indexing = [SourceReadinessDimensionUpdate(dimension: .indexing, state: .running, action: .invalidate,
+                                                       detail: "index rebuild pending for the activated parser \(version) derivation")]
+        }
+        try await restamp(svid, snapshot: snapshot, to: indexing + records.map { rec in
             // A dimension the new structure no longer produces (e.g. no OCR blocks) is not applicable.
             let u = produced[rec.dimension] ?? SourceReadinessDimensionUpdate(
                 dimension: rec.dimension, state: .ready, action: .satisfy, applicability: .notApplicable)
@@ -176,14 +191,20 @@ public struct SourceReprocessingCoordinator: Sendable {
         return nil
     }
 
-    /// F16 — the content identity of a block set: ordered (kind, text, locator). Ids and timestamps are
-    /// excluded (a re-parse mints new ids); anything a citation shows or resolves by is included.
+    /// F16 — the content identity of a block set, in order. Every semantically material output field is
+    /// included: kind, raw and normalized text, locator, attributes (record keys, table/row, message
+    /// index, …), extraction method and confidence, language, and the parent by ORDINAL. Only fields a
+    /// re-parse mints afresh are excluded: block/document ids and timestamps.
     static func fingerprint(_ blocks: [EvidenceBlock]) -> [String] {
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys]
+        func json<T: Encodable>(_ v: T) -> String { (try? enc.encode(v)).flatMap { String(data: $0, encoding: .utf8) } ?? "" }
+        let ordinalOf = Dictionary(blocks.map { ($0.id, $0.ordinal) }, uniquingKeysWith: { a, _ in a })
         return blocks.sorted { $0.ordinal < $1.ordinal }.map { b in
-            let locator = (try? enc.encode(b.locator)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            return "\(b.kind.rawValue)\u{1F}\(b.rawText)\u{1F}\(locator)"
+            let parent = b.parentBlockID.flatMap { ordinalOf[$0] }.map(String.init) ?? "-"
+            return [b.kind.rawValue, b.rawText, b.normalizedText, json(b.locator), json(b.attributes),
+                    b.extractionMethod.rawValue, String(b.extractionConfidence), b.language ?? "-", parent]
+                .joined(separator: "\u{1F}")
         }
     }
 }

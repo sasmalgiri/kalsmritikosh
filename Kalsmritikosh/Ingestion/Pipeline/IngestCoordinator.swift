@@ -502,7 +502,8 @@ public actor IngestCoordinator {
             database: database, readiness: r, byteResolver: resolver,
             reparse: { [weak self] svid, snapshot, identity in
                 try await self?.reparseStructure(sourceVersionID: svid, snapshotURL: snapshot, identityURL: identity)
-            })
+            },
+            reindex: { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) })
         self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
                                                             upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
     }
@@ -671,21 +672,57 @@ public actor IngestCoordinator {
         guard let row = try await db.query(
             "SELECT logical_source_id, content_hash, detected_type, size_bytes FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(svid)]).first,
             let logical = row.uuid(0), let hash = row.string(1) else { throw SourceUpgradeError.sourceVersionMissing(svid) }
+        let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
+        let size = row.int(3) ?? 0
         let request = UniversalParserRequest(
             originalURL: identityURL, processingSnapshotURL: snapshotURL, logicalSourceID: logical,
-            sourceVersionID: svid, sourceType: SourceType(rawValue: row.string(2) ?? "") ?? .unknown,
-            contentHash: hash, sizeBytes: row.int(3) ?? 0, intent: .evidenceStructure)
+            sourceVersionID: svid, sourceType: type, contentHash: hash, sizeBytes: size, intent: .evidenceStructure)
+        // F16 — reprocessing obeys the SAME memory budget as ingest: a file above the streaming
+        // threshold is re-parsed only through a bounded structural parser, never the whole-file path.
+        if size > memoryBudget.streamAboveBytes {
+            guard let adapter = universalExecutor.registry.plugin(for: type) as? ExistingParserPluginAdapter,
+                  let doc = try await adapter.parseBoundedStructure(request) else {
+                throw SourceUpgradeError.policyBlocked(
+                    "resource limit: a \(size)-byte source can only be re-parsed by a bounded structural parser")
+            }
+            return doc
+        }
         return try await universalExecutor.execute(request).parsedDocument
     }
 
-    /// F25 — rebuild the retrieval index for an EXACT source version from its COMMITTED evidence blocks:
-    /// for every knowledge object that owns blocks of this version but has no chunks for it, re-derive
-    /// chunks through the same chunker, admission gate, version stamp and salience the ingest path
-    /// uses (FTS follows through the chunks triggers), then advance indexing readiness from the
-    /// measured per-version FTS coverage. Objects that still have chunks are left untouched, so a
-    /// rerun is a no-op. No committed blocks → a missing dependency (structure must exist first).
+    /// F25 — rebuild the retrieval index for an EXACT source version from its COMMITTED evidence blocks,
+    /// then advance indexing readiness from the measured per-version FTS coverage. Generation-aware
+    /// (F16): see `rebuildIndex`. No committed blocks → a missing dependency (structure must exist first).
     func upgradeIndexing(sourceVersionID svid: UUID) async throws {
-        guard let evidenceStore, let readiness, let db = upgradeDatabase else { return }
+        guard let readiness else { return }
+        try await rebuildIndex(sourceVersionID: svid, objects: nil)
+        ensureEmbeddingDrain()   // the rebuilt chunks deepen into vectors in the background
+        let coverage = try await readiness.ftsCoverage(sourceVersionID: svid)
+        guard coverage.eligible > 0 else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .indexing, sourceVersionID: svid)
+        }
+        let fullyIndexed = coverage.indexed == coverage.eligible
+        await advanceReadiness(svid, [
+            SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                           completedUnits: coverage.eligible, totalUnits: coverage.eligible),
+            SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                           action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                           completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                           basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString))])
+    }
+
+    /// F16/F25 — switch each object's search chunks to the ACTIVE derivation. An object is rebuilt when
+    /// it has no current chunks, when a current chunk cites a block of a superseded derivation, or when
+    /// an active block is cited by none of its current chunks (content missing from a still-populated
+    /// object). An object whose current chunks are already the active generation — or whose chunks
+    /// come from loader text rather than blocks — is left untouched, so a rerun is a no-op.
+    ///
+    /// The switch is ONE savepoint per object: the object's current chunks are stamped superseded
+    /// (rows kept — a historical claim may cite a chunk id; they leave FTS by trigger), their vectors
+    /// are retired from every vector table (the new chunks are embedded by the drain), and the new
+    /// chunks are inserted with their block lineage. `objects` limits the switch (nil = all owners).
+    func rebuildIndex(sourceVersionID svid: UUID, objects only: Set<UUID>?) async throws {
+        guard let evidenceStore, let db = upgradeDatabase else { return }
         let blocks = try await evidenceStore.blocks(forVersion: svid)
         guard !blocks.isEmpty else {
             throw SourceUpgradeError.missingDependency("no committed evidence blocks for source version \(svid)")
@@ -702,9 +739,8 @@ public actor IngestCoordinator {
             throw SourceUpgradeError.missingDependency("committed blocks of \(svid) are not linked to any knowledge object")
         }
         for (ko, koBlocks) in blocksByKO.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
-            let existing = try await db.query("SELECT COUNT(*) FROM chunks WHERE object_id = ? AND source_version_id = ?;",
-                                              [.uuid(ko), .uuid(svid)]).first?.int(0) ?? 0
-            guard existing == 0 else { continue }
+            if let only, !only.contains(ko) { continue }
+            guard try await Self.indexNeedsRebuild(db, object: ko, sourceVersionID: svid) else { continue }
             let docClass = try await db.query("SELECT document_class FROM knowledge_objects WHERE id = ? LIMIT 1;",
                                               [.uuid(ko)]).first?.string(0).flatMap(DocumentClass.init(rawValue:))
             let packed = chunker.chunkWithLineage(objectID: ko, blocks: koBlocks.sorted { $0.ordinal < $1.ordinal })
@@ -714,21 +750,37 @@ public actor IngestCoordinator {
                     .withSourceVersion(svid)
                     .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
             }
-            try await chunks.insertBatch(rebuilt, lineage: packed.blockIDs)
+            let inserts = ChunksRepository.insertStatements(rebuilt, lineage: packed.blockIDs)
+            let marker = "index:\(UUID().uuidString)"
+            try await db.withSavepoint("idx_switch_\(ko.uuidString.prefix(8))") { db in
+                let binds: [SQLValue] = [.uuid(ko), .uuid(svid)]
+                try db.exec("UPDATE chunks SET superseded_by_run = ? WHERE object_id = ? AND source_version_id = ? AND superseded_by_run IS NULL;",
+                            [.text(marker)] + binds)
+                for table in ["vectors", "chunk_embeddings", "ann_postings"] {
+                    try db.exec("DELETE FROM \(table) WHERE chunk_id IN (SELECT id FROM chunks WHERE superseded_by_run = ?);", [.text(marker)])
+                }
+                for st in inserts { try db.exec(st.sql, st.binds) }
+            }
         }
-        ensureEmbeddingDrain()   // the rebuilt chunks deepen into vectors in the background
-        let coverage = try await readiness.ftsCoverage(sourceVersionID: svid)
-        guard coverage.eligible > 0 else {
-            throw SourceUpgradeError.postconditionNotSatisfied(kind: .indexing, sourceVersionID: svid)
-        }
-        let fullyIndexed = coverage.indexed == coverage.eligible
-        await advanceReadiness(svid, [
-            SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                           completedUnits: coverage.eligible, totalUnits: coverage.eligible),
-            SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
-                                           action: fullyIndexed ? .satisfy : .partiallySatisfy,
-                                           completedUnits: coverage.indexed, totalUnits: coverage.eligible,
-                                           basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString))])
+    }
+
+    /// Whether an object's current chunks for a version are not (all of) the active derivation.
+    private static func indexNeedsRebuild(_ db: Database, object ko: UUID, sourceVersionID svid: UUID) async throws -> Bool {
+        let row = try await db.query("""
+            SELECT
+              (SELECT COUNT(*) FROM chunks WHERE object_id = ?1 AND source_version_id = ?2 AND superseded_by_run IS NULL),
+              (SELECT COUNT(*) FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id JOIN evidence_blocks b ON b.id = cb.evidence_block_id
+                WHERE c.object_id = ?1 AND c.source_version_id = ?2 AND c.superseded_by_run IS NULL AND b.superseded_by_run IS NOT NULL),
+              (SELECT COUNT(*) FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id
+                WHERE c.object_id = ?1 AND c.source_version_id = ?2 AND c.superseded_by_run IS NULL),
+              (SELECT COUNT(*) FROM evidence_blocks b JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
+                WHERE ebo.knowledge_object_id = ?1 AND b.source_version_id = ?2 AND b.superseded_by_run IS NULL
+                  AND length(trim(CASE WHEN b.normalized_text = '' THEN b.raw_text ELSE b.normalized_text END)) > 0
+                  AND NOT EXISTS (SELECT 1 FROM chunk_blocks cb2 JOIN chunks c2 ON c2.id = cb2.chunk_id
+                                   WHERE cb2.evidence_block_id = b.id AND c2.source_version_id = ?2 AND c2.superseded_by_run IS NULL));
+            """, [.uuid(ko), .uuid(svid)]).first
+        let current = row?.int(0) ?? 0, staleCited = row?.int(1) ?? 0, lineage = row?.int(2) ?? 0, uncited = row?.int(3) ?? 0
+        return current == 0 || staleCited > 0 || (lineage > 0 && uncited > 0)
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,

@@ -192,8 +192,10 @@ public actor EvidenceStore: EvidenceBlockResolving {
     /// the whole activation back; nothing is ever half-active.
     ///
     /// Ownership: when one KnowledgeObject owns the active blocks, every new block is linked to it.
-    /// With several owners a new block takes the owner of the old block at its ordinal only when that
-    /// owner is unique; otherwise it stays unowned (counted, never guessed).
+    /// With several owners a new block takes the unique owner of the old blocks of the SAME RECORD
+    /// (`recordIdentity`: row key / message index); a block whose record has no single owner, or that
+    /// names no record, stays unowned (counted, never guessed). Display order is never used — a parser
+    /// that inserts or splits a block shifts every ordinal after it.
     public func activateDerivation(_ fresh: ParsedDocument, parser: String, parserVersion: String,
                                    startedAt: Date, endedAt: Date = Date()) async throws -> DerivationActivation {
         let svid = fresh.sourceVersionID
@@ -214,16 +216,18 @@ public actor EvidenceStore: EvidenceBlockResolving {
                 throw SourceIntakeError.parsedDocumentIdentityMismatch("activate: version \(svid) has no attached structure")
             }
 
-            var ownersByOrdinal: [Int: Set<UUID>] = [:]
+            var ownersByRecord: [String: Set<UUID>] = [:]
             var allOwners = Set<UUID>()
             for r in try db.query("""
-                SELECT b.ordinal, ebo.knowledge_object_id FROM evidence_blocks b
+                SELECT b.attributes, ebo.knowledge_object_id FROM evidence_blocks b
                 JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
                 WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
                 """, [.uuid(svid)]) {
-                guard let o = r.int(0), let ko = r.uuid(1) else { continue }
-                ownersByOrdinal[Int(o), default: []].insert(ko)
+                guard let ko = r.uuid(1) else { continue }
                 allOwners.insert(ko)
+                let attrs = r.string(0).flatMap { Self.decode([String: AnyCodable].self, $0) } ?? [:]
+                let probe = EvidenceBlock(documentID: documentID, ordinal: 0, kind: .paragraph, rawText: "", locator: SourceLocator(), attributes: attrs)
+                if let record = probe.recordIdentity { ownersByRecord[record, default: []].insert(ko) }
             }
 
             try db.exec("UPDATE evidence_blocks SET superseded_by_run = ? WHERE source_version_id = ? AND superseded_by_run IS NULL;",
@@ -250,8 +254,8 @@ public actor EvidenceStore: EvidenceBlockResolving {
                        .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
                        .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
                        .text(Self.json(block.attributes) ?? "{}")])
-                let atOrdinal = ownersByOrdinal[b.ordinal] ?? []
-                let owner = allOwners.count == 1 ? allOwners.first : (atOrdinal.count == 1 ? atOrdinal.first : nil)
+                let ofRecord = b.recordIdentity.flatMap { ownersByRecord[$0] } ?? []
+                let owner = allOwners.count == 1 ? allOwners.first : (ofRecord.count == 1 ? ofRecord.first : nil)
                 if let owner {
                     try db.exec("INSERT OR IGNORE INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?, ?, ?);",
                                 [.uuid(block.id), .uuid(owner), .real(linkedAt)])

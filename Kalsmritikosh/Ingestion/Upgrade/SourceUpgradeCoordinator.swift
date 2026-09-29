@@ -108,13 +108,13 @@ public struct SourceUpgradeCoordinator: Sendable {
                 SELECT COUNT(DISTINCT ebo.knowledge_object_id) FROM evidence_block_objects ebo
                 JOIN evidence_blocks b ON b.id = ebo.evidence_block_id
                 WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL
-                  AND NOT EXISTS (SELECT 1 FROM chunks c WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ?);
+                  AND NOT EXISTS (SELECT 1 FROM chunks c WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ? AND c.superseded_by_run IS NULL);
                 """, [v, v]).first?.int(0) ?? 0)
             let staleChunks = Int(try await database.query("""
                 SELECT COUNT(DISTINCT c.id) FROM chunks c
                 JOIN chunk_blocks cb ON cb.chunk_id = c.id
                 JOIN evidence_blocks b ON b.id = cb.evidence_block_id
-                WHERE c.source_version_id = ? AND b.superseded_by_run IS NOT NULL;
+                WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL AND b.superseded_by_run IS NOT NULL;
                 """, [v]).first?.int(0) ?? 0)
             let uncited = Int(try await database.query("""
                 SELECT COUNT(DISTINCT b.id) FROM evidence_blocks b
@@ -122,9 +122,9 @@ public struct SourceUpgradeCoordinator: Sendable {
                 WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL
                   AND length(trim(CASE WHEN b.normalized_text = '' THEN b.raw_text ELSE b.normalized_text END)) > 0
                   AND EXISTS (SELECT 1 FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id
-                               WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ?)
+                               WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ? AND c.superseded_by_run IS NULL)
                   AND NOT EXISTS (SELECT 1 FROM chunk_blocks cb2 JOIN chunks c2 ON c2.id = cb2.chunk_id
-                                   WHERE cb2.evidence_block_id = b.id AND c2.source_version_id = ?);
+                                   WHERE cb2.evidence_block_id = b.id AND c2.source_version_id = ? AND c2.superseded_by_run IS NULL);
                 """, [v, v, v]).first?.int(0) ?? 0)
             if recorded > 0, live.indexed < recorded {
                 updates.append(invalidate(.indexing, "index coverage fell to \(live.indexed)/\(recorded) — rebuild required"))

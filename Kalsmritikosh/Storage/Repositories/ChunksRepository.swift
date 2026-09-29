@@ -107,7 +107,7 @@ public actor ChunksRepository {
         FROM chunks c
         LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
         WHERE ce.chunk_id IS NULL
-          AND c.admit_embedding = 1
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL
         ORDER BY c.created_at DESC
         LIMIT ?;
         """, [.text(modelID), .integer(Int64(limit))])
@@ -125,7 +125,7 @@ public actor ChunksRepository {
         FROM chunks c
         LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
         WHERE ce.chunk_id IS NULL
-          AND c.admit_embedding = 1
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL
           AND (? IS NULL OR c.rowid < ?)
         ORDER BY c.rowid DESC
         LIMIT ?;
@@ -142,7 +142,7 @@ public actor ChunksRepository {
         SELECT COUNT(*) FROM chunks c
         LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
         WHERE ce.chunk_id IS NULL
-          AND c.admit_embedding = 1;
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL;
         """, [.text(modelID)])
         return Int(rows.first?.int(0) ?? 0)
     }
@@ -176,7 +176,7 @@ public actor ChunksRepository {
 
     public func count(forObject id: KnowledgeObject.ID) async throws -> Int {
         let rows = try await database.query(
-            "SELECT COUNT(*) FROM chunks WHERE object_id = ?;",
+            "SELECT COUNT(*) FROM chunks WHERE object_id = ? AND superseded_by_run IS NULL;",
             [.uuid(id)]
         )
         return Int(rows.first?.int(0) ?? 0)
@@ -189,7 +189,7 @@ public actor ChunksRepository {
     public func findByObjectID(_ id: KnowledgeObject.ID) async throws -> [Chunk] {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
-        FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
+        FROM chunks WHERE object_id = ? AND superseded_by_run IS NULL ORDER BY ordinal ASC;
         """, [.uuid(id)])
         return try await hydrateLineage(rows.compactMap(decode))
     }
@@ -200,7 +200,7 @@ public actor ChunksRepository {
     public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
-        FROM chunks WHERE object_id = ? AND review_status IS NULL ORDER BY ordinal ASC LIMIT 1;
+        FROM chunks WHERE object_id = ? AND review_status IS NULL AND superseded_by_run IS NULL ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
         return try await hydrateLineage(rows.compactMap(decode)).first
     }
@@ -212,7 +212,7 @@ public actor ChunksRepository {
         let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
         return try await database.query("""
             SELECT id FROM chunks WHERE source_version_id IN (\(ids.map { _ in "?" }.joined(separator: ",")))
-               AND review_status IS NULL ORDER BY rowid LIMIT ?;
+               AND review_status IS NULL AND superseded_by_run IS NULL ORDER BY rowid LIMIT ?;
             """, ids.map { .uuid($0) } + [.integer(Int64(limit))]).compactMap { $0.uuid(0) }
     }
 
@@ -264,7 +264,7 @@ public actor ChunksRepository {
             SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind, c.source_version_id
             FROM chunks c
             JOIN chunks_fts ON chunks_fts.rowid = c.rowid
-            WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL AND c.source_version_id IN (\(qs))
+            WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL AND c.superseded_by_run IS NULL AND c.source_version_id IN (\(qs))
             ORDER BY rank
             LIMIT ?;
             """, [.text(match)] + slice.map { .uuid($0) } + [.integer(Int64(limit))])
@@ -295,7 +295,7 @@ public actor ChunksRepository {
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
         JOIN chunks_fts ON chunks_fts.rowid = c.rowid
-        WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL
+        WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL AND c.superseded_by_run IS NULL
         ORDER BY rank
         LIMIT ?;
         """, [.text(match), .integer(Int64(limit))])
@@ -351,7 +351,7 @@ public actor ChunksRepository {
             let rows = try await database.query("""
             SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
             FROM chunks
-            WHERE object_id = ? AND review_status IS NULL
+            WHERE object_id = ? AND review_status IS NULL AND superseded_by_run IS NULL
             ORDER BY ordinal ASC LIMIT ?;
             """, [.uuid(id), .integer(Int64(chunksPerDocument))])
             out.append(contentsOf: try await hydrateLineage(rows.compactMap(decode)))
@@ -366,7 +366,7 @@ public actor ChunksRepository {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks
-        WHERE review_status IS NULL AND admit_embedding = 1 AND length(text) >= 40
+        WHERE review_status IS NULL AND superseded_by_run IS NULL AND admit_embedding = 1 AND length(text) >= 40
         ORDER BY rowid
         LIMIT ?;
         """, [.integer(Int64(limit))])
@@ -386,7 +386,7 @@ public actor ChunksRepository {
         FROM chunks
         WHERE (evidence_block_id IN (\(placeholders))
                OR id IN (SELECT chunk_id FROM chunk_blocks WHERE evidence_block_id IN (\(placeholders))))
-          AND review_status IS NULL
+          AND review_status IS NULL AND superseded_by_run IS NULL
         ORDER BY rowid
         LIMIT ?;
         """, ids.map { SQLValue.uuid($0) } + ids.map { SQLValue.uuid($0) } + [.integer(Int64(limit))])

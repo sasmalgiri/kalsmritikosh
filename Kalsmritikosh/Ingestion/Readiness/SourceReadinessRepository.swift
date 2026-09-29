@@ -283,18 +283,18 @@ public struct SourceReadinessRepository: Sendable {
     /// never derived from a live counter that could include a child attachment's chunks.
     public func ftsCoverage(sourceVersionID: UUID) async throws -> (eligible: Int, indexed: Int) {
         let eligible = Int(try await database.query(
-            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         let indexed = Int(try await database.query(
-            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ?;",
+            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL;",
             [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         return (eligible, indexed)
     }
 
     static func ftsCoverageInSavepoint(_ db: isolated Database, sourceVersionID: UUID) throws -> (eligible: Int, indexed: Int) {
         let eligible = Int(try db.query(
-            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         let indexed = Int(try db.query(
-            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ?;",
+            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL;",
             [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         return (eligible, indexed)
     }
