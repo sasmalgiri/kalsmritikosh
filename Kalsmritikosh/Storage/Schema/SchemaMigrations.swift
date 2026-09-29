@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 133
+    public static let latestVersion = 134
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -664,7 +664,8 @@ public enum SchemaMigrations {
         (130, v130),
         (131, v131),
         (132, v132),
-        (133, v133)
+        (133, v133),
+        (134, v134)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6684,6 +6685,21 @@ public enum SchemaMigrations {
         FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_chunk_blocks_block ON chunk_blocks(evidence_block_id);
+    """
+
+
+    // MARK: - v134 — F15 evidence fingerprint on readiness records
+    //
+    // Readiness was trusted as recorded: completion compared COUNTS, so replacing one derivation
+    // with another (same total) or losing blocks behind a "ready" record went unseen. Each readiness
+    // dimension now records the fingerprint of the version's derived evidence it was measured
+    // against — aggregates over its chunks, blocks and block ownership (count, rowid sum/max, text
+    // length, distinct owners). Reconciliation re-measures a dimension only when the live
+    // fingerprint differs. Computed at readiness-write time, NOT maintained by row triggers: a
+    // trigger per chunk insert measured +43% ingest time on a 3,000-message mailbox.
+    // NULL = recorded before v134 (unknown → always re-checked).
+    private static let v134: String = """
+    ALTER TABLE source_readiness_dimensions ADD COLUMN evidence_fingerprint TEXT;
     """
 
 }

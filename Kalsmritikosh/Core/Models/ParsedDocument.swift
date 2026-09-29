@@ -67,7 +67,13 @@ public nonisolated struct ParsedDocument: Sendable {
     /// the deterministic DocumentProfile's "first meaningful block".
     public var meaningfulBlocks: [EvidenceBlock] {
         blocks
-            .filter { !$0.kind.isBoilerplate && $0.normalizedText.count >= 3 }
+            .filter(\.isMeaningful)
             .sorted { $0.ordinal < $1.ordinal }
     }
+}
+
+extension EvidenceBlock {
+    /// A substantive block: not boilerplate and carrying real text. The ONE rule both the committed
+    /// structural receipt and live reconciliation (F15) count by.
+    public nonisolated var isMeaningful: Bool { !kind.isBoilerplate && normalizedText.count >= 3 }
 }

@@ -173,6 +173,63 @@ public actor EvidenceStore: EvidenceBlockResolving {
         return receipt
     }
 
+    // MARK: - F15 — live structural coverage + repair of lost blocks
+
+    /// The version's COMMITTED structure measured now, by the same rules the persist receipt uses.
+    public func liveStructuralCounts(forVersion versionID: UUID) async throws -> (substantive: Int, located: Int, ocr: Int) {
+        let all = try await blocks(forVersion: versionID)
+        let meaningful = all.filter(\.isMeaningful)
+        return (meaningful.count, meaningful.filter { $0.locator.isResolvable }.count,
+                all.filter { $0.extractionMethod == .ocr }.count)
+    }
+
+    /// F15 — restore blocks lost from a version's committed structure. `fresh` is a re-parse of the
+    /// version's exact bytes by the same parser; parsing is deterministic, so a block is identified by
+    /// its ordinal. Surviving blocks are untouched (their ids and ownership stand); each MISSING
+    /// ordinal is inserted into the EXISTING document (attach-once is kept), with its parent re-pointed
+    /// at the surviving block of that ordinal. Returns the restored blocks. Fail-closed on identity.
+    public func restoreMissingBlocks(from fresh: ParsedDocument) async throws -> [EvidenceBlock] {
+        let sp = "es_restore_\(fresh.sourceVersionID.uuidString.prefix(8))"
+        return try await database.withSavepoint(sp) { db -> [EvidenceBlock] in
+            guard let v = try db.query("SELECT logical_source_id, content_hash, document_id FROM source_versions WHERE id = ?;",
+                                       [.uuid(fresh.sourceVersionID)]).first else {
+                throw SourceIntakeError.sourceVersionNotFound(fresh.sourceVersionID)
+            }
+            guard v.uuid(0) == fresh.logicalSourceID, (v.string(1) ?? "").lowercased() == fresh.contentHash.lowercased() else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("restore: identity mismatch for version \(fresh.sourceVersionID)")
+            }
+            guard let documentID = v.uuid(2) else { return [] }   // never attached: a normal persist, not a restore
+            var existing: [Int: UUID] = [:]
+            for r in try db.query("SELECT ordinal, id FROM evidence_blocks WHERE source_version_id = ?;", [.uuid(fresh.sourceVersionID)]) {
+                if let o = r.int(0), let id = r.uuid(1) { existing[Int(o)] = id }
+            }
+            // fresh id → the id the block has (or will have) in the ledger.
+            var idMap: [UUID: UUID] = [:]
+            for b in fresh.blocks { idMap[b.id] = existing[b.ordinal] ?? b.id }
+            var restored: [EvidenceBlock] = []
+            for b in fresh.blocks.sorted(by: { $0.ordinal < $1.ordinal }) where existing[b.ordinal] == nil {
+                let block = EvidenceBlock(
+                    id: b.id, documentID: documentID, sourceVersionID: fresh.sourceVersionID,
+                    parentBlockID: b.parentBlockID.map { idMap[$0] ?? $0 }, ordinal: b.ordinal, kind: b.kind,
+                    rawText: b.rawText, normalizedText: b.normalizedText, locator: b.locator,
+                    extractionMethod: b.extractionMethod, extractionConfidence: b.extractionConfidence,
+                    language: b.language, attributes: b.attributes)
+                try db.exec("""
+                INSERT INTO evidence_blocks
+                    (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, [.uuid(block.id), .uuid(documentID), .uuid(fresh.sourceVersionID),
+                       block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                       .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                       .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                       .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                       .text(Self.json(block.attributes) ?? "{}")])
+                restored.append(block)
+            }
+            return restored
+        }
+    }
+
     // MARK: - B6 — canonical block → KnowledgeObject ownership
 
     /// Record that each of `blockIDs` belongs to KnowledgeObject `koID` (PA-PROD B6). Idempotent

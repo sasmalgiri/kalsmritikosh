@@ -42,7 +42,7 @@ public struct SourceUpgradeCoordinator: Sendable {
             throw SourceUpgradeError.sourceVersionMissing(sourceVersionID)
         }
         let type = SourceType(rawValue: typeRaw) ?? .unknown
-        try await reconcileIndexing(sourceVersionID, at: now)
+        try await reconcile(sourceVersionID, at: now)
         let snapshot = try await readiness.snapshot(sourceVersionID: sourceVersionID)
         let containerStatus = type.category == .archive ? (try? await container?.manifest(sourceVersionID: sourceVersionID)?.status) ?? nil : nil
 
@@ -65,22 +65,62 @@ public struct SourceUpgradeCoordinator: Sendable {
         return enqueued
     }
 
-    /// F15 — readiness was trusted as recorded: a stored "indexing ready (N units)" stayed ready even
-    /// after the chunks behind it were lost, so nothing ever re-planned the index. Before planning, the
-    /// stored indexing claim is checked against the LIVE per-version FTS coverage; when coverage has
-    /// fallen below what was recorded, the dimension is invalidated so the planner schedules a rebuild.
-    private func reconcileIndexing(_ sourceVersionID: UUID, at now: Date) async throws {
+    /// F15 — readiness was trusted as recorded: a stored "ready (N units)" stayed ready after the
+    /// derived evidence behind it was lost or swapped, so nothing re-planned it. Before planning, each
+    /// ready/partial evidence dimension is RE-MEASURED against the live ledger — but only when the
+    /// version's evidence revision (bumped by triggers on every chunk / block / ownership change) has
+    /// moved since the dimension was recorded; an unchanged revision proves the record still holds.
+    /// A dimension whose live evidence fell short is invalidated, so the planner schedules its rebuild.
+    ///   indexing   — FTS coverage fell, OR an object owning this version's blocks has no chunks
+    ///                (catches one derivation removed while another keeps the total count)
+    ///   structure  — fewer substantive / located blocks than recorded
+    ///   ocr        — fewer OCR blocks than recorded
+    /// Embeddings need no reconciliation here: the embedding drain measures the live missing set
+    /// on every pass (F10), so a lost vector is re-embedded by construction.
+    private func reconcile(_ sourceVersionID: UUID, at now: Date) async throws {
         let snap = try await readiness.snapshot(sourceVersionID: sourceVersionID)
-        guard let rec = snap.dimension(.indexing), rec.state == .ready || rec.state == .partial else { return }
-        let recorded = rec.completedUnits ?? 0
-        let live = try await readiness.ftsCoverage(sourceVersionID: sourceVersionID)
-        guard recorded > 0, live.indexed < recorded else { return }
+        let current = try await readiness.evidenceRevision(sourceVersionID: sourceVersionID)
+        func needsCheck(_ d: SourceReadinessDimension) async throws -> SourceReadinessDimensionRecord? {
+            guard let rec = snap.dimension(d), rec.state == .ready || rec.state == .partial else { return nil }
+            let measured = try await readiness.measuredEvidenceRevision(sourceVersionID: sourceVersionID, dimension: d)
+            return measured == current ? nil : rec     // nil measured (pre-v134) → always re-check
+        }
+        func invalidate(_ d: SourceReadinessDimension, _ why: String) -> SourceReadinessDimensionUpdate {
+            SourceReadinessDimensionUpdate(dimension: d, state: .running, action: .invalidate, detail: why)
+        }
+        var updates: [SourceReadinessDimensionUpdate] = []
+
+        if let rec = try await needsCheck(.indexing) {
+            let recorded = rec.completedUnits ?? 0
+            let live = try await readiness.ftsCoverage(sourceVersionID: sourceVersionID)
+            let orphaned = Int(try await database.query("""
+                SELECT COUNT(DISTINCT ebo.knowledge_object_id) FROM evidence_block_objects ebo
+                JOIN evidence_blocks b ON b.id = ebo.evidence_block_id
+                WHERE b.source_version_id = ?
+                  AND NOT EXISTS (SELECT 1 FROM chunks c WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ?);
+                """, [.uuid(sourceVersionID), .uuid(sourceVersionID)]).first?.int(0) ?? 0)
+            if recorded > 0, live.indexed < recorded {
+                updates.append(invalidate(.indexing, "index coverage fell to \(live.indexed)/\(recorded) — rebuild required"))
+            } else if orphaned > 0 {
+                updates.append(invalidate(.indexing, "\(orphaned) object(s) with committed blocks have no index entries — rebuild required"))
+            }
+        }
+        let structure = try await needsCheck(.structuralExtraction)
+        let ocr = try await needsCheck(.ocr)
+        if structure != nil || ocr != nil {
+            let live = try await EvidenceStore(database: database).liveStructuralCounts(forVersion: sourceVersionID)
+            if let rec = structure, live.located < (rec.completedUnits ?? 0) || live.substantive < (rec.totalUnits ?? 0) {
+                updates.append(invalidate(.structuralExtraction,
+                    "committed structure fell to \(live.located)/\(live.substantive) located blocks (recorded \(rec.completedUnits ?? 0)/\(rec.totalUnits ?? 0)) — rebuild required"))
+            }
+            if let rec = ocr, live.ocr < (rec.completedUnits ?? 0) {
+                updates.append(invalidate(.ocr, "OCR blocks fell to \(live.ocr)/\(rec.completedUnits ?? 0) — rebuild required"))
+            }
+        }
+        guard !updates.isEmpty else { return }
         try await readiness.apply(SourceReadinessUpdatePlan(
             sourceVersionID: sourceVersionID, expectedRevision: snap.aggregateRevision,
-            updates: [SourceReadinessDimensionUpdate(
-                dimension: .indexing, state: .running, action: .invalidate,
-                detail: "index coverage fell to \(live.indexed)/\(recorded) — rebuild required")],
-            producerID: "usf-m3.reconcile", producerVersion: "1", occurredAt: now))
+            updates: updates, producerID: "usf-m3.reconcile", producerVersion: "2", occurredAt: now))
     }
 
     /// Background drainer step: claim the next eligible job, run + verify it, return whether one ran.

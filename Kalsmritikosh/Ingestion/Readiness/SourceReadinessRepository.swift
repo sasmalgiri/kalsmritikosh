@@ -338,6 +338,58 @@ public struct SourceReadinessRepository: Sendable {
                  producer_id, producer_version, basis_kind, basis_identifier, detail, revision, updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
             """, bindDimension(r))
+        try stampEvidenceRevision(db, r)
+    }
+
+    /// F15 — record the fingerprint of the evidence this dimension was measured against, in the SAME
+    /// savepoint as the write, so a later change to the version's chunks / blocks is detectable.
+    private static func stampEvidenceRevision(_ db: isolated Database, _ r: SourceReadinessDimensionRecord) throws {
+        let fp = try evidenceFingerprint(db, sourceVersionID: r.sourceVersionID)
+        try db.exec("UPDATE source_readiness_dimensions SET evidence_fingerprint = ? WHERE source_version_id = ? AND dimension = ?;",
+                    [.text(fp), .uuid(r.sourceVersionID), .text(r.dimension.rawValue)])
+    }
+
+    /// F15 — a cheap fingerprint of a version's derived evidence. Any insert, delete or text change of
+    /// a chunk or block, or an ownership link / unlink, moves at least one term (new rows take fresh
+    /// rowids; a swap between objects changes the distinct-owner count or the text total).
+    static func evidenceFingerprint(_ db: isolated Database, sourceVersionID svid: UUID) throws -> String {
+        let c = try db.query("""
+            SELECT COUNT(*), TOTAL(rowid), MAX(rowid), TOTAL(length(text)), COUNT(DISTINCT object_id)
+              FROM chunks WHERE source_version_id = ?;
+            """, [.uuid(svid)]).first
+        let b = try db.query("""
+            SELECT COUNT(*), TOTAL(rowid), MAX(rowid), TOTAL(length(normalized_text)) + TOTAL(length(locator))
+              FROM evidence_blocks WHERE source_version_id = ?;
+            """, [.uuid(svid)]).first
+        let o = try db.query("""
+            SELECT COUNT(*), TOTAL(ebo.rowid), COUNT(DISTINCT ebo.knowledge_object_id)
+              FROM evidence_block_objects ebo JOIN evidence_blocks eb ON eb.id = ebo.evidence_block_id
+             WHERE eb.source_version_id = ?;
+            """, [.uuid(svid)]).first
+        func v(_ r: SQLRow?, _ i: Int) -> String {
+            guard let r, i < r.values.count else { return "0" }
+            switch r.values[i] {
+            case .integer(let x): return String(x)
+            case .real(let d): return String(d)
+            case .text(let t): return t
+            default: return "0"
+            }
+        }
+        return "c\(v(c,0))/\(v(c,1))/\(v(c,2))/\(v(c,3))/\(v(c,4))|b\(v(b,0))/\(v(b,1))/\(v(b,2))/\(v(b,3))|o\(v(o,0))/\(v(o,1))/\(v(o,2))"
+    }
+
+    /// F15 — the version's live evidence fingerprint.
+    public func evidenceRevision(sourceVersionID: UUID) async throws -> String {
+        try await database.withSavepoint("rd_fp_\(sourceVersionID.uuidString.prefix(8))") { db in
+            try Self.evidenceFingerprint(db, sourceVersionID: sourceVersionID)
+        }
+    }
+
+    /// F15 — the fingerprint a dimension was last measured against; nil = unknown (pre-v134 record).
+    public func measuredEvidenceRevision(sourceVersionID: UUID, dimension: SourceReadinessDimension) async throws -> String? {
+        try await database.query(
+            "SELECT evidence_fingerprint FROM source_readiness_dimensions WHERE source_version_id = ? AND dimension = ?;",
+            [.uuid(sourceVersionID), .text(dimension.rawValue)]).first?.string(0)
     }
 
     private static func updateDimension(_ db: isolated Database, _ r: SourceReadinessDimensionRecord) throws {
@@ -350,6 +402,7 @@ public struct SourceReadinessRepository: Sendable {
                   .text(r.producerID), .text(r.producerVersion), r.basis.map { SQLValue.text($0.kind.rawValue) } ?? .null,
                   r.basis.map { SQLValue.text($0.identifier) } ?? .null, r.detail.map(SQLValue.text) ?? .null,
                   .integer(Int64(r.revision)), .date(r.updatedAt), .uuid(r.sourceVersionID), .text(r.dimension.rawValue)])
+        try stampEvidenceRevision(db, r)
     }
 
     private static func bindDimension(_ r: SourceReadinessDimensionRecord) -> [SQLValue] {

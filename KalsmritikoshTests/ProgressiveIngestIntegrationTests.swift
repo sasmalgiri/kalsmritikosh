@@ -147,6 +147,82 @@ struct ProgressiveIngestIntegrationTests {
         #expect(try await rig.c.completion(sourceVersionID: sv)?.isSearchReady == true)
     }
 
+    @Test("F15 — one object's index removed while another's grows (same total) is detected and repaired")
+    func swappedDerivationDetected() async throws {
+        let rig = try await makeRig()
+        var mbox = ""
+        for (i, word) in ["quillbright", "marrowfen"].enumerated() {
+            mbox += "From a\(i)@x.example Mon Jan  1 00:00:00 2024\nFrom: A\(i) <a\(i)@x.example>\nSubject: Note \(i)\n"
+            mbox += "Date: Mon, 1 Jan 2024 10:0\(i):00 +0000\n\nThe \(word) ledger entry was reconciled today by the team.\n\n"
+        }
+        let url = rig.dir.appendingPathComponent("two.mbox"); try mbox.write(to: url, atomically: true, encoding: .utf8)
+        let sv = try #require(try await rig.c.ingest(fileAt: url).sourceVersionID)
+        let chunks = ChunksRepository(database: rig.db)
+        let hit = try #require(try await chunks.searchFTS("quillbright", limit: 5).first)
+        let lostKO = try #require(try await rig.db.query("SELECT object_id FROM chunks WHERE id = ?;", [.uuid(hit.id)]).first?.uuid(0))
+        let lostCount = Int(try await rig.db.query("SELECT COUNT(*) FROM chunks WHERE object_id = ?;", [.uuid(lostKO)]).first?.int(0) ?? 0)
+        let total = try await SourceReadinessRepository(database: rig.db).ftsCoverage(sourceVersionID: sv).indexed
+        // Swap: drop the lost object's chunks, add the same number of copies to the other object.
+        try await rig.db.exec("DELETE FROM chunks WHERE object_id = ?;", [.uuid(lostKO)])
+        for n in 0..<lostCount {
+            try await rig.db.exec("""
+                INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, created_at, source_version_id)
+                SELECT ?, object_id, ordinal + \(1000 + n), text, char_start, char_end, created_at, source_version_id
+                  FROM chunks WHERE source_version_id = ? AND object_id != ? LIMIT 1;
+                """, [.uuid(UUID()), .uuid(sv), .uuid(lostKO)])
+        }
+        #expect(try await SourceReadinessRepository(database: rig.db).ftsCoverage(sourceVersionID: sv).indexed == total,
+                "the swap keeps the total count — a count check cannot see it")
+        #expect(try await chunks.searchFTS("quillbright", limit: 5).isEmpty)
+        _ = try await rig.c.ensureUpgrade(sourceVersionID: sv, goal: .searchReady, execution: .foreground)
+        #expect(!(try await chunks.searchFTS("quillbright", limit: 5)).isEmpty, "the swapped-out object was not re-indexed")
+    }
+
+    @Test("F15 — blocks lost behind a 'ready' structure record are detected and restored")
+    func lostStructureRestored() async throws {
+        let rig = try await makeRig()
+        let body = (1...6).map { "Paragraph \($0) records the harbour survey of section \($0) in detail." }.joined(separator: "\n\n")
+        let url = try writeTxt(rig, "survey.txt", body)
+        let sv = try #require(try await rig.c.ingest(fileAt: url).sourceVersionID)
+        let readiness = SourceReadinessRepository(database: rig.db)
+        let store = EvidenceStore(database: rig.db)
+        let before = try await store.liveStructuralCounts(forVersion: sv)
+        try #require(before.substantive >= 2)
+        #expect(try await readiness.measuredEvidenceRevision(sourceVersionID: sv, dimension: .structuralExtraction)
+                == (try await readiness.evidenceRevision(sourceVersionID: sv)), "ingest records the revision it measured")
+        // Lose the last block (and its ownership row) behind the ready record.
+        let lost = try #require(try await rig.db.query(
+            "SELECT id FROM evidence_blocks WHERE source_version_id = ? ORDER BY ordinal DESC LIMIT 1;", [.uuid(sv)]).first?.uuid(0))
+        let revBefore = try await readiness.evidenceRevision(sourceVersionID: sv)
+        try await rig.db.exec("DELETE FROM evidence_block_objects WHERE evidence_block_id = ?;", [.uuid(lost)])
+        try await rig.db.exec("DELETE FROM evidence_blocks WHERE id = ?;", [.uuid(lost)])
+        #expect(try await readiness.evidenceRevision(sourceVersionID: sv) != revBefore, "a block change moves the fingerprint")
+        #expect(try await readiness.snapshot(sourceVersionID: sv).dimension(.structuralExtraction)?.state == .ready,
+                "the stored record still claims ready")
+
+        _ = try await rig.c.ensureUpgrade(sourceVersionID: sv, goal: .evidenceReady, execution: .foreground)
+        let after = try await store.liveStructuralCounts(forVersion: sv)
+        #expect(after.substantive == before.substantive, "the lost block was restored")
+        #expect(after.located == before.located)
+        #expect(try await readiness.snapshot(sourceVersionID: sv).dimension(.structuralExtraction)?.state == .ready)
+        let unowned = try await rig.db.query("""
+            SELECT COUNT(*) FROM evidence_blocks b WHERE b.source_version_id = ?
+               AND NOT EXISTS (SELECT 1 FROM evidence_block_objects o WHERE o.evidence_block_id = b.id);
+            """, [.uuid(sv)]).first?.int(0)
+        #expect(unowned == 0, "the restored block is linked to the version's single owner")
+    }
+
+    @Test("F15 — an unchanged revision skips re-measurement; nothing is invalidated")
+    func unchangedRevisionIsTrusted() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "steady.txt", "A steady document whose evidence never changes after ingest.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url).sourceVersionID)
+        let readiness = SourceReadinessRepository(database: rig.db)
+        let rev = try await readiness.snapshot(sourceVersionID: sv).aggregateRevision
+        #expect(try await rig.c.ensureUpgrade(sourceVersionID: sv, goal: .searchReady, execution: .foreground).isEmpty)
+        #expect(try await readiness.snapshot(sourceVersionID: sv).aggregateRevision == rev, "no readiness write when nothing moved")
+    }
+
     @Test("A duplicate upgrade request reuses the active job")
     func duplicateRequestReusesJob() async throws {
         let rig = try await makeRig()

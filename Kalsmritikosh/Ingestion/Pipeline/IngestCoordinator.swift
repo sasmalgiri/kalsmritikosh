@@ -599,7 +599,11 @@ public actor IngestCoordinator {
             // ready, this is a no-op success (no duplicated blocks); otherwise the persist genuinely failed.
             if let snap = try? await readiness.snapshot(sourceVersionID: svid),
                snap.dimension(.structuralExtraction)?.state == .ready { return }
-            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+            // F15 — structure was committed once (attach-once) but blocks behind it were LOST: restore
+            // the missing ordinals from this deterministic re-parse, then measure readiness live.
+            try await repairStructure(doc, sourceVersionID: svid, store: evidenceStore, readiness: readiness,
+                                      db: db, producerVersion: result.pluginVersion)
+            return
         }
         var updates: [SourceReadinessDimensionUpdate] = [
             SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready, action: .satisfy,
@@ -618,6 +622,46 @@ public actor IngestCoordinator {
         // USF-010 — stamp the EXACT parser version as the producer version so a later parser upgrade can
         // detect this structure as stale (producer version < current) and reprocess only what changed.
         await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: result.pluginVersion)
+    }
+
+    /// F15 — restore lost blocks into the version's existing document and advance structure / OCR
+    /// readiness from the LIVE committed blocks (never from the re-parse). Restored blocks are linked
+    /// to the version's owning object when exactly one object owns its blocks; with several owners the
+    /// owner of a restored block is not knowable from the ledger, so they stay unlinked and it is logged.
+    private func repairStructure(_ doc: ParsedDocument, sourceVersionID svid: UUID, store: EvidenceStore,
+                                 readiness: SourceReadinessRepository, db: Database, producerVersion: String) async throws {
+        let restored = try await store.restoreMissingBlocks(from: doc)
+        if !restored.isEmpty {
+            let owners = try await db.query("""
+                SELECT DISTINCT ebo.knowledge_object_id FROM evidence_block_objects ebo
+                JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ?;
+                """, [.uuid(svid)]).compactMap { $0.uuid(0) }
+            if owners.count == 1 {
+                try await store.linkBlocks(restored.map(\.id), toObject: owners[0], at: Date())
+            } else {
+                KalsmritikoshLog.ingestion.notice("Structure repair: \(restored.count, privacy: .public) restored block(s) left unlinked — \(owners.count, privacy: .public) owners for version")
+            }
+        }
+        let live = try await store.liveStructuralCounts(forVersion: svid)
+        guard live.substantive > 0 else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+        }
+        // The basis is the committed document the blocks live in (never the discarded re-parse).
+        guard let documentID = try await db.query("SELECT document_id FROM source_versions WHERE id = ?;",
+                                                  [.uuid(svid)]).first?.uuid(0) else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+        }
+        let basis = SourceReadinessBasis(kind: .sourceDocument, identifier: documentID.uuidString)
+        let ready = doc.extractionStatus == .complete && live.located == live.substantive
+        var updates = [SourceReadinessDimensionUpdate(
+            dimension: .structuralExtraction, state: ready ? .ready : .partial, action: ready ? .satisfy : .partiallySatisfy,
+            completedUnits: live.located, totalUnits: live.substantive, basis: basis,
+            detail: restored.isEmpty ? nil : "restored \(restored.count) lost block(s)")]
+        if live.ocr > 0 {
+            updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy, applicability: .conditional,
+                                                          completedUnits: live.ocr, totalUnits: live.ocr, basis: basis))
+        }
+        await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: producerVersion)
     }
 
     /// F16 — parse an exact version's re-verified bytes with the CURRENT structural parser (no
