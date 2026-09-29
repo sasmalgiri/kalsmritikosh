@@ -188,15 +188,16 @@ struct ProgressiveIngestIntegrationTests {
         let store = EvidenceStore(database: rig.db)
         let before = try await store.liveStructuralCounts(forVersion: sv)
         try #require(before.substantive >= 2)
-        #expect(try await readiness.measuredEvidenceRevision(sourceVersionID: sv, dimension: .structuralExtraction)
-                == (try await readiness.evidenceRevision(sourceVersionID: sv)), "ingest records the revision it measured")
+        #expect(try await readiness.proofIsCurrent(sourceVersionID: sv, dimension: .structuralExtraction),
+                "ingest records the revision it measured")
         // Lose the last block (and its ownership row) behind the ready record.
         let lost = try #require(try await rig.db.query(
             "SELECT id FROM evidence_blocks WHERE source_version_id = ? ORDER BY ordinal DESC LIMIT 1;", [.uuid(sv)]).first?.uuid(0))
-        let revBefore = try await readiness.evidenceRevision(sourceVersionID: sv)
+        let revBefore = try await readiness.evidenceRevisions(sourceVersionID: sv)
         try await rig.db.exec("DELETE FROM evidence_block_objects WHERE evidence_block_id = ?;", [.uuid(lost)])
         try await rig.db.exec("DELETE FROM evidence_blocks WHERE id = ?;", [.uuid(lost)])
-        #expect(try await readiness.evidenceRevision(sourceVersionID: sv) != revBefore, "a block change moves the fingerprint")
+        #expect(try await readiness.evidenceRevisions(sourceVersionID: sv) != revBefore, "a block change moves the revision")
+        #expect(!(try await readiness.proofIsCurrent(sourceVersionID: sv, dimension: .structuralExtraction)))
         #expect(try await readiness.snapshot(sourceVersionID: sv).dimension(.structuralExtraction)?.state == .ready,
                 "the stored record still claims ready")
 

@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import os
 
 public struct SourceUpgradeCoordinator: Sendable {
 
@@ -66,29 +67,39 @@ public struct SourceUpgradeCoordinator: Sendable {
     }
 
     /// F15 — readiness was trusted as recorded: a stored "ready (N units)" stayed ready after the
-    /// derived evidence behind it was lost or swapped, so nothing re-planned it. Before planning, each
-    /// ready/partial evidence dimension is RE-MEASURED against the live ledger — but only when the
-    /// version's evidence revision (bumped by triggers on every chunk / block / ownership change) has
-    /// moved since the dimension was recorded; an unchanged revision proves the record still holds.
-    /// A dimension whose live evidence fell short is invalidated, so the planner schedules its rebuild.
-    ///   indexing   — FTS coverage fell, OR an object owning this version's blocks has no chunks
-    ///                (catches one derivation removed while another keeps the total count)
+    /// derived evidence behind it was lost, edited or swapped. Before planning, each ready/partial
+    /// evidence dimension whose proof no longer matches the live per-lane evidence revisions (v137
+    /// triggers bump them on every chunk / block / ownership change and generation switch) is
+    /// RE-VERIFIED semantically; an unchanged revision is the fast path and is not re-measured.
+    ///   indexing   — FTS coverage fell; an object owning active blocks has no chunks; a chunk cites a
+    ///                block of a superseded derivation (stale index); or an active block is cited by no
+    ///                chunk in an object whose chunks carry block lineage (content missing from a
+    ///                still-populated object)
     ///   structure  — fewer substantive / located blocks than recorded
     ///   ocr        — fewer OCR blocks than recorded
-    /// Embeddings need no reconciliation here: the embedding drain measures the live missing set
-    /// on every pass (F10), so a lost vector is re-embedded by construction.
+    /// A dimension that fails is invalidated so the planner schedules its rebuild; one that passes is
+    /// re-stamped against the revisions read BEFORE measuring (refused if they moved meanwhile).
+    /// Embeddings need no reconciliation here: the embedding drain measures the live missing set on
+    /// every pass (F10), so a lost vector is re-embedded by construction.
     private func reconcile(_ sourceVersionID: UUID, at now: Date) async throws {
         let snap = try await readiness.snapshot(sourceVersionID: sourceVersionID)
-        let current = try await readiness.evidenceRevision(sourceVersionID: sourceVersionID)
+        let measured = try await readiness.evidenceRevisions(sourceVersionID: sourceVersionID)
         func needsCheck(_ d: SourceReadinessDimension) async throws -> SourceReadinessDimensionRecord? {
-            guard let rec = snap.dimension(d), rec.state == .ready || rec.state == .partial else { return nil }
-            let measured = try await readiness.measuredEvidenceRevision(sourceVersionID: sourceVersionID, dimension: d)
-            return measured == current ? nil : rec     // nil measured (pre-v134) → always re-check
+            // A not-applicable dimension (OCR of a text file) claims nothing about evidence.
+            guard let rec = snap.dimension(d), rec.state == .ready || rec.state == .partial,
+                  rec.applicability != .notApplicable else { return nil }
+            return try await readiness.proofIsCurrent(sourceVersionID: sourceVersionID, dimension: d) ? nil : rec
         }
         func invalidate(_ d: SourceReadinessDimension, _ why: String) -> SourceReadinessDimensionUpdate {
             SourceReadinessDimensionUpdate(dimension: d, state: .running, action: .invalidate, detail: why)
         }
+        func reaffirm(_ rec: SourceReadinessDimensionRecord, completed: Int?, total: Int?) -> SourceReadinessDimensionUpdate {
+            SourceReadinessDimensionUpdate(dimension: rec.dimension, state: rec.state, action: .reconcile,
+                                           applicability: rec.applicability, completedUnits: completed, totalUnits: total,
+                                           basis: rec.basis, detail: rec.detail)
+        }
         var updates: [SourceReadinessDimensionUpdate] = []
+        let v = SQLValue.uuid(sourceVersionID)
 
         if let rec = try await needsCheck(.indexing) {
             let recorded = rec.completedUnits ?? 0
@@ -98,29 +109,70 @@ public struct SourceUpgradeCoordinator: Sendable {
                 JOIN evidence_blocks b ON b.id = ebo.evidence_block_id
                 WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL
                   AND NOT EXISTS (SELECT 1 FROM chunks c WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ?);
-                """, [.uuid(sourceVersionID), .uuid(sourceVersionID)]).first?.int(0) ?? 0)
+                """, [v, v]).first?.int(0) ?? 0)
+            let staleChunks = Int(try await database.query("""
+                SELECT COUNT(DISTINCT c.id) FROM chunks c
+                JOIN chunk_blocks cb ON cb.chunk_id = c.id
+                JOIN evidence_blocks b ON b.id = cb.evidence_block_id
+                WHERE c.source_version_id = ? AND b.superseded_by_run IS NOT NULL;
+                """, [v]).first?.int(0) ?? 0)
+            let uncited = Int(try await database.query("""
+                SELECT COUNT(DISTINCT b.id) FROM evidence_blocks b
+                JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
+                WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL
+                  AND length(trim(CASE WHEN b.normalized_text = '' THEN b.raw_text ELSE b.normalized_text END)) > 0
+                  AND EXISTS (SELECT 1 FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id
+                               WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ?)
+                  AND NOT EXISTS (SELECT 1 FROM chunk_blocks cb2 JOIN chunks c2 ON c2.id = cb2.chunk_id
+                                   WHERE cb2.evidence_block_id = b.id AND c2.source_version_id = ?);
+                """, [v, v, v]).first?.int(0) ?? 0)
             if recorded > 0, live.indexed < recorded {
                 updates.append(invalidate(.indexing, "index coverage fell to \(live.indexed)/\(recorded) — rebuild required"))
             } else if orphaned > 0 {
                 updates.append(invalidate(.indexing, "\(orphaned) object(s) with committed blocks have no index entries — rebuild required"))
+            } else if staleChunks > 0 {
+                updates.append(invalidate(.indexing, "\(staleChunks) index entr(ies) come from a superseded derivation — rebuild required"))
+            } else if uncited > 0 {
+                updates.append(invalidate(.indexing, "\(uncited) active block(s) are missing from the index of their object — rebuild required"))
+            } else {
+                updates.append(reaffirm(rec, completed: live.indexed, total: live.eligible))
             }
         }
         let structure = try await needsCheck(.structuralExtraction)
         let ocr = try await needsCheck(.ocr)
         if structure != nil || ocr != nil {
             let live = try await EvidenceStore(database: database).liveStructuralCounts(forVersion: sourceVersionID)
-            if let rec = structure, live.located < (rec.completedUnits ?? 0) || live.substantive < (rec.totalUnits ?? 0) {
-                updates.append(invalidate(.structuralExtraction,
-                    "committed structure fell to \(live.located)/\(live.substantive) located blocks (recorded \(rec.completedUnits ?? 0)/\(rec.totalUnits ?? 0)) — rebuild required"))
+            if let rec = structure {
+                if live.located < (rec.completedUnits ?? 0) || live.substantive < (rec.totalUnits ?? 0) {
+                    updates.append(invalidate(.structuralExtraction,
+                        "committed structure fell to \(live.located)/\(live.substantive) located blocks (recorded \(rec.completedUnits ?? 0)/\(rec.totalUnits ?? 0)) — rebuild required"))
+                } else if rec.state == .ready, live.located != live.substantive {
+                    updates.append(invalidate(.structuralExtraction, "committed structure is no longer fully located — rebuild required"))
+                } else {
+                    updates.append(reaffirm(rec, completed: rec.completedUnits == nil ? nil : live.located,
+                                            total: rec.totalUnits == nil ? nil : live.substantive))
+                }
             }
-            if let rec = ocr, live.ocr < (rec.completedUnits ?? 0) {
-                updates.append(invalidate(.ocr, "OCR blocks fell to \(live.ocr)/\(rec.completedUnits ?? 0) — rebuild required"))
+            if let rec = ocr {
+                if live.ocr < (rec.completedUnits ?? 0) {
+                    updates.append(invalidate(.ocr, "OCR blocks fell to \(live.ocr)/\(rec.completedUnits ?? 0) — rebuild required"))
+                } else {
+                    updates.append(reaffirm(rec, completed: rec.completedUnits == nil ? nil : live.ocr,
+                                            total: rec.totalUnits == nil ? nil : live.ocr))
+                }
             }
         }
         guard !updates.isEmpty else { return }
-        try await readiness.apply(SourceReadinessUpdatePlan(
-            sourceVersionID: sourceVersionID, expectedRevision: snap.aggregateRevision,
-            updates: updates, producerID: "usf-m3.reconcile", producerVersion: "2", occurredAt: now))
+        do {
+            try await readiness.apply(SourceReadinessUpdatePlan(
+                sourceVersionID: sourceVersionID, expectedRevision: snap.aggregateRevision,
+                updates: updates, producerID: "usf-m3.reconcile", producerVersion: "3", occurredAt: now,
+                measuredEvidence: measured))
+        } catch SourceReadinessError.evidenceChangedDuringMeasurement {
+            // Evidence moved while it was being measured: nothing is stamped; the proofs stay stale and
+            // the next reconciliation re-measures the new state.
+            KalsmritikoshLog.ingestion.info("reconcile \(sourceVersionID.uuidString, privacy: .public): evidence changed during measurement — retry later")
+        }
     }
 
     /// Background drainer step: claim the next eligible job, run + verify it, return whether one ran.
@@ -193,7 +245,7 @@ public struct SourceUpgradeCoordinator: Sendable {
     private static func isPermanent(_ e: SourceUpgradeError) -> Bool {
         switch e {
         case .unsupportedCapability, .missingDependency, .sourceUnavailable, .policyBlocked,
-             .sourceBytesChanged, .vaultBlobMissing, .hashMismatch, .sourceVersionMissing:
+             .sourceBytesChanged, .vaultBlobMissing, .hashMismatch, .sourceVersionMissing, .acquisitionIncomplete:
             return true
         default:
             return false

@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 136
+    public static let latestVersion = 137
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -667,7 +667,8 @@ public enum SchemaMigrations {
         (133, v133),
         (134, v134),
         (135, v135),
-        (136, v136)
+        (136, v136),
+        (137, v137)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6729,6 +6730,35 @@ public enum SchemaMigrations {
     ALTER TABLE source_versions ADD COLUMN acquisition_limitation TEXT;
     UPDATE source_versions SET acquisition_limitation = 'walNotPreserved'
      WHERE id IN (SELECT source_version_id FROM source_intake_receipts WHERE detail LIKE '%"sqliteSidecars"%');
+    """
+
+    // MARK: - v137 — F15 genuine evidence revisions
+    //
+    // v134's fingerprint (counts, rowid sums, text lengths, distinct owners) was not a revision: an
+    // equal-length text or locator change, or an ownership swap preserving owner counts, left it
+    // unchanged, so a stale readiness proof stayed "current". Each source version now carries a
+    // monotonically increasing revision per evidence LANE — chunks, blocks, ownership — bumped
+    // transactionally by triggers on every insert, delete and material update (including the F16
+    // active-generation switch, an UPDATE of superseded_by_run, and FK-cascade deletes). A readiness
+    // dimension records the revisions of the lanes it depends on; reconciliation re-verifies it only
+    // when one moved. Absent row = revision 0. Old v134 fingerprints never equal the new tokens, so
+    // every migrated proof is revalidated once. Cost is one indexed upsert per evidence row write.
+    private static let v137: String = """
+    CREATE TABLE IF NOT EXISTS evidence_revisions (
+        source_version_id TEXT NOT NULL,
+        lane              TEXT NOT NULL,
+        revision          INTEGER NOT NULL,
+        PRIMARY KEY (source_version_id, lane)
+    ) WITHOUT ROWID;
+    CREATE TRIGGER IF NOT EXISTS evrev_chunks_ins AFTER INSERT ON chunks WHEN NEW.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (NEW.source_version_id, 'chunks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_chunks_del AFTER DELETE ON chunks WHEN OLD.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (OLD.source_version_id, 'chunks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_chunks_upd AFTER UPDATE OF text, object_id, source_version_id, evidence_block_id ON chunks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'chunks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'chunks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_blocks_ins AFTER INSERT ON evidence_blocks WHEN NEW.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (NEW.source_version_id, 'blocks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_blocks_del AFTER DELETE ON evidence_blocks WHEN OLD.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (OLD.source_version_id, 'blocks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_blocks_upd AFTER UPDATE OF raw_text, normalized_text, locator, kind, attributes, ordinal, parent_block_id, extraction_method, source_version_id, superseded_by_run ON evidence_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'blocks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'blocks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_owner_ins AFTER INSERT ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_owner_del AFTER DELETE ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_owner_upd AFTER UPDATE ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id) IS NOT NULL AND NEW.evidence_block_id IS NOT OLD.evidence_block_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
     """
 
 }
