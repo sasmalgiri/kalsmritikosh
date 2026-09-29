@@ -96,7 +96,7 @@ public struct SourceUpgradeCoordinator: Sendable {
             let orphaned = Int(try await database.query("""
                 SELECT COUNT(DISTINCT ebo.knowledge_object_id) FROM evidence_block_objects ebo
                 JOIN evidence_blocks b ON b.id = ebo.evidence_block_id
-                WHERE b.source_version_id = ?
+                WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL
                   AND NOT EXISTS (SELECT 1 FROM chunks c WHERE c.object_id = ebo.knowledge_object_id AND c.source_version_id = ?);
                 """, [.uuid(sourceVersionID), .uuid(sourceVersionID)]).first?.int(0) ?? 0)
             if recorded > 0, live.indexed < recorded {

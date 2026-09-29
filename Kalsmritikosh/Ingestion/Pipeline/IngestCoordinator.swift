@@ -519,7 +519,7 @@ public actor IngestCoordinator {
         }
         let type = SourceType(rawValue: typeRaw) ?? .unknown
         let parserVersion = universalExecutor.registry.plugin(for: type)?.pluginVersion ?? "1"
-        _ = execution   // reprocessing re-stamps synchronously (bytes verified, structure unchanged)
+        _ = execution   // reprocessing runs synchronously: bytes verified, re-parsed, activated if changed, re-stamped
         return try await reprocessing.reprocess(sourceVersionID: sourceVersionID, currentParserVersion: parserVersion, at: Date())
     }
 
@@ -634,7 +634,7 @@ public actor IngestCoordinator {
         if !restored.isEmpty {
             let owners = try await db.query("""
                 SELECT DISTINCT ebo.knowledge_object_id FROM evidence_block_objects ebo
-                JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ?;
+                JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
                 """, [.uuid(svid)]).compactMap { $0.uuid(0) }
             if owners.count == 1 {
                 try await store.linkBlocks(restored.map(\.id), toObject: owners[0], at: Date())
@@ -692,7 +692,7 @@ public actor IngestCoordinator {
         }
         let owners = try await db.query("""
             SELECT ebo.evidence_block_id, ebo.knowledge_object_id FROM evidence_block_objects ebo
-            JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ?;
+            JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
             """, [.uuid(svid)])
         var koOfBlock: [UUID: UUID] = [:]
         for r in owners { if let b = r.uuid(0), let k = r.uuid(1), koOfBlock[b] == nil { koOfBlock[b] = k } }
@@ -1643,7 +1643,7 @@ public actor IngestCoordinator {
     private static let ownershipKeys: Set<String> = [SQLiteRecordKey.metadataKey, "messageIndex", EmailLoader.threadMessagesMetaKey]
 
     /// Structure / metadata / OCR readiness from a COMMITTED structural receipt (USF-002.1).
-    private static func structuralReadinessUpdates(_ r: StructuralPersistenceReceipt) -> [SourceReadinessDimensionUpdate] {
+    nonisolated static func structuralReadinessUpdates(_ r: StructuralPersistenceReceipt) -> [SourceReadinessDimensionUpdate] {
         let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
         let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
         var updates = [SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,

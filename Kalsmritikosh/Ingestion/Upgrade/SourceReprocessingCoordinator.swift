@@ -39,10 +39,12 @@ public struct SourceReprocessingCoordinator: Sendable {
     public enum Outcome: Sendable, Equatable {
         case upToDate
         case reprocessed(dimensions: [SourceReadinessDimension])
-        /// F16 — the current parser produces a DIFFERENT block set for these bytes. Activating it would
-        /// need a versioned derivation (the committed structure is attach-once), so nothing is re-stamped:
-        /// the dimensions stay honestly stale at their old producer version.
-        case changedOutputNotActivated(dimensions: [SourceReadinessDimension])
+        /// F16 — the current parser produced a DIFFERENT block set; it was validated and activated as the
+        /// version's structure (the old blocks superseded, kept for citations) and readiness re-stamped.
+        case activated(dimensions: [SourceReadinessDimension], supersededBlocks: Int, activatedBlocks: Int)
+        /// F16 — the changed output was worse than what it would replace, so nothing was activated or
+        /// re-stamped: the dimensions stay honestly stale at their old producer version.
+        case changedOutputRejected(dimensions: [SourceReadinessDimension], reason: String)
     }
 
     /// Parser-dependent, present dimensions whose stored producer version differs from `currentParserVersion`.
@@ -80,37 +82,98 @@ public struct SourceReprocessingCoordinator: Sendable {
         guard let reparse else {
             throw SourceUpgradeError.missingDependency("no re-parser wired; refusing to re-stamp without running the parser")
         }
-        let fresh = try await reparse(sourceVersionID, resolved.snapshotURL, resolved.identityURL)?.blocks ?? []
-        let committed = try await EvidenceStore(database: database).blocks(forVersion: sourceVersionID)
-        guard Self.fingerprint(fresh) == Self.fingerprint(committed) else {
-            KalsmritikoshLog.ingestion.info("reprocess \(sourceVersionID.uuidString, privacy: .public): parser \(currentParserVersion, privacy: .public) output differs from committed structure — not re-stamped")
-            return .changedOutputNotActivated(dimensions: stale)
-        }
-
-        // Capture the existing parser-dimension records so the refresh preserves their exact proof.
+        let freshDoc = try await reparse(sourceVersionID, resolved.snapshotURL, resolved.identityURL)
+        let store = EvidenceStore(database: database)
+        let committed = try await store.blocks(forVersion: sourceVersionID)
         let snapshot = try await readiness.snapshot(sourceVersionID: sourceVersionID)
         let records = stale.compactMap { snapshot.dimension($0) }
 
-        // Leaving `ready` requires an explicit invalidation to `running` (readiness transition rule).
-        try await readiness.apply(SourceReadinessUpdatePlan(
-            sourceVersionID: sourceVersionID, expectedRevision: snapshot.aggregateRevision,
-            updates: records.map { SourceReadinessDimensionUpdate(dimension: $0.dimension, state: .running, action: .invalidate,
-                                                                  detail: "parser upgrade to \(currentParserVersion)") },
-            producerID: "usf-m3.reprocess", producerVersion: currentParserVersion, occurredAt: now))
-
-        // Re-satisfy each dimension to its prior state with its prior proof, stamped with the new version.
-        let mid = try await readiness.snapshot(sourceVersionID: sourceVersionID)
-        try await readiness.apply(SourceReadinessUpdatePlan(
-            sourceVersionID: sourceVersionID, expectedRevision: mid.aggregateRevision,
-            updates: records.map { rec in
+        if Self.fingerprint(freshDoc?.blocks ?? []) == Self.fingerprint(committed) {
+            // Resume: a derivation was activated but the stamp that follows it never landed — the proof
+            // still names the run it replaced. Stamp from the ACTIVE derivation, never the old proof.
+            if let active = try await store.activatedDerivationReceipt(forVersion: sourceVersionID),
+               records.contains(where: { $0.basis?.kind == .parserRun && $0.basis?.identifier != active.parserRunID.uuidString }) {
+                try await stamp(sourceVersionID, snapshot: snapshot, records: records, from: active,
+                                version: currentParserVersion, at: now)
+                return .activated(dimensions: stale, supersededBlocks: 0, activatedBlocks: active.blockCount)
+            }
+            // Same structure: each dimension keeps its exact prior proof, stamped with the new version.
+            try await restamp(sourceVersionID, snapshot: snapshot, to: records.map { rec in
                 SourceReadinessDimensionUpdate(
-                    dimension: rec.dimension, state: rec.state,
-                    action: rec.state == .ready ? .satisfy : .partiallySatisfy, applicability: rec.applicability,
+                    dimension: rec.dimension, state: rec.state, action: .reconcile, applicability: rec.applicability,
                     completedUnits: rec.completedUnits, totalUnits: rec.totalUnits, basis: rec.basis, detail: rec.detail)
-            },
-            producerID: "usf-m3.reprocess", producerVersion: currentParserVersion, occurredAt: now))
+            }, version: currentParserVersion, at: now)
+            return .reprocessed(dimensions: stale)
+        }
 
-        return .reprocessed(dimensions: stale)
+        // F16 — the output CHANGED. Validate it, activate it as the version's structure in one
+        // savepoint (the old blocks are superseded, not deleted), and only THEN re-stamp readiness
+        // from the committed receipt. An interruption before the stamp leaves the dimensions stale at
+        // the old version (a rerun finds the activated structure and re-stamps); never falsely v2.
+        guard let freshDoc else {
+            return .changedOutputRejected(dimensions: stale, reason: "the current parser produced no structure for these bytes")
+        }
+        if let reason = Self.activationRefusal(fresh: freshDoc, committed: committed,
+                                               priorStructural: snapshot.dimension(.structuralExtraction)?.state) {
+            KalsmritikoshLog.ingestion.info("reprocess \(sourceVersionID.uuidString, privacy: .public): parser \(currentParserVersion, privacy: .public) output refused — \(reason, privacy: .public)")
+            return .changedOutputRejected(dimensions: stale, reason: reason)
+        }
+        let parser = try await store.activeParser(forVersion: sourceVersionID) ?? "reprocess"
+        let activation = try await store.activateDerivation(freshDoc, parser: parser, parserVersion: currentParserVersion,
+                                                            startedAt: now, endedAt: now)
+        if activation.unownedCount > 0 {
+            KalsmritikoshLog.ingestion.info("reprocess \(sourceVersionID.uuidString, privacy: .public): \(activation.unownedCount, privacy: .public) activated blocks have no knowable owner")
+        }
+        try await stamp(sourceVersionID, snapshot: snapshot, records: records, from: activation.receipt,
+                        version: currentParserVersion, at: now)
+        return .activated(dimensions: stale, supersededBlocks: activation.supersededCount,
+                          activatedBlocks: activation.activated.count)
+    }
+
+    /// Re-stamp the stale dimensions from an activated derivation's committed receipt.
+    private func stamp(_ svid: UUID, snapshot: SourceReadinessSnapshot, records: [SourceReadinessDimensionRecord],
+                       from receipt: StructuralPersistenceReceipt, version: String, at now: Date) async throws {
+        let produced = Dictionary(IngestCoordinator.structuralReadinessUpdates(receipt).map { ($0.dimension, $0) },
+                                  uniquingKeysWith: { a, _ in a })
+        try await restamp(svid, snapshot: snapshot, to: records.map { rec in
+            // A dimension the new structure no longer produces (e.g. no OCR blocks) is not applicable.
+            let u = produced[rec.dimension] ?? SourceReadinessDimensionUpdate(
+                dimension: rec.dimension, state: .ready, action: .satisfy, applicability: .notApplicable)
+            return SourceReadinessDimensionUpdate(
+                dimension: u.dimension, state: u.state, action: u.state == rec.state ? .reconcile : u.action,
+                applicability: u.applicability, completedUnits: u.completedUnits, totalUnits: u.totalUnits,
+                basis: u.basis, detail: "activated parser \(version) derivation")
+        }, version: version, at: now)
+    }
+
+    /// Re-stamp dimensions in ONE readiness plan (same-state → `reconcile`), so no interruption can
+    /// leave a dimension half-way (invalidated to `running` and never re-satisfied).
+    private func restamp(_ svid: UUID, snapshot: SourceReadinessSnapshot, to updates: [SourceReadinessDimensionUpdate],
+                         version: String, at now: Date) async throws {
+        guard !updates.isEmpty else { return }
+        try await readiness.apply(SourceReadinessUpdatePlan(
+            sourceVersionID: svid, expectedRevision: snapshot.aggregateRevision, updates: updates,
+            producerID: "usf-m3.reprocess", producerVersion: version, occurredAt: now))
+    }
+
+    /// F16 — why a changed derivation must NOT be activated, or nil when it may. A newer parser's output
+    /// is activated only when it is at least as good as what it replaces: a clean status, substantive
+    /// blocks where the old structure had them, and no fall from complete to partial.
+    static func activationRefusal(fresh: ParsedDocument, committed: [EvidenceBlock],
+                                  priorStructural: SourceReadinessDimensionState?) -> String? {
+        guard fresh.extractionStatus == .complete || fresh.extractionStatus == .partial else {
+            return "the current parser reported \(fresh.extractionStatus.rawValue)"
+        }
+        let meaningful = fresh.blocks.filter(\.isMeaningful)
+        if meaningful.isEmpty, committed.contains(where: \.isMeaningful) {
+            return "the new structure has no substantive blocks where the old one did"
+        }
+        let complete = fresh.extractionStatus == .complete && !meaningful.isEmpty
+            && meaningful.allSatisfy { $0.locator.isResolvable }
+        if priorStructural == .ready, !complete {
+            return "the new structure is incomplete where the old one was complete"
+        }
+        return nil
     }
 
     /// F16 — the content identity of a block set: ordered (kind, text, locator). Ids and timestamps are

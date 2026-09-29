@@ -88,33 +88,123 @@ struct SourceReprocessingTests {
         #expect(try await rig.c.completion(sourceVersionID: sv)?.isEvidenceReady == true)           // re-evidence-ready
     }
 
-    @Test("F16 — a parser whose output differs is NOT stamped: the dimension stays stale, nothing is claimed")
-    func changedParserOutputNotStamped() async throws {
+    /// A "parser v2" document for the version's exact identity: the committed blocks with changed text.
+    private func v2Document(_ rig: Rig, _ sv: UUID, committed: [EvidenceBlock],
+                            status: ExtractionStatus = .complete) async throws -> ParsedDocument {
+        let row = try #require(try await rig.db.query("SELECT logical_source_id, content_hash FROM source_versions WHERE id = ?;",
+                                                      [.uuid(sv)]).first)
+        return ParsedDocument(id: UUID(), logicalSourceID: try #require(row.uuid(0)), sourceVersionID: sv, filename: "v2.txt",
+                              detectedType: .txt, contentHash: row.string(1) ?? "",
+                              blocks: committed.map { b in
+                                  EvidenceBlock(documentID: b.documentID, ordinal: b.ordinal, kind: b.kind,
+                                                rawText: b.rawText + " (v2 split)", locator: b.locator)
+                              }, extractionStatus: status)
+    }
+
+    private func coordinator(_ rig: Rig, _ doc: ParsedDocument) -> SourceReprocessingCoordinator {
+        SourceReprocessingCoordinator(
+            database: rig.db, readiness: SourceReadinessRepository(database: rig.db),
+            byteResolver: SourceVersionByteResolver(database: rig.db, vault: EvidenceVault(root: rig.dir.appendingPathComponent("vault", isDirectory: true))),
+            reparse: { _, _, _ in doc })
+    }
+
+    private func structuralRecord(_ rig: Rig, _ sv: UUID) async throws -> (version: String?, basis: String?, completed: Int?) {
+        let r = try await rig.db.query("""
+            SELECT producer_version, basis_identifier, completed_units FROM source_readiness_dimensions
+             WHERE source_version_id = ? AND dimension = 'structuralExtraction';
+            """, [.uuid(sv)]).first
+        return (r?.string(0), r?.string(1), r?.int(2).map(Int.init))
+    }
+
+    @Test("F16 — a changed parser output is staged, activated atomically, and only then stamped; old blocks stay citable")
+    func changedParserOutputActivated() async throws {
         let rig = try await makeRig()
         let url = try writeTxt(rig, "v2.txt", "Version two body — synthetic, several words for structure.")
         let sv = try #require(try await rig.c.ingest(fileAt: url, intent: .fullAvailable).sourceVersionID)
         try await downgrade(rig, sv, .structuralExtraction)
-        let committed = try await EvidenceStore(database: rig.db).blocks(forVersion: sv)
-        // A "parser v2" that deliberately yields a different block set for the same bytes.
-        let v2 = SourceReprocessingCoordinator(
-            database: rig.db, readiness: SourceReadinessRepository(database: rig.db),
-            byteResolver: SourceVersionByteResolver(database: rig.db, vault: EvidenceVault(root: rig.dir.appendingPathComponent("vault", isDirectory: true))),
-            reparse: { _, _, _ in
-                ParsedDocument(id: UUID(), logicalSourceID: UUID(), sourceVersionID: sv, filename: "v2.txt",
-                               detectedType: .txt, contentHash: "h",
-                               blocks: committed.map { b in
-                                   EvidenceBlock(documentID: b.documentID, ordinal: b.ordinal, kind: b.kind,
-                                                 rawText: b.rawText + " (v2 split)", locator: b.locator)
-                               })
-            })
+        let store = EvidenceStore(database: rig.db)
+        let committed = try await store.blocks(forVersion: sv)
+        #expect(!committed.isEmpty)
+        let v2 = coordinator(rig, try await v2Document(rig, sv, committed: committed))
         let staleBefore = try await v2.staleParserDimensions(sourceVersionID: sv, currentParserVersion: "2")
         #expect(staleBefore.contains(.structuralExtraction))
+
         let outcome = try await v2.reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date())
-        #expect(outcome == .changedOutputNotActivated(dimensions: staleBefore))
-        // Still stale: the old structure was never re-labelled as parser v2's output.
-        #expect(try await v2.staleParserDimensions(sourceVersionID: sv, currentParserVersion: "2") == staleBefore)
-        #expect(try await rig.db.query("SELECT producer_version FROM source_readiness_dimensions WHERE source_version_id = ? AND dimension = 'structuralExtraction';",
-                                       [.uuid(sv)]).first?.string(0) == "0")
+        #expect(outcome == .activated(dimensions: staleBefore, supersededBlocks: committed.count, activatedBlocks: committed.count))
+
+        // The version's structure IS v2's output now.
+        let active = try await store.blocks(forVersion: sv)
+        #expect(active.count == committed.count)
+        #expect(active.allSatisfy { $0.rawText.hasSuffix(" (v2 split)") })
+        #expect(Set(active.map(\.id)).isDisjoint(with: committed.map(\.id)))
+        // The old blocks are superseded, never deleted: a citation naming one still resolves.
+        #expect(Set(try await store.supersededBlocks(forVersion: sv).map(\.id)) == Set(committed.map(\.id)))
+        #expect(try await store.blocks(ids: committed.map(\.id)).count == committed.count)
+        // Ownership carried over: every new block resolves to the version's object.
+        let resolutions = try await store.resolveCanonicalBlocks(active.map(\.id))
+        #expect(resolutions.allSatisfy { if case .resolved = $0 { return true } else { return false } })
+        // Block search sees only the active derivation.
+        let hits = try await store.searchBlocks("synthetic structure")
+        #expect(!hits.isEmpty && hits.allSatisfy { h in active.contains { $0.id == h.id } })
+        // Stamped from the NEW run's committed receipt, and converged.
+        let rec = try await structuralRecord(rig, sv)
+        #expect(rec.version == "2")
+        #expect(rec.basis == (try await store.activatedDerivationReceipt(forVersion: sv))?.parserRunID.uuidString)
+        #expect(try await v2.staleParserDimensions(sourceVersionID: sv, currentParserVersion: "2").isEmpty)
+        #expect(try await v2.reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date()) == .upToDate)
+    }
+
+    @Test("F16 — a changed output that is worse (complete → partial) is refused: nothing activated, still stale")
+    func worseOutputRefused() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "worse.txt", "Worse body — synthetic, several words for structure.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url, intent: .fullAvailable).sourceVersionID)
+        try await downgrade(rig, sv, .structuralExtraction)
+        let store = EvidenceStore(database: rig.db)
+        let committed = try await store.blocks(forVersion: sv)
+        let v2 = coordinator(rig, try await v2Document(rig, sv, committed: committed, status: .partial))
+        let staleBefore = try await v2.staleParserDimensions(sourceVersionID: sv, currentParserVersion: "2")
+        let outcome = try await v2.reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date())
+        guard case .changedOutputRejected(let dims, _) = outcome else { Issue.record("expected rejection, got \(outcome)"); return }
+        #expect(dims == staleBefore)
+        #expect(try await store.blocks(forVersion: sv).map(\.id) == committed.map(\.id))
+        #expect(try await store.supersededBlocks(forVersion: sv).isEmpty)
+        #expect(try await structuralRecord(rig, sv).version == "0")
+    }
+
+    @Test("F16 — a failed activation leaves nothing half-active; an interrupted stamp resumes from the ACTIVE derivation")
+    func interruptionNeverStampsFalsely() async throws {
+        let rig = try await makeRig()
+        let url = try writeTxt(rig, "int.txt", "Interrupted body — synthetic, several words for structure.")
+        let sv = try #require(try await rig.c.ingest(fileAt: url, intent: .fullAvailable).sourceVersionID)
+        try await downgrade(rig, sv, .structuralExtraction)
+        let store = EvidenceStore(database: rig.db)
+        let committed = try await store.blocks(forVersion: sv)
+        let doc = try await v2Document(rig, sv, committed: committed)
+
+        // 1. An activation that fails part-way (identity gate) rolls back whole.
+        let wrong = ParsedDocument(id: UUID(), logicalSourceID: doc.logicalSourceID, sourceVersionID: sv, filename: "v2.txt",
+                                   detectedType: .txt, contentHash: String(repeating: "0", count: 64), blocks: doc.blocks)
+        await #expect(throws: (any Error).self) {
+            _ = try await store.activateDerivation(wrong, parser: "p", parserVersion: "2", startedAt: Date())
+        }
+        #expect(try await store.blocks(forVersion: sv).map(\.id) == committed.map(\.id))
+        #expect(try await store.supersededBlocks(forVersion: sv).isEmpty)
+
+        // 2. Activation commits, then the process dies before the readiness stamp.
+        let activation = try await store.activateDerivation(doc, parser: "p", parserVersion: "2", startedAt: Date())
+        let before = try await structuralRecord(rig, sv)
+        #expect(before.version == "0")                                             // never falsely v2
+        #expect(before.basis != activation.receipt.parserRunID.uuidString)
+
+        // 3. The rerun stamps from the ACTIVE derivation's receipt — not the proof it replaced.
+        let outcome = try await coordinator(rig, doc).reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date())
+        guard case .activated = outcome else { Issue.record("expected resumed activation, got \(outcome)"); return }
+        let after = try await structuralRecord(rig, sv)
+        #expect(after.version == "2")
+        #expect(after.basis == activation.receipt.parserRunID.uuidString)
+        #expect(after.completed == activation.receipt.locatedSubstantiveBlockCount)
+        #expect(try await coordinator(rig, doc).reprocess(sourceVersionID: sv, currentParserVersion: "2", at: Date()) == .upToDate)
     }
 
     @Test("F16 — a reprocessor with no parser wired refuses to stamp")

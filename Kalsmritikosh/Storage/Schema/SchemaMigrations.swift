@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 134
+    public static let latestVersion = 135
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -665,7 +665,8 @@ public enum SchemaMigrations {
         (131, v131),
         (132, v132),
         (133, v133),
-        (134, v134)
+        (134, v134),
+        (135, v135)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6700,6 +6701,19 @@ public enum SchemaMigrations {
     // NULL = recorded before v134 (unknown → always re-checked).
     private static let v134: String = """
     ALTER TABLE source_readiness_dimensions ADD COLUMN evidence_fingerprint TEXT;
+    """
+
+    // MARK: - v135 — F16 versioned structural derivations
+    //
+    // Committed structure was attach-once: a newer parser whose output differed could never be
+    // activated, so reprocessing left the version stale forever. A version's blocks now form
+    // derivations. `superseded_by_run` is NULL for the ACTIVE derivation; activating a new parser's
+    // output stamps the old blocks with the parser_runs id that replaced them, in the same savepoint
+    // that inserts the new ones. Superseded blocks are never deleted — citations that name them keep
+    // resolving by id — but version-scoped reads (structure, search, readiness) see only the active set.
+    private static let v135: String = """
+    ALTER TABLE evidence_blocks ADD COLUMN superseded_by_run TEXT;
+    CREATE INDEX IF NOT EXISTS idx_blocks_version_active ON evidence_blocks(source_version_id) WHERE superseded_by_run IS NULL;
     """
 
 }

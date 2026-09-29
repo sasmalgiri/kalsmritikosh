@@ -359,12 +359,12 @@ public struct SourceReadinessRepository: Sendable {
             """, [.uuid(svid)]).first
         let b = try db.query("""
             SELECT COUNT(*), TOTAL(rowid), MAX(rowid), TOTAL(length(normalized_text)) + TOTAL(length(locator))
-              FROM evidence_blocks WHERE source_version_id = ?;
+              FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL;
             """, [.uuid(svid)]).first
         let o = try db.query("""
             SELECT COUNT(*), TOTAL(ebo.rowid), COUNT(DISTINCT ebo.knowledge_object_id)
               FROM evidence_block_objects ebo JOIN evidence_blocks eb ON eb.id = ebo.evidence_block_id
-             WHERE eb.source_version_id = ?;
+             WHERE eb.source_version_id = ? AND eb.superseded_by_run IS NULL;
             """, [.uuid(svid)]).first
         func v(_ r: SQLRow?, _ i: Int) -> String {
             guard let r, i < r.values.count else { return "0" }
