@@ -1575,17 +1575,27 @@ public actor IngestCoordinator {
         // F01/F15 — every record's outcome is durable (v139): attempting → committed | failed.
         let outcomes = upgradeDatabase.map(StreamRecordOutcomeRepository.init(database:))
         var failedRecords = 0, alreadyCommitted = 0
+        var bookkeeping = StreamBookkeeping()
 
         var tally: IngestTally? = nil
         var docClass: DocumentClass = .other
         var records = 0, batches = 0
+        defer {
+            bookkeeping.records = records
+            bookkeeping.retainedInvalidations = tally?.invalidations.count ?? 0
+            lastStreamBookkeeping = bookkeeping
+        }
         // Only the keys block ownership is decided by, per committed record — never the content. With a
         // durable outcome ledger they live in its rows (bounded memory); this list is the fallback only.
         var ownership: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])] = []
         var streamError: Error? = nil
         do {
-            try await streamer.streamRecords(fileAt: processURL, type: type, budget: memoryBudget.batch) { batch in
+            let budget = memoryBudget.batch
+            try await streamer.streamRecords(fileAt: processURL, type: type, budget: budget) { batch in
                 batches += 1
+                bookkeeping.maxBatchObjects = max(bookkeeping.maxBatchObjects, batch.count)
+                bookkeeping.maxBatchContentBytes = max(bookkeeping.maxBatchContentBytes,
+                                                       batch.reduce(0) { $0 + $1.content.utf8.count })
                 for raw in batch {
                     let ko = Self.rebindingSourceFile(raw, to: url)
                     // The document class comes from the first record, as on the whole-file path.
@@ -1602,6 +1612,17 @@ public actor IngestCoordinator {
                         continue
                     }
                     let keys = ko.metadata.filter { Self.ownershipKeys.contains($0.key) }
+                    // A record above the per-record budget is not processed: recorded as failed with the
+                    // reason (custody kept) — raise the budget and retry to commit it.
+                    let size = ko.content.utf8.count
+                    if size > budget.maxRecordBytes {
+                        failedRecords += 1; bookkeeping.oversizedRecords += 1
+                        try? await outcomes?.beginAttempt(sourceVersionID: svid, position: position, objectID: ko.id, at: Date())
+                        try? await outcomes?.fail(sourceVersionID: svid, position: position,
+                                                  reason: "record of \(size) bytes exceeds the \(budget.maxRecordBytes)-byte per-record budget",
+                                                  at: Date())
+                        continue
+                    }
                     do {
                         // Durable BEFORE any write: rolls back a previous half-written attempt of this record.
                         try await outcomes?.beginAttempt(sourceVersionID: svid, position: position, objectID: ko.id, at: Date())
@@ -1614,6 +1635,7 @@ public actor IngestCoordinator {
                                                       ownershipKeys: keys, at: Date())
                         } else {
                             ownership.append((ko.id, keys))
+                            bookkeeping.maxInMemoryOwnership = max(bookkeeping.maxInMemoryOwnership, ownership.count)
                         }
                     } catch {
                         failedRecords += 1
@@ -1870,9 +1892,38 @@ public actor IngestCoordinator {
     /// Running totals for one file across its objects and the attachments they spawn.
     private struct IngestTally {
         var chunks = 0, entities = 0, events = 0
-        var invalidations: [SubjectInvalidation.Subject] = []
+        /// Distinct subjects this file invalidated, capped. Every invalidation is ALSO delivered live
+        /// on `invalidations` as each object commits; this list only summarises the file, so it is
+        /// de-duplicated and bounded (F12) instead of growing with the record count.
+        private(set) var invalidations: [SubjectInvalidation.Subject] = []
+        private(set) var droppedInvalidations = 0
+        private var seen = Set<SubjectInvalidation.Subject>()
         var lastObject: KnowledgeObject
+
+        init(lastObject: KnowledgeObject) { self.lastObject = lastObject }
+
+        static let maxRetainedInvalidations = 1024
+
+        mutating func note(_ subjects: [SubjectInvalidation.Subject]) {
+            for s in subjects where !seen.contains(s) {
+                guard invalidations.count < Self.maxRetainedInvalidations else { droppedInvalidations += 1; continue }
+                seen.insert(s); invalidations.append(s)
+            }
+        }
     }
+
+    /// F01/F12 — high-water marks of the last streamed ingest's live structures (instrumentation,
+    /// not a resident-memory measurement).
+    public struct StreamBookkeeping: Sendable, Equatable {
+        public var records = 0
+        public var maxBatchObjects = 0
+        public var maxBatchContentBytes = 0
+        public var maxInMemoryOwnership = 0
+        public var retainedInvalidations = 0
+        public var oversizedRecords = 0
+    }
+    private(set) var lastStreamBookkeeping = StreamBookkeeping()
+    public func streamBookkeeping() -> StreamBookkeeping { lastStreamBookkeeping }
 
     /// One object of a file through the per-KO pipeline, then its attachments. Shared by the
     /// whole-file and streamed paths so both commit an object identically.
@@ -1881,7 +1932,7 @@ public actor IngestCoordinator {
                               tally: inout IngestTally) async throws {
         let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks, sourceVersionID: sourceVersionID)
         tally.chunks += processed.chunkCount; tally.entities += processed.entityCount; tally.events += processed.eventCount
-        tally.invalidations.append(contentsOf: processed.invalidations)
+        tally.note(processed.invalidations)
         tally.lastObject = processed.object
         // Attachments — each ingested with THIS message's version as parent, so the
         // version relation is recorded (atomically, in intake) even if the child parse fails.
@@ -1897,7 +1948,7 @@ public actor IngestCoordinator {
                     let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
                     await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
                     tally.chunks += attachmentResult.chunkCount; tally.entities += attachmentResult.entityCount; tally.events += attachmentResult.eventCount
-                    tally.invalidations.append(contentsOf: attachmentResult.invalidations)
+                    tally.note(attachmentResult.invalidations)
                 } catch {
                     await derivationFailures?.record(
                         stage: "attachment.ingest", error: error,

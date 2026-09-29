@@ -45,10 +45,15 @@ extension Ingestor {
 public struct StreamBatchBudget: Sendable, Equatable {
     public let maxObjects: Int
     public let maxContentBytes: Int
+    /// F01/F12 — the largest single record the pipeline will process. A record above it is not
+    /// committed: its outcome is `failed` with the reason (custody kept), so raising the budget and
+    /// retrying recovers it. A record can never be split, so this is the per-record ceiling.
+    public let maxRecordBytes: Int
 
-    public nonisolated init(maxObjects: Int, maxContentBytes: Int) {
+    public nonisolated init(maxObjects: Int, maxContentBytes: Int, maxRecordBytes: Int = 256 * 1024 * 1024) {
         self.maxObjects = max(1, maxObjects)
         self.maxContentBytes = max(1, maxContentBytes)
+        self.maxRecordBytes = max(1, maxRecordBytes)
     }
 
     public nonisolated static let standard = StreamBatchBudget(maxObjects: 64, maxContentBytes: 8 * 1024 * 1024)

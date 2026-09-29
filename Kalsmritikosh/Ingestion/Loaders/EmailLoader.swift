@@ -16,6 +16,7 @@
 
 import Foundation
 import CryptoKit
+import os
 
 public struct EmailLoader: StreamingIngestor {
     public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail, .nsf]
@@ -156,23 +157,59 @@ public struct EmailLoader: StreamingIngestor {
         let data: Data
         do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
-        let boundaries = Self.mboxBoundaries(data)
-        if coalesce {
-            let plan = mboxThreadPlan(data: data, boundaries: boundaries, url: url)
+        // F12 — thread coalescing groups across the whole mailbox, so its plan (headers + byte range
+        // per message, never bodies) is held in memory; above `maxCoalescedPlanMessages` that plan is
+        // not built and the mailbox streams per message instead — every message is still committed.
+        if coalesce, Self.countMboxMessages(data) <= Self.maxCoalescedPlanMessages {
+            let plan = mboxThreadPlan(data: data, boundaries: Self.mboxBoundaries(data), url: url)
             for thread in plan.threads {
                 if let ko = threadKO(thread, plan: plan, data: data, url: url), let batch = batcher.add(ko) { try await emit(batch) }
             }
             if let rest = batcher.drain() { try await emit(rest) }
             return
+        } else if coalesce {
+            KalsmritikoshLog.ingestion.notice("mbox \(url.lastPathComponent, privacy: .private): more than \(Self.maxCoalescedPlanMessages, privacy: .public) messages — streamed per message (thread plan not built)")
         }
+        // Per message: boundaries are walked one at a time (O(1) bookkeeping), never collected.
         var pieceIndex = 0
-        for k in 0..<(boundaries.count - 1) {
-            guard let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) else { continue }
+        var start = 0
+        while start < data.count {
+            let end = Self.nextMboxBoundary(data, after: start)
+            defer { start = end }
+            guard let piece = Self.mboxPiece(data, from: start, to: end) else { continue }
             defer { pieceIndex += 1 }
             guard let ko = perMessageKO(from: piece, index: pieceIndex, url: url) else { continue }
             if let batch = batcher.add(ko) { try await emit(batch) }
         }
         if let rest = batcher.drain() { try await emit(rest) }
+    }
+
+    /// F12 — above this many messages a thread-coalesced stream falls back to per-message records
+    /// (the thread plan is the one cross-message structure the stream must hold).
+    nonisolated static let maxCoalescedPlanMessages = 250_000
+
+    /// The next message start strictly after `start` (a "\nFrom " line), or `data.count` — the same
+    /// boundaries `mboxBoundaries` returns, found one at a time.
+    nonisolated static func nextMboxBoundary(_ data: Data, after start: Int) -> Int {
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int in
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return raw.count }
+            let count = raw.count
+            var i = start
+            while i + 6 <= count {
+                if base[i] == 0x0A, base[i+1] == 0x46, base[i+2] == 0x72, base[i+3] == 0x6F, base[i+4] == 0x6D, base[i+5] == 0x20 {
+                    return i + 1
+                }
+                i += 1
+            }
+            return count
+        }
+    }
+
+    /// How many message slices the mailbox holds, counted without storing their offsets.
+    nonisolated static func countMboxMessages(_ data: Data) -> Int {
+        var n = 0, start = 0
+        while start < data.count { start = nextMboxBoundary(data, after: start); n += 1 }
+        return n
     }
 
     /// Byte offsets of every mbox message start, plus a final `data.count` sentinel.

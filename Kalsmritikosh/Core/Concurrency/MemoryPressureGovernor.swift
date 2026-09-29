@@ -46,21 +46,39 @@ public actor MemoryPressureGovernor {
     private var level: MemoryPressureLevel = .normal
     private var responders: [Responder] = []
     private var source: DispatchSourceMemoryPressure?
+    /// F12 — the newest level reported but not yet applied, and whether a drain is running. A
+    /// responder suspends (it awaits caches / lanes), and actor reentrancy used to let the NEXT report
+    /// start its responders mid-way — a relief re-warm could run before the critical shed finished.
+    private var pending: MemoryPressureLevel?
+    private var draining = false
 
     public init() {}
 
     public func currentLevel() -> MemoryPressureLevel { level }
 
+    /// The newest level the system has reported (pending, or else applied). Relief work checks this
+    /// between steps so it stops the moment pressure returns.
+    public func latestReportedLevel() -> MemoryPressureLevel { pending ?? level }
+
     /// Register a responder. It is called on every level change, in registration order.
     public func addResponder(_ responder: @escaping Responder) { responders.append(responder) }
 
-    /// Apply a new pressure level. Repeats of the current level are ignored.
+    /// Apply a new pressure level. Levels are applied ONE AT A TIME, in report order: a report that
+    /// arrives while responders are running is queued, and only the newest queued level is applied
+    /// next (intermediate levels superseded by a newer report are skipped). Repeats are ignored.
     public func report(_ new: MemoryPressureLevel) async {
-        guard new != level else { return }
-        let old = level
-        level = new
-        KalsmritikoshLog.app.notice("Memory pressure \(old.description, privacy: .public) → \(new.description, privacy: .public)")
-        for responder in responders { await responder(new) }
+        pending = new
+        guard !draining else { return }
+        draining = true
+        defer { draining = false }
+        while let next = pending {
+            pending = nil
+            guard next != level else { continue }
+            let old = level
+            level = next
+            KalsmritikoshLog.app.notice("Memory pressure \(old.description, privacy: .public) → \(next.description, privacy: .public)")
+            for responder in responders { await responder(next) }
+        }
     }
 
     /// Start listening to the kernel's memory-pressure events. Idempotent.
@@ -105,13 +123,15 @@ public enum MemoryPressureResponse {
                                lanes: LaneScheduler? = nil, memory: MemoryHashCache?,
                                timeline: EntityTimeline?, trie: EntityTrie?, rewarm: Rewarm = Rewarm()) async {
         await governor.addResponder { level in
-            await apply(level, ingest: ingest, lanes: lanes, memory: memory, timeline: timeline, trie: trie, rewarm: rewarm)
+            await apply(level, ingest: ingest, lanes: lanes, memory: memory, timeline: timeline, trie: trie, rewarm: rewarm,
+                        stillRelieved: { await governor.latestReportedLevel() == .normal })
         }
     }
 
     public static func apply(_ level: MemoryPressureLevel, ingest: IngestCoordinator?, lanes: LaneScheduler?,
                              memory: MemoryHashCache?, timeline: EntityTimeline?, trie: EntityTrie?,
-                             rewarm: Rewarm = Rewarm()) async {
+                             rewarm: Rewarm = Rewarm(),
+                             stillRelieved: @Sendable () async -> Bool = { true }) async {
         await ingest?.setPressurePaused(level != .normal)
         await lanes?.setPressure(level)
         switch level {
@@ -121,10 +141,11 @@ public enum MemoryPressureResponse {
             await trie?.shed(reason: pressureShedReason)
         case .normal:
             // Relief: rebuild only what pressure took away. Warms run one after another so the
-            // recovery itself does not spike memory.
-            if await memory?.lastShedReason() == pressureShedReason { await rewarm.memory?() }
-            if await timeline?.lastShedReason() == pressureShedReason { await rewarm.timeline?() }
-            if await trie?.lastShedReason() == pressureShedReason { await rewarm.trie?() }
+            // recovery itself does not spike memory, and each re-checks that pressure has not
+            // returned — a critical report arriving mid-recovery stops the remaining warms.
+            if await stillRelieved(), await memory?.lastShedReason() == pressureShedReason { await rewarm.memory?() }
+            if await stillRelieved(), await timeline?.lastShedReason() == pressureShedReason { await rewarm.timeline?() }
+            if await stillRelieved(), await trie?.lastShedReason() == pressureShedReason { await rewarm.trie?() }
         case .warning:
             break
         }
