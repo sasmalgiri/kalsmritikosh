@@ -174,6 +174,82 @@ public actor EvidenceStore: EvidenceBlockResolving {
                .integer(Int64(doc.warnings.count)), .null])
     }
 
+    // MARK: - F04/F05 — evidence committed WITH each streamed record
+
+    /// Append one streamed record's evidence to its version's document — call INSIDE the savepoint that
+    /// commits the record. The first call of a version attaches `document` (identity-gated exactly like
+    /// `persist`); later calls require the SAME document. Blocks carry deterministic ids, so a redo of a
+    /// record is `INSERT OR IGNORE` (no duplicates); `owned` blocks are linked to `owner`. The run row
+    /// is created once per run and finished by `finishStreamedRun`.
+    static func appendStreamedEvidence(_ db: isolated Database, document doc: ParsedDocument, parser: String,
+                                       parserVersion: String, runID: UUID, runStartedAt: Date, sizeBytes: Int64,
+                                       blocks: [EvidenceBlock], owner: KnowledgeObject.ID, owned: [EvidenceBlock.ID],
+                                       at now: Date) throws {
+        guard let v = try db.query("SELECT logical_source_id, content_hash, document_id FROM source_versions WHERE id = ?;",
+                                   [.uuid(doc.sourceVersionID)]).first else {
+            throw SourceIntakeError.sourceVersionNotFound(doc.sourceVersionID)
+        }
+        guard v.uuid(0) == doc.logicalSourceID, (v.string(1) ?? "").lowercased() == doc.contentHash.lowercased() else {
+            throw SourceIntakeError.parsedDocumentIdentityMismatch("streamed evidence: identity mismatch for version \(doc.sourceVersionID)")
+        }
+        let t = now.timeIntervalSince1970
+        if let existing = v.uuid(2) {
+            guard existing == doc.id else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("version \(doc.sourceVersionID) already has document \(existing)")
+            }
+        } else {
+            try db.exec("""
+            INSERT INTO source_documents
+                (id, logical_source_id, filename, detected_type, mime_type, content_hash, extraction_status, metadata, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(doc.id), .uuid(doc.logicalSourceID), .text(doc.filename), .text(doc.detectedType.rawValue),
+                   doc.mimeType.map { .text($0) } ?? .null, .text(doc.contentHash), .text(ExtractionStatus.partial.rawValue),
+                   .text(Self.json(doc.metadata) ?? "{}"), .real(t)])
+            try db.exec("UPDATE source_versions SET document_id = ? WHERE id = ?;", [.uuid(doc.id), .uuid(doc.sourceVersionID)])
+            try Self.writeProfile(db, DocumentProfile.from(doc, parser: parser, parserVersion: parserVersion, sizeBytes: sizeBytes), at: t)
+        }
+        try db.exec("""
+        INSERT OR IGNORE INTO parser_runs
+            (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL);
+        """, [.uuid(runID), .uuid(doc.sourceVersionID), .text(parser), .text(parserVersion),
+               .real(runStartedAt.timeIntervalSince1970), .real(t), .text(ExtractionStatus.partial.rawValue)])
+        for block in blocks {
+            try db.exec("""
+            INSERT OR IGNORE INTO evidence_blocks
+                (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(block.id), .uuid(doc.id), .uuid(doc.sourceVersionID),
+                   block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                   .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                   .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                   .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                   .text(Self.json(block.attributes) ?? "{}")])
+        }
+        for id in owned {
+            try db.exec("INSERT OR IGNORE INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?, ?, ?);",
+                        [.uuid(id), .uuid(owner), .real(t)])
+        }
+    }
+
+    /// Close a streamed run: its status and the version's live block count on the run, profile and
+    /// document. `complete` only when every discovered unit is committed.
+    public func finishStreamedRun(sourceVersionID svid: UUID, runID: UUID, complete: Bool, at now: Date) async throws {
+        let status = (complete ? ExtractionStatus.complete : .partial).rawValue
+        try await database.withSavepoint("es_stream_finish") { db in
+            let live = try db.query("SELECT COUNT(*) FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL;",
+                                    [.uuid(svid)]).first?.int(0) ?? 0
+            try db.exec("UPDATE parser_runs SET ended_at = ?, status = ?, block_count = ? WHERE id = ?;",
+                        [.real(now.timeIntervalSince1970), .text(status), .integer(live), .uuid(runID)])
+            try db.exec("UPDATE document_profiles SET block_count = ?, extraction_status = ? WHERE source_version_id = ?;",
+                        [.integer(live), .text(status), .uuid(svid)])
+            try db.exec("""
+                UPDATE source_documents SET extraction_status = ?
+                 WHERE id = (SELECT document_id FROM source_versions WHERE id = ?);
+                """, [.text(status), .uuid(svid)])
+        }
+    }
+
     // MARK: - F16 — versioned derivations
 
     /// The committed result of activating a newer parser's derivation of a version.

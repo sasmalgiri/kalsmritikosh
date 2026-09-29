@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 139
+    public static let latestVersion = 140
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -670,7 +670,8 @@ public enum SchemaMigrations {
         (136, v136),
         (137, v137),
         (138, v138),
-        (139, v139)
+        (139, v139),
+        (140, v140)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6807,6 +6808,27 @@ public enum SchemaMigrations {
         attempts          INTEGER NOT NULL DEFAULT 0,
         updated_at        REAL NOT NULL,
         PRIMARY KEY (source_version_id, position)
+    ) WITHOUT ROWID;
+    """
+
+    // MARK: - v140 — F04 durable continuation cursor per scope of a resumable stream
+    //
+    // SQLite ingest stopped each table at a hard 500,000-row cap (and cited only the first 5,000 rows),
+    // so a larger table was never complete. A run now stops at a WORK budget instead and records, per
+    // table (scope) of the EXACT source version, the serialized keyset cursor it reached, the rows it
+    // processed and the rows it discovered. The cursor advances in the same savepoint that commits the
+    // record, so it never runs ahead of committed evidence; a later run resumes from it over the same
+    // immutable acquired bytes. Deferred = discovered − processed, reported, never hidden.
+    private static let v140: String = """
+    CREATE TABLE IF NOT EXISTS stream_cursors (
+        source_version_id TEXT NOT NULL,
+        scope             TEXT NOT NULL,
+        scope_index       INTEGER NOT NULL,
+        cursor            TEXT,
+        processed         INTEGER NOT NULL DEFAULT 0,
+        discovered        INTEGER,
+        updated_at        REAL NOT NULL,
+        PRIMARY KEY (source_version_id, scope)
     ) WITHOUT ROWID;
     """
 

@@ -87,8 +87,16 @@ public struct StreamRecordOutcomeRepository: Sendable {
 
     public func commit(sourceVersionID svid: UUID, position: Int, objectID: UUID,
                        ownershipKeys: [String: AnyCodable], at now: Date) async throws {
+        try await database.withSavepoint("sro_commit") { db in
+            try Self.commit(db, sourceVersionID: svid, position: position, objectID: objectID, ownershipKeys: ownershipKeys, at: now)
+        }
+    }
+
+    /// The commit, for a caller that commits the record together with other writes in ONE savepoint.
+    static func commit(_ db: isolated Database, sourceVersionID svid: UUID, position: Int, objectID: UUID,
+                       ownershipKeys: [String: AnyCodable], at now: Date) throws {
         let keys = (try? JSONEncoder().encode(ownershipKeys)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        try await database.exec("""
+        try db.exec("""
             UPDATE stream_record_outcomes SET state = 'committed', object_id = ?, ownership_keys = ?, reason = NULL, updated_at = ?
              WHERE source_version_id = ? AND position = ?;
             """, [.uuid(objectID), .text(keys), .date(now), .uuid(svid), .integer(Int64(position))])

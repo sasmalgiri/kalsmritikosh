@@ -183,6 +183,13 @@ public struct SourceReprocessingCoordinator: Sendable {
         if meaningful.isEmpty, committed.contains(where: \.isMeaningful) {
             return "the new structure has no substantive blocks where the old one did"
         }
+        // F04 — a bounded re-parse that no longer covers records the ledger already cites (e.g. rows a
+        // resumable ingest committed beyond the whole-file parse's bound) would supersede real evidence.
+        let freshRecords = Set(fresh.blocks.compactMap(\.recordIdentity))
+        let dropped = Set(committed.compactMap(\.recordIdentity)).subtracting(freshRecords).count
+        if dropped > 0 {
+            return "the new structure drops \(dropped) record(s) the committed structure cites"
+        }
         let complete = fresh.extractionStatus == .complete && !meaningful.isEmpty
             && meaningful.allSatisfy { $0.locator.isResolvable }
         if priorStructural == .ready, !complete {

@@ -17,15 +17,20 @@ import CryptoKit
 /// F01 — the ingest memory budget. Above `streamAboveBytes` a file is read in bounded record
 /// batches when its loader can stream; above `deferWholeFileAboveBytes` a file whose loader cannot
 /// stream is deferred (custody kept, resource limit recorded) rather than loaded whole.
+/// F04 — a loader that RESUMES (SQLite) is always walked record by record, at any size, and one run
+/// processes at most `resumable.unitsPerRun` units; the rest is deferred to a durable cursor.
 public struct IngestMemoryBudget: Sendable, Equatable {
     public let streamAboveBytes: Int64
     public let deferWholeFileAboveBytes: Int64
     public let batch: StreamBatchBudget
+    public let resumable: ResumableStreamBudget
 
-    public nonisolated init(streamAboveBytes: Int64, deferWholeFileAboveBytes: Int64, batch: StreamBatchBudget = .standard) {
+    public nonisolated init(streamAboveBytes: Int64, deferWholeFileAboveBytes: Int64, batch: StreamBatchBudget = .standard,
+                            resumable: ResumableStreamBudget = .standard) {
         self.streamAboveBytes = streamAboveBytes
         self.deferWholeFileAboveBytes = max(streamAboveBytes, deferWholeFileAboveBytes)
         self.batch = batch
+        self.resumable = resumable
     }
 
     public nonisolated static let standard = IngestMemoryBudget(
@@ -581,6 +586,12 @@ public actor IngestCoordinator {
     /// receipt. Idempotent: a rerun re-persists the same structure and the readiness stays ready.
     func upgradeStructure(sourceVersionID svid: UUID) async throws {
         guard let byteResolver, let evidenceStore, let readiness, let db = upgradeDatabase else { return }
+        // F04 — a version walked resumably CONTINUES from its durable cursor (the scheduled structure
+        // upgrade is its continuation); a whole-file re-parse would cite rows the walk never committed.
+        if try await !StreamCursorRepository(database: db).states(sourceVersionID: svid).isEmpty {
+            try await resumeStreamedIngest(sourceVersionID: svid)
+            return
+        }
         guard let row = try await db.query(
             "SELECT logical_source_id, content_hash, detected_type, size_bytes FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(svid)]).first,
             let logical = row.uuid(0), let hash = row.string(1) else { throw SourceUpgradeError.sourceVersionMissing(svid) }
@@ -702,9 +713,13 @@ public actor IngestCoordinator {
             throw SourceUpgradeError.postconditionNotSatisfied(kind: .indexing, sourceVersionID: svid)
         }
         let fullyIndexed = coverage.indexed == coverage.eligible
+        // F04/F15 — rebuilding the index of what IS committed never makes a streamed version's text
+        // complete: failed/interrupted records or deferred units keep it partial.
+        let incomplete = await resumableIncompleteDetail(svid)
         await advanceReadiness(svid, [
-            SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                           completedUnits: coverage.eligible, totalUnits: coverage.eligible),
+            incomplete.map { SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .partial, action: .partiallySatisfy, detail: $0) }
+                ?? SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                  completedUnits: coverage.eligible, totalUnits: coverage.eligible),
             SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
                                            action: fullyIndexed ? .satisfy : .partiallySatisfy,
                                            completedUnits: coverage.indexed, totalUnits: coverage.eligible,
@@ -1329,6 +1344,12 @@ public actor IngestCoordinator {
         // custody kept (resource limit, retriable) instead of being loaded whole. Containers and
         // the iOS-backup manifest expand member by member and are not subject to this.
         let expandsMembers = plugin.executionMode == .container || type == .extractionManifest
+        // F04/F05 — a resumable loader is walked record by record at ANY size: each record commits with
+        // its own evidence and continuation cursor, and a run stops at a work budget, never a hard cap.
+        if !expandsMembers, let resumable = resumableLoader(plugin, type) {
+            return await ingestResumable(resumable, plugin: plugin, handle: handle, fileRecord: fileRecord,
+                                         url: url, processURL: processURL, type: type, skip: skipResult)
+        }
         if !expandsMembers, handle.sizeBytes > memoryBudget.streamAboveBytes {
             if let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) {
                 return await ingestStreaming(streamer, plugin: plugin, request: request, handle: handle, fileRecord: fileRecord,
@@ -1744,6 +1765,214 @@ public actor IngestCoordinator {
         return result
     }
 
+    /// F04 — the resumable loader for a type, when this coordinator keeps durable cursors and evidence.
+    private func resumableLoader(_ plugin: any UniversalParserPlugin, _ type: SourceType) -> (any ResumableStreamingIngestor)? {
+        guard upgradeDatabase != nil, evidenceStore != nil,
+              let loader = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) as? any ResumableStreamingIngestor,
+              loader.resumes(type: type) else { return nil }
+        return loader
+    }
+
+    /// F04/F05 — the resumable record path. One run processes at most `memoryBudget.resumable.unitsPerRun`
+    /// units. Each record commits in two steps: its object (KO + chunks + FTS, with block lineage), then ONE
+    /// savepoint holding its evidence blocks (deterministic ids), their ownership, the scope's continuation
+    /// cursor and the record's `committed` outcome. So the cursor never runs ahead of committed evidence, and
+    /// an interruption can only leave the record `attempting` — the next run rolls its object back and redoes
+    /// it from the same cursor. A record that fails stops the run at that record (the cursor stays before it,
+    /// so the retry is exact). Deferred units are counted per scope and keep text and structure partial; a
+    /// later run (`resumeStreamedIngest`, or a structural upgrade) continues over the EXACT acquired bytes.
+    private func ingestResumable(_ loader: any ResumableStreamingIngestor, plugin: any UniversalParserPlugin,
+                                 handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
+                                 type: SourceType, resuming: Bool = false,
+                                 skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
+        let svid = handle.sourceVersionID
+        let started = Date()
+        guard let db = upgradeDatabase, let evidenceStore else {
+            return skip(.failed, "parser", "resumable ingest needs the upgrade database and evidence store")
+        }
+        if !resuming {
+            do {
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+            } catch {
+                KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+        let outcomes = StreamRecordOutcomeRepository(database: db)
+        let cursors = StreamCursorRepository(database: db)
+        let budget = memoryBudget.resumable
+        let maxRecordBytes = memoryBudget.batch.maxRecordBytes
+        let parserID = plugin.pluginID, parserVersion = plugin.pluginVersion
+        let runID = UUID()
+        var bookkeeping = StreamBookkeeping()
+        var tally: IngestTally? = nil
+        var docClass: DocumentClass = .other
+        var records = 0, committedThisRun = 0
+        var stopReason: String? = nil
+        var streamError: Error? = nil
+        defer {
+            bookkeeping.records = records
+            bookkeeping.retainedInvalidations = tally?.invalidations.count ?? 0
+            lastStreamBookkeeping = bookkeeping
+        }
+
+        // The version's ONE document: the attached one, else a deterministic id for its first attach.
+        let attached = (try? await db.query("SELECT document_id FROM source_versions WHERE id = ?;", [.uuid(svid)]).first?.uuid(0)) ?? nil
+        let documentID = attached ?? StreamedEvidence.blockID(sourceVersionID: svid, identity: "\u{1F}document")
+        func block(_ e: StreamedEvidence) -> EvidenceBlock {
+            EvidenceBlock(id: StreamedEvidence.blockID(sourceVersionID: svid, identity: e.identity), documentID: documentID,
+                          sourceVersionID: svid, ordinal: e.ordinal, kind: e.kind, rawText: e.rawText,
+                          locator: e.locator, attributes: e.attributes)
+        }
+        let resume = Dictionary(((try? await cursors.states(sourceVersionID: svid)) ?? []).compactMap { s in
+            s.cursor.map { (s.scope, $0) } }, uniquingKeysWith: { a, _ in a })
+
+        do {
+            let totals = try await loader.streamResumable(fileAt: processURL, type: type, budget: budget, resume: resume) { rec in
+                records += 1
+                let ko = Self.rebindingSourceFile(rec.object, to: url)
+                let size = ko.content.utf8.count
+                bookkeeping.maxBatchObjects = max(bookkeeping.maxBatchObjects, 1)
+                bookkeeping.maxBatchContentBytes = max(bookkeeping.maxBatchContentBytes, size)
+                if tally == nil {
+                    docClass = classifier.classify(ContentDecoder().decode(cleaner.clean(ko)))
+                    tally = IngestTally(lastObject: ko)
+                }
+                if size > maxRecordBytes {
+                    bookkeeping.oversizedRecords += 1
+                    let reason = "record of \(size) bytes exceeds the \(maxRecordBytes)-byte per-record budget"
+                    try? await outcomes.beginAttempt(sourceVersionID: svid, position: rec.position, objectID: ko.id, at: Date())
+                    try? await outcomes.fail(sourceVersionID: svid, position: rec.position, reason: reason, at: Date())
+                    stopReason = reason
+                    return false
+                }
+                let owned = rec.evidence.map(block)
+                let all = rec.scopeEvidence.map(block) + owned
+                do {
+                    // Durable BEFORE any write: rolls back a previous half-written attempt of this record.
+                    try await outcomes.beginAttempt(sourceVersionID: svid, position: rec.position, objectID: ko.id, at: Date())
+                    var t = tally ?? IngestTally(lastObject: ko)
+                    try await ingestObject(ko, blocks: owned, fileRecord: fileRecord, documentClass: docClass,
+                                           sourceVersionID: svid, tally: &t)
+                    tally = t
+                    let page = ParsedDocument(id: documentID, logicalSourceID: handle.logicalSourceID, sourceVersionID: svid,
+                                              filename: handle.filename, detectedType: type, mimeType: handle.mimeType,
+                                              contentHash: handle.contentHash, blocks: all, extractionStatus: .partial)
+                    let keys = ko.metadata.filter { Self.ownershipKeys.contains($0.key) }
+                    let now = Date(), size = handle.sizeBytes, ownedIDs = owned.map(\.id)
+                    try await db.withSavepoint("stream_resume_commit") { db in
+                        try EvidenceStore.appendStreamedEvidence(db, document: page, parser: parserID, parserVersion: parserVersion,
+                                                                 runID: runID, runStartedAt: started, sizeBytes: size, blocks: all,
+                                                                 owner: ko.id, owned: ownedIDs, at: now)
+                        try StreamCursorRepository.advance(db, sourceVersionID: svid, scope: rec.scope, scopeIndex: rec.scopeIndex,
+                                                           cursor: rec.cursorAfter, processed: rec.unitsAfter, at: now)
+                        try StreamRecordOutcomeRepository.commit(db, sourceVersionID: svid, position: rec.position, objectID: ko.id,
+                                                                 ownershipKeys: keys, at: now)
+                    }
+                    committedThisRun += 1
+                    // Additive, best-effort derivations from the committed blocks (as persistStructuralDoc does).
+                    if let assertions {
+                        await deriveAssertions(from: page, sourceVersionID: svid, extractorVersion: parserVersion, into: assertions)
+                    }
+                    if let genericFacts {
+                        await deriveGenericFacts(from: page, url: url, into: genericFacts, owningObjectID: ko.id, documentClass: docClass)
+                    }
+                    return true
+                } catch {
+                    try? await outcomes.fail(sourceVersionID: svid, position: rec.position, reason: String(describing: error), at: Date())
+                    stopReason = String(describing: error)
+                    await derivationFailures?.record(stage: "stream.record", error: error, knowledgeObjectID: ko.id,
+                                                     filePath: url.path, detectedType: type.rawValue)
+                    KalsmritikoshLog.ingestion.error("Resumable record \(rec.position, privacy: .public) failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    return false
+                }
+            }
+            try await cursors.recordDiscovered(sourceVersionID: svid, totals, at: Date())
+        } catch {
+            streamError = error
+            KalsmritikoshLog.ingestion.error("Resumable ingest stopped for \(url.lastPathComponent, privacy: .private) after \(records, privacy: .public) records: \(String(describing: error), privacy: .public)")
+        }
+        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
+
+        let coverage = (try? await cursors.coverage(sourceVersionID: svid)) ?? nil
+        if tally == nil, (coverage?.processed ?? 0) > 0 {
+            tally = IngestTally(lastObject: KnowledgeObject(sourceFile: url, sourceType: type, content: ""))
+        }
+        guard let tally else {
+            if let streamError {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
+                                                   detail: String(describing: streamError).prefix(120).description)])
+                return skip(.failed, "parser", String(describing: streamError).prefix(300).description)
+            }
+            await advanceReadiness(svid, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy, completedUnits: 0, totalUnits: 0)])
+            return Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                          chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                          logicalSourceID: handle.logicalSourceID, sourceVersionID: svid, intakeOutcome: handle.outcome)
+        }
+
+        // ONE decision for text and structure, from durable state: complete only when every discovered unit
+        // is committed and no record is failed or interrupted.
+        var incomplete = await resumableIncompleteDetail(svid, noun: loader.unitNoun, perRun: budget.unitsPerRun)
+        if let streamError {
+            let p = coverage.map { " (\($0.processed) of \($0.discovered) \(loader.unitNoun) committed)" } ?? ""
+            incomplete = "stream stopped after \(records) records\(p): " + String(describing: streamError).prefix(120)
+        } else if incomplete == nil, let stopReason {
+            incomplete = "stopped at a record that failed to commit: \(stopReason.prefix(120)) — retry to continue"
+        }
+        let complete = incomplete == nil
+        try? await evidenceStore.finishStreamedRun(sourceVersionID: svid, runID: runID, complete: complete, at: Date())
+        if let readiness {
+            await advanceSearchReadiness(svid, readiness: readiness, incomplete: incomplete)
+            if let live = try? await evidenceStore.liveStructuralCounts(forVersion: svid), live.substantive > 0 {
+                let basis = SourceReadinessBasis(kind: .sourceDocument, identifier: documentID.uuidString)
+                let ready = complete && live.located == live.substantive
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready, action: .satisfy, basis: basis),
+                    SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: ready ? .ready : .partial,
+                                                   action: ready ? .satisfy : .partiallySatisfy,
+                                                   completedUnits: live.located, totalUnits: live.substantive, basis: basis,
+                                                   detail: incomplete)],
+                    producerID: "usf-m3.structural", producerVersion: parserVersion)
+            }
+        }
+
+        var result = Result(fileRecord: fileRecord, object: tally.lastObject, chunkCount: tally.chunks,
+                            entityCount: tally.entities, eventCount: tally.events, documentClass: docClass,
+                            invalidations: tally.invalidations, logicalSourceID: handle.logicalSourceID,
+                            sourceVersionID: svid, intakeOutcome: handle.outcome)
+        if let streamError {
+            result.processingStatus = .failed
+            result.processingStage = "parser-stream"
+            result.processingDetail = "partial: " + String(describing: streamError).prefix(200)
+        } else if let incomplete {
+            result.processingDetail = "partial: " + incomplete.prefix(200)
+        }
+        return result
+    }
+
+    /// F04/F15 — why a streamed version is NOT complete, from durable state (nil when it is, or was never
+    /// streamed): records that failed or were interrupted, and units deferred to a later run.
+    private func resumableIncompleteDetail(_ svid: UUID, noun: String = "units", perRun: Int? = nil) async -> String? {
+        guard let db = upgradeDatabase else { return nil }
+        let outcomes = StreamRecordOutcomeRepository(database: db)
+        var parts: [String] = []
+        if let counts = try? await outcomes.counts(sourceVersionID: svid) {
+            let unfinished = (counts[.failed] ?? 0) + (counts[.attempting] ?? 0)
+            if unfinished > 0 {
+                let reason = (try? await outcomes.firstFailureReason(sourceVersionID: svid)) ?? nil
+                parts.append("\(unfinished) streamed record(s) failed to commit" + (reason.map { " (first: \($0.prefix(120)))" } ?? "")
+                             + " — retry to commit them")
+            }
+        }
+        if let c = try? await StreamCursorRepository(database: db).coverage(sourceVersionID: svid), c.deferred > 0 {
+            let budget = perRun.map { " at the per-run budget of \($0)" } ?? ""
+            parts.append("paused\(budget): \(c.processed) of \(c.discovered) \(noun) processed, \(c.deferred) deferred — resume to continue")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
     /// The metadata keys block ownership is decided by (`blocks(for:from:singleKO:)`).
     private static let ownershipKeys: Set<String> = [SQLiteRecordKey.metadataKey, "messageIndex", EmailLoader.threadMessagesMetaKey]
 
@@ -1814,7 +2043,8 @@ public actor IngestCoordinator {
     }
 
     /// F01/F15 — retry a streamed version: re-stream its EXACT acquired bytes (byte resolver) and commit
-    /// only the records that are not committed yet. A record whose previous attempt failed or was
+    /// only the records that are not committed yet. F04 — for a resumable loader this is the continuation:
+    /// the walk resumes from each scope's durable cursor for another run's budget. A record whose previous attempt failed or was
     /// interrupted has that attempt's object rolled back first, so nothing is duplicated. Structure that
     /// is already committed is kept; the newly committed records are linked to it.
     public func resumeStreamedIngest(sourceVersionID svid: UUID) async throws {
@@ -1850,6 +2080,17 @@ public actor IngestCoordinator {
             originalURL: resolved.identityURL, processingSnapshotURL: resolved.snapshotURL, logicalSourceID: logical,
             sourceVersionID: svid, sourceType: type, contentHash: hash, sizeBytes: size, intent: .fullAvailable)
         let url = resolved.identityURL
+        if let resumable = resumableLoader(plugin, type) {
+            _ = await ingestResumable(resumable, plugin: plugin, handle: handle, fileRecord: fileRecord, url: url,
+                                      processURL: resolved.snapshotURL, type: type, resuming: true,
+                                      skip: { status, stage, detail in
+                Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                       chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                       logicalSourceID: logical, sourceVersionID: svid, intakeOutcome: .newVersion,
+                       processingStatus: status, processingStage: stage, processingDetail: detail)
+            })
+            return
+        }
         _ = await ingestStreaming(streamer, plugin: plugin, request: request, handle: handle, fileRecord: fileRecord,
                                   url: url, processURL: resolved.snapshotURL, type: type, resuming: true,
                                   skip: { status, stage, detail in

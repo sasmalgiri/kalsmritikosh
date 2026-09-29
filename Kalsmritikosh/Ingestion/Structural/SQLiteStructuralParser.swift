@@ -18,15 +18,15 @@ public struct SQLiteStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.sqlite] }
     public nonisolated var parserName: String { "sqlite" }
     /// "2" — F05: rows walked in the loader's order and stamped with a shared record key.
-    public nonisolated var parserVersion: String { "2" }
+    /// "3" — F04: the shared resumable walk (keyset on composite keys), stable sparse ordinals, real row totals.
+    public nonisolated var parserVersion: String { "3" }
     /// F01 — bounded by design: copies the bytes to a temp file, reads through SQLite, and caps rows per table.
     public nonisolated var boundedMemory: Bool { true }
 
-    /// Max rows given an individually-citable block, per table. This parser is the
-    /// CITATION layer, not the indexing layer: SQLiteLoader emits every row as
-    /// searchable records (DB-1), so a table beyond this cap is fully ingested even
-    /// though only its leading rows get a precise per-row locator. Raised from 1000
-    /// because 1000 rows of a message store is not a usable citation set either.
+    /// Max rows this WHOLE-FILE parse gives a block, per table. F04 — ingest no longer relies on it:
+    /// the resumable SQLiteLoader walk emits every processed row's block with its record. This bound
+    /// applies to re-parse / reprocessing, and a re-parse that would drop rows the ledger already
+    /// cites is refused (SourceReprocessingCoordinator.activationRefusal).
     public nonisolated static let rowCapPerTable = 5000
 
     public nonisolated init() {}
@@ -41,15 +41,10 @@ public struct SQLiteStructuralParser: StructuralParser {
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
 
-        func add(_ kind: EvidenceBlockKind, _ raw: String, table: String, key: String?, recordKey: String? = nil) {
-            var attrs: [String: AnyCodable] = ["table": AnyCodable(.string(table))]
-            if let key { attrs["rowKey"] = AnyCodable(.string(key)) }
-            if let recordKey { attrs[SQLiteRecordKey.attributeKey] = AnyCodable(.string(recordKey)) }
+        func add(_ e: StreamedEvidence) {
             blocks.append(EvidenceBlock(
-                documentID: documentID, sourceVersionID: sourceVersionID,
-                ordinal: blocks.count, kind: kind, rawText: raw,
-                locator: SourceLocator(sectionPath: key == nil ? [dbName, table] : [dbName, table, key!]),
-                attributes: attrs))
+                documentID: documentID, sourceVersionID: sourceVersionID, ordinal: e.ordinal, kind: e.kind,
+                rawText: e.rawText, locator: e.locator, attributes: e.attributes))
         }
 
         // Write the bytes to a temp file so ExternalSQLiteSource can open a read-only copy.
@@ -67,57 +62,25 @@ public struct SQLiteStructuralParser: StructuralParser {
                 warnings.append(ParserWarning(severity: .warning, code: "sqlite.no_tables",
                                               message: "Database has no user tables."))
             }
-            for table in tables {
-                let quoted = "\"" + table.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-                // Column names + primary-key columns.
-                let info = (try? db.query("PRAGMA table_info(\(quoted));")) ?? []
-                let columns = info.compactMap { $0.cells.count > 1 ? $0.cells[1].string : nil }
-                let pkCols: [String] = info.compactMap { r in
-                    guard r.cells.count > 5, let name = r.cells[1].string,
-                          (r.cells[5].int64 ?? 0) > 0 else { return nil }
-                    return name
+            for (tableIndex, table) in tables.enumerated() {
+                // F04/F05 — the SAME walk, record keys, ordinals and block text as SQLiteLoader's
+                // resumable ingest, so this bounded re-parse and the ingested evidence agree block for block.
+                guard let walk = SQLiteRecordKey.Walk(db: db, table: table) else { continue }
+                let total = try walk.count()
+                add(walk.headerEvidence(dbName: dbName, tableIndex: tableIndex, rowCount: total))
+                var cursor = SQLiteRecordKey.Cursor.start
+                while cursor.offset < min(total, Self.rowCapPerTable) {
+                    let (rows, next) = try walk.page(after: cursor, limit: min(SQLiteLoader.rowsPerObject, Self.rowCapPerTable - cursor.offset))
+                    if rows.isEmpty { break }
+                    for row in rows { add(walk.rowEvidence(row, dbName: dbName, tableIndex: tableIndex)) }
+                    cursor = next
                 }
-                // F05 — walk rows in the SAME order as SQLiteLoader and stamp the same record key, so
-                // each loader page object links to exactly its own row blocks.
-                let plan = SQLiteRecordKey.plan(db: db, quotedTable: quoted, info: info)
-                let rows: [ExternalSQLiteSource.Row]
-                if let alias = plan.rowIDAlias {
-                    rows = (try? db.query("SELECT \(alias), * FROM \(quoted) ORDER BY \(alias) LIMIT \(Self.rowCapPerTable);")) ?? []
-                } else {
-                    rows = (try? db.query("SELECT * FROM \(quoted)\(plan.orderBy) LIMIT \(Self.rowCapPerTable);")) ?? []
-                }
-                add(.table, "Table \"\(table)\": \(rows.count) row(s), \(columns.count) column(s)",
-                    table: table, key: nil)
-                for (i, fullRow) in rows.enumerated() {
-                    var cells = fullRow.cells
-                    let recordKey: String?
-                    if plan.rowIDAlias != nil, let first = cells.first {
-                        recordKey = first.int64.map { SQLiteRecordKey.key(table: table, rowID: $0) }
-                        cells = Array(cells.dropFirst())
-                    } else {
-                        recordKey = SQLiteRecordKey.key(table: table, position: i)
-                    }
-                    let row = ExternalSQLiteSource.Row(cells: cells)
-                    let pairs = zip(columns, row.cells).map { "\($0)=\(Self.render($1))" }
-                    let keyValue: String = pkCols.isEmpty
-                        ? "row \(i + 1)"
-                        : pkCols.compactMap { col in
-                            columns.firstIndex(of: col).flatMap { idx in
-                                idx < row.cells.count ? "\(col)=\(Self.render(row.cells[idx]))" : nil
-                            }
-                        }.joined(separator: ", ")
-                    add(.tableRow, pairs.joined(separator: " | "), table: table, key: keyValue, recordKey: recordKey)
-                }
-                if rows.count >= Self.rowCapPerTable {
-                    // State the REAL total. "Exceeded the cap" alone leaves an examiner
-                    // unable to tell a 5001-row table from a 500 000-row one.
-                    let total = (try? db.query("SELECT COUNT(*) FROM \(quoted);"))?
-                        .first?.cells.first?.int64
-                    let of = total.map { " of \($0)" } ?? ""
+                if total > cursor.offset {
+                    // State the REAL total. This whole-file parse (re-parse / reprocessing only) is bounded;
+                    // the ingest walk cites every row it has processed and resumes the rest.
                     warnings.append(ParserWarning(severity: .warning, code: "sqlite.row_cap",
-                        message: "Table \(table): the first \(Self.rowCapPerTable)\(of) rows have "
-                               + "individual citations. All rows remain searchable via record-level "
-                               + "ingest; later rows have table-level citations only."))
+                        message: "Table \(table): this bounded parse cites the first \(cursor.offset) of \(total) rows; "
+                               + "the resumable ingest cites every row it has processed."))
                 }
             }
         } catch {
@@ -131,16 +94,5 @@ public struct SQLiteStructuralParser: StructuralParser {
             id: documentID, logicalSourceID: logicalSourceID, sourceVersionID: sourceVersionID,
             filename: filename, detectedType: .sqlite, mimeType: "application/vnd.sqlite3",
             contentHash: hash, blocks: blocks, warnings: warnings, extractionStatus: status)
-    }
-
-    /// Render a cell for a citation row (text/number as-is, blobs by size, null explicit).
-    private nonisolated static func render(_ cell: ExternalSQLiteSource.Cell) -> String {
-        switch cell {
-        case .int(let v): return String(v)
-        case .double(let d): return String(d)
-        case .text(let s): return s
-        case .blob(let data): return "<blob \(data.count) bytes>"
-        case .null: return "NULL"
-        }
     }
 }
