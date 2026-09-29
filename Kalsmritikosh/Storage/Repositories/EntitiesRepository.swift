@@ -628,9 +628,19 @@ public actor EntitiesRepository {
     /// The audit record (fact_reviews, action `.merge`) is written by the caller.
     /// Rejects self-merge, cross-kind merge, and any merge that would form a cycle.
     public func merge(loserID: Entity.ID, winnerID: Entity.ID) async throws {
+        // F28 — the whole merge (pointer, aliases, carried aliases) is ONE isolated savepoint: a
+        // failure part-way no longer leaves a loser pointed at a winner without its aliases.
+        let sp = "entity_merge_\(loserID.uuidString.replacingOccurrences(of: "-", with: ""))"
+        try await database.withSavepoint(sp) { db in
+            try Self.merge(db, loserID: loserID, winnerID: winnerID)
+        }
+    }
+
+    /// The merge, synchronously on the caller's savepoint — composable into a larger unit.
+    static func merge(_ db: isolated Database, loserID: Entity.ID, winnerID: Entity.ID) throws {
         guard loserID != winnerID else { throw MergeError.sameEntity }
 
-        let rows = try await database.query("""
+        let rows = try db.query("""
         SELECT id, kind, normalized, value FROM entities WHERE id IN (?, ?);
         """, [.uuid(loserID), .uuid(winnerID)])
         var kinds: [Entity.ID: String] = [:]
@@ -643,24 +653,46 @@ public actor EntitiesRepository {
         guard let lk = kinds[loserID], let wk = kinds[winnerID] else { throw MergeError.notFound }
         guard lk == wk else { throw MergeError.differentKind }
         // Cycle guard: the winner must not already resolve back to the loser.
-        let winnerCanonical = try await resolveCanonical(winnerID)
+        let winnerCanonical = try resolveCanonical(db, winnerID)
         guard winnerCanonical != loserID else { throw MergeError.cycle }
 
-        try await database.exec(
+        try db.exec(
             "UPDATE entities SET merged_into = ? WHERE id = ?;",
             [.uuid(winnerID), .uuid(loserID)]
         )
         // Old spellings resolve to the winner via alias rows.
-        if !loserNorm.isEmpty { try await addAlias(entityID: winnerID, aliasNormalized: loserNorm, source: "merge") }
+        if !loserNorm.isEmpty { try addAlias(db, entityID: winnerID, aliasNormalized: loserNorm, source: "merge") }
         let vnorm = loserValue.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if !vnorm.isEmpty, vnorm != loserNorm {
-            try await addAlias(entityID: winnerID, aliasNormalized: vnorm, source: "merge")
+            try addAlias(db, entityID: winnerID, aliasNormalized: vnorm, source: "merge")
         }
         // Carry the loser's existing aliases up to the winner.
-        try await database.exec("""
+        try db.exec("""
         INSERT OR IGNORE INTO entity_aliases (entity_id, alias_normalized, source)
         SELECT ?, alias_normalized, 'merge' FROM entity_aliases WHERE entity_id = ?;
         """, [.uuid(winnerID), .uuid(loserID)])
+    }
+
+    /// `resolveCanonical` on the caller's savepoint.
+    static func resolveCanonical(_ db: isolated Database, _ id: Entity.ID) throws -> Entity.ID {
+        var current = id
+        for _ in 0..<8 {
+            let rows = try db.query("SELECT merged_into FROM entities WHERE id = ? LIMIT 1;", [.uuid(current)])
+            guard let next = rows.first?.uuid(0) else { return current }
+            current = next
+        }
+        return current
+    }
+
+    /// `addAlias` on the caller's savepoint.
+    static func addAlias(_ db: isolated Database, entityID: Entity.ID, aliasNormalized: String, source: String) throws {
+        let normalized = aliasNormalized.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        try db.exec("""
+        INSERT INTO entity_aliases (entity_id, alias_normalized, source)
+        VALUES (?, ?, ?)
+        ON CONFLICT(entity_id, alias_normalized) DO NOTHING;
+        """, [.uuid(entityID), .text(normalized), .text(source)])
     }
 
     /// Reverse a merge (split): clear the loser's `merged_into` pointer and drop

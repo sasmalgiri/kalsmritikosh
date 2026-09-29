@@ -248,42 +248,44 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
         // before.
         let level0: Int64 = 0
         let ts = started.timeIntervalSince1970
-        var insertedRows = 0
-        var insertFailures = 0
         let savepointName = "kalsmritikosh_communities_write"
+        let groups: [(id: UUID, members: [UUID])] = membership.map { root, members in
+            let sorted = members.sorted { $0.uuidString < $1.uuidString }
+            return (sorted.first ?? root, sorted)
+        }
+        /// Thrown inside the savepoint to undo the DELETE when nothing landed.
+        struct NothingInserted: Error { let failures: Int }
+        let insertedRows: Int, insertFailures: Int
         do {
-            try await database.exec("SAVEPOINT \(savepointName);")
-            try await database.exec("DELETE FROM entity_communities WHERE level = ?;", [.integer(level0)])
-            for (root, members) in membership {
-                let sortedMembers = members.sorted { $0.uuidString < $1.uuidString }
-                let stableID = sortedMembers.first ?? root
-                for member in sortedMembers {
-                    do {
-                        try await database.exec(
-                            "INSERT INTO entity_communities (community_id, entity_id, level, computed_at) VALUES (?, ?, ?, ?);",
-                            [.uuid(stableID), .uuid(member), .integer(level0), .real(ts)]
-                        )
-                        insertedRows += 1
-                    } catch {
-                        insertFailures += 1
-                        if insertFailures <= 3 {
-                            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: insert failed for member \(member.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+            // F28 — replace level 0 in ONE isolated savepoint.
+            (insertedRows, insertFailures) = try await database.withSavepoint(savepointName) { db -> (Int, Int) in
+                var inserted = 0, failures = 0
+                try db.exec("DELETE FROM entity_communities WHERE level = ?;", [.integer(level0)])
+                for (stableID, sortedMembers) in groups {
+                    for member in sortedMembers {
+                        do {
+                            try db.exec(
+                                "INSERT INTO entity_communities (community_id, entity_id, level, computed_at) VALUES (?, ?, ?, ?);",
+                                [.uuid(stableID), .uuid(member), .integer(level0), .real(ts)]
+                            )
+                            inserted += 1
+                        } catch {
+                            failures += 1
+                            if failures <= 3 {
+                                KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: insert failed for member \(member.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                            }
                         }
                     }
                 }
+                // Roll back the DELETE if literally nothing landed; we
+                // don't want to empty the table on a wholesale failure.
+                if inserted == 0 { throw NothingInserted(failures: failures) }
+                return (inserted, failures)
             }
-            // Roll back the DELETE if literally nothing landed; we
-            // don't want to empty the table on a wholesale failure.
-            if insertedRows == 0 {
-                try? await database.exec("ROLLBACK TO SAVEPOINT \(savepointName);")
-                try? await database.exec("RELEASE SAVEPOINT \(savepointName);")
-                KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: ALL inserts failed (\(insertFailures, privacy: .public) failures); kept previous communities table contents")
-                return 0
-            }
-            try await database.exec("RELEASE SAVEPOINT \(savepointName);")
+        } catch let e as NothingInserted {
+            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: ALL inserts failed (\(e.failures, privacy: .public) failures); kept previous communities table contents")
+            return 0
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepointName);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepointName);")
             KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: write block failed — \(String(describing: error), privacy: .public)")
             return 0
         }

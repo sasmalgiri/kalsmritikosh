@@ -52,22 +52,18 @@ public actor InvestigationScopeLedger {
         let clean = artifactID.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = UUID()
         let sp = savepoint("invscope", id)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let exists = try await database.query(
+        let fingerprintValue = fingerprint.value
+        // F28 — the existence check and the insert are ONE isolated savepoint (no double record).
+        try await database.withSavepoint(sp) { db in
+            let exists = try db.query(
                 "SELECT 1 FROM investigation_scope_artifacts WHERE case_id = ? AND artifact_kind = ? AND artifact_id = ? LIMIT 1;",
                 [.uuid(caseID), .text(kind.rawValue), .text(clean)]).first != nil
             if exists { throw InvestigationScopeLedgerError.alreadyRecorded(kind: kind.rawValue, artifactID: clean) }
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO investigation_scope_artifacts (id, case_id, artifact_kind, artifact_id, scope_fingerprint, case_revision, created_at)
                 VALUES (?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(kind.rawValue), .text(clean),
-                      .text(fingerprint.value), .integer(Int64(caseRevision)), .date(date)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+                      .text(fingerprintValue), .integer(Int64(caseRevision)), .date(date)])
         }
         return InvestigationScopeArtifact(id: id, caseID: caseID, kind: kind, artifactID: clean,
                                           fingerprint: fingerprint, caseRevision: caseRevision, createdAt: date)

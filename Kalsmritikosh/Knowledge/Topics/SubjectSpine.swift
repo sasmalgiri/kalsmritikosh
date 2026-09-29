@@ -359,24 +359,25 @@ public struct SubjectSpine: Sendable {
         receipt.reachedDocuments = Set(named.values.flatMap { $0 }).count
 
         // Record each reach as an anchor mention (derived; idempotent by id).
-        try await database.exec("SAVEPOINT subject_spine;", [])
-        do {
-            for (aid, objects) in named.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
-                guard let a = anchorByID[aid] else { continue }
-                for oid in objects.sorted(by: { $0.uuidString < $1.uuidString }) {
-                    let changed = try await database.query("""
-                    INSERT OR IGNORE INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id, confidence)
-                    VALUES (?, ?, 'identifierAnchor', ?, ?, ?, 0.9) RETURNING id;
-                    """, [.uuid(Self.mentionID(anchorID: aid, objectID: oid)),
-                          .uuid(aid), .text(a.value), .text("\(a.field)|\(a.canon)"), .uuid(oid)])
-                    receipt.mentionsWritten += changed.count
-                }
+        var mentionRows: [[SQLValue]] = []
+        for (aid, objects) in named.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            guard let a = anchorByID[aid] else { continue }
+            for oid in objects.sorted(by: { $0.uuidString < $1.uuidString }) {
+                mentionRows.append([.uuid(Self.mentionID(anchorID: aid, objectID: oid)),
+                                    .uuid(aid), .text(a.value), .text("\(a.field)|\(a.canon)"), .uuid(oid)])
             }
-            try await database.exec("RELEASE subject_spine;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO subject_spine;", [])
-            try? await database.exec("RELEASE subject_spine;", [])
-            throw error
+        }
+        let finalMentionRows = mentionRows
+        // F28 — all reach mentions in ONE isolated savepoint.
+        receipt.mentionsWritten += try await database.withSavepoint("subject_spine") { db -> Int in
+            var written = 0
+            for binds in finalMentionRows {
+                written += try db.query("""
+                INSERT OR IGNORE INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id, confidence)
+                VALUES (?, ?, 'identifierAnchor', ?, ?, ?, 0.9) RETURNING id;
+                """, binds).count
+            }
+            return written
         }
 
         // 2 — FAMILY.  3 — RESOLUTION.

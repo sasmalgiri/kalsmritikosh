@@ -56,11 +56,15 @@ public actor InvestigationClosureRepository {
         let cleanActor = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanActor.isEmpty else { throw InvestigationClosureError.blankActor }
         let id = UUID()
-        var sequence = 0
         let sp = "invclose_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let header = try await database.query("SELECT status, revision FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first
+        let unresolvedJSON = encodeUnresolved(unresolvedItems)
+        let seal: SQLValue = receiptSeal.flatMap { $0.isEmpty ? nil : .text($0) } ?? .null
+        let runID: SQLValue = workProductRunID.map { SQLValue.uuid($0) } ?? .null
+        let fingerprint = scopeFingerprint.value
+        // F28 — the status/revision check, the sequence number, the decision row and the case swing are
+        // ONE isolated savepoint: two concurrent decisions can no longer both pass the check.
+        let sequence = try await database.withSavepoint(sp) { db -> Int in
+            let header = try db.query("SELECT status, revision FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first
             guard let header, let statusRaw = header.string(0), let revision = header.int(1),
                   let status = InvestigationCaseStatus(rawValue: statusRaw) else {
                 throw InvestigationClosureError.caseNotFound(caseID)
@@ -73,23 +77,17 @@ public actor InvestigationClosureRepository {
             guard Int(revision) == expectedRevision else {
                 throw InvestigationClosureError.revisionConflict(expected: expectedRevision, actual: Int(revision))
             }
-            sequence = Int(try await database.query(
+            let next = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_case_closures WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
-            let unresolvedJSON = encodeUnresolved(unresolvedItems)
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO investigation_case_closures (id, case_id, sequence, decision, rationale, work_product_run_id,
                     scope_fingerprint, unresolved_json, receipt_seal, actor, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?);
-                """, [.uuid(id), .uuid(caseID), .integer(Int64(sequence)), .text(decision.rawValue), .text(cleanRationale),
-                      workProductRunID.map { SQLValue.uuid($0) } ?? .null, .text(scopeFingerprint.value), .text(unresolvedJSON),
-                      receiptSeal.flatMap { $0.isEmpty ? nil : .text($0) } ?? .null, .text(cleanActor), .date(date)])
-            try await database.exec("UPDATE investigation_cases SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
-                                    [.text(newStatus.rawValue), .integer(Int64(Int(revision) + 1)), .text(cleanActor), .date(date), .uuid(caseID), .integer(revision)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+                """, [.uuid(id), .uuid(caseID), .integer(Int64(next)), .text(decision.rawValue), .text(cleanRationale),
+                      runID, .text(fingerprint), .text(unresolvedJSON), seal, .text(cleanActor), .date(date)])
+            try db.exec("UPDATE investigation_cases SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                        [.text(newStatus.rawValue), .integer(Int64(Int(revision) + 1)), .text(cleanActor), .date(date), .uuid(caseID), .integer(revision)])
+            return next
         }
         return InvestigationClosureDecision(id: id, caseID: caseID, sequence: sequence, decision: decision, rationale: cleanRationale,
                                             workProductRunID: workProductRunID, scopeFingerprint: scopeFingerprint,
