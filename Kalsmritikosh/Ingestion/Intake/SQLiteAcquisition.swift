@@ -184,6 +184,14 @@ public nonisolated enum SQLiteAcquisition {
                 }
                 return
             case .busy(let rc):
+                // A WAL-mode database AT REST (no -wal, no -shm: its last connection closed cleanly) is
+                // locked by no one; a read-only connection simply cannot build its wal-index, which some
+                // SQLite versions report as BUSY. That is "cannot read in place" — the caller copies the
+                // file and backs up the copy — not a lock to wait out. A live holder keeps its -wal.
+                if readOnly, !FileManager.default.fileExists(atPath: source.path + "-wal"),
+                   !FileManager.default.fileExists(atPath: source.path + "-shm") {
+                    throw AcquisitionError.backupFailed("read-only open of an at-rest WAL-mode database")
+                }
                 if limits.isCancelled() { throw AcquisitionError.cancelled }
                 let remaining = deadline.timeIntervalSinceNow
                 guard remaining > 0 else {

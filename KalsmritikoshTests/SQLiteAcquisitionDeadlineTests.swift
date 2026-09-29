@@ -91,9 +91,36 @@ struct SQLiteAcquisitionDeadlineTests {
         let holder = LockHolder(source)
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { holder.release() }
         let dest = dir.appendingPathComponent("snap.db")
-        let record = try SQLiteAcquisition.acquire(source, into: dest, limits: .init(deadline: 10, maxBackoff: 0.05))
+        let record: SQLiteAcquisition.Record
+        do { record = try SQLiteAcquisition.acquire(source, into: dest, limits: .init(deadline: 10, maxBackoff: 0.05)) }
+        catch {
+            let fm = FileManager.default
+            Issue.record("acquisition after release failed: \(error); -wal present: \(fm.fileExists(atPath: source.path + "-wal")), -shm present: \(fm.fileExists(atPath: source.path + "-shm")), SQLite \(String(cString: sqlite3_libversion()))")
+            return
+        }
         #expect(record.method == "sqliteOnlineBackup")
         #expect(rows(dest) == ["main-row", "wal-only-row", "holder-row"], "committed WAL rows included")
+    }
+
+    @Test("A WAL-mode database at rest (no -wal, no -shm) acquires — it is not a lock to wait out")
+    func atRestWALModeDatabaseAcquires() throws {
+        let dir = try scratch(); defer { try? FileManager.default.removeItem(at: dir) }
+        // At rest: every commit checkpointed into the main file, no connection open, no sidecars (e.g. a
+        // WAL-mode database copied without them). Apple's SQLite may keep a -wal/-shm after close, so the
+        // state is made explicit.
+        let source = try walSource(in: dir)
+        var h: OpaquePointer?
+        #expect(sqlite3_open(source.path, &h) == SQLITE_OK)
+        #expect(sqlite3_exec(h, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil) == SQLITE_OK)
+        sqlite3_close(h)
+        try? FileManager.default.removeItem(atPath: source.path + "-wal")
+        try? FileManager.default.removeItem(atPath: source.path + "-shm")
+        #expect(SQLiteAcquisition.needsLogicalAcquisition(source), "fixture: the header is still WAL mode")
+        let dest = dir.appendingPathComponent("snap.db")
+        let started = Date()
+        _ = try SQLiteAcquisition.acquire(source, into: dest, limits: .init(deadline: 5, maxBackoff: 0.05))
+        #expect(Date().timeIntervalSince(started) < 4, "no waiting on a lock nobody holds")
+        #expect(rows(dest) == ["main-row", "wal-only-row"])
     }
 
     @Test("Cancellation during the lock wait exits promptly and cleans up")
