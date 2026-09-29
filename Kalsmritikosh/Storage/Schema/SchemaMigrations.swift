@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 138
+    public static let latestVersion = 139
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -669,7 +669,8 @@ public enum SchemaMigrations {
         (135, v135),
         (136, v136),
         (137, v137),
-        (138, v138)
+        (138, v138),
+        (139, v139)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6784,6 +6785,29 @@ public enum SchemaMigrations {
     END;
     DROP TRIGGER IF EXISTS evrev_chunks_upd;
     CREATE TRIGGER evrev_chunks_upd AFTER UPDATE OF text, object_id, source_version_id, evidence_block_id, superseded_by_run ON chunks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'chunks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'chunks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    """
+
+    // MARK: - v139 — F01/F15 durable outcome for every streamed record
+    //
+    // The streaming ingest caught a failing record, logged it and continued; readiness then measured
+    // the surviving chunks, so a lost record disappeared behind "ready". Each record of a streamed
+    // version now has a row keyed by its position in the (immutable) acquired stream: `attempting`
+    // before its writes, `committed` after them, `failed` with the reason otherwise. The row also
+    // carries the object id of the attempt (so a half-written attempt can be rolled back before a
+    // retry — never duplicated) and the record's ownership keys (so block ownership is linked from
+    // durable rows, not an in-memory list that grows with the file).
+    private static let v139: String = """
+    CREATE TABLE IF NOT EXISTS stream_record_outcomes (
+        source_version_id TEXT NOT NULL,
+        position          INTEGER NOT NULL,
+        state             TEXT NOT NULL CHECK (state IN ('attempting', 'committed', 'failed')),
+        object_id         TEXT,
+        ownership_keys    TEXT,
+        reason            TEXT,
+        attempts          INTEGER NOT NULL DEFAULT 0,
+        updated_at        REAL NOT NULL,
+        PRIMARY KEY (source_version_id, position)
+    ) WITHOUT ROWID;
     """
 
 }

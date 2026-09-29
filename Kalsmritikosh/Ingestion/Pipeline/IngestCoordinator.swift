@@ -1560,21 +1560,27 @@ public actor IngestCoordinator {
     private func ingestStreaming(_ streamer: any StreamingIngestor, plugin: any UniversalParserPlugin,
                                  request: UniversalParserRequest,
                                  handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
-                                 type: SourceType,
+                                 type: SourceType, resuming: Bool = false,
                                  skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
         let svid = handle.sourceVersionID
         let started = Date()
-        do {
-            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
-            _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
-        } catch {
-            KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        if !resuming {
+            do {
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+            } catch {
+                KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
         }
+        // F01/F15 — every record's outcome is durable (v139): attempting → committed | failed.
+        let outcomes = upgradeDatabase.map(StreamRecordOutcomeRepository.init(database:))
+        var failedRecords = 0, alreadyCommitted = 0
 
         var tally: IngestTally? = nil
         var docClass: DocumentClass = .other
         var records = 0, batches = 0
-        // Only the keys block ownership is decided by, per committed record — never the content.
+        // Only the keys block ownership is decided by, per committed record — never the content. With a
+        // durable outcome ledger they live in its rows (bounded memory); this list is the fallback only.
         var ownership: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])] = []
         var streamError: Error? = nil
         do {
@@ -1587,15 +1593,35 @@ public actor IngestCoordinator {
                         docClass = classifier.classify(ContentDecoder().decode(cleaner.clean(ko)))
                         tally = IngestTally(lastObject: ko)
                     }
+                    let position = records
                     records += 1
+                    // A retry over the same acquired bytes meets the same record at the same position:
+                    // a committed record is not written twice.
+                    if let outcomes, try await outcomes.outcome(sourceVersionID: svid, position: position)?.state == .committed {
+                        alreadyCommitted += 1
+                        continue
+                    }
+                    let keys = ko.metadata.filter { Self.ownershipKeys.contains($0.key) }
                     do {
+                        // Durable BEFORE any write: rolls back a previous half-written attempt of this record.
+                        try await outcomes?.beginAttempt(sourceVersionID: svid, position: position, objectID: ko.id, at: Date())
                         var t = tally ?? IngestTally(lastObject: ko)
                         try await ingestObject(ko, blocks: [], fileRecord: fileRecord, documentClass: docClass,
                                                sourceVersionID: svid, tally: &t)
                         tally = t
-                        ownership.append((ko.id, ko.metadata.filter { Self.ownershipKeys.contains($0.key) }))
+                        if let outcomes {
+                            try await outcomes.commit(sourceVersionID: svid, position: position, objectID: ko.id,
+                                                      ownershipKeys: keys, at: Date())
+                        } else {
+                            ownership.append((ko.id, keys))
+                        }
                     } catch {
-                        KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                        failedRecords += 1
+                        try? await outcomes?.fail(sourceVersionID: svid, position: position,
+                                                  reason: String(describing: error), at: Date())
+                        await derivationFailures?.record(stage: "stream.record", error: error, knowledgeObjectID: ko.id,
+                                                         filePath: url.path, detectedType: type.rawValue)
+                        KalsmritikoshLog.ingestion.error("Streamed record \(position, privacy: .public) failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                     }
                 }
             }
@@ -1604,6 +1630,9 @@ public actor IngestCoordinator {
             KalsmritikoshLog.ingestion.error("Streamed ingest stopped for \(url.lastPathComponent, privacy: .private) after \(records, privacy: .public) records: \(String(describing: error), privacy: .public)")
         }
         await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
+        if tally == nil, alreadyCommitted > 0 {
+            tally = IngestTally(lastObject: KnowledgeObject(sourceFile: url, sourceType: type, content: ""))
+        }
 
         guard let tally else {
             // Nothing was read. A loader failure is a parser failure (custody kept, retriable).
@@ -1623,7 +1652,13 @@ public actor IngestCoordinator {
         // Bounded structure: parse, commit once, link blocks to the streamed records by record key.
         var structuralReceipt: StructuralPersistenceReceipt? = nil
         var structuralAttempted = false
-        if streamError == nil, tally.chunks > 0, plugin.capabilities.producesStructure, let evidenceStore,
+        let structureExists = (try? await upgradeDatabase?.query(
+            "SELECT document_id FROM source_versions WHERE id = ?;", [.uuid(svid)]).first?.uuid(0)) ?? nil
+        if structureExists != nil, let evidenceStore {
+            // A retry over a version whose structure is committed: link the newly committed records only.
+            let blocks = (try? await evidenceStore.blocks(forVersion: svid)) ?? []
+            await linkStreamedOwnership(svid, blocks: blocks, fallback: ownership, url: url, store: evidenceStore)
+        } else if streamError == nil, tally.chunks > 0, plugin.capabilities.producesStructure, let evidenceStore,
            let adapter = plugin as? ExistingParserPluginAdapter {
             do {
                 if let doc = try await adapter.parseBoundedStructure(request) {
@@ -1633,17 +1668,7 @@ public actor IngestCoordinator {
                     structuralReceipt = await persistStructuralDoc(parse, url: url, store: evidenceStore,
                                                                    owningObjectID: tally.lastObject.id, documentClass: docClass)
                     if structuralReceipt != nil {
-                        for (id, keys) in ownership {
-                            let stub = KnowledgeObject(id: id, sourceFile: url, sourceType: type, content: "", metadata: keys)
-                            let blockIDs = Self.blocks(for: stub, from: doc.blocks, singleKO: ownership.count == 1).map(\.id)
-                            guard !blockIDs.isEmpty else { continue }
-                            do { try await evidenceStore.linkBlocks(blockIDs, toObject: id, at: Date()) }
-                            catch {
-                                await derivationFailures?.record(stage: "evidence.linkBlocks", error: error, knowledgeObjectID: id,
-                                                                 filePath: url.path, detectedType: type.rawValue)
-                                KalsmritikoshLog.ingestion.error("linkBlocks failed (\(blockIDs.count, privacy: .public) blocks) for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                            }
-                        }
+                        await linkStreamedOwnership(svid, blocks: doc.blocks, fallback: ownership, url: url, store: evidenceStore)
                     }
                 }
             } catch {
@@ -1653,14 +1678,20 @@ public actor IngestCoordinator {
         }
 
         if let readiness {
-            await advanceSearchReadiness(svid, readiness: readiness)
+            // ONE decision for text: complete only when every discovered record is committed. (Setting it
+            // ready and then partial was an illegal transition, so a stopped stream used to read as ready.)
+            var incomplete: String? = nil
             if let streamError {
-                // Committed records stay; the text dimension says the file was only partly read.
-                await advanceReadiness(svid, [
-                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .partial, action: .partiallySatisfy,
-                                                   detail: "stream stopped after \(records) records: "
-                                                       + String(describing: streamError).prefix(120))])
+                incomplete = "stream stopped after \(records) records: " + String(describing: streamError).prefix(120)
+            } else if let outcomes, let counts = try? await outcomes.counts(sourceVersionID: svid),
+                      let failed = counts[.failed], failed > 0 || (counts[.attempting] ?? 0) > 0 {
+                let reason = (try? await outcomes.firstFailureReason(sourceVersionID: svid)) ?? nil
+                incomplete = "\(failed) of \(records) streamed records failed to commit"
+                    + (reason.map { " (first: \($0.prefix(120)))" } ?? "") + " — retry to commit them"
+            } else if failedRecords > 0 {
+                incomplete = "\(failedRecords) of \(records) streamed records failed to commit"
             }
+            await advanceSearchReadiness(svid, readiness: readiness, incomplete: incomplete)
             if let r = structuralReceipt {
                 await advanceReadiness(svid, Self.structuralReadinessUpdates(r),
                                        producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
@@ -1717,10 +1748,111 @@ public actor IngestCoordinator {
 
     /// Search dimensions (loader-produced) from the exact per-version FTS coverage — default
     /// pipeline producer. Shared by the whole-file and streamed paths.
-    private func advanceSearchReadiness(_ svid: UUID, readiness: SourceReadinessRepository) async {
+    /// F01 — link a streamed version's structural blocks to the records that own them, reading the
+    /// committed records' ownership keys from the durable outcome rows page by page (bounded memory;
+    /// idempotent — linking is INSERT OR IGNORE, so a retry links only what is new).
+    private func linkStreamedOwnership(_ svid: UUID, blocks: [EvidenceBlock],
+                                       fallback: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])],
+                                       url: URL, store: EvidenceStore) async {
+        guard !blocks.isEmpty else { return }
+        func link(_ id: UUID, _ keys: [String: AnyCodable], singleKO: Bool) async {
+            let stub = KnowledgeObject(id: id, sourceFile: url, sourceType: .unknown, content: "", metadata: keys)
+            let blockIDs = Self.blocks(for: stub, from: blocks, singleKO: singleKO).map(\.id)
+            guard !blockIDs.isEmpty else { return }
+            do { try await store.linkBlocks(blockIDs, toObject: id, at: Date()) }
+            catch {
+                await derivationFailures?.record(stage: "evidence.linkBlocks", error: error, knowledgeObjectID: id,
+                                                 filePath: url.path, detectedType: nil)
+                KalsmritikoshLog.ingestion.error("linkBlocks failed (\(blockIDs.count, privacy: .public) blocks) for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+        guard let db = upgradeDatabase else {
+            for (id, keys) in fallback { await link(id, keys, singleKO: fallback.count == 1) }
+            return
+        }
+        let repo = StreamRecordOutcomeRepository(database: db)
+        let committed = (try? await repo.counts(sourceVersionID: svid))?[.committed] ?? 0
+        var after = -1
+        while let page = try? await repo.page(sourceVersionID: svid, afterPosition: after, limit: 256, state: .committed),
+              let last = page.last {
+            for o in page { if let id = o.objectID { await link(id, o.ownershipKeys, singleKO: committed == 1) } }
+            after = last.position
+        }
+    }
+
+    /// F01/F15 — the durable outcome of every record of a streamed version, in stream order.
+    public func streamRecordOutcomes(sourceVersionID svid: UUID) async throws -> [StreamRecordOutcome] {
+        guard let db = upgradeDatabase else { return [] }
+        let repo = StreamRecordOutcomeRepository(database: db)
+        var out: [StreamRecordOutcome] = [], after = -1
+        while case let page = try await repo.page(sourceVersionID: svid, afterPosition: after, limit: 512), let last = page.last {
+            out += page; after = last.position
+        }
+        return out
+    }
+
+    /// F01/F15 — retry a streamed version: re-stream its EXACT acquired bytes (byte resolver) and commit
+    /// only the records that are not committed yet. A record whose previous attempt failed or was
+    /// interrupted has that attempt's object rolled back first, so nothing is duplicated. Structure that
+    /// is already committed is kept; the newly committed records are linked to it.
+    public func resumeStreamedIngest(sourceVersionID svid: UUID) async throws {
+        guard let byteResolver, let db = upgradeDatabase else {
+            throw SourceUpgradeError.missingDependency("upgrades not configured: cannot resume a streamed ingest")
+        }
+        guard let row = try await db.query("""
+            SELECT logical_source_id, content_hash, detected_type, size_bytes, filename, declared_extension, mime_type,
+                   detection_basis, custody_mode, preservation_status, vault_address
+              FROM source_versions WHERE id = ? LIMIT 1;
+            """, [.uuid(svid)]).first, let logical = row.uuid(0), let hash = row.string(1) else {
+            throw SourceUpgradeError.sourceVersionMissing(svid)
+        }
+        let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
+        let size = row.int(3) ?? 0
+        let resolved = try await byteResolver.resolve(sourceVersionID: svid, at: Date())
+        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+        let plugin = try universalExecutor.registry.resolve(type)
+        guard let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) else {
+            throw SourceUpgradeError.policyBlocked("\(type.rawValue) is not ingested as a stream; nothing to resume")
+        }
+        let handle = SourceIntakeHandle(
+            occurrenceFileID: logical, logicalSourceID: logical, sourceVersionID: svid, outcome: .newVersion,
+            filename: row.string(4) ?? resolved.identityURL.lastPathComponent, declaredExtension: row.string(5) ?? "",
+            detectedType: type, mimeType: row.string(6),
+            detectionBasis: SourceDetectionBasis(rawValue: row.string(7) ?? "") ?? .unknown, contentHash: hash,
+            sizeBytes: size, custodyMode: SourceCustodyMode(rawValue: row.string(8) ?? "") ?? .referenced,
+            preservationStatus: SourcePreservationStatus(rawValue: row.string(9) ?? "") ?? .referenceRecorded,
+            vaultAddress: row.string(10))
+        let fileRecord = FileRecord(id: logical, url: resolved.identityURL, sourceType: type, sizeBytes: size,
+                                    modifiedAt: Date(), ingestedAt: Date(), contentHash: hash, aliasOf: nil, availability: .available)
+        let request = UniversalParserRequest(
+            originalURL: resolved.identityURL, processingSnapshotURL: resolved.snapshotURL, logicalSourceID: logical,
+            sourceVersionID: svid, sourceType: type, contentHash: hash, sizeBytes: size, intent: .fullAvailable)
+        let url = resolved.identityURL
+        _ = await ingestStreaming(streamer, plugin: plugin, request: request, handle: handle, fileRecord: fileRecord,
+                                  url: url, processURL: resolved.snapshotURL, type: type, resuming: true,
+                                  skip: { status, stage, detail in
+            Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                   chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                   logicalSourceID: logical, sourceVersionID: svid, intakeOutcome: .newVersion,
+                   processingStatus: status, processingStage: stage, processingDetail: detail)
+        })
+    }
+
+    private func advanceSearchReadiness(_ svid: UUID, readiness: SourceReadinessRepository, incomplete: String? = nil) async {
         var searchUpdates: [SourceReadinessDimensionUpdate] = []
         let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
-        if coverage.eligible > 0 {
+        if let incomplete {
+            // Committed records stay searchable; the text dimension says what was not read or committed.
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .partial,
+                                                                action: .partiallySatisfy, detail: incomplete))
+            if coverage.eligible > 0 {
+                let fullyIndexed = coverage.indexed == coverage.eligible
+                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                                                    action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                                                    completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                                                    basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
+            }
+        } else if coverage.eligible > 0 {
             searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
                                                                 completedUnits: coverage.eligible, totalUnits: coverage.eligible))
             let fullyIndexed = coverage.indexed == coverage.eligible
