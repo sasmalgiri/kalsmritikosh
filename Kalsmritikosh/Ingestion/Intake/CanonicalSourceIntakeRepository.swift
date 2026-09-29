@@ -338,11 +338,12 @@ public struct CanonicalSourceIntakeRepository: Sendable {
             mimeType: r.string(8), detectionBasis: r.string(9) ?? "unknown", sizeBytes: r.int(10) ?? 0)
     }
 
-    /// F03 — the receipt records the acquisition SET for a WAL database: each sidecar's suffix,
-    /// SHA-256 and size (JSON in `detail`). NULL for every other source, as before.
+    /// F03 — the receipt records how a logical derivative was acquired (method, time, and each
+    /// original member's role, length and SHA-256) as JSON in `detail`. NULL for exact-byte captures.
     nonisolated static func receiptDetail(_ captured: CapturedSource) -> SQLValue {
-        guard !captured.sqliteSidecars.isEmpty,
-              let json = try? JSONEncoder().encode(["sqliteSidecars": captured.sqliteSidecars]),
+        guard let record = captured.sqliteAcquisition else { return .null }
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]; enc.dateEncodingStrategy = .iso8601
+        guard let json = try? enc.encode(["sqliteAcquisition": record]),
               let text = String(data: json, encoding: .utf8) else { return .null }
         return .text(text)
     }

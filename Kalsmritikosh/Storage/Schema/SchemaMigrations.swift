@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 135
+    public static let latestVersion = 136
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -666,7 +666,8 @@ public enum SchemaMigrations {
         (132, v132),
         (133, v133),
         (134, v134),
-        (135, v135)
+        (135, v135),
+        (136, v136)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6714,6 +6715,20 @@ public enum SchemaMigrations {
     private static let v135: String = """
     ALTER TABLE evidence_blocks ADD COLUMN superseded_by_run TEXT;
     CREATE INDEX IF NOT EXISTS idx_blocks_version_active ON evidence_blocks(source_version_id) WHERE superseded_by_run IS NULL;
+    """
+
+    // MARK: - v136 — F03 SQLite acquisitions that did not preserve their WAL
+    //
+    // Before the logical-derivative acquisition, a live WAL database was versioned by its MAIN
+    // file's hash and only the main file reached the vault; its receipt recorded the WAL as a
+    // sidecar. Those versions' committed WAL rows cannot be reopened. They are marked, not rewritten:
+    // their historical evidence stays as it is, and reopening/reprocessing refuses them explicitly
+    // (`acquisitionIncomplete`) instead of re-reading main-file bytes under the version's identity.
+    // A fresh ingest of the database acquires it completely as a new version.
+    private static let v136: String = """
+    ALTER TABLE source_versions ADD COLUMN acquisition_limitation TEXT;
+    UPDATE source_versions SET acquisition_limitation = 'walNotPreserved'
+     WHERE id IN (SELECT source_version_id FROM source_intake_receipts WHERE detail LIKE '%"sqliteSidecars"%');
     """
 
 }

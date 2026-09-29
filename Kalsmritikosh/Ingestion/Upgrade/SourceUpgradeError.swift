@@ -19,6 +19,9 @@ public nonisolated enum SourceUpgradeError: Error, Sendable, Equatable {
     case sourceBytesChanged(UUID)          // referenced bytes differ from the exact version hash
     case vaultBlobMissing(UUID)            // managed version's vault blob is gone
     case hashMismatch(UUID)                // reopened bytes do not hash to the version's hash
+    /// F03 — the version's acquisition never preserved all of its source (a WAL database captured
+    /// before logical acquisition); its bytes cannot be reopened as the version's state.
+    case acquisitionIncomplete(UUID)
 
     // Ledger.
     case jobNotFound(UUID)

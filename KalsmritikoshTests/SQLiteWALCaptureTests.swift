@@ -32,16 +32,17 @@ struct SQLiteWALCaptureTests {
         return (url, dir, h)
     }
 
-    @Test("Committed WAL rows survive intake: the snapshot set carries the WAL and every row is read")
+    @Test("Committed WAL rows survive intake: the acquired snapshot carries every row")
     func walRowsSurviveSnapshot() async throws {
         let db = try liveWALDatabase(rows: 3)
         defer { sqlite3_close(db.writer); try? FileManager.default.removeItem(at: db.dir) }
         let snapDir = db.dir.appendingPathComponent("snapshot")
         let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(db.url, snapshotDirectory: snapDir)
 
-        #expect(FileManager.default.fileExists(atPath: snapshotURL.path + "-wal"))
-        #expect(captured.sqliteSidecars.map(\.suffix) == ["-wal"])
-        #expect(captured.sqliteSidecars.first?.contentHash.count == 64)
+        // The live WAL database is acquired as ONE self-contained derivative (SQLiteAcquisitionTests).
+        #expect(!FileManager.default.fileExists(atPath: snapshotURL.path + "-wal"))
+        #expect(captured.sqliteAcquisition?.members.map(\.role) == ["main", "wal"])
+        #expect(captured.sqliteAcquisition?.members.allSatisfy { $0.sha256.count == 64 } == true)
         let text = try await SQLiteLoader().ingestMany(fileAt: snapshotURL, type: .sqlite)
             .map(\.content).joined(separator: "\n")
         for i in 1...3 { #expect(text.contains("body = wal-row-\(i)"), "row \(i) lost") }
@@ -56,7 +57,7 @@ struct SQLiteWALCaptureTests {
         try Data("hello".utf8).write(to: url)
         try Data("not a wal".utf8).write(to: URL(fileURLWithPath: url.path + "-wal"))   // a stray file, not SQLite
         let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(url, snapshotDirectory: dir.appendingPathComponent("s"))
-        #expect(captured.sqliteSidecars.isEmpty)
+        #expect(captured.sqliteAcquisition == nil)
         #expect(!FileManager.default.fileExists(atPath: snapshotURL.path + "-wal"))
     }
 }
