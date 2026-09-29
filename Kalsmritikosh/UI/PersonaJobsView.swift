@@ -61,6 +61,16 @@ public final class PersonaJobsModel {
     // workspace, newest first.
     private let cases: InvestigationCaseRepository?
     public private(set) var openMatters: [InvestigationCase] = []
+    /// Free-text filter over the resumable-matters list (by title).
+    public var matterSearch: String = ""
+
+    /// Open matters filtered by `matterSearch` (case-insensitive, title match),
+    /// newest first — so a long list stays findable.
+    public var filteredMatters: [InvestigationCase] {
+        let q = matterSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return openMatters }
+        return openMatters.filter { $0.title.lowercased().contains(q) }
+    }
 
     public func reloadMatters() async {
         guard let cases, let wsID = selectedWorkspace else { openMatters = []; return }
@@ -340,16 +350,31 @@ public struct PersonaJobsView: View {
                 // JOB-RESUME — matters are durable; come back to them any time.
                 if !model.openMatters.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Resume where you left off")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(model.openMatters.prefix(5)) { matter in
+                        HStack {
+                            Text("Resume where you left off")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if model.openMatters.count > 5 {
+                                TextField("Find a matter", text: $model.matterSearch)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 200)
+                                    .controlSize(.small)
+                            }
+                        }
+                        let matches = model.filteredMatters
+                        if matches.isEmpty {
+                            Text("No matter matches “\(model.matterSearch)”.")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        ForEach(matches.prefix(model.matterSearch.isEmpty ? 5 : 20)) { matter in
                             HStack(spacing: 8) {
                                 Image(systemName: "folder.badge.person.crop")
                                     .foregroundStyle(Theme.brand)
                                     .imageScale(.small)
-                                Text(matter.title).font(.callout)
-                                Text(matter.createdAt.formatted(date: .abbreviated, time: .omitted))
+                                Text(matter.title).font(.callout).lineLimit(1)
+                                // Date + short id disambiguate identically-named matters.
+                                Text("\(matter.createdAt.formatted(date: .abbreviated, time: .omitted)) · #\(matter.id.uuidString.prefix(6))")
                                     .font(.caption2).foregroundStyle(.secondary)
                                 Spacer()
                                 Button("Open") { model.openMatter(matter) }
@@ -357,6 +382,10 @@ public struct PersonaJobsView: View {
                                     .buttonStyle(.bordered)
                             }
                             .padding(.vertical, 2)
+                        }
+                        if model.matterSearch.isEmpty && model.openMatters.count > 5 {
+                            Text("Showing 5 of \(model.openMatters.count) — type above to find others.")
+                                .font(.caption2).foregroundStyle(.tertiary)
                         }
                     }
                     .padding(10)
