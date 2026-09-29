@@ -19,6 +19,8 @@ public struct SQLiteStructuralParser: StructuralParser {
     public nonisolated var parserName: String { "sqlite" }
     /// "2" — F05: rows walked in the loader's order and stamped with a shared record key.
     public nonisolated var parserVersion: String { "2" }
+    /// F01 — bounded by design: copies the bytes to a temp file, reads through SQLite, and caps rows per table.
+    public nonisolated var boundedMemory: Bool { true }
 
     /// Max rows given an individually-citable block, per table. This parser is the
     /// CITATION layer, not the indexing layer: SQLiteLoader emits every row as

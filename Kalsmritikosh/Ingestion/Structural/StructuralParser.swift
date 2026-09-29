@@ -15,6 +15,10 @@ public protocol StructuralParser: Sendable {
     nonisolated var supportedTypes: Set<SourceType> { get }
     nonisolated var parserName: String { get }
     nonisolated var parserVersion: String { get }
+    /// F01 — true when the parser's resident memory does NOT grow with the file: it reads through a
+    /// disk-backed engine and caps what it materialises (rows per table, events). Such a parser may
+    /// run on a file ingested batch by batch; an unbounded one (whole-document structure) may not.
+    nonisolated var boundedMemory: Bool { get }
 
     /// Parse raw bytes into a ParsedDocument. Implementations never throw for
     /// merely-empty or partial input — they set `extractionStatus` and add
@@ -26,4 +30,8 @@ public protocol StructuralParser: Sendable {
         logicalSourceID: UUID,
         sourceVersionID: UUID
     ) async throws -> ParsedDocument
+}
+
+public extension StructuralParser {
+    nonisolated var boundedMemory: Bool { false }
 }

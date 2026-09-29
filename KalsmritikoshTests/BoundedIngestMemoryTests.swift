@@ -175,8 +175,8 @@ struct BoundedIngestMemoryTests {
         #expect(shapes[0] == shapes[1], "streamed and whole-file ingest must commit the same records")
     }
 
-    @Test("A streamed database records structure as blocked by a resource limit, never ready")
-    @MainActor func streamedSQLiteBlocksStructure() async throws {
+    @Test("A streamed database still gets its bounded structure, each page owning exactly its rows' blocks")
+    @MainActor func streamedSQLiteGetsBoundedStructure() async throws {
         let rig = try await makeRig(tinyBudget)
         let url = try makeSQLite(rows: 1_750)
         let result = try await rig.coordinator.ingest(fileAt: url)
@@ -184,8 +184,76 @@ struct BoundedIngestMemoryTests {
         #expect(try await count(rig, "SELECT COUNT(*) FROM knowledge_objects WHERE file_id = ?;", result.fileRecord.id) == 4)
         #expect(try await count(rig, "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND text LIKE '%row-1750%';", v) >= 1)
         let structure = try await rig.readiness.snapshot(sourceVersionID: v).dimension(.structuralExtraction)
+        #expect(structure?.state == .ready || structure?.state == .partial, "bounded structure runs on a streamed file")
+        #expect(structure?.condition == nil)
+        // Every row block is owned by exactly one page object, and no block by two.
+        let owned = try await count(rig, """
+            SELECT COUNT(*) FROM evidence_block_objects o JOIN evidence_blocks b ON b.id = o.evidence_block_id
+             WHERE b.source_version_id = ?;
+            """, v)
+        let owners = try await count(rig, """
+            SELECT COUNT(DISTINCT o.knowledge_object_id) FROM evidence_block_objects o
+              JOIN evidence_blocks b ON b.id = o.evidence_block_id WHERE b.source_version_id = ?;
+            """, v)
+        let doubly = try await count(rig, """
+            SELECT COUNT(*) FROM (SELECT o.evidence_block_id FROM evidence_block_objects o
+              JOIN evidence_blocks b ON b.id = o.evidence_block_id WHERE b.source_version_id = ?
+              GROUP BY o.evidence_block_id HAVING COUNT(*) > 1);
+            """, v)
+        #expect(owned > 0)
+        #expect(owners == 4, "each of the four page objects owns its rows")
+        #expect(doubly == 0)
+    }
+
+    @Test("A streamed mailbox's whole-document structure is held back by a resource limit, never claimed")
+    @MainActor func streamedMboxStructureBlocked() async throws {
+        let rig = try await makeRig(tinyBudget)
+        let result = try await rig.coordinator.ingest(fileAt: try makeMbox(messages: 10))
+        let v = try #require(result.sourceVersionID)
+        let structure = try await rig.readiness.snapshot(sourceVersionID: v).dimension(.structuralExtraction)
         #expect(structure?.state == .blocked)
         #expect(structure?.condition == .resourceLimit)
+    }
+
+    @Test("Thread-coalesced mbox streams one thread at a time, identical to the whole-file thread path")
+    func coalescedMboxStreams() async throws {
+        var text = ""
+        for i in 0..<12 {
+            let thread = i % 3
+            text += "From s\(i)@x.example Mon Jan  1 00:00:00 2024\nFrom: S\(i) <s\(i)@x.example>\n"
+            text += "Message-ID: <m\(i)@x.example>\n"
+            if i >= 3 { text += "In-Reply-To: <m\(i - 3)@x.example>\n" }
+            text += "Subject: Re: Harbour survey thread \(thread)\nDate: Mon, 1 Jan 2024 1\(i % 10):00:00 +0000\n\n"
+            text += "Reply \(i) in thread \(thread) about tide gauges and crane loads.\n\n"
+        }
+        let url = try tempFile("threads.mbox", Data(text.utf8))
+        let loader = EmailLoader()
+        let reference = try loader.ingestMBOXAsMessages(at: url, coalesce: true)
+        var batches: [[KnowledgeObject]] = []
+        try await loader.streamMbox(at: url, budget: StreamBatchBudget(maxObjects: 1, maxContentBytes: .max), coalesce: true) {
+            batches.append($0)
+        }
+        #expect(reference.count == 3, "three threads")
+        #expect(batches.count == 3 && batches.allSatisfy { $0.count == 1 })
+        #expect(batches.flatMap { $0 }.map(fingerprint) == reference.map(fingerprint))
+        #expect(batches.flatMap { $0 }.allSatisfy { $0.content.contains("--- MSG 4 sent") }, "each thread carries all four messages")
+    }
+
+    @Test("NSF and PST stream note by note; NSF matches ingestMany exactly")
+    func nsfAndPSTStream() async throws {
+        var text = "Lotus Notes NSF database\n" + String(repeating: "-", count: 300) + "\n"
+        for i in 0..<5 {
+            text += "Form: Memo\nFrom: Sender \(i) <s\(i)@example.com>\nSendTo: team@example.com\n"
+            text += "Subject: Survey note \(i)\nDeliveredDate: 12 March 2024\nBody: Survey note \(i) records berth use.\n\n"
+        }
+        let url = try tempFile("mail.nsf", Data(text.utf8))
+        let loader = EmailLoader()
+        #expect(loader.streamsRecords(type: .nsf) && loader.streamsRecords(type: .pst))
+        let reference = try await loader.ingestMany(fileAt: url, type: .nsf)
+        let batches = try await streamed(loader, url, .nsf, StreamBatchBudget(maxObjects: 2, maxContentBytes: .max))
+        #expect(!reference.isEmpty)
+        #expect(batches.allSatisfy { $0.count <= 2 })
+        #expect(batches.flatMap { $0 }.map(fingerprint) == reference.map(fingerprint))
     }
 
     @Test("An oversize file that cannot stream is deferred with custody kept, not loaded whole")

@@ -1279,7 +1279,7 @@ public actor IngestCoordinator {
         let expandsMembers = plugin.executionMode == .container || type == .extractionManifest
         if !expandsMembers, handle.sizeBytes > memoryBudget.streamAboveBytes {
             if let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) {
-                return await ingestStreaming(streamer, plugin: plugin, handle: handle, fileRecord: fileRecord,
+                return await ingestStreaming(streamer, plugin: plugin, request: request, handle: handle, fileRecord: fileRecord,
                                              url: url, processURL: processURL, type: type, skip: skipResult)
             }
             if handle.sizeBytes > memoryBudget.deferWholeFileAboveBytes {
@@ -1482,22 +1482,7 @@ public actor IngestCoordinator {
             // later parser upgrade can detect this structure as stale and reprocess only what changed.
             var structuralUpdates: [SourceReadinessDimensionUpdate] = []
             if let r = structuralReceipt {
-                let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
-                let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
-                structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
-                                                                        action: .satisfy, basis: docBasis))
-                if r.substantiveBlockCount > 0 {
-                    let ready = r.isStructurallyComplete
-                    structuralUpdates.append(SourceReadinessDimensionUpdate(
-                        dimension: .structuralExtraction, state: ready ? .ready : .partial,
-                        action: ready ? .satisfy : .partiallySatisfy,
-                        completedUnits: r.locatedSubstantiveBlockCount, totalUnits: r.substantiveBlockCount, basis: runBasis))
-                }
-                if r.ocrBlockCount > 0 {
-                    structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
-                                                                            applicability: .conditional,
-                                                                            completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
-                }
+                structuralUpdates = Self.structuralReadinessUpdates(r)
             } else if structuralAttempted {
                 structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed,
                                                                         action: .fail, detail: "structural persistence failed"))
@@ -1515,11 +1500,13 @@ public actor IngestCoordinator {
     /// F01 — the bounded-memory path for a file above `memoryBudget.streamAboveBytes` whose loader
     /// can stream. Records arrive in `memoryBudget.batch`-sized batches and each object is committed
     /// (KO + chunks + FTS) through the same per-KO pipeline before the next batch is read, so the
-    /// resident set is one batch, not the file. The whole-document structural parse (one atomic
-    /// commit of every block) is NOT run here: structure is recorded as blocked by a resource limit
-    /// with the reason, never claimed. A failure mid-stream keeps every record already committed and
-    /// reports text as partial.
+    /// resident set is one batch, not the file. Structure runs only when the plugin's structural parser
+    /// is bounded by design (its memory does not grow with the file); its blocks are then linked to
+    /// the streamed records by their record keys, exactly as on the whole-file path. Otherwise
+    /// structure is recorded as blocked by a resource limit with the reason, never claimed. A failure
+    /// mid-stream keeps every record already committed and reports text as partial.
     private func ingestStreaming(_ streamer: any StreamingIngestor, plugin: any UniversalParserPlugin,
+                                 request: UniversalParserRequest,
                                  handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
                                  type: SourceType,
                                  skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
@@ -1535,6 +1522,8 @@ public actor IngestCoordinator {
         var tally: IngestTally? = nil
         var docClass: DocumentClass = .other
         var records = 0, batches = 0
+        // Only the keys block ownership is decided by, per committed record — never the content.
+        var ownership: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])] = []
         var streamError: Error? = nil
         do {
             try await streamer.streamRecords(fileAt: processURL, type: type, budget: memoryBudget.batch) { batch in
@@ -1552,6 +1541,7 @@ public actor IngestCoordinator {
                         try await ingestObject(ko, blocks: [], fileRecord: fileRecord, documentClass: docClass,
                                                sourceVersionID: svid, tally: &t)
                         tally = t
+                        ownership.append((ko.id, ko.metadata.filter { Self.ownershipKeys.contains($0.key) }))
                     } catch {
                         KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                     }
@@ -1578,6 +1568,38 @@ public actor IngestCoordinator {
                           logicalSourceID: handle.logicalSourceID, sourceVersionID: svid, intakeOutcome: handle.outcome)
         }
 
+        // Bounded structure: parse, commit once, link blocks to the streamed records by record key.
+        var structuralReceipt: StructuralPersistenceReceipt? = nil
+        var structuralAttempted = false
+        if streamError == nil, tally.chunks > 0, plugin.capabilities.producesStructure, let evidenceStore,
+           let adapter = plugin as? ExistingParserPluginAdapter {
+            do {
+                if let doc = try await adapter.parseBoundedStructure(request) {
+                    structuralAttempted = true
+                    let parse = StructuralParse(doc: doc, parserName: plugin.pluginID, parserVersion: plugin.pluginVersion,
+                                                sizeBytes: handle.sizeBytes, startedAt: started)
+                    structuralReceipt = await persistStructuralDoc(parse, url: url, store: evidenceStore,
+                                                                   owningObjectID: tally.lastObject.id, documentClass: docClass)
+                    if structuralReceipt != nil {
+                        for (id, keys) in ownership {
+                            let stub = KnowledgeObject(id: id, sourceFile: url, sourceType: type, content: "", metadata: keys)
+                            let blockIDs = Self.blocks(for: stub, from: doc.blocks, singleKO: ownership.count == 1).map(\.id)
+                            guard !blockIDs.isEmpty else { continue }
+                            do { try await evidenceStore.linkBlocks(blockIDs, toObject: id, at: Date()) }
+                            catch {
+                                await derivationFailures?.record(stage: "evidence.linkBlocks", error: error, knowledgeObjectID: id,
+                                                                 filePath: url.path, detectedType: type.rawValue)
+                                KalsmritikoshLog.ingestion.error("linkBlocks failed (\(blockIDs.count, privacy: .public) blocks) for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                            }
+                        }
+                    }
+                }
+            } catch {
+                structuralAttempted = true
+                KalsmritikoshLog.ingestion.error("Bounded structural parse failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+
         if let readiness {
             await advanceSearchReadiness(svid, readiness: readiness)
             if let streamError {
@@ -1587,7 +1609,15 @@ public actor IngestCoordinator {
                                                    detail: "stream stopped after \(records) records: "
                                                        + String(describing: streamError).prefix(120))])
             }
-            if plugin.capabilities.producesStructure, evidenceStore != nil {
+            if let r = structuralReceipt {
+                await advanceReadiness(svid, Self.structuralReadinessUpdates(r),
+                                       producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
+            } else if structuralAttempted {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed, action: .fail,
+                                                   detail: "structural persistence failed")],
+                    producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
+            } else if plugin.capabilities.producesStructure, evidenceStore != nil {
                 await advanceReadiness(svid, [
                     SourceReadinessDimensionUpdate(
                         dimension: .structuralExtraction, state: .blocked, action: .block, condition: .resourceLimit,
@@ -1607,6 +1637,30 @@ public actor IngestCoordinator {
             result.processingDetail = "partial: \(records) records committed before " + String(describing: streamError).prefix(200)
         }
         return result
+    }
+
+    /// The metadata keys block ownership is decided by (`blocks(for:from:singleKO:)`).
+    private static let ownershipKeys: Set<String> = [SQLiteRecordKey.metadataKey, "messageIndex", EmailLoader.threadMessagesMetaKey]
+
+    /// Structure / metadata / OCR readiness from a COMMITTED structural receipt (USF-002.1).
+    private static func structuralReadinessUpdates(_ r: StructuralPersistenceReceipt) -> [SourceReadinessDimensionUpdate] {
+        let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
+        let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
+        var updates = [SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
+                                                      action: .satisfy, basis: docBasis)]
+        if r.substantiveBlockCount > 0 {
+            let ready = r.isStructurallyComplete
+            updates.append(SourceReadinessDimensionUpdate(
+                dimension: .structuralExtraction, state: ready ? .ready : .partial,
+                action: ready ? .satisfy : .partiallySatisfy,
+                completedUnits: r.locatedSubstantiveBlockCount, totalUnits: r.substantiveBlockCount, basis: runBasis))
+        }
+        if r.ocrBlockCount > 0 {
+            updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
+                                                          applicability: .conditional,
+                                                          completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
+        }
+        return updates
     }
 
     /// Search dimensions (loader-produced) from the exact per-version FTS coverage — default

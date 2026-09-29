@@ -75,6 +75,22 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         return streaming
     }
 
+    /// F01 — the structural document for a file ingested batch by batch, but ONLY when this plugin's
+    /// structural parser is bounded by design; nil otherwise (the caller records structure as held
+    /// back by a resource limit). The parsed document's identity is checked against the request.
+    public func parseBoundedStructure(_ request: UniversalParserRequest) async throws -> ParsedDocument? {
+        guard let structural, structural.boundedMemory else { return nil }
+        let bytes = try Self.snapshotBytes(request.processingSnapshotURL)
+        let doc = try await structural.parse(
+            data: bytes, filename: request.originalURL.lastPathComponent, type: request.sourceType,
+            logicalSourceID: request.logicalSourceID, sourceVersionID: request.sourceVersionID)
+        guard doc.logicalSourceID == request.logicalSourceID, doc.sourceVersionID == request.sourceVersionID,
+              doc.contentHash.lowercased() == request.contentHash.lowercased(), doc.detectedType == request.sourceType else {
+            throw UniversalParserError.contentHashMismatch(pluginID: pluginID)
+        }
+        return doc
+    }
+
     public func execute(_ request: UniversalParserRequest) async throws -> UniversalParserResult {
         // Read ONLY the immutable snapshot — never the mutable original.
         guard FileManager.default.isReadableFile(atPath: request.processingSnapshotURL.path) else {

@@ -109,10 +109,11 @@ public struct EmailLoader: StreamingIngestor {
         return [try await ingest(fileAt: url, type: type)]
     }
 
-    /// F01 — per-message mbox streams; thread coalescing needs the whole archive to group, and
-    /// PST/NSF readers materialise their message tables, so those keep the `ingestMany` path.
+    /// F01 — every many-record mail format streams: per-message mbox, thread-coalesced mbox (a
+    /// header-only grouping pass, then one thread's bodies at a time), PST and NSF (one message /
+    /// note parsed at a time from the mapped file).
     public nonisolated func streamsRecords(type: SourceType) -> Bool {
-        type == .mbox && !Self.threadCoalescingEnabled
+        type == .mbox || type == .pst || type == .nsf
     }
 
     /// F01 — the per-message mbox path, one message at a time: the file stays memory-mapped,
@@ -127,11 +128,43 @@ public struct EmailLoader: StreamingIngestor {
             if let rest = batcher.drain() { try await emit(rest) }
             return
         }
+        var batcher = KnowledgeObjectBatcher(budget: budget)
+        switch type {
+        case .pst:
+            for msg in try pstMessageIterator(at: url) {
+                if let ko = buildKO(fromPSTMessage: msg, source: url), let batch = batcher.add(ko) { try await emit(batch) }
+            }
+            if let rest = batcher.drain() { try await emit(rest) }
+            return
+        case .nsf:
+            for note in try nsfNoteIterator(at: url) where note.isMailNote {
+                if let ko = buildKO(fromNSFNote: note, source: url), let batch = batcher.add(ko) { try await emit(batch) }
+            }
+            if let rest = batcher.drain() { try await emit(rest) }
+            return
+        default:
+            break
+        }
+        try await streamMbox(at: url, budget: budget, coalesce: Self.threadCoalescingEnabled, emit: emit)
+    }
+
+    /// F01 — the mbox stream, either mode. Emits exactly what `ingestMBOXAsMessages(at:coalesce:)`
+    /// returns, in the same order.
+    func streamMbox(at url: URL, budget: StreamBatchBudget, coalesce: Bool,
+                    emit: ([KnowledgeObject]) async throws -> Void) async throws {
+        var batcher = KnowledgeObjectBatcher(budget: budget)
         let data: Data
         do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
         let boundaries = Self.mboxBoundaries(data)
-        var batcher = KnowledgeObjectBatcher(budget: budget)
+        if coalesce {
+            let plan = mboxThreadPlan(data: data, boundaries: boundaries, url: url)
+            for thread in plan.threads {
+                if let ko = threadKO(thread, plan: plan, data: data, url: url), let batch = batcher.add(ko) { try await emit(batch) }
+            }
+            if let rest = batcher.drain() { try await emit(rest) }
+            return
+        }
         var pieceIndex = 0
         for k in 0..<(boundaries.count - 1) {
             guard let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) else { continue }
@@ -318,7 +351,9 @@ public struct EmailLoader: StreamingIngestor {
     /// carries its own structured From/To/Cc/Date entities (T13.2) and
     /// goes through the standard chunker / NER / event-extraction
     /// pipeline from IngestCoordinator independently.
-    private func ingestMBOXAsMessages(at url: URL) throws -> [KnowledgeObject] {
+    /// `coalesce` defaults to the user's Move-A setting; tests pass it explicitly rather than
+    /// flipping a real preference.
+    func ingestMBOXAsMessages(at url: URL, coalesce: Bool = EmailLoader.threadCoalescingEnabled) throws -> [KnowledgeObject] {
         // Byte-level scan for "\nFrom " message boundaries. Avoids the
         // String.components(separatedBy:) path that silently flattens
         // very large mbox files (~94MB observed: 525 boundaries seen by
@@ -331,182 +366,173 @@ public struct EmailLoader: StreamingIngestor {
         do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
         let boundaries = Self.mboxBoundaries(data)
-        var pieces: [String] = []
-        for k in 0..<(boundaries.count - 1) {
-            if let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) { pieces.append(piece) }
-        }
         // Move-A switch — when the flag is OFF (default), emit one KO
         // per message (the pre-Move-A path that the 435 MB production
         // DB was built with). When ON, fall through to the thread
         // coalescer below.
-        if !Self.threadCoalescingEnabled {
+        if !coalesce {
+            var pieces: [String] = []
+            for k in 0..<(boundaries.count - 1) {
+                if let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) { pieces.append(piece) }
+            }
             return emitPerMessageKOs(from: pieces, url: url)
         }
-        // First pass — parse each mbox piece into a structured record
-        // (cleaned body + headers + date). We don't emit a KO yet
-        // because Move A coalesces these into threads first.
-        struct ParsedRecord {
-            let index: Int
-            let headers: [String: String]
-            let cleanedBody: String
-            let quotedBytesRemoved: Int
-            let attachmentURLs: [URL]
-            let date: Date?
-        }
-        var parsed: [ParsedRecord] = []
-        parsed.reserveCapacity(pieces.count)
-        for (idx, message) in pieces.enumerated() {
-            // Drop the "From <sender> <date>" envelope line — not a
-            // real header, leaks into the parser. `.isNewline` (not
-            // `$0 == "\n"`) catches CRLF-terminated mbox from Gmail
-            // Takeout where Swift treats "\r\n" as ONE grapheme.
-            let messageBody: String
-            if let firstLineEnd = message.firstIndex(where: { $0.isNewline }) {
-                messageBody = String(message[message.index(after: firstLineEnd)...])
-            } else {
-                messageBody = message
-            }
-            let (headers, body) = splitEMLHeaders(messageBody)
-            // T13.7 — decode multipart, T7 — strip quoted regions.
-            let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
-                headers: headers, body: body, for: url
-            )
-            let (cleanedBody, quoted) = Self.stripQuotedRegions(textBody)
-            if cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && headers["subject"] == nil { continue }
-            parsed.append(ParsedRecord(
-                index: idx,
-                headers: headers,
-                cleanedBody: cleanedBody,
-                quotedBytesRemoved: quoted,
-                attachmentURLs: attachmentURLs,
-                date: Self.parseRFC2822Date(headers["date"])
-            ))
-        }
+        let plan = mboxThreadPlan(data: data, boundaries: boundaries, url: url)
+        return plan.threads.compactMap { threadKO($0, plan: plan, data: data, url: url) }
+    }
 
-        // Second pass — thread coalescing. ParsedRecord → ParsedMessage.
-        let parsedMessages = parsed.map { rec in
-            ThreadCoalescer.ParsedMessage(
-                index: rec.index,
-                headers: rec.headers,
-                body: rec.cleanedBody,
-                date: rec.date
-            )
+    /// One mbox message decoded for the thread path: envelope line dropped, headers split,
+    /// multipart decoded (attachments staged only when asked), quoted regions stripped.
+    private func decodeMboxMessage(_ message: String, url: URL, stageAttachments: Bool)
+        -> (headers: [String: String], cleanedBody: String, quoted: Int, attachments: [URL]) {
+        // Drop the "From <sender> <date>" envelope line — not a
+        // real header, leaks into the parser. `.isNewline` (not
+        // `$0 == "\n"`) catches CRLF-terminated mbox from Gmail
+        // Takeout where Swift treats "\r\n" as ONE grapheme.
+        let messageBody: String
+        if let firstLineEnd = message.firstIndex(where: { $0.isNewline }) {
+            messageBody = String(message[message.index(after: firstLineEnd)...])
+        } else {
+            messageBody = message
         }
-        let threads = ThreadCoalescer.coalesce(parsedMessages)
+        let (headers, body) = splitEMLHeaders(messageBody)
+        // T13.7 — decode multipart, T7 — strip quoted regions.
+        let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
+            headers: headers, body: body, for: url, stageAttachments: stageAttachments
+        )
+        let (cleanedBody, quoted) = Self.stripQuotedRegions(textBody)
+        return (headers, cleanedBody, quoted, attachmentURLs)
+    }
 
-        // Third pass — emit one KO per thread. Singletons take the same
-        // shape so callers don't need to special-case them.
-        var out: [KnowledgeObject] = []
-        out.reserveCapacity(threads.count)
-        let attachmentsByIndex: [Int: [URL]] = Dictionary(
-            uniqueKeysWithValues: parsed.map { ($0.index, $0.attachmentURLs) }
-        )
-        let quotedByIndex: [Int: Int] = Dictionary(
-            uniqueKeysWithValues: parsed.map { ($0.index, $0.quotedBytesRemoved) }
-        )
+    /// F01 — the thread path's first pass, bodies NOT kept: per message only its headers, date,
+    /// quoted-byte count, staged attachments and byte range, then the coalesced threads. Grouping
+    /// reads headers + dates only, so this holds the archive's headers, never its bodies.
+    struct MboxThreadPlan {
+        struct Record { let index: Int; let start: Int; let end: Int; let quoted: Int; let attachments: [URL] }
+        let records: [Int: Record]
+        let threads: [ThreadCoalescer.Thread]
+    }
+
+    private func mboxThreadPlan(data: Data, boundaries: [Int], url: URL) -> MboxThreadPlan {
+        var records: [Int: MboxThreadPlan.Record] = [:]
+        var parsedMessages: [ThreadCoalescer.ParsedMessage] = []
+        var index = 0
+        for k in 0..<(boundaries.count - 1) {
+            guard let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) else { continue }
+            defer { index += 1 }
+            let d = decodeMboxMessage(piece, url: url, stageAttachments: true)
+            if d.cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && d.headers["subject"] == nil { continue }
+            records[index] = .init(index: index, start: boundaries[k], end: boundaries[k + 1],
+                                   quoted: d.quoted, attachments: d.attachments)
+            parsedMessages.append(ThreadCoalescer.ParsedMessage(
+                index: index, headers: d.headers, body: "", date: Self.parseRFC2822Date(d.headers["date"])))
+        }
+        return MboxThreadPlan(records: records, threads: ThreadCoalescer.coalesce(parsedMessages))
+    }
+
+    /// One thread → its KO. Bodies are re-decoded from the mapped bytes here (text only, nothing
+    /// staged), so a thread's bodies are resident only while its KO is built.
+    private func threadKO(_ thread: ThreadCoalescer.Thread, plan: MboxThreadPlan, data: Data, url: URL) -> KnowledgeObject? {
         let isoDate = ISO8601DateFormatter()
-        for thread in threads {
-            let koID = UUID()
+        let koID = UUID()
 
-            // Build the concatenated thread content + structured
-            // per-message offsets so the Evidence gate can still cite
-            // an individual message.
-            var content = ""
-            var perMessage: [[String: AnyCodable]] = []
-            var attachmentsAccum: [URL] = []
-            var totalQuotedRemoved = 0
-            for (n, m) in thread.messages.enumerated() {
-                let from = m.headers["from"] ?? ""
-                let dateText = m.date.map { isoDate.string(from: $0) }
-                    ?? (m.headers["date"] ?? "")
-                let banner = "--- MSG \(n + 1) sent \(dateText) by \(from) ---"
-                if !content.isEmpty {
-                    content += "\n\n"
-                }
-                let messageStart = content.utf8.count
-                content += banner + "\n"
-                // Header lines first so NER / chunker see participants.
-                var headerLines: [String] = []
-                for key in ["from", "to", "cc", "subject", "date"] {
-                    if let value = m.headers[key], !value.isEmpty {
-                        headerLines.append("\(key.capitalized): \(value)")
-                    }
-                }
-                if !headerLines.isEmpty {
-                    content += headerLines.joined(separator: "\n") + "\n\n"
-                }
-                content += m.body
-                let messageEnd = content.utf8.count
-
-                // Per-message structured record. Keys mirror the EML
-                // path so the dossier / completeness panels read the
-                // same shape.
-                var msgRec: [String: AnyCodable] = [
-                    "messageIndex": AnyCodable(.int(Int64(m.index))),
-                    "byteStart": AnyCodable(.int(Int64(messageStart))),
-                    "byteEnd": AnyCodable(.int(Int64(messageEnd))),
-                ]
-                for (k, v) in m.headers {
-                    msgRec[k] = AnyCodable(.string(v))
-                }
-                perMessage.append(msgRec)
-
-                if let attaches = attachmentsByIndex[m.index] {
-                    attachmentsAccum.append(contentsOf: attaches)
-                }
-                totalQuotedRemoved += quotedByIndex[m.index] ?? 0
+        // Build the concatenated thread content + structured
+        // per-message offsets so the Evidence gate can still cite
+        // an individual message.
+        var content = ""
+        var perMessage: [[String: AnyCodable]] = []
+        var attachmentsAccum: [URL] = []
+        var totalQuotedRemoved = 0
+        for (n, m) in thread.messages.enumerated() {
+            guard let rec = plan.records[m.index],
+                  let piece = Self.mboxPiece(data, from: rec.start, to: rec.end) else { continue }
+            let body = decodeMboxMessage(piece, url: url, stageAttachments: false).cleanedBody
+            let from = m.headers["from"] ?? ""
+            let dateText = m.date.map { isoDate.string(from: $0) }
+                ?? (m.headers["date"] ?? "")
+            let banner = "--- MSG \(n + 1) sent \(dateText) by \(from) ---"
+            if !content.isEmpty {
+                content += "\n\n"
             }
-
-            if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                continue
+            let messageStart = content.utf8.count
+            content += banner + "\n"
+            // Header lines first so NER / chunker see participants.
+            var headerLines: [String] = []
+            for key in ["from", "to", "cc", "subject", "date"] {
+                if let value = m.headers[key], !value.isEmpty {
+                    headerLines.append("\(key.capitalized): \(value)")
+                }
             }
+            if !headerLines.isEmpty {
+                content += headerLines.joined(separator: "\n") + "\n\n"
+            }
+            content += body
+            let messageEnd = content.utf8.count
 
-            // Pick representative headers for the KO's flat metadata
-            // bag (first message wins) so existing consumers that
-            // look up "from"/"subject"/"date" still get a value
-            // without needing to walk the per-message array.
-            let rep = thread.messages.first?.headers ?? [:]
-            var meta: [String: AnyCodable] = [
-                "filename": AnyCodable(.string(url.lastPathComponent)),
-                "loader": AnyCodable(.string("mbox-thread")),
-                "threadMessageCount": AnyCodable(.int(Int64(thread.messages.count))),
-                "threadSubject": AnyCodable(.string(thread.canonicalSubject)),
-                "quotedBytesRemoved": AnyCodable(.int(Int64(totalQuotedRemoved)))
+            // Per-message structured record. Keys mirror the EML
+            // path so the dossier / completeness panels read the
+            // same shape.
+            var msgRec: [String: AnyCodable] = [
+                "messageIndex": AnyCodable(.int(Int64(m.index))),
+                "byteStart": AnyCodable(.int(Int64(messageStart))),
+                "byteEnd": AnyCodable(.int(Int64(messageEnd))),
             ]
-            for (k, v) in rep {
-                meta[k] = AnyCodable(.string(v))
+            for (k, v) in m.headers {
+                msgRec[k] = AnyCodable(.string(v))
             }
-            if let thrid = rep["x-gm-thrid"] {
-                meta["threadID"] = AnyCodable(.string(thrid))
-            }
-            // Smuggle the per-message array as JSON so the schema
-            // stays untouched but downstream code can de-serialize.
-            if let bag = Self.encodeMessagesBag(perMessage) {
-                meta[Self.threadMessagesMetaKey] = AnyCodable(.string(bag))
-            }
-            if let json = Self.encodeAttachmentURLs(attachmentsAccum) {
-                meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
-            }
-            // Structured From/To/Cc/Date entities computed over the
-            // FIRST message so the entity extractor sees a single
-            // sender/recipient set per thread KO. Per-message entity
-            // mentions still emerge from the chunker's NER pass over
-            // the concatenated content.
-            let structuredEntities = Self.structuredEntities(from: rep, sourceObjectID: koID)
-            if let json = Self.encodeStructuredEntities(structuredEntities) {
-                meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
-            }
-            out.append(KnowledgeObject(
-                id: koID,
-                sourceFile: url,
-                sourceType: .mbox,
-                content: content,
-                metadata: meta,
-                confidence: .high
-            ))
+            perMessage.append(msgRec)
+            attachmentsAccum.append(contentsOf: rec.attachments)
+            totalQuotedRemoved += rec.quoted
         }
-        return out
+
+        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return nil
+        }
+
+        // Pick representative headers for the KO's flat metadata
+        // bag (first message wins) so existing consumers that
+        // look up "from"/"subject"/"date" still get a value
+        // without needing to walk the per-message array.
+        let rep = thread.messages.first?.headers ?? [:]
+        var meta: [String: AnyCodable] = [
+            "filename": AnyCodable(.string(url.lastPathComponent)),
+            "loader": AnyCodable(.string("mbox-thread")),
+            "threadMessageCount": AnyCodable(.int(Int64(thread.messages.count))),
+            "threadSubject": AnyCodable(.string(thread.canonicalSubject)),
+            "quotedBytesRemoved": AnyCodable(.int(Int64(totalQuotedRemoved)))
+        ]
+        for (k, v) in rep {
+            meta[k] = AnyCodable(.string(v))
+        }
+        if let thrid = rep["x-gm-thrid"] {
+            meta["threadID"] = AnyCodable(.string(thrid))
+        }
+        // Smuggle the per-message array as JSON so the schema
+        // stays untouched but downstream code can de-serialize.
+        if let bag = Self.encodeMessagesBag(perMessage) {
+            meta[Self.threadMessagesMetaKey] = AnyCodable(.string(bag))
+        }
+        if let json = Self.encodeAttachmentURLs(attachmentsAccum) {
+            meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
+        }
+        // Structured From/To/Cc/Date entities computed over the
+        // FIRST message so the entity extractor sees a single
+        // sender/recipient set per thread KO. Per-message entity
+        // mentions still emerge from the chunker's NER pass over
+        // the concatenated content.
+        let structuredEntities = Self.structuredEntities(from: rep, sourceObjectID: koID)
+        if let json = Self.encodeStructuredEntities(structuredEntities) {
+            meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+        }
+        return KnowledgeObject(
+            id: koID,
+            sourceFile: url,
+            sourceType: .mbox,
+            content: content,
+            metadata: meta,
+            confidence: .high
+        )
     }
 
     /// Metadata key carrying the JSON-encoded per-message array
@@ -621,6 +647,9 @@ public struct EmailLoader: StreamingIngestor {
             })
         )
         let encoder = JSONEncoder()
+        // Stable bytes: dictionaries otherwise serialize in per-process hash order, so the same
+        // thread produced different stored metadata on every run (and every re-parse looked changed).
+        encoder.outputFormatting = [.sortedKeys]
         guard let data = try? encoder.encode(asAnyCodable) else { return nil }
         return String(data: data, encoding: .utf8)
     }
@@ -675,7 +704,8 @@ public struct EmailLoader: StreamingIngestor {
     static func applyMultipartIfNeeded(
         headers: [String: String],
         body: String,
-        for sourceURL: URL
+        for sourceURL: URL,
+        stageAttachments: Bool = true
     ) -> (textBody: String, attachmentURLs: [URL]) {
         guard let ct = headers["content-type"],
               ct.lowercased().hasPrefix("multipart/") else {
@@ -691,7 +721,8 @@ public struct EmailLoader: StreamingIngestor {
         let baseDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-email-attachments", isDirectory: true)
             .appendingPathComponent(sourceURL.lastPathComponent + "-" + UUID().uuidString.prefix(8), isDirectory: true)
-        guard let decoded = decodeMultipart(body: body, contentType: ct, attachmentDir: baseDir) else {
+        // F01 — a text-only re-decode (streamed coalescing, pass 2) writes nothing to disk.
+        guard let decoded = decodeMultipart(body: body, contentType: ct, attachmentDir: stageAttachments ? baseDir : nil) else {
             return (body, [])
         }
         return (decoded.text, decoded.attachmentURLs)
@@ -706,7 +737,7 @@ public struct EmailLoader: StreamingIngestor {
     static func decodeMultipart(
         body: String,
         contentType: String,
-        attachmentDir: URL
+        attachmentDir: URL?
     ) -> (text: String, attachmentURLs: [URL])? {
         guard contentType.lowercased().hasPrefix("multipart/"),
               let boundary = MIMEPart.extractParam(contentType, key: "boundary") else {
@@ -729,7 +760,7 @@ public struct EmailLoader: StreamingIngestor {
                 } else {
                     textPieces.append(text)
                 }
-            } else {
+            } else if let attachmentDir {
                 // Real attachment. Write to disk and record the URL.
                 // 2026-06-30 fix — prepend a short content-hash to the
                 // filename so two messages in the same mbox that
@@ -1177,6 +1208,11 @@ public struct EmailLoader: StreamingIngestor {
     }
 
     private func loadPSTMessages(at url: URL) throws -> [PSTReader.PSTMessage] {
+        Array(try pstMessageIterator(at: url))
+    }
+
+    /// F01 — PST messages parsed one at a time from the memory-mapped file.
+    private func pstMessageIterator(at url: URL) throws -> AnyIterator<PSTReader.PSTMessage> {
         let raw: Data
         do { raw = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
@@ -1192,7 +1228,7 @@ public struct EmailLoader: StreamingIngestor {
         let reader: PSTReader
         do { reader = try PSTReader(data: raw) }
         catch { throw IngestorError.parseFailure(url, reason: "pst: \(error)") }
-        return try reader.readAllMessages()
+        return reader.messageIterator()
     }
 
     /// Adapt one PSTMessage into a KnowledgeObject. Returns nil when
@@ -1345,6 +1381,11 @@ public struct EmailLoader: StreamingIngestor {
     }
 
     private func loadNSFNotes(at url: URL) throws -> [NSFReader.NSFNote] {
+        Array(try nsfNoteIterator(at: url))
+    }
+
+    /// F01 — NSF notes parsed one at a time from the memory-mapped file.
+    private func nsfNoteIterator(at url: URL) throws -> AnyIterator<NSFReader.NSFNote> {
         let raw: Data
         do { raw = try Data(contentsOf: url, options: .mappedIfSafe) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
@@ -1357,7 +1398,7 @@ public struct EmailLoader: StreamingIngestor {
             )
         }
         let reader = NSFReader(data: raw)
-        do { return try reader.readNotes() }
+        do { return try reader.noteIterator() }
         catch { throw IngestorError.parseFailure(url, reason: "nsf: \(error)") }
     }
 
