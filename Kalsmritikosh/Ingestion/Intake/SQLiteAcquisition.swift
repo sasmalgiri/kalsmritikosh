@@ -166,16 +166,48 @@ public nonisolated enum SQLiteAcquisition {
         }
     }
 
-    /// Online backup of `source` into a fresh single-file database at `destination`, verified. Every
-    /// exit closes both handles; every failure removes the partial destination (and its journal), so a
-    /// later retry can never mistake it for a snapshot.
+    /// Online backup of `source` into a fresh single-file database at `destination`, verified. A source
+    /// that is BUSY / LOCKED is retried as a FRESH attempt (new connections, new backup, partial output
+    /// removed) with capped backoff until the deadline — a connection that failed on a lock is never
+    /// reused, so no lock or WAL-index state from a failed attempt can outlive the lock itself.
+    /// Every exit closes every handle; every failure removes the partial destination (and its journal),
+    /// so a later retry can never mistake it for a snapshot.
     private static func backup(from source: URL, readOnly: Bool, to destination: URL,
                                deadline: Date, limits: Limits) throws {
-        func removePartial() {
-            try? FileManager.default.removeItem(at: destination)
-            try? FileManager.default.removeItem(at: URL(fileURLWithPath: destination.path + "-journal"))
+        var backoff = limits.initialBackoff
+        while true {
+            switch try backupAttempt(from: source, readOnly: readOnly, to: destination, limits: limits) {
+            case .done:
+                if let problem = Database.quickCheck(fileAt: destination) {
+                    removePartial(destination)
+                    throw AcquisitionError.verifyFailed(problem)
+                }
+                return
+            case .busy(let rc):
+                if limits.isCancelled() { throw AcquisitionError.cancelled }
+                let remaining = deadline.timeIntervalSinceNow
+                guard remaining > 0 else {
+                    throw AcquisitionError.busyUntilDeadline("source stayed \(rc == SQLITE_BUSY ? "busy" : "locked") for \(limits.deadline)s")
+                }
+                sqlite3_sleep(Int32(max(1, min(backoff, remaining) * 1000)))
+                backoff = min(limits.maxBackoff, backoff * 2)
+                if limits.isCancelled() { throw AcquisitionError.cancelled }
+            }
         }
-        removePartial()
+    }
+
+    private enum AttemptOutcome { case done, busy(Int32) }
+
+    private static func removePartial(_ destination: URL) {
+        try? FileManager.default.removeItem(at: destination)
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: destination.path + "-journal"))
+    }
+
+    /// ONE backup attempt with its own connections. BUSY / LOCKED → `.busy` (partial output removed);
+    /// any other failure throws.
+    private static func backupAttempt(from source: URL, readOnly: Bool, to destination: URL,
+                                      limits: Limits) throws -> AttemptOutcome {
+        removePartial(destination)
         var src: OpaquePointer?
         let flags = readOnly ? (SQLITE_OPEN_READONLY | SQLITE_OPEN_URI) : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_URI)
         let uri = readOnly ? "file:\(source.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? source.path)?mode=ro"
@@ -186,53 +218,39 @@ public nonisolated enum SQLiteAcquisition {
             throw AcquisitionError.backupFailed(msg)
         }
         defer { sqlite3_close(srcDB) }
-        // Short per-attempt wait inside SQLite; the OVERALL wait is the deadline below.
+        // Short per-attempt wait inside SQLite; the OVERALL wait is the caller's deadline.
         sqlite3_busy_timeout(srcDB, Int32(max(1, min(200, limits.deadline * 1000))))
         var dest: OpaquePointer?
         guard sqlite3_open_v2(destination.path, &dest, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
               let destDB = dest else {
             sqlite3_close(dest)
-            removePartial()
+            removePartial(destination)
             throw AcquisitionError.backupFailed("cannot open destination")
         }
         var failure: AcquisitionError?
+        var busy: Int32?
         if let b = sqlite3_backup_init(destDB, "main", srcDB, "main") {
-            var rc: Int32
-            var backoff = limits.initialBackoff
-            while true {
-                // -1: every page in ONE step, i.e. under one read transaction on the source.
-                rc = sqlite3_backup_step(b, -1)
-                guard rc == SQLITE_BUSY || rc == SQLITE_LOCKED else { break }
-                if limits.isCancelled() { failure = .cancelled; break }
-                let remaining = deadline.timeIntervalSinceNow
-                if remaining <= 0 {
-                    failure = .busyUntilDeadline("source stayed \(rc == SQLITE_BUSY ? "busy" : "locked") for \(limits.deadline)s")
-                    break
-                }
-                let wait = min(backoff, remaining)
-                sqlite3_sleep(Int32(max(1, wait * 1000)))
-                backoff = min(limits.maxBackoff, backoff * 2)
-            }
+            // -1: every page in ONE step, i.e. under one read transaction on the source.
+            let rc = sqlite3_backup_step(b, -1)
             let finish = sqlite3_backup_finish(b)
-            if failure == nil, rc != SQLITE_DONE {
+            if rc == SQLITE_BUSY || rc == SQLITE_LOCKED {
+                busy = rc
+            } else if rc != SQLITE_DONE {
                 failure = .backupFailed(String(cString: sqlite3_errmsg(destDB)))
-            } else if failure == nil, finish != SQLITE_OK {
+            } else if finish != SQLITE_OK {
                 failure = .backupFailed("backup finish failed: \(String(cString: sqlite3_errstr(finish)))")
             }
         } else {
-            failure = .backupFailed(String(cString: sqlite3_errmsg(destDB)))
+            let code = sqlite3_errcode(srcDB)
+            if code == SQLITE_BUSY || code == SQLITE_LOCKED { busy = code }
+            else { failure = .backupFailed(String(cString: sqlite3_errmsg(destDB))) }
         }
-        if failure == nil, sqlite3_exec(destDB, "PRAGMA journal_mode=DELETE;", nil, nil, nil) != SQLITE_OK {
+        if failure == nil, busy == nil, sqlite3_exec(destDB, "PRAGMA journal_mode=DELETE;", nil, nil, nil) != SQLITE_OK {
             failure = .backupFailed(String(cString: sqlite3_errmsg(destDB)))
         }
         sqlite3_close(destDB)
-        if let failure {
-            removePartial()
-            throw failure
-        }
-        if let problem = Database.quickCheck(fileAt: destination) {
-            removePartial()
-            throw AcquisitionError.verifyFailed(problem)
-        }
+        if let busy { removePartial(destination); return .busy(busy) }
+        if let failure { removePartial(destination); throw failure }
+        return .done
     }
 }
