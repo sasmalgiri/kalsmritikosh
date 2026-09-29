@@ -525,6 +525,28 @@ public actor EntitiesRepository {
         return rows.compactMap(decodeFullEntity)
     }
 
+    /// F08 — `find(byValue:)` restricted INSIDE the query to entities whose source object belongs to
+    /// one of `sourceVersionIDs` (current-version mapping, as the case-scope filter resolves), before LIMIT.
+    public func find(byValue value: String, sourceVersionIDs: Set<UUID>, limit: Int = 25) async throws -> [Entity] {
+        guard !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        let pattern = "%\(value)%"
+        let aliasPattern = "%\(value.lowercased())%"
+        let rows = try await database.query("""
+        SELECT DISTINCT e.id, e.kind, e.value, e.normalized, e.source_object_id, e.confidence
+        FROM entities e
+        LEFT JOIN entity_aliases a ON a.entity_id = e.id
+        JOIN knowledge_objects ko ON ko.id = e.source_object_id
+        JOIN source_versions sv ON sv.logical_source_id = ko.file_id AND sv.is_current = 1
+        WHERE sv.id IN (\(ids.map { _ in "?" }.joined(separator: ",")))
+          AND (e.value LIKE ? OR e.normalized LIKE ? OR a.alias_normalized LIKE ?)
+          AND e.review_status IS NULL AND e.merged_into IS NULL
+        ORDER BY e.confidence DESC
+        LIMIT ?;
+        """, ids.map { .uuid($0) } + [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
+        return rows.compactMap(decodeFullEntity)
+    }
+
     public func search(value query: String, limit: Int = 50) async throws -> [EntitySummaryRow] {
         let pattern = "%\(query)%"
         let aliasPattern = "%\(query.lowercased())%"

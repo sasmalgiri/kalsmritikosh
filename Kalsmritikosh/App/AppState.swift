@@ -2267,9 +2267,12 @@ public final class AppState {
                         sensitiveScope: sensitiveScopesRepo)
                 },
                 artifacts: casePhaseArtifactsRepo,
-                // F08 — case-scoped keyword recall. nil policy MIRRORS the shared HybridRetriever
-                // (sensitivity is enforced downstream in ExpertContext for base and recovered chunks alike).
-                scopedRecall: SourceScopedRetriever.ScopedRecall(chunks: chunks, sensitivePolicy: nil))
+                // F08 — case-scoped recall on every lane (keyword, vector, events, entities, graph), the
+                // scope inside each query before LIMIT. nil policy MIRRORS the shared HybridRetriever
+                // (sensitivity is enforced downstream in ExpertContext for base and recovered items alike).
+                scopedRecall: SourceScopedRetriever.ScopedRecall(
+                    chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
+                    events: events, entities: entities, relationships: relationships))
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.

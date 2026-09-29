@@ -173,6 +173,29 @@ public actor RelationshipsRepository {
                                      [.uuid(entityID), .uuid(entityID)]).first?.int(0) ?? 0)
     }
 
+    /// F08 — relationships touching any of `entityIDs` whose source object belongs to one of
+    /// `sourceVersionIDs` (current-version mapping), the scope predicate inside the query before LIMIT.
+    public func touching(_ entityIDs: Set<Entity.ID>, sourceVersionIDs: Set<UUID>, limit: Int = 100) async throws -> [Relationship] {
+        guard !entityIDs.isEmpty, !sourceVersionIDs.isEmpty else { return [] }
+        let es = entityIDs.sorted { $0.uuidString < $1.uuidString }
+        let vs = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        let ep = es.map { _ in "?" }.joined(separator: ","), vp = vs.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT r.id, r.kind, r.from_entity_id, r.to_entity_id, r.via_event_id, r.source_object_id, r.confidence
+        FROM relationships r
+        JOIN knowledge_objects ko ON ko.id = r.source_object_id
+        JOIN source_versions sv ON sv.logical_source_id = ko.file_id AND sv.is_current = 1
+        WHERE sv.id IN (\(vp)) AND (r.from_entity_id IN (\(ep)) OR r.to_entity_id IN (\(ep)))
+        LIMIT ?;
+        """, vs.map { .uuid($0) } + es.map { .uuid($0) } + es.map { .uuid($0) } + [.integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let kindRaw = row.string(1), let kind = Relationship.Kind(rawValue: kindRaw),
+                  let from = row.uuid(2), let to = row.uuid(3), let src = row.uuid(5), let conf = row.double(6) else { return nil }
+            return Relationship(id: id, kind: kind, fromEntityID: from, toEntityID: to, viaEventID: row.uuid(4),
+                                sourceObjectID: src, confidence: Confidence(conf))
+        }
+    }
+
     public func neighbors(of entityID: Entity.ID, limit: Int = 100) async throws -> [Relationship] {
         try await neighborsQuery(entityID, suffix: "LIMIT ?", [.integer(Int64(limit))])
     }

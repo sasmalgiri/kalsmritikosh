@@ -196,6 +196,33 @@ public actor ChunksRepository {
         return try await hydrateLineage(rows.compactMap(decode)).first
     }
 
+    /// F08 — ids of the chunks belonging to `sourceVersionIDs`: the candidate set that restricts a
+    /// vector scan to a case BEFORE its top-k cut. Capped; the cap is the caller's recall budget.
+    public func chunkIDs(sourceVersionIDs: Set<UUID>, limit: Int) async throws -> [Chunk.ID] {
+        guard !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        return try await database.query("""
+            SELECT id FROM chunks WHERE source_version_id IN (\(ids.map { _ in "?" }.joined(separator: ",")))
+               AND review_status IS NULL ORDER BY rowid LIMIT ?;
+            """, ids.map { .uuid($0) } + [.integer(Int64(limit))]).compactMap { $0.uuid(0) }
+    }
+
+    /// F08 — chunks by id, restricted to `sourceVersionIDs` in the query, each carrying its version.
+    public func findByIDs(_ ids: [Chunk.ID], sourceVersionIDs: Set<UUID>) async throws -> [Chunk] {
+        guard !ids.isEmpty, !sourceVersionIDs.isEmpty else { return [] }
+        let vs = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        var out: [Chunk] = []
+        for id in ids {
+            let rows = try await database.query("""
+                SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version, source_version_id
+                FROM chunks WHERE id = ? AND review_status IS NULL
+                  AND source_version_id IN (\(vs.map { _ in "?" }.joined(separator: ","))) LIMIT 1;
+                """, [.uuid(id)] + vs.map { .uuid($0) })
+            if let row = rows.first, let chunk = decode(row) { out.append(chunk) }
+        }
+        return out
+    }
+
     public func findByIDs(_ ids: [Chunk.ID]) async throws -> [Chunk] {
         guard !ids.isEmpty else { return [] }
         var chunks: [Chunk] = []
@@ -420,6 +447,8 @@ public actor ChunksRepository {
             blockKind: row.string(11),
             // S2-U1 — projected only by SELECTs that carry column 12; narrower
             // queries fall back to the neutral prior, same as legacy rows.
+            // F08 — projected (column 14) only by the scoped readers; nil everywhere else.
+            sourceVersionID: row.uuid(14),
             salience: row.double(12) ?? SalienceTable.neutral,
             contextTemplateVersion: row.int(13).map(Int.init)
         )

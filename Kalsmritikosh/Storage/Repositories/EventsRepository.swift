@@ -84,6 +84,28 @@ public actor EventsRepository {
         return rows.compactMap(decode)
     }
 
+    /// F08 — events whose source object belongs to one of `sourceVersionIDs` (the object's file's
+    /// CURRENT version — the same mapping the case-scope filter resolves by), with the scope predicate
+    /// INSIDE the query, before LIMIT, so a small case's events are not crowded out by the corpus.
+    public func forSourceVersions(_ sourceVersionIDs: Set<UUID>, start: Date? = nil, end: Date? = nil,
+                                  limit: Int = 200) async throws -> [Event] {
+        guard !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        var sql = """
+        SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id, e.confidence, e.date_confidence, e.quality_tier, e.date_precision, e.status
+        FROM events e
+        JOIN knowledge_objects ko ON ko.id = e.source_object_id
+        JOIN source_versions sv ON sv.logical_source_id = ko.file_id AND sv.is_current = 1
+        WHERE sv.id IN (\(ids.map { _ in "?" }.joined(separator: ","))) AND e.review_status IS NULL
+        """
+        var binds: [SQLValue] = ids.map { .uuid($0) }
+        if let start { sql += " AND e.date >= ?"; binds.append(.date(start)) }
+        if let end { sql += " AND e.date <= ?"; binds.append(.date(end)) }
+        sql += " ORDER BY e.date DESC LIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        return try await database.query(sql, binds).compactMap(decode)
+    }
+
     public func findByIDs(_ ids: [Event.ID]) async throws -> [Event] {
         guard !ids.isEmpty else { return [] }
         var results: [Event] = []
