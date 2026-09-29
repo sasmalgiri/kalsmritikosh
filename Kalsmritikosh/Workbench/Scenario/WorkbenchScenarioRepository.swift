@@ -31,16 +31,15 @@ public actor WorkbenchScenarioRepository {
         guard let baseRev = try await datasetRevision(datasetID) else { throw WorkbenchScenarioError.datasetNotFound(datasetID) }
         let id = UUID()
         let sp = savepoint("wbsc_create", id)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 INSERT INTO workbench_scenarios (id, dataset_id, base_dataset_revision, title, status, current_op_seq, revision, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(datasetID), .integer(Int64(baseRev)), .text(clean), .text(WorkbenchScenarioStatus.active.rawValue),
                       .integer(0), .integer(1), .text(actor), .date(date), .date(date)])
-            try await appendEvent(scenarioID: id, revision: 1, action: .created, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+            try Self.appendEvent(db, scenarioID: id, revision: 1, action: .created, actor: actor, detail: nil, at: date)
+        }
         return try await require(id)
     }
 
@@ -65,25 +64,24 @@ public actor WorkbenchScenarioRepository {
         let before: String? = targetKind == .cell ? try await projectedCellValue(sc, rowID: rowID, fieldID: fieldID!) : nil
         let newRev = sc.revision + 1
         let sp = savepoint("wbsc_apply", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
             // A new operation after an undo truncates (abandons) the redo branch — never resurrected.
-            try await database.exec("""
+            try db.exec("""
                 UPDATE workbench_scenario_operations SET status = 'abandoned'
                 WHERE scenario_id = ? AND status = 'live' AND sequence > ?;
                 """, [.uuid(scenarioID), .integer(Int64(sc.currentOpSeq))])
-            let seq = try await maxOpSequence(scenarioID) + 1     // monotone, never reused
-            try await database.exec("""
+            let seq = try Self.maxOpSequence(db, scenarioID) + 1     // monotone, never reused
+            try db.exec("""
                 INSERT INTO workbench_scenario_operations (id, scenario_id, sequence, kind, target_kind, row_id, field_id, before_value, after_value, reason, status, actor, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(scenarioID), .integer(Int64(seq)), .text(kind.rawValue), .text(targetKind.rawValue),
                       .uuid(rowID), fieldID.map { SQLValue.uuid($0) } ?? .null,
                       before.map { SQLValue.text($0) } ?? .null, afterValue.map { SQLValue.text($0) } ?? .null,
                       reason.map { SQLValue.text($0) } ?? .null, .text(WorkbenchScenarioOpStatus.live.rawValue), .text(actor), .date(date)])
-            try await movePointer(scenarioID, to: seq, revision: newRev, at: date)
-            try await appendEvent(scenarioID: scenarioID, revision: newRev, action: .operationApplied, actor: actor, detail: kind.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+            try Self.movePointer(db, scenarioID, to: seq, revision: newRev, at: date)
+            try Self.appendEvent(db, scenarioID: scenarioID, revision: newRev, action: .operationApplied, actor: actor, detail: kind.rawValue, at: date)
+        }
         return try await require(scenarioID)
     }
 
@@ -128,13 +126,13 @@ public actor WorkbenchScenarioRepository {
         let sc = try await requireActiveScenario(scenarioID)
         let newRev = sc.revision + 1
         let sp = savepoint("wbsc_discard", scenarioID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("UPDATE workbench_scenarios SET status = 'discarded', revision = ?, updated_at = ? WHERE id = ?;",
-                                    [.integer(Int64(newRev)), .date(date), .uuid(scenarioID)])
-            try await appendEvent(scenarioID: scenarioID, revision: newRev, action: .discarded, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("UPDATE workbench_scenarios SET status = 'discarded', revision = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                        [.integer(Int64(newRev)), .date(date), .uuid(scenarioID), .integer(Int64(newRev - 1))])
+            try Self.requireAdvanced(db, scenarioID, to: newRev)
+            try Self.appendEvent(db, scenarioID: scenarioID, revision: newRev, action: .discarded, actor: actor, detail: nil, at: date)
+        }
         return try await require(scenarioID)
     }
 
@@ -150,16 +148,16 @@ public actor WorkbenchScenarioRepository {
         let applied = source.appliedOperations
         let newID = UUID()
         let sp = savepoint("wbsc_dup", newID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 INSERT INTO workbench_scenarios (id, dataset_id, base_dataset_revision, title, status, current_op_seq, revision, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(newID), .uuid(source.scenario.datasetID), .integer(Int64(source.scenario.baseDatasetRevision)),
                       .text(clean), .text(WorkbenchScenarioStatus.active.rawValue), .integer(Int64(applied.count)),
                       .integer(1), .text(actor), .date(date), .date(date)])
             for (i, op) in applied.enumerated() {
-                try await database.exec("""
+                try db.exec("""
                     INSERT INTO workbench_scenario_operations (id, scenario_id, sequence, kind, target_kind, row_id, field_id, before_value, after_value, reason, status, actor, created_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
                     """, [.uuid(UUID()), .uuid(newID), .integer(Int64(i + 1)), .text(op.kind.rawValue), .text(op.targetKind.rawValue),
@@ -167,14 +165,14 @@ public actor WorkbenchScenarioRepository {
                           op.beforeValue.map { SQLValue.text($0) } ?? .null, op.afterValue.map { SQLValue.text($0) } ?? .null,
                           op.reason.map { SQLValue.text($0) } ?? .null, .text(WorkbenchScenarioOpStatus.live.rawValue), .text(actor), .date(date)])
             }
-            try await appendEvent(scenarioID: newID, revision: 1, action: .created, actor: actor, detail: "duplicatedFrom:\(scenarioID.uuidString)", at: date)
+            try Self.appendEvent(db, scenarioID: newID, revision: 1, action: .created, actor: actor, detail: "duplicatedFrom:\(scenarioID.uuidString)", at: date)
             // Record the duplication on the source (its own revision bump + event).
             let srcRev = source.scenario.revision + 1
-            try await database.exec("UPDATE workbench_scenarios SET revision = ?, updated_at = ? WHERE id = ?;",
-                                    [.integer(Int64(srcRev)), .date(date), .uuid(scenarioID)])
-            try await appendEvent(scenarioID: scenarioID, revision: srcRev, action: .duplicated, actor: actor, detail: newID.uuidString, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+            try db.exec("UPDATE workbench_scenarios SET revision = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                        [.integer(Int64(srcRev)), .date(date), .uuid(scenarioID), .integer(Int64(srcRev - 1))])
+            try Self.requireAdvanced(db, scenarioID, to: srcRev)
+            try Self.appendEvent(db, scenarioID: scenarioID, revision: srcRev, action: .duplicated, actor: actor, detail: newID.uuidString, at: date)
+        }
         return try await require(newID)
     }
 
@@ -196,21 +194,21 @@ public actor WorkbenchScenarioRepository {
         guard op.kind != .rowInclusion && op.kind != .rowExclusion else { throw WorkbenchScenarioError.operationNotPromotable(operationID) }
         let newRev = sc.revision + 1
         let sp = savepoint("wbsc_promote", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 INSERT INTO workbench_scenario_reviews (id, scenario_id, operation_id, destination, decision, reviewer, reason, resulting_reference, decided_at)
                 VALUES (?,?,?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(scenarioID), .uuid(operationID), .text(destination.rawValue), .text(decision.rawValue),
                       .text(reviewer), reason.map { SQLValue.text($0) } ?? .null,
                       resultingReference.map { SQLValue.text($0) } ?? .null, .date(date)])
-            try await database.exec("UPDATE workbench_scenarios SET revision = ?, updated_at = ? WHERE id = ?;",
-                                    [.integer(Int64(newRev)), .date(date), .uuid(scenarioID)])
-            try await appendEvent(scenarioID: scenarioID, revision: newRev,
+            try db.exec("UPDATE workbench_scenarios SET revision = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                        [.integer(Int64(newRev)), .date(date), .uuid(scenarioID), .integer(Int64(newRev - 1))])
+            try Self.requireAdvanced(db, scenarioID, to: newRev)
+            try Self.appendEvent(db, scenarioID: scenarioID, revision: newRev,
                                   action: decision == .accepted ? .promotionAccepted : .promotionRejected,
                                   actor: reviewer, detail: destination.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(scenarioID)
     }
 
@@ -342,20 +340,30 @@ public actor WorkbenchScenarioRepository {
 
     private func pointerMutation(_ scenarioID: UUID, to seq: Int, revision: Int, action: WorkbenchScenarioEventAction, actor: String, at date: Date) async throws {
         let sp = savepoint("wbsc_ptr", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await movePointer(scenarioID, to: seq, revision: revision, at: date)
-            try await appendEvent(scenarioID: scenarioID, revision: revision, action: action, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try Self.movePointer(db, scenarioID, to: seq, revision: revision, at: date)
+            try Self.appendEvent(db, scenarioID: scenarioID, revision: revision, action: action, actor: actor, detail: nil, at: date)
+        }
     }
-    private func movePointer(_ scenarioID: UUID, to seq: Int, revision: Int, at date: Date) async throws {
-        try await database.exec("UPDATE workbench_scenarios SET current_op_seq = ?, revision = ?, updated_at = ? WHERE id = ?;",
-                                [.integer(Int64(seq)), .integer(Int64(revision)), .date(date), .uuid(scenarioID)])
+    /// F28 — moves the pointer only from `revision - 1` (compare-and-set inside the isolated savepoint).
+    private static func movePointer(_ db: isolated Database, _ scenarioID: UUID, to seq: Int, revision: Int, at date: Date) throws {
+        try db.exec("UPDATE workbench_scenarios SET current_op_seq = ?, revision = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                    [.integer(Int64(seq)), .integer(Int64(revision)), .date(date), .uuid(scenarioID), .integer(Int64(revision - 1))])
+        try requireAdvanced(db, scenarioID, to: revision)
     }
 
-    private func maxOpSequence(_ scenarioID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_scenario_operations WHERE scenario_id = ?;", [.uuid(scenarioID)]).first?.int(0) ?? 0)
+    /// F28 — the revision UPDATE just issued must have advanced exactly one row from `revision - 1`;
+    /// otherwise a concurrent edit got there first and this one is a revision conflict.
+    private static func requireAdvanced(_ db: isolated Database, _ scenarioID: UUID, to revision: Int) throws {
+        guard Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0) == 1 else {
+            let actual = Int(try db.query("SELECT revision FROM workbench_scenarios WHERE id = ?;", [.uuid(scenarioID)]).first?.int(0) ?? -1)
+            throw WorkbenchScenarioError.revisionConflict(expected: revision - 1, actual: actual)
+        }
+    }
+
+    private static func maxOpSequence(_ db: isolated Database, _ scenarioID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_scenario_operations WHERE scenario_id = ?;", [.uuid(scenarioID)]).first?.int(0) ?? 0)
     }
     private func liveOpExists(_ scenarioID: UUID, atOrBelow seq: Int) async throws -> Bool {
         Int(try await database.query("SELECT COUNT(*) FROM workbench_scenario_operations WHERE scenario_id = ? AND status = 'live' AND sequence <= ?;", [.uuid(scenarioID), .integer(Int64(seq))]).first?.int(0) ?? 0) > 0
@@ -368,20 +376,16 @@ public actor WorkbenchScenarioRepository {
         guard let v = rows.first?.int(0) else { return nil }
         return Int(v)
     }
-    private func nextEventSequence(_ scenarioID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_scenario_events WHERE scenario_id = ?;", [.uuid(scenarioID)]).first?.int(0) ?? 0) + 1
+    private static func nextEventSequence(_ db: isolated Database, _ scenarioID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_scenario_events WHERE scenario_id = ?;", [.uuid(scenarioID)]).first?.int(0) ?? 0) + 1
     }
-    private func appendEvent(scenarioID: UUID, revision: Int, action: WorkbenchScenarioEventAction, actor: String, detail: String?, at date: Date) async throws {
-        let seq = try await nextEventSequence(scenarioID)
-        try await database.exec("""
+    private static func appendEvent(_ db: isolated Database, scenarioID: UUID, revision: Int, action: WorkbenchScenarioEventAction, actor: String, detail: String?, at date: Date) throws {
+        let seq = try nextEventSequence(db, scenarioID)
+        try db.exec("""
             INSERT INTO workbench_scenario_events (id, scenario_id, sequence, scenario_revision, action, actor, detail, occurred_at)
             VALUES (?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(scenarioID), .integer(Int64(seq)), .integer(Int64(revision)),
                   .text(action.rawValue), .text(actor), detail.map { SQLValue.text($0) } ?? .null, .date(date)])
-    }
-    private func rollback(_ sp: String) async throws {
-        try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-        try? await database.exec("RELEASE SAVEPOINT \(sp);")
     }
     private func savepoint(_ prefix: String, _ id: UUID) -> String { "\(prefix)_\(id.uuidString.replacingOccurrences(of: "-", with: ""))" }
 

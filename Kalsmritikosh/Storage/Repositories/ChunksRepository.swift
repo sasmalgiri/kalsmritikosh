@@ -21,8 +21,17 @@ public actor ChunksRepository {
     /// (`chunk_blocks`). A chunk with no lineage entry records its own
     /// `evidenceBlockID`, so single-block chunks are covered too.
     public func insertBatch(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]]) async throws {
+        for statement in Self.insertStatements(chunks, lineage: lineage) {
+            try await database.exec(statement.sql, statement.binds)
+        }
+    }
+
+    /// The exact statements `insertBatch` runs, so a caller can compose them into its own isolated
+    /// savepoint (F28) instead of awaiting this actor across a transaction.
+    nonisolated static func insertStatements(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]] = [:]) -> [(sql: String, binds: [SQLValue])] {
+        var out: [(sql: String, binds: [SQLValue])] = []
         for chunk in chunks {
-            try await database.exec("""
+            out.append(("""
             INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
@@ -42,14 +51,14 @@ public actor ChunksRepository {
                 chunk.sourceVersionID.map { .uuid($0) } ?? .null,
                 .real(chunk.salience),
                 chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null
-            ])
+            ]))
             let blocks = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
             for (i, blockID) in blocks.enumerated() {
-                try await database.exec("""
-                INSERT OR IGNORE INTO chunk_blocks (chunk_id, evidence_block_id, ordinal) VALUES (?, ?, ?);
-                """, [.uuid(chunk.id), .uuid(blockID), .integer(Int64(i))])
+                out.append(("INSERT OR IGNORE INTO chunk_blocks (chunk_id, evidence_block_id, ordinal) VALUES (?, ?, ?);",
+                            [.uuid(chunk.id), .uuid(blockID), .integer(Int64(i))]))
             }
         }
+        return out
     }
 
     /// L1 — every block a chunk was assembled from, in reading order; falls

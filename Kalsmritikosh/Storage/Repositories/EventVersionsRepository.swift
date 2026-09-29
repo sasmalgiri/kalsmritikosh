@@ -113,55 +113,64 @@ public actor EventVersionsRepository {
         reason: String? = nil,
         at recordedAt: Date = Date()
     ) async throws -> Int {
-        // 3. Encode payload (outside the savepoint: the closure runs synchronously on the DB actor).
-        let payloadData = try encoder.encode(event)
-        let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
+        let payloadJSON = try Self.payloadJSON(event)
         let eventID = event.id
         // F28 — close, number and insert in ONE isolated savepoint: two concurrent versions of the
         // same event can no longer both read MAX(version) and claim the same number.
         let nextVersion = try await database.withSavepoint("kalsmritikosh_event_version") { db -> Int in
-            // 1. Close any current row's valid_to.
-            try db.exec("""
-            UPDATE event_versions SET valid_to = ?
-            WHERE event_id = ? AND valid_to IS NULL;
-            """, [
-                .real(recordedAt.timeIntervalSince1970),
-                .uuid(eventID)
-            ])
-            // 2. Compute the next version number.
-            let rows = try db.query("""
-            SELECT COALESCE(MAX(version), 0) FROM event_versions WHERE event_id = ?;
-            """, [.uuid(eventID)])
-            let next = Int(rows.first?.int(0) ?? 0) + 1
-            // 4. Insert new row.
-            try db.exec("""
-            INSERT INTO event_versions
-                (id, event_id, version, valid_from, valid_to, payload_json,
-                 agent, activity, reason, recorded_at)
-            VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?);
-            """, [
-                .uuid(UUID()),
-                .uuid(eventID),
-                .integer(Int64(next)),
-                .real(recordedAt.timeIntervalSince1970),
-                .text(payloadJSON),
-                .text(agent),
-                activity.map { .text($0) } ?? .null,
-                reason.map { .text($0) } ?? .null,
-                .real(recordedAt.timeIntervalSince1970)
-            ])
-            return next
+            try Self.recordVersion(db, eventID: eventID, payloadJSON: payloadJSON, agent: agent,
+                                   activity: activity, reason: reason, at: recordedAt)
         }
-        // Phase J.15 — Vol 25 ¶10 event-versioning regen trigger.
-        // Fire-and-forget so the caller doesn't block on
-        // downstream link recomputation; failures are logged in
-        // ConfidencePropagator itself.
-        if let handler = onVersionRecorded {
-            Task.detached(priority: .utility) {
-                await handler(eventID)
-            }
-        }
+        notifyRecorded([eventID])
         return nextVersion
+    }
+
+    /// Phase J.15 — Vol 25 ¶10 event-versioning regen trigger. Fire-and-forget so the caller doesn't
+    /// block on downstream link recomputation; failures are logged in ConfidencePropagator itself.
+    /// Callers that record versions through the synchronous core call this AFTER their commit.
+    public func notifyRecorded(_ eventIDs: [Event.ID]) {
+        guard let handler = onVersionRecorded else { return }
+        for eventID in eventIDs {
+            Task.detached(priority: .utility) { await handler(eventID) }
+        }
+    }
+
+    /// The stored payload of a version.
+    nonisolated static func payloadJSON(_ event: Event) throws -> String {
+        String(data: try JSONEncoder().encode(event), encoding: .utf8) ?? "{}"
+    }
+
+    /// Record one version on the caller's savepoint (composable into a larger isolated unit).
+    static func recordVersion(_ db: isolated Database, eventID: Event.ID, payloadJSON: String, agent: String,
+                              activity: String?, reason: String?, at recordedAt: Date) throws -> Int {
+        // 1. Close any current row's valid_to.
+        try db.exec("""
+        UPDATE event_versions SET valid_to = ?
+        WHERE event_id = ? AND valid_to IS NULL;
+        """, [.real(recordedAt.timeIntervalSince1970), .uuid(eventID)])
+        // 2. Compute the next version number.
+        let rows = try db.query("""
+        SELECT COALESCE(MAX(version), 0) FROM event_versions WHERE event_id = ?;
+        """, [.uuid(eventID)])
+        let next = Int(rows.first?.int(0) ?? 0) + 1
+        // 3. Insert the new row.
+        try db.exec("""
+        INSERT INTO event_versions
+            (id, event_id, version, valid_from, valid_to, payload_json,
+             agent, activity, reason, recorded_at)
+        VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?);
+        """, [
+            .uuid(UUID()),
+            .uuid(eventID),
+            .integer(Int64(next)),
+            .real(recordedAt.timeIntervalSince1970),
+            .text(payloadJSON),
+            .text(agent),
+            activity.map { .text($0) } ?? .null,
+            reason.map { .text($0) } ?? .null,
+            .real(recordedAt.timeIntervalSince1970)
+        ])
+        return next
     }
 
     // MARK: - Reads

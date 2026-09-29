@@ -14,6 +14,16 @@ public actor EventsRepository {
     }
 
     public func insertBatch(_ events: [Event]) async throws {
+        for statement in try Self.insertStatements(for: events) {
+            try await database.exec(statement.sql, statement.binds)
+        }
+    }
+
+    /// The exact statements `insertBatch` runs — so a caller can compose them into its own
+    /// isolated savepoint (F28) instead of awaiting across a transaction.
+    nonisolated static func insertStatements(for events: [Event]) throws -> [(sql: String, binds: [SQLValue])] {
+        let encoder = JSONEncoder()
+        var out: [(sql: String, binds: [SQLValue])] = []
         for e in events {
             let attrs = try encoder.encode(e.attributes)
             // T16 — persist an evidentiary status. If the event still carries
@@ -26,7 +36,7 @@ public actor EventsRepository {
                     contentConfidence: e.confidence.value,
                     kind: e.kind)
                 : e.status
-            try await database.exec("""
+            out.append(("""
             INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision, status,
                                 producer_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \(DerivedProducerVersions.events));
@@ -44,13 +54,13 @@ public actor EventsRepository {
                 .text(e.qualityTier.rawValue),
                 .integer(Int64(e.datePrecision.rawValue)),
                 .text(status.rawValue)
-            ])
+            ]))
             for entityID in e.entityIDs {
-                try await database.exec("""
-                INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?);
-                """, [.uuid(e.id), .uuid(entityID)])
+                out.append(("INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?);",
+                            [.uuid(e.id), .uuid(entityID)]))
             }
         }
+        return out
     }
 
     public func count() async throws -> Int {

@@ -21,20 +21,9 @@ struct RawSavepointRatchetTests {
             .appendingPathComponent("Kalsmritikosh")
     }
 
-    /// Files still issuing raw savepoints across suspension points — each is open conversion work.
+    /// Files still issuing raw savepoints across suspension points. EMPTY since F28b: every transaction
+    /// runs in `Database.withSavepoint`; any new raw use fails the test below.
     private static let knownRawSavepointFiles: Set<String> = [
-        "Jobs/Persistence/JobRepository.swift",
-        "Knowledge/Backfill/ChunkReindexCoordinator.swift",
-        "Knowledge/Backfill/LedgerDrainCoordinator.swift",
-        "Personas/Investigator/InvestigationCaseRepository.swift",
-        "Personas/Investigator/InvestigationSubjectRepository.swift",
-        "Storage/Repositories/DeadlineRepository.swift",
-        "Storage/Repositories/EventMutator.swift",
-        "Storage/Repositories/ProfessionalIssueRepository.swift",
-        "Storage/Repositories/ProfessionalTaskRepository.swift",
-        "Storage/Repositories/WorkspaceRepository.swift",
-        "Workbench/Persistence/WorkbenchDatasetRepository.swift",
-        "Workbench/Scenario/WorkbenchScenarioRepository.swift",
     ]
 
     @Test("No NEW file opens a raw SAVEPOINT; converted files leave the list")
