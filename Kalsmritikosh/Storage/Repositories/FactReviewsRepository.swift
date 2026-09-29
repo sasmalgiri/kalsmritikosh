@@ -20,11 +20,25 @@ public actor FactReviewsRepository {
     /// Append a review. Returns the new row id. Never overwrites history.
     @discardableResult
     public func record(_ review: FactReview) async throws -> UUID {
-        try await database.exec("""
+        try await database.exec(Self.insertSQL, Self.binds(review))
+        return review.id
+    }
+
+    /// The synchronous core, composable into the caller's savepoint (F28).
+    @discardableResult
+    static func record(_ db: isolated Database, _ review: FactReview) throws -> UUID {
+        try db.exec(insertSQL, binds(review))
+        return review.id
+    }
+
+    private nonisolated static let insertSQL = """
         INSERT INTO fact_reviews
             (id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at, reversal_of)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, [
+        """
+
+    private nonisolated static func binds(_ review: FactReview) -> [SQLValue] {
+        [
             .uuid(review.id),
             .text(review.subjectKind.rawValue),
             .uuid(review.subjectID),
@@ -35,8 +49,7 @@ public actor FactReviewsRepository {
             review.reason.map { .text($0) } ?? .null,
             .real(review.reviewedAt.timeIntervalSince1970),
             review.reversalOf.map { .uuid($0) } ?? .null
-        ])
-        return review.id
+        ]
     }
 
     /// A5.8 — undo a prior review by appending a `.reverse` row that points at

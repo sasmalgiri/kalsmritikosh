@@ -111,7 +111,7 @@ extension Database {
     /// (ledger commit read-back only).
     public func query(_ sql: String, _ bindings: [SQLValue] = []) throws -> [SQLRow] {
         try collectRows(sql: sql, bindings: bindings,
-                        handle: ((askSnapshotActive && inSavepoint == 0 && !transactionInProgress) ? snapshotHandle : nil) ?? rawHandle)
+                        handle: ((askSnapshotActive && inSavepoint == 0) ? snapshotHandle : nil) ?? rawHandle)
     }
 
     /// Read on the LIVE connection regardless of any active snapshot — for

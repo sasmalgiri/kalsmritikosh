@@ -39,8 +39,8 @@ public actor RelationshipsRepository {
         }
     }
 
-    /// Batch variant of `upsertEdge` — wraps N edge upserts in a single
-    /// BEGIN IMMEDIATE / COMMIT so disk writes amortize fsync cost. Each
+    /// Batch variant of `upsertEdge` — N edge upserts in ONE isolated savepoint, so disk writes
+    /// amortize fsync cost. Each
     /// edge tuple is canonical-ordered by the caller per the rules in
     /// `upsertEdge`. ROLLBACK on partial failure so the table either gets
     /// the full batch or none of it.
@@ -69,24 +69,14 @@ public actor RelationshipsRepository {
         confidence: Confidence = .medium
     ) async throws {
         guard !edges.isEmpty else { return }
-        // Same gate as FactBondsRepository — concurrent IngestCoordinator
-        // fan-out caused nested BEGINs to fail.
-        try await database.beginTransaction()
-        do {
+        // F28 — the whole batch is ONE synchronous isolated unit. The old await-spanning
+        // BEGIN/COMMIT let any other caller's write run inside it and vanish on rollback.
+        try await database.withSavepoint("rel_upsert_edges") { db in
             for edge in edges {
-                try await upsertEdge(
-                    kind: edge.kind,
-                    from: edge.from,
-                    to: edge.to,
-                    sourceObjectID: sourceObjectID,
-                    viaEventID: edge.viaEventID,
-                    confidence: confidence
-                )
+                try Self.upsertEdge(db, kind: edge.kind, from: edge.from, to: edge.to,
+                                    sourceObjectID: sourceObjectID, viaEventID: edge.viaEventID,
+                                    confidence: confidence)
             }
-            try await database.commitTransaction()
-        } catch {
-            await database.rollbackTransaction()
-            throw error
         }
     }
 
@@ -102,35 +92,34 @@ public actor RelationshipsRepository {
         viaEventID: Event.ID? = nil,
         confidence: Confidence = .medium
     ) async throws {
-        let existing = try await database.query("""
+        // Read-modify-write in one isolated unit: two concurrent callers can no longer both
+        // read "absent" and both insert.
+        try await database.withSavepoint("rel_upsert_edge") { db in
+            try Self.upsertEdge(db, kind: kind, from: from, to: to, sourceObjectID: sourceObjectID,
+                                viaEventID: viaEventID, confidence: confidence)
+        }
+    }
+
+    /// The synchronous core, composable into the caller's savepoint.
+    static func upsertEdge(_ db: isolated Database, kind: Relationship.Kind, from: Entity.ID, to: Entity.ID,
+                           sourceObjectID: KnowledgeObject.ID, viaEventID: Event.ID?, confidence: Confidence) throws {
+        let existing = try db.query("""
         SELECT id, weight, evidence_object_ids_json
         FROM relationships
         WHERE kind = ? AND from_entity_id = ? AND to_entity_id = ?
         LIMIT 1;
         """, [.text(kind.rawValue), .uuid(from), .uuid(to)])
 
-        if let row = existing.first,
-           let id = row.uuid(0) {
+        if let row = existing.first, let id = row.uuid(0) {
             let weight = Int(row.int(1) ?? 1)
-            var evidence = parseEvidence(row.string(2) ?? "[]")
-            let srcStr = sourceObjectID.uuidString
-            if !evidence.contains(srcStr) {
-                evidence.append(srcStr)
-                if evidence.count > Self.evidenceCap {
-                    evidence = Array(evidence.suffix(Self.evidenceCap))
-                }
-            }
-            try await database.exec("""
+            let evidence = EvidenceList.appending(sourceObjectID.uuidString, to: row.string(2) ?? "[]", cap: Self.evidenceCap)
+            try db.exec("""
             UPDATE relationships
             SET weight = ?, evidence_object_ids_json = ?
             WHERE id = ?;
-            """, [
-                .integer(Int64(weight + 1)),
-                .text(serializeEvidence(evidence)),
-                .uuid(id)
-            ])
+            """, [.integer(Int64(weight + 1)), .text(evidence), .uuid(id)])
         } else {
-            try await database.exec("""
+            try db.exec("""
             INSERT INTO relationships (id, kind, from_entity_id, to_entity_id, via_event_id,
                                        source_object_id, confidence, attributes_json,
                                        weight, evidence_object_ids_json)
@@ -280,14 +269,6 @@ public actor RelationshipsRepository {
         }
         return arr
     }
-
-    private func serializeEvidence(_ list: [String]) -> String {
-        guard let data = try? encoder.encode(list),
-              let s = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
-        return s
-    }
 }
 
 /// A payer → payee money-flow edge with resolved labels, for the fund-flow view.
@@ -299,4 +280,17 @@ public struct FundFlowEdge: Sendable, Hashable, Identifiable {
     public let toLabel: String
     public let weight: Int
     public let evidenceCount: Int
+}
+
+/// The evidence-id list carried on graph edges and fact bonds (JSON array of object ids):
+/// append once, keep the newest `cap`. Pure, so it runs inside a synchronous savepoint body.
+nonisolated enum EvidenceList {
+    static func appending(_ id: String, to json: String, cap: Int) -> String {
+        var list = (json.data(using: .utf8).flatMap { try? JSONDecoder().decode([String].self, from: $0) }) ?? []
+        if !list.contains(id) {
+            list.append(id)
+            if list.count > cap { list = Array(list.suffix(cap)) }
+        }
+        return (try? JSONEncoder().encode(list)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
 }

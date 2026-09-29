@@ -31,15 +31,11 @@ public actor Database {
     internal var rawHandle: OpaquePointer?
     public let url: URL
 
-    /// Transaction serialization gate. Without this, two concurrent
-    /// callers can both call `exec("BEGIN IMMEDIATE;")` between each
-    /// other's `await`s — SQLite sees the second BEGIN as nested and
-    /// raises "cannot start a transaction within a transaction".
-    /// Repository writes that wrap a multi-await BEGIN/COMMIT block
-    /// MUST acquire the gate via `beginTransaction()` first, releasing
-    /// it via `commitTransaction()` or `rollbackTransaction()`.
-    internal var transactionInProgress = false
-    private var transactionWaiters: [CheckedContinuation<Void, Never>] = []
+    /// F28 — the ONE transaction ownership model for this shared connection: every transaction is
+    /// `withSavepoint`, a synchronous isolated body with no suspension point. There is deliberately
+    /// no await-spanning BEGIN/COMMIT API: a gate honoured by only some writers let every other
+    /// caller's write run inside an open transaction and vanish when it rolled back.
+    /// `RawSavepointRatchetTests.noAwaitSpanningTransactionAPI` fails if one is reintroduced.
 
     // MARK: - Ask snapshot (unit C-ii read-split, owner bindings 2026-09-01)
     //
@@ -318,17 +314,6 @@ public actor Database {
         try execRaw("PRAGMA user_version = \(value);")
     }
 
-    public func transaction(_ body: () throws -> Void) throws {
-        try execRaw("BEGIN IMMEDIATE;")
-        do {
-            try body()
-            try execRaw("COMMIT;")
-        } catch {
-            try? execRaw("ROLLBACK;")
-            throw error
-        }
-    }
-
     /// Run `body` inside a named SAVEPOINT as ONE non-interleavable actor operation
     /// (OPS-002.2). The closure is SYNCHRONOUS and receives this database as an `isolated`
     /// parameter, so it can call the isolated `exec`/`query` helpers directly with NO
@@ -356,58 +341,6 @@ public actor Database {
             try? execRaw("ROLLBACK TO SAVEPOINT \(name);")
             try? execRaw("RELEASE SAVEPOINT \(name);")
             throw error
-        }
-    }
-
-    /// Acquire the transaction gate and start a SQLite transaction.
-    /// Waits (suspending the caller, not blocking the actor) until any
-    /// prior transaction has called `commitTransaction()` or
-    /// `rollbackTransaction()`. Required for any repository pattern that
-    /// awaits between BEGIN and COMMIT — without this gate, concurrent
-    /// callers race and SQLite raises "cannot start a transaction
-    /// within a transaction".
-    ///
-    /// Hand-off semantics: when a transaction releases the gate, it
-    /// resumes the next waiter directly (keeping `transactionInProgress`
-    /// = true). The woken waiter inherits the gate without re-racing
-    /// against any newly-arriving caller, avoiding starvation.
-    public func beginTransaction() async throws {
-        if transactionInProgress {
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                transactionWaiters.append(cont)
-            }
-            // On resume the gate has been handed to us — transactionInProgress
-            // is still true (set by the previous owner's release).
-        } else {
-            transactionInProgress = true
-        }
-        do {
-            try execRaw("BEGIN IMMEDIATE;")
-        } catch {
-            releaseGate()
-            throw error
-        }
-    }
-
-    public func commitTransaction() throws {
-        defer { releaseGate() }
-        try execRaw("COMMIT;")
-    }
-
-    public func rollbackTransaction() {
-        defer { releaseGate() }
-        try? execRaw("ROLLBACK;")
-    }
-
-    /// Hand the gate to the next waiter (if any), or clear the flag.
-    private func releaseGate() {
-        if !transactionWaiters.isEmpty {
-            let next = transactionWaiters.removeFirst()
-            // Keep transactionInProgress = true so a newly-arriving caller
-            // queues behind the woken waiter rather than racing past it.
-            next.resume()
-        } else {
-            transactionInProgress = false
         }
     }
 
