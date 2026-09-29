@@ -256,4 +256,66 @@ struct IVFDiskVectorIndexTests {
         // Idempotent.
         #expect(try await r.index.reconcile(now: t0) == 0)
     }
+
+    // MARK: - F11 generation switch
+
+    private actor Flag { var done = false; func set() { done = true }; func isSet() -> Bool { done } }
+
+    @Test("F11 — the live generation keeps serving while a rebuild runs; the new one replaces it atomically")
+    func servesDuringRebuild() async throws {
+        let r = try await rig()
+        let vectors = corpus(count: 600, clusters: 12, seed: 91)
+        var ids: [UUID] = []
+        for v in vectors { ids.append(try await storeEmbedding(r, v)) }
+        try await r.index.rebuild(seed: 7, now: t0)
+        #expect(await r.index.isReady())
+
+        let finished = Flag()
+        let index = r.index, t0 = self.t0
+        let rebuild = Task { try await index.rebuild(seed: 99, now: t0); await finished.set() }
+        var probes = 0, misses = 0, notReady = 0
+        var i = 0
+        while !(await finished.isSet()) {
+            if !(await r.index.isReady()) { notReady += 1 }
+            let got = try await r.index.nearest(embedding: vectors[i % vectors.count], limit: 5)
+            probes += 1
+            if got.first?.chunkID != ids[i % ids.count] { misses += 1 }
+            i += 1
+            await Task.yield()
+        }
+        try await rebuild.value
+        #expect(probes > 0, "no probe interleaved with the rebuild — the test proved nothing")
+        #expect(notReady == 0, "the index must stay ready while its next generation is built")
+        #expect(misses == 0, "every probe during the rebuild found its own vector first")
+
+        // The new generation is live, complete, and the staging namespace is gone.
+        #expect(await r.index.size() == 600)
+        #expect(try await r.repo.meta(for: model)?.trainSeed == 99)
+        #expect(try await r.repo.meta(for: "\(model)@next") == nil)
+        #expect(try await r.repo.postingCount(for: "\(model)@next") == 0)
+        #expect(try await r.index.nearest(embedding: vectors[3], limit: 5).first?.chunkID == ids[3])
+    }
+
+    @Test("F11 — a staged generation left by a crash is discarded; the live one was never touched")
+    func staleStagingDiscarded() async throws {
+        let r = try await rig()
+        let vectors = corpus(count: 160, clusters: 4, seed: 55)
+        var ids: [UUID] = []
+        for v in vectors { ids.append(try await storeEmbedding(r, v)) }
+        try await r.index.rebuild(seed: 3, now: t0)
+        // A crash mid-rebuild leaves a half-filled staging namespace behind.
+        let staging = "\(model)@next"
+        try await r.repo.ensureMeta(modelID: staging, dimension: dim, at: t0)
+        try await r.repo.replaceCells([ANNCell(cellID: 0, centroid: Data(count: dim * 4), vectorCount: 0)], for: staging, at: t0)
+        try await r.repo.insertPostings([ANNPosting(cellID: 0, chunkID: ids[0], q: Data(count: dim), scale: 1)], for: staging)
+        // The live index still serves on a fresh load.
+        let reopened = IVFDiskVectorIndex(repository: r.repo, modelID: model, dimension: dim)
+        #expect(await reopened.load())
+        #expect(try await reopened.nearest(embedding: vectors[9], limit: 3).first?.chunkID == ids[9])
+        // The next rebuild starts the staging over and promotes cleanly.
+        try await reopened.rebuild(seed: 4, now: t0)
+        #expect(await reopened.size() == 160)
+        #expect(try await r.repo.meta(for: staging) == nil)
+        #expect(try await r.repo.cells(for: staging).isEmpty)
+    }
 }
