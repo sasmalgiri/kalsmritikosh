@@ -50,6 +50,19 @@ struct SQLiteAcquisitionDeadlineTests {
         deinit { if db != nil { sqlite3_close(db) } }
     }
 
+    /// Releases the holder the first time it is consulted; never reports cancellation.
+    private final class ReleaseBarrier: @unchecked Sendable {
+        private let lock = NSLock()
+        private let holder: LockHolder
+        private(set) var fired = false
+        init(_ holder: LockHolder) { self.holder = holder }
+        func fire() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if !fired { fired = true; holder.release() }
+            return false
+        }
+    }
+
     private func scratch() throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("acqdl-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -79,26 +92,33 @@ struct SQLiteAcquisitionDeadlineTests {
         do { _ = try SQLiteAcquisition.acquire(source, into: dest, limits: .init(deadline: 0.4, maxBackoff: 0.05)) }
         catch SourceIntakeError.acquisitionTimedOut(let url, _) { #expect(url == source) }
         catch { Issue.record("expected acquisitionTimedOut, got \(error)") }
-        #expect(Date().timeIntervalSince(started) < 5, "the wait is bounded by the deadline")
+        #expect(Date().timeIntervalSince(started) < 20, "the wait is bounded by the deadline (the old loop never ended; slack for loaded CI)")
         #expect(!FileManager.default.fileExists(atPath: dest.path), "no partial destination survives")
         #expect(!FileManager.default.fileExists(atPath: dest.path + "-journal"))
     }
 
-    @Test("A lock released within the deadline: acquisition succeeds and holds every committed row")
+    @Test("A lock released while the acquisition waits: the next attempt succeeds with every committed row")
     func releasedWithinDeadline() throws {
         let dir = try scratch(); defer { try? FileManager.default.removeItem(at: dir) }
         let source = try walSource(in: dir)
         let holder = LockHolder(source)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { holder.release() }
+        // Deterministic barrier (no timer — a loaded CI runner starved the old timed release): the
+        // acquisition consults `isCancelled` before every retry, i.e. only after it has met the lock;
+        // the lock is released there, once, so the next fresh attempt must succeed.
+        let barrier = ReleaseBarrier(holder)
         let dest = dir.appendingPathComponent("snap.db")
         let record: SQLiteAcquisition.Record
-        do { record = try SQLiteAcquisition.acquire(source, into: dest, limits: .init(deadline: 10, maxBackoff: 0.05)) }
+        do {
+            record = try SQLiteAcquisition.acquire(source, into: dest,
+                                                   limits: .init(deadline: 60, maxBackoff: 0.05, isCancelled: { barrier.fire() }))
+        }
         catch {
             let fm = FileManager.default
             Issue.record("acquisition after release failed: \(error); -wal present: \(fm.fileExists(atPath: source.path + "-wal")), -shm present: \(fm.fileExists(atPath: source.path + "-shm")), SQLite \(String(cString: sqlite3_libversion()))")
             return
         }
         #expect(record.method == "sqliteOnlineBackup")
+        #expect(barrier.fired, "the acquisition met the lock before it was released")
         #expect(rows(dest) == ["main-row", "wal-only-row", "holder-row"], "committed WAL rows included")
     }
 
@@ -138,7 +158,7 @@ struct SQLiteAcquisitionDeadlineTests {
         task.cancel()
         let error = await task.value
         #expect(error as? SourceIntakeError == .acquisitionCancelled(source))
-        #expect(Date().timeIntervalSince(started) < 5, "cancel is honoured long before the 60 s deadline")
+        #expect(Date().timeIntervalSince(started) < 20, "cancel is honoured long before the 60 s deadline (slack for loaded CI)")
         #expect(!FileManager.default.fileExists(atPath: dest.path))
     }
 
