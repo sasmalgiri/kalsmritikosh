@@ -75,7 +75,7 @@ public struct MSGStructuralParser: StructuralParser {
             add(.emailHeader, value, SourceLocator(messageID: messageID, emailHeaderField: key))
         }
         if !body.isEmpty {
-            add(.emailBody, body, SourceLocator(messageID: messageID))
+            add(.emailBody, body, SourceLocator(sectionPath: ["body"], messageID: messageID))
         }
 
         // One block per attachment, named like the EML path (filename only —

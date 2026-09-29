@@ -88,7 +88,7 @@ public struct PSTStructuralParser: StructuralParser {
             }
             let body = Self.body(of: message)
             if !body.isEmpty {
-                add(.emailBody, body, SourceLocator(messageID: messageID))
+                add(.emailBody, body, SourceLocator(sectionPath: ["body"], messageID: messageID))
             }
         }
 

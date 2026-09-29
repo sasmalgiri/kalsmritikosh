@@ -34,13 +34,13 @@ public struct StructuredTextStructuralParser: StructuralParser {
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
 
-        func add(_ kind: EvidenceBlockKind, _ raw: String, path: [String]? = nil) {
+        func add(_ kind: EvidenceBlockKind, _ raw: String, path: [String]? = nil, line: Int? = nil) {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             blocks.append(EvidenceBlock(
                 documentID: documentID, sourceVersionID: sourceVersionID,
                 ordinal: blocks.count, kind: kind, rawText: trimmed,
-                locator: SourceLocator(sectionPath: (path?.isEmpty ?? true) ? nil : path)))
+                locator: SourceLocator(line: line, sectionPath: (path?.isEmpty ?? true) ? nil : path)))
         }
 
         switch type {
@@ -71,8 +71,9 @@ public struct StructuredTextStructuralParser: StructuralParser {
                 add(.paragraph, elementText, path: pathParts.isEmpty ? nil : pathParts)
             }
         case .log:
-            for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-                add(.logRecord, String(line))
+            // Each record cites its 1-based line (blank lines still count toward the number).
+            for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                add(.logRecord, String(line), line: index + 1)
             }
         default:
             break
