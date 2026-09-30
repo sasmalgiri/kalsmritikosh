@@ -592,6 +592,47 @@ public actor IngestCoordinator {
         }
     }
 
+    // MARK: - F04/F15 — per-source execution lease
+
+    /// Events a test can observe to build deterministic barriers (nil in production).
+    public enum SourceWorkEvent: Sendable {
+        /// Work on a source asked for its execution lease (before waiting for it).
+        case leaseRequested(UUID)
+        /// A resumable record of the source committed.
+        case recordCommitted(UUID, position: Int)
+    }
+    private var sourceWorkHook: (@Sendable (SourceWorkEvent) async -> Void)? = nil
+    public func setSourceWorkHook(_ hook: (@Sendable (SourceWorkEvent) async -> Void)?) { sourceWorkHook = hook }
+
+    /// Leases held by the CURRENT task (so nested work on the same source — a structural upgrade that
+    /// resumes the walk — re-enters instead of deadlocking on itself).
+    @TaskLocal static var heldSourceLeases: Set<UUID> = []
+    private var leasedSources: Set<UUID> = []
+    private var leaseWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+
+    /// Run `body` holding the source version's execution lease. Every path that walks or rewrites a
+    /// version's evidence — the resumable ingest, an explicit resume, the automatic continuation job, a
+    /// foreground structural or indexing upgrade — takes it, so two of them never run on one source at
+    /// once (the actor alone does not prevent that: they interleave at every await). Waiters are served
+    /// in arrival order. Process-local: the ledger has one writer process.
+    func withSourceLease<T>(_ svid: UUID, _ body: () async throws -> T) async rethrows -> T {
+        if Self.heldSourceLeases.contains(svid) { return try await body() }
+        await sourceWorkHook?(.leaseRequested(svid))
+        while leasedSources.contains(svid) {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in leaseWaiters[svid, default: []].append(c) }
+        }
+        leasedSources.insert(svid)
+        defer {
+            leasedSources.remove(svid)
+            if var waiting = leaseWaiters[svid], !waiting.isEmpty {
+                let next = waiting.removeFirst()
+                leaseWaiters[svid] = waiting.isEmpty ? nil : waiting
+                next.resume()
+            }
+        }
+        return try await Self.$heldSourceLeases.withValue(Self.heldSourceLeases.union([svid])) { try await body() }
+    }
+
     /// F04 — the producer identity of continuation jobs (dedup is per version + kind + producer, so a
     /// continuation never collides with a user-requested evidence upgrade of the same version).
     nonisolated static let continuationProducer = "stream-continuation"
@@ -602,7 +643,9 @@ public actor IngestCoordinator {
     /// supervised drain runs as one bounded resume (`upgradeStructure` → `resumeStreamedIngest`). A
     /// version is skipped when:
     ///   • a record is failed or interrupted — a failure needs an explicit retry, not a hot loop;
-    ///   • a continuation job is already pending/running (single flight per version);
+    ///   • a continuation job — or ANY pending/running structural, OCR or indexing job (e.g. a user's
+    ///     evidence upgrade) — is already scheduled for the version; and execution itself is serialized
+    ///     per source by `withSourceLease`, so even two claimed jobs never overlap on one source;
     ///   • its last continuation job failed or was blocked and the cursor has not advanced since
     ///     (no progress → no retry until something changes).
     /// Least-recently-advanced versions go first, and each run re-joins the back of the queue, so
@@ -620,7 +663,8 @@ public actor IngestCoordinator {
                AND NOT EXISTS (SELECT 1 FROM stream_record_outcomes o
                                 WHERE o.source_version_id = t.svid AND o.state IN ('failed', 'attempting'))
                AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j
-                                WHERE j.source_version_id = t.svid AND j.producer_id = ? AND j.state IN ('pending', 'running'))
+                                WHERE j.source_version_id = t.svid AND j.state IN ('pending', 'running')
+                                  AND (j.producer_id = ? OR j.kind IN ('structuralExtraction', 'indexing', 'ocr')))
                AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j
                                 WHERE j.source_version_id = t.svid AND j.producer_id = ? AND j.state IN ('failed', 'blocked')
                                   AND j.updated_at >= t.moved)
@@ -653,6 +697,10 @@ public actor IngestCoordinator {
     /// through the ONE registry → persist the structural document → advance readiness from the COMMITTED
     /// receipt. Idempotent: a rerun re-persists the same structure and the readiness stays ready.
     func upgradeStructure(sourceVersionID svid: UUID) async throws {
+        try await withSourceLease(svid) { try await upgradeStructureLeased(sourceVersionID: svid) }
+    }
+
+    private func upgradeStructureLeased(sourceVersionID svid: UUID) async throws {
         guard let byteResolver, let evidenceStore, let readiness, let db = upgradeDatabase else { return }
         // F04 — a version walked resumably CONTINUES from its durable cursor (the scheduled structure
         // upgrade is its continuation); a whole-file re-parse would cite rows the walk never committed.
@@ -773,6 +821,10 @@ public actor IngestCoordinator {
     /// then advance indexing readiness from the measured per-version FTS coverage. Generation-aware
     /// (F16): see `rebuildIndex`. No committed blocks → a missing dependency (structure must exist first).
     func upgradeIndexing(sourceVersionID svid: UUID) async throws {
+        try await withSourceLease(svid) { try await upgradeIndexingLeased(sourceVersionID: svid) }
+    }
+
+    private func upgradeIndexingLeased(sourceVersionID svid: UUID) async throws {
         guard let readiness, let db = upgradeDatabase else { return }
         try await rebuildIndex(sourceVersionID: svid, objects: nil)
         ensureEmbeddingDrain()   // the rebuilt chunks deepen into vectors in the background
@@ -784,10 +836,10 @@ public actor IngestCoordinator {
         // object whose chunks cannot be re-derived from committed blocks (content-only) and no longer
         // match is withheld with the reason, never stamped current.
         let check = try await ChunkDerivation.verify(db, sourceVersionID: svid)
-        let fullyIndexed = coverage.indexed == coverage.eligible && check.mismatchedChunks == 0
-        let mismatchDetail = check.mismatchedChunks > 0
-            ? "\(check.mismatchedChunks) index entr(ies) still do not match their evidence and cannot be re-derived from committed blocks"
-            : nil
+        let fullyIndexed = coverage.indexed == coverage.eligible && check.uncertifiable == 0
+        let mismatchDetail: String? = check.needsRebuildOrProof > 0
+            ? "\(check.needsRebuildOrProof) index entr(ies) still do not match (or cannot be proven against) their evidence and cannot be re-derived from committed blocks"
+            : (check.unverifiedChunks > 0 ? SourceUpgradeCoordinator.unverifiedDetail(check.unverifiedChunks) : nil)
         // F04/F15 — rebuilding the index of what IS committed never makes a streamed version's text
         // complete: failed/interrupted records or deferred units keep it partial.
         let incomplete = await resumableIncompleteDetail(svid)
@@ -831,6 +883,7 @@ public actor IngestCoordinator {
         }
         for (ko, koBlocks) in blocksByKO.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
             if let only, !only.contains(ko) { continue }
+            try await proveUndigested(db, object: ko, sourceVersionID: svid, blocks: koBlocks)
             guard try await Self.indexNeedsRebuild(db, object: ko, sourceVersionID: svid) else { continue }
             let docClass = try await db.query("SELECT document_class FROM knowledge_objects WHERE id = ? LIMIT 1;",
                                               [.uuid(ko)]).first?.string(0).flatMap(DocumentClass.init(rawValue:))
@@ -872,8 +925,44 @@ public actor IngestCoordinator {
             """, [.uuid(ko), .uuid(svid)]).first
         let current = row?.int(0) ?? 0, staleCited = row?.int(1) ?? 0, lineage = row?.int(2) ?? 0, uncited = row?.int(3) ?? 0
         if current == 0 || staleCited > 0 || (lineage > 0 && uncited > 0) { return true }
-        // F15/F25 — the counts hold; the derived content must still match its evidence.
-        return try await ChunkDerivation.verify(db, sourceVersionID: svid, object: ko).mismatchedChunks > 0
+        // F15/F25 — the counts hold; the derived content must still match (or be proven against) its evidence.
+        return try await ChunkDerivation.verify(db, sourceVersionID: svid, object: ko).needsRebuildOrProof > 0
+    }
+
+    /// F15/F25 — prove an object's digest-less chunks (written before v141) against evidence instead of
+    /// trusting their present state: re-derive the object's chunks from its committed blocks with the
+    /// current chunker, and record a digest ONLY for a chunk whose text and ordered lineage equal a
+    /// re-derived chunk exactly. Anything else stays unproven and the object is rebuilt.
+    private func proveUndigested(_ db: Database, object ko: UUID, sourceVersionID svid: UUID, blocks koBlocks: [EvidenceBlock]) async throws {
+        let rows = try await db.query("""
+            SELECT id, text FROM chunks
+             WHERE object_id = ? AND source_version_id = ? AND superseded_by_run IS NULL AND derivation_digest IS NULL;
+            """, [.uuid(ko), .uuid(svid)])
+        guard !rows.isEmpty else { return }
+        let ordered = koBlocks.sorted { $0.ordinal < $1.ordinal }
+        let packed = chunker.chunkWithLineage(objectID: ko, blocks: ordered)
+        var derived = Set<String>()
+        for c in packed.chunks {
+            let lineage = packed.blockIDs[c.id] ?? c.allBlockIDs
+            derived.insert(c.text + "\u{1F}" + lineage.map(\.uuidString).joined(separator: ","))
+        }
+        let content = Dictionary(koBlocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { a, _ in a })
+        let ids = rows.compactMap { $0.uuid(0) }
+        try await db.withSavepoint("chunk_prove_\(ko.uuidString.prefix(8))") { db in
+            var lineageOf: [UUID: [UUID]] = [:]
+            for id in ids {
+                lineageOf[id] = try db.query("SELECT evidence_block_id FROM chunk_blocks WHERE chunk_id = ? ORDER BY ordinal;",
+                                             [.uuid(id)]).compactMap { $0.uuid(0) }
+            }
+            for r in rows {
+                guard let id = r.uuid(0), let lineage = lineageOf[id], !lineage.isEmpty else { continue }
+                let text = r.string(1) ?? ""
+                guard derived.contains(text + "\u{1F}" + lineage.map(\.uuidString).joined(separator: ",")),
+                      let digest = ChunkDerivation.digest(text: text, lineage: lineage, content: content) else { continue }
+                try db.exec("UPDATE chunks SET derivation_digest = ? WHERE id = ? AND derivation_digest IS NULL;",
+                            [.text(digest), .uuid(id)])
+            }
+        }
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
@@ -1863,6 +1952,16 @@ public actor IngestCoordinator {
                                  handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
                                  type: SourceType, resuming: Bool = false,
                                  skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
+        await withSourceLease(handle.sourceVersionID) {
+            await ingestResumableLeased(loader, plugin: plugin, handle: handle, fileRecord: fileRecord, url: url,
+                                        processURL: processURL, type: type, resuming: resuming, skip: skip)
+        }
+    }
+
+    private func ingestResumableLeased(_ loader: any ResumableStreamingIngestor, plugin: any UniversalParserPlugin,
+                                       handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
+                                       type: SourceType, resuming: Bool,
+                                       skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
         let svid = handle.sourceVersionID
         let started = Date()
         guard let db = upgradeDatabase, let evidenceStore else {
@@ -1948,6 +2047,7 @@ public actor IngestCoordinator {
                                                                  ownershipKeys: keys, at: now)
                     }
                     committedThisRun += 1
+                    await sourceWorkHook?(.recordCommitted(svid, position: rec.position))
                     // Additive, best-effort derivations from the committed blocks (as persistStructuralDoc does).
                     if let assertions {
                         await deriveAssertions(from: page, sourceVersionID: svid, extractorVersion: parserVersion, into: assertions)
@@ -2126,6 +2226,10 @@ public actor IngestCoordinator {
     /// interrupted has that attempt's object rolled back first, so nothing is duplicated. Structure that
     /// is already committed is kept; the newly committed records are linked to it.
     public func resumeStreamedIngest(sourceVersionID svid: UUID) async throws {
+        try await withSourceLease(svid) { try await resumeStreamedIngestLeased(sourceVersionID: svid) }
+    }
+
+    private func resumeStreamedIngestLeased(sourceVersionID svid: UUID) async throws {
         guard let byteResolver, let db = upgradeDatabase else {
             throw SourceUpgradeError.missingDependency("upgrades not configured: cannot resume a streamed ingest")
         }

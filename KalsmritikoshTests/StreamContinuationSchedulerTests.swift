@@ -148,6 +148,9 @@ struct StreamContinuationSchedulerTests {
         defer { try? FileManager.default.removeItem(at: e.dir) }
         let sv = try #require(try await coordinator(e).ingest(fileAt: try source(e)).sourceVersionID)
         let c = try await coordinator(e)
+        // Ingest scheduled its own evidence upgrade; while that is pending no continuation is added.
+        #expect(await c.scheduleStreamContinuations().isEmpty, "a source with an active structural job gets no second job")
+        _ = await c.drainUpgrades(max: 4)
         #expect(await c.scheduleStreamContinuations() == [sv])
         let jobs = SourceUpgradeJobRepository(database: e.db)
         let jobID = try #require(try await e.db.query(

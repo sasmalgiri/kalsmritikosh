@@ -121,6 +121,7 @@ public struct SourceUpgradeCoordinator: Sendable {
                                            basis: rec.basis, detail: rec.detail)
         }
         var updates: [SourceReadinessDimensionUpdate] = []
+        var unverifiedIndex: (indexed: Int, eligible: Int, count: Int)? = nil
         let v = SQLValue.uuid(sourceVersionID)
 
         if let rec = try await needsCheck(.indexing) {
@@ -157,8 +158,21 @@ public struct SourceUpgradeCoordinator: Sendable {
             } else if uncited > 0 {
                 updates.append(invalidate(.indexing, "\(uncited) active block(s) are missing from the index of their object — rebuild required"))
             } else if case let check = try await ChunkDerivation.verify(database, sourceVersionID: sourceVersionID),
-                      check.mismatchedChunks > 0 {
-                updates.append(invalidate(.indexing, "\(check.mismatchedChunks) index entr(ies) no longer match their evidence — rebuild required"))
+                      check.uncertifiable > 0 {
+                if check.needsRebuildOrProof > 0 {
+                    updates.append(invalidate(.indexing, "\(check.mismatchedChunks) index entr(ies) no longer match their evidence and "
+                        + "\(check.undigestedChunks) are not yet proven against it — rebuild required"))
+                } else if rec.state == .ready {
+                    // Only lineage-less entries without a digest remain: nothing to verify them against. The
+                    // index is never certified over them — it leaves `ready` (invalidate now, partial below).
+                    updates.append(invalidate(.indexing, Self.unverifiedDetail(check.unverifiedChunks)))
+                    unverifiedIndex = (live.indexed, live.eligible, check.unverifiedChunks)
+                } else {
+                    updates.append(SourceReadinessDimensionUpdate(
+                        dimension: .indexing, state: .partial, action: .reconcile, applicability: rec.applicability,
+                        completedUnits: live.indexed, totalUnits: live.eligible, basis: rec.basis,
+                        detail: Self.unverifiedDetail(check.unverifiedChunks)))
+                }
             } else {
                 updates.append(reaffirm(rec, completed: live.indexed, total: live.eligible))
             }
@@ -194,12 +208,29 @@ public struct SourceUpgradeCoordinator: Sendable {
                 sourceVersionID: sourceVersionID, expectedRevision: snap.aggregateRevision,
                 updates: updates, producerID: "usf-m3.reconcile", producerVersion: "4", occurredAt: now,
                 measuredEvidence: measured))
+            if let u = unverifiedIndex {
+                // Second step of leaving `ready` for unverified entries: running → partial, with the reason.
+                let after = try await readiness.snapshot(sourceVersionID: sourceVersionID)
+                try await readiness.apply(SourceReadinessUpdatePlan(
+                    sourceVersionID: sourceVersionID, expectedRevision: after.aggregateRevision,
+                    updates: [SourceReadinessDimensionUpdate(
+                        dimension: .indexing, state: .partial, action: .partiallySatisfy,
+                        completedUnits: u.indexed, totalUnits: u.eligible,
+                        basis: SourceReadinessBasis(kind: .ftsIndex, identifier: sourceVersionID.uuidString),
+                        detail: Self.unverifiedDetail(u.count))],
+                    producerID: "usf-m3.reconcile", producerVersion: "4", occurredAt: now, measuredEvidence: measured))
+            }
             return true
         } catch SourceReadinessError.evidenceChangedDuringMeasurement {
             // Evidence moved while it was being measured: nothing is stamped; re-measure the new state.
             KalsmritikoshLog.ingestion.info("reconcile \(sourceVersionID.uuidString, privacy: .public): evidence changed during measurement — re-measuring")
             return false
         }
+    }
+
+    /// Why an index is not certified when entries have neither a derivation digest nor evidence lineage.
+    static func unverifiedDetail(_ n: Int) -> String {
+        "\(n) index entr(ies) predate derivation digests and cite no evidence blocks — unverified, not certified"
     }
 
     /// Background drainer step: claim the next eligible job, run + verify it, return whether one ran.

@@ -32,9 +32,10 @@ public actor ChunksRepository {
     /// chunk's `derivation_digest`); a chunk whose lineage names a block not given here gets no digest
     /// (a later reconciliation records its baseline).
     nonisolated static func insertStatements(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]] = [:],
-                                             blocks: [EvidenceBlock] = []) -> [(sql: String, binds: [SQLValue])] {
+                                             blocks: [EvidenceBlock] = [],
+                                             content extra: [UUID: ChunkDerivation.BlockContent] = [:]) -> [(sql: String, binds: [SQLValue])] {
         var out: [(sql: String, binds: [SQLValue])] = []
-        let content = Dictionary(blocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { a, _ in a })
+        let content = extra.merging(blocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { _, b in b })
         for chunk in chunks {
             let chunkLineage = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
             let digest = ChunkDerivation.digest(text: chunk.text, lineage: chunkLineage, content: content)

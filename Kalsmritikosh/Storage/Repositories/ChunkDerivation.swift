@@ -12,8 +12,9 @@
 //  confidence do not change chunk text either; they move the evidence revision (v141) so dependent
 //  proofs are re-verified, but they do not invalidate the chunk.
 //
-//  The digest is recorded when the chunk is written (`chunks.derivation_digest`, v141) and recomputed
-//  from the LIVE chunk, lineage and blocks when readiness is reconciled. A mismatch means the derived
+//  The digest is recorded when the chunk is written (`chunks.derivation_digest`, v141) — by EVERY write
+//  path, from the blocks it was derived from — and recomputed from the LIVE chunk, lineage and blocks
+//  when readiness is reconciled. A chunk without a digest is never certified from its present state. A mismatch means the derived
 //  output no longer matches the evidence it claims to come from — the object's index is rebuilt from
 //  its committed blocks, never re-stamped as current.
 //
@@ -52,19 +53,47 @@ public nonisolated enum ChunkDerivation {
         BlockContent(kind: block.kind.rawValue, rawText: block.rawText, normalizedText: block.normalizedText)
     }
 
+    /// Live content of `ids` (for a write path that holds only block ids) — call inside its savepoint.
+    static func content(_ db: isolated Database, blockIDs ids: [UUID]) throws -> [UUID: BlockContent] {
+        var out: [UUID: BlockContent] = [:]
+        let unique = Array(Set(ids))
+        for slice in stride(from: 0, to: unique.count, by: 400).map({ Array(unique[$0..<min($0 + 400, unique.count)]) }) {
+            let marks = slice.map { _ in "?" }.joined(separator: ",")
+            for r in try db.query("SELECT id, kind, raw_text, normalized_text FROM evidence_blocks WHERE id IN (\(marks));",
+                                  slice.map { .uuid($0) }) {
+                if let id = r.uuid(0) {
+                    out[id] = BlockContent(kind: r.string(1) ?? "", rawText: r.string(2) ?? "", normalizedText: r.string(3) ?? "")
+                }
+            }
+        }
+        return out
+    }
+
     /// The outcome of checking a version's (or one object's) active chunks against their evidence.
+    /// A chunk with no recorded digest is NEVER certified from its current state: it is either
+    /// `undigested` (it names evidence blocks, so it can be proven by re-deriving it from them — see
+    /// IngestCoordinator.proveUndigested — or rebuilt) or `unverified` (no lineage: nothing to check
+    /// it against, so it stays explicitly unverified).
     public struct Verification: Sendable, Equatable {
-        /// Objects with at least one chunk whose derivation no longer matches its evidence.
+        /// Objects with a chunk that does not match its evidence OR is not yet proven against it.
         public var mismatchedObjects: Set<UUID> = []
+        /// Recorded digest differs from the live derivation (or a lineage block is gone).
         public var mismatchedChunks = 0
-        /// Chunks written before v141 whose baseline digest was recorded by this check.
-        public var baselined = 0
+        /// No recorded digest, lineage present: must be proven or rebuilt before certification.
+        public var undigestedChunks = 0
+        /// No recorded digest and no lineage: cannot be verified against evidence.
+        public var unverifiedChunks = 0
         public var checked = 0
+
+        /// Chunks that block certifying the index as current.
+        public var uncertifiable: Int { mismatchedChunks + undigestedChunks + unverifiedChunks }
+        /// Chunks a rebuild from committed blocks can resolve.
+        public var needsRebuildOrProof: Int { mismatchedChunks + undigestedChunks }
     }
 
     /// Recompute every active chunk's digest from the live chunk, lineage and blocks and compare it
-    /// with the recorded one; record a baseline where none was recorded. Paged by rowid, one isolated
-    /// savepoint per page (a writer between pages is caught by the caller's revision compare-and-set).
+    /// with the recorded one. Read-only. Paged by rowid, one isolated savepoint per page (a writer
+    /// between pages is caught by the caller's revision compare-and-set).
     static func verify(_ db: Database, sourceVersionID svid: UUID, object: UUID? = nil, pageSize: Int = 500) async throws -> Verification {
         var result = Verification()
         var after: Int64 = -1
@@ -74,7 +103,8 @@ public nonisolated enum ChunkDerivation {
             }
             result.mismatchedObjects.formUnion(page.mismatchedObjects)
             result.mismatchedChunks += page.mismatchedChunks
-            result.baselined += page.baselined
+            result.undigestedChunks += page.undigestedChunks
+            result.unverifiedChunks += page.unverifiedChunks
             result.checked += page.checked
             guard let last else { break }
             after = last
@@ -116,13 +146,14 @@ public nonisolated enum ChunkDerivation {
         for r in rows {
             guard let id = r.uuid(1), let ko = r.uuid(2) else { continue }
             out.checked += 1
-            let live = digest(text: r.string(3) ?? "", lineage: lineage[id] ?? [], content: content)
+            let chunkLineage = lineage[id] ?? []
             if let recorded = r.string(4) {
+                let live = digest(text: r.string(3) ?? "", lineage: chunkLineage, content: content)
                 if live != recorded { out.mismatchedChunks += 1; out.mismatchedObjects.insert(ko) }
-            } else if let live {
-                // Written before v141: nothing to compare against — record today's state as the baseline.
-                try db.exec("UPDATE chunks SET derivation_digest = ? WHERE id = ?;", [.text(live), .uuid(id)])
-                out.baselined += 1
+            } else if chunkLineage.isEmpty {
+                out.unverifiedChunks += 1
+            } else {
+                out.undigestedChunks += 1; out.mismatchedObjects.insert(ko)
             }
         }
         return (out, lastRow)

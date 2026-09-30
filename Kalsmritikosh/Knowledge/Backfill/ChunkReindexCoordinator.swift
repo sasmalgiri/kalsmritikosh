@@ -177,7 +177,7 @@ public struct ChunkReindexCoordinator {
                 return out
             }
 
-            let inserts = ChunksRepository.insertStatements(finished, lineage: packed.blockIDs)
+            let inserts = ChunksRepository.insertStatements(finished, lineage: packed.blockIDs, blocks: blocks)   // F15 — digests
             let packedVersion = Int64(Self.packedChunkVersion)
             // F28 — drop + repack + stamp for this object in ONE isolated savepoint.
             let dropped = try await database.withSavepoint("reindex_pack") { db -> Int in
@@ -274,7 +274,9 @@ public struct ChunkReindexCoordinator {
                         .first?.int(0) ?? 0)
                     try db.exec("DELETE FROM chunk_embeddings WHERE chunk_id = ?;", [.uuid(id)])
                     try db.exec("DELETE FROM chunks WHERE id = ?;", [.uuid(id)])
-                    for st in ChunksRepository.insertStatements(children) { try db.exec(st.sql, st.binds) }
+                    // F15 — each piece's digest binds it to the live content of the blocks it cites.
+                    let content = try ChunkDerivation.content(db, blockIDs: children.flatMap(\.allBlockIDs))
+                    for st in ChunksRepository.insertStatements(children, content: content) { try db.exec(st.sql, st.binds) }
                     try db.exec(
                         "UPDATE chunks SET chunk_version = 2 WHERE object_id = ? AND ordinal > ?;",
                         [.uuid(objectID), .integer(Int64(maxOrdinal))])
