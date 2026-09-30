@@ -50,15 +50,18 @@ struct SQLiteAcquisitionDeadlineTests {
         deinit { if db != nil { sqlite3_close(db) } }
     }
 
-    /// Releases the holder the first time it is consulted; never reports cancellation.
+    /// Releases the holder at the first LOCK-RETRY check (the acquisition also consults `isCancelled`
+    /// before hashing and before the backup starts — calls 1 and 2); never reports cancellation.
     private final class ReleaseBarrier: @unchecked Sendable {
         private let lock = NSLock()
         private let holder: LockHolder
+        private var calls = 0
         private(set) var fired = false
         init(_ holder: LockHolder) { self.holder = holder }
         func fire() -> Bool {
             lock.lock(); defer { lock.unlock() }
-            if !fired { fired = true; holder.release() }
+            calls += 1
+            if calls >= 3, !fired { fired = true; holder.release() }
             return false
         }
     }

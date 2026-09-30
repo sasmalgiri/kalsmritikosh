@@ -53,11 +53,13 @@ public nonisolated enum SQLiteAcquisition {
         case cancelled
     }
 
-    /// F03 — how long ONE acquisition may wait on a locked source, and how it waits. The backup step
-    /// itself copies every page under one read transaction (`step(-1)`), so the only unbounded wait was
-    /// the retry loop around a BUSY / LOCKED source; it now stops at `deadline`, backs off
-    /// exponentially up to `maxBackoff`, and checks `isCancelled` (default: the current Task) before
-    /// every retry.
+    /// F03 — how long ONE acquisition may WAIT ON A LOCK, and how it waits. `deadline` bounds lock
+    /// waiting only — the retry loop around a BUSY / LOCKED source stops there, backing off
+    /// exponentially up to `maxBackoff`. It does NOT bound the whole acquisition: hashing the original
+    /// members and a successful backup step (every page under one read transaction, `step(-1)`) run to
+    /// completion once started, and take time proportional to the source. `isCancelled` (default: the
+    /// current Task) is checked before hashing, before the backup starts, and before and after every
+    /// lock retry — not inside the hash or the page copy.
     public nonisolated struct Limits: Sendable {
         public let deadline: TimeInterval
         public let initialBackoff: TimeInterval
@@ -97,7 +99,9 @@ public nonisolated enum SQLiteAcquisition {
     /// derivative made from an incoherent pair.
     public static func acquire(_ url: URL, into destination: URL, now: Date = Date(),
                                limits: Limits = .standard) throws -> Record {
+        if limits.isCancelled() { throw SourceIntakeError.acquisitionCancelled(url) }
         let members = try physicalMembers(url)
+        if limits.isCancelled() { throw SourceIntakeError.acquisitionCancelled(url) }
         let deadline = Date().addingTimeInterval(limits.deadline)
         do {
             try backup(from: url, readOnly: true, to: destination, deadline: deadline, limits: limits)
