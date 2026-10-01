@@ -41,6 +41,8 @@ public actor CapabilityRegistry {
     // a transient blip. Exponential backoff after N consecutive fails.
     private var consecutiveFailures: [String: Int] = [:]
     private var cooldownUntil: [String: Date] = [:]
+    /// Providers whose model-fit exclusion has already been logged.
+    private var fitGateLogged: Set<String> = []
     /// Consecutive failures before the first cooldown kicks in (so a
     /// single slow call doesn't sideline a provider).
     private let failuresBeforeCooldown = 3
@@ -177,6 +179,9 @@ public actor CapabilityRegistry {
             if manifest.capabilities.contains(.textGeneration), manifest.minRAMBytes > 0 {
                 let budget = Int64(Double(hardware.totalRAMBytes) * 0.7)
                 if manifest.minRAMBytes > budget {
+                    // Logged once per provider: resolve runs on every capability
+                    // request, and the verdict cannot change for a fixed device.
+                    guard fitGateLogged.insert(manifest.id).inserted else { return false }
                     KalsmritikoshLog.app.info("Model-fit gate: excluding \(manifest.id, privacy: .public) — needs \(manifest.minRAMBytes / 1_073_741_824, privacy: .public)GB > budget \(budget / 1_073_741_824, privacy: .public)GB")
                     return false
                 }

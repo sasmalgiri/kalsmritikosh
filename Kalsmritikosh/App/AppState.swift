@@ -1042,6 +1042,14 @@ public final class AppState {
             #else
             let internalProvidersEnabled = false
             #endif
+            // The developer local-model-server providers (Ollama daemon probe +
+            // MLX reasoning download) are OFF even in DEBUG unless explicitly
+            // opted in: `defaults write <bundle-id> devLocalModelServers -bool YES`.
+            // Without the opt-in the sandboxed app would poll localhost:11434
+            // every few seconds (DNS is denied, so every probe fails) and keep
+            // logging a model-fit exclusion for a provider it can never use.
+            let devLocalModelServersEnabled = internalProvidersEnabled
+                && UserDefaults.standard.bool(forKey: "devLocalModelServers")
 
             await capabilities.register(FoundationModelsProvider())
             // P6.2 — bundled on-device sentence embedder. Resolves over the
@@ -1050,7 +1058,7 @@ public final class AppState {
             // embedding behaviour is unchanged. See docs/EMBEDDER_SWAP.md.
             let coreMLEmbedder = CoreMLEmbedderProvider()
             await capabilities.register(coreMLEmbedder)
-            if internalProvidersEnabled {
+            if devLocalModelServersEnabled {
             await capabilities.register(
                 MLXProvider(
                     id: "provider.local.mlx.reasoning",
@@ -1072,7 +1080,7 @@ public final class AppState {
                     downloader: ModelDownloader()
                 )
             )
-            } // internalProvidersEnabled (MLX reasoning)
+            } // devLocalModelServersEnabled (MLX reasoning)
             // SIXTEENTH REVIEW — LlamaCpp is an INTENTIONAL NON-SHIPPING
             // PROVIDER STUB (SHIP_DECISIONS §4): registered in internal
             // builds only, so a Release capability resolution can never
@@ -1158,7 +1166,7 @@ public final class AppState {
             // must make zero network connections, so it never probes the daemon
             // and never surfaces a setup suggestion.
             var internalOllamaSetupSuggestion: OllamaSetupAdvisor.SetupSuggestion? = nil
-            if internalProvidersEnabled {
+            if devLocalModelServersEnabled {
             let ollamaBase = URL(string: "http://localhost:11434")!
             let detectedOllama = await OllamaDiscovery.list(baseURL: ollamaBase)
             let ollamaReachable: Bool
@@ -1230,7 +1238,7 @@ public final class AppState {
                     ))
                 }
             }
-            } // internalProvidersEnabled (Ollama probe + discovery + registration)
+            } // devLocalModelServersEnabled (Ollama probe + discovery + registration)
             if internalProvidersEnabled {
                 await capabilities.register(CloudProvider())
             }
