@@ -31,15 +31,11 @@ public actor Database {
     internal var rawHandle: OpaquePointer?
     public let url: URL
 
-    /// Transaction serialization gate. Without this, two concurrent
-    /// callers can both call `exec("BEGIN IMMEDIATE;")` between each
-    /// other's `await`s — SQLite sees the second BEGIN as nested and
-    /// raises "cannot start a transaction within a transaction".
-    /// Repository writes that wrap a multi-await BEGIN/COMMIT block
-    /// MUST acquire the gate via `beginTransaction()` first, releasing
-    /// it via `commitTransaction()` or `rollbackTransaction()`.
-    internal var transactionInProgress = false
-    private var transactionWaiters: [CheckedContinuation<Void, Never>] = []
+    /// F28 — the ONE transaction ownership model for this shared connection: every transaction is
+    /// `withSavepoint`, a synchronous isolated body with no suspension point. There is deliberately
+    /// no await-spanning BEGIN/COMMIT API: a gate honoured by only some writers let every other
+    /// caller's write run inside an open transaction and vanish when it rolled back.
+    /// `RawSavepointRatchetTests.noAwaitSpanningTransactionAPI` fails if one is reintroduced.
 
     // MARK: - Ask snapshot (unit C-ii read-split, owner bindings 2026-09-01)
     //
@@ -114,6 +110,84 @@ public actor Database {
         defer { askSnapshotActive = false }
         guard askSnapshotActive, let snap = snapshotHandle else { return }
         try? Self.execRaw(handle: snap, sql: "COMMIT;")
+    }
+
+    public enum BackupSnapshotError: Error, Sendable {
+        case openFailed(String)
+        case stepFailed(String)
+        case verifyFailed(String)
+    }
+
+    /// F18 — a CONSISTENT copy of the live ledger via SQLite's Online Backup API
+    /// (https://www.sqlite.org/backup.html), written to `destination` as ONE self-contained file
+    /// (WAL content included; no sidecars). It runs as a single synchronous actor operation, so no
+    /// write on this connection can interleave, and SQLite itself guarantees the copy is a coherent
+    /// point-in-time image even while other connections are active (busy/locked pages are retried).
+    /// The finished file must pass `quick_check` or it is deleted and the call throws.
+    public func backupSnapshot(to destination: URL) throws {
+        try? FileManager.default.removeItem(at: destination)
+        var dest: OpaquePointer?
+        guard sqlite3_open_v2(destination.path, &dest, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK,
+              let destDB = dest else {
+            let msg = dest.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open destination"
+            sqlite3_close(dest)
+            throw BackupSnapshotError.openFailed(msg)
+        }
+        var failure: String?
+        if let backup = sqlite3_backup_init(destDB, "main", rawHandle, "main") {
+            var rc: Int32
+            repeat {
+                rc = sqlite3_backup_step(backup, -1)
+                if rc == SQLITE_BUSY || rc == SQLITE_LOCKED { sqlite3_sleep(25) }
+            } while rc == SQLITE_OK || rc == SQLITE_BUSY || rc == SQLITE_LOCKED
+            if rc != SQLITE_DONE { failure = String(cString: sqlite3_errmsg(destDB)) }
+            sqlite3_backup_finish(backup)
+        } else {
+            failure = String(cString: sqlite3_errmsg(destDB))
+        }
+        if failure == nil, sqlite3_errcode(destDB) != SQLITE_OK { failure = String(cString: sqlite3_errmsg(destDB)) }
+        // The copy inherits the live WAL mode; switch it to a rollback journal so the snapshot is ONE
+        // self-contained file that opens anywhere without -wal/-shm sidecars.
+        if failure == nil, sqlite3_exec(destDB, "PRAGMA journal_mode=DELETE;", nil, nil, nil) != SQLITE_OK {
+            failure = String(cString: sqlite3_errmsg(destDB))
+        }
+        sqlite3_close(destDB)
+        if let failure {
+            try? FileManager.default.removeItem(at: destination)
+            throw BackupSnapshotError.stepFailed(failure)
+        }
+        if let problem = Self.quickCheck(fileAt: destination) {
+            try? FileManager.default.removeItem(at: destination)
+            throw BackupSnapshotError.verifyFailed(problem)
+        }
+    }
+
+    /// F19 — open a database file READ-ONLY (never modifying it), run `PRAGMA quick_check`, close.
+    /// Returns nil when the file is a sound SQLite database, else the failure text. Used to vet a
+    /// staged restore before it may replace anything; the raw handle never leaves this function.
+    public nonisolated static func quickCheck(fileAt url: URL) -> String? {
+        var db: OpaquePointer?
+        // `immutable=1`: read the file as-is — no locks, no -shm creation, never a write.
+        var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        comps?.scheme = "file"
+        comps?.queryItems = [URLQueryItem(name: "immutable", value: "1")]
+        let uri = comps?.string ?? "file:\(url.path)?immutable=1"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK, let opened = db else {
+            let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open"
+            sqlite3_close(db)
+            return msg
+        }
+        defer { sqlite3_close(opened) }
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(opened, "PRAGMA quick_check;", -1, &stmt, nil) == SQLITE_OK, let prepared = stmt else {
+            return String(cString: sqlite3_errmsg(opened))
+        }
+        defer { sqlite3_finalize(prepared) }
+        guard sqlite3_step(prepared) == SQLITE_ROW, let text = sqlite3_column_text(prepared, 0) else {
+            return String(cString: sqlite3_errmsg(opened))
+        }
+        let result = String(cString: text)
+        return result == "ok" ? nil : result
     }
 
     public init(url: URL) throws {
@@ -240,17 +314,6 @@ public actor Database {
         try execRaw("PRAGMA user_version = \(value);")
     }
 
-    public func transaction(_ body: () throws -> Void) throws {
-        try execRaw("BEGIN IMMEDIATE;")
-        do {
-            try body()
-            try execRaw("COMMIT;")
-        } catch {
-            try? execRaw("ROLLBACK;")
-            throw error
-        }
-    }
-
     /// Run `body` inside a named SAVEPOINT as ONE non-interleavable actor operation
     /// (OPS-002.2). The closure is SYNCHRONOUS and receives this database as an `isolated`
     /// parameter, so it can call the isolated `exec`/`query` helpers directly with NO
@@ -278,58 +341,6 @@ public actor Database {
             try? execRaw("ROLLBACK TO SAVEPOINT \(name);")
             try? execRaw("RELEASE SAVEPOINT \(name);")
             throw error
-        }
-    }
-
-    /// Acquire the transaction gate and start a SQLite transaction.
-    /// Waits (suspending the caller, not blocking the actor) until any
-    /// prior transaction has called `commitTransaction()` or
-    /// `rollbackTransaction()`. Required for any repository pattern that
-    /// awaits between BEGIN and COMMIT — without this gate, concurrent
-    /// callers race and SQLite raises "cannot start a transaction
-    /// within a transaction".
-    ///
-    /// Hand-off semantics: when a transaction releases the gate, it
-    /// resumes the next waiter directly (keeping `transactionInProgress`
-    /// = true). The woken waiter inherits the gate without re-racing
-    /// against any newly-arriving caller, avoiding starvation.
-    public func beginTransaction() async throws {
-        if transactionInProgress {
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                transactionWaiters.append(cont)
-            }
-            // On resume the gate has been handed to us — transactionInProgress
-            // is still true (set by the previous owner's release).
-        } else {
-            transactionInProgress = true
-        }
-        do {
-            try execRaw("BEGIN IMMEDIATE;")
-        } catch {
-            releaseGate()
-            throw error
-        }
-    }
-
-    public func commitTransaction() throws {
-        defer { releaseGate() }
-        try execRaw("COMMIT;")
-    }
-
-    public func rollbackTransaction() {
-        defer { releaseGate() }
-        try? execRaw("ROLLBACK;")
-    }
-
-    /// Hand the gate to the next waiter (if any), or clear the flag.
-    private func releaseGate() {
-        if !transactionWaiters.isEmpty {
-            let next = transactionWaiters.removeFirst()
-            // Keep transactionInProgress = true so a newly-arriving caller
-            // queues behind the woken waiter rather than racing past it.
-            next.resume()
-        } else {
-            transactionInProgress = false
         }
     }
 

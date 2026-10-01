@@ -1592,33 +1592,28 @@ public struct SettingsView: View {
         backupStatus = nil
         Task {
             let dbURL = DatabaseLocations.defaultDatabaseURL
-            var sidecars: [URL] = []
-            for suffix in ["-wal", "-shm"] {
-                let u = URL(fileURLWithPath: dbURL.path + suffix)
-                if FileManager.default.fileExists(atPath: u.path) { sidecars.append(u) }
-            }
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Kalsmritikosh-Backup-\(stamp)")
-            // CHECKPOINT BEFORE COPYING. The connection runs in WAL mode, so
-            // recent commits can live in `knowledge.sqlite-wal` while the main
-            // file is copied — and copying a live database with an active log
-            // can capture a torn state even though the sidecars travel too.
-            // Folding the log back first makes the copied main file
-            // self-contained. A partial checkpoint is REPORTED, not hidden:
-            // the user needs to know their backup was taken over a busy log.
-            let checkpointed = (try? await appState.database?.checkpointWAL()) ?? nil
+            // F18 — a CONSISTENT live snapshot via SQLite's Online Backup API, taken inside the
+            // Database actor, instead of "checkpoint, then copy the files": nothing stopped writes
+            // between those copies, so a busy ledger could be captured torn. The snapshot is one
+            // self-contained, integrity-checked file (the log is folded in; no sidecars to carry).
+            let scratch = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kalsmritikosh-backup-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: scratch) }
             do {
+                guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
+                try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+                let snapshot = scratch.appendingPathComponent(dbURL.lastPathComponent)
+                try await database.backupSnapshot(to: snapshot)
                 let manifest = try BackupService().createBackup(
-                    databaseURL: dbURL, originalURLs: sidecars, destination: dest,
+                    databaseURL: snapshot, originalURLs: [], destination: dest,
                     schemaVersion: SchemaMigrations.latestVersion,
                     nowEpoch: Date().timeIntervalSince1970)
                 await MainActor.run {
                     backingUp = false
-                    var msg = "Backed up \(manifest.entries.count) file(s) to “\(dest.lastPathComponent)”."
-                    if checkpointed == false {
-                        msg += " The write-ahead log was busy, so it was copied alongside the database rather than folded into it — the backup is complete, but restore it as a whole folder."
-                    }
-                    backupStatus = msg
+                    backupStatus = "Backed up the ledger to “\(dest.lastPathComponent)” (a consistent, verified snapshot). Original files and the evidence vault are not included."
+                    _ = manifest
                 }
             } catch {
                 await MainActor.run {
@@ -1644,9 +1639,16 @@ public struct SettingsView: View {
             do {
                 let (manifest, verdict) = try BackupService().inspect(backupFolder: dir)
                 await MainActor.run {
-                    backupStatus = verdict.ok
-                        ? "Backup OK — \(manifest.entries.count) file(s), schema v\(manifest.schemaVersion). Verified complete."
-                        : "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                    // F17 — the verdict now checks every file's size + checksum; say exactly what failed.
+                    if verdict.ok {
+                        backupStatus = "Backup OK — schema v\(manifest.schemaVersion). \(verdict.note)"
+                    } else if !verdict.unsafe.isEmpty {
+                        backupStatus = "Backup refused — unsafe paths in its manifest: \(verdict.unsafe.joined(separator: ", "))."
+                    } else if !verdict.corrupt.isEmpty {
+                        backupStatus = "Damaged backup — these files don't match their checksum: \(verdict.corrupt.joined(separator: ", "))."
+                    } else {
+                        backupStatus = "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                    }
                 }
             } catch {
                 await MainActor.run {

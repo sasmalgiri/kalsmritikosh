@@ -91,7 +91,8 @@ public struct EmailStructuralParser: StructuralParser {
         }
         let body = cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines)
         if !body.isEmpty {
-            add(.emailBody, body, SourceLocator(messageID: messageID),
+            // The body section of its message: citable even when the message has no Message-ID.
+            add(.emailBody, body, SourceLocator(sectionPath: ["body"], messageID: messageID),
                 ["quotedBytesRemoved": AnyCodable(.int(Int64(quotedBytes)))])
         }
         for url in attachmentURLs {

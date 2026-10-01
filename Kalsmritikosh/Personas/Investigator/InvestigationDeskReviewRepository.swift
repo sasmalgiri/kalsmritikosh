@@ -24,28 +24,23 @@ public actor InvestigationDeskReviewRepository {
         guard !cleanActor.isEmpty else { throw InvestigationDeskError.blankActor }
         let cleanItem = itemID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sp = "invdesk_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
-        var created = date
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
+        let noteValue: SQLValue = note.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .text($0) } ?? .null
+        // F28 — read the prior created_at, replace and insert in ONE isolated savepoint.
+        try await database.withSavepoint(sp) { db in
             // Preserve the original created_at if a prior disposition exists.
-            if let existing = try await database.query(
+            var created = date
+            if let existing = try db.query(
                 "SELECT created_at FROM investigation_desk_reviews WHERE case_id = ? AND item_kind = ? AND item_id = ? LIMIT 1;",
                 [.uuid(caseID), .text(itemKind.rawValue), .text(cleanItem)]).first, let c = existing.date(0) {
                 created = c
             }
-            try await database.exec("DELETE FROM investigation_desk_reviews WHERE case_id = ? AND item_kind = ? AND item_id = ?;",
-                                    [.uuid(caseID), .text(itemKind.rawValue), .text(cleanItem)])
-            try await database.exec("""
+            try db.exec("DELETE FROM investigation_desk_reviews WHERE case_id = ? AND item_kind = ? AND item_id = ?;",
+                        [.uuid(caseID), .text(itemKind.rawValue), .text(cleanItem)])
+            try db.exec("""
                 INSERT INTO investigation_desk_reviews (id, case_id, item_kind, item_id, decision, note, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(caseID), .text(itemKind.rawValue), .text(cleanItem), .text(decision.rawValue),
-                      note.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .text($0) } ?? .null,
-                      .text(cleanActor), .date(created), .date(date)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+                      noteValue, .text(cleanActor), .date(created), .date(date)])
         }
         return try await requireReview(caseID: caseID, itemKind: itemKind, itemID: cleanItem)
     }

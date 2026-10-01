@@ -751,6 +751,10 @@ public final class AppState {
     public private(set) var entityTimeline: EntityTimeline?
     /// In-memory Trie + fuzzy index for entity hint resolution.
     public private(set) var entityTrie: EntityTrie?
+    /// F12 — the memory-pressure governor (kernel signal → drains, lanes, caches).
+    public private(set) var memoryPressure: MemoryPressureGovernor?
+    /// The watcher's ingest lanes; kept so memory pressure can narrow them.
+    private var laneScheduler: LaneScheduler?
     /// HNSW ANN index over the `vectors` table. Built at boot in
     /// parallel with the other caches. When built, SQLiteVectorStore
     /// .nearest takes the index path; brute-force is the fallback.
@@ -1750,6 +1754,8 @@ public final class AppState {
             let sourceUpgradeJobs = SourceUpgradeJobRepository(database: db)
             await ingest.configureUpgrades(database: db, jobs: sourceUpgradeJobs, priorityGate: priorityGate)
             _ = try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
+            // F20 — the supervised background worker that actually runs scheduled upgrades.
+            await ingest.startUpgradeDrain()
 
             // AEE-M1 — now that the upgrade subsystem is live, give the brain its adaptive
             // evidence bridge so a mission that needs evidence-ready DECISIVE sources can
@@ -2145,12 +2151,13 @@ public final class AppState {
             //   network      = 4           (cloud OCR / reasoning)
             // Mixed-format corpora hit ~3× speedup; same-format
             // bursts unchanged (still bounded by their own lane).
-            let laneScheduler = LaneScheduler(
-                capacities: LaneScheduler.defaultCapacities(
-                    processorCount: ProcessInfo.processInfo.activeProcessorCount,
-                    availableRAMBytes: hardware.totalRAMBytes
-                )
+            let laneCapacities = LaneScheduler.defaultCapacities(
+                processorCount: ProcessInfo.processInfo.activeProcessorCount,
+                availableRAMBytes: hardware.totalRAMBytes
             )
+            let laneScheduler = LaneScheduler(capacities: laneCapacities)
+            let watcherInFlightLimit = BoundedFanOut.watcherLimit(capacities: laneCapacities)
+            self.laneScheduler = laneScheduler
             // Phase L — chat + browser loaders are flag-gated for
             // App Store compatibility. Default OFF; user opts in via
             // Settings. Plain-text chat exports default ON since
@@ -2179,20 +2186,17 @@ public final class AppState {
                     if discovered > 0 {
                         await MainActor.run { self.noteDiscoveredFiles(discovered) }
                     }
-                    await withTaskGroup(of: Void.self) { group in
-                        for url in event.urls {
-                            group.addTask { [weak self, weak ingest] in
-                                guard let self, let ingest else { return }
-                                let type = SourceType.detect(from: url)
-                                let lane = loaderRegistry.loader(for: type).primaryLane
-                                await laneScheduler.withLane(lane) {
-                                    await self.withIngestActivity(file: url.lastPathComponent) {
-                                        do {
-                                            _ = try await ingest.ingest(fileAt: url)
-                                        } catch {
-                                            KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                                        }
-                                    }
+                    // F12 — bounded fan-out: only `watcherLimit` files resident at once.
+                    await BoundedFanOut.forEach(event.urls, maxInFlight: watcherInFlightLimit) { [weak self, weak ingest] url in
+                        guard let self, let ingest else { return }
+                        let type = SourceType.detect(from: url)
+                        let lane = loaderRegistry.loader(for: type).primaryLane
+                        await laneScheduler.withLane(lane) {
+                            await self.withIngestActivity(file: url.lastPathComponent) {
+                                do {
+                                    _ = try await ingest.ingest(fileAt: url)
+                                } catch {
+                                    KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                                 }
                             }
                         }
@@ -2262,7 +2266,13 @@ public final class AppState {
                         objects: objects, priorityGate: priorityGate, typedFields: TypedFieldRepository(database: db),
                         sensitiveScope: sensitiveScopesRepo)
                 },
-                artifacts: casePhaseArtifactsRepo)
+                artifacts: casePhaseArtifactsRepo,
+                // F08 — case-scoped recall on every lane (keyword, vector, events, entities, graph), the
+                // scope inside each query before LIMIT. nil policy MIRRORS the shared HybridRetriever
+                // (sensitivity is enforced downstream in ExpertContext for base and recovered items alike).
+                scopedRecall: SourceScopedRetriever.ScopedRecall(
+                    chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
+                    events: events, entities: entities, relationships: relationships))
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.
@@ -2564,6 +2574,18 @@ public final class AppState {
             self.memoryCache = memoryHashCache
             self.entityTimeline = entityTimelineCache
             self.entityTrie = entityTrieCache
+            // F12 — memory pressure pauses background drains, narrows the ingest lanes, and at
+            // critical sheds the retrieval caches (retrieval falls back to SQL).
+            let pressure = MemoryPressureGovernor()
+            await MemoryPressureResponse.install(on: pressure, ingest: ingest, lanes: laneScheduler,
+                                                 memory: memoryHashCache, timeline: entityTimelineCache,
+                                                 trie: entityTrieCache,
+                                                 rewarm: .init(
+                                                    memory: { await memoryHashCache.warm(memory: memoryRepo) },
+                                                    timeline: { await entityTimelineCache.warm(events: events) },
+                                                    trie: { await entityTrieCache.warm(entities: entities) }))
+            await pressure.startMonitoring()
+            self.memoryPressure = pressure
             self.hnswIndex = hnsw
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
@@ -4259,13 +4281,15 @@ public final class AppState {
         let plan = QuestionPlan.derive(question: question, anchors: anchors)
         guard plan.shape != QuestionShape.outOfScope.rawValue else { return nil }
 
-        let tools = LedgerTools(
+        var tools = LedgerTools(
             events: { [weak events] tokens in (try? await events?.findByTitleTokens(tokens)) ?? [] },
             facts: { [weak genericFacts] field in (try? await genericFacts?.facts(field: field)) ?? [] },
             chunksForQuestion: { [weak chunks] q in
                 let hits = (try? await chunks?.searchFTS(SlotFieldResolver.expandAliases(q), limit: 15)) ?? []
                 return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
             })
+        // F06 — field results cite the document that owns their source blocks.
+        if let evidenceStore { tools.blockOwners = LedgerTools.blockOwners(using: evidenceStore) }
         // The loop law: history → field lookup → ONE span fetch.
         let shape = QuestionShape(rawValue: plan.shape) ?? .unresolved
         var results: [ToolResult]

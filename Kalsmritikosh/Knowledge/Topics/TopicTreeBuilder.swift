@@ -209,49 +209,52 @@ public struct TopicTreeBuilder {
         }
 
         // 4 — persist level-1 (replace wholesale; level-0 untouched) + labels.
-        try await database.exec("SAVEPOINT topic_tree;", [])
-        do {
-            try await database.exec("DELETE FROM entity_communities WHERE level = 1;", [])
+        // Labels may read the ledger (async), so every node and label is decided BEFORE the write
+        // savepoint; the savepoint then only writes (F28 — one isolated unit).
+        struct Node: Sendable { let id: String; let members: [UUID]; let label: String? }
+        var nodes: [Node] = []
+        for (root, children) in groups.sorted(by: { $0.key < $1.key }) {
+            // A parent with one child adds no structure — leaves stay leaves —
+            // EXCEPT a matter: one substantial community that names an
+            // identifier anchor IS a top-level topic (P1.16: once hubs and
+            // attributes left the graph, the owner's whole patent matter
+            // formed ONE community, and Big Picture — level-1 only — lost it).
+            if children.count < 2 {
+                guard let only = children.first,
+                      (members[only]?.count ?? 0) >= 5,
+                      (signature[only] ?? []).contains(where: { $0.hasPrefix("anchor:") }) else { continue }
+            }
+            let allMembers = children.flatMap { members[$0] ?? [] }
+                .sorted { $0.uuidString < $1.uuidString }
+            let label = try await deterministicLabel(for: children, signature: signature,
+                                                     anchorCanonsForLabels: Set(anchorCanons.keys))
+            nodes.append(Node(id: "L1-" + root, members: allMembers, label: label))
+        }
+        let finalNodes = nodes
+        // 4 — persist level-1 (replace wholesale; level-0 untouched) + labels.
+        try await database.withSavepoint("topic_tree") { db in
+            try db.exec("DELETE FROM entity_communities WHERE level = 1;", [])
             // Replace the labels with the nodes: a node that no longer exists
             // kept its old label, so stale titles outlived every rebuild.
-            try await database.exec("DELETE FROM community_summaries WHERE level = 1;", [])
+            try db.exec("DELETE FROM community_summaries WHERE level = 1;", [])
             let now = Date().timeIntervalSince1970
-            for (root, children) in groups.sorted(by: { $0.key < $1.key }) {
-                // A parent with one child adds no structure — leaves stay leaves —
-                // EXCEPT a matter: one substantial community that names an
-                // identifier anchor IS a top-level topic (P1.16: once hubs and
-                // attributes left the graph, the owner's whole patent matter
-                // formed ONE community, and Big Picture — level-1 only — lost it).
-                if children.count < 2 {
-                    guard let only = children.first,
-                          (members[only]?.count ?? 0) >= 5,
-                          (signature[only] ?? []).contains(where: { $0.hasPrefix("anchor:") }) else { continue }
-                }
-                let allMembers = children.flatMap { members[$0] ?? [] }
-                    .sorted { $0.uuidString < $1.uuidString }
-                let nodeID = "L1-" + root
-                for eid in allMembers {
-                    try await database.exec("""
+            for node in finalNodes {
+                for eid in node.members {
+                    try db.exec("""
                     INSERT OR REPLACE INTO entity_communities (community_id, entity_id, level, computed_at)
                     VALUES (?, ?, 1, ?);
-                    """, [.text(nodeID), .uuid(eid), .real(now)])
+                    """, [.text(node.id), .uuid(eid), .real(now)])
                 }
-                receipt.levelOneNodes += 1
-                if let label = try await deterministicLabel(for: children, signature: signature,
-                                                           anchorCanonsForLabels: Set(anchorCanons.keys)) {
-                    try await database.exec("""
+                if let label = node.label {
+                    try db.exec("""
                     INSERT OR REPLACE INTO community_summaries (community_id, level, title, summary, member_count, top_entity_ids_json, computed_at)
                     VALUES (?, 1, ?, '', ?, '[]', ?);
-                    """, [.text(nodeID), .text(label), .integer(Int64(allMembers.count)), .real(now)])
-                    receipt.labeled += 1
+                    """, [.text(node.id), .text(label), .integer(Int64(node.members.count)), .real(now)])
                 }
             }
-            try await database.exec("RELEASE topic_tree;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO topic_tree;", [])
-            try? await database.exec("RELEASE topic_tree;", [])
-            throw error
         }
+        receipt.levelOneNodes += finalNodes.count
+        receipt.labeled += finalNodes.filter { $0.label != nil }.count
         Self.log.info("TopicTree: \(receipt.levelZeroNodes) leaves → \(receipt.levelOneNodes) level-1 nodes (\(receipt.labeled) labeled)")
         return receipt
     }

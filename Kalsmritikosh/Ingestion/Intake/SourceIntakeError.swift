@@ -18,6 +18,11 @@ public nonisolated enum SourceIntakeError: Error, Equatable, Sendable {
     case securityScopeUnavailable(URL)
     /// The file's size / modification time / resource identity changed during hashing.
     case sourceChangedDuringCapture(URL)
+    /// F03 — a live SQLite source stayed locked (BUSY / LOCKED) past the acquisition deadline. RETRYABLE:
+    /// nothing was captured, no version exists, and the next intake of the same path tries again.
+    case acquisitionTimedOut(URL, reason: String)
+    /// F03 — the acquisition was cancelled while it waited on a lock; nothing was captured.
+    case acquisitionCancelled(URL)
     /// The streaming hash could not be computed.
     case hashComputationFailed(URL)
     /// Managed-copy storage into the evidence vault failed (source stays visible as managedCopyFailed).

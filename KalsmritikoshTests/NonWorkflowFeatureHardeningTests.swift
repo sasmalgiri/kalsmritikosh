@@ -95,6 +95,31 @@ struct NonWorkflowFeatureHardeningTests {
         #expect(out?.findString("Bravo", withOptions: [.caseInsensitive]).isEmpty ?? false)
     }
 
+    @Test("F24 — a page that fails to render refuses the redaction; it never becomes a blank 'verified' page")
+    func redactionRenderFailureFailsClosed() throws {
+        let url = try makePDF([.text("Alpha is secret.")])
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(throws: PDFRedactionError.self) {
+            _ = try PDFRedactionService(flattener: { _, _, _, _ in nil }).redact(source: url, terms: ["Alpha"])
+        }
+    }
+
+    @Test("F24 — an unreadable or page-losing output is never 'verified'")
+    func unreadableOutputNeverVerified() throws {
+        #expect(throws: PDFRedactionError.self) {
+            _ = try PDFRedactionService.residualTerms(in: Data("not a pdf".utf8), terms: ["x"],
+                                                      caseSensitive: false, expectedPageCount: 1)
+        }
+        let url = try makePDF([.text("One page.")])
+        defer { try? FileManager.default.removeItem(at: url) }
+        let data = try Data(contentsOf: url)
+        #expect(throws: PDFRedactionError.self) {
+            _ = try PDFRedactionService.residualTerms(in: data, terms: ["x"], caseSensitive: false, expectedPageCount: 2)
+        }
+        #expect(try PDFRedactionService.residualTerms(in: data, terms: ["absent"], caseSensitive: false,
+                                                      expectedPageCount: 1).isEmpty)
+    }
+
     @Test("A scanned/image-only page is counted as a redaction caveat")
     func redactionScannedPageCaveat() throws {
         let url = try makePDF([.text("Page one has the SECRETWORD here."), .imageOnly])

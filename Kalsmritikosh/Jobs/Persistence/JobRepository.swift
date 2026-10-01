@@ -45,10 +45,10 @@ public actor JobRepository {
                                lifecycle: .active, revision: 1, createdAt: date, updatedAt: date,
                                closedAt: nil, closureReason: nil)
         let sp = savepointName("job_create", job.id)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
             let b = budgetColumns(budget)
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO job_objectives (id, workspace_id, title, objective_detail, budget_basis,
                     budget_seconds, budget_deadline_id, budget_workflow_run_id, primary_workflow_run_id,
                     lifecycle, revision, created_at, updated_at, closed_at, closure_reason)
@@ -57,13 +57,8 @@ public actor JobRepository {
                       .text(budget.basis.rawValue), b.seconds, b.deadline, b.workflow,
                       primaryWorkflowRunID.map { SQLValue.uuid($0) } ?? .null,
                       .text(JobLifecycle.active.rawValue), .integer(1), .date(date), .date(date), .null, .null])
-            try await appendEvent(jobID: job.id, sequence: 1, revision: 1, action: .created,
+            try Self.appendEvent(db, jobID: job.id, sequence: 1, revision: 1, action: .created,
                                   actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(job.id)
     }
@@ -81,21 +76,16 @@ public actor JobRepository {
         try await validateBudget(budget, workspaceID: job.workspaceID)
         let newRev = job.revision + 1
         let sp = savepointName("job_budget", jobID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
             let b = budgetColumns(budget)
-            try await database.exec("""
+            try db.exec("""
                 UPDATE job_objectives SET budget_basis = ?, budget_seconds = ?, budget_deadline_id = ?,
                     budget_workflow_run_id = ?, revision = ?, updated_at = ? WHERE id = ?;
                 """, [.text(budget.basis.rawValue), b.seconds, b.deadline, b.workflow,
                       .integer(Int64(newRev)), .date(date), .uuid(jobID)])
-            try await appendEvent(jobID: jobID, sequence: try await nextSequence(jobID), revision: newRev,
+            try Self.appendEvent(db, jobID: jobID, sequence: try Self.nextSequence(db, jobID), revision: newRev,
                                   action: .budgetSet, actor: actor, detail: budget.basis.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(jobID)
     }
@@ -126,10 +116,10 @@ public actor JobRepository {
         let newRev = job.revision + 1
         let refID = UUID()
         let sp = savepointName("job_ref_add", refID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let ordinal = try await nextOrdinal(jobID)
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let ordinal = try Self.nextOrdinal(db, jobID)
+            try db.exec("""
                 INSERT INTO job_plan_references (id, job_id, reference_kind, reference_id, workflow_run_id,
                     role, is_minimum_deliverable, ordinal, note, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
@@ -137,14 +127,9 @@ public actor JobRepository {
                       workflowRunID.map { SQLValue.uuid($0) } ?? .null, .text(role.rawValue),
                       .integer(isMinimumDeliverable ? 1 : 0), .integer(Int64(ordinal)),
                       .optionalText(note), .date(date)])
-            try await bumpRevision(jobID: jobID, to: newRev, at: date)
-            try await appendEvent(jobID: jobID, sequence: try await nextSequence(jobID), revision: newRev,
+            try Self.bumpRevision(db, jobID: jobID, to: newRev, at: date)
+            try Self.appendEvent(db, jobID: jobID, sequence: try Self.nextSequence(db, jobID), revision: newRev,
                                   action: .referenceAdded, actor: actor, detail: kind.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(jobID)
     }
@@ -160,19 +145,14 @@ public actor JobRepository {
         try requireRevision(job, expectedRevision)
         let newRev = job.revision + 1
         let sp = savepointName("job_ref_upd", referenceID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 UPDATE job_plan_references SET role = ?, is_minimum_deliverable = ? WHERE id = ?;
                 """, [.text(role.rawValue), .integer(isMinimumDeliverable ? 1 : 0), .uuid(referenceID)])
-            try await bumpRevision(jobID: jobID, to: newRev, at: date)
-            try await appendEvent(jobID: jobID, sequence: try await nextSequence(jobID), revision: newRev,
+            try Self.bumpRevision(db, jobID: jobID, to: newRev, at: date)
+            try Self.appendEvent(db, jobID: jobID, sequence: try Self.nextSequence(db, jobID), revision: newRev,
                                   action: .referenceUpdated, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(jobID)
     }
@@ -188,17 +168,12 @@ public actor JobRepository {
         try requireRevision(job, expectedRevision)
         let newRev = job.revision + 1
         let sp = savepointName("job_ref_rm", referenceID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("DELETE FROM job_plan_references WHERE id = ?;", [.uuid(referenceID)])
-            try await bumpRevision(jobID: jobID, to: newRev, at: date)
-            try await appendEvent(jobID: jobID, sequence: try await nextSequence(jobID), revision: newRev,
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("DELETE FROM job_plan_references WHERE id = ?;", [.uuid(referenceID)])
+            try Self.bumpRevision(db, jobID: jobID, to: newRev, at: date)
+            try Self.appendEvent(db, jobID: jobID, sequence: try Self.nextSequence(db, jobID), revision: newRev,
                                   action: .referenceRemoved, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(jobID)
     }
@@ -232,19 +207,14 @@ public actor JobRepository {
         try requireRevision(job, expectedRevision)
         let newRev = job.revision + 1
         let sp = savepointName("job_reopen", jobID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 UPDATE job_objectives SET lifecycle = ?, closed_at = NULL, closure_reason = NULL,
                     revision = ?, updated_at = ? WHERE id = ?;
                 """, [.text(JobLifecycle.active.rawValue), .integer(Int64(newRev)), .date(date), .uuid(jobID)])
-            try await appendEvent(jobID: jobID, sequence: try await nextSequence(jobID), revision: newRev,
+            try Self.appendEvent(db, jobID: jobID, sequence: try Self.nextSequence(db, jobID), revision: newRev,
                                   action: .reopened, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(jobID)
     }
@@ -298,20 +268,15 @@ public actor JobRepository {
         try requireRevision(job, expectedRevision)
         let newRev = job.revision + 1
         let sp = savepointName("job_life", jobID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 UPDATE job_objectives SET lifecycle = ?, closed_at = ?, closure_reason = ?,
                     revision = ?, updated_at = ? WHERE id = ?;
                 """, [.text(lifecycle.rawValue), .date(date), .optionalText(reason),
                       .integer(Int64(newRev)), .date(date), .uuid(jobID)])
-            try await appendEvent(jobID: jobID, sequence: try await nextSequence(jobID), revision: newRev,
+            try Self.appendEvent(db, jobID: jobID, sequence: try Self.nextSequence(db, jobID), revision: newRev,
                                   action: action, actor: actor, detail: reason, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await require(jobID)
     }
@@ -442,31 +407,31 @@ public actor JobRepository {
         Int(try await database.query("SELECT COUNT(*) FROM \(table) WHERE id = ?;", [.uuid(id)]).first?.int(0) ?? 0) > 0
     }
 
-    private func nextSequence(_ jobID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM job_events WHERE job_id = ?;",
+    private static func nextSequence(_ db: isolated Database, _ jobID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(sequence), 0) FROM job_events WHERE job_id = ?;",
                                      [.uuid(jobID)]).first?.int(0) ?? 0) + 1
     }
 
-    private func nextOrdinal(_ jobID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(ordinal), -1) FROM job_plan_references WHERE job_id = ?;",
+    private static func nextOrdinal(_ db: isolated Database, _ jobID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(ordinal), -1) FROM job_plan_references WHERE job_id = ?;",
                                      [.uuid(jobID)]).first?.int(0) ?? -1) + 1
     }
 
-    private func bumpRevision(jobID: UUID, to revision: Int, at date: Date) async throws {
-        try await database.exec("UPDATE job_objectives SET revision = ?, updated_at = ? WHERE id = ?;",
+    private static func bumpRevision(_ db: isolated Database, jobID: UUID, to revision: Int, at date: Date) throws {
+        try db.exec("UPDATE job_objectives SET revision = ?, updated_at = ? WHERE id = ?;",
                                 [.integer(Int64(revision)), .date(date), .uuid(jobID)])
     }
 
-    private func appendEvent(jobID: UUID, sequence: Int, revision: Int, action: JobEventAction,
-                             actor: String, detail: String?, at date: Date) async throws {
-        try await database.exec("""
+    private static func appendEvent(_ db: isolated Database, jobID: UUID, sequence: Int, revision: Int, action: JobEventAction,
+                             actor: String, detail: String?, at date: Date) throws {
+        try db.exec("""
             INSERT INTO job_events (id, job_id, sequence, job_revision, action, actor, detail, occurred_at)
             VALUES (?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(jobID), .integer(Int64(sequence)), .integer(Int64(revision)),
                   .text(action.rawValue), .text(actor), .optionalText(detail), .date(date)])
     }
 
-    private func budgetColumns(_ budget: TimeBudget) -> (seconds: SQLValue, deadline: SQLValue, workflow: SQLValue) {
+    private nonisolated func budgetColumns(_ budget: TimeBudget) -> (seconds: SQLValue, deadline: SQLValue, workflow: SQLValue) {
         (budget.explicitDuration.map { SQLValue.real($0) } ?? .null,
          budget.deadlineID.map { SQLValue.uuid($0) } ?? .null,
          budget.workflowRunID.map { SQLValue.uuid($0) } ?? .null)

@@ -67,7 +67,22 @@ public nonisolated struct ParsedDocument: Sendable {
     /// the deterministic DocumentProfile's "first meaningful block".
     public var meaningfulBlocks: [EvidenceBlock] {
         blocks
-            .filter { !$0.kind.isBoilerplate && $0.normalizedText.count >= 3 }
+            .filter(\.isMeaningful)
             .sorted { $0.ordinal < $1.ordinal }
+    }
+}
+
+extension EvidenceBlock {
+    /// A substantive block: not boilerplate and carrying real text. The ONE rule both the committed
+    /// structural receipt and live reconciliation (F15) count by.
+    public nonisolated var isMeaningful: Bool { !kind.isBoilerplate && normalizedText.count >= 3 }
+
+    /// F16 — the parser-native RECORD this block belongs to, independent of display order: a database
+    /// row's record key or a mailbox message's index. Ownership is carried between derivations by this
+    /// identity, never by ordinal. Nil for a block of a single-record document.
+    public nonisolated var recordIdentity: String? {
+        if case .string(let k)? = attributes[SQLiteRecordKey.attributeKey]?.value { return "record:\(k)" }
+        if case .int(let i)? = attributes["messageIndex"]?.value { return "message:\(i)" }
+        return nil
     }
 }

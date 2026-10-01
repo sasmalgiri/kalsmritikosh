@@ -102,7 +102,7 @@ struct SourceUpgradeJobRepositoryTests {
         let sv = UUID(); try await seedVersion(db, sv)
         _ = try await repo.enqueue(sourceVersionID: sv, kind: .indexing, at: t0)
         let job = try #require(try await repo.claimNext(at: t0))
-        try await repo.succeed(job.id, at: t0)
+        try await repo.succeed(job, at: t0)
         #expect(try await repo.job(job.id)?.state == .done)
         #expect(try await repo.events(jobID: job.id).map(\.action) == ["enqueue", "claim", "succeed"])
     }
@@ -113,10 +113,10 @@ struct SourceUpgradeJobRepositoryTests {
         let sv = UUID(); try await seedVersion(db, sv)
         _ = try await repo.enqueue(sourceVersionID: sv, kind: .ocr, maxAttempts: 2, at: t0)
         let j1 = try #require(try await repo.claimNext(at: t0))                       // attempts 1
-        try await repo.fail(j1.id, error: "boom", at: t0)
+        try await repo.fail(j1, error: "boom", at: t0)
         #expect(try await repo.job(j1.id)?.state == .pending)                          // requeued (1 < 2)
         let j2 = try #require(try await repo.claimNext(at: t0.addingTimeInterval(100)))  // attempts 2
-        try await repo.fail(j2.id, error: "boom again", at: t0)
+        try await repo.fail(j2, error: "boom again", at: t0)
         #expect(try await repo.job(j2.id)?.state == .failed)                           // exhausted (2 >= 2)
         #expect(try await repo.job(j2.id)?.lastError == "boom again")
     }
@@ -168,7 +168,7 @@ struct SourceUpgradeJobRepositoryTests {
         _ = try await repo.enqueue(sourceVersionID: sv, kind: .indexing, at: t0)
         let done = try await repo.enqueue(sourceVersionID: sv, kind: .embedding, at: t0)
         let dj = try #require(try await repo.claimNext(at: t0))
-        try await repo.succeed(dj.id, at: t0)   // one already done — not active
+        try await repo.succeed(dj, at: t0)   // one already done — not active
         let n = try await repo.supersedeActive(sourceVersionID: sv, at: t0)
         #expect(n == 2)                          // ocr + indexing (the other claimed-then-done one, or remaining)
         #expect(try await repo.job(done.id) != nil)
@@ -187,14 +187,65 @@ struct SourceUpgradeJobRepositoryTests {
         #expect(overlay.running.count == 1)
     }
 
+    @Test("F21 — a reclaimed job's old worker cannot complete it; the new owner can")
+    func staleWorkerFenced() async throws {
+        let (db, repo) = try await makeRig()
+        let sv = UUID(); try await seedVersion(db, sv)
+        _ = try await repo.enqueue(sourceVersionID: sv, kind: .ocr, at: t0)
+        let oldClaim = try #require(try await repo.claimNext(leaseSeconds: 1, at: t0))
+        #expect(try await repo.recoverExpiredLeases(at: t0.addingTimeInterval(10)) == 1)
+        let newClaim = try #require(try await repo.claimNext(at: t0.addingTimeInterval(11)))
+        #expect(newClaim.leaseToken != oldClaim.leaseToken)
+        // The old worker finishes late: every terminal write it attempts is rejected.
+        await #expect(throws: SourceUpgradeError.staleLease(oldClaim.id)) { try await repo.succeed(oldClaim, at: t0) }
+        await #expect(throws: SourceUpgradeError.staleLease(oldClaim.id)) { try await repo.fail(oldClaim, error: "x", at: t0) }
+        await #expect(throws: SourceUpgradeError.staleLease(oldClaim.id)) { try await repo.failTerminal(oldClaim, error: "x", at: t0) }
+        #expect(try await repo.job(newClaim.id)?.state == .running)
+        try await repo.succeed(newClaim, at: t0.addingTimeInterval(12))
+        #expect(try await repo.job(newClaim.id)?.state == .done)
+    }
+
+    @Test("F21 — a cancelled job stays cancelled when its worker finishes afterwards")
+    func cancelledJobNotResurrected() async throws {
+        let (db, repo) = try await makeRig()
+        let sv = UUID(); try await seedVersion(db, sv)
+        _ = try await repo.enqueue(sourceVersionID: sv, kind: .indexing, at: t0)
+        let claim = try #require(try await repo.claimNext(at: t0))
+        try await repo.cancel(claim.id, at: t0)
+        await #expect(throws: SourceUpgradeError.staleLease(claim.id)) { try await repo.succeed(claim, at: t0) }
+        await #expect(throws: SourceUpgradeError.staleLease(claim.id)) {
+            try await repo.block(claim.id, reason: "late", lease: claim.leaseToken, at: t0)
+        }
+        #expect(try await repo.job(claim.id)?.state == .cancelled)
+    }
+
     @Test("Job events carry a strictly increasing sequence")
     func eventSequence() async throws {
         let (db, repo) = try await makeRig()
         let sv = UUID(); try await seedVersion(db, sv)
         _ = try await repo.enqueue(sourceVersionID: sv, kind: .ocr, at: t0)
         let j = try #require(try await repo.claimNext(at: t0))
-        try await repo.succeed(j.id, at: t0)
+        try await repo.succeed(j, at: t0)
         let seqs = try await repo.events(jobID: j.id).map(\.sequence)
         #expect(seqs == [1, 2, 3])
+    }
+
+    @Test("A job enqueued at `now` is claimable at that same `now`, even when the stored REAL rounds up")
+    func claimAtEnqueueInstant() async throws {
+        // Find an instant whose 1970-epoch round trip decodes LATER than itself — the case in which a
+        // Date comparison against the decoded not_before refused the claim.
+        var now = Date(timeIntervalSince1970: 1_790_000_000.123456)
+        var probes = 0
+        while Date(timeIntervalSince1970: now.timeIntervalSince1970) <= now, probes < 100_000 {
+            now = now.addingTimeInterval(0.000_137)
+            probes += 1
+        }
+        let reproduced = Date(timeIntervalSince1970: now.timeIntervalSince1970) > now
+        try #require(reproduced, "no round-up instant found to exercise the defect")
+        let (db, repo) = try await makeRig()
+        let sv = UUID(); try await seedVersion(db, sv)
+        let job = try await repo.enqueue(sourceVersionID: sv, kind: .indexing, at: now)
+        let claimed = try await repo.claim(jobID: job.id, at: now)
+        #expect(claimed?.state == .running, "a foreground claim at the enqueue instant must succeed")
     }
 }

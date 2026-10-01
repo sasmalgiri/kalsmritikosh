@@ -140,9 +140,13 @@ struct WorkbenchTransformRepositoryTests {
         #expect(byKey["A"]?.outputValue == "125")
         #expect(byKey["B"]?.outputValue == "50")
         #expect(byKey["A"]?.outputCellID == nil)   // an aggregate produces no grid cell
-        // Group A's inputs are the two A-row amount cells.
+        // Group A's inputs are the two A-row amount cells plus (F27) the two "cat" cells that
+        // placed those rows in group A.
         let aInputs = try await f.transforms.inputs(derivationID: byKey["A"]!.id)
-        #expect(Set(aInputs.map(\.inputCellID)) == Set([f.amountCellIDs[0], f.amountCellIDs[2]]))
+        let rec = try await f.datasets.fetch(datasetID: f.datasetID)!
+        let aCatCells = rec.cells.filter { $0.fieldID == f.catFieldID && [f.rowIDs[0], f.rowIDs[2]].contains($0.rowID) }.map(\.id)
+        #expect(Set(aInputs.map(\.inputCellID)) == Set([f.amountCellIDs[0], f.amountCellIDs[2]] + aCatCells))
+        #expect(aCatCells.count == 2)
     }
 
     // MARK: - Fail-closed guarantees

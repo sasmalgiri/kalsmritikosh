@@ -59,25 +59,21 @@ public actor InvestigationFindingsApprovalRepository {
         let cleanSeal = receiptSeal.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanSeal.isEmpty else { throw InvestigationFindingsError.blankReceiptSeal }
         let id = UUID()
-        var sequence = 0
         let sp = "invapprove_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let header = try await database.query("SELECT id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first
+        let fingerprint = scopeFingerprint.value
+        // F28 — case check, sequence allocation and insert in ONE isolated savepoint.
+        let sequence = try await database.withSavepoint(sp) { db -> Int in
+            let header = try db.query("SELECT id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first
             guard header != nil else { throw InvestigationFindingsError.caseNotFound(caseID) }
-            sequence = Int(try await database.query(
+            let next = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_findings_approvals WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO investigation_findings_approvals (id, case_id, sequence, decision, work_product_run_id,
                     receipt_seal, scope_fingerprint, rationale, actor, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
-                """, [.uuid(id), .uuid(caseID), .integer(Int64(sequence)), .text(decision.rawValue), .uuid(workProductRunID),
-                      .text(cleanSeal), .text(scopeFingerprint.value), .text(cleanRationale), .text(cleanActor), .date(date)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+                """, [.uuid(id), .uuid(caseID), .integer(Int64(next)), .text(decision.rawValue), .uuid(workProductRunID),
+                      .text(cleanSeal), .text(fingerprint), .text(cleanRationale), .text(cleanActor), .date(date)])
+            return next
         }
         return InvestigationFindingsApproval(id: id, caseID: caseID, sequence: sequence, decision: decision,
                                              workProductRunID: workProductRunID, receiptSeal: cleanSeal,

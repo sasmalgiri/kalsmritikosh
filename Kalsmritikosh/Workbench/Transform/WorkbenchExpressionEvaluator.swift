@@ -25,9 +25,13 @@ public nonisolated enum WorkbenchEvaluationError: Error, Sendable, Equatable {
     case unknownField(String)
     case wrongArgumentCount(function: String, got: Int)
     case unknownDateUnit(String)
+    case invalidArgument(function: String, reason: String)
 }
 
 public nonisolated enum WorkbenchExpressionEvaluator {
+
+    /// F26 — ROUND precision bound (a Double carries ~15-17 significant digits).
+    nonisolated static let maxRoundPlaces = 15
 
     /// A fixed UTC Gregorian calendar — deterministic, host-independent date math.
     private nonisolated static let utcCalendar: Calendar = {
@@ -158,9 +162,18 @@ public nonisolated enum WorkbenchExpressionEvaluator {
         case "ROUND":
             guard argExprs.count == 1 || argExprs.count == 2 else { throw WorkbenchEvaluationError.wrongArgumentCount(function: name, got: argExprs.count) }
             guard let x = try evaluate(argExprs[0], in: ctx).asNumber else { return .null }
-            let places = argExprs.count == 2 ? (try evaluate(argExprs[1], in: ctx).asNumber.map { Int($0) } ?? 0) : 0
+            // F26 — the precision must be a finite whole number in ±maxRoundPlaces; `Int(_:)` on
+            // NaN / ±inf / 1e20 traps, so it is checked BEFORE conversion.
+            var places = 0
+            if argExprs.count == 2, let p = try evaluate(argExprs[1], in: ctx).asNumber {
+                guard p.isFinite, p == p.rounded(), abs(p) <= Double(maxRoundPlaces) else {
+                    throw WorkbenchEvaluationError.invalidArgument(function: name, reason: "precision must be a whole number from -\(maxRoundPlaces) to \(maxRoundPlaces)")
+                }
+                places = Int(p)
+            }
             let f = pow(10.0, Double(places))
-            return .number((x * f).rounded() / f)
+            let rounded = (x * f).rounded() / f
+            return rounded.isFinite ? .number(rounded) : .null
         case "MOD":
             try arity(2)
             guard let a = try evaluate(argExprs[0], in: ctx).asNumber, let b = try evaluate(argExprs[1], in: ctx).asNumber, b != 0 else { return .null }

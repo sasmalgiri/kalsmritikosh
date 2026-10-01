@@ -189,7 +189,10 @@ public nonisolated struct HistoryOutlineBuilder: Sendable {
             earliest: starts.first, latest: dated.compactMap { $0.end?.end ?? $0.start?.start }.max(),
             evidenceObjectCount: material.evidenceObjectIDs.count,
             assertionCount: material.assertions.count, genericFactCount: material.genericFacts.count,
-            eventCount: material.events.count)
+            eventCount: material.events.count,
+            deferredEventCount: material.provenance.deferredEventCount,
+            deferredAssertionCount: material.provenance.deferredAssertionCount,
+            deferredRelationshipCount: material.provenance.deferredRelationshipCount)
 
         // Keep the full item list in a stable order: chronological, undated,
         // then the reviewed-out tail (visible, never silently dropped).

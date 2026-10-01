@@ -51,16 +51,15 @@ public actor WorkbenchDatasetRepository {
         guard try await rowExists("workspaces", id: workspaceID) else { throw WorkbenchError.workspaceNotFound(workspaceID) }
         let id = UUID()
         let sp = savepoint("wbds_create", id)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at, origin_case_id)
                 VALUES (?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(workspaceID), .text(clean), .text(mode.rawValue), .integer(1), .date(date), .date(date),
                       originCaseID.map { .uuid($0) } ?? .null])
-            try await appendEvent(datasetID: id, sequence: 1, revision: 1, action: .created, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+            try Self.appendEvent(db, datasetID: id, sequence: 1, revision: 1, action: .created, actor: actor, detail: nil, at: date)
+        }
         return try await require(id)
     }
 
@@ -75,18 +74,17 @@ public actor WorkbenchDatasetRepository {
         guard !clean.isEmpty else { throw WorkbenchError.blankFieldName }
         let newRev = ds.revision + 1
         let sp = savepoint("wbds_field", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let ordinal = try await nextOrdinal("workbench_fields", datasetID)
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let ordinal = try Self.nextOrdinal(db, "workbench_fields", datasetID)
+            try db.exec("""
                 INSERT INTO workbench_fields (id, dataset_id, name, value_shape, ordinal, created_at)
                 VALUES (?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(datasetID), .text(clean), .text(valueShape.rawValue), .integer(Int64(ordinal)), .date(date)])
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendEvent(datasetID: datasetID, sequence: try await nextSequence(datasetID), revision: newRev,
+            try Self.bumpRevision(db, datasetID, to: newRev, at: date)
+            try Self.appendEvent(db, datasetID: datasetID, sequence: try Self.nextSequence(db, datasetID), revision: newRev,
                                   action: .fieldAdded, actor: actor, detail: clean, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(datasetID)
     }
 
@@ -97,16 +95,15 @@ public actor WorkbenchDatasetRepository {
         let newRev = ds.revision + 1
         let rowID = UUID()
         let sp = savepoint("wbds_row", rowID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let ordinal = try await nextOrdinal("workbench_rows", datasetID)
-            try await database.exec("INSERT INTO workbench_rows (id, dataset_id, ordinal, created_at) VALUES (?,?,?,?);",
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let ordinal = try Self.nextOrdinal(db, "workbench_rows", datasetID)
+            try db.exec("INSERT INTO workbench_rows (id, dataset_id, ordinal, created_at) VALUES (?,?,?,?);",
                                     [.uuid(rowID), .uuid(datasetID), .integer(Int64(ordinal)), .date(date)])
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendEvent(datasetID: datasetID, sequence: try await nextSequence(datasetID), revision: newRev,
+            try Self.bumpRevision(db, datasetID, to: newRev, at: date)
+            try Self.appendEvent(db, datasetID: datasetID, sequence: try Self.nextSequence(db, datasetID), revision: newRev,
                                   action: .rowAdded, actor: actor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(datasetID)
     }
 
@@ -123,19 +120,18 @@ public actor WorkbenchDatasetRepository {
         guard try await ownedField(fieldID, datasetID) else { throw WorkbenchError.fieldNotInDataset(fieldID) }
         let newRev = ds.revision + 1
         let sp = savepoint("wbds_cell", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("DELETE FROM workbench_cells WHERE row_id = ? AND field_id = ?;", [.uuid(rowID), .uuid(fieldID)])
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("DELETE FROM workbench_cells WHERE row_id = ? AND field_id = ?;", [.uuid(rowID), .uuid(fieldID)])
+            try db.exec("""
                 INSERT INTO workbench_cells (id, dataset_id, row_id, field_id, kind, value, status, created_at)
                 VALUES (?,?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(datasetID), .uuid(rowID), .uuid(fieldID), .text(kind.rawValue),
                       value.map { SQLValue.text($0) } ?? .null, .text(status.rawValue), .date(date)])
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendEvent(datasetID: datasetID, sequence: try await nextSequence(datasetID), revision: newRev,
+            try Self.bumpRevision(db, datasetID, to: newRev, at: date)
+            try Self.appendEvent(db, datasetID: datasetID, sequence: try Self.nextSequence(db, datasetID), revision: newRev,
                                   action: .cellSet, actor: actor, detail: kind.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(datasetID)
     }
 
@@ -152,21 +148,20 @@ public actor WorkbenchDatasetRepository {
         try await validateBindingTarget(kind: targetKind, targetID: targetID, sourceVersionID: sourceVersionID)
         let newRev = ds.revision + 1
         let sp = savepoint("wbds_bind", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let ordinal = try await nextBindingOrdinal(cellID)
-            let locatorJSON = try locator.map { String(data: try Self.encoder.encode($0), encoding: .utf8) ?? "" }
-            try await database.exec("""
+        let locatorJSON = try locator.map { String(data: try Self.encoder.encode($0), encoding: .utf8) ?? "" }
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let ordinal = try Self.nextBindingOrdinal(db, cellID)
+            try db.exec("""
                 INSERT INTO workbench_source_bindings (id, cell_id, target_kind, target_id, source_version_id, locator_json, ordinal, created_at)
                 VALUES (?,?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(cellID), .text(targetKind.rawValue), .text(targetID),
                       sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
                       locatorJSON.map { SQLValue.text($0) } ?? .null, .integer(Int64(ordinal)), .date(date)])
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendEvent(datasetID: datasetID, sequence: try await nextSequence(datasetID), revision: newRev,
+            try Self.bumpRevision(db, datasetID, to: newRev, at: date)
+            try Self.appendEvent(db, datasetID: datasetID, sequence: try Self.nextSequence(db, datasetID), revision: newRev,
                                   action: .sourceBound, actor: actor, detail: targetKind.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(datasetID)
     }
 
@@ -179,36 +174,34 @@ public actor WorkbenchDatasetRepository {
         guard !clean.isEmpty else { throw WorkbenchError.blankViewName }
         let newRev = ds.revision + 1
         let sp = savepoint("wbds_view", UUID())
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 INSERT INTO workbench_saved_views (id, dataset_id, name, projection_json, created_at)
                 VALUES (?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(datasetID), .text(clean), .text(projectionJSON), .date(date)])
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendEvent(datasetID: datasetID, sequence: try await nextSequence(datasetID), revision: newRev,
+            try Self.bumpRevision(db, datasetID, to: newRev, at: date)
+            try Self.appendEvent(db, datasetID: datasetID, sequence: try Self.nextSequence(db, datasetID), revision: newRev,
                                   action: .viewSaved, actor: actor, detail: clean, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(datasetID)
     }
 
     @discardableResult
     public func rename(datasetID: UUID, title: String, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
         try await headerPatch(datasetID: datasetID, expectedRevision: expectedRevision, actor: actor, at: date,
-                              action: .renamed, detail: title) { clean in
+                              action: .renamed, detail: title) { db in
             let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty else { throw WorkbenchError.blankTitle }
-            try await self.database.exec("UPDATE workbench_datasets SET title = ? WHERE id = ?;", [.text(t), .uuid(datasetID)])
-            _ = clean
+            try db.exec("UPDATE workbench_datasets SET title = ? WHERE id = ?;", [.text(t), .uuid(datasetID)])
         }
     }
 
     @discardableResult
     public func setMode(datasetID: UUID, mode: WorkbenchDatasetMode, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
         try await headerPatch(datasetID: datasetID, expectedRevision: expectedRevision, actor: actor, at: date,
-                              action: .modeChanged, detail: mode.rawValue) { _ in
-            try await self.database.exec("UPDATE workbench_datasets SET mode = ? WHERE id = ?;", [.text(mode.rawValue), .uuid(datasetID)])
+                              action: .modeChanged, detail: mode.rawValue) { db in
+            try db.exec("UPDATE workbench_datasets SET mode = ? WHERE id = ?;", [.text(mode.rawValue), .uuid(datasetID)])
         }
     }
 
@@ -364,19 +357,18 @@ public actor WorkbenchDatasetRepository {
 
     private func headerPatch(datasetID: UUID, expectedRevision: Int, actor: String, at date: Date,
                              action: WorkbenchDatasetEventAction, detail: String?,
-                             _ body: @Sendable (String) async throws -> Void) async throws -> WorkbenchDatasetRecord {
+                             _ body: @Sendable (isolated Database) throws -> Void) async throws -> WorkbenchDatasetRecord {
         try requireActor(actor)
         let ds = try await requireDataset(datasetID); try requireRevision(ds, expectedRevision)
         let newRev = ds.revision + 1
         let sp = savepoint("wbds_hdr", datasetID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await body("")
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendEvent(datasetID: datasetID, sequence: try await nextSequence(datasetID), revision: newRev,
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try body(db)
+            try Self.bumpRevision(db, datasetID, to: newRev, at: date)
+            try Self.appendEvent(db, datasetID: datasetID, sequence: try Self.nextSequence(db, datasetID), revision: newRev,
                                   action: action, actor: actor, detail: detail, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch { try? await rollback(sp); throw error }
+        }
         return try await require(datasetID)
     }
 
@@ -394,30 +386,33 @@ public actor WorkbenchDatasetRepository {
     private func datasetOfCell(_ cellID: UUID) async throws -> UUID? {
         try await database.query("SELECT dataset_id FROM workbench_cells WHERE id = ? LIMIT 1;", [.uuid(cellID)]).first?.uuid(0)
     }
-    private func nextOrdinal(_ table: String, _ datasetID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(ordinal), -1) FROM \(table) WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? -1) + 1
+    private static func nextOrdinal(_ db: isolated Database, _ table: String, _ datasetID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(ordinal), -1) FROM \(table) WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? -1) + 1
     }
-    private func nextBindingOrdinal(_ cellID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(ordinal), -1) FROM workbench_source_bindings WHERE cell_id = ?;", [.uuid(cellID)]).first?.int(0) ?? -1) + 1
+    private static func nextBindingOrdinal(_ db: isolated Database, _ cellID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(ordinal), -1) FROM workbench_source_bindings WHERE cell_id = ?;", [.uuid(cellID)]).first?.int(0) ?? -1) + 1
     }
-    private func nextSequence(_ datasetID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_dataset_events WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? 0) + 1
+    private static func nextSequence(_ db: isolated Database, _ datasetID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_dataset_events WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? 0) + 1
     }
-    private func bumpRevision(_ datasetID: UUID, to revision: Int, at date: Date) async throws {
-        try await database.exec("UPDATE workbench_datasets SET revision = ?, updated_at = ? WHERE id = ?;",
-                                [.integer(Int64(revision)), .date(date), .uuid(datasetID)])
+    /// F28 — a compare-and-set bump inside the mutation's isolated savepoint: it only advances from
+    /// `revision - 1`, so of two concurrent edits that both passed the pre-check, the second fails
+    /// with a revision conflict instead of silently double-bumping.
+    private static func bumpRevision(_ db: isolated Database, _ datasetID: UUID, to revision: Int, at date: Date) throws {
+        try db.exec("UPDATE workbench_datasets SET revision = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                    [.integer(Int64(revision)), .date(date), .uuid(datasetID), .integer(Int64(revision - 1))])
+        guard Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0) == 1 else {
+            let actual = Int(try db.query("SELECT revision FROM workbench_datasets WHERE id = ?;", [.uuid(datasetID)]).first?.int(0) ?? -1)
+            throw WorkbenchError.revisionConflict(expected: revision - 1, actual: actual)
+        }
     }
-    private func appendEvent(datasetID: UUID, sequence: Int, revision: Int, action: WorkbenchDatasetEventAction,
-                             actor: String, detail: String?, at date: Date) async throws {
-        try await database.exec("""
+    private static func appendEvent(_ db: isolated Database, datasetID: UUID, sequence: Int, revision: Int, action: WorkbenchDatasetEventAction,
+                             actor: String, detail: String?, at date: Date) throws {
+        try db.exec("""
             INSERT INTO workbench_dataset_events (id, dataset_id, sequence, dataset_revision, action, actor, detail, occurred_at)
             VALUES (?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(datasetID), .integer(Int64(sequence)), .integer(Int64(revision)),
                   .text(action.rawValue), .text(actor), detail.map { SQLValue.text($0) } ?? .null, .date(date)])
-    }
-    private func rollback(_ sp: String) async throws {
-        try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-        try? await database.exec("RELEASE SAVEPOINT \(sp);")
     }
     private func savepoint(_ prefix: String, _ id: UUID) -> String {
         "\(prefix)_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"

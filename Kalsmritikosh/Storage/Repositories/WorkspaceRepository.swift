@@ -107,22 +107,17 @@ public actor WorkspaceRepository {
     public func addSources(_ fileIDs: [UUID], to workspaceID: Workspace.ID, at when: Date = Date()) async throws {
         guard !fileIDs.isEmpty else { return }
         let sp = "wsaddsrc_\(workspaceID.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);", [])
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
             for fileID in fileIDs {
-                try await database.exec("""
+                try db.exec("""
                 INSERT INTO workspace_sources (workspace_id, file_id, added_at)
                 VALUES (?, ?, ?) ON CONFLICT(workspace_id, file_id) DO NOTHING;
                 """, [.uuid(workspaceID), .uuid(fileID), .real(when.timeIntervalSince1970)])
             }
-            try await database.exec(
+            try db.exec(
                 "UPDATE workspaces SET updated_at = ? WHERE id = ?;",
                 [.real(when.timeIntervalSince1970), .uuid(workspaceID)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);", [])
-            try? await database.exec("RELEASE SAVEPOINT \(sp);", [])
-            throw error
         }
     }
 
@@ -238,25 +233,22 @@ public actor WorkspaceRepository {
     /// obsolete — while leaving manually-added `workspace_entities` untouched.
     public func replaceDerivedEntities(_ expected: Set<UUID>, in workspaceID: Workspace.ID, at when: Date = Date()) async throws {
         let sp = "wsderiv_\(workspaceID.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);", [])
-            let existing = Set(try await derivedEntityIDs(in: workspaceID))
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let existing = Set(try db.query(
+                "SELECT entity_id FROM workspace_derived_entities WHERE workspace_id = ? ORDER BY entity_id ASC;",
+                [.uuid(workspaceID)]).compactMap { $0.uuid(0) })
             for obsolete in existing.subtracting(expected) {
-                try await database.exec(
+                try db.exec(
                     "DELETE FROM workspace_derived_entities WHERE workspace_id = ? AND entity_id = ?;",
                     [.uuid(workspaceID), .uuid(obsolete)])
             }
             for add in expected.subtracting(existing) {
-                try await database.exec("""
+                try db.exec("""
                 INSERT INTO workspace_derived_entities (workspace_id, entity_id, derived_at)
                 VALUES (?,?,?) ON CONFLICT(workspace_id, entity_id) DO NOTHING;
                 """, [.uuid(workspaceID), .uuid(add), .real(when.timeIntervalSince1970)])
             }
-            try await database.exec("RELEASE SAVEPOINT \(sp);", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);", [])
-            try? await database.exec("RELEASE SAVEPOINT \(sp);", [])
-            throw error
         }
     }
 

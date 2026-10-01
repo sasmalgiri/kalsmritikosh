@@ -52,6 +52,43 @@ public enum ToolGroundedComposer {
         "none", "neither", "nor", "unpaid", "unresolved",
     ]
 
+    /// F07 — lowercased word tokens that KEEP inner apostrophes (curly ones normalized), so
+    /// "wasn't" stays one token instead of splitting into "wasn" + "t" and slipping past the cues.
+    nonisolated static func polarityTokens(_ text: String) -> [String] {
+        let keep = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "'"))
+        return text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
+            .components(separatedBy: keep.inverted)
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "'")) }
+            .filter { !$0.isEmpty }
+    }
+
+    nonisolated static func isNegated(_ tokens: [String]) -> Bool {
+        tokens.contains { negationCues.contains($0) || $0.hasSuffix("n't") }
+    }
+
+    private nonisolated static let polarityStopwords: Set<String> = [
+        "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "by", "for", "with", "as",
+        "was", "were", "is", "are", "be", "been", "has", "had", "have", "it", "its", "that", "this",
+    ]
+
+    /// F07 — the sentence's polarity against the evidence CLAUSE that best supports it (most
+    /// shared content words), not the whole cited text: a "No objections were raised" clause
+    /// elsewhere in a span must not kill "The patent was granted", yet must kill "Objections were
+    /// raised". Several equally-supporting clauses must all agree with the sentence (fail closed).
+    nonisolated static func polarityMatches(body: String, truth: String) -> Bool {
+        let bodyTokens = polarityTokens(body)
+        let bodyNeg = isNegated(bodyTokens)
+        let content = Set(bodyTokens.filter {
+            $0.count > 1 && !polarityStopwords.contains($0) && !negationCues.contains($0) && !$0.hasSuffix("n't")
+        })
+        let clauses = truth.components(separatedBy: CharacterSet(charactersIn: ".;!?\n"))
+            .map(polarityTokens).filter { !$0.isEmpty }
+        let scored = clauses.map { c in (tokens: c, overlap: content.intersection(c).count) }
+        let best = scored.map(\.overlap).max() ?? 0
+        let support = best > 0 ? scored.filter { $0.overlap == best }.map(\.tokens) : [polarityTokens(truth)]
+        return support.allSatisfy { isNegated($0) == bodyNeg }
+    }
+
     /// AT-05 — the currency/unit markers present in a text (normalized). A
     /// sentence may not assert a currency its cited evidence lacks.
     nonisolated static func currencyMarkers(in text: String) -> Set<String> {
@@ -99,17 +136,11 @@ public enum ToolGroundedComposer {
                 .allSatisfy { truthWords.contains($0.lowercased())
                     || StoryProseRephraser.allowedLeads.contains($0.lowercased()) }
             guard nounsOK else { continue }
-            // AT-05 — NEGATION POLARITY: a composed sentence must not introduce
-            // a negation the cited evidence does not carry (asserting "was NOT
-            // granted" from a "granted" result is a fabricated reversal). If the
-            // sentence contains a negation cue absent from the cited text, it
-            // dies. (A negation grounded in the evidence — the cited text also
-            // negates — passes.)
-            let bodyWords = Set(body.lowercased()
-                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
-            let bodyNeg = !bodyWords.isDisjoint(with: Self.negationCues)
-            let truthNeg = !truthWords.isDisjoint(with: Self.negationCues)
-            guard !(bodyNeg && !truthNeg) else { continue }
+            // AT-05 / F07 — NEGATION POLARITY, BOTH WAYS: the sentence's polarity
+            // must equal that of the evidence clause it rests on. Adding a negation
+            // ("was NOT granted" from "granted") and DROPPING one ("was granted"
+            // from "was not granted") are both fabricated reversals and die.
+            guard Self.polarityMatches(body: body, truth: truth) else { continue }
             // AT-05 — CURRENCY / UNIT POLARITY: an amount whose digits match
             // the evidence but whose CURRENCY differs ("$500" from a "₹500"
             // result) is a changed claim, not a grounded one. Every currency

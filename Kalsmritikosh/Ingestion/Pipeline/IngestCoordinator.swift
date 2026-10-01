@@ -14,6 +14,29 @@ import OSLog
 import CryptoKit
 
 
+/// F01 — the ingest memory budget. Above `streamAboveBytes` a file is read in bounded record
+/// batches when its loader can stream; above `deferWholeFileAboveBytes` a file whose loader cannot
+/// stream is deferred (custody kept, resource limit recorded) rather than loaded whole.
+/// F04 — a loader that RESUMES (SQLite) is always walked record by record, at any size, and one run
+/// processes at most `resumable.unitsPerRun` units; the rest is deferred to a durable cursor.
+public struct IngestMemoryBudget: Sendable, Equatable {
+    public let streamAboveBytes: Int64
+    public let deferWholeFileAboveBytes: Int64
+    public let batch: StreamBatchBudget
+    public let resumable: ResumableStreamBudget
+
+    public nonisolated init(streamAboveBytes: Int64, deferWholeFileAboveBytes: Int64, batch: StreamBatchBudget = .standard,
+                            resumable: ResumableStreamBudget = .standard) {
+        self.streamAboveBytes = streamAboveBytes
+        self.deferWholeFileAboveBytes = max(streamAboveBytes, deferWholeFileAboveBytes)
+        self.batch = batch
+        self.resumable = resumable
+    }
+
+    public nonisolated static let standard = IngestMemoryBudget(
+        streamAboveBytes: 64 * 1024 * 1024, deferWholeFileAboveBytes: 4 * 1024 * 1024 * 1024)
+}
+
 public actor IngestCoordinator {
     /// Thrown when a file is intentionally NOT ingested (not a failure). Callers
     /// treat it as "processed, skipped" so it doesn't count as an error.
@@ -59,10 +82,14 @@ public actor IngestCoordinator {
     private var byteResolver: SourceVersionByteResolver? = nil
     private var reprocessing: SourceReprocessingCoordinator? = nil   // USF-010
     private var upgradeDatabase: Database? = nil
+    /// F04 — the persisted job queue continuation work is scheduled into.
+    private var upgradeJobs: SourceUpgradeJobRepository? = nil
     /// I1 (module .boilerplateEmbedSkip) — learned cross-document boilerplate.
     /// Built once a database is wired (configureUpgrades). Consulted at the embed
     /// gate to skip chunks that are mostly a known template; nil ⇒ feature off.
     private var boilerplateRegistry: BoilerplateRegistry? = nil
+    /// F01 — when a file is too large to hold all of its records in memory at once.
+    private var memoryBudget = IngestMemoryBudget.standard
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -292,6 +319,13 @@ public actor IngestCoordinator {
     /// Pause/Stop hooks for the live ingest controls. `drainPaused` idles the
     /// background embedding loop between batches (Resume clears it).
     private var drainPaused = false
+    /// F12 — set by the memory-pressure governor; idles the same drains as `drainPaused` but is
+    /// kept separate so the user's Resume never overrides pressure (and relief never un-pauses
+    /// a user's Pause).
+    private var pressurePaused = false
+
+    /// F01 — replace the ingest memory budget (tests lower it to force the streaming path).
+    public func setMemoryBudget(_ budget: IngestMemoryBudget) { memoryBudget = budget }
 
     public func shutdown() {
         embeddingDrainTask?.cancel()
@@ -301,6 +335,10 @@ public actor IngestCoordinator {
     /// Pause (true) / resume (false) the background embedding drain. Wired to the
     /// live-panel Pause/Resume controls via AppState.
     public func setDrainPaused(_ paused: Bool) { drainPaused = paused }
+
+    /// F12 — memory pressure pauses (true) / releases (false) the background drains.
+    public func setPressurePaused(_ paused: Bool) { pressurePaused = paused }
+    public func isPressurePaused() -> Bool { pressurePaused }
 
     /// Stop the embedding drain entirely (the Stop control). Cancels the task and
     /// clears the started flag so a later ingest restarts it from the pending set.
@@ -344,56 +382,72 @@ public actor IngestCoordinator {
         var unembeddable = Set<Chunk.ID>()
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         while !Task.isCancelled {
-            // Live Pause — idle between batches until resumed (or cancelled).
-            // ENGINE POWER — Lightning mode idles the drain the same way; the
-            // pending set is durable, so flipping back to Full power resumes
-            // embedding exactly where it left off (nothing is lost).
-            while (drainPaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
+            // F10 — one fair keyset pass over EVERY missing chunk: a page the embedder can't
+            // vectorize is stepped past, so it can no longer starve older, embeddable chunks.
+            let pass = await EmbeddingDrain.pass(
+                fetch: { before in
+                    try await self.chunks.findChunksMissingVectorPage(limit: 256, modelID: modelID, beforeRowID: before)
+                },
+                skip: unembeddable,
+                betweenPages: {
+                    // Live Pause — idle between batches until resumed (or cancelled).
+                    // ENGINE POWER — Lightning mode idles the drain the same way; the
+                    // pending set is durable, so flipping back to Full power resumes
+                    // embedding exactly where it left off (nothing is lost).
+                    while (self.drainPaused || self.pressurePaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
+                    if Task.isCancelled { return false }
+                    // ING-006 — yield to any in-flight interactive query before the next batch.
+                    await self.priorityGate?.awaitClearance()
+                    return !Task.isCancelled
+                },
+                embed: { batch in
+                    let embStart = Date()
+                    let result = await self.embedAndStore(batch, embedder: embedder, vectors: vectors)
+                    await self.pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
+                    await self.pipelineMetrics?.bump(.embedded, by: result.stored)
+                    try? await Task.sleep(nanoseconds: result.stored == 0 ? 2_000_000_000 : 200_000_000)
+                    return result
+                })
+            // Chunks the embedder returned EMPTY for are not retried this session.
+            unembeddable.formUnion(pass.newlyFailed)
             if Task.isCancelled { break }
-            // ING-006 — yield to any in-flight interactive query before the next batch.
-            await priorityGate?.awaitClearance()
-            if Task.isCancelled { break }
-            let fetched = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
-            let batch = fetched.filter { !unembeddable.contains($0.id) }
-            if batch.isEmpty {
-                // Fully drained, or everything still missing is known-unembeddable.
-                // Idle; a later ingest adds new rows this pass will pick up.
-                try? await Task.sleep(nanoseconds: 10_000_000_000)
-                continue
-            }
-            let texts: [String] = batch.map { c in
-                if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
-                return c.text
-            }
-            let embStart = Date()
-            let vectorsList = await embedder.embedAll(texts, batchSize: 64)
-            await pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
-            var embedded = 0
-            for (i, c) in batch.enumerated() where i < vectorsList.count {
-                if vectorsList[i].isEmpty {
-                    unembeddable.insert(c.id)   // don't retry this one this session
-                    continue                     // never persist a zero vector
-                }
-                // P1.2 — a failed upsert leaves the chunk simply ABSENT from
-                // chunk_embeddings, which reads identically to not-yet-drained.
-                // Coverage could never be honest about failed vs pending, so the
-                // reason is recorded and `embedded` is only incremented on an
-                // actual write.
-                do {
-                    try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
-                    embedded += 1
-                } catch {
-                    await derivationFailures?.record(
-                        stage: "embeddings.upsert", error: error,
-                        knowledgeObjectID: c.objectID)
-                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
-                }
-            }
-            await pipelineMetrics?.bump(.embedded, by: embedded)
-            try? await Task.sleep(nanoseconds: embedded == 0 ? 2_000_000_000 : 200_000_000)
+            // Nothing stored in a whole pass: fully drained, or everything still missing is
+            // known-unembeddable. Idle; a later ingest adds new rows the next pass picks up.
+            if pass.embedded == 0 { try? await Task.sleep(nanoseconds: 10_000_000_000) }
         }
+    }
+
+    /// Embed one batch and persist every non-empty vector. Returns how many were stored and which
+    /// chunks the embedder could not vectorize (empty vector — never persisted as a zero vector).
+    private func embedAndStore(_ batch: [Chunk], embedder: any Embedder,
+                               vectors: VectorStore) async -> (stored: Int, unembeddable: [Chunk.ID]) {
+        let texts: [String] = batch.map { c in
+            if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
+            return c.text
+        }
+        let vectorsList = await embedder.embedAll(texts, batchSize: 64)
+        var stored = 0
+        var failed: [Chunk.ID] = []
+        for (i, c) in batch.enumerated() where i < vectorsList.count {
+            guard !vectorsList[i].isEmpty else { failed.append(c.id); continue }
+            // P1.2 — a failed upsert leaves the chunk simply ABSENT from
+            // chunk_embeddings, which reads identically to not-yet-drained.
+            // Coverage could never be honest about failed vs pending, so the
+            // reason is recorded and `stored` is only incremented on an
+            // actual write.
+            do {
+                try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
+                stored += 1
+            } catch {
+                await derivationFailures?.record(
+                    stage: "embeddings.upsert", error: error,
+                    knowledgeObjectID: c.objectID)
+                KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
+        return (stored, failed)
     }
 
     /// PERF.1 — synchronously embed all currently-pending chunks (no sleeps,
@@ -403,32 +457,21 @@ public actor IngestCoordinator {
     public func drainEmbeddingsNow() async {
         guard let embedder, let vectors else { return }
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
+        // F10 — full keyset passes: a front page the embedder can't vectorize no longer ends the
+        // drain before older, embeddable chunks are reached. Stops when a whole pass stores
+        // nothing (drained, or only unembeddable / unwritable chunks remain). `stored` reflects
+        // real writes only (P1.2), so a persistent write failure cannot spin the loop.
+        var unembeddable = Set<Chunk.ID>()
         while !Task.isCancelled {
-            let batch = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
-            if batch.isEmpty { break }
-            let texts: [String] = batch.map { c in
-                if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
-                return c.text
-            }
-            let vecs = await embedder.embedAll(texts, batchSize: 64)
-            var progressed = false
-            for (i, c) in batch.enumerated() where i < vecs.count {
-                if vecs[i].isEmpty { continue }
-                // P1.2 — same failed-vs-pending distinction as the background
-                // drain. `progressed` must reflect a real write, or the loop's
-                // stop condition below misreads a persistent write failure as
-                // forward progress and spins.
-                do {
-                    try await vectors.upsert(chunkID: c.id, embedding: vecs[i])
-                    progressed = true
-                } catch {
-                    await derivationFailures?.record(
-                        stage: "embeddings.upsert", error: error,
-                        knowledgeObjectID: c.objectID)
-                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
-                }
-            }
-            if !progressed { break }   // embedder can't produce vectors → stop
+            let pass = await EmbeddingDrain.pass(
+                fetch: { before in
+                    try await self.chunks.findChunksMissingVectorPage(limit: 256, modelID: modelID, beforeRowID: before)
+                },
+                skip: unembeddable,
+                betweenPages: { !Task.isCancelled },
+                embed: { batch in await self.embedAndStore(batch, embedder: embedder, vectors: vectors) })
+            unembeddable.formUnion(pass.newlyFailed)
+            if pass.embedded == 0 { break }
         }
     }
 
@@ -443,8 +486,12 @@ public actor IngestCoordinator {
 
     /// Wire the on-demand progressive-upgrade machinery (production + progressive tests). Rigs that do
     /// not call this keep the prior behaviour (no completion snapshot, no upgrade scheduling).
-    public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil) {
+    /// `reconcileHook` is a fault-injection seam for tests (runs between reconciliation's measurement and
+    /// its stamp); production passes nil.
+    public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil,
+                                  reconcileHook: (@Sendable (UUID) async -> Void)? = nil) {
         self.upgradeDatabase = database
+        self.upgradeJobs = jobs
         self.boilerplateRegistry = BoilerplateRegistry(database: database)
         let resolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
         self.byteResolver = resolver
@@ -452,11 +499,23 @@ public actor IngestCoordinator {
         let containerRepo = ContainerInspectionRepository(database: database)
         // The dimension-advancing kinds reopen exact bytes and re-parse through the ONE registry.
         let handler: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeStructure(sourceVersionID: svid) }
-        let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: handler])
+        // F25 — indexing is its OWN handler: it rebuilds retrieval chunks + FTS from committed blocks.
+        // Routing it to the structural handler re-persisted structure, wrote no chunks, and the
+        // (stale) readiness row let the job report success with the index still missing.
+        let indexing: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) }
+        let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: indexing])
         let upg = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
-                                           container: containerRepo, executor: executor, priorityGate: priorityGate)
+                                           container: containerRepo, executor: executor, priorityGate: priorityGate,
+                                           afterMeasuring: reconcileHook)
         self.sourceUpgrade = upg
-        self.reprocessing = SourceReprocessingCoordinator(database: database, readiness: r, byteResolver: resolver)
+        // F16 — reprocessing RUNS the current structural parser (through the ONE registry) over the
+        // re-verified bytes before it may re-stamp anything.
+        self.reprocessing = SourceReprocessingCoordinator(
+            database: database, readiness: r, byteResolver: resolver,
+            reparse: { [weak self] svid, snapshot, identity in
+                try await self?.reparseStructure(sourceVersionID: svid, snapshotURL: snapshot, identityURL: identity)
+            },
+            reindex: { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) })
         self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
                                                             upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
     }
@@ -473,7 +532,7 @@ public actor IngestCoordinator {
         }
         let type = SourceType(rawValue: typeRaw) ?? .unknown
         let parserVersion = universalExecutor.registry.plugin(for: type)?.pluginVersion ?? "1"
-        _ = execution   // reprocessing re-stamps synchronously (bytes verified, structure unchanged)
+        _ = execution   // reprocessing runs synchronously: bytes verified, re-parsed, activated if changed, re-stamped
         return try await reprocessing.reprocess(sourceVersionID: sourceVersionID, currentParserVersion: parserVersion, at: Date())
     }
 
@@ -493,6 +552,142 @@ public actor IngestCoordinator {
         return await sourceUpgrade.drain(max: max, at: Date())
     }
 
+    private var upgradeDrainTask: Task<Void, Never>?
+
+    /// F20 — the SUPERVISED background upgrade worker. Scheduled upgrades (`.background` ensure,
+    /// auto-scheduled evidence work after a fast initial pass) had no production caller of
+    /// `drainUpgrades`, so they only ran when a foreground question forced them. This loop claims
+    /// eligible jobs in small batches with a fresh clock each time, yields to interactive queries
+    /// (via the coordinator's priority gate), idles while paused / not in full-power mode
+    /// (`shouldRun`), and sleeps `idleSeconds` when nothing is eligible. Idempotent; the app starts
+    /// it once at boot.
+    public func startUpgradeDrain(idleSeconds: TimeInterval = 30,
+                                  shouldRun: @escaping @Sendable () -> Bool = { FeatureFlags.fullPowerModeValue() }) {
+        guard upgradeDrainTask == nil, sourceUpgrade != nil else { return }
+        upgradeDrainTask = Task(priority: .background) { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let paused = await self.drainPaused, underPressure = await self.pressurePaused
+                if paused || underPressure || !shouldRun() {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    continue
+                }
+                let ran = await self.drainUpgrades(max: 4)
+                // F04 — idle: schedule the next bounded run of any source with deferred units.
+                if ran == 0, await self.scheduleStreamContinuations().isEmpty {
+                    try? await Task.sleep(nanoseconds: UInt64(max(0.05, idleSeconds) * 1_000_000_000))
+                }
+            }
+        }
+    }
+
+    /// An actionable failure reason for a record outcome and the readiness detail: a database error
+    /// states SQLite's message (the cause), not the statement text that precedes it.
+    nonisolated static func failureReason(_ error: Error) -> String {
+        switch error {
+        case DatabaseError.stepFailed(_, let message), DatabaseError.prepareFailed(_, let message):
+            return "database: \(message)"
+        default:
+            return String(describing: error)
+        }
+    }
+
+    // MARK: - F04/F15 — per-source execution lease
+
+    /// Events a test can observe to build deterministic barriers (nil in production).
+    public enum SourceWorkEvent: Sendable {
+        /// Work on a source asked for its execution lease (before waiting for it).
+        case leaseRequested(UUID)
+        /// A resumable record of the source committed.
+        case recordCommitted(UUID, position: Int)
+    }
+    private var sourceWorkHook: (@Sendable (SourceWorkEvent) async -> Void)? = nil
+    public func setSourceWorkHook(_ hook: (@Sendable (SourceWorkEvent) async -> Void)?) { sourceWorkHook = hook }
+
+    /// Leases held by the CURRENT task (so nested work on the same source — a structural upgrade that
+    /// resumes the walk — re-enters instead of deadlocking on itself).
+    @TaskLocal static var heldSourceLeases: Set<UUID> = []
+    private var leasedSources: Set<UUID> = []
+    private var leaseWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+
+    /// Run `body` holding the source version's execution lease. Every path that walks or rewrites a
+    /// version's evidence — the resumable ingest, an explicit resume, the automatic continuation job, a
+    /// foreground structural or indexing upgrade — takes it, so two of them never run on one source at
+    /// once (the actor alone does not prevent that: they interleave at every await). Waiters are served
+    /// in arrival order. Process-local: the ledger has one writer process.
+    func withSourceLease<T>(_ svid: UUID, _ body: () async throws -> T) async rethrows -> T {
+        if Self.heldSourceLeases.contains(svid) { return try await body() }
+        await sourceWorkHook?(.leaseRequested(svid))
+        while leasedSources.contains(svid) {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in leaseWaiters[svid, default: []].append(c) }
+        }
+        leasedSources.insert(svid)
+        defer {
+            leasedSources.remove(svid)
+            if var waiting = leaseWaiters[svid], !waiting.isEmpty {
+                let next = waiting.removeFirst()
+                leaseWaiters[svid] = waiting.isEmpty ? nil : waiting
+                next.resume()
+            }
+        }
+        return try await Self.$heldSourceLeases.withValue(Self.heldSourceLeases.union([svid])) { try await body() }
+    }
+
+    /// F04 — the producer identity of continuation jobs (dedup is per version + kind + producer, so a
+    /// continuation never collides with a user-requested evidence upgrade of the same version).
+    nonisolated static let continuationProducer = "stream-continuation"
+
+    /// F04 — durable AUTOMATIC continuation of resumable sources. The scheduler's state is durable:
+    /// `stream_cursors` (what is deferred) and the persisted job queue (what is scheduled). For each
+    /// version with deferred units this enqueues ONE background structural-extraction job, which the
+    /// supervised drain runs as one bounded resume (`upgradeStructure` → `resumeStreamedIngest`). A
+    /// version is skipped when:
+    ///   • a record is failed or interrupted — a failure needs an explicit retry, not a hot loop;
+    ///   • a continuation job — or ANY pending/running structural, OCR or indexing job (e.g. a user's
+    ///     evidence upgrade) — is already scheduled for the version; and execution itself is serialized
+    ///     per source by `withSourceLease`, so even two claimed jobs never overlap on one source;
+    ///   • its last continuation job failed or was blocked and the cursor has not advanced since
+    ///     (no progress → no retry until something changes).
+    /// Least-recently-advanced versions go first, and each run re-joins the back of the queue, so
+    /// several deferred sources share the drain in turn. Returns the versions scheduled.
+    @discardableResult
+    public func scheduleStreamContinuations(limit: Int = 8, at now: Date = Date()) async -> [UUID] {
+        guard let db = upgradeDatabase, let jobs = upgradeJobs else { return [] }
+        let producer = Self.continuationProducer
+        let candidates = (try? await db.query("""
+            SELECT t.svid FROM (
+                SELECT source_version_id AS svid, MAX(updated_at) AS moved,
+                       SUM(COALESCE(discovered, processed)) AS discovered, SUM(processed) AS processed
+                  FROM stream_cursors GROUP BY source_version_id) t
+             WHERE t.discovered > t.processed
+               AND NOT EXISTS (SELECT 1 FROM stream_record_outcomes o
+                                WHERE o.source_version_id = t.svid AND o.state IN ('failed', 'attempting'))
+               AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j
+                                WHERE j.source_version_id = t.svid AND j.state IN ('pending', 'running')
+                                  AND (j.producer_id = ? OR j.kind IN ('structuralExtraction', 'indexing', 'ocr')))
+               AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j
+                                WHERE j.source_version_id = t.svid AND j.producer_id = ? AND j.state IN ('failed', 'blocked')
+                                  AND j.updated_at >= t.moved)
+             ORDER BY t.moved ASC LIMIT ?;
+            """, [.text(producer), .text(producer), .integer(Int64(max(1, limit)))]).compactMap { $0.uuid(0) }) ?? []
+        var scheduled: [UUID] = []
+        for svid in candidates {
+            do {
+                _ = try await jobs.enqueue(sourceVersionID: svid, kind: .structuralExtraction, goal: .evidenceReady,
+                                           priority: .background, origin: .backgroundPolicy, producerID: producer, at: now)
+                scheduled.append(svid)
+            } catch {
+                KalsmritikoshLog.ingestion.error("Stream continuation not scheduled for \(svid.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
+        return scheduled
+    }
+
+    public func stopUpgradeDrain() {
+        upgradeDrainTask?.cancel()
+        upgradeDrainTask = nil
+    }
+
     /// The canonical completion snapshot for an EXACT source version, if the completion service is wired.
     public func completion(sourceVersionID: UUID) async throws -> IngestionCompletionSnapshot? {
         try await completionService?.snapshot(sourceVersionID: sourceVersionID, at: Date())
@@ -502,7 +697,17 @@ public actor IngestCoordinator {
     /// through the ONE registry → persist the structural document → advance readiness from the COMMITTED
     /// receipt. Idempotent: a rerun re-persists the same structure and the readiness stays ready.
     func upgradeStructure(sourceVersionID svid: UUID) async throws {
+        try await withSourceLease(svid) { try await upgradeStructureLeased(sourceVersionID: svid) }
+    }
+
+    private func upgradeStructureLeased(sourceVersionID svid: UUID) async throws {
         guard let byteResolver, let evidenceStore, let readiness, let db = upgradeDatabase else { return }
+        // F04 — a version walked resumably CONTINUES from its durable cursor (the scheduled structure
+        // upgrade is its continuation); a whole-file re-parse would cite rows the walk never committed.
+        if try await !StreamCursorRepository(database: db).states(sourceVersionID: svid).isEmpty {
+            try await resumeStreamedIngest(sourceVersionID: svid)
+            return
+        }
         guard let row = try await db.query(
             "SELECT logical_source_id, content_hash, detected_type, size_bytes FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(svid)]).first,
             let logical = row.uuid(0), let hash = row.string(1) else { throw SourceUpgradeError.sourceVersionMissing(svid) }
@@ -522,7 +727,11 @@ public actor IngestCoordinator {
             // ready, this is a no-op success (no duplicated blocks); otherwise the persist genuinely failed.
             if let snap = try? await readiness.snapshot(sourceVersionID: svid),
                snap.dimension(.structuralExtraction)?.state == .ready { return }
-            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+            // F15 — structure was committed once (attach-once) but blocks behind it were LOST: restore
+            // the missing ordinals from this deterministic re-parse, then measure readiness live.
+            try await repairStructure(doc, sourceVersionID: svid, store: evidenceStore, readiness: readiness,
+                                      db: db, producerVersion: result.pluginVersion)
+            return
         }
         var updates: [SourceReadinessDimensionUpdate] = [
             SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready, action: .satisfy,
@@ -541,6 +750,219 @@ public actor IngestCoordinator {
         // USF-010 — stamp the EXACT parser version as the producer version so a later parser upgrade can
         // detect this structure as stale (producer version < current) and reprocess only what changed.
         await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: result.pluginVersion)
+    }
+
+    /// F15 — restore lost blocks into the version's existing document and advance structure / OCR
+    /// readiness from the LIVE committed blocks (never from the re-parse). Restored blocks are linked
+    /// to the version's owning object when exactly one object owns its blocks; with several owners the
+    /// owner of a restored block is not knowable from the ledger, so they stay unlinked and it is logged.
+    private func repairStructure(_ doc: ParsedDocument, sourceVersionID svid: UUID, store: EvidenceStore,
+                                 readiness: SourceReadinessRepository, db: Database, producerVersion: String) async throws {
+        let restored = try await store.restoreMissingBlocks(from: doc)
+        if !restored.isEmpty {
+            let owners = try await db.query("""
+                SELECT DISTINCT ebo.knowledge_object_id FROM evidence_block_objects ebo
+                JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
+                """, [.uuid(svid)]).compactMap { $0.uuid(0) }
+            if owners.count == 1 {
+                try await store.linkBlocks(restored.map(\.id), toObject: owners[0], at: Date())
+            } else {
+                KalsmritikoshLog.ingestion.notice("Structure repair: \(restored.count, privacy: .public) restored block(s) left unlinked — \(owners.count, privacy: .public) owners for version")
+            }
+        }
+        let live = try await store.liveStructuralCounts(forVersion: svid)
+        guard live.substantive > 0 else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+        }
+        // The basis is the committed document the blocks live in (never the discarded re-parse).
+        guard let documentID = try await db.query("SELECT document_id FROM source_versions WHERE id = ?;",
+                                                  [.uuid(svid)]).first?.uuid(0) else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+        }
+        let basis = SourceReadinessBasis(kind: .sourceDocument, identifier: documentID.uuidString)
+        let ready = doc.extractionStatus == .complete && live.located == live.substantive
+        var updates = [SourceReadinessDimensionUpdate(
+            dimension: .structuralExtraction, state: ready ? .ready : .partial, action: ready ? .satisfy : .partiallySatisfy,
+            completedUnits: live.located, totalUnits: live.substantive, basis: basis,
+            detail: restored.isEmpty ? nil : "restored \(restored.count) lost block(s)")]
+        if live.ocr > 0 {
+            updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy, applicability: .conditional,
+                                                          completedUnits: live.ocr, totalUnits: live.ocr, basis: basis))
+        }
+        await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: producerVersion)
+    }
+
+    /// F16 — parse an exact version's re-verified bytes with the CURRENT structural parser (no
+    /// persistence). The reprocessor compares the result with the committed structure.
+    func reparseStructure(sourceVersionID svid: UUID, snapshotURL: URL, identityURL: URL) async throws -> ParsedDocument? {
+        guard let db = upgradeDatabase else { return nil }
+        guard let row = try await db.query(
+            "SELECT logical_source_id, content_hash, detected_type, size_bytes FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(svid)]).first,
+            let logical = row.uuid(0), let hash = row.string(1) else { throw SourceUpgradeError.sourceVersionMissing(svid) }
+        let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
+        let size = row.int(3) ?? 0
+        let request = UniversalParserRequest(
+            originalURL: identityURL, processingSnapshotURL: snapshotURL, logicalSourceID: logical,
+            sourceVersionID: svid, sourceType: type, contentHash: hash, sizeBytes: size, intent: .evidenceStructure)
+        // F16 — reprocessing obeys the SAME memory budget as ingest: a file above the streaming
+        // threshold is re-parsed only through a bounded structural parser, never the whole-file path.
+        if size > memoryBudget.streamAboveBytes {
+            guard let adapter = universalExecutor.registry.plugin(for: type) as? ExistingParserPluginAdapter,
+                  let doc = try await adapter.parseBoundedStructure(request) else {
+                throw SourceUpgradeError.policyBlocked(
+                    "resource limit: a \(size)-byte source can only be re-parsed by a bounded structural parser")
+            }
+            return doc
+        }
+        return try await universalExecutor.execute(request).parsedDocument
+    }
+
+    /// F25 — rebuild the retrieval index for an EXACT source version from its COMMITTED evidence blocks,
+    /// then advance indexing readiness from the measured per-version FTS coverage. Generation-aware
+    /// (F16): see `rebuildIndex`. No committed blocks → a missing dependency (structure must exist first).
+    func upgradeIndexing(sourceVersionID svid: UUID) async throws {
+        try await withSourceLease(svid) { try await upgradeIndexingLeased(sourceVersionID: svid) }
+    }
+
+    private func upgradeIndexingLeased(sourceVersionID svid: UUID) async throws {
+        guard let readiness, let db = upgradeDatabase else { return }
+        try await rebuildIndex(sourceVersionID: svid, objects: nil)
+        ensureEmbeddingDrain()   // the rebuilt chunks deepen into vectors in the background
+        let coverage = try await readiness.ftsCoverage(sourceVersionID: svid)
+        guard coverage.eligible > 0 else {
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .indexing, sourceVersionID: svid)
+        }
+        // F15/F25 — a rebuilt index is certified only when every active chunk matches its evidence. An
+        // object whose chunks cannot be re-derived from committed blocks (content-only) and no longer
+        // match is withheld with the reason, never stamped current.
+        let check = try await ChunkDerivation.verify(db, sourceVersionID: svid)
+        let fullyIndexed = coverage.indexed == coverage.eligible && check.uncertifiable == 0
+        let mismatchDetail: String? = check.needsRebuildOrProof > 0
+            ? "\(check.needsRebuildOrProof) index entr(ies) still do not match (or cannot be proven against) their evidence and cannot be re-derived from committed blocks"
+            : (check.unverifiedChunks > 0 ? SourceUpgradeCoordinator.unverifiedDetail(check.unverifiedChunks) : nil)
+        // F04/F15 — rebuilding the index of what IS committed never makes a streamed version's text
+        // complete: failed/interrupted records or deferred units keep it partial.
+        let incomplete = await resumableIncompleteDetail(svid)
+        await advanceReadiness(svid, [
+            incomplete.map { SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .partial, action: .partiallySatisfy, detail: $0) }
+                ?? SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                  completedUnits: coverage.eligible, totalUnits: coverage.eligible),
+            SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                           action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                           completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                           basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString),
+                                           detail: mismatchDetail)])
+    }
+
+    /// F16/F25 — switch each object's search chunks to the ACTIVE derivation. An object is rebuilt when
+    /// it has no current chunks, when a current chunk cites a block of a superseded derivation, or when
+    /// an active block is cited by none of its current chunks (content missing from a still-populated
+    /// object). An object whose current chunks are already the active generation — or whose chunks
+    /// come from loader text rather than blocks — is left untouched, so a rerun is a no-op.
+    ///
+    /// The switch is ONE savepoint per object: the object's current chunks are stamped superseded
+    /// (rows kept — a historical claim may cite a chunk id; they leave FTS by trigger), their vectors
+    /// are retired from every vector table (the new chunks are embedded by the drain), and the new
+    /// chunks are inserted with their block lineage. `objects` limits the switch (nil = all owners).
+    func rebuildIndex(sourceVersionID svid: UUID, objects only: Set<UUID>?) async throws {
+        guard let evidenceStore, let db = upgradeDatabase else { return }
+        let blocks = try await evidenceStore.blocks(forVersion: svid)
+        guard !blocks.isEmpty else {
+            throw SourceUpgradeError.missingDependency("no committed evidence blocks for source version \(svid)")
+        }
+        let owners = try await db.query("""
+            SELECT ebo.evidence_block_id, ebo.knowledge_object_id FROM evidence_block_objects ebo
+            JOIN evidence_blocks b ON b.id = ebo.evidence_block_id WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
+            """, [.uuid(svid)])
+        var koOfBlock: [UUID: UUID] = [:]
+        for r in owners { if let b = r.uuid(0), let k = r.uuid(1), koOfBlock[b] == nil { koOfBlock[b] = k } }
+        var blocksByKO: [UUID: [EvidenceBlock]] = [:]
+        for b in blocks { if let k = koOfBlock[b.id] { blocksByKO[k, default: []].append(b) } }
+        guard !blocksByKO.isEmpty else {
+            throw SourceUpgradeError.missingDependency("committed blocks of \(svid) are not linked to any knowledge object")
+        }
+        for (ko, koBlocks) in blocksByKO.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            if let only, !only.contains(ko) { continue }
+            try await proveUndigested(db, object: ko, sourceVersionID: svid, blocks: koBlocks)
+            guard try await Self.indexNeedsRebuild(db, object: ko, sourceVersionID: svid) else { continue }
+            let docClass = try await db.query("SELECT document_class FROM knowledge_objects WHERE id = ? LIMIT 1;",
+                                              [.uuid(ko)]).first?.string(0).flatMap(DocumentClass.init(rawValue:))
+            let packed = chunker.chunkWithLineage(objectID: ko, blocks: koBlocks.sorted { $0.ordinal < $1.ordinal })
+            let rebuilt = packed.chunks.map { c in
+                let isBoilerplate = c.blockKind.flatMap(EvidenceBlockKind.init(rawValue:))?.isBoilerplate ?? false
+                return c.withAdmitEmbedding(!isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted)
+                    .withSourceVersion(svid)
+                    .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
+            }
+            let inserts = ChunksRepository.insertStatements(rebuilt, lineage: packed.blockIDs, blocks: koBlocks)
+            let marker = "index:\(UUID().uuidString)"
+            try await db.withSavepoint("idx_switch_\(ko.uuidString.prefix(8))") { db in
+                let binds: [SQLValue] = [.uuid(ko), .uuid(svid)]
+                try db.exec("UPDATE chunks SET superseded_by_run = ? WHERE object_id = ? AND source_version_id = ? AND superseded_by_run IS NULL;",
+                            [.text(marker)] + binds)
+                for table in ["vectors", "chunk_embeddings", "ann_postings"] {
+                    try db.exec("DELETE FROM \(table) WHERE chunk_id IN (SELECT id FROM chunks WHERE superseded_by_run = ?);", [.text(marker)])
+                }
+                for st in inserts { try db.exec(st.sql, st.binds) }
+            }
+        }
+    }
+
+    /// Whether an object's current chunks for a version are not (all of) the active derivation.
+    private static func indexNeedsRebuild(_ db: Database, object ko: UUID, sourceVersionID svid: UUID) async throws -> Bool {
+        let row = try await db.query("""
+            SELECT
+              (SELECT COUNT(*) FROM chunks WHERE object_id = ?1 AND source_version_id = ?2 AND superseded_by_run IS NULL),
+              (SELECT COUNT(*) FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id JOIN evidence_blocks b ON b.id = cb.evidence_block_id
+                WHERE c.object_id = ?1 AND c.source_version_id = ?2 AND c.superseded_by_run IS NULL AND b.superseded_by_run IS NOT NULL),
+              (SELECT COUNT(*) FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id
+                WHERE c.object_id = ?1 AND c.source_version_id = ?2 AND c.superseded_by_run IS NULL),
+              (SELECT COUNT(*) FROM evidence_blocks b JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
+                WHERE ebo.knowledge_object_id = ?1 AND b.source_version_id = ?2 AND b.superseded_by_run IS NULL
+                  AND length(trim(CASE WHEN b.normalized_text = '' THEN b.raw_text ELSE b.normalized_text END)) > 0
+                  AND NOT EXISTS (SELECT 1 FROM chunk_blocks cb2 JOIN chunks c2 ON c2.id = cb2.chunk_id
+                                   WHERE cb2.evidence_block_id = b.id AND c2.source_version_id = ?2 AND c2.superseded_by_run IS NULL));
+            """, [.uuid(ko), .uuid(svid)]).first
+        let current = row?.int(0) ?? 0, staleCited = row?.int(1) ?? 0, lineage = row?.int(2) ?? 0, uncited = row?.int(3) ?? 0
+        if current == 0 || staleCited > 0 || (lineage > 0 && uncited > 0) { return true }
+        // F15/F25 — the counts hold; the derived content must still match (or be proven against) its evidence.
+        return try await ChunkDerivation.verify(db, sourceVersionID: svid, object: ko).needsRebuildOrProof > 0
+    }
+
+    /// F15/F25 — prove an object's digest-less chunks (written before v141) against evidence instead of
+    /// trusting their present state: re-derive the object's chunks from its committed blocks with the
+    /// current chunker, and record a digest ONLY for a chunk whose text and ordered lineage equal a
+    /// re-derived chunk exactly. Anything else stays unproven and the object is rebuilt.
+    private func proveUndigested(_ db: Database, object ko: UUID, sourceVersionID svid: UUID, blocks koBlocks: [EvidenceBlock]) async throws {
+        let rows = try await db.query("""
+            SELECT id, text FROM chunks
+             WHERE object_id = ? AND source_version_id = ? AND superseded_by_run IS NULL AND derivation_digest IS NULL;
+            """, [.uuid(ko), .uuid(svid)])
+        guard !rows.isEmpty else { return }
+        let ordered = koBlocks.sorted { $0.ordinal < $1.ordinal }
+        let packed = chunker.chunkWithLineage(objectID: ko, blocks: ordered)
+        var derived = Set<String>()
+        for c in packed.chunks {
+            let lineage = packed.blockIDs[c.id] ?? c.allBlockIDs
+            derived.insert(c.text + "\u{1F}" + lineage.map(\.uuidString).joined(separator: ","))
+        }
+        let content = Dictionary(koBlocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { a, _ in a })
+        let ids = rows.compactMap { $0.uuid(0) }
+        try await db.withSavepoint("chunk_prove_\(ko.uuidString.prefix(8))") { db in
+            var lineageOf: [UUID: [UUID]] = [:]
+            for id in ids {
+                lineageOf[id] = try db.query("SELECT evidence_block_id FROM chunk_blocks WHERE chunk_id = ? ORDER BY ordinal;",
+                                             [.uuid(id)]).compactMap { $0.uuid(0) }
+            }
+            for r in rows {
+                guard let id = r.uuid(0), let lineage = lineageOf[id], !lineage.isEmpty else { continue }
+                let text = r.string(1) ?? ""
+                guard derived.contains(text + "\u{1F}" + lineage.map(\.uuidString).joined(separator: ",")),
+                      let digest = ChunkDerivation.digest(text: text, lineage: lineage, content: content) else { continue }
+                try db.exec("UPDATE chunks SET derivation_digest = ? WHERE id = ? AND derivation_digest IS NULL;",
+                            [.text(digest), .uuid(id)])
+            }
+        }
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
@@ -678,6 +1100,15 @@ public actor IngestCoordinator {
         for ko: KnowledgeObject, from all: [EvidenceBlock], singleKO: Bool
     ) -> [EvidenceBlock] {
         if singleKO { return all }
+        // F05 — the GENERIC contract: a loader object lists the parser-native record keys its
+        // text covers, and each structural block names the one record it cites. Any multi-record
+        // format that stamps both sides (SQLite today) links exactly, with no format branch here.
+        if let keys = SQLiteRecordKey.keys(in: ko.metadata) {
+            return all.filter {
+                if case .string(let k)? = $0.attributes[SQLiteRecordKey.attributeKey]?.value { return keys.contains(k) }
+                return false
+            }
+        }
         let wanted: Set<Int>
         if case .int(let idx)? = ko.metadata["messageIndex"]?.value {
             wanted = [Int(idx)]
@@ -1035,7 +1466,11 @@ public actor IngestCoordinator {
         }
 
         // Deferred media: custody is registered; defer transcription (never a failure).
-        if type.category == .audio || type.category == .video {
+        // F02 — decided by the RESOLVED plugin, not the category: with the mediaTranscription module
+        // on, the registry installs an immediate on-device ASR plugin and the recording must reach
+        // it (becoming searchable, timecoded text). Only a deferred / missing plugin defers.
+        if type.category == .audio || type.category == .video,
+           universalExecutor.registry.plugin(for: type)?.executionMode != .immediate {
             return skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
         }
         // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser.
@@ -1071,6 +1506,32 @@ public actor IngestCoordinator {
             originalURL: url, processingSnapshotURL: processURL, logicalSourceID: handle.logicalSourceID,
             sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash,
             sizeBytes: handle.sizeBytes, intent: parserIntent)
+        // F01 — a file too large to hold every record at once. A loader that can stream is fed
+        // batch by batch, each committed before the next is read; one that cannot is deferred with
+        // custody kept (resource limit, retriable) instead of being loaded whole. Containers and
+        // the iOS-backup manifest expand member by member and are not subject to this.
+        let expandsMembers = plugin.executionMode == .container || type == .extractionManifest
+        // F04/F05 — a resumable loader is walked record by record at ANY size: each record commits with
+        // its own evidence and continuation cursor, and a run stops at a work budget, never a hard cap.
+        if !expandsMembers, let resumable = resumableLoader(plugin, type) {
+            return await ingestResumable(resumable, plugin: plugin, handle: handle, fileRecord: fileRecord,
+                                         url: url, processURL: processURL, type: type, skip: skipResult)
+        }
+        if !expandsMembers, handle.sizeBytes > memoryBudget.streamAboveBytes {
+            if let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) {
+                return await ingestStreaming(streamer, plugin: plugin, request: request, handle: handle, fileRecord: fileRecord,
+                                             url: url, processURL: processURL, type: type, skip: skipResult)
+            }
+            if handle.sizeBytes > memoryBudget.deferWholeFileAboveBytes {
+                let detail = "\(handle.sizeBytes) bytes exceeds the \(memoryBudget.deferWholeFileAboveBytes)-byte "
+                    + "whole-file budget and \(type.rawValue) cannot be read in parts"
+                await advanceReadiness(handle.sourceVersionID, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .blocked, action: .block,
+                                                   condition: .resourceLimit, detail: detail)])
+                return skipResult(.deferred, stage: "resource-deferred", detail: detail)
+            }
+        }
+
         let started = Date()
         let result: UniversalParserResult
         do { result = try await universalExecutor.execute(request) }
@@ -1195,47 +1656,22 @@ public actor IngestCoordinator {
         } : nil
         let allBlocks = structural?.doc.blocks ?? []
         let singleKO = perFileKOs.count == 1
-        var totalChunks = 0, totalEntities = 0, totalEvents = 0
-        var allInvalidations: [SubjectInvalidation.Subject] = []
-        var lastObject = perFileKOs[0]
+        var tally = IngestTally(lastObject: perFileKOs[0])
         var blockOwnership: [(ko: KnowledgeObject.ID, blockIDs: [EvidenceBlock.ID])] = []
 
         for rawKO in perFileKOs {
             do {
                 let koBlocks = Self.blocks(for: rawKO, from: allBlocks, singleKO: singleKO)
-                let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks, sourceVersionID: handle.sourceVersionID)
-                totalChunks += processed.chunkCount; totalEntities += processed.entityCount; totalEvents += processed.eventCount
-                allInvalidations.append(contentsOf: processed.invalidations)
-                lastObject = processed.object
+                try await ingestObject(rawKO, blocks: koBlocks, fileRecord: fileRecord, documentClass: docClass,
+                                       sourceVersionID: handle.sourceVersionID, tally: &tally)
                 if !koBlocks.isEmpty { blockOwnership.append((rawKO.id, koBlocks.map(\.id))) }
-                // Attachments — each ingested with THIS message's version as parent, so the
-                // version relation is recorded (atomically, in intake) even if the child parse fails.
-                if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
-                   case .string(let json) = value.value {
-                    let attachParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .attachment)
-                    for attachmentURL in EmailLoader.decodeAttachmentURLs(from: json) {
-                        // P1.2 (F-4) — an email ATTACHMENT that fails to ingest
-                        // was silently absent, indistinguishable from an email
-                        // that had no attachment. Tolerated (one bad attachment
-                        // must not fail the email) but recorded.
-                        do {
-                            let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
-                            await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
-                            totalChunks += attachmentResult.chunkCount; totalEntities += attachmentResult.entityCount; totalEvents += attachmentResult.eventCount
-                            allInvalidations.append(contentsOf: attachmentResult.invalidations)
-                        } catch {
-                            await derivationFailures?.record(
-                                stage: "attachment.ingest", error: error,
-                                sourceVersionID: handle.sourceVersionID,
-                                filePath: attachmentURL.path)
-                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                        }
-                    }
-                }
             } catch {
                 KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             }
         }
+        let totalChunks = tally.chunks, totalEntities = tally.entities, totalEvents = tally.events
+        let allInvalidations = tally.invalidations
+        let lastObject = tally.lastObject
 
         // USF-002.1 — a structural persist yields a COMMITTED receipt (nil on failure); readiness
         // advances structure/metadata/OCR only from it, and links blocks only on a real commit.
@@ -1280,43 +1716,13 @@ public actor IngestCoordinator {
         // complete AND every substantive block is located.
         if let readiness {
             let svid = handle.sourceVersionID
-            // Search dimensions (loader-produced) — default pipeline producer.
-            var searchUpdates: [SourceReadinessDimensionUpdate] = []
-            let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
-            if coverage.eligible > 0 {
-                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                                    completedUnits: coverage.eligible, totalUnits: coverage.eligible))
-                let fullyIndexed = coverage.indexed == coverage.eligible
-                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
-                                                                    action: fullyIndexed ? .satisfy : .partiallySatisfy,
-                                                                    completedUnits: coverage.indexed, totalUnits: coverage.eligible,
-                                                                    basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
-            } else {
-                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                                    completedUnits: 0, totalUnits: 0))
-            }
-            await advanceReadiness(svid, searchUpdates)
+            await advanceSearchReadiness(svid, readiness: readiness)
 
             // USF-010 — parser-produced dimensions carry the EXACT parser version as producer version so a
             // later parser upgrade can detect this structure as stale and reprocess only what changed.
             var structuralUpdates: [SourceReadinessDimensionUpdate] = []
             if let r = structuralReceipt {
-                let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
-                let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
-                structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
-                                                                        action: .satisfy, basis: docBasis))
-                if r.substantiveBlockCount > 0 {
-                    let ready = r.isStructurallyComplete
-                    structuralUpdates.append(SourceReadinessDimensionUpdate(
-                        dimension: .structuralExtraction, state: ready ? .ready : .partial,
-                        action: ready ? .satisfy : .partiallySatisfy,
-                        completedUnits: r.locatedSubstantiveBlockCount, totalUnits: r.substantiveBlockCount, basis: runBasis))
-                }
-                if r.ocrBlockCount > 0 {
-                    structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
-                                                                            applicability: .conditional,
-                                                                            completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
-                }
+                structuralUpdates = Self.structuralReadinessUpdates(r)
             } else if structuralAttempted {
                 structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed,
                                                                         action: .fail, detail: "structural persistence failed"))
@@ -1329,6 +1735,652 @@ public actor IngestCoordinator {
         return Result(fileRecord: fileRecord, object: lastObject, chunkCount: totalChunks, entityCount: totalEntities,
                       eventCount: totalEvents, documentClass: docClass, invalidations: allInvalidations,
                       logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID, intakeOutcome: handle.outcome)
+    }
+
+    /// F01 — the bounded-memory path for a file above `memoryBudget.streamAboveBytes` whose loader
+    /// can stream. Records arrive in `memoryBudget.batch`-sized batches and each object is committed
+    /// (KO + chunks + FTS) through the same per-KO pipeline before the next batch is read, so the
+    /// resident set is one batch, not the file. Structure runs only when the plugin's structural parser
+    /// is bounded by design (its memory does not grow with the file); its blocks are then linked to
+    /// the streamed records by their record keys, exactly as on the whole-file path. Otherwise
+    /// structure is recorded as blocked by a resource limit with the reason, never claimed. A failure
+    /// mid-stream keeps every record already committed and reports text as partial.
+    private func ingestStreaming(_ streamer: any StreamingIngestor, plugin: any UniversalParserPlugin,
+                                 request: UniversalParserRequest,
+                                 handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
+                                 type: SourceType, resuming: Bool = false,
+                                 skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
+        let svid = handle.sourceVersionID
+        let started = Date()
+        if !resuming {
+            do {
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+            } catch {
+                KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+        // F01/F15 — every record's outcome is durable (v139): attempting → committed | failed.
+        let outcomes = upgradeDatabase.map(StreamRecordOutcomeRepository.init(database:))
+        var failedRecords = 0, alreadyCommitted = 0
+        var bookkeeping = StreamBookkeeping()
+
+        var tally: IngestTally? = nil
+        var docClass: DocumentClass = .other
+        var records = 0, batches = 0
+        defer {
+            bookkeeping.records = records
+            bookkeeping.retainedInvalidations = tally?.invalidations.count ?? 0
+            lastStreamBookkeeping = bookkeeping
+        }
+        // Only the keys block ownership is decided by, per committed record — never the content. With a
+        // durable outcome ledger they live in its rows (bounded memory); this list is the fallback only.
+        var ownership: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])] = []
+        var streamError: Error? = nil
+        do {
+            let budget = memoryBudget.batch
+            try await streamer.streamRecords(fileAt: processURL, type: type, budget: budget) { batch in
+                batches += 1
+                bookkeeping.maxBatchObjects = max(bookkeeping.maxBatchObjects, batch.count)
+                bookkeeping.maxBatchContentBytes = max(bookkeeping.maxBatchContentBytes,
+                                                       batch.reduce(0) { $0 + $1.content.utf8.count })
+                for raw in batch {
+                    let ko = Self.rebindingSourceFile(raw, to: url)
+                    // The document class comes from the first record, as on the whole-file path.
+                    if tally == nil {
+                        docClass = classifier.classify(ContentDecoder().decode(cleaner.clean(ko)))
+                        tally = IngestTally(lastObject: ko)
+                    }
+                    let position = records
+                    records += 1
+                    // A retry over the same acquired bytes meets the same record at the same position:
+                    // a committed record is not written twice.
+                    if let outcomes, try await outcomes.outcome(sourceVersionID: svid, position: position)?.state == .committed {
+                        alreadyCommitted += 1
+                        continue
+                    }
+                    let keys = ko.metadata.filter { Self.ownershipKeys.contains($0.key) }
+                    // A record above the per-record budget is not processed: recorded as failed with the
+                    // reason (custody kept) — raise the budget and retry to commit it.
+                    let size = ko.content.utf8.count
+                    if size > budget.maxRecordBytes {
+                        failedRecords += 1; bookkeeping.oversizedRecords += 1
+                        try? await outcomes?.beginAttempt(sourceVersionID: svid, position: position, objectID: ko.id, at: Date())
+                        try? await outcomes?.fail(sourceVersionID: svid, position: position,
+                                                  reason: "record of \(size) bytes exceeds the \(budget.maxRecordBytes)-byte per-record budget",
+                                                  at: Date())
+                        continue
+                    }
+                    do {
+                        // Durable BEFORE any write: rolls back a previous half-written attempt of this record.
+                        try await outcomes?.beginAttempt(sourceVersionID: svid, position: position, objectID: ko.id, at: Date())
+                        var t = tally ?? IngestTally(lastObject: ko)
+                        try await ingestObject(ko, blocks: [], fileRecord: fileRecord, documentClass: docClass,
+                                               sourceVersionID: svid, tally: &t)
+                        tally = t
+                        if let outcomes {
+                            try await outcomes.commit(sourceVersionID: svid, position: position, objectID: ko.id,
+                                                      ownershipKeys: keys, at: Date())
+                        } else {
+                            ownership.append((ko.id, keys))
+                            bookkeeping.maxInMemoryOwnership = max(bookkeeping.maxInMemoryOwnership, ownership.count)
+                        }
+                    } catch {
+                        failedRecords += 1
+                        try? await outcomes?.fail(sourceVersionID: svid, position: position,
+                                                  reason: Self.failureReason(error), at: Date())
+                        await derivationFailures?.record(stage: "stream.record", error: error, knowledgeObjectID: ko.id,
+                                                         filePath: url.path, detectedType: type.rawValue)
+                        KalsmritikoshLog.ingestion.error("Streamed record \(position, privacy: .public) failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    }
+                }
+            }
+        } catch {
+            streamError = error
+            KalsmritikoshLog.ingestion.error("Streamed ingest stopped for \(url.lastPathComponent, privacy: .private) after \(records, privacy: .public) records: \(String(describing: error), privacy: .public)")
+        }
+        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
+        if tally == nil, alreadyCommitted > 0 {
+            tally = IngestTally(lastObject: KnowledgeObject(sourceFile: url, sourceType: type, content: ""))
+        }
+
+        guard let tally else {
+            // Nothing was read. A loader failure is a parser failure (custody kept, retriable).
+            if let streamError {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
+                                                   detail: String(describing: streamError).prefix(120).description)])
+                return skip(.failed, "parser", String(describing: streamError).prefix(300).description)
+            }
+            await advanceReadiness(svid, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy, completedUnits: 0, totalUnits: 0)])
+            return Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                          chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                          logicalSourceID: handle.logicalSourceID, sourceVersionID: svid, intakeOutcome: handle.outcome)
+        }
+
+        // Bounded structure: parse, commit once, link blocks to the streamed records by record key.
+        var structuralReceipt: StructuralPersistenceReceipt? = nil
+        var structuralAttempted = false
+        let structureExists = (try? await upgradeDatabase?.query(
+            "SELECT document_id FROM source_versions WHERE id = ?;", [.uuid(svid)]).first?.uuid(0)) ?? nil
+        if structureExists != nil, let evidenceStore {
+            // A retry over a version whose structure is committed: link the newly committed records only.
+            let blocks = (try? await evidenceStore.blocks(forVersion: svid)) ?? []
+            await linkStreamedOwnership(svid, blocks: blocks, fallback: ownership, url: url, store: evidenceStore)
+        } else if streamError == nil, tally.chunks > 0, plugin.capabilities.producesStructure, let evidenceStore,
+           let adapter = plugin as? ExistingParserPluginAdapter {
+            do {
+                if let doc = try await adapter.parseBoundedStructure(request) {
+                    structuralAttempted = true
+                    let parse = StructuralParse(doc: doc, parserName: plugin.pluginID, parserVersion: plugin.pluginVersion,
+                                                sizeBytes: handle.sizeBytes, startedAt: started)
+                    structuralReceipt = await persistStructuralDoc(parse, url: url, store: evidenceStore,
+                                                                   owningObjectID: tally.lastObject.id, documentClass: docClass)
+                    if structuralReceipt != nil {
+                        await linkStreamedOwnership(svid, blocks: doc.blocks, fallback: ownership, url: url, store: evidenceStore)
+                    }
+                }
+            } catch {
+                structuralAttempted = true
+                KalsmritikoshLog.ingestion.error("Bounded structural parse failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        if let readiness {
+            // ONE decision for text: complete only when every discovered record is committed. (Setting it
+            // ready and then partial was an illegal transition, so a stopped stream used to read as ready.)
+            var incomplete: String? = nil
+            if let streamError {
+                incomplete = "stream stopped after \(records) records: " + String(describing: streamError).prefix(120)
+            } else if let outcomes, let counts = try? await outcomes.counts(sourceVersionID: svid),
+                      let failed = counts[.failed], failed > 0 || (counts[.attempting] ?? 0) > 0 {
+                let reason = (try? await outcomes.firstFailureReason(sourceVersionID: svid)) ?? nil
+                incomplete = "\(failed) of \(records) streamed records failed to commit"
+                    + (reason.map { " (first: \($0.prefix(120)))" } ?? "") + " — retry to commit them"
+            } else if failedRecords > 0 {
+                incomplete = "\(failedRecords) of \(records) streamed records failed to commit"
+            }
+            await advanceSearchReadiness(svid, readiness: readiness, incomplete: incomplete)
+            if let r = structuralReceipt {
+                await advanceReadiness(svid, Self.structuralReadinessUpdates(r),
+                                       producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
+            } else if structuralAttempted {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed, action: .fail,
+                                                   detail: "structural persistence failed")],
+                    producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
+            } else if plugin.capabilities.producesStructure, evidenceStore != nil {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(
+                        dimension: .structuralExtraction, state: .blocked, action: .block, condition: .resourceLimit,
+                        detail: "\(handle.sizeBytes)-byte file ingested as \(records) records in \(batches) bounded batches; "
+                            + "whole-document structure exceeds the \(memoryBudget.streamAboveBytes)-byte in-memory budget")],
+                    producerID: "usf-m3.structural", producerVersion: plugin.pluginVersion)
+            }
+        }
+
+        var result = Result(fileRecord: fileRecord, object: tally.lastObject, chunkCount: tally.chunks,
+                            entityCount: tally.entities, eventCount: tally.events, documentClass: docClass,
+                            invalidations: tally.invalidations, logicalSourceID: handle.logicalSourceID,
+                            sourceVersionID: svid, intakeOutcome: handle.outcome)
+        if let streamError {
+            result.processingStatus = .failed
+            result.processingStage = "parser-stream"
+            result.processingDetail = "partial: \(records) records committed before " + String(describing: streamError).prefix(200)
+        }
+        return result
+    }
+
+    /// F04 — the resumable loader for a type, when this coordinator keeps durable cursors and evidence.
+    private func resumableLoader(_ plugin: any UniversalParserPlugin, _ type: SourceType) -> (any ResumableStreamingIngestor)? {
+        guard upgradeDatabase != nil, evidenceStore != nil,
+              let loader = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) as? any ResumableStreamingIngestor,
+              loader.resumes(type: type) else { return nil }
+        return loader
+    }
+
+    /// F04/F05 — the resumable record path. One run processes at most `memoryBudget.resumable.unitsPerRun`
+    /// units. Each record commits in two steps: its object (KO + chunks + FTS, with block lineage), then ONE
+    /// savepoint holding its evidence blocks (deterministic ids), their ownership, the scope's continuation
+    /// cursor and the record's `committed` outcome. So the cursor never runs ahead of committed evidence, and
+    /// an interruption can only leave the record `attempting` — the next run rolls its object back and redoes
+    /// it from the same cursor. A record that fails stops the run at that record (the cursor stays before it,
+    /// so the retry is exact). Deferred units are counted per scope and keep text and structure partial; a
+    /// later run (`resumeStreamedIngest`, or a structural upgrade) continues over the EXACT acquired bytes.
+    private func ingestResumable(_ loader: any ResumableStreamingIngestor, plugin: any UniversalParserPlugin,
+                                 handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
+                                 type: SourceType, resuming: Bool = false,
+                                 skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
+        await withSourceLease(handle.sourceVersionID) {
+            await ingestResumableLeased(loader, plugin: plugin, handle: handle, fileRecord: fileRecord, url: url,
+                                        processURL: processURL, type: type, resuming: resuming, skip: skip)
+        }
+    }
+
+    private func ingestResumableLeased(_ loader: any ResumableStreamingIngestor, plugin: any UniversalParserPlugin,
+                                       handle: SourceIntakeHandle, fileRecord: FileRecord, url: URL, processURL: URL,
+                                       type: SourceType, resuming: Bool,
+                                       skip: (IngestAttemptsRepository.Status, String, String) -> Result) async -> Result {
+        let svid = handle.sourceVersionID
+        let started = Date()
+        guard let db = upgradeDatabase, let evidenceStore else {
+            return skip(.failed, "parser", "resumable ingest needs the upgrade database and evidence store")
+        }
+        if !resuming {
+            do {
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+                _ = try await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
+            } catch {
+                KalsmritikoshLog.ingestion.error("Custody record failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+        let outcomes = StreamRecordOutcomeRepository(database: db)
+        let cursors = StreamCursorRepository(database: db)
+        let budget = memoryBudget.resumable
+        let maxRecordBytes = memoryBudget.batch.maxRecordBytes
+        let parserID = plugin.pluginID, parserVersion = plugin.pluginVersion
+        let runID = UUID()
+        var bookkeeping = StreamBookkeeping()
+        var tally: IngestTally? = nil
+        var docClass: DocumentClass = .other
+        var records = 0, committedThisRun = 0
+        var stopReason: String? = nil
+        var streamError: Error? = nil
+        defer {
+            bookkeeping.records = records
+            bookkeeping.retainedInvalidations = tally?.invalidations.count ?? 0
+            lastStreamBookkeeping = bookkeeping
+        }
+
+        // The version's ONE document: the attached one, else a deterministic id for its first attach.
+        let attached = (try? await db.query("SELECT document_id FROM source_versions WHERE id = ?;", [.uuid(svid)]).first?.uuid(0)) ?? nil
+        let documentID = attached ?? StreamedEvidence.blockID(sourceVersionID: svid, identity: "\u{1F}document")
+        func block(_ e: StreamedEvidence) -> EvidenceBlock {
+            EvidenceBlock(id: StreamedEvidence.blockID(sourceVersionID: svid, identity: e.identity), documentID: documentID,
+                          sourceVersionID: svid, ordinal: e.ordinal, kind: e.kind, rawText: e.rawText,
+                          locator: e.locator, attributes: e.attributes)
+        }
+        let resume = Dictionary(((try? await cursors.states(sourceVersionID: svid)) ?? []).compactMap { s in
+            s.cursor.map { (s.scope, $0) } }, uniquingKeysWith: { a, _ in a })
+
+        do {
+            let totals = try await loader.streamResumable(fileAt: processURL, type: type, budget: budget, resume: resume) { rec in
+                records += 1
+                let ko = Self.rebindingSourceFile(rec.object, to: url)
+                let size = ko.content.utf8.count
+                bookkeeping.maxBatchObjects = max(bookkeeping.maxBatchObjects, 1)
+                bookkeeping.maxBatchContentBytes = max(bookkeeping.maxBatchContentBytes, size)
+                if tally == nil {
+                    docClass = classifier.classify(ContentDecoder().decode(cleaner.clean(ko)))
+                    tally = IngestTally(lastObject: ko)
+                }
+                if size > maxRecordBytes {
+                    bookkeeping.oversizedRecords += 1
+                    let reason = "record of \(size) bytes exceeds the \(maxRecordBytes)-byte per-record budget"
+                    try? await outcomes.beginAttempt(sourceVersionID: svid, position: rec.position, objectID: ko.id, at: Date())
+                    try? await outcomes.fail(sourceVersionID: svid, position: rec.position, reason: reason, at: Date())
+                    stopReason = reason
+                    return false
+                }
+                let owned = rec.evidence.map(block)
+                let all = rec.scopeEvidence.map(block) + owned
+                do {
+                    // Durable BEFORE any write: rolls back a previous half-written attempt of this record.
+                    try await outcomes.beginAttempt(sourceVersionID: svid, position: rec.position, objectID: ko.id, at: Date())
+                    var t = tally ?? IngestTally(lastObject: ko)
+                    try await ingestObject(ko, blocks: owned, fileRecord: fileRecord, documentClass: docClass,
+                                           sourceVersionID: svid, tally: &t)
+                    tally = t
+                    let page = ParsedDocument(id: documentID, logicalSourceID: handle.logicalSourceID, sourceVersionID: svid,
+                                              filename: handle.filename, detectedType: type, mimeType: handle.mimeType,
+                                              contentHash: handle.contentHash, blocks: all, extractionStatus: .partial)
+                    let keys = ko.metadata.filter { Self.ownershipKeys.contains($0.key) }
+                    let now = Date(), size = handle.sizeBytes, ownedIDs = owned.map(\.id)
+                    try await db.withSavepoint("stream_resume_commit") { db in
+                        try EvidenceStore.appendStreamedEvidence(db, document: page, parser: parserID, parserVersion: parserVersion,
+                                                                 runID: runID, runStartedAt: started, sizeBytes: size, blocks: all,
+                                                                 owner: ko.id, owned: ownedIDs, at: now)
+                        try StreamCursorRepository.advance(db, sourceVersionID: svid, scope: rec.scope, scopeIndex: rec.scopeIndex,
+                                                           cursor: rec.cursorAfter, processed: rec.unitsAfter, at: now)
+                        try StreamRecordOutcomeRepository.commit(db, sourceVersionID: svid, position: rec.position, objectID: ko.id,
+                                                                 ownershipKeys: keys, at: now)
+                    }
+                    committedThisRun += 1
+                    await sourceWorkHook?(.recordCommitted(svid, position: rec.position))
+                    // Additive, best-effort derivations from the committed blocks (as persistStructuralDoc does).
+                    if let assertions {
+                        await deriveAssertions(from: page, sourceVersionID: svid, extractorVersion: parserVersion, into: assertions)
+                    }
+                    if let genericFacts {
+                        await deriveGenericFacts(from: page, url: url, into: genericFacts, owningObjectID: ko.id, documentClass: docClass)
+                    }
+                    return true
+                } catch {
+                    try? await outcomes.fail(sourceVersionID: svid, position: rec.position, reason: Self.failureReason(error), at: Date())
+                    stopReason = Self.failureReason(error)
+                    await derivationFailures?.record(stage: "stream.record", error: error, knowledgeObjectID: ko.id,
+                                                     filePath: url.path, detectedType: type.rawValue)
+                    KalsmritikoshLog.ingestion.error("Resumable record \(rec.position, privacy: .public) failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    return false
+                }
+            }
+            try await cursors.recordDiscovered(sourceVersionID: svid, totals, at: Date())
+        } catch {
+            streamError = error
+            KalsmritikoshLog.ingestion.error("Resumable ingest stopped for \(url.lastPathComponent, privacy: .private) after \(records, privacy: .public) records: \(String(describing: error), privacy: .public)")
+        }
+        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
+
+        let coverage = (try? await cursors.coverage(sourceVersionID: svid)) ?? nil
+        if tally == nil, (coverage?.processed ?? 0) > 0 {
+            tally = IngestTally(lastObject: KnowledgeObject(sourceFile: url, sourceType: type, content: ""))
+        }
+        guard let tally else {
+            if let streamError {
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
+                                                   detail: String(describing: streamError).prefix(120).description)])
+                return skip(.failed, "parser", String(describing: streamError).prefix(300).description)
+            }
+            await advanceReadiness(svid, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy, completedUnits: 0, totalUnits: 0)])
+            return Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                          chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                          logicalSourceID: handle.logicalSourceID, sourceVersionID: svid, intakeOutcome: handle.outcome)
+        }
+
+        // ONE decision for text and structure, from durable state: complete only when every discovered unit
+        // is committed and no record is failed or interrupted.
+        var incomplete = await resumableIncompleteDetail(svid, noun: loader.unitNoun, perRun: budget.unitsPerRun)
+        if let streamError {
+            let p = coverage.map { " (\($0.processed) of \($0.discovered) \(loader.unitNoun) committed)" } ?? ""
+            incomplete = "stream stopped after \(records) records\(p): " + String(describing: streamError).prefix(120)
+        } else if incomplete == nil, let stopReason {
+            incomplete = "stopped at a record that failed to commit: \(stopReason.prefix(120)) — retry to continue"
+        }
+        let complete = incomplete == nil
+        try? await evidenceStore.finishStreamedRun(sourceVersionID: svid, runID: runID, complete: complete, at: Date())
+        if let readiness {
+            await advanceSearchReadiness(svid, readiness: readiness, incomplete: incomplete)
+            if let live = try? await evidenceStore.liveStructuralCounts(forVersion: svid), live.substantive > 0 {
+                let basis = SourceReadinessBasis(kind: .sourceDocument, identifier: documentID.uuidString)
+                let ready = complete && live.located == live.substantive
+                await advanceReadiness(svid, [
+                    SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready, action: .satisfy, basis: basis),
+                    SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: ready ? .ready : .partial,
+                                                   action: ready ? .satisfy : .partiallySatisfy,
+                                                   completedUnits: live.located, totalUnits: live.substantive, basis: basis,
+                                                   detail: incomplete)],
+                    producerID: "usf-m3.structural", producerVersion: parserVersion)
+            }
+        }
+
+        var result = Result(fileRecord: fileRecord, object: tally.lastObject, chunkCount: tally.chunks,
+                            entityCount: tally.entities, eventCount: tally.events, documentClass: docClass,
+                            invalidations: tally.invalidations, logicalSourceID: handle.logicalSourceID,
+                            sourceVersionID: svid, intakeOutcome: handle.outcome)
+        if let streamError {
+            result.processingStatus = .failed
+            result.processingStage = "parser-stream"
+            result.processingDetail = "partial: " + String(describing: streamError).prefix(200)
+        } else if let incomplete {
+            result.processingDetail = "partial: " + incomplete.prefix(200)
+        }
+        return result
+    }
+
+    /// F04/F15 — why a streamed version is NOT complete, from durable state (nil when it is, or was never
+    /// streamed): records that failed or were interrupted, and units deferred to a later run.
+    private func resumableIncompleteDetail(_ svid: UUID, noun: String = "units", perRun: Int? = nil) async -> String? {
+        guard let db = upgradeDatabase else { return nil }
+        let outcomes = StreamRecordOutcomeRepository(database: db)
+        var parts: [String] = []
+        if let counts = try? await outcomes.counts(sourceVersionID: svid) {
+            let unfinished = (counts[.failed] ?? 0) + (counts[.attempting] ?? 0)
+            if unfinished > 0 {
+                let reason = (try? await outcomes.firstFailureReason(sourceVersionID: svid)) ?? nil
+                parts.append("\(unfinished) streamed record(s) failed to commit" + (reason.map { " (first: \($0.prefix(120)))" } ?? "")
+                             + " — retry to commit them")
+            }
+        }
+        if let c = try? await StreamCursorRepository(database: db).coverage(sourceVersionID: svid), c.deferred > 0 {
+            let budget = perRun.map { " at the per-run budget of \($0)" } ?? ""
+            parts.append("paused\(budget): \(c.processed) of \(c.discovered) \(noun) processed, \(c.deferred) deferred — resume to continue")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
+    /// The metadata keys block ownership is decided by (`blocks(for:from:singleKO:)`).
+    private static let ownershipKeys: Set<String> = [SQLiteRecordKey.metadataKey, "messageIndex", EmailLoader.threadMessagesMetaKey]
+
+    /// Structure / metadata / OCR readiness from a COMMITTED structural receipt (USF-002.1).
+    nonisolated static func structuralReadinessUpdates(_ r: StructuralPersistenceReceipt) -> [SourceReadinessDimensionUpdate] {
+        let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
+        let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
+        var updates = [SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
+                                                      action: .satisfy, basis: docBasis)]
+        if r.substantiveBlockCount > 0 {
+            let ready = r.isStructurallyComplete
+            updates.append(SourceReadinessDimensionUpdate(
+                dimension: .structuralExtraction, state: ready ? .ready : .partial,
+                action: ready ? .satisfy : .partiallySatisfy,
+                completedUnits: r.locatedSubstantiveBlockCount, totalUnits: r.substantiveBlockCount, basis: runBasis))
+        }
+        if r.ocrBlockCount > 0 {
+            updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
+                                                          applicability: .conditional,
+                                                          completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
+        }
+        return updates
+    }
+
+    /// Search dimensions (loader-produced) from the exact per-version FTS coverage — default
+    /// pipeline producer. Shared by the whole-file and streamed paths.
+    /// F01 — link a streamed version's structural blocks to the records that own them, reading the
+    /// committed records' ownership keys from the durable outcome rows page by page (bounded memory;
+    /// idempotent — linking is INSERT OR IGNORE, so a retry links only what is new).
+    private func linkStreamedOwnership(_ svid: UUID, blocks: [EvidenceBlock],
+                                       fallback: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])],
+                                       url: URL, store: EvidenceStore) async {
+        guard !blocks.isEmpty else { return }
+        func link(_ id: UUID, _ keys: [String: AnyCodable], singleKO: Bool) async {
+            let stub = KnowledgeObject(id: id, sourceFile: url, sourceType: .unknown, content: "", metadata: keys)
+            let blockIDs = Self.blocks(for: stub, from: blocks, singleKO: singleKO).map(\.id)
+            guard !blockIDs.isEmpty else { return }
+            do { try await store.linkBlocks(blockIDs, toObject: id, at: Date()) }
+            catch {
+                await derivationFailures?.record(stage: "evidence.linkBlocks", error: error, knowledgeObjectID: id,
+                                                 filePath: url.path, detectedType: nil)
+                KalsmritikoshLog.ingestion.error("linkBlocks failed (\(blockIDs.count, privacy: .public) blocks) for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
+        }
+        guard let db = upgradeDatabase else {
+            for (id, keys) in fallback { await link(id, keys, singleKO: fallback.count == 1) }
+            return
+        }
+        let repo = StreamRecordOutcomeRepository(database: db)
+        let committed = (try? await repo.counts(sourceVersionID: svid))?[.committed] ?? 0
+        var after = -1
+        while let page = try? await repo.page(sourceVersionID: svid, afterPosition: after, limit: 256, state: .committed),
+              let last = page.last {
+            for o in page { if let id = o.objectID { await link(id, o.ownershipKeys, singleKO: committed == 1) } }
+            after = last.position
+        }
+    }
+
+    /// F01/F15 — the durable outcome of every record of a streamed version, in stream order.
+    public func streamRecordOutcomes(sourceVersionID svid: UUID) async throws -> [StreamRecordOutcome] {
+        guard let db = upgradeDatabase else { return [] }
+        let repo = StreamRecordOutcomeRepository(database: db)
+        var out: [StreamRecordOutcome] = [], after = -1
+        while case let page = try await repo.page(sourceVersionID: svid, afterPosition: after, limit: 512), let last = page.last {
+            out += page; after = last.position
+        }
+        return out
+    }
+
+    /// F01/F15 — retry a streamed version: re-stream its EXACT acquired bytes (byte resolver) and commit
+    /// only the records that are not committed yet. F04 — for a resumable loader this is the continuation:
+    /// the walk resumes from each scope's durable cursor for another run's budget. A record whose previous attempt failed or was
+    /// interrupted has that attempt's object rolled back first, so nothing is duplicated. Structure that
+    /// is already committed is kept; the newly committed records are linked to it.
+    public func resumeStreamedIngest(sourceVersionID svid: UUID) async throws {
+        try await withSourceLease(svid) { try await resumeStreamedIngestLeased(sourceVersionID: svid) }
+    }
+
+    private func resumeStreamedIngestLeased(sourceVersionID svid: UUID) async throws {
+        guard let byteResolver, let db = upgradeDatabase else {
+            throw SourceUpgradeError.missingDependency("upgrades not configured: cannot resume a streamed ingest")
+        }
+        guard let row = try await db.query("""
+            SELECT logical_source_id, content_hash, detected_type, size_bytes, filename, declared_extension, mime_type,
+                   detection_basis, custody_mode, preservation_status, vault_address
+              FROM source_versions WHERE id = ? LIMIT 1;
+            """, [.uuid(svid)]).first, let logical = row.uuid(0), let hash = row.string(1) else {
+            throw SourceUpgradeError.sourceVersionMissing(svid)
+        }
+        let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
+        let size = row.int(3) ?? 0
+        let resolved = try await byteResolver.resolve(sourceVersionID: svid, at: Date())
+        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+        let plugin = try universalExecutor.registry.resolve(type)
+        guard let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) else {
+            throw SourceUpgradeError.policyBlocked("\(type.rawValue) is not ingested as a stream; nothing to resume")
+        }
+        let handle = SourceIntakeHandle(
+            occurrenceFileID: logical, logicalSourceID: logical, sourceVersionID: svid, outcome: .newVersion,
+            filename: row.string(4) ?? resolved.identityURL.lastPathComponent, declaredExtension: row.string(5) ?? "",
+            detectedType: type, mimeType: row.string(6),
+            detectionBasis: SourceDetectionBasis(rawValue: row.string(7) ?? "") ?? .unknown, contentHash: hash,
+            sizeBytes: size, custodyMode: SourceCustodyMode(rawValue: row.string(8) ?? "") ?? .referenced,
+            preservationStatus: SourcePreservationStatus(rawValue: row.string(9) ?? "") ?? .referenceRecorded,
+            vaultAddress: row.string(10))
+        let fileRecord = FileRecord(id: logical, url: resolved.identityURL, sourceType: type, sizeBytes: size,
+                                    modifiedAt: Date(), ingestedAt: Date(), contentHash: hash, aliasOf: nil, availability: .available)
+        let request = UniversalParserRequest(
+            originalURL: resolved.identityURL, processingSnapshotURL: resolved.snapshotURL, logicalSourceID: logical,
+            sourceVersionID: svid, sourceType: type, contentHash: hash, sizeBytes: size, intent: .fullAvailable)
+        let url = resolved.identityURL
+        if let resumable = resumableLoader(plugin, type) {
+            _ = await ingestResumable(resumable, plugin: plugin, handle: handle, fileRecord: fileRecord, url: url,
+                                      processURL: resolved.snapshotURL, type: type, resuming: true,
+                                      skip: { status, stage, detail in
+                Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                       chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                       logicalSourceID: logical, sourceVersionID: svid, intakeOutcome: .newVersion,
+                       processingStatus: status, processingStage: stage, processingDetail: detail)
+            })
+            return
+        }
+        _ = await ingestStreaming(streamer, plugin: plugin, request: request, handle: handle, fileRecord: fileRecord,
+                                  url: url, processURL: resolved.snapshotURL, type: type, resuming: true,
+                                  skip: { status, stage, detail in
+            Result(fileRecord: fileRecord, object: KnowledgeObject(sourceFile: url, sourceType: type, content: ""),
+                   chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                   logicalSourceID: logical, sourceVersionID: svid, intakeOutcome: .newVersion,
+                   processingStatus: status, processingStage: stage, processingDetail: detail)
+        })
+    }
+
+    private func advanceSearchReadiness(_ svid: UUID, readiness: SourceReadinessRepository, incomplete: String? = nil) async {
+        var searchUpdates: [SourceReadinessDimensionUpdate] = []
+        let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
+        if let incomplete {
+            // Committed records stay searchable; the text dimension says what was not read or committed.
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .partial,
+                                                                action: .partiallySatisfy, detail: incomplete))
+            if coverage.eligible > 0 {
+                let fullyIndexed = coverage.indexed == coverage.eligible
+                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                                                    action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                                                    completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                                                    basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
+            }
+        } else if coverage.eligible > 0 {
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                                completedUnits: coverage.eligible, totalUnits: coverage.eligible))
+            let fullyIndexed = coverage.indexed == coverage.eligible
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                                                action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                                                completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                                                basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
+        } else {
+            searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                                completedUnits: 0, totalUnits: 0))
+        }
+        await advanceReadiness(svid, searchUpdates)
+    }
+
+    /// Running totals for one file across its objects and the attachments they spawn.
+    private struct IngestTally {
+        var chunks = 0, entities = 0, events = 0
+        /// Distinct subjects this file invalidated, capped. Every invalidation is ALSO delivered live
+        /// on `invalidations` as each object commits; this list only summarises the file, so it is
+        /// de-duplicated and bounded (F12) instead of growing with the record count.
+        private(set) var invalidations: [SubjectInvalidation.Subject] = []
+        private(set) var droppedInvalidations = 0
+        private var seen = Set<SubjectInvalidation.Subject>()
+        var lastObject: KnowledgeObject
+
+        init(lastObject: KnowledgeObject) { self.lastObject = lastObject }
+
+        static let maxRetainedInvalidations = 1024
+
+        mutating func note(_ subjects: [SubjectInvalidation.Subject]) {
+            for s in subjects where !seen.contains(s) {
+                guard invalidations.count < Self.maxRetainedInvalidations else { droppedInvalidations += 1; continue }
+                seen.insert(s); invalidations.append(s)
+            }
+        }
+    }
+
+    /// F01/F12 — high-water marks of the last streamed ingest's live structures (instrumentation,
+    /// not a resident-memory measurement).
+    public struct StreamBookkeeping: Sendable, Equatable {
+        public var records = 0
+        public var maxBatchObjects = 0
+        public var maxBatchContentBytes = 0
+        public var maxInMemoryOwnership = 0
+        public var retainedInvalidations = 0
+        public var oversizedRecords = 0
+    }
+    private(set) var lastStreamBookkeeping = StreamBookkeeping()
+    public func streamBookkeeping() -> StreamBookkeeping { lastStreamBookkeeping }
+
+    /// One object of a file through the per-KO pipeline, then its attachments. Shared by the
+    /// whole-file and streamed paths so both commit an object identically.
+    private func ingestObject(_ rawKO: KnowledgeObject, blocks koBlocks: [EvidenceBlock], fileRecord: FileRecord,
+                              documentClass docClass: DocumentClass, sourceVersionID: UUID,
+                              tally: inout IngestTally) async throws {
+        let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks, sourceVersionID: sourceVersionID)
+        tally.chunks += processed.chunkCount; tally.entities += processed.entityCount; tally.events += processed.eventCount
+        tally.note(processed.invalidations)
+        tally.lastObject = processed.object
+        // Attachments — each ingested with THIS message's version as parent, so the
+        // version relation is recorded (atomically, in intake) even if the child parse fails.
+        if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
+           case .string(let json) = value.value {
+            let attachParent = SourceParentReference(parentSourceVersionID: sourceVersionID, relation: .attachment)
+            for attachmentURL in EmailLoader.decodeAttachmentURLs(from: json) {
+                // P1.2 (F-4) — an email ATTACHMENT that fails to ingest
+                // was silently absent, indistinguishable from an email
+                // that had no attachment. Tolerated (one bad attachment
+                // must not fail the email) but recorded.
+                do {
+                    let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
+                    await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
+                    tally.chunks += attachmentResult.chunkCount; tally.entities += attachmentResult.entityCount; tally.events += attachmentResult.eventCount
+                    tally.note(attachmentResult.invalidations)
+                } catch {
+                    await derivationFailures?.record(
+                        stage: "attachment.ingest", error: error,
+                        sourceVersionID: sourceVersionID,
+                        filePath: attachmentURL.path)
+                    KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
     }
 
     private struct ProcessedKO: Sendable {
@@ -1524,7 +2576,7 @@ public actor IngestCoordinator {
         // entities/events/relationships — stays best-effort and re-derivable, so
         // it is intentionally NOT part of the atomic core.)
         do {
-            try await chunks.insertBatch(chunked, lineage: chunkLineage)
+            try await chunks.insertBatch(chunked, lineage: chunkLineage, blocks: blocks)
         } catch {
             KalsmritikoshLog.storage.error("chunk insert failed for \(object.id.uuidString.prefix(8), privacy: .public) — rolling back KO: \(String(describing: error), privacy: .public)")
             try? await objects.deleteByID(object.id)

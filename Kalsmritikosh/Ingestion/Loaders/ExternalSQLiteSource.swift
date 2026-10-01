@@ -128,6 +128,10 @@ public final class ExternalSQLiteSource {
                 sqlite3_bind_double(stmt, pos, v)
             case .text(let s):
                 sqlite3_bind_text(stmt, pos, s, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            case .blob(let d):
+                _ = d.withUnsafeBytes { raw in
+                    sqlite3_bind_blob(stmt, pos, raw.baseAddress, Int32(d.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                }
             case .null:
                 sqlite3_bind_null(stmt, pos)
             }
@@ -176,6 +180,8 @@ public final class ExternalSQLiteSource {
         case int64(Int64)
         case double(Double)
         case text(String)
+        /// F04 — a BLOB key value (a WITHOUT ROWID table keyed by a blob is walked by keyset too).
+        case blob(Data)
         case null
     }
 

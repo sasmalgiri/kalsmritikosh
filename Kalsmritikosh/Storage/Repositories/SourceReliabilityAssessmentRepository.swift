@@ -37,36 +37,36 @@ public actor SourceReliabilityAssessmentRepository {
     ) async throws -> SourceReliabilityAssessment {
         let newID = UUID()
         let sp = "sra_\(newID.uuidString.replacingOccurrences(of: "-", with: ""))"
+        let insert: [SQLValue] = [
+            .text(newID.uuidString),
+            .text(sourceVersionID.uuidString),
+            .text(reliability.rawValue),
+            .text(independence.rawValue),
+            rationale.map { .text($0) } ?? .null,
+            assessedBy.map { .text($0) } ?? .null,
+            .real(date.timeIntervalSince1970),
+            .real(date.timeIntervalSince1970)
+        ]
         do {
-            try await database.exec("SAVEPOINT \(sp);")
-            // Forward any currently active assessments to the new row.
-            try await database.exec("""
-            UPDATE source_reliability_assessments
-               SET superseded_by_id = ?
-             WHERE source_version_id = ? AND superseded_by_id IS NULL;
-            """, [.text(newID.uuidString), .text(sourceVersionID.uuidString)])
-            // Insert the new active assessment.
-            try await database.exec("""
-            INSERT INTO source_reliability_assessments
-                (id, source_version_id, reliability, independence,
-                 rationale, assessed_by, assessed_at, created_at, superseded_by_id)
-            VALUES (?,?,?,?,?,?,?,?,NULL);
-            """, [
-                .text(newID.uuidString),
-                .text(sourceVersionID.uuidString),
-                .text(reliability.rawValue),
-                .text(independence.rawValue),
-                rationale.map { .text($0) } ?? .null,
-                assessedBy.map { .text($0) } ?? .null,
-                .real(date.timeIntervalSince1970),
-                .real(date.timeIntervalSince1970)
-            ])
-            try await database.exec("RELEASE \(sp);")
+            // F28 — supersede + insert in ONE isolated savepoint.
+            try await database.withSavepoint(sp) { db in
+                // Forward any currently active assessments to the new row.
+                try db.exec("""
+                UPDATE source_reliability_assessments
+                   SET superseded_by_id = ?
+                 WHERE source_version_id = ? AND superseded_by_id IS NULL;
+                """, [.text(newID.uuidString), .text(sourceVersionID.uuidString)])
+                // Insert the new active assessment.
+                try db.exec("""
+                INSERT INTO source_reliability_assessments
+                    (id, source_version_id, reliability, independence,
+                     rationale, assessed_by, assessed_at, created_at, superseded_by_id)
+                VALUES (?,?,?,?,?,?,?,?,NULL);
+                """, insert)
+            }
             KalsmritikoshLog.storage.debug(
                 "SourceReliabilityAssessmentRepository: assessed \(sourceVersionID, privacy: .public)")
         } catch {
-            try? await database.exec("ROLLBACK TO \(sp);")
-            try? await database.exec("RELEASE \(sp);")
             KalsmritikoshLog.storage.error(
                 "SourceReliabilityAssessmentRepository assess failed: \(String(describing: error), privacy: .public)")
             throw error

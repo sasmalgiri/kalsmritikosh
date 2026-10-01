@@ -32,10 +32,10 @@ public actor InvestigationAnalysisRepository {
         let clean = statement.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw InvestigationHypothesisError.blankStatement }
         let cleanActor = try validatedActor(actor)
-        try await requireOpenCase(caseID)
         let id = UUID()
-        try await tx("invhyp", id) {
-            try await self.database.exec("""
+        try await tx("invhyp", id) { db in
+            try Self.requireOpenCase(db, caseID)
+            try db.exec("""
                 INSERT INTO investigation_hypotheses (id, case_id, kind, statement, status, origin_hypothesis_id, revision, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(kind.rawValue), .text(clean), .text(HypothesisStatus.proposed.rawValue),
@@ -47,10 +47,10 @@ public actor InvestigationAnalysisRepository {
     /// Promote a lead into a hypothesis (INV-04 human decision). In place: kind lead → hypothesis, status stays proposed.
     public func promoteToHypothesis(hypothesisID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> InvestigationHypothesis {
         let cleanActor = try validatedActor(actor)
-        try await tx("invhypp", hypothesisID) {
-            let h = try await self.requireHypothesisCAS(hypothesisID, expectedRevision: expectedRevision)
+        try await tx("invhypp", hypothesisID) { db in
+            let h = try Self.hypothesisCAS(db, hypothesisID, expectedRevision: expectedRevision)
             guard h.kind == .lead else { throw InvestigationHypothesisError.notALead(hypothesisID) }
-            try await self.database.exec("UPDATE investigation_hypotheses SET kind = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+            try db.exec("UPDATE investigation_hypotheses SET kind = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
                                          [.text(HypothesisKind.hypothesis.rawValue), .integer(Int64(h.revision + 1)), .text(cleanActor), .date(date), .uuid(hypothesisID), .integer(Int64(h.revision))])
         }
         return try await requireHypothesis(hypothesisID)
@@ -61,8 +61,8 @@ public actor InvestigationAnalysisRepository {
     public func setHypothesisStatus(hypothesisID: UUID, expectedRevision: Int, to status: HypothesisStatus,
                                     actor: String, at date: Date) async throws -> InvestigationHypothesis {
         let cleanActor = try validatedActor(actor)
-        try await tx("invhyps", hypothesisID) {
-            let h = try await self.requireHypothesisCAS(hypothesisID, expectedRevision: expectedRevision)
+        try await tx("invhyps", hypothesisID) { db in
+            let h = try Self.hypothesisCAS(db, hypothesisID, expectedRevision: expectedRevision)
             switch status {
             case .confirmed, .rejected:
                 guard h.kind == .hypothesis else { throw InvestigationHypothesisError.notAHypothesis(hypothesisID) }
@@ -72,17 +72,17 @@ public actor InvestigationAnalysisRepository {
             case .proposed:
                 break
             }
-            try await self.database.exec("UPDATE investigation_hypotheses SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+            try db.exec("UPDATE investigation_hypotheses SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
                                          [.text(status.rawValue), .integer(Int64(h.revision + 1)), .text(cleanActor), .date(date), .uuid(hypothesisID), .integer(Int64(h.revision))])
         }
         return try await requireHypothesis(hypothesisID)
     }
 
     public func fetchHypothesis(_ id: UUID) async throws -> InvestigationHypothesis? {
-        (try await database.query("\(hypSelect) WHERE id = ? LIMIT 1;", [.uuid(id)])).first.flatMap(decodeHypothesis)
+        (try await database.query("\(Self.hypSelect) WHERE id = ? LIMIT 1;", [.uuid(id)])).first.flatMap(Self.decodeHypothesis)
     }
     public func hypotheses(caseID: UUID) async throws -> [InvestigationHypothesis] {
-        (try await database.query("\(hypSelect) WHERE case_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(caseID)])).compactMap(decodeHypothesis)
+        (try await database.query("\(Self.hypSelect) WHERE case_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(caseID)])).compactMap(Self.decodeHypothesis)
     }
 
     // MARK: - Evidence links (for/against)
@@ -91,12 +91,13 @@ public actor InvestigationAnalysisRepository {
                             note: String?, addedBy: String, at date: Date) async throws -> HypothesisEvidenceLink {
         let cleanBy = try validatedActor(addedBy)
         let id = UUID()
-        try await tx("invhe", id) {
-            try await self.database.exec("""
+        let noteValue = opt(note)
+        try await tx("invhe", id) { db in
+            try db.exec("""
                 INSERT INTO investigation_hypothesis_evidence (id, hypothesis_id, stance, source_version_id, knowledge_object_id, note, added_by, created_at)
                 VALUES (?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(hypothesisID), .text(stance.rawValue), .uuid(sourceVersionID), .uuid(knowledgeObjectID),
-                      self.opt(note), .text(cleanBy), .date(date)])
+                      noteValue, .text(cleanBy), .date(date)])
         }
         return HypothesisEvidenceLink(id: id, hypothesisID: hypothesisID, stance: stance, sourceVersionID: sourceVersionID,
                                       knowledgeObjectID: knowledgeObjectID, note: note?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -135,10 +136,10 @@ public actor InvestigationAnalysisRepository {
         let clean = description.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw InvestigationHypothesisError.blankStatement }
         let cleanActor = try validatedActor(actor)
-        try await requireOpenCase(caseID)
         let id = UUID()
-        try await tx("invreq", id) {
-            try await self.database.exec("""
+        try await tx("invreq", id) { db in
+            try Self.requireOpenCase(db, caseID)
+            try db.exec("""
                 INSERT INTO investigation_evidence_requests (id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), hypothesisID.map { SQLValue.uuid($0) } ?? .null, .text(clean),
@@ -149,16 +150,16 @@ public actor InvestigationAnalysisRepository {
 
     public func setRequestStatus(requestID: UUID, expectedRevision: Int, to status: EvidenceRequestStatus, actor: String, at date: Date) async throws -> EvidenceRequest {
         let cleanActor = try validatedActor(actor)
-        try await tx("invreqs", requestID) {
-            let r = try await self.requireRequestCAS(requestID, expectedRevision: expectedRevision)
-            try await self.database.exec("UPDATE investigation_evidence_requests SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+        try await tx("invreqs", requestID) { db in
+            let r = try Self.requestCAS(db, requestID, expectedRevision: expectedRevision)
+            try db.exec("UPDATE investigation_evidence_requests SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
                                          [.text(status.rawValue), .integer(Int64(r.revision + 1)), .text(cleanActor), .date(date), .uuid(requestID), .integer(Int64(r.revision))])
         }
         return try await requireRequest(requestID)
     }
 
     public func requests(caseID: UUID) async throws -> [EvidenceRequest] {
-        (try await database.query("\(reqSelect) WHERE case_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(caseID)])).compactMap(decodeRequest)
+        (try await database.query("\(Self.reqSelect) WHERE case_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(caseID)])).compactMap(Self.decodeRequest)
     }
 
     // MARK: - 5W1H worksheet
@@ -168,20 +169,20 @@ public actor InvestigationAnalysisRepository {
     public func setCell(caseID: UUID, dimension: WorksheetDimension, status: WorksheetCellStatus, answerText: String?,
                         sourceVersionID: UUID?, knowledgeObjectID: UUID?, actor: String, at date: Date) async throws -> WorksheetCell {
         let cleanActor = try validatedActor(actor)
-        try await requireOpenCase(caseID)
         let answer: SQLValue = status == .answered ? .text((answerText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)) : .null
         let sv: SQLValue = status == .answered ? (sourceVersionID.map { .uuid($0) } ?? .null) : .null
         let ko: SQLValue = status == .answered ? (knowledgeObjectID.map { .uuid($0) } ?? .null) : .null
-        try await tx("invcell", caseID, dimension.rawValue) {
-            let existing = try await self.database.query("SELECT id, revision FROM investigation_worksheet_cells WHERE case_id = ? AND dimension = ? LIMIT 1;",
+        try await tx("invcell", caseID, dimension.rawValue) { db in
+            try Self.requireOpenCase(db, caseID)
+            let existing = try db.query("SELECT id, revision FROM investigation_worksheet_cells WHERE case_id = ? AND dimension = ? LIMIT 1;",
                                                          [.uuid(caseID), .text(dimension.rawValue)]).first
             if let existing, let cid = existing.uuid(0), let rev = existing.int(1) {
-                try await self.database.exec("""
+                try db.exec("""
                     UPDATE investigation_worksheet_cells SET status = ?, answer_text = ?, source_version_id = ?, knowledge_object_id = ?, revision = ?, actor = ?, updated_at = ?
                     WHERE id = ?;
                     """, [.text(status.rawValue), answer, sv, ko, .integer(rev + 1), .text(cleanActor), .date(date), .uuid(cid)])
             } else {
-                try await self.database.exec("""
+                try db.exec("""
                     INSERT INTO investigation_worksheet_cells (id, case_id, dimension, status, answer_text, source_version_id, knowledge_object_id, revision, actor, updated_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?);
                     """, [.uuid(UUID()), .uuid(caseID), .text(dimension.rawValue), .text(status.rawValue), answer, sv, ko, .integer(1), .text(cleanActor), .date(date)])
@@ -191,35 +192,40 @@ public actor InvestigationAnalysisRepository {
     }
 
     public func cells(caseID: UUID) async throws -> [WorksheetCell] {
-        (try await database.query("\(cellSelect) WHERE case_id = ? ORDER BY dimension ASC;", [.uuid(caseID)])).compactMap(decodeCell)
+        (try await database.query("\(Self.cellSelect) WHERE case_id = ? ORDER BY dimension ASC;", [.uuid(caseID)])).compactMap(Self.decodeCell)
     }
     public func cell(caseID: UUID, dimension: WorksheetDimension) async throws -> WorksheetCell? {
-        (try await database.query("\(cellSelect) WHERE case_id = ? AND dimension = ? LIMIT 1;", [.uuid(caseID), .text(dimension.rawValue)])).first.flatMap(decodeCell)
+        (try await database.query("\(Self.cellSelect) WHERE case_id = ? AND dimension = ? LIMIT 1;", [.uuid(caseID), .text(dimension.rawValue)])).first.flatMap(Self.decodeCell)
     }
 
     // MARK: - Internals
 
-    private let hypSelect = "SELECT id, case_id, kind, statement, status, origin_hypothesis_id, revision, actor, created_at, updated_at FROM investigation_hypotheses"
-    private let reqSelect = "SELECT id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at FROM investigation_evidence_requests"
-    private let cellSelect = "SELECT id, case_id, dimension, status, answer_text, source_version_id, knowledge_object_id, revision, actor, updated_at FROM investigation_worksheet_cells"
+    private static let hypSelect = "SELECT id, case_id, kind, statement, status, origin_hypothesis_id, revision, actor, created_at, updated_at FROM investigation_hypotheses"
+    private static let reqSelect = "SELECT id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at FROM investigation_evidence_requests"
+    private static let cellSelect = "SELECT id, case_id, dimension, status, answer_text, source_version_id, knowledge_object_id, revision, actor, updated_at FROM investigation_worksheet_cells"
 
     private func requireHypothesis(_ id: UUID) async throws -> InvestigationHypothesis {
         guard let h = try await fetchHypothesis(id) else { throw InvestigationHypothesisError.hypothesisNotFound(id) }
         return h
     }
-    private func requireHypothesisCAS(_ id: UUID, expectedRevision: Int) async throws -> InvestigationHypothesis {
-        let h = try await requireHypothesis(id)
+    /// Read + revision check INSIDE the caller's savepoint, so the CAS and the write are one step.
+    private static func hypothesisCAS(_ db: isolated Database, _ id: UUID, expectedRevision: Int) throws -> InvestigationHypothesis {
+        guard let h = try db.query("\(hypSelect) WHERE id = ? LIMIT 1;", [.uuid(id)]).first.flatMap(Self.decodeHypothesis) else {
+            throw InvestigationHypothesisError.hypothesisNotFound(id)
+        }
         guard h.revision == expectedRevision else { throw InvestigationHypothesisError.revisionConflict(expected: expectedRevision, actual: h.revision) }
         return h
     }
     private func requireRequest(_ id: UUID) async throws -> EvidenceRequest {
-        guard let r = (try await database.query("\(reqSelect) WHERE id = ? LIMIT 1;", [.uuid(id)])).first.flatMap(decodeRequest) else {
+        guard let r = (try await database.query("\(Self.reqSelect) WHERE id = ? LIMIT 1;", [.uuid(id)])).first.flatMap(Self.decodeRequest) else {
             throw InvestigationHypothesisError.requestNotFound(id)
         }
         return r
     }
-    private func requireRequestCAS(_ id: UUID, expectedRevision: Int) async throws -> EvidenceRequest {
-        let r = try await requireRequest(id)
+    private static func requestCAS(_ db: isolated Database, _ id: UUID, expectedRevision: Int) throws -> EvidenceRequest {
+        guard let r = try db.query("\(reqSelect) WHERE id = ? LIMIT 1;", [.uuid(id)]).first.flatMap(Self.decodeRequest) else {
+            throw InvestigationHypothesisError.requestNotFound(id)
+        }
         guard r.revision == expectedRevision else { throw InvestigationHypothesisError.revisionConflict(expected: expectedRevision, actual: r.revision) }
         return r
     }
@@ -228,27 +234,28 @@ public actor InvestigationAnalysisRepository {
         return c
     }
 
-    private func requireOpenCase(_ caseID: UUID) async throws {
-        let rows = try await database.query("SELECT status FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
+    /// Checked inside the write's savepoint: the case cannot close between the check and the write.
+    private static func requireOpenCase(_ db: isolated Database, _ caseID: UUID) throws {
+        let rows = try db.query("SELECT status FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
         guard let status = rows.first?.string(0) else { throw InvestigationHypothesisError.caseNotFound(caseID) }
         if status == InvestigationCaseStatus.closed.rawValue { throw InvestigationHypothesisError.caseClosed(caseID) }
     }
 
-    private nonisolated func decodeHypothesis(_ r: SQLRow) -> InvestigationHypothesis? {
+    private nonisolated static func decodeHypothesis(_ r: SQLRow) -> InvestigationHypothesis? {
         guard let id = r.uuid(0), let caseID = r.uuid(1), let kind = r.string(2).flatMap(HypothesisKind.init(rawValue:)),
               let statement = r.string(3), let status = r.string(4).flatMap(HypothesisStatus.init(rawValue:)),
               let rev = r.int(6), let actor = r.string(7), let created = r.date(8), let updated = r.date(9) else { return nil }
         return InvestigationHypothesis(id: id, caseID: caseID, kind: kind, statement: statement, status: status,
                                        originHypothesisID: r.uuid(5), revision: Int(rev), actor: actor, createdAt: created, updatedAt: updated)
     }
-    private nonisolated func decodeRequest(_ r: SQLRow) -> EvidenceRequest? {
+    private nonisolated static func decodeRequest(_ r: SQLRow) -> EvidenceRequest? {
         guard let id = r.uuid(0), let caseID = r.uuid(1), let desc = r.string(3),
               let status = r.string(4).flatMap(EvidenceRequestStatus.init(rawValue:)),
               let rev = r.int(5), let actor = r.string(6), let created = r.date(7), let updated = r.date(8) else { return nil }
         return EvidenceRequest(id: id, caseID: caseID, hypothesisID: r.uuid(2), description: desc, status: status,
                                revision: Int(rev), actor: actor, createdAt: created, updatedAt: updated)
     }
-    private nonisolated func decodeCell(_ r: SQLRow) -> WorksheetCell? {
+    private nonisolated static func decodeCell(_ r: SQLRow) -> WorksheetCell? {
         guard let id = r.uuid(0), let caseID = r.uuid(1), let dim = r.string(2).flatMap(WorksheetDimension.init(rawValue:)),
               let status = r.string(3).flatMap(WorksheetCellStatus.init(rawValue:)),
               let rev = r.int(7), let actor = r.string(8), let updated = r.date(9) else { return nil }
@@ -266,17 +273,11 @@ public actor InvestigationAnalysisRepository {
         return .text(s)
     }
 
-    /// One SAVEPOINT around a mutation body.
-    private func tx(_ prefix: String, _ id: UUID, _ extra: String = "", _ body: () async throws -> Void) async throws {
+    /// One ISOLATED savepoint around a mutation body (F28): the body runs synchronously on the
+    /// database actor, so no other caller's statements interleave with it.
+    private func tx(_ prefix: String, _ id: UUID, _ extra: String = "",
+                    _ body: @Sendable (isolated Database) throws -> Void) async throws {
         let sp = "\(prefix)_\(id.uuidString.replacingOccurrences(of: "-", with: ""))\(extra.isEmpty ? "" : "_" + extra.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await body()
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
-        }
+        try await database.withSavepoint(sp, body)
     }
 }

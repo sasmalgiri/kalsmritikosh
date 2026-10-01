@@ -121,6 +121,13 @@ public actor AssertionsRepository {
 
     /// Deterministic paged enumeration of a SUBJECT's non-retracted assertions (no fixed
     /// ceiling — the incremental producer pages through all of them).
+    /// F09 — non-retracted assertions about one subject (for honest deferred counts).
+    public func count(subjectKind: Assertion.SubjectKind, subjectID: UUID) async throws -> Int {
+        Int(try await database.query(
+            "SELECT COUNT(*) FROM assertions WHERE subject_kind = ? AND subject_id = ? AND retracted_at IS NULL;",
+            [.text(subjectKind.rawValue), .uuid(subjectID)]).first?.int(0) ?? 0)
+    }
+
     public func assertions(subjectKind: Assertion.SubjectKind, subjectID: UUID,
                            offset: Int, pageSize: Int) async throws -> [Assertion] {
         let rows = try await database.query("""

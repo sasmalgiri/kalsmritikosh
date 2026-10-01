@@ -87,6 +87,13 @@ public struct SourceReadinessRepository: Sendable {
             var currentByDim: [SourceReadinessDimension: SourceReadinessDimensionRecord] = [:]
             for r in current { currentByDim[r.dimension] = r }
 
+            // F15 — a caller that measured before this savepoint may only stamp if nothing it depends on moved.
+            if let measured = p.measuredEvidence {
+                let live = try Self.evidenceRevisions(db, sourceVersionID: p.sourceVersionID)
+                for u in p.updates where Self.lanes(for: u.dimension).contains(where: { (measured[$0] ?? 0) != (live[$0] ?? 0) }) {
+                    throw SourceReadinessError.evidenceChangedDuringMeasurement(u.dimension)
+                }
+            }
             // Validate every update up front (fail-closed before any write).
             for u in p.updates {
                 guard let cur = currentByDim[u.dimension] else { throw SourceReadinessError.dimensionMissing(u.dimension) }
@@ -112,7 +119,7 @@ public struct SourceReadinessRepository: Sendable {
                     applicability: u.applicability, condition: u.condition, completedUnits: u.completedUnits,
                     totalUnits: u.totalUnits, producerID: p.producerID, producerVersion: p.producerVersion,
                     basis: u.basis, detail: u.detail, revision: cur.revision + 1, updatedAt: p.occurredAt)
-                try Self.updateDimension(db, record)
+                try Self.updateDimension(db, record, measured: p.measuredEvidence)
                 try Self.insertEvent(db, sourceVersionID: p.sourceVersionID, sequence: sequence,
                                      aggregateRevision: newAggRevision, dimension: u.dimension, action: u.action,
                                      fromState: cur.state, record: record, occurredAt: p.occurredAt)
@@ -276,18 +283,18 @@ public struct SourceReadinessRepository: Sendable {
     /// never derived from a live counter that could include a child attachment's chunks.
     public func ftsCoverage(sourceVersionID: UUID) async throws -> (eligible: Int, indexed: Int) {
         let eligible = Int(try await database.query(
-            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         let indexed = Int(try await database.query(
-            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ?;",
+            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL;",
             [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         return (eligible, indexed)
     }
 
     static func ftsCoverageInSavepoint(_ db: isolated Database, sourceVersionID: UUID) throws -> (eligible: Int, indexed: Int) {
         let eligible = Int(try db.query(
-            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         let indexed = Int(try db.query(
-            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ?;",
+            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL;",
             [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
         return (eligible, indexed)
     }
@@ -338,9 +345,68 @@ public struct SourceReadinessRepository: Sendable {
                  producer_id, producer_version, basis_kind, basis_identifier, detail, revision, updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
             """, bindDimension(r))
+        try stampEvidenceRevision(db, r)
     }
 
-    private static func updateDimension(_ db: isolated Database, _ r: SourceReadinessDimensionRecord) throws {
+    /// F15 — record the evidence revisions this dimension was verified against, in the SAME savepoint
+    /// as the write. `measured` (when the caller measured before this savepoint) is what gets stamped;
+    /// `apply` has already refused the plan if any of those lanes moved since.
+    private static func stampEvidenceRevision(_ db: isolated Database, _ r: SourceReadinessDimensionRecord,
+                                              measured: [String: Int64]? = nil) throws {
+        let revs = try measured ?? evidenceRevisions(db, sourceVersionID: r.sourceVersionID)
+        try db.exec("UPDATE source_readiness_dimensions SET evidence_fingerprint = ? WHERE source_version_id = ? AND dimension = ?;",
+                    [.text(proofToken(r.dimension, revs)), .uuid(r.sourceVersionID), .text(r.dimension.rawValue)])
+    }
+
+    /// F15 — the evidence lanes a dimension's proof depends on. A change in any other lane cannot
+    /// invalidate it (a chunk edit never stales the structure proof; a block edit stales both).
+    nonisolated static func lanes(for d: SourceReadinessDimension) -> [String] {
+        switch d {
+        case .textExtraction:                              return ["chunks"]
+        // F15 (v141) — citation lineage is part of what an index certifies.
+        case .indexing:                                    return ["blocks", "chunks", "lineage", "ownership"]
+        case .metadataExtraction, .structuralExtraction, .ocr: return ["blocks", "ownership"]
+        default:                                           return ["blocks", "chunks", "lineage", "ownership"]
+        }
+    }
+
+    /// The stored proof: the revision of each lane the dimension depends on, e.g. `rev2|blocks=4;ownership=2`.
+    /// "rev2" (v141): lineage and the extra block fields were untracked before, so every proof stamped
+    /// under "rev1" is revalidated once rather than trusted.
+    nonisolated static func proofToken(_ d: SourceReadinessDimension, _ revs: [String: Int64]) -> String {
+        "rev2|" + lanes(for: d).map { "\($0)=\(revs[$0] ?? 0)" }.joined(separator: ";")
+    }
+
+    /// The live per-lane revisions of a version (maintained by v137 triggers; absent lane = 0).
+    static func evidenceRevisions(_ db: isolated Database, sourceVersionID svid: UUID) throws -> [String: Int64] {
+        var out: [String: Int64] = [:]
+        for row in try db.query("SELECT lane, revision FROM evidence_revisions WHERE source_version_id = ?;", [.uuid(svid)]) {
+            if let lane = row.string(0), let rev = row.int(1) { out[lane] = rev }
+        }
+        return out
+    }
+
+    /// F15 — read the version's revisions BEFORE measuring; pass them as the plan's `measuredEvidence`
+    /// so a mutation between measurement and stamping is refused instead of stamped.
+    public func evidenceRevisions(sourceVersionID: UUID) async throws -> [String: Int64] {
+        try await database.withSavepoint("rd_rev_\(sourceVersionID.uuidString.prefix(8))") { db in
+            try Self.evidenceRevisions(db, sourceVersionID: sourceVersionID)
+        }
+    }
+
+    /// F15 — whether a dimension's recorded proof still matches the live revisions of every lane it
+    /// depends on. False for a proof recorded before v137 (it must be revalidated once).
+    public func proofIsCurrent(sourceVersionID: UUID, dimension: SourceReadinessDimension) async throws -> Bool {
+        try await database.withSavepoint("rd_proof_\(sourceVersionID.uuidString.prefix(8))") { db in
+            let stored = try db.query(
+                "SELECT evidence_fingerprint FROM source_readiness_dimensions WHERE source_version_id = ? AND dimension = ?;",
+                [.uuid(sourceVersionID), .text(dimension.rawValue)]).first?.string(0)
+            return stored == Self.proofToken(dimension, try Self.evidenceRevisions(db, sourceVersionID: sourceVersionID))
+        }
+    }
+
+    private static func updateDimension(_ db: isolated Database, _ r: SourceReadinessDimensionRecord,
+                                        measured: [String: Int64]? = nil) throws {
         try db.exec("""
             UPDATE source_readiness_dimensions SET state = ?, applicability = ?, condition = ?, completed_units = ?,
                    total_units = ?, producer_id = ?, producer_version = ?, basis_kind = ?, basis_identifier = ?,
@@ -350,6 +416,7 @@ public struct SourceReadinessRepository: Sendable {
                   .text(r.producerID), .text(r.producerVersion), r.basis.map { SQLValue.text($0.kind.rawValue) } ?? .null,
                   r.basis.map { SQLValue.text($0.identifier) } ?? .null, r.detail.map(SQLValue.text) ?? .null,
                   .integer(Int64(r.revision)), .date(r.updatedAt), .uuid(r.sourceVersionID), .text(r.dimension.rawValue)])
+        try stampEvidenceRevision(db, r, measured: measured)
     }
 
     private static func bindDimension(_ r: SourceReadinessDimensionRecord) -> [SQLValue] {

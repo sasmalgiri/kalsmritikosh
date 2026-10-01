@@ -98,7 +98,8 @@ extension Database {
             // SQLITE_DONE: terminal success for non-row statements.
             // SQLITE_ROW: legal too (e.g. INSERT ... RETURNING) — discard.
             if rc != SQLITE_DONE && rc != SQLITE_ROW {
-                let msg = String(cString: sqlite3_errstr(rc))
+                // The connection's message names the constraint or RAISE text; errstr(rc) is only the code's gloss.
+                let msg = sqlite3_db_handle(stmt).map { String(cString: sqlite3_errmsg($0)) } ?? String(cString: sqlite3_errstr(rc))
                 stepError = .stepFailed(sql: sql, message: msg)
             }
         }
@@ -111,7 +112,7 @@ extension Database {
     /// (ledger commit read-back only).
     public func query(_ sql: String, _ bindings: [SQLValue] = []) throws -> [SQLRow] {
         try collectRows(sql: sql, bindings: bindings,
-                        handle: ((askSnapshotActive && inSavepoint == 0 && !transactionInProgress) ? snapshotHandle : nil) ?? rawHandle)
+                        handle: ((askSnapshotActive && inSavepoint == 0) ? snapshotHandle : nil) ?? rawHandle)
     }
 
     /// Read on the LIVE connection regardless of any active snapshot — for
@@ -168,7 +169,8 @@ extension Database {
             //    logged); the FTS-query-sanitisation fix is a separate, parity-
             //    gated change. "throw OR counted diagnostic — never silence."
             if rc != SQLITE_DONE {
-                let msg = String(cString: sqlite3_errstr(rc))
+                // The connection's message names the constraint or RAISE text; errstr(rc) is only the code's gloss.
+                let msg = sqlite3_db_handle(stmt).map { String(cString: sqlite3_errmsg($0)) } ?? String(cString: sqlite3_errstr(rc))
                 if Self.isWriteStatement(sql) {
                     stepError = .stepFailed(sql: sql, message: msg)
                 } else {

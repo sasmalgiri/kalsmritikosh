@@ -66,13 +66,17 @@ public actor InvestigationAnswerService {
     /// answer for the case, so the conformance assessor can OBSERVE the
     /// phase. Only a question HASH is stored, never the question text.
     private let artifacts: CasePhaseArtifactRepository?
+    /// F08 — scope-restricted keyword recall so a small case is not crowded out by the global corpus.
+    private let scopedRecall: SourceScopedRetriever.ScopedRecall?
 
     public init(cases: InvestigationCaseRepository,
                 resolver: CaseRetrievalScopeResolver,
                 baseRetriever: any Retriever,
                 evidence: EvidenceStore,
                 makeBrain: @escaping @Sendable (any Retriever) -> MasterBrain,
-                artifacts: CasePhaseArtifactRepository? = nil) {
+                artifacts: CasePhaseArtifactRepository? = nil,
+                scopedRecall: SourceScopedRetriever.ScopedRecall? = nil) {
+        self.scopedRecall = scopedRecall
         self.cases = cases
         self.resolver = resolver
         self.baseRetriever = baseRetriever
@@ -100,7 +104,7 @@ public actor InvestigationAnswerService {
     /// the identical boundary.
     public func scopedRetriever(caseID: UUID) async throws -> any Retriever {
         let context = try await scopeContext(caseID: caseID)
-        return SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope)
+        return SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
     }
 
     /// Ask a question inside an active investigation. The answer is produced by the shared MasterBrain
@@ -108,7 +112,7 @@ public actor InvestigationAnswerService {
     /// citations on any pass. Fast vs Full Evidence is the engine's depth concern; the scope is identical.
     public func answer(caseID: UUID, question: String, access: SensitiveAccessContext) async throws -> InvestigationAnswer {
         let context = try await scopeContext(caseID: caseID)
-        let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope)
+        let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
         let brain = makeBrain(scoped)
         // NINTH/TENTH AUDIT — consume the lifecycle STREAM and require the
         // COMMIT PROOF: `.verifiedFinal` carries the ledger answer ID only

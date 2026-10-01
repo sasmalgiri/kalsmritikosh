@@ -135,16 +135,18 @@ struct ExportEngineTests {
         #expect(!contains(md, "SECRET1234") && contains(md, "[REDACTED]"))
     }
 
-    @Test("Redaction fails closed: a protected term surviving in the manifest refuses the export")
+    @Test("A protected term in the manifest never reaches the exported bytes")
     func redactionFailsClosed() throws {
         let svc = WorkProductExportService()
-        // The term lives only in the manifest's known-limitations (not redacted at the doc level) — verification
-        // of the rendered projection must catch it and refuse, rather than emit a leaking file.
+        // F23 — the term lives only in the manifest's known-limitations. Manifest text is now
+        // redacted like the body, so the export ships without it (it used to be refused).
         let doc = sampleDoc(sectionText: "clean text", limitations: ["review blocked on SECRET1234"])
         let policy = RedactionPolicy(customTerms: ["SECRET1234"])
-        #expect(throws: WorkProductExportError.self) {
-            _ = try svc.data(for: doc, format: .pdf, redaction: policy)
+        for format in [ExportDeliverableFormat.markdown, .html, .json] {
+            let bytes = try svc.data(for: doc, format: format, redaction: policy)
+            #expect(!contains(bytes, "SECRET1234"), "\(format)")
         }
+        _ = try svc.data(for: doc, format: .pdf, redaction: policy)   // renders, no refusal
     }
 
     @Test("Writing to disk yields a file whose bytes equal the rendered data")

@@ -17,6 +17,12 @@ public actor EnrichmentJobRepository {
     private let database: Database
     public init(database: Database) { self.database = database }
 
+    /// F20 — this repository owns ONLY the legacy subject queue. The v88 table also holds the
+    /// exact-version upgrade queue (`scope_kind = 'sourceVersion'`, lease-based, owned by
+    /// SourceUpgradeJobRepository). Unscoped, boot recovery here flipped VALIDLY leased upgrade jobs
+    /// back to pending (so a second worker could run them) and counts/claims mixed the two queues.
+    private static let scope = "scope_kind = 'legacySubject'"
+
     /// Enqueue a job for (subject, kind). Idempotent: if one already exists it is left
     /// as-is (INSERT OR IGNORE on the UNIQUE constraint), so re-ingest doesn't re-queue
     /// completed or in-flight work. Returns true if a new row was created.
@@ -37,7 +43,7 @@ public actor EnrichmentJobRepository {
     public func claimNext(kind: EnrichmentJobKind) async throws -> EnrichmentJob? {
         let rows = try await database.query("""
         SELECT id, subject_id, kind, state, attempts, last_error, created_at, updated_at
-        FROM enrichment_jobs WHERE state = 'pending' AND kind = ?
+        FROM enrichment_jobs WHERE \(Self.scope) AND state = 'pending' AND kind = ?
         ORDER BY created_at ASC LIMIT 1;
         """, [.text(kind.rawValue)])
         guard let job = rows.first.flatMap(Self.decode) else { return nil }
@@ -49,7 +55,7 @@ public actor EnrichmentJobRepository {
 
     public func markFailed(_ id: UUID, error: String) async throws {
         try await database.exec("""
-        UPDATE enrichment_jobs SET state = 'failed', last_error = ?, updated_at = ? WHERE id = ?;
+        UPDATE enrichment_jobs SET state = 'failed', last_error = ?, updated_at = ? WHERE \(Self.scope) AND id = ?;
         """, [.text(String(error.prefix(500))), .real(Date().timeIntervalSince1970), .uuid(id)])
     }
 
@@ -58,9 +64,9 @@ public actor EnrichmentJobRepository {
     @discardableResult
     public func requeueStuckRunning() async throws -> Int {
         let stuck = Int((try await database.query(
-            "SELECT COUNT(*) FROM enrichment_jobs WHERE state = 'running';", [])).first?.int(0) ?? 0)
+            "SELECT COUNT(*) FROM enrichment_jobs WHERE \(Self.scope) AND state = 'running';", [])).first?.int(0) ?? 0)
         try await database.exec("""
-        UPDATE enrichment_jobs SET state = 'pending', updated_at = ? WHERE state = 'running';
+        UPDATE enrichment_jobs SET state = 'pending', updated_at = ? WHERE \(Self.scope) AND state = 'running';
         """, [.real(Date().timeIntervalSince1970)])
         return stuck
     }
@@ -68,18 +74,18 @@ public actor EnrichmentJobRepository {
     /// Pending-job count for a kind (feeds the readiness display).
     public func pendingCount(kind: EnrichmentJobKind) async throws -> Int {
         Int((try await database.query(
-            "SELECT COUNT(*) FROM enrichment_jobs WHERE state = 'pending' AND kind = ?;",
+            "SELECT COUNT(*) FROM enrichment_jobs WHERE \(Self.scope) AND state = 'pending' AND kind = ?;",
             [.text(kind.rawValue)])).first?.int(0) ?? 0)
     }
 
     public func count() async throws -> Int {
-        Int((try await database.query("SELECT COUNT(*) FROM enrichment_jobs;", [])).first?.int(0) ?? 0)
+        Int((try await database.query("SELECT COUNT(*) FROM enrichment_jobs WHERE \(Self.scope);", [])).first?.int(0) ?? 0)
     }
 
     private func setState(_ id: UUID, _ state: EnrichmentJobState, incrementAttempt: Bool = false) async throws {
         let attemptClause = incrementAttempt ? ", attempts = attempts + 1" : ""
         try await database.exec("""
-        UPDATE enrichment_jobs SET state = ?\(attemptClause), updated_at = ? WHERE id = ?;
+        UPDATE enrichment_jobs SET state = ?\(attemptClause), updated_at = ? WHERE \(Self.scope) AND id = ?;
         """, [.text(state.rawValue), .real(Date().timeIntervalSince1970), .uuid(id)])
     }
 

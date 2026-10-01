@@ -30,6 +30,8 @@ public struct KnowledgeCStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.knowledgeC] }
     public nonisolated var parserName: String { "apple-knowledgec" }
     public nonisolated var parserVersion: String { "1" }
+    /// F01 — bounded by design: copies the bytes to a temp file, reads through SQLite, and caps its events.
+    public nonisolated var boundedMemory: Bool { true }
 
     /// Event ceiling. A months-old store holds hundreds of thousands of rows;
     /// this is the citation layer, so it stops at a stated number while the

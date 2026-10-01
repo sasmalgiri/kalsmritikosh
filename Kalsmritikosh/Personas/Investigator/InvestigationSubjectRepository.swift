@@ -27,28 +27,22 @@ public actor InvestigationSubjectRepository {
         let cleanLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanLabel.isEmpty else { throw InvestigationSubjectError.blankLabel }
         let cleanActor = try validatedActor(actor)
-        try await requireOpenCase(caseID)
-        let exists = try await database.query(
-            "SELECT 1 FROM investigation_subjects WHERE case_id = ? AND canonical_entity_id = ? LIMIT 1;",
-            [.uuid(caseID), .uuid(canonicalEntityID)]).first != nil
-        if exists { throw InvestigationSubjectError.subjectAlreadyExists(caseID: caseID, entityID: canonicalEntityID) }
-
         let id = UUID()
         let sp = savepoint("invsubj", id)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — the open-case check, the duplicate check and the insert are ONE isolated savepoint.
+        try await database.withSavepoint(sp) { db in
+            try Self.requireOpenCase(db, caseID)
+            let exists = try db.query(
+                "SELECT 1 FROM investigation_subjects WHERE case_id = ? AND canonical_entity_id = ? LIMIT 1;",
+                [.uuid(caseID), .uuid(canonicalEntityID)]).first != nil
+            if exists { throw InvestigationSubjectError.subjectAlreadyExists(caseID: caseID, entityID: canonicalEntityID) }
+            try db.exec("""
                 INSERT INTO investigation_subjects (id, case_id, canonical_entity_id, label, identity_status,
                     confirmed_by, confirmed_at, revision, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .uuid(canonicalEntityID), .text(cleanLabel),
                       .text(SubjectIdentityStatus.proposed.rawValue), .null, .null, .integer(1),
                       .text(cleanActor), .date(date), .date(date)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await requireSubject(id)
     }
@@ -72,26 +66,22 @@ public actor InvestigationSubjectRepository {
                             confirmer: String?, actor: String, at date: Date) async throws -> InvestigationSubject {
         let cleanActor = try validatedActor(actor)
         let sp = savepoint("invsubjt", subjectID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let current = try await requireSubject(subjectID)
+        let confirmedBy: SQLValue = confirmer.map { .text($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? .null
+        let confirmedAt: SQLValue = confirmer != nil ? .date(date) : .null
+        // F28 — read, CAS and write in ONE isolated savepoint.
+        try await database.withSavepoint(sp) { db in
+            guard let current = try db.query("\(Self.subjectSelect) WHERE id = ? LIMIT 1;", [.uuid(subjectID)])
+                .first.flatMap(Self.decode) else { throw InvestigationSubjectError.subjectNotFound(subjectID) }
             guard current.revision == expectedRevision else {
                 throw InvestigationSubjectError.revisionConflict(expected: expectedRevision, actual: current.revision)
             }
             guard current.identityStatus == .proposed else { throw InvestigationSubjectError.notProposed(subjectID) }
             let newRevision = current.revision + 1
-            let confirmedBy: SQLValue = confirmer.map { .text($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? .null
-            let confirmedAt: SQLValue = confirmer != nil ? .date(date) : .null
-            try await database.exec("""
+            try db.exec("""
                 UPDATE investigation_subjects SET identity_status = ?, confirmed_by = ?, confirmed_at = ?,
                     revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;
                 """, [.text(status.rawValue), confirmedBy, confirmedAt, .integer(Int64(newRevision)),
                       .text(cleanActor), .date(date), .uuid(subjectID), .integer(Int64(current.revision))])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await requireSubject(subjectID)
     }
@@ -99,27 +89,27 @@ public actor InvestigationSubjectRepository {
     // MARK: - Read / resume
 
     public func fetch(subjectID: UUID) async throws -> InvestigationSubject? {
-        let rows = try await database.query("\(subjectSelect) WHERE id = ? LIMIT 1;", [.uuid(subjectID)])
-        return rows.first.flatMap(decode)
+        let rows = try await database.query("\(Self.subjectSelect) WHERE id = ? LIMIT 1;", [.uuid(subjectID)])
+        return rows.first.flatMap(Self.decode)
     }
 
     public func subject(caseID: UUID, canonicalEntityID: UUID) async throws -> InvestigationSubject? {
         let rows = try await database.query(
-            "\(subjectSelect) WHERE case_id = ? AND canonical_entity_id = ? LIMIT 1;",
+            "\(Self.subjectSelect) WHERE case_id = ? AND canonical_entity_id = ? LIMIT 1;",
             [.uuid(caseID), .uuid(canonicalEntityID)])
-        return rows.first.flatMap(decode)
+        return rows.first.flatMap(Self.decode)
     }
 
     /// All subjects of a case, oldest first.
     public func subjects(caseID: UUID) async throws -> [InvestigationSubject] {
         let rows = try await database.query(
-            "\(subjectSelect) WHERE case_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(caseID)])
-        return rows.compactMap(decode)
+            "\(Self.subjectSelect) WHERE case_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(caseID)])
+        return rows.compactMap(Self.decode)
     }
 
     // MARK: - Internals
 
-    private let subjectSelect = """
+    private static let subjectSelect = """
         SELECT id, case_id, canonical_entity_id, label, identity_status, confirmed_by, confirmed_at,
                revision, actor, created_at, updated_at
         FROM investigation_subjects
@@ -130,13 +120,13 @@ public actor InvestigationSubjectRepository {
         return s
     }
 
-    private func requireOpenCase(_ caseID: UUID) async throws {
-        let rows = try await database.query("SELECT status FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
+    private static func requireOpenCase(_ db: isolated Database, _ caseID: UUID) throws {
+        let rows = try db.query("SELECT status FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
         guard let status = rows.first?.string(0) else { throw InvestigationSubjectError.caseNotFound(caseID) }
         if status == InvestigationCaseStatus.closed.rawValue { throw InvestigationSubjectError.caseClosed(caseID) }
     }
 
-    private nonisolated func decode(_ r: SQLRow) -> InvestigationSubject? {
+    private nonisolated static func decode(_ r: SQLRow) -> InvestigationSubject? {
         guard let id = r.uuid(0), let caseID = r.uuid(1), let entityID = r.uuid(2), let label = r.string(3),
               let status = r.string(4).flatMap(SubjectIdentityStatus.init(rawValue:)),
               let revision = r.int(7), let actor = r.string(8),

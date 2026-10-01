@@ -484,27 +484,23 @@ public struct EntityQualityGate: Sendable {
             )
         }
 
-        let memory = MemoryRepository(database: database)
-        let reviews = FactReviewsRepository(database: database)
-        try await database.beginTransaction()
-        var memoryRetired = 0
-        do {
-            for entry in toRetire {
+        // F28 — one synchronous isolated unit: the retirement, its memory rows and its audit
+        // records commit together, and no other caller's write can run inside it.
+        let retiring = toRetire
+        let memoryRetired = try await database.withSavepoint("eqg_retire") { db -> Int in
+            var retired = 0
+            for entry in retiring {
                 // Memory first: keyed by subject NAME, so both the displayed
                 // value and its normalized form have to be offered.
-                memoryRetired += try await memory.retireSubjects(
-                    identifiers: [entry.value, entry.normalized])
+                retired += try MemoryRepository.retireSubjects(db, identifiers: [entry.value, entry.normalized])
                 // Soft-exclude the entity. Its mentions and aliases SURVIVE —
                 // under the old delete they were cascaded away, which is what
                 // made the operation unrecoverable.
-                try await database.exec(
-                    "UPDATE entities SET review_status = 'rejected' WHERE id = ?;",
-                    [.uuid(entry.id)]
-                )
+                try db.exec("UPDATE entities SET review_status = 'rejected' WHERE id = ?;", [.uuid(entry.id)])
                 // Append-only audit record, attributable and reversible.
                 let why = "Retired by the entity quality gate (\(entry.reason))"
                     + " — excluded from answers, not deleted"
-                _ = try await reviews.record(FactReview(
+                try FactReviewsRepository.record(db, FactReview(
                     subjectKind: .entity,
                     subjectID: entry.id,
                     action: .reject,
@@ -513,10 +509,7 @@ public struct EntityQualityGate: Sendable {
                     reason: why
                 ))
             }
-            try await database.commitTransaction()
-        } catch {
-            await database.rollbackTransaction()
-            throw error
+            return retired
         }
         KalsmritikoshLog.brain.info("EntityQualityGate: RETIRED (not deleted) \(toRetire.count, privacy: .public) entities + \(memoryRetired, privacy: .public) memory rows; \(skipped, privacy: .public) left live because the user restored them")
         return PurgeReport(

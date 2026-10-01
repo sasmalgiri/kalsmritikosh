@@ -64,7 +64,10 @@ public protocol WorkflowEvidenceReferenceGating: Sendable {
 /// Existence + workspace boundary go through the shared `WorkflowTargetValidator`
 /// (issues are workspace-owned rows checked directly). Sensitivity is resolved via
 /// `SensitiveScopeRepository.effectiveLabel` for the kinds that carry a lineage
-/// (claim / evidenceBlock / sourceVersion / entity / event).
+/// (claim / evidenceBlock / sourceVersion / entity / event). Issues, gaps and contradictions
+/// (F29) are checked through the evidence they are built from: every linked / cited object
+/// must pass the same workspace + sensitivity checks, and under an explicit scope an object
+/// with no resolvable evidence is denied.
 ///
 /// Scope policy:
 ///  • an explicit `SensitiveScope` is applied via `scope.permits(label)`;
@@ -113,11 +116,66 @@ public nonisolated struct CanonicalWorkflowEvidenceReferenceGate: WorkflowEviden
         }
 
         // 2. Sensitive-scope enforcement where a lineage is resolvable
-        guard let scopeTargetKind = Self.scopeTargetKind(for: kind) else {
-            // issue / gap / contradiction carry no sensitivity lineage — boundary check is final
-            return .permitted
+        if let scopeTargetKind = Self.scopeTargetKind(for: kind) {
+            return await sensitivityVerdict(
+                SensitiveScopeTarget(kind: scopeTargetKind, id: canonicalObjectID), kindName: kind.rawValue)
         }
-        let target = SensitiveScopeTarget(kind: scopeTargetKind, id: canonicalObjectID)
+
+        // 3. F29 — issue / gap / contradiction carry no label of their own, but their text is
+        //    drawn from evidence that does. Every piece of that evidence must pass the same
+        //    workspace + sensitivity checks; one failing piece denies the whole reference.
+        let lineage: [LineageMember]
+        do {
+            lineage = try await lineageMembers(of: kind, id: canonicalObjectID)
+        } catch {
+            return .denied(reason: "Lineage resolution failed for referenced \(kind.rawValue): \(error)")
+        }
+        // A restricted workflow (explicit scope) cannot vouch for an object whose evidence is
+        // unknown; the unscoped default keeps the existing global-object behaviour.
+        if lineage.isEmpty, scope != nil {
+            return .denied(reason: "Referenced \(kind.rawValue) has no resolvable evidence lineage")
+        }
+        for member in lineage {
+            let memberVerdict = await leafVerdict(member, workspaceID: workspaceID)
+            if case .denied(let reason) = memberVerdict {
+                return .denied(reason: "Referenced \(kind.rawValue) draws on evidence that is not permitted: \(reason)")
+            }
+        }
+        return .permitted
+    }
+
+    // MARK: - Private
+
+    /// One piece of evidence a composite object (issue / gap / contradiction) is built from.
+    private struct LineageMember {
+        let validatorKind: String
+        let scopeKind: SensitiveScopeTargetKind
+        let id: UUID
+    }
+
+    private enum LineageError: Error {
+        case malformedReference(String)
+        case unsupportedLinkKind(String)
+    }
+
+    /// Existence + workspace boundary + sensitivity for one leaf evidence object.
+    private func leafVerdict(_ member: LineageMember, workspaceID: UUID) async -> WorkflowEvidenceGateVerdict {
+        do {
+            try await WorkflowTargetValidator.validate(
+                kind: member.validatorKind, targetID: member.id,
+                workspaceID: workspaceID, database: database)
+        } catch WorkflowTargetValidationError.targetNotFound {
+            return .denied(reason: "\(member.validatorKind) does not exist")
+        } catch WorkflowTargetValidationError.crossWorkspace {
+            return .denied(reason: "\(member.validatorKind) belongs to a different workspace")
+        } catch {
+            return .denied(reason: "\(member.validatorKind) verification failed: \(error)")
+        }
+        return await sensitivityVerdict(
+            SensitiveScopeTarget(kind: member.scopeKind, id: member.id), kindName: member.validatorKind)
+    }
+
+    private func sensitivityVerdict(_ target: SensitiveScopeTarget, kindName: String) async -> WorkflowEvidenceGateVerdict {
         let resolution: ProtectionResolution
         do {
             resolution = try await scopeRepository.effectiveLabel(for: target)
@@ -126,24 +184,78 @@ public nonisolated struct CanonicalWorkflowEvidenceReferenceGate: WorkflowEviden
         }
         switch resolution {
         case .brokenLineage:
-            return .denied(reason: "Sensitivity lineage is broken for referenced \(kind.rawValue)")
+            return .denied(reason: "Sensitivity lineage is broken for referenced \(kindName)")
         case .resolved(let label):
             if let scope = scope {
                 guard scope.permits(label) else {
-                    return .denied(reason: "Active sensitive scope does not permit this \(kind.rawValue)")
+                    return .denied(reason: "Active sensitive scope does not permit this \(kindName)")
                 }
                 return .permitted
             }
             // Fail-closed default: no privileged material, nothing above the
             // unassigned-object default level.
             guard !label.privileged, label.sensitivity <= .internalLevel else {
-                return .denied(reason: "No active sensitive scope permits this protected \(kind.rawValue)")
+                return .denied(reason: "No active sensitive scope permits this protected \(kindName)")
             }
             return .permitted
         }
     }
 
-    // MARK: - Private
+    /// The leaf evidence behind a composite object. Issues expand their links one level
+    /// (a linked gap / contradiction expands to ITS evidence); an unknown link kind or a
+    /// non-UUID reference is an error, never skipped.
+    private func lineageMembers(of kind: WorkflowEvidenceObjectKind, id: UUID) async throws -> [LineageMember] {
+        switch kind {
+        case .contradiction:
+            let rows = try await database.query(
+                "SELECT evidence_a, evidence_b FROM contradictions WHERE id = ?;", [.uuid(id)])
+            guard let row = rows.first else { return [] }
+            return try [0, 1].compactMap { try Self.member(row.string($0), validatorKind: "knowledgeObject", scopeKind: .knowledgeObject) }
+        case .gap:
+            let rows = try await database.query(
+                "SELECT evidence_object_id, before_event, after_event FROM gap_nodes WHERE id = ?;", [.uuid(id)])
+            guard let row = rows.first else { return [] }
+            return try [
+                Self.member(row.string(0), validatorKind: "knowledgeObject", scopeKind: .knowledgeObject),
+                Self.member(row.string(1), validatorKind: "event", scopeKind: .event),
+                Self.member(row.string(2), validatorKind: "event", scopeKind: .event),
+            ].compactMap { $0 }
+        case .issue:
+            let rows = try await database.query(
+                "SELECT target_kind, target_id FROM professional_issue_links WHERE issue_id = ?;", [.uuid(id)])
+            var members: [LineageMember] = []
+            for row in rows {
+                let linkKind = row.string(0) ?? ""
+                guard let targetID = row.string(1).flatMap(UUID.init(uuidString:)) else {
+                    throw LineageError.malformedReference("issue link \(linkKind)")
+                }
+                switch linkKind {
+                case "contradiction": members += try await lineageMembers(of: .contradiction, id: targetID)
+                case "gap":           members += try await lineageMembers(of: .gap, id: targetID)
+                default:
+                    guard let scopeKind = SensitiveScopeTargetKind(rawValue: linkKind),
+                          IssueLinkTarget(kind: linkKind, targetID: targetID) != nil else {
+                        throw LineageError.unsupportedLinkKind(linkKind)
+                    }
+                    members.append(LineageMember(validatorKind: linkKind, scopeKind: scopeKind, id: targetID))
+                }
+            }
+            return members
+        case .claim, .evidenceBlock, .sourceVersion, .entity, .event:
+            return []
+        }
+    }
+
+    /// nil column → no member; a present value that isn't a UUID → error (fail closed).
+    private static nonisolated func member(
+        _ raw: String?, validatorKind: String, scopeKind: SensitiveScopeTargetKind
+    ) throws -> LineageMember? {
+        guard let raw, !raw.isEmpty else { return nil }
+        guard let id = UUID(uuidString: raw) else {
+            throw LineageError.malformedReference(validatorKind)
+        }
+        return LineageMember(validatorKind: validatorKind, scopeKind: scopeKind, id: id)
+    }
 
     private func validateIssue(_ issueID: UUID, workspaceID: UUID) async throws {
         let rows = try await database.query(

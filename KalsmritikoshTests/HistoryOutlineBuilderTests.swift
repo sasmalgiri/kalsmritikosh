@@ -66,4 +66,33 @@ struct HistoryOutlineBuilderTests {
         #expect(again.chapters.map(\.title) == titles)
         #expect(again.items.map(\.id) == outline.items.map(\.id))
     }
+
+    @Test("F09 — deferred material reaches the story's coverage, the UI note, and old stories decode as complete")
+    func deferredCountsSurface() throws {
+        let s = UUID(), src = UUID()
+        let e = Event(kind: .contractSigned, date: Date(timeIntervalSince1970: 1_072_915_200), title: "MSA signed",
+                      entityIDs: [s], sourceObjectID: src, datePrecision: .day)
+        let m = HistoryMaterial(
+            subject: ResolvedHistorySubject(subject: .person(s), displayName: "S", canonicalEntityID: s, resolutionConfidence: 1.0),
+            events: [e], assertions: [],
+            provenance: MaterialProvenance(canonicalEntityID: s, eventCount: 1, assertionCount: 0, genericFactCount: 0,
+                                           relationshipCount: 0, unscopedSubject: false,
+                                           deferredEventCount: 1_200, deferredAssertionCount: 0, deferredRelationshipCount: 7))
+        let projector = TemporalEventProjector(now: clock)
+        let outline = HistoryOutlineBuilder().build(material: m, items: projector.projectItems(from: m, claims: projector.projectClaims(from: m)))
+        #expect(outline.coverage.deferredEventCount == 1_200)
+        #expect(outline.coverage.deferredRelationshipCount == 7)
+        #expect(!outline.coverage.isComplete)
+        let note = try #require(DossierView.incompleteNote(outline.coverage))
+        #expect(note.contains("1200 event(s)") && note.contains("7 connection(s)") && !note.contains("statement"))
+
+        // A story persisted before F09 has no deferred keys: it decodes, as complete.
+        let legacy = #"{"totalItems":1,"datedItems":1,"undatedItems":0,"evidenceObjectCount":1,"assertionCount":0,"genericFactCount":0,"eventCount":1}"#
+        let decoded = try JSONDecoder().decode(HistoryCoverage.self, from: Data(legacy.utf8))
+        #expect(decoded.isComplete)
+        #expect(DossierView.incompleteNote(decoded) == nil)
+        // Round trip keeps the counts.
+        let again = try JSONDecoder().decode(HistoryCoverage.self, from: JSONEncoder().encode(outline.coverage))
+        #expect(again == outline.coverage)
+    }
 }

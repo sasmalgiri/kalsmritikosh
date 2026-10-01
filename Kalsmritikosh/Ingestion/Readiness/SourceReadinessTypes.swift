@@ -221,10 +221,16 @@ public nonisolated struct SourceReadinessUpdatePlan: Sendable, Hashable {
     public let producerID: String
     public let producerVersion: String
     public let occurredAt: Date
+    /// F15 — the per-lane evidence revisions the caller read BEFORE measuring. When set, `apply`
+    /// refuses the plan (`evidenceChangedDuringMeasurement`) if a lane an updated dimension depends
+    /// on has moved since, and stamps exactly these revisions. Nil = the measurement happens inside
+    /// the apply savepoint itself (e.g. indexing coverage), so the live revisions are stamped.
+    public let measuredEvidence: [String: Int64]?
 
     public nonisolated init(
         sourceVersionID: UUID, expectedRevision: Int, updates: [SourceReadinessDimensionUpdate],
-        producerID: String, producerVersion: String, occurredAt: Date
+        producerID: String, producerVersion: String, occurredAt: Date,
+        measuredEvidence: [String: Int64]? = nil
     ) {
         self.sourceVersionID = sourceVersionID
         self.expectedRevision = expectedRevision
@@ -232,6 +238,7 @@ public nonisolated struct SourceReadinessUpdatePlan: Sendable, Hashable {
         self.producerID = producerID
         self.producerVersion = producerVersion
         self.occurredAt = occurredAt
+        self.measuredEvidence = measuredEvidence
     }
 }
 

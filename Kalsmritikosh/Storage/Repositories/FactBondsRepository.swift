@@ -16,8 +16,6 @@ import Foundation
 
 public actor FactBondsRepository {
     private let database: Database
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
 
     /// Max source KO ids retained per bond row (mirrors RelationshipsRepository).
     public static let evidenceCap = 20
@@ -75,12 +73,12 @@ public actor FactBondsRepository {
         self.database = database
     }
 
-    /// Batched upserts wrapped in BEGIN IMMEDIATE / COMMIT so an N-bond
-    /// write amortises fsync cost. ROLLBACK on partial failure leaves
-    /// the table at its pre-batch state. Returns the Bond values for
-    /// NEWLY-INSERTED rows only (UPDATE-path rows already exist in any
-    /// downstream cache, so they don't need re-insertion). Existing
-    /// caches use this return value to keep their adjacency fresh.
+    /// Batched upserts in ONE isolated savepoint so an N-bond write amortises fsync cost and a
+    /// partial failure leaves the table at its pre-batch state (F28: the old await-spanning
+    /// BEGIN/COMMIT could also roll back OTHER callers' writes that ran inside it). Returns the
+    /// Bond values for NEWLY-INSERTED rows only (UPDATE-path rows already exist in any downstream
+    /// cache, so they don't need re-insertion). Existing caches use this return value to keep
+    /// their adjacency fresh.
     @discardableResult
     public func upsertBonds(
         _ bonds: [BondUpsert],
@@ -88,27 +86,15 @@ public actor FactBondsRepository {
         confidence: Confidence = .medium
     ) async throws -> [Bond] {
         guard !bonds.isEmpty else { return [] }
-        // Serialize concurrent batch-upserts at the gate so two callers
-        // don't both BEGIN at the same time (SQLite raises "transaction
-        // within a transaction" otherwise — observed during real-archive
-        // ingest with parallel IngestCoordinator fan-out).
-        try await database.beginTransaction()
-        var written: [Bond] = []
-        do {
+        return try await database.withSavepoint("fb_upsert_bonds") { db -> [Bond] in
+            var written: [Bond] = []
             for bond in bonds {
-                if let newBond = try await upsertBond(
-                    bond,
-                    sourceObjectID: sourceObjectID,
-                    confidence: bond.confidence ?? confidence
-                ) {
+                if let newBond = try Self.upsertBond(db, bond, sourceObjectID: sourceObjectID,
+                                                     confidence: bond.confidence ?? confidence, qualityTier: .t2) {
                     written.append(newBond)
                 }
             }
-            try await database.commitTransaction()
             return written
-        } catch {
-            await database.rollbackTransaction()
-            throw error
         }
     }
 
@@ -123,72 +109,64 @@ public actor FactBondsRepository {
         confidence: Confidence = .medium,
         qualityTier: QualityTier = .t2
     ) async throws -> Bond? {
-        let existing = try await database.query("""
+        try await database.withSavepoint("fb_upsert_bond") { db -> Bond? in
+            try Self.upsertBond(db, bond, sourceObjectID: sourceObjectID, confidence: confidence, qualityTier: qualityTier)
+        }
+    }
+
+    /// The synchronous core, composable into the caller's savepoint.
+    static func upsertBond(_ db: isolated Database, _ bond: BondUpsert, sourceObjectID: KnowledgeObject.ID,
+                           confidence: Confidence, qualityTier: QualityTier) throws -> Bond? {
+        let existing = try db.query("""
         SELECT id, weight, evidence_object_ids_json
         FROM fact_bonds
         WHERE bond_name = ? AND from_fact_id = ? AND to_fact_id = ?
         LIMIT 1;
-        """, [
-            .text(bond.bondName),
-            .uuid(bond.fromID),
-            .uuid(bond.toID)
-        ])
+        """, [.text(bond.bondName), .uuid(bond.fromID), .uuid(bond.toID)])
 
         if let row = existing.first, let id = row.uuid(0) {
             let weight = Int(row.int(1) ?? 1)
-            var evidence = parseEvidence(row.string(2) ?? "[]")
-            let srcStr = sourceObjectID.uuidString
-            if !evidence.contains(srcStr) {
-                evidence.append(srcStr)
-                if evidence.count > Self.evidenceCap {
-                    evidence = Array(evidence.suffix(Self.evidenceCap))
-                }
-            }
-            try await database.exec("""
+            let evidence = EvidenceList.appending(sourceObjectID.uuidString, to: row.string(2) ?? "[]", cap: Self.evidenceCap)
+            try db.exec("""
             UPDATE fact_bonds
             SET weight = ?, evidence_object_ids_json = ?
             WHERE id = ?;
-            """, [
-                .integer(Int64(weight + 1)),
-                .text(serializeEvidence(evidence)),
-                .uuid(id)
-            ])
+            """, [.integer(Int64(weight + 1)), .text(evidence), .uuid(id)])
             return nil
-        } else {
-            let newID = UUID()
-            try await database.exec("""
-            INSERT INTO fact_bonds (
-                id, bond_name, from_fact_kind, from_fact_id,
-                to_fact_kind, to_fact_id, source_object_id,
-                confidence, weight, evidence_object_ids_json, created_at,
-                quality_tier
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
-            """, [
-                .uuid(newID),
-                .text(bond.bondName),
-                .text(bond.fromKind.rawValue),
-                .uuid(bond.fromID),
-                .text(bond.toKind.rawValue),
-                .uuid(bond.toID),
-                .uuid(sourceObjectID),
-                .real(confidence.value),
-                .text("[\"\(sourceObjectID.uuidString)\"]"),
-                .date(.init()),
-                .text(qualityTier.rawValue)
-            ])
-            return Bond(
-                id: newID,
-                bondName: bond.bondName,
-                fromKind: bond.fromKind,
-                fromID: bond.fromID,
-                toKind: bond.toKind,
-                toID: bond.toID,
-                sourceObjectID: sourceObjectID,
-                confidence: confidence.value,
-                weight: 1
-            )
         }
+        let newID = UUID()
+        try db.exec("""
+        INSERT INTO fact_bonds (
+            id, bond_name, from_fact_kind, from_fact_id,
+            to_fact_kind, to_fact_id, source_object_id,
+            confidence, weight, evidence_object_ids_json, created_at,
+            quality_tier
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
+        """, [
+            .uuid(newID),
+            .text(bond.bondName),
+            .text(bond.fromKind.rawValue),
+            .uuid(bond.fromID),
+            .text(bond.toKind.rawValue),
+            .uuid(bond.toID),
+            .uuid(sourceObjectID),
+            .real(confidence.value),
+            .text("[\"\(sourceObjectID.uuidString)\"]"),
+            .date(.init()),
+            .text(qualityTier.rawValue)
+        ])
+        return Bond(
+            id: newID,
+            bondName: bond.bondName,
+            fromKind: bond.fromKind,
+            fromID: bond.fromID,
+            toKind: bond.toKind,
+            toID: bond.toID,
+            sourceObjectID: sourceObjectID,
+            confidence: confidence.value,
+            weight: 1
+        )
     }
 
     public func count() async throws -> Int {
@@ -309,23 +287,5 @@ public actor FactBondsRepository {
             confidence: conf,
             weight: weight
         )
-    }
-
-    // MARK: - JSON evidence list helpers
-
-    private func parseEvidence(_ json: String) -> [String] {
-        guard let data = json.data(using: .utf8),
-              let arr = try? decoder.decode([String].self, from: data) else {
-            return []
-        }
-        return arr
-    }
-
-    private func serializeEvidence(_ list: [String]) -> String {
-        guard let data = try? encoder.encode(list),
-              let s = String(data: data, encoding: .utf8) else {
-            return "[]"
-        }
-        return s
     }
 }

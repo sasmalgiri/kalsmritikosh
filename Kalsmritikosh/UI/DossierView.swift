@@ -120,14 +120,31 @@ public struct DossierView: View {
     }
 
     private func coverageRibbon(_ c: HistoryCoverage) -> some View {
-        HStack(spacing: 14) {
-            Label("\(c.datedItems) dated", systemImage: "calendar")
-            Label("\(c.undatedItems) undated", systemImage: "calendar.badge.exclamationmark")
-            Label("\(c.evidenceObjectCount) source(s)", systemImage: "doc.text.magnifyingglass")
-            Label("\(c.eventCount) event · \(c.assertionCount) assertion · \(c.genericFactCount) fact",
-                  systemImage: "square.stack.3d.up")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 14) {
+                Label("\(c.datedItems) dated", systemImage: "calendar")
+                Label("\(c.undatedItems) undated", systemImage: "calendar.badge.exclamationmark")
+                Label("\(c.evidenceObjectCount) source(s)", systemImage: "doc.text.magnifyingglass")
+                Label("\(c.eventCount) event · \(c.assertionCount) assertion · \(c.genericFactCount) fact",
+                      systemImage: "square.stack.3d.up")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            // F09 — a story built from capped material says so, with the exact counts left out.
+            if let note = Self.incompleteNote(c) {
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
         }
-        .font(.caption).foregroundStyle(.secondary)
+    }
+
+    /// Plain-language note naming what the story did NOT include, or nil when it saw everything.
+    static func incompleteNote(_ c: HistoryCoverage) -> String? {
+        guard !c.isComplete else { return nil }
+        var parts: [String] = []
+        if c.deferredEventCount > 0 { parts.append("\(c.deferredEventCount) event(s)") }
+        if c.deferredAssertionCount > 0 { parts.append("\(c.deferredAssertionCount) statement(s)") }
+        if c.deferredRelationshipCount > 0 { parts.append("\(c.deferredRelationshipCount) connection(s)") }
+        return "Not everything is in this story: \(parts.joined(separator: ", ")) about this subject were too many to include."
     }
 
     private func chapterCard(_ chapter: RenderedChapter) -> some View {

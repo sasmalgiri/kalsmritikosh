@@ -25,24 +25,20 @@ public actor InvestigationIdentityDecisionRepository {
         guard !cleanActor.isEmpty else { throw IdentityResolutionError.blankActor }
         let id = UUID()
         let sp = savepoint("invdec", id)
-        var sequence = 0
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            sequence = Int(try await database.query(
+        let rationaleValue = opt(rationale)
+        // F28 — sequence allocation + insert in ONE isolated savepoint.
+        let sequence = try await database.withSavepoint(sp) { db -> Int in
+            let next = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_identity_decisions WHERE case_id = ?;",
                 [.uuid(caseID)]).first?.int(0) ?? 0) + 1
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO investigation_identity_decisions (id, case_id, sequence, decision_kind, winner_entity_id,
                     loser_entity_id, rationale, actor, prior_decision_id, occurred_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
-                """, [.uuid(id), .uuid(caseID), .integer(Int64(sequence)), .text(kind.rawValue),
-                      .uuid(winnerEntityID), .uuid(loserEntityID), opt(rationale), .text(cleanActor),
+                """, [.uuid(id), .uuid(caseID), .integer(Int64(next)), .text(kind.rawValue),
+                      .uuid(winnerEntityID), .uuid(loserEntityID), rationaleValue, .text(cleanActor),
                       priorDecisionID.map { SQLValue.uuid($0) } ?? .null, .date(date)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+            return next
         }
         return IdentityResolutionDecision(id: id, caseID: caseID, sequence: sequence, kind: kind,
                                           winnerEntityID: winnerEntityID, loserEntityID: loserEntityID,

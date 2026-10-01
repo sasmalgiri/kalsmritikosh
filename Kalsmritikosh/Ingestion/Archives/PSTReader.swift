@@ -101,21 +101,26 @@ public nonisolated struct PSTReader: Sendable {
     /// surface as many readable messages as possible from a possibly
     /// corrupt archive.
     public func readAllMessages() throws -> [PSTMessage] {
-        let nodeEntries = readNodeBTree()
+        Array(messageIterator())
+    }
+
+    /// F01 — the same walk, one message at a time: the node / block tables (small) are read once;
+    /// each message's property context is parsed only when the caller asks for the next one.
+    public func messageIterator() -> AnyIterator<PSTMessage> {
         let blockEntries = readBlockBTree()
-
-        let messageNodes = nodeEntries.filter { ($0.nid & 0x1F) == 0x0C }
-
-        var messages: [PSTMessage] = []
-        for node in messageNodes {
-            do {
-                let msg = try readMessage(node: node, blockEntries: blockEntries)
-                messages.append(msg)
-            } catch {
-                Self.log.warning("PSTReader skipping NID \(node.nid, privacy: .public): \(String(describing: error), privacy: .public)")
+        let messageNodes = readNodeBTree().filter { ($0.nid & 0x1F) == 0x0C }
+        var i = 0
+        return AnyIterator {
+            while i < messageNodes.count {
+                let node = messageNodes[i]
+                i += 1
+                do { return try self.readMessage(node: node, blockEntries: blockEntries) }
+                catch {
+                    Self.log.warning("PSTReader skipping NID \(node.nid, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
+            return nil
         }
-        return messages
     }
 
     // MARK: - NDB (Node + Block) B-tree readers

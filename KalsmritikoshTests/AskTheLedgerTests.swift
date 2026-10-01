@@ -163,10 +163,12 @@ struct AskTheLedgerTests {
     }
 
     // G1/Stage-2.1 — a field fact's provenance is its SOURCE BLOCKS, never
-    // the subject/entity id masquerading as a document id.
+    // the subject/entity id masquerading as a document id. F06 — and never a
+    // block id masquerading as one either: blocks travel in `blockIDs`, the
+    // cited documents are the blocks' OWNERS.
     @Test func lookupFieldCitesSourceBlocksNotSubject() async {
-        let block1 = UUID(), block2 = UUID(), subject = UUID()
-        let tools = LedgerTools(
+        let block1 = UUID(), block2 = UUID(), subject = UUID(), doc = UUID()
+        var tools = LedgerTools(
             events: { _ in [] },
             facts: { field in
                 field == "applicant"
@@ -177,8 +179,10 @@ struct AskTheLedgerTests {
                     : []
             },
             chunksForQuestion: { _ in [] })
+        tools.blockOwners = { ids in Dictionary(uniqueKeysWithValues: ids.map { ($0, doc) }) }
         let lookup = await tools.lookupField("applicant")
-        #expect(lookup.first?.objectIDs == [block1, block2], "must cite source blocks")
+        #expect(lookup.first?.blockIDs == [block1, block2], "must keep the source blocks as provenance")
+        #expect(lookup.first?.objectIDs == [doc], "must cite the document that owns them")
         #expect(lookup.first?.objectIDs.contains(subject) == false, "must NOT cite the subject id")
     }
 }

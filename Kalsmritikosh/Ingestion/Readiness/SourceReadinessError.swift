@@ -36,6 +36,9 @@ public nonisolated enum SourceReadinessError: Error, Equatable, Sendable {
     case basisOwnershipMismatch(SourceReadinessBasis)
     /// The optimistic revision check failed (a concurrent update won).
     case revisionConflict(expected: Int, actual: Int)
+    /// F15 — evidence this dimension depends on changed between the caller's measurement and the
+    /// stamp; the measurement is stale and nothing was written.
+    case evidenceChangedDuringMeasurement(SourceReadinessDimension)
     /// Readiness was already initialized for this source version.
     case alreadyInitialized(UUID)
     /// A source version does not carry all ten dimensions.
