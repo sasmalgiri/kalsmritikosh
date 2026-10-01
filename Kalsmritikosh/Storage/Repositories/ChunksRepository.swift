@@ -31,14 +31,17 @@ public actor ChunksRepository {
     /// F15/F25 — `blocks` are the evidence blocks the chunks were derived from (their content binds each
     /// chunk's `derivation_digest`); a chunk whose lineage names a block not given here gets no digest
     /// (a later reconciliation records its baseline).
+    /// `certify: false` writes NO digest — for chunks whose text is not (yet) proven to follow from the
+    /// evidence (e.g. pieces of an unproven parent): reconciliation must prove or rebuild them.
     nonisolated static func insertStatements(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]] = [:],
                                              blocks: [EvidenceBlock] = [],
-                                             content extra: [UUID: ChunkDerivation.BlockContent] = [:]) -> [(sql: String, binds: [SQLValue])] {
+                                             content extra: [UUID: ChunkDerivation.BlockContent] = [:],
+                                             certify: Bool = true) -> [(sql: String, binds: [SQLValue])] {
         var out: [(sql: String, binds: [SQLValue])] = []
         let content = extra.merging(blocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { _, b in b })
         for chunk in chunks {
             let chunkLineage = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
-            let digest = ChunkDerivation.digest(text: chunk.text, lineage: chunkLineage, content: content)
+            let digest = certify ? ChunkDerivation.digest(text: chunk.text, lineage: chunkLineage, content: content) : nil
             out.append(("""
             INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version, derivation_digest)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

@@ -40,6 +40,8 @@ public struct ChunkReindexReceipt: Sendable {
     public var oversizedFound = 0
     public var oversizedSplit = 0
     public var childrenWritten = 0
+    /// F25 — splits whose parent was not proven against its evidence: the pieces carry no digest.
+    public var splitUnproven = 0
     public var embeddingsDropped = 0
     public var salienceBackfilled = 0
     public var prefixesStamped = 0
@@ -210,16 +212,18 @@ public struct ChunkReindexCoordinator {
         let rows = try await database.query("""
         SELECT c.id, c.object_id, c.text, c.char_start, c.page_number, c.context_prefix,
                c.evidence_block_id, c.block_kind, c.source_version_id, c.admit_embedding,
-               ko.document_class
+               ko.document_class, c.derivation_digest
         FROM chunks c JOIN knowledge_objects ko ON ko.id = c.object_id
-        WHERE length(c.text) > \(Self.oversizeChars);
+        WHERE length(c.text) > \(Self.oversizeChars) AND c.superseded_by_run IS NULL;
         """, [])
+        // F25 — only ACTIVE chunks are split: a superseded chunk is a historical citation row of a replaced
+        // derivation; splitting it would delete it and re-insert its text as active search output.
         receipt.oversizedFound = rows.count
         guard !rows.isEmpty else { return }
 
         // F28 — every oversized split in ONE isolated savepoint.
-        let counts = try await database.withSavepoint("reindex_split") { db -> (dropped: Int, split: Int, children: Int) in
-            var counts = (dropped: 0, split: 0, children: 0)
+        let counts = try await database.withSavepoint("reindex_split") { db -> (dropped: Int, split: Int, children: Int, unproven: Int) in
+            var counts = (dropped: 0, split: 0, children: 0, unproven: 0)
                 for row in rows {
                     guard let id = row.uuid(0), let objectID = row.uuid(1), let text = row.string(2) else { continue }
                     let charStart = Int(row.int(3) ?? 0)
@@ -274,9 +278,19 @@ public struct ChunkReindexCoordinator {
                         .first?.int(0) ?? 0)
                     try db.exec("DELETE FROM chunk_embeddings WHERE chunk_id = ?;", [.uuid(id)])
                     try db.exec("DELETE FROM chunks WHERE id = ?;", [.uuid(id)])
-                    // F15 — each piece's digest binds it to the live content of the blocks it cites.
-                    let content = try ChunkDerivation.content(db, blockIDs: children.flatMap(\.allBlockIDs))
-                    for st in ChunksRepository.insertStatements(children, content: content) { try db.exec(st.sql, st.binds) }
+                    // F15/F25 — a piece inherits proof ONLY from a proven parent. The parent's recorded digest
+                    // is checked against its live text, lineage and blocks first: splitting must never turn
+                    // text that no longer follows from the evidence into "certified" pieces. An unproven
+                    // parent (mismatch, or no digest) yields pieces with NO digest, which reconciliation must
+                    // prove against evidence or rebuild (lineage-less pieces stay explicitly unverified).
+                    let parentIDs = parentLineage.map(\.0)
+                    let content = try ChunkDerivation.content(db, blockIDs: parentIDs + children.flatMap(\.allBlockIDs))
+                    let recorded = row.string(11)
+                    let liveParent = ChunkDerivation.digest(text: text, lineage: parentIDs.isEmpty ? (blockID.map { [$0] } ?? []) : parentIDs,
+                                                            content: content)
+                    let proven = recorded != nil && recorded == liveParent
+                    if !proven { counts.unproven += 1 }
+                    for st in ChunksRepository.insertStatements(children, content: content, certify: proven) { try db.exec(st.sql, st.binds) }
                     try db.exec(
                         "UPDATE chunks SET chunk_version = 2 WHERE object_id = ? AND ordinal > ?;",
                         [.uuid(objectID), .integer(Int64(maxOrdinal))])
@@ -288,6 +302,7 @@ public struct ChunkReindexCoordinator {
         }
         receipt.embeddingsDropped += counts.dropped
         receipt.oversizedSplit += counts.split
+        receipt.splitUnproven += counts.unproven
         receipt.childrenWritten += counts.children
     }
 

@@ -125,31 +125,112 @@ struct ChunkDigestProofTests {
         #expect(try await readiness.snapshot(sourceVersionID: sv).aggregateRevision == rev)
     }
 
-    @Test("Both chunk-reindex write paths (repack and split) record digests from the blocks they used")
-    func reindexPathsWriteDigests() async throws {
+    @Test("The repack path records digests from the blocks it packed from")
+    func repackWritesDigests() async throws {
         let r = try await rig()
         let sv = try await ingest(r)
-        let chunks = try await activeChunks(r, sv)
-        let koA = try #require(chunks.first?.object)
-        // Repack path (P1.8): an object that owns blocks but has a lineage-less chunk is re-packed.
+        let koA = try #require(try await activeChunks(r, sv).first?.object)
+        // P1.8: an object that owns blocks but has a lineage-less chunk is re-packed from its blocks.
         try await r.db.exec("""
             INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, created_at, source_version_id)
             VALUES (?, ?, 900, 'flattened legacy text', 0, 21, 0, ?);
             """, [.uuid(UUID()), .uuid(koA), .uuid(sv)])
-        // Split path: another chunk with lineage becomes oversized.
-        let para = String(repeating: "The claim was filed after review by the board. ", count: 28)
-        let big = [para, para, para].joined(separator: "\n\n")
-        let target = try #require(chunks.first { $0.object != koA }?.id)
-        try await r.db.exec("UPDATE chunks SET text = ?, chunk_version = 0 WHERE id = ?;", [.text(big), .uuid(target)])
+        _ = try await ChunkReindexCoordinator(database: r.db).run()
+        let nullDigests = try await r.db.query("""
+            SELECT COUNT(*) FROM chunks c WHERE c.object_id = ? AND c.superseded_by_run IS NULL
+               AND c.derivation_digest IS NULL AND EXISTS (SELECT 1 FROM chunk_blocks cb WHERE cb.chunk_id = c.id);
+            """, [.uuid(koA)]).first?.int(0)
+        #expect(nullDigests == 0, "a repacked chunk that cites blocks must carry a digest")
+        #expect(try await ChunkDerivation.verify(r.db, sourceVersionID: sv).mismatchedChunks == 0)
+    }
+
+    /// Unsupported text no evidence block contains, long enough to be split.
+    private static let injected: String = {
+        let para = String(repeating: "Zorblax quantified the fabricated settlement overnight. ", count: 26)
+        return [para, para, para].joined(separator: "\n\n")
+    }()
+
+    @Test("Splitting never certifies unsupported text: a digested parent whose text was replaced yields uncertified pieces, and the upgrade removes them")
+    func splitDoesNotLaunderAlteredText() async throws {
+        let r = try await rig()
+        let sv = try await ingest(r)
+        let target = try #require(try await activeChunks(r, sv).first { $0.digest != nil }?.id)
+        try await r.db.exec("UPDATE chunks SET text = ?, chunk_version = 0 WHERE id = ?;", [.text(Self.injected), .uuid(target)])
 
         let receipt = try await ChunkReindexCoordinator(database: r.db).run()
-        #expect(receipt.oversizedSplit >= 1, "fixture: the split path ran")
-        let nullDigests = try await r.db.query("""
-            SELECT COUNT(*) FROM chunks c WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL
-               AND c.derivation_digest IS NULL AND EXISTS (SELECT 1 FROM chunk_blocks cb WHERE cb.chunk_id = c.id);
-            """, [.uuid(sv)]).first?.int(0)
-        #expect(nullDigests == 0, "a reindexed chunk that cites blocks must carry a digest")
-        #expect(try await ChunkDerivation.verify(r.db, sourceVersionID: sv).mismatchedChunks == 0,
-                "the recorded digests match the live chunks and blocks")
+        #expect(receipt.oversizedSplit >= 1 && receipt.splitUnproven >= 1, "fixture: the unproven parent was split")
+        let check = try await ChunkDerivation.verify(r.db, sourceVersionID: sv)
+        #expect(check.uncertifiable > 0, "the pieces of an unproven parent are NOT certified by the split")
+        #expect(try await r.db.query("""
+            SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL
+               AND text LIKE '%Zorblax%' AND derivation_digest IS NOT NULL;
+            """, [.uuid(sv)]).first?.int(0) == 0, "no piece of the injected text carries a digest")
+
+        _ = try await r.c.ensureUpgrade(sourceVersionID: sv, goal: .searchReady, execution: .foreground)
+        #expect(try await !search(r, "Zorblax"), "the unsupported text no longer serves as active search output")
+        #expect(try await search(r, "approved"), "the object was re-derived from its evidence")
+        #expect(try await ChunkDerivation.verify(r.db, sourceVersionID: sv).uncertifiable == 0)
+        #expect(try await SourceReadinessRepository(database: r.db).snapshot(sourceVersionID: sv).dimension(.indexing)?.state == .ready)
+    }
+
+    @Test("A legacy digest-less parent with unsupported text: split pieces stay unproven and the upgrade removes them")
+    func splitOfLegacyParentStaysUnproven() async throws {
+        let r = try await rig()
+        let sv = try await ingest(r)
+        let target = try #require(try await activeChunks(r, sv).first?.id)
+        try await r.db.exec("UPDATE chunks SET text = ?, chunk_version = 0 WHERE id = ?;", [.text(Self.injected), .uuid(target)])
+        try await simulatePreV141(r, sv)
+
+        _ = try await ChunkReindexCoordinator(database: r.db).run()
+        #expect(try await r.db.query("""
+            SELECT COUNT(*) FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL
+               AND text LIKE '%Zorblax%' AND derivation_digest IS NOT NULL;
+            """, [.uuid(sv)]).first?.int(0) == 0)
+        _ = try await r.c.ensureUpgrade(sourceVersionID: sv, goal: .searchReady, execution: .foreground)
+        #expect(try await !search(r, "Zorblax"))
+        #expect(try await ChunkDerivation.verify(r.db, sourceVersionID: sv).uncertifiable == 0)
+    }
+
+    @Test("A proven oversized parent still splits into certified pieces")
+    func provenParentSplitsCertified() async throws {
+        let r = try await rig()
+        let sv = try await ingest(r)
+        // A genuinely oversized derivation: the evidence block itself holds the long text and the chunk
+        // was derived from it (digest recorded over that block content).
+        let row = try #require(try await r.db.query("""
+            SELECT c.id, cb.evidence_block_id, b.kind FROM chunks c JOIN chunk_blocks cb ON cb.chunk_id = c.id
+              JOIN evidence_blocks b ON b.id = cb.evidence_block_id
+             WHERE c.source_version_id = ? AND c.superseded_by_run IS NULL
+               AND (SELECT COUNT(*) FROM chunk_blocks x WHERE x.chunk_id = c.id) = 1 LIMIT 1;
+            """, [.uuid(sv)]).first)
+        let chunk = try #require(row.uuid(0)), block = try #require(row.uuid(1)), kind = row.string(2) ?? ""
+        let para = String(repeating: "The ledger entry was reconciled by the finance team. ", count: 26)
+        let long = [para, para, para].joined(separator: "\n\n")
+        try await r.db.exec("UPDATE evidence_blocks SET raw_text = ?, normalized_text = ? WHERE id = ?;", [.text(long), .text(long), .uuid(block)])
+        let digest = try #require(ChunkDerivation.digest(text: long, lineage: [block],
+                                                         content: [block: .init(kind: kind, rawText: long, normalizedText: long)]))
+        try await r.db.exec("UPDATE chunks SET text = ?, chunk_version = 0, derivation_digest = ? WHERE id = ?;",
+                            [.text(long), .text(digest), .uuid(chunk)])
+
+        let receipt = try await ChunkReindexCoordinator(database: r.db).run()
+        #expect(receipt.oversizedSplit >= 1 && receipt.splitUnproven == 0)
+        let pieces = try await r.db.query("""
+            SELECT derivation_digest FROM chunks WHERE source_version_id = ? AND superseded_by_run IS NULL AND text LIKE '%reconciled by the finance%';
+            """, [.uuid(sv)])
+        #expect(pieces.count >= 2 && pieces.allSatisfy { $0.string(0) != nil }, "pieces of a proven parent are certified")
+        #expect(try await ChunkDerivation.verify(r.db, sourceVersionID: sv).uncertifiable == 0)
+    }
+
+    @Test("A superseded oversized chunk is never split back into active search output")
+    func supersededChunkIsNotSplit() async throws {
+        let r = try await rig()
+        let sv = try await ingest(r)
+        let target = try #require(try await activeChunks(r, sv).first?.id)
+        try await r.db.exec("UPDATE chunks SET text = ?, chunk_version = 0, superseded_by_run = 'old-run' WHERE id = ?;",
+                            [.text(Self.injected), .uuid(target)])
+        _ = try await ChunkReindexCoordinator(database: r.db).run()
+        #expect(try await r.db.query("SELECT superseded_by_run FROM chunks WHERE id = ?;", [.uuid(target)]).first?.string(0) == "old-run",
+                "the historical row is kept as it was")
+        #expect(try await !search(r, "Zorblax"), "nothing of it became active output")
     }
 }
