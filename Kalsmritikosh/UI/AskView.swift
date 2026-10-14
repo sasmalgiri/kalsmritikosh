@@ -742,7 +742,7 @@ public struct AskView: View {
             let sealed = VerifiableReceipt.seal(
                 title: question.isEmpty ? "Answer receipt" : "Answer: \(question)", drafts: drafts
             )
-            let json = VerifiableReceipt.json(sealed)
+            let json = ReceiptSigner.exportJSON(sealed)
             await MainActor.run { saveReceipt(json, suggestedName: question) }
         }
     }

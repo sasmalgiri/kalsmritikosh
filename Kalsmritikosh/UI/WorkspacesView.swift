@@ -890,7 +890,7 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Nothing to receipt yet — compose finds no claims in scope." }
             return
         }
-        let json = VerifiableReceipt.json(sealed)
+        let json = ReceiptSigner.exportJSON(sealed)
 
         #if canImport(AppKit)
         let panel = NSSavePanel()

@@ -11,9 +11,9 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 |---|---|---|---|---|---|---|
 | W1-1 | Advanced search syntax | Search & organise | yes | off | — | Plain keyword search, as before. |
 | W1-2 | Search coverage badge | Search & organise | yes | off | — | Results only; coverage is still recorded. |
-| W1-3 | Signed import and export receipts | Evidence & proof | not yet | off | — | Unsigned receipts as before. |
+| W1-3 | Signed import and export receipts | Evidence & proof | yes | off | — | Unsigned receipts as before. |
 | W1-4 | Tags | Search & organise | yes | off | — | Tags are hidden but kept; turning this back on restores them. |
-| W1-5 | Links to passages (kalsmritikosh://) | Integration | not yet | off | — | Links are not offered; existing links show a 'links are off' message. |
+| W1-5 | Links to passages (kalsmritikosh://) | Integration | yes | off | — | Links are not offered; existing links show a 'links are off' message. |
 | W1-6 | Shortcuts actions | Integration | not yet | off | — | Actions are not offered to Shortcuts. |
 | W1-7 | Command palette | Integration | not yet | off | — | Menus and toolbar only. |
 | W1-8 | Move the ledger to another disk | Storage | not yet | off | — | The ledger stays in its current location. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
 
-_7 of 54 product modules built._
+_9 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

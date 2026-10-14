@@ -199,7 +199,7 @@ public struct CrossDocumentMatrixView: View {
                 return ReceiptDraft(claim: "\"\(q)\" appears in \(r.filename)", source: source, date: r.date, passage: r.passage)
             }
             let sealed = VerifiableReceipt.seal(title: "Cross-document matrix: \(q)", drafts: drafts)
-            let json = VerifiableReceipt.json(sealed)
+            let json = ReceiptSigner.exportJSON(sealed)
             await MainActor.run {
                 let panel = NSSavePanel()
                 if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }

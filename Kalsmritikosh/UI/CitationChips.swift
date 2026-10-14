@@ -74,6 +74,14 @@ public struct CitationChips: View {
                         .frame(maxWidth: 220)
                         .help(citation.snippet.isEmpty ? name : String(citation.snippet.prefix(200)))
                         .accessibilityLabel("Source \(index + 1): \(name). Opens at the quoted passage.")
+                        .contextMenu {
+                            // W1-5 — a link that reopens this exact passage from any app.
+                            if ProductModuleFlags.isEnabled(.deepLinks) {
+                                Button("Copy link to this passage") {
+                                    appState.copyLink(objectID: citation.objectID, quote: citation.snippet)
+                                }
+                            }
+                        }
                     }
                 }
             }

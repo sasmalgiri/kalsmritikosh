@@ -278,6 +278,15 @@ public struct SearchView: View {
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
+                // W1-5 — copy a link that reopens this passage from any app.
+                if ProductModuleFlags.isEnabled(.deepLinks) {
+                    Button {
+                        appState.copyLink(objectID: chunk.objectID, quote: String(chunk.text.prefix(200)))
+                    } label: {
+                        Label("Copy link", systemImage: "link").font(.caption2)
+                    }
+                    .buttonStyle(.borderless).controlSize(.small)
+                }
                 // W1-4 — tag the document this passage belongs to.
                 if ProductModuleFlags.isEnabled(.userTags) {
                     Button {

@@ -15,6 +15,8 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | I-11 | `AnswerPathExplainer` — plain-language "how this answer was found" | cbc24fb3 |
 | W1-1 | `AdvancedSearchCompiler` + `ChunksRepository.searchAdvanced` — AND/OR/NOT, phrases, NEAR/n, prefix, brackets, type:/file:/before:/after:/entity:/tag: and negation; issues reported | (this commit) |
 | W1-2 | `SearchCoverage` — matched fields, searchable-of-total, sources still indexing | (this commit) |
+| W1-3 | `ReceiptSigner` — exported receipts carry an ECDSA P-256 signature (Secure Enclave/Keychain installation key) over title+seal; verifier shows signer fingerprint or FAILED; `writeImportReceipt` seals+signs one receipt per Add-files batch (content hash + size per file, or the error) into Receipts/ | (this commit) |
+| W1-5 | `DeepLink` `kalsmritikosh://document/<id>?quote=` — parse, open at passage via `CitationSourceSheet`, missing-item / switched-off messages; Copy link on citation chips and search results | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
@@ -34,4 +36,6 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 - `MigrationMatrixTests` pins `latestVersion == 141`; it is now **142** (v142 user tags). Update the pin.
 - Regenerate `MODULE_MATRIX.md` from `ModuleMatrixDocument.render()` and add a drift test.
 - Each built item: write the tests named in its "Done means" column.
+- W1-3: import receipts are written only for the Add-files path; the folder-watcher/bulk ingest path does not write one yet.
+- W1-5: links do nothing until the `kalsmritikosh` URL type is registered (owner step).
 - Search screen: a search with issues but zero hits shows the empty state, so the issues are not visible — check and fix.

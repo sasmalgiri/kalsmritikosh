@@ -402,6 +402,7 @@ public final class AppState {
         let activity = beginProcess("Adding \(urls.count) file(s)…", total: urls.count)
         defer { finishProcess(activity); ingestCurrentFile = nil }
         var done = 0
+        var outcomes: [ImportOutcome] = []   // W1-3 import receipt
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -409,12 +410,15 @@ public final class AppState {
             do {
                 _ = try await ingest.ingest(fileAt: url, intent: .fullAvailable)
                 ingestLastFile = url.lastPathComponent
+                outcomes.append(ImportOutcome(url: url, error: nil))
             } catch {
                 KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                outcomes.append(ImportOutcome(url: url, error: error.localizedDescription))
             }
             done += 1
             updateProcess(activity, done: done)
         }
+        await writeImportReceipt(outcomes)
     }
 
     // MARK: - Device-suitable model install (consent-gated)
@@ -677,6 +681,9 @@ public final class AppState {
     /// picks it up on appear / change, runs it, then clears this. Lets the
     /// user search from anywhere without first navigating to Search.
     public var pendingSearchQuery: String?
+    /// W1-5 — a source opened from a kalsmritikosh:// link, and any message about a link that could not open.
+    public var deepLinkTarget: CitationOpenTarget?
+    public var deepLinkMessage: String?
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
     /// this on appear, then clears it. Lets a persona example open Ask ready
     /// to run.

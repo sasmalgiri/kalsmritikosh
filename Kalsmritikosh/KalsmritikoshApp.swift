@@ -37,6 +37,19 @@ struct KalsmritikoshApp: App {
             RootView()
                 .environment(appState)
                 .preferredColorScheme(.light)   // light UI across all phases
+                // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
+                .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
+                .sheet(item: Binding(get: { appState.deepLinkTarget },
+                                     set: { appState.deepLinkTarget = $0 })) { target in
+                    CitationSourceSheet(target: target) { appState.deepLinkTarget = nil }
+                        .environment(appState)
+                }
+                .alert("Link", isPresented: Binding(get: { appState.deepLinkMessage != nil },
+                                                   set: { if !$0 { appState.deepLinkMessage = nil } })) {
+                    Button("OK") { appState.deepLinkMessage = nil }
+                } message: {
+                    Text(appState.deepLinkMessage ?? "")
+                }
                 .task {
                     #if DEBUG
                     // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with

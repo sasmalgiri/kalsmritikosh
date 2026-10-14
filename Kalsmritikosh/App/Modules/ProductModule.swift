@@ -80,7 +80,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .signedReceipts:
             return Spec(planID: "W1-3", group: "Evidence & proof", title: "Signed import and export receipts",
                         detail: "Every import and export ends in a receipt listing what was read or written with its hashes, signed with this Mac's key so a changed byte or a different signer fails verification.",
-                        whenOff: "Unsigned receipts as before.")
+                        whenOff: "Unsigned receipts as before.",
+                        implemented: true)
         case .userTags:
             return Spec(planID: "W1-4", group: "Search & organise", title: "Tags",
                         detail: "Tag documents, facts and entities; use a tag as a search or question scope. Tags are your organisation only — they never change what the evidence says.",
@@ -89,7 +90,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .deepLinks:
             return Spec(planID: "W1-5", group: "Integration", title: "Links to passages (kalsmritikosh://)",
                         detail: "Copy a link to a document, an exact passage, a citation or a saved answer and paste it into any app; opening it jumps to that place, or says plainly that it is no longer in this archive.",
-                        whenOff: "Links are not offered; existing links show a 'links are off' message.")
+                        whenOff: "Links are not offered; existing links show a 'links are off' message.",
+                        implemented: true)
         case .shortcutsActions:
             return Spec(planID: "W1-6", group: "Integration", title: "Shortcuts actions",
                         detail: "Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app or the command line.",
