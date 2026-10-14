@@ -270,8 +270,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .menuBarAsk:
             return Spec(planID: "N-6", group: "Integration", title: "Ask from anywhere",
-                        detail: "A menu-bar search and a keyboard shortcut that work from any app; answers open in the main window with their sources.",
-                        whenOff: "Ask from the main window only.")
+                        detail: "A menu-bar panel reachable from any app: ask or search, and the answer opens in the main window with its sources. (A system-wide keyboard shortcut would need Accessibility permission, which the app does not request.)",
+                        whenOff: "Ask from the main window only.",
+                        implemented: true)
         case .imageIntelligence:
             return Spec(planID: "N-7", group: "Investigation", title: "Similar images and faces",
                         detail: "Find copies and crops of a photo across your archive. Face grouping is a separate choice inside this module; groups are named by you and the app never claims who a person is.",

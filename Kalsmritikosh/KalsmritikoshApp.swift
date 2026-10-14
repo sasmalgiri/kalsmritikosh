@@ -21,6 +21,9 @@ struct KalsmritikoshApp: App {
         ? AppState(bookmarks: BookmarkStore(ephemeral: true))
         : AppState()
 
+    /// N-6 — the menu-bar panel's switch (the module's own persisted key).
+    @AppStorage("kalsmritikosh.product.menuBarAsk") private var menuBarAskOn = false
+
     init() {
         #if canImport(TipKit)
         if #available(macOS 15.0, *) {
@@ -102,6 +105,11 @@ struct KalsmritikoshApp: App {
                 Button("Delete All My Data…") { postPaletteEntry("act.deleteAllData") }
             }
         }
+        // N-6 — ask from anywhere (menu bar). Shown only while its module is on.
+        MenuBarExtra("Kalsmritikosh", systemImage: "text.magnifyingglass", isInserted: $menuBarAskOn) {
+            MenuBarAskView(appState: appState)
+        }
+        .menuBarExtraStyle(.window)
     }
 
     private func postPaletteEntry(_ id: String) {

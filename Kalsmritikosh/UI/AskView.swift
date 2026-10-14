@@ -123,6 +123,14 @@ public struct AskView: View {
                 appState.pendingAskQuestion = nil
             }
         }
+        // N-6 — a question sent from the menu bar while Ask is already open.
+        .onChange(of: appState.pendingAskQuestion) { _, new in
+            if let seeded = new, !seeded.isEmpty {
+                question = seeded
+                appState.pendingAskQuestion = nil
+                inputFocused = true
+            }
+        }
         .sheet(isPresented: $showHistory) {
             ConversationHistorySheet(
                 conversations: pastConversations,

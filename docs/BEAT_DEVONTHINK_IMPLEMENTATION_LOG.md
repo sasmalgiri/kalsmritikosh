@@ -51,6 +51,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | W3-3 | `RelationshipGraphView` — top 40 people/organisations by relationship degree, deterministic `ForceLayout`, click a node or link for its evidence documents; event timeline (Swift Charts) by kind | (this commit) |
 | N-12 | `CustomTypesView` — user types with fields, filled from open-field `generic_facts` by field name (value + source count; empty = no source states it) | (this commit) |
 | N-5 | `StudioOutputsView` — deterministic briefing, FAQ, mind-map outline from the ledger, exported as Markdown, read aloud by AVSpeechSynthesizer (on-device) | (this commit) |
+| N-6 | `MenuBarExtra` panel (Ask / Search → main window with sources) shown while the module is on; Ask now also picks up a question arriving while open. No global hotkey — it would need Accessibility permission (stated in the module text) | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

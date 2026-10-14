@@ -50,7 +50,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-3 | Watchlists | Investigation | yes | off | — | Lists are kept but not matched. |
 | N-4 | Review coding | Legal | yes | off | — | No coding. |
 | N-5 | Briefings, FAQs and mind maps | Writing | yes | off | — | Not offered. |
-| N-6 | Ask from anywhere | Integration | not yet | off | — | Ask from the main window only. |
+| N-6 | Ask from anywhere | Integration | yes | off | — | Ask from the main window only. |
 | N-7 | Similar images and faces | Investigation | not yet | off | — | Images are searchable by their text only. |
 | N-8 | Places | Investigation | not yet | off | — | Not shown. |
 | N-9 | Import notes apps | Integration | not yet | off | — | These folders import as plain files. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_34 of 54 product modules built._
+_35 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 
