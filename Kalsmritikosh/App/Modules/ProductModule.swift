@@ -284,7 +284,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .imageIntelligence:
             return Spec(planID: "N-7", group: "Investigation", title: "Similar images and faces",
                         detail: "Find copies and crops of a photo across your archive. Face grouping is a separate choice inside this module; groups are named by you and the app never claims who a person is.",
-                        whenOff: "Images are searchable by their text only.")
+                        whenOff: "Images are searchable by their text only.",
+                        implemented: true)
         case .locationMap:
             return Spec(planID: "N-8", group: "Investigation", title: "Places",
                         detail: "Photo locations and addresses found in documents, as a list with coordinates. Nothing is looked up online; in Online mode a place can be handed to Apple Maps.",
