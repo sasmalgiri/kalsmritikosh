@@ -157,7 +157,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .statementDrift:
             return Spec(planID: "I-9", group: "Investigation", title: "How an account changed",
                         detail: "For one person, line up everything they said or wrote about a topic in date order and flag where dates, amounts, who was present or denials changed, with both quotes.",
-                        whenOff: "Contradictions between documents only.")
+                        whenOff: "Contradictions between documents only.",
+                        implemented: true)
         case .caseSlices:
             return Spec(planID: "I-10", group: "Sharing", title: "Signed case slices",
                         detail: "Share a redacted, signed, read-only part of a case as one file that another Mac can open and verify. No server.",

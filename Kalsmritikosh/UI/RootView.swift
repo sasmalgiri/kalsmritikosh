@@ -341,7 +341,7 @@ public struct RootView: View {
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     @State private var showImportQueue = false   // W1-9
-    @State private var showFactCheck = false     // I-6
+    @State private var openTool: ToolSheet?       // plan tools menu
     /// D-10 — set when a palette/menu entry targets a Settings group; the
     /// router hands it to SettingsView, which expands + scrolls + flashes.
     @State private var pendingSettingsAnchor: SettingsAnchor?
@@ -706,19 +706,20 @@ public struct RootView: View {
                         Task { await appState.ingestFiles(urls) }
                     }
                 }
-                // I-6 — check a draft against the archive.
-                if ProductModuleFlags.isEnabled(.liveFactCheck) {
-                    Button {
-                        showFactCheck = true
+                // Plan tools — one menu listing only the tools whose module is on.
+                if !ToolSheet.available.isEmpty {
+                    Menu {
+                        ForEach(ToolSheet.available) { tool in
+                            Button { openTool = tool } label: { Label(tool.title, systemImage: tool.symbol) }
+                        }
                     } label: {
-                        Label("Fact-check my writing", systemImage: "text.badge.checkmark")
-                            .frame(maxWidth: .infinity)
+                        Label("Tools", systemImage: "wrench.and.screwdriver").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderless)
+                    .menuStyle(.borderlessButton)
                     .controlSize(.small)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
-                    .sheet(isPresented: $showFactCheck) { FactCheckWritingView() }
+                    .sheet(item: $openTool) { $0.view }
                 }
                 // W1-9 — the queue for added files.
                 if ProductModuleFlags.isEnabled(.importQueue), !appState.importQueue.items.isEmpty {
