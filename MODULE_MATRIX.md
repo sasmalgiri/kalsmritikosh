@@ -23,7 +23,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | I-3 | Corroboration meter | Evidence & proof | yes | off | — | Citations only. |
 | I-4 | Look for contradicting evidence | Evidence & proof | yes | off | — | Contradictions are shown only when they are found during the normal search. |
 | I-5 | As of a date | Investigation | yes | off | — | Answers always use all evidence. |
-| I-6 | Fact-check my writing | Writing | not yet | off | — | Plain editor. |
+| I-6 | Fact-check my writing | Writing | yes | off | — | The fact-check tool is hidden. |
 | I-7 | Accuracy on your archive | Evidence & proof | yes | off | — | No self-test runs; confidence uses the built-in scale. |
 | I-8 | Send the least data | Online (your own key) | not yet | off | Online mode, needs O-4 | Online answers send the passages the question needs, still previewed and logged. |
 | I-9 | How an account changed | Investigation | not yet | off | — | Contradictions between documents only. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
 
-_16 of 54 product modules built._
+_17 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

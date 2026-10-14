@@ -141,8 +141,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .liveFactCheck:
             return Spec(planID: "I-6", group: "Writing", title: "Fact-check my writing",
-                        detail: "While you write a note or report, each sentence is checked against your evidence: supported, contradicted (with the source) or unsupported.",
-                        whenOff: "Plain editor.")
+                        detail: "Write or paste a draft and each sentence is checked against your evidence after you pause: supported (with the source), contradicted (with the conflicting sentence) or unsupported.",
+                        whenOff: "The fact-check tool is hidden.",
+                        implemented: true)
         case .archiveSelfScore:
             return Spec(planID: "I-7", group: "Evidence & proof", title: "Accuracy on your archive",
                         detail: "The app tests itself with questions whose answers your ledger already proves, plus questions it must refuse, and shows a personal accuracy score; displayed confidence is tuned to that score.",

@@ -341,6 +341,7 @@ public struct RootView: View {
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     @State private var showImportQueue = false   // W1-9
+    @State private var showFactCheck = false     // I-6
     /// D-10 — set when a palette/menu entry targets a Settings group; the
     /// router hands it to SettingsView, which expands + scrolls + flashes.
     @State private var pendingSettingsAnchor: SettingsAnchor?
@@ -704,6 +705,20 @@ public struct RootView: View {
                     if case .success(let urls) = result {
                         Task { await appState.ingestFiles(urls) }
                     }
+                }
+                // I-6 — check a draft against the archive.
+                if ProductModuleFlags.isEnabled(.liveFactCheck) {
+                    Button {
+                        showFactCheck = true
+                    } label: {
+                        Label("Fact-check my writing", systemImage: "text.badge.checkmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .sheet(isPresented: $showFactCheck) { FactCheckWritingView() }
                 }
                 // W1-9 — the queue for added files.
                 if ProductModuleFlags.isEnabled(.importQueue), !appState.importQueue.items.isEmpty {

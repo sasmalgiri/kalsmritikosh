@@ -24,6 +24,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | I-1 | `ProofBundle` — bundle.json (quotes + hashes + source SHA-256, P-256 signature raw+DER) and a self-contained offline verify.html (WebCrypto signature check, re-hash chosen sources, quote-in-text check for text files); Ask answer context menu | (this commit) |
 | I-2 | `WhatIsMissingView` (gaps grouped by kind, reason, likelihood, dismiss keeps) from Insights; per-answer gaps (cited documents or named entities) in the answer trust panel | (this commit) |
 | I-5 | `answerAsOf` — same question re-asked through `InvestigationAnswerService.answer(scopedTo:)` (fail-closed SourceScopedRetriever) over source versions with file date ≤ the day; lists today's cited documents dated later; As-of control in the answer trust panel | (this commit) |
+| I-6 | `SentenceFactChecker` (deterministic supported/contradicted/unsupported per sentence, reuses the I-4 extractors) + `FactCheckWritingView` (debounced, up to 40 sentences) from the sidebar. Plan said 'in the notebook editor' — no free-writing editor exists, so it is a standalone tool | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
