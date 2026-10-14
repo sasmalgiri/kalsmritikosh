@@ -709,10 +709,53 @@ public struct AskView: View {
                         } label: {
                             Label("Export verifiable receipt…", systemImage: "checkmark.seal")
                         }
+                        // I-1 — a bundle anyone can verify without this app.
+                        if ProductModuleFlags.isEnabled(.proofBundles) {
+                            Button {
+                                exportProofBundle(for: turn)
+                            } label: {
+                                Label("Export proof bundle…", systemImage: "seal")
+                            }
+                        }
                     }
                 }
                 Spacer(minLength: 60)
             }
+        }
+    }
+
+    /// I-1 — export a signed proof bundle (bundle.json + offline verify.html) into a chosen folder.
+    private func exportProofBundle(for turn: ConversationTurn) {
+        guard let answer = verifiedAnswers[turn.id] else { return }
+        let idx = turns.firstIndex(where: { $0.id == turn.id })
+        let question = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+        Task { @MainActor in
+            let ids = Set(answer.citations.map(\.objectID))
+            let names = (try? await appState.objects?.sourceFilenames(for: ids)) ?? [:]
+            let hashes = (try? await appState.objects?.sourceHashes(for: ids)) ?? [:]
+            let bundle = ProofBundle.build(question: question, answer: answer.answerText ?? answer.body,
+                                           citations: answer.citations.map { ($0.objectID, $0.snippet) },
+                                           filenames: names, hashes: hashes)
+            guard let signed = bundle.signed() else {
+                KalsmritikoshLog.ui.error("Proof bundle: no signing key available")
+                return
+            }
+            #if canImport(AppKit)
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.canCreateDirectories = true
+            panel.prompt = "Save proof bundle here"
+            guard panel.runModal() == .OK, let parent = panel.url else { return }
+            let safe = String(question.prefix(40)).replacingOccurrences(of: "/", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                let dir = try signed.write(into: parent, folderName: "Proof — \(safe.isEmpty ? "answer" : safe)")
+                NSWorkspace.shared.activateFileViewerSelecting([dir])
+            } catch {
+                KalsmritikoshLog.ui.error("Proof bundle write failed: \(error.localizedDescription, privacy: .public)")
+            }
+            #endif
         }
     }
 

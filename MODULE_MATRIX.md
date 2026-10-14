@@ -18,8 +18,8 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W1-7 | Command palette | Integration | yes | on | — | Menus and toolbar only; ⌘K does nothing. |
 | W1-8 | Move the ledger to another disk | Storage | yes | off | — | Boot uses the copy on this Mac; a copy on another disk is left in place. |
 | W1-9 | Import queue | Storage | yes | off | — | Imports run in the order added, with progress in the toolbar. |
-| I-1 | Proof bundles | Evidence & proof | not yet | off | needs W1-3 | Answers export as before, without a bundle. |
-| I-2 | What is missing | Investigation | not yet | off | — | Gaps are still detected in the background but not shown. |
+| I-1 | Proof bundles | Evidence & proof | yes | off | — | Answers export as before, without a bundle. |
+| I-2 | What is missing | Investigation | yes | off | — | The existing Insights gap list stays; the grouped map and per-answer gaps are hidden. |
 | I-3 | Corroboration meter | Evidence & proof | yes | off | — | Citations only. |
 | I-4 | Look for contradicting evidence | Evidence & proof | yes | off | — | Contradictions are shown only when they are found during the normal search. |
 | I-5 | As of a date | Investigation | not yet | off | — | Answers always use all evidence. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
 
-_13 of 54 product modules built._
+_15 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

@@ -19,6 +19,7 @@ struct AnswerTrustPanel: View {
     @State private var checking = false
     @State private var path: [AnswerPathStep]?
     @State private var pathExpanded = false
+    @State private var missing: [GapNode]?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -39,6 +40,17 @@ struct AnswerTrustPanel: View {
             } else if let disconfirmation {
                 disconfirmationRow(disconfirmation)
             }
+            if let missing, !missing.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("What may be missing for this answer", systemImage: "puzzlepiece.extension")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(missing) { g in
+                        Text("• \(g.description) — \(g.reason)")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
             if let path, !path.isEmpty {
                 DisclosureGroup(isExpanded: $pathExpanded) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -57,6 +69,7 @@ struct AnswerTrustPanel: View {
         .task(id: answer.ledgerAnswerID ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")) {
             path = appState.answerPath(for: answer)
             corroboration = await appState.corroboration(for: answer)
+            missing = await appState.gaps(relevantTo: answer)
             if ProductModuleFlags.isEnabled(.devilsAdvocate) && !answer.refused {
                 checking = true
                 disconfirmation = await appState.disconfirmation(for: answer)

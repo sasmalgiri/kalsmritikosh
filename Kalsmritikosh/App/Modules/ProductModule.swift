@@ -118,12 +118,12 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "I-1", group: "Evidence & proof", title: "Proof bundles",
                         detail: "Export an answer as one signed file with every quote, its exact location and the fingerprint of each source. Anyone can check it offline with the included verifier page, without this app.",
                         whenOff: "Answers export as before, without a bundle.",
-                        dependsOn: [.signedReceipts])
+                        implemented: true)
         case .gapMap:
             return Spec(planID: "I-2", group: "Investigation", title: "What is missing",
                         detail: "Shows items your documents imply should exist but are absent: a missing number in a series, a missing month, a reply to an email you do not have, a referenced attachment. Each gap states the pattern behind it and is never presented as fact.",
-                        whenOff: "Gaps are still detected in the background but not shown.",
-                        defaultEnabled: false)
+                        whenOff: "The existing Insights gap list stays; the grouped map and per-answer gaps are hidden.",
+                        implemented: true)
         case .corroborationMeter:
             return Spec(planID: "I-3", group: "Evidence & proof", title: "Corroboration meter",
                         detail: "Beside each claim, how many INDEPENDENT sources support it. Copies and forwards of one message count once; a claim with a single source is marked as a lead, not a fact.",

@@ -21,6 +21,8 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | W1-7 | **False gap** — ⌘K palette and the ? shortcut sheet already existed. Gated on the module switch, which defaults ON so behaviour is unchanged | (this commit) |
 | W1-8 | `LedgerRelocation` — VACUUM INTO + quick_check, every other file SHA-256 verified, security-scoped bookmark; boot follows it only when the disk is present and not behind this Mac's copy, else opens the local copy with a notice; Settings ▸ Your data | (this commit) |
 | W1-9 | `ImportQueue` (one worker, pause between files, skip, move up/down, clear finished) + `ImportQueueView`; Add files and the Shortcuts Add-files action route through it when on; ends with an import receipt | (this commit) |
+| I-1 | `ProofBundle` — bundle.json (quotes + hashes + source SHA-256, P-256 signature raw+DER) and a self-contained offline verify.html (WebCrypto signature check, re-hash chosen sources, quote-in-text check for text files); Ask answer context menu | (this commit) |
+| I-2 | `WhatIsMissingView` (gaps grouped by kind, reason, likelihood, dismiss keeps) from Insights; per-answer gaps (cited documents or named entities) in the answer trust panel | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
