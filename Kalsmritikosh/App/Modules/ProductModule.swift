@@ -328,7 +328,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .extraParsers:
             return Spec(planID: "W4-2", group: "Reading files", title: "More file types",
                         detail: "Keynote, older PowerPoint, Messages history, Safari and Chrome history, and 7z/RAR archives where a licence-clean reader exists.",
-                        whenOff: "These files are kept but not read.")
+                        whenOff: "These files are kept but not read.",
+                        implemented: true)
         case .mailRecovery:
             return Spec(planID: "W4-3", group: "Email evidence", title: "Deleted email recovery",
                         detail: "Finds deleted mail that is still present: files in Deleted Items / Trash / Bin folders and messages whose headers mark them deleted or trashed. Shown as recovered and partial, never mixed with live mail. Carving unlisted messages out of Outlook/Notes free space is not included.",
