@@ -26,7 +26,10 @@ extension AppState {
             // Conservative: without keys nothing counts as independent corroboration.
             keys = [:]
         }
-        return CorroborationMeter.read(citedObjectIDs: cited, keys: keys)
+        // W2-4 — near-duplicate copies (drafts, forwards) count as one source.
+        var merged = keys
+        for (id, key) in await nearDuplicateKeys(for: Set(cited)) { merged[id] = key }
+        return CorroborationMeter.read(citedObjectIDs: cited, keys: merged)
     }
 
     /// I-4 — search uncited passages on the same subject for evidence against the answer.

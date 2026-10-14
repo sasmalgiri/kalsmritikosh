@@ -192,7 +192,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .nearDuplicates:
             return Spec(planID: "W2-4", group: "Search & organise", title: "Near-duplicates",
                         detail: "Links drafts, forwards and re-saved copies as versions of one another. Nothing is merged or deleted.",
-                        whenOff: "Exact duplicates only.")
+                        whenOff: "Exact duplicates only.",
+                        implemented: true)
         case .legalProduction:
             return Spec(planID: "W2-5", group: "Legal", title: "Production sets",
                         detail: "Bates-numbered PDFs, Concordance/Relativity load files and legal holds that block removal.",

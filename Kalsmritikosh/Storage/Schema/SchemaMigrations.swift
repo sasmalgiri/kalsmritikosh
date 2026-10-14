@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 144
+    public static let latestVersion = 145
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -675,7 +675,8 @@ public enum SchemaMigrations {
         (141, v141),
         (142, v142),
         (143, v143),
-        (144, v144)
+        (144, v144),
+        (145, v145)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6960,6 +6961,46 @@ public enum SchemaMigrations {
         object_id TEXT, created_at REAL NOT NULL, read_at REAL
     );
     CREATE INDEX IF NOT EXISTS idx_product_alerts_created ON product_alerts(created_at);
+    """
+
+
+    // MARK: - v145 — beat-DEVONthink plan: annotations (W2-1), near-duplicate groups (W2-4),
+    // legal holds and Bates runs (W2-5), smart collections and rules (W3-5).
+    //
+    // User work product and derived links only — none changes evidence. Nothing is deleted:
+    // removals stamp removed_at / released_at / retired_at.
+    private static let v145: String = """
+    CREATE TABLE IF NOT EXISTS annotations (
+        id TEXT PRIMARY KEY NOT NULL, object_id TEXT NOT NULL, chunk_id TEXT,
+        quote TEXT NOT NULL, note TEXT, color TEXT NOT NULL DEFAULT 'yellow',
+        created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_annotations_object ON annotations(object_id);
+    CREATE TABLE IF NOT EXISTS near_duplicate_members (
+        object_id TEXT PRIMARY KEY NOT NULL, group_id TEXT NOT NULL,
+        similarity REAL NOT NULL, computed_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_near_dup_group ON near_duplicate_members(group_id);
+    CREATE TABLE IF NOT EXISTS legal_holds (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, released_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS legal_hold_items (
+        hold_id TEXT NOT NULL, object_id TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL,
+        PRIMARY KEY (hold_id, object_id), FOREIGN KEY (hold_id) REFERENCES legal_holds(id)
+    );
+    CREATE TABLE IF NOT EXISTS bates_runs (
+        id TEXT PRIMARY KEY NOT NULL, prefix TEXT NOT NULL, first_number INTEGER NOT NULL,
+        last_number INTEGER NOT NULL, documents INTEGER NOT NULL, created_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS smart_collections (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, query TEXT NOT NULL,
+        created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS automation_rules (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, query TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('tag','alert')), action_value TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL, retired_at REAL
+    );
     """
 
 }
