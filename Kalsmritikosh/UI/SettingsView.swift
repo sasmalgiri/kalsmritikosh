@@ -1850,6 +1850,10 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             backupSubsection
             Divider().padding(.vertical, 4)
+            if ProductModuleFlags.isEnabled(.ledgerRelocation) || appState.ledgerLocationNotice != nil {
+                LedgerRelocationSection()
+                Divider().padding(.vertical, 4)
+            }
             ledgerCleanupSubsection
             Divider().padding(.vertical, 4)
             HStack(spacing: 6) {

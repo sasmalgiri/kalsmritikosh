@@ -99,12 +99,14 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .commandPalette:
             return Spec(planID: "W1-7", group: "Integration", title: "Command palette",
-                        detail: "Reach every screen and main action from one search box, with a list of keyboard shortcuts.",
-                        whenOff: "Menus and toolbar only.")
+                        detail: "Reach every screen and main action from one search box (⌘K); press ? for the list of keyboard shortcuts. This existed before the module matrix, so it is on by default.",
+                        whenOff: "Menus and toolbar only; ⌘K does nothing.",
+                        implemented: true, defaultEnabled: true)
         case .ledgerRelocation:
             return Spec(planID: "W1-8", group: "Storage", title: "Move the ledger to another disk",
                         detail: "Copy the ledger to an external disk, verify the copy by hash, then use it from there; the app says clearly when the disk is not connected.",
-                        whenOff: "The ledger stays in its current location.")
+                        whenOff: "Boot uses the copy on this Mac; a copy on another disk is left in place.",
+                        implemented: true)
         case .importQueue:
             return Spec(planID: "W1-9", group: "Storage", title: "Import queue",
                         detail: "See pending, running and finished imports; pause, resume, stop one source or reorder. Resuming never processes a record twice.",

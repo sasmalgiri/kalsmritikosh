@@ -1293,7 +1293,8 @@ public struct RootView: View {
 
     @ViewBuilder
     private var paletteOverlay: some View {
-        if showPalette {
+        // W1-7 — the palette predates the module matrix; its switch defaults on.
+        if showPalette && ProductModuleFlags.isEnabled(.commandPalette) {
             ZStack(alignment: .top) {
                 Color.black.opacity(0.22)
                     .ignoresSafeArea()

@@ -15,8 +15,8 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W1-4 | Tags | Search & organise | yes | off | — | Tags are hidden but kept; turning this back on restores them. |
 | W1-5 | Links to passages (kalsmritikosh://) | Integration | yes | off | — | Links are not offered; existing links show a 'links are off' message. |
 | W1-6 | Shortcuts actions | Integration | yes | off | — | Actions refuse with a message to turn them on. |
-| W1-7 | Command palette | Integration | not yet | off | — | Menus and toolbar only. |
-| W1-8 | Move the ledger to another disk | Storage | not yet | off | — | The ledger stays in its current location. |
+| W1-7 | Command palette | Integration | yes | on | — | Menus and toolbar only; ⌘K does nothing. |
+| W1-8 | Move the ledger to another disk | Storage | yes | off | — | Boot uses the copy on this Mac; a copy on another disk is left in place. |
 | W1-9 | Import queue | Storage | not yet | off | — | Imports run in the order added, with progress in the toolbar. |
 | I-1 | Proof bundles | Evidence & proof | not yet | off | needs W1-3 | Answers export as before, without a bundle. |
 | I-2 | What is missing | Investigation | not yet | off | — | Gaps are still detected in the background but not shown. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
 
-_10 of 54 product modules built._
+_12 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

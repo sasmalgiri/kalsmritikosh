@@ -17,6 +17,9 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | W1-2 | `SearchCoverage` — matched fields, searchable-of-total, sources still indexing | (this commit) |
 | W1-3 | `ReceiptSigner` — exported receipts carry an ECDSA P-256 signature (Secure Enclave/Keychain installation key) over title+seal; verifier shows signer fingerprint or FAILED; `writeImportReceipt` seals+signs one receipt per Add-files batch (content hash + size per file, or the error) into Receipts/ | (this commit) |
 | W1-5 | `DeepLink` `kalsmritikosh://document/<id>?quote=` — parse, open at passage via `CitationSourceSheet`, missing-item / switched-off messages; Copy link on citation chips and search results | (this commit) |
+| W1-6 | App Intents: Ask, Ask with receipt, Search, Add files, Open a passage link; Ask/Search App Shortcuts; refuse when off | 763e6055 |
+| W1-7 | **False gap** — ⌘K palette and the ? shortcut sheet already existed. Gated on the module switch, which defaults ON so behaviour is unchanged | (this commit) |
+| W1-8 | `LedgerRelocation` — VACUUM INTO + quick_check, every other file SHA-256 verified, security-scoped bookmark; boot follows it only when the disk is present and not behind this Mac's copy, else opens the local copy with a notice; Settings ▸ Your data | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

@@ -684,6 +684,8 @@ public final class AppState {
     /// W1-5 — a source opened from a kalsmritikosh:// link, and any message about a link that could not open.
     public var deepLinkTarget: CitationOpenTarget?
     public var deepLinkMessage: String?
+    /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
+    public var ledgerLocationNotice: String?
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
     /// this on appear, then clears it. Lets a persona example open Ask ready
     /// to run.
@@ -952,7 +954,15 @@ public final class AppState {
             // at a throwaway temp-dir DB so the eval can't read from
             // (or write to) the user's real archive. nil = production
             // path under Application Support.
-            let resolvedDBURL = databaseURL ?? DatabaseLocations.defaultDatabaseURL
+            // W1-8 — follow a relocated ledger when its disk is present and current.
+            let resolvedDBURL: URL
+            if let databaseURL {
+                resolvedDBURL = databaseURL
+            } else {
+                let boot = LedgerRelocation.bootURL()
+                resolvedDBURL = boot.url
+                ledgerLocationNotice = boot.notice
+            }
             let db = try Database(url: resolvedDBURL)
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
