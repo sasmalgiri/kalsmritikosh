@@ -259,7 +259,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .reviewCoding:
             return Spec(planID: "N-4", group: "Legal", title: "Review coding",
                         detail: "Mark documents responsive, privileged or hot; suggestions learn from your choices and show why. Suggestions never change the evidence.",
-                        whenOff: "No coding.")
+                        whenOff: "No coding.",
+                        implemented: true)
         case .studioOutputs:
             return Spec(planID: "N-5", group: "Writing", title: "Briefings, FAQs and mind maps",
                         detail: "One-click briefing, FAQ, chronology and mind map built from the ledger with every line cited, and a spoken briefing read on your Mac.",
@@ -297,7 +298,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .riskScore:
             return Spec(planID: "N-13", group: "Investigation", title: "What to read first",
                         detail: "A score per document and person from contradictions, watchlist matches, failed authenticity checks and recency. Every point of the score is explained.",
-                        whenOff: "No score.")
+                        whenOff: "No score.",
+                        implemented: true, dependsOn: [.reviewCoding])
 
         // ── Wave 4 ───────────────────────────────────────────────────────
         case .ocrUpgrade:
