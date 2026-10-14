@@ -51,6 +51,7 @@ struct KalsmritikoshApp: App {
                     Text(appState.deepLinkMessage ?? "")
                 }
                 .task {
+                    IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
                     #if DEBUG
                     // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with
                     // `--pa-prod-gui-smoke`, boot against a disposable database and seed the

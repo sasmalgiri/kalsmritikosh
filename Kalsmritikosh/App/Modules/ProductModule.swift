@@ -95,7 +95,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .shortcutsActions:
             return Spec(planID: "W1-6", group: "Integration", title: "Shortcuts actions",
                         detail: "Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app or the command line.",
-                        whenOff: "Actions are not offered to Shortcuts.")
+                        whenOff: "Actions refuse with a message to turn them on.",
+                        implemented: true)
         case .commandPalette:
             return Spec(planID: "W1-7", group: "Integration", title: "Command palette",
                         detail: "Reach every screen and main action from one search box, with a list of keyboard shortcuts.",
