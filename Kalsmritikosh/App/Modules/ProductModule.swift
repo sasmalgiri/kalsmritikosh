@@ -202,8 +202,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         whenOff: "The current export formats.")
         case .appLock:
             return Spec(planID: "W2-7", group: "Storage", title: "Lock with Touch ID",
-                        detail: "Lock the app when the Mac sleeps or after a period of inactivity; unlock with Touch ID or your password.",
-                        whenOff: "No app lock; the Mac's own login protects the data.")
+                        detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. Whole-database encryption is a separate decision.",
+                        whenOff: "No app lock; the Mac's own login protects the data.",
+                        implemented: true)
         case .byteRangeItems:
             return Spec(planID: "W2-8", group: "Storage", title: "Very large items",
                         detail: "Messages and attachments over 100 MB are read from the original file by byte range instead of being loaded whole.",

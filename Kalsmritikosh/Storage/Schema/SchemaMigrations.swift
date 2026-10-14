@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 143
+    public static let latestVersion = 144
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -674,7 +674,8 @@ public enum SchemaMigrations {
         (140, v140),
         (141, v141),
         (142, v142),
-        (143, v143)
+        (143, v143),
+        (144, v144)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6911,6 +6912,54 @@ public enum SchemaMigrations {
         detail         TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_outbound_log_sent ON outbound_log(sent_at);
+    """
+
+
+    // MARK: - v144 — beat-DEVONthink plan: watchlists (N-3), question monitors (N-11),
+    // issues (N-1), review coding (N-4), custom record types (N-12), alerts (W3-4).
+    //
+    // All user organisation or derived signals: none changes evidence status. Nothing is
+    // deleted (owner rule): removals stamp removed_at / retired_at.
+    private static let v144: String = """
+    CREATE TABLE IF NOT EXISTS watchlists (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS watchlist_entries (
+        id TEXT PRIMARY KEY NOT NULL, watchlist_id TEXT NOT NULL, term TEXT NOT NULL,
+        note TEXT, created_at REAL NOT NULL, removed_at REAL,
+        FOREIGN KEY (watchlist_id) REFERENCES watchlists(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_watchlist_entries_list ON watchlist_entries(watchlist_id);
+    CREATE TABLE IF NOT EXISTS pinned_questions (
+        id TEXT PRIMARY KEY NOT NULL, question TEXT NOT NULL, created_at REAL NOT NULL,
+        last_checked_at REAL, last_answer_text TEXT, last_answer_fingerprint TEXT,
+        last_citation_ids TEXT, last_contradictions INTEGER, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS case_issues (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL COLLATE NOCASE, description TEXT,
+        created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS case_issue_links (
+        issue_id TEXT NOT NULL, subject_kind TEXT NOT NULL CHECK (subject_kind IN ('event','fact','object','chunk')),
+        subject_id TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL,
+        PRIMARY KEY (issue_id, subject_kind, subject_id),
+        FOREIGN KEY (issue_id) REFERENCES case_issues(id)
+    );
+    CREATE TABLE IF NOT EXISTS review_codes (
+        id TEXT PRIMARY KEY NOT NULL, object_id TEXT NOT NULL,
+        code TEXT NOT NULL CHECK (code IN ('responsive','not_responsive','privileged','hot')),
+        reviewer TEXT NOT NULL, coded_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_codes_object ON review_codes(object_id);
+    CREATE TABLE IF NOT EXISTS custom_record_types (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, fields_json TEXT NOT NULL,
+        created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS product_alerts (
+        id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, detail TEXT,
+        object_id TEXT, created_at REAL NOT NULL, read_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_alerts_created ON product_alerts(created_at);
     """
 
 }

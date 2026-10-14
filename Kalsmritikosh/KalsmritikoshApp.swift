@@ -44,6 +44,7 @@ struct KalsmritikoshApp: App {
                     OutboundConsentSheet(preview: preview)
                 }
                 .preferredColorScheme(.light)   // light UI across all phases
+                .appLockOverlay()               // W2-7 — Touch ID / password lock
                 // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
                 .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
                 .sheet(item: Binding(get: { appState.deepLinkTarget },

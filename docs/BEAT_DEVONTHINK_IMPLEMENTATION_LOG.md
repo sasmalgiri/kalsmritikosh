@@ -39,6 +39,8 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | N-10 | `OnlinePIIMasker` — ledger people/organisation names, emails, phones, 6+ digit IDs → placeholders, restored locally; preview shows the masked text | (this commit) |
 | O-8 | `release/ONLINE_MODE_DISCLOSURE_DRAFT.md` — privacy-policy section, App Store privacy answers, review notes, listing sentence, consent text. **Draft only; live policy/listing unchanged pending owner/legal review** | (this commit) |
 | W0-C | `scripts/verify-no-network.sh` (signed main app: sandboxed, no network.client/server, no ATS exceptions; helper if bundled: sandboxed, no network.server) + `NoNetworkAttestation` (reads own signed entitlements; unreadable = cannot demonstrate) shown in Settings ▸ Connection. CI wiring on an archived Release build is for the test phase | (this commit) |
+| W2-7 | `AppLock` (locks on sleep / screen sleep / return after idle limit; Touch ID or Mac password via LocalAuthentication; never locks out a Mac that cannot authenticate) + `appLockOverlay`. Encryption at rest: FileVault + sandbox; SQLCipher remains an owner decision | (this commit) |
+| — | Schema **v144** + `PlanFeatureRepositories` (watchlists, pinned questions, case issues, review codes, custom record types, alerts) — storage for N-1, N-3, N-4, N-11, N-12, W3-4 | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
@@ -55,7 +57,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 
 ## For the final test phase
 
-- `MigrationMatrixTests` pins `latestVersion == 141`; it is now **143** (v142 user tags, v143 outbound log). Update the pin.
+- `MigrationMatrixTests` pins `latestVersion == 141`; it is now **144** (v142 user tags, v143 outbound log, v144 plan feature tables). Update the pin.
 - `PrivacyPostureTests` likely asserts the no-network promise; reconcile with O-1 (main app still has no network; only the helper may).
 - Online mode cannot be exercised end to end until the helper target exists (O-2 owner step); test the request builders/parsers and masker with recorded responses.
 - O-7 nuance: when an online call fails, the answer pipeline's existing error handling still produces a deterministic answer; the banner says the online answer did not go through. Verify the answer itself is labelled accordingly.
