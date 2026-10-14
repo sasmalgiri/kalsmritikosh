@@ -1482,6 +1482,84 @@ public struct SettingsView: View {
                     }
                 }
             }
+            Divider()
+            connectivitySection
+            productModulesSection
+        }
+    }
+
+    /// O-3 — Private (default) or Online (the user's own cloud AI key). The
+    /// choice is kept even when this build cannot go online, and takes effect
+    /// once the network helper is bundled.
+    @ViewBuilder
+    private var connectivitySection: some View {
+        let _ = moduleFlagsVersion
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Connection").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Picker("Connection", selection: Binding(
+                get: { ConnectivityMode.stored },
+                set: { ConnectivityMode.set($0); moduleFlagsVersion &+= 1 }
+            )) {
+                ForEach(ConnectivityMode.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(ConnectivityMode.stored.summary)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if ConnectivityMode.stored == .online && !ConnectivityMode.onlineAvailableInThisBuild {
+                Label("Online mode is not available in this build, so the app stays Private. Your choice is kept.",
+                      systemImage: "lock.fill")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// W0-M — product modules from the beat-DEVONthink plan. Built modules get
+    /// a switch; the rest are counted so the list stays short.
+    @ViewBuilder
+    private var productModulesSection: some View {
+        let _ = moduleFlagsVersion
+        let built = ProductModule.allCases.filter(\.implemented)
+        let groups = Dictionary(grouping: built, by: \.group)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            ForEach(groups.keys.sorted(), id: \.self) { groupName in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(groupName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                        let reason = ProductModuleFlags.disabledReason(module)
+                        Toggle(isOn: Binding(
+                            get: { ProductModuleFlags.isEnabled(module) },
+                            set: { ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1 }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.title)
+                                Text(module.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Off: \(module.spec.whenOff)")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let reason {
+                                    Label(reason, systemImage: "lock.fill")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .disabled(reason != nil)
+                    }
+                }
+            }
+            let coming = ProductModule.allCases.count - built.count
+            if coming > 0 {
+                Text("\(coming) more features are planned and will appear here as they are built.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }
     }
 
