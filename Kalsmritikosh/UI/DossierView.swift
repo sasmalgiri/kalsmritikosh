@@ -21,6 +21,7 @@ public struct DossierView: View {
     @State private var streaming = false
     @State private var phase: String = ""
     @State private var resolvedName: String?
+    @State private var dossierChanges: DossierChanges?   // I-12
     @State private var candidates: [SubjectCandidate] = []
     @State private var narrative: HistoryNarrative?
     @State private var coverage: HistoryCoverage?
@@ -50,7 +51,17 @@ public struct DossierView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let name = resolvedName {
-                Text("— \(name)").font(.headline).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("— \(name)").font(.headline).foregroundStyle(.secondary)
+                    // I-12 — what arrived about this subject since the dossier was last opened.
+                    if let changes = dossierChanges {
+                        Text(changes.summary).font(.caption).foregroundStyle(changes.newDocuments.isEmpty ? Color.secondary : Color.orange)
+                        if !changes.newDocuments.isEmpty {
+                            Text(changes.newDocuments.prefix(5).joined(separator: ", "))
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }
+                }
             }
             Spacer()
             if streaming {
@@ -213,6 +224,7 @@ public struct DossierView: View {
         guard !streaming else { return }
         reset()
         resolvedName = name
+        dossierChanges = await appState.dossierChanges(for: name)
         streaming = true
         defer { streaming = false }
         for await update in appState.reconstructHistory(subject: subject) {

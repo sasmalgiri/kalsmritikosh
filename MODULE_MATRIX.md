@@ -29,7 +29,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | I-9 | How an account changed | Investigation | yes | off | — | Contradictions between documents only. |
 | I-10 | Signed case slices | Sharing | yes | off | needs W1-4 | Work products export as documents only. |
 | I-11 | How this answer was found | Evidence & proof | yes | off | — | The answer and its citations only. |
-| I-12 | Living dossiers | Investigation | not yet | off | — | Dossiers are built when opened. |
+| I-12 | Living dossiers | Investigation | yes | off | — | Dossiers are built when opened, without the since-last-time strip. |
 | W2-1 | Highlights and notes | Writing | not yet | off | — | Highlights are hidden but kept. |
 | W2-2 | Email authenticity checks | Email evidence | not yet | off | — | Emails are read as before; no authenticity result. |
 | W2-3 | Outlook PST reader (MS-PST) | Email evidence | not yet | off | — | The current PST reader is used. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
 
-_19 of 54 product modules built._
+_20 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

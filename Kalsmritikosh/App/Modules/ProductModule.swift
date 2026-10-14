@@ -172,7 +172,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .livingDossiers:
             return Spec(planID: "I-12", group: "Investigation", title: "Living dossiers",
                         detail: "A profile per person or organisation that updates after each import, with 'what changed since you last looked'.",
-                        whenOff: "Dossiers are built when opened.")
+                        whenOff: "Dossiers are built when opened, without the since-last-time strip.",
+                        implemented: true)
 
         // ── Wave 2 ───────────────────────────────────────────────────────
         case .annotations:

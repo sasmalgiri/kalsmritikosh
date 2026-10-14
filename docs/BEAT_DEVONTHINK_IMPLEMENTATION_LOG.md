@@ -27,6 +27,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | I-6 | `SentenceFactChecker` (deterministic supported/contradicted/unsupported per sentence, reuses the I-4 extractors) + `FactCheckWritingView` (debounced, up to 40 sentences) from the sidebar. Plan said 'in the notebook editor' — no free-writing editor exists, so it is a standalone tool | (this commit) |
 | I-9 | `StatementDrift` — statements naming a person + topic in date order; later statements on the same subject with a different date/amount or flipped polarity flagged with both quotes; `StatementDriftView`. New sidebar **Tools** menu (`ToolSheet`) lists only switched-on tools (fact-check, drift) | (this commit) |
 | I-10 | `CaseSlice` — from a tag: redacted names + import fingerprints, dated events, 3 passages per document; PIIRedactor (emails, phones, listed terms); P-256 signature over sorted-key JSON; `CaseSliceView` exports and opens read-only with verify (Tools menu). Depends on tags | (this commit) |
+| I-12 | `dossierChanges` — per-subject last-opened time; documents that entered the ledger since then mentioning the subject + their dated events; strip in DossierView header | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
