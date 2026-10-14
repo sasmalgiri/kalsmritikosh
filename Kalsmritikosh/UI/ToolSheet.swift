@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift
+    case factCheck, statementDrift, caseSlices
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         switch self {
         case .factCheck: return .liveFactCheck
         case .statementDrift: return .statementDrift
+        case .caseSlices: return .caseSlices
         }
     }
 
@@ -26,6 +27,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         switch self {
         case .factCheck: return "text.badge.checkmark"
         case .statementDrift: return "person.text.rectangle"
+        case .caseSlices: return "square.on.square.badge.person.crop"
         }
     }
 
@@ -34,6 +36,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         switch self {
         case .factCheck: FactCheckWritingView()
         case .statementDrift: StatementDriftView()
+        case .caseSlices: CaseSliceView()
         }
     }
 

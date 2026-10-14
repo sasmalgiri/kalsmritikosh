@@ -163,7 +163,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "I-10", group: "Sharing", title: "Signed case slices",
                         detail: "Share a redacted, signed, read-only part of a case as one file that another Mac can open and verify. No server.",
                         whenOff: "Work products export as documents only.",
-                        dependsOn: [.signedReceipts])
+                        implemented: true, dependsOn: [.userTags])
         case .answerPath:
             return Spec(planID: "I-11", group: "Evidence & proof", title: "How this answer was found",
                         detail: "For every answer, which kinds of search ran, what each found, what the evidence check kept or dropped and why, and how many AI calls were used.",
