@@ -250,7 +250,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .communicationAnalysis:
             return Spec(planID: "N-2", group: "Email evidence", title: "Who talks to whom",
                         detail: "A communication graph with message counts and volume over time, and a marker on any reply whose original message is not in your archive.",
-                        whenOff: "Threads only.")
+                        whenOff: "Threads only.",
+                        implemented: true)
         case .watchlists:
             return Spec(planID: "N-3", group: "Investigation", title: "Watchlists",
                         detail: "Import a list of people or companies and find them in your archive, including other spellings; every match opens its source.",

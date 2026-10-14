@@ -46,7 +46,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W3-6 | Share and capture | Integration | not yet | off | — | Add files from inside the app only. |
 | W3-7 | Show in Spotlight | Integration | not yet | off | — | Nothing is given to Spotlight, and any earlier entries are removed. |
 | N-1 | Issues and chronology | Legal | yes | off | — | Chronology without issues. |
-| N-2 | Who talks to whom | Email evidence | not yet | off | — | Threads only. |
+| N-2 | Who talks to whom | Email evidence | yes | off | — | Threads only. |
 | N-3 | Watchlists | Investigation | yes | off | — | Lists are kept but not matched. |
 | N-4 | Review coding | Legal | yes | off | — | No coding. |
 | N-5 | Briefings, FAQs and mind maps | Writing | not yet | off | — | Not offered. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_30 of 54 product modules built._
+_31 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 
