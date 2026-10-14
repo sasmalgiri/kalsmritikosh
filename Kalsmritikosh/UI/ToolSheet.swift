@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery
 
     var id: String { rawValue }
 
@@ -26,6 +26,8 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .graph: return .timelineGraph
         case .customTypes: return .customEntityTypes
         case .studio: return .studioOutputs
+        case .emailAuthenticity: return .emailAuthenticity
+        case .mailRecovery: return .mailRecovery
         }
     }
 
@@ -44,6 +46,8 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .graph: return "point.3.connected.trianglepath.dotted"
         case .customTypes: return "tablecells"
         case .studio: return "doc.richtext"
+        case .emailAuthenticity: return "checkmark.shield"
+        case .mailRecovery: return "trash.slash"
         }
     }
 
@@ -61,6 +65,8 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .graph: RelationshipGraphView()
         case .customTypes: CustomTypesView()
         case .studio: StudioOutputsView()
+        case .emailAuthenticity: EmailAuthenticityView()
+        case .mailRecovery: MailRecoveryView()
         }
     }
 

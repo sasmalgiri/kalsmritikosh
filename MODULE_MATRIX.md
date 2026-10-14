@@ -31,7 +31,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | I-11 | How this answer was found | Evidence & proof | yes | off | — | The answer and its citations only. |
 | I-12 | Living dossiers | Investigation | yes | off | — | Dossiers are built when opened, without the since-last-time strip. |
 | W2-1 | Highlights and notes | Writing | not yet | off | — | Highlights are hidden but kept. |
-| W2-2 | Email authenticity checks | Email evidence | not yet | off | — | Emails are read as before; no authenticity result. |
+| W2-2 | Email authenticity checks | Email evidence | yes | off | — | Emails are read as before; no authenticity result. |
 | W2-3 | Outlook PST reader (MS-PST) | Email evidence | not yet | off | — | The current PST reader is used. |
 | W2-4 | Near-duplicates | Search & organise | not yet | off | — | Exact duplicates only. |
 | W2-5 | Production sets | Legal | not yet | off | — | Exports without Bates numbers or load files; holds are kept but not enforced. |
@@ -60,11 +60,11 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-13 | What to read first | Investigation | yes | off | needs N-4 | No score. |
 | W4-1 | Improved text recognition | Reading files | not yet | off | — | The current text recognition. |
 | W4-2 | More file types | Reading files | not yet | off | — | These files are kept but not read. |
-| W4-3 | Deleted email recovery | Email evidence | not yet | off | — | Only live mail is read. |
+| W4-3 | Deleted email recovery | Email evidence | yes | off | — | Only live mail is read. |
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_37 of 54 product modules built._
+_39 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

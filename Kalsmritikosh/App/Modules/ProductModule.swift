@@ -183,7 +183,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .emailAuthenticity:
             return Spec(planID: "W2-2", group: "Email evidence", title: "Email authenticity checks",
                         detail: "Checks DKIM and ARC signatures and S/MIME, and reads hidden time values in message identifiers. No internet lookups: keys come from the message or from you.",
-                        whenOff: "Emails are read as before; no authenticity result.")
+                        whenOff: "Emails are read as before; no authenticity result.",
+                        implemented: true)
         case .specPSTReader:
             return Spec(planID: "W2-3", group: "Email evidence", title: "Outlook PST reader (MS-PST)",
                         detail: "Reads Outlook PST and OST files by Microsoft's published format: every folder, message, recipient and attachment.",
@@ -319,8 +320,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         whenOff: "These files are kept but not read.")
         case .mailRecovery:
             return Spec(planID: "W4-3", group: "Email evidence", title: "Deleted email recovery",
-                        detail: "Finds deleted messages still present inside mail files. Recovered items are marked recovered and partial, never mixed with live mail.",
-                        whenOff: "Only live mail is read.")
+                        detail: "Finds deleted mail that is still present: files in Deleted Items / Trash / Bin folders and messages whose headers mark them deleted or trashed. Shown as recovered and partial, never mixed with live mail. Carving unlisted messages out of Outlook/Notes free space is not included.",
+                        whenOff: "Only live mail is read.",
+                        implemented: true)
         case .teamReview:
             return Spec(planID: "W4-4", group: "Sharing", title: "Team review over a shared folder",
                         detail: "Reviewers work on one case through a shared folder with signed logs; tampering is reported at the exact entry. No server.",
