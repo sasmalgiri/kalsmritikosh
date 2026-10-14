@@ -265,8 +265,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .studioOutputs:
             return Spec(planID: "N-5", group: "Writing", title: "Briefings, FAQs and mind maps",
-                        detail: "One-click briefing, FAQ, chronology and mind map built from the ledger with every line cited, and a spoken briefing read on your Mac.",
-                        whenOff: "Not offered.")
+                        detail: "One-click briefing, FAQ and mind map built from the ledger (no AI writes them), and a spoken briefing read by your Mac's own voice. The cited chronology is in Issues and chronology.",
+                        whenOff: "Not offered.",
+                        implemented: true)
         case .menuBarAsk:
             return Spec(planID: "N-6", group: "Integration", title: "Ask from anywhere",
                         detail: "A menu-bar search and a keyboard shortcut that work from any app; answers open in the main window with their sources.",
@@ -296,7 +297,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .customEntityTypes:
             return Spec(planID: "N-12", group: "Search & organise", title: "Your own record types",
                         detail: "Define types such as 'Contract: parties, value, start date'. Fields fill from your documents where the value is written, and show where it was found.",
-                        whenOff: "Types are kept but not filled.")
+                        whenOff: "Types are kept but not filled.",
+                        implemented: true)
         case .riskScore:
             return Spec(planID: "N-13", group: "Investigation", title: "What to read first",
                         detail: "A score per document and person from contradictions, watchlist matches, failed authenticity checks and recency. Every point of the score is explained.",

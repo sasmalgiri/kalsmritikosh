@@ -49,14 +49,14 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-2 | Who talks to whom | Email evidence | yes | off | — | Threads only. |
 | N-3 | Watchlists | Investigation | yes | off | — | Lists are kept but not matched. |
 | N-4 | Review coding | Legal | yes | off | — | No coding. |
-| N-5 | Briefings, FAQs and mind maps | Writing | not yet | off | — | Not offered. |
+| N-5 | Briefings, FAQs and mind maps | Writing | yes | off | — | Not offered. |
 | N-6 | Ask from anywhere | Integration | not yet | off | — | Ask from the main window only. |
 | N-7 | Similar images and faces | Investigation | not yet | off | — | Images are searchable by their text only. |
 | N-8 | Places | Investigation | not yet | off | — | Not shown. |
 | N-9 | Import notes apps | Integration | not yet | off | — | These folders import as plain files. |
 | N-10 | Mask personal details before sending | Online (your own key) | yes | off | Online mode, needs O-4 | Passages are sent unmasked, still previewed first. |
 | N-11 | Watch a question | Investigation | yes | off | — | Pinned questions are kept but not re-asked. |
-| N-12 | Your own record types | Search & organise | not yet | off | — | Types are kept but not filled. |
+| N-12 | Your own record types | Search & organise | yes | off | — | Types are kept but not filled. |
 | N-13 | What to read first | Investigation | yes | off | needs N-4 | No score. |
 | W4-1 | Improved text recognition | Reading files | not yet | off | — | The current text recognition. |
 | W4-2 | More file types | Reading files | not yet | off | — | These files are kept but not read. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_32 of 54 product modules built._
+_34 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 
