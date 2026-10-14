@@ -42,7 +42,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W3-2 | Send to DEVONthink | Integration | yes | off | — | Not offered. |
 | W3-3 | Timeline and relationship views | Investigation | yes | off | — | Lists only. |
 | W3-4 | Alerts | Investigation | yes | off | — | No alerts; contradictions still appear in answers. |
-| W3-5 | Smart collections and rules | Search & organise | not yet | off | — | Saved searches run only when opened; rules do not run. |
+| W3-5 | Smart collections and rules | Search & organise | yes | off | — | Saved searches run only when opened; rules do not run. |
 | W3-6 | Share and capture | Integration | not yet | off | — | Add files from inside the app only. |
 | W3-7 | Show in Spotlight | Integration | yes | off | — | Nothing is given to Spotlight, and any earlier entries are removed. |
 | N-1 | Issues and chronology | Legal | yes | off | — | Chronology without issues. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_42 of 54 product modules built._
+_43 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

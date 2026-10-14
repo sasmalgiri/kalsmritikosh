@@ -237,7 +237,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .smartCollections:
             return Spec(planID: "W3-5", group: "Search & organise", title: "Smart collections and rules",
                         detail: "Saved searches that stay up to date, and rules such as 'when a document from this sender arrives, tag it'. Rules show a dry run first.",
-                        whenOff: "Saved searches run only when opened; rules do not run.")
+                        whenOff: "Saved searches run only when opened; rules do not run.",
+                        implemented: true)
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Share and capture",
                         detail: "Send files and web pages to the import queue from the Share menu, the Services menu or Safari. Pages are saved on your Mac.",

@@ -320,10 +320,35 @@ public actor ChunksRepository {
     /// filters alone select passages (newest file first).
     public func searchAdvanced(_ compiled: CompiledSearch, limit: Int = 50) async throws -> [Chunk] {
         guard !compiled.isEmpty else { return [] }
+        let (fragment, filterBinds) = Self.advancedFragment(compiled)
         var sql = """
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
-        """
+        """ + fragment
+        var binds = filterBinds
+        sql += compiled.ftsExpression != nil ? "\nORDER BY rank" : "\nORDER BY f.modified_at DESC"
+        sql += "\nLIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        let rows = try await database.query(sql, binds)
+        return try await hydrateLineage(rows.compactMap(decode))
+    }
+
+    /// W3-5 — distinct documents matching advanced syntax, optionally only those created since `since`
+    /// (rules on ingest) — the same joins and filters as `searchAdvanced`.
+    public func objectsMatchingAdvanced(_ compiled: CompiledSearch, since: Date? = nil, limit: Int = 100_000) async throws -> [UUID] {
+        guard !compiled.isEmpty else { return [] }
+        let (fragment, filterBinds) = Self.advancedFragment(compiled)
+        var sql = "SELECT DISTINCT c.object_id FROM chunks c" + fragment
+        var binds = filterBinds
+        if let since { sql += " AND ko.created_at >= ?"; binds.append(.date(since)) }
+        sql += "\nLIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        return try await database.query(sql, binds).compactMap { $0.uuid(0) }
+    }
+
+    /// Joins + WHERE clause (starting with a newline) and binds for compiled advanced syntax.
+    nonisolated static func advancedFragment(_ compiled: CompiledSearch) -> (String, [SQLValue]) {
+        var sql = ""
         var binds: [SQLValue] = []
         if compiled.ftsExpression != nil { sql += "\nJOIN chunks_fts ON chunks_fts.rowid = c.rowid" }
         sql += "\nJOIN knowledge_objects ko ON ko.id = c.object_id\nJOIN files f ON f.id = ko.file_id"
@@ -362,11 +387,7 @@ public actor ChunksRepository {
             }
             sql += f.negated ? " AND NOT (\(clause))" : " AND (\(clause))"
         }
-        sql += compiled.ftsExpression != nil ? "\nORDER BY rank" : "\nORDER BY f.modified_at DESC"
-        sql += "\nLIMIT ?;"
-        binds.append(.integer(Int64(limit)))
-        let rows = try await database.query(sql, binds)
-        return try await hydrateLineage(rows.compactMap(decode))
+        return (sql, binds)
     }
 
     private nonisolated static func likeEscaped(_ s: String) -> String {
