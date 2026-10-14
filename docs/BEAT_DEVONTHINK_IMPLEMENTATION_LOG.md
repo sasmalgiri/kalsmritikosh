@@ -44,6 +44,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | N-3 | `WatchlistMatcher` (exact / reordered / Jaro-Winkler ≥0.92 / initials over entities + aliases) + `WatchlistView` (paste or import CSV/text, save lists, documents per match) in Tools | (this commit) |
 | W3-4 | `runPostIngestChecksSinceLast` after every import path: watchlist names in new documents, new contradictions and gaps → `product_alerts`; `AlertsView` in Tools | (this commit) |
 | N-11 | Pinned questions re-asked after each import (and on demand); alert only when answer, sources or contradictions changed, with before/now | (this commit) |
+| N-1 | `IssueChronologyView` (issues, tag events, filter) + `ChronologyDrafter` — deterministic statement of facts (numbered, cited, grouped by issue) and deposition outline (questions anchored to events, exhibits) | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

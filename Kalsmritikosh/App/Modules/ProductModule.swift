@@ -245,7 +245,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .issueChronology:
             return Spec(planID: "N-1", group: "Legal", title: "Issues and chronology",
                         detail: "Tag facts and events with the issues of a matter, read the chronology by issue and draft a statement of facts or deposition outline in which every sentence is cited.",
-                        whenOff: "Chronology without issues.")
+                        whenOff: "Chronology without issues.",
+                        implemented: true)
         case .communicationAnalysis:
             return Spec(planID: "N-2", group: "Email evidence", title: "Who talks to whom",
                         detail: "A communication graph with message counts and volume over time, and a marker on any reply whose original message is not in your archive.",

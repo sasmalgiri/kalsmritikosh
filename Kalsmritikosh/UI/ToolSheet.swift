@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology
 
     var id: String { rawValue }
 
@@ -20,6 +20,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .caseSlices: return .caseSlices
         case .watchlists: return .watchlists
         case .alerts: return .proactiveAlerts
+        case .chronology: return .issueChronology
         }
     }
 
@@ -32,6 +33,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .caseSlices: return "square.on.square.badge.person.crop"
         case .watchlists: return "list.bullet.clipboard"
         case .alerts: return "bell.badge"
+        case .chronology: return "calendar.badge.clock"
         }
     }
 
@@ -43,6 +45,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .caseSlices: CaseSliceView()
         case .watchlists: WatchlistView()
         case .alerts: AlertsView()
+        case .chronology: IssueChronologyView()
         }
     }
 
