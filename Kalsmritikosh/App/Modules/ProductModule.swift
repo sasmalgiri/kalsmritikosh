@@ -219,7 +219,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .devonthinkImport:
             return Spec(planID: "W3-1", group: "Integration", title: "Import a DEVONthink database",
                         detail: "Read the files stored in a DEVONthink database in place, keeping its groups as collections and its tags. Nothing is written into the database.",
-                        whenOff: "DEVONthink databases are not recognised.")
+                        whenOff: "DEVONthink databases are not recognised.",
+                        implemented: true)
         case .sendToDevonthink:
             return Spec(planID: "W3-2", group: "Integration", title: "Send to DEVONthink",
                         detail: "Send an answer to DEVONthink as a Markdown note with a link back to each quoted passage; when DEVONthink is not installed the note is shown in Finder.",
