@@ -322,8 +322,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         // ── Wave 4 ───────────────────────────────────────────────────────
         case .ocrUpgrade:
             return Spec(planID: "W4-1", group: "Reading files", title: "Improved text recognition",
-                        detail: "Re-reads scanned PDFs and photos page by page with Apple's on-device text recognition and records each file once.",
-                        whenOff: "The current text recognition.")
+                        detail: "Shows scanned PDFs and photos whose recognised text is thin, and saves a searchable PDF copy (page image plus an invisible text layer) using Apple's on-device text recognition.",
+                        whenOff: "The current text recognition.",
+                        implemented: true)
         case .extraParsers:
             return Spec(planID: "W4-2", group: "Reading files", title: "More file types",
                         detail: "Keynote, older PowerPoint, Messages history, Safari and Chrome history, and 7z/RAR archives where a licence-clean reader exists.",

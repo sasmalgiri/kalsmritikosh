@@ -58,13 +58,13 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-11 | Watch a question | Investigation | yes | off | — | Pinned questions are kept but not re-asked. |
 | N-12 | Your own record types | Search & organise | yes | off | — | Types are kept but not filled. |
 | N-13 | What to read first | Investigation | yes | off | needs N-4 | No score. |
-| W4-1 | Improved text recognition | Reading files | not yet | off | — | The current text recognition. |
+| W4-1 | Improved text recognition | Reading files | yes | off | — | The current text recognition. |
 | W4-2 | More file types | Reading files | not yet | off | — | These files are kept but not read. |
 | W4-3 | Deleted email recovery | Email evidence | yes | off | — | Only live mail is read. |
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_49 of 54 product modules built._
+_50 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 
