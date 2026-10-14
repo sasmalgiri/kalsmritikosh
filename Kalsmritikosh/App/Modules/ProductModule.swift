@@ -294,7 +294,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .notesImport:
             return Spec(planID: "N-9", group: "Integration", title: "Import notes apps",
                         detail: "Read Obsidian vaults (links between notes become relations), Notion exports and notes exported from Apple Notes.",
-                        whenOff: "These folders import as plain files.")
+                        whenOff: "These folders import as plain files.",
+                        implemented: true)
         case .onlinePIIMasking:
             return Spec(planID: "N-10", group: "Online (your own key)", title: "Mask personal details before sending",
                         detail: "Before anything goes online, names, emails, phone numbers, addresses, ID and account numbers are replaced with placeholders; the answer is restored on your Mac.",

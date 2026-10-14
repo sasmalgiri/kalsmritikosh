@@ -189,6 +189,9 @@ public struct CitationSourceSheet: View {
                 AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.quote)
                 Divider()
             }
+            if ProductModuleFlags.isEnabled(.notesImport) {
+                NoteLinksStrip(objectID: target.objectID)
+            }
             SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
         }
         .frame(minWidth: 640, minHeight: 480)

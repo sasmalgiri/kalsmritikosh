@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 145
+    public static let latestVersion = 146
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -676,7 +676,8 @@ public enum SchemaMigrations {
         (142, v142),
         (143, v143),
         (144, v144),
-        (145, v145)
+        (145, v145),
+        (146, v146)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7002,6 +7003,18 @@ public enum SchemaMigrations {
         action TEXT NOT NULL CHECK (action IN ('tag','alert')), action_value TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL, retired_at REAL
     );
+    """
+
+    // MARK: - v146 — note links (N-9): links between notes from notes apps (Obsidian
+    // [[wiki-links]], Notion page links). Derived from the notes' own text; a re-run
+    // stamps removed_at on links that no longer exist. Nothing is deleted.
+    private static let v146: String = """
+    CREATE TABLE IF NOT EXISTS note_links (
+        id TEXT PRIMARY KEY NOT NULL, from_object_id TEXT NOT NULL, to_object_id TEXT,
+        target TEXT NOT NULL, kind TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_note_links_from ON note_links(from_object_id);
+    CREATE INDEX IF NOT EXISTS idx_note_links_to ON note_links(to_object_id);
     """
 
 }
