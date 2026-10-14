@@ -340,6 +340,7 @@ public struct RootView: View {
     @State private var showAddFolder = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
+    @State private var showImportQueue = false   // W1-9
     /// D-10 — set when a palette/menu entry targets a Settings group; the
     /// router hands it to SettingsView, which expands + scrolls + flashes.
     @State private var pendingSettingsAnchor: SettingsAnchor?
@@ -703,6 +704,20 @@ public struct RootView: View {
                     if case .success(let urls) = result {
                         Task { await appState.ingestFiles(urls) }
                     }
+                }
+                // W1-9 — the queue for added files.
+                if ProductModuleFlags.isEnabled(.importQueue), !appState.importQueue.items.isEmpty {
+                    Button {
+                        showImportQueue = true
+                    } label: {
+                        Label("Import queue (\(appState.importQueue.pendingCount))", systemImage: "list.bullet.rectangle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .sheet(isPresented: $showImportQueue) { ImportQueueView(queue: appState.importQueue) }
                 }
                 // HYBRID MODE — the Simple/Advanced and Full power/Lightning
                 // toggles were removed (owner request 2026-09-16): the app runs

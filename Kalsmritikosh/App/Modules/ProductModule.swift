@@ -110,7 +110,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .importQueue:
             return Spec(planID: "W1-9", group: "Storage", title: "Import queue",
                         detail: "See pending, running and finished imports; pause, resume, stop one source or reorder. Resuming never processes a record twice.",
-                        whenOff: "Imports run in the order added, with progress in the toolbar.")
+                        whenOff: "Imports run in the order added, with progress in the toolbar.",
+                        implemented: true)
 
         // ── Wave I ───────────────────────────────────────────────────────
         case .proofBundles:

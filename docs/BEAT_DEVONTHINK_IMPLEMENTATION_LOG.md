@@ -20,6 +20,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | W1-6 | App Intents: Ask, Ask with receipt, Search, Add files, Open a passage link; Ask/Search App Shortcuts; refuse when off | 763e6055 |
 | W1-7 | **False gap** — ⌘K palette and the ? shortcut sheet already existed. Gated on the module switch, which defaults ON so behaviour is unchanged | (this commit) |
 | W1-8 | `LedgerRelocation` — VACUUM INTO + quick_check, every other file SHA-256 verified, security-scoped bookmark; boot follows it only when the disk is present and not behind this Mac's copy, else opens the local copy with a notice; Settings ▸ Your data | (this commit) |
+| W1-9 | `ImportQueue` (one worker, pause between files, skip, move up/down, clear finished) + `ImportQueueView`; Add files and the Shortcuts Add-files action route through it when on; ends with an import receipt | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

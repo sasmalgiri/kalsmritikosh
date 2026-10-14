@@ -397,8 +397,17 @@ public final class AppState {
     /// archive with the full pipeline, tracked on the live panel so the user sees
     /// progress. Picker URLs are sandbox security-scoped, so access is started per
     /// file for the read. Folders are handled by the Sources watcher, not here.
+    /// W1-9 — the visible queue for added files (used when its module is on).
+    public func noteIngestFile(current name: String?, finished: Bool = false) {
+        if finished { ingestLastFile = name } else { ingestCurrentFile = name }
+    }
+
     public func ingestFiles(_ urls: [URL]) async {
         guard let ingest, !urls.isEmpty else { return }
+        if ProductModuleFlags.isEnabled(.importQueue) {
+            importQueue.enqueue(urls, state: self)
+            return
+        }
         let activity = beginProcess("Adding \(urls.count) file(s)…", total: urls.count)
         defer { finishProcess(activity); ingestCurrentFile = nil }
         var done = 0
@@ -686,6 +695,8 @@ public final class AppState {
     public var deepLinkMessage: String?
     /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
     public var ledgerLocationNotice: String?
+    /// W1-9 — files waiting, running and finished in this session.
+    public let importQueue = ImportQueue()
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
     /// this on appear, then clears it. Lets a persona example open Ask ready
     /// to run.
