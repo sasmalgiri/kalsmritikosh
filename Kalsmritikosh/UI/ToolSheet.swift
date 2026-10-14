@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices
+    case factCheck, statementDrift, caseSlices, watchlists, alerts
 
     var id: String { rawValue }
 
@@ -18,6 +18,8 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .factCheck: return .liveFactCheck
         case .statementDrift: return .statementDrift
         case .caseSlices: return .caseSlices
+        case .watchlists: return .watchlists
+        case .alerts: return .proactiveAlerts
         }
     }
 
@@ -28,6 +30,8 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .factCheck: return "text.badge.checkmark"
         case .statementDrift: return "person.text.rectangle"
         case .caseSlices: return "square.on.square.badge.person.crop"
+        case .watchlists: return "list.bullet.clipboard"
+        case .alerts: return "bell.badge"
         }
     }
 
@@ -37,9 +41,15 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .factCheck: FactCheckWritingView()
         case .statementDrift: StatementDriftView()
         case .caseSlices: CaseSliceView()
+        case .watchlists: WatchlistView()
+        case .alerts: AlertsView()
         }
     }
 
     @MainActor
-    static var available: [ToolSheet] { allCases.filter { ProductModuleFlags.isEnabled($0.module) } }
+    static var available: [ToolSheet] {
+        allCases.filter { t in
+            ProductModuleFlags.isEnabled(t.module) || (t == .alerts && ProductModuleFlags.isEnabled(.questionMonitors))
+        }
+    }
 }

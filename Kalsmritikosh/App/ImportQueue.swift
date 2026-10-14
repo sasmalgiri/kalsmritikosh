@@ -91,6 +91,7 @@ public final class ImportQueue {
                                 total: items.count)
         }
         await state.writeImportReceipt(outcomes)
+        await state.runPostIngestChecksSinceLast()   // W3-4 / N-11
     }
 
     private func markFinished(_ url: URL, _ s: State, _ error: String?) {

@@ -226,7 +226,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .proactiveAlerts:
             return Spec(planID: "W3-4", group: "Investigation", title: "Alerts",
                         detail: "Tells you when a new document contradicts what the ledger said, fills or opens a gap, or mentions someone you watch.",
-                        whenOff: "No alerts; contradictions still appear in answers.")
+                        whenOff: "No alerts; contradictions still appear in answers.",
+                        implemented: true)
         case .smartCollections:
             return Spec(planID: "W3-5", group: "Search & organise", title: "Smart collections and rules",
                         detail: "Saved searches that stay up to date, and rules such as 'when a document from this sender arrives, tag it'. Rules show a dry run first.",
@@ -252,7 +253,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .watchlists:
             return Spec(planID: "N-3", group: "Investigation", title: "Watchlists",
                         detail: "Import a list of people or companies and find them in your archive, including other spellings; every match opens its source.",
-                        whenOff: "Lists are kept but not matched.")
+                        whenOff: "Lists are kept but not matched.",
+                        implemented: true)
         case .reviewCoding:
             return Spec(planID: "N-4", group: "Legal", title: "Review coding",
                         detail: "Mark documents responsive, privileged or hot; suggestions learn from your choices and show why. Suggestions never change the evidence.",
@@ -285,7 +287,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .questionMonitors:
             return Spec(planID: "N-11", group: "Investigation", title: "Watch a question",
                         detail: "Pin a question; after each import it is asked again and you are told when the answer, its sources or a contradiction changes, with the old and new answers.",
-                        whenOff: "Pinned questions are kept but not re-asked.")
+                        whenOff: "Pinned questions are kept but not re-asked.",
+                        implemented: true)
         case .customEntityTypes:
             return Spec(planID: "N-12", group: "Search & organise", title: "Your own record types",
                         detail: "Define types such as 'Contract: parties, value, start date'. Fields fill from your documents where the value is written, and show where it was found.",

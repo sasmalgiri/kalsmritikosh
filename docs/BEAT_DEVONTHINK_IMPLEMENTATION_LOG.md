@@ -41,6 +41,9 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | W0-C | `scripts/verify-no-network.sh` (signed main app: sandboxed, no network.client/server, no ATS exceptions; helper if bundled: sandboxed, no network.server) + `NoNetworkAttestation` (reads own signed entitlements; unreadable = cannot demonstrate) shown in Settings ▸ Connection. CI wiring on an archived Release build is for the test phase | (this commit) |
 | W2-7 | `AppLock` (locks on sleep / screen sleep / return after idle limit; Touch ID or Mac password via LocalAuthentication; never locks out a Mac that cannot authenticate) + `appLockOverlay`. Encryption at rest: FileVault + sandbox; SQLCipher remains an owner decision | (this commit) |
 | — | Schema **v144** + `PlanFeatureRepositories` (watchlists, pinned questions, case issues, review codes, custom record types, alerts) — storage for N-1, N-3, N-4, N-11, N-12, W3-4 | (this commit) |
+| N-3 | `WatchlistMatcher` (exact / reordered / Jaro-Winkler ≥0.92 / initials over entities + aliases) + `WatchlistView` (paste or import CSV/text, save lists, documents per match) in Tools | (this commit) |
+| W3-4 | `runPostIngestChecksSinceLast` after every import path: watchlist names in new documents, new contradictions and gaps → `product_alerts`; `AlertsView` in Tools | (this commit) |
+| N-11 | Pinned questions re-asked after each import (and on demand); alert only when answer, sources or contradictions changed, with before/now | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

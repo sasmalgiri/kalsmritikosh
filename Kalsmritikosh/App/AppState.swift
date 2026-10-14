@@ -428,6 +428,7 @@ public final class AppState {
             updateProcess(activity, done: done)
         }
         await writeImportReceipt(outcomes)
+        await runPostIngestChecksSinceLast()   // W3-4 / N-11
     }
 
     // MARK: - Device-suitable model install (consent-gated)
@@ -4539,6 +4540,7 @@ public final class AppState {
         // (dedup + AI subject resolution + minimization + prose), so the archive
         // is answer-ready without a manual button. No-op if the run was stopped.
         if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
+        if !(await ingestControl.isStopped) { await runPostIngestChecksSinceLast() }   // W3-4 / N-11
     }
 
     @discardableResult
@@ -4622,6 +4624,7 @@ public final class AppState {
         // here (the function's defer resets it), so the idle pass stays deferred
         // through the build and won't race it.
         if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
+        if !(await ingestControl.isStopped) { await runPostIngestChecksSinceLast() }   // W3-4 / N-11
         return succeeded
     }
 
