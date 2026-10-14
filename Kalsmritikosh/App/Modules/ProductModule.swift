@@ -203,7 +203,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .exportFormats:
             return Spec(planID: "W2-6", group: "Sharing", title: "More export formats",
                         detail: "mbox, EML, MSG, PDF, TIFF, CSV, Word, Markdown, JSON and HTML, with a check before export and resume after interruption.",
-                        whenOff: "The current export formats.")
+                        whenOff: "The current export formats.",
+                        implemented: true)
         case .appLock:
             return Spec(planID: "W2-7", group: "Storage", title: "Lock with Touch ID",
                         detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. Whole-database encryption is a separate decision.",
