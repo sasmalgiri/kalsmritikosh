@@ -198,7 +198,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .legalProduction:
             return Spec(planID: "W2-5", group: "Legal", title: "Production sets",
                         detail: "Bates-numbered PDFs, Concordance/Relativity load files and legal holds that block removal.",
-                        whenOff: "Exports without Bates numbers or load files; holds are kept but not enforced.")
+                        whenOff: "Exports without Bates numbers or load files. Existing holds still block removal.",
+                        implemented: true)
         case .exportFormats:
             return Spec(planID: "W2-6", group: "Sharing", title: "More export formats",
                         detail: "mbox, EML, MSG, PDF, TIFF, CSV, Word, Markdown, JSON and HTML, with a check before export and resume after interruption.",

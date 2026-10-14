@@ -1904,6 +1904,11 @@ public struct SettingsView: View {
                 Task {
                     deleteAllStatus = "Erasing…"
                     let n = await appState.deleteAllData()
+                    if let block = appState.legalHoldBlock {
+                        deleteAllStatus = block
+                        appState.legalHoldBlock = nil
+                        return
+                    }
                     // P4.3 — the erase is VERIFIED, and a failure to verify is
                     // shown here rather than only logged. "Erased" is a claim
                     // the user cannot check for themselves and cannot undo, so

@@ -34,7 +34,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W2-2 | Email authenticity checks | Email evidence | yes | off | — | Emails are read as before; no authenticity result. |
 | W2-3 | Outlook PST reader (MS-PST) | Email evidence | not yet | off | — | The current PST reader is used. |
 | W2-4 | Near-duplicates | Search & organise | yes | off | — | Exact duplicates only. |
-| W2-5 | Production sets | Legal | not yet | off | — | Exports without Bates numbers or load files; holds are kept but not enforced. |
+| W2-5 | Production sets | Legal | yes | off | — | Exports without Bates numbers or load files; holds are kept but not enforced. |
 | W2-6 | More export formats | Sharing | not yet | off | — | The current export formats. |
 | W2-7 | Lock with Touch ID | Storage | yes | off | — | No app lock; the Mac's own login protects the data. |
 | W2-8 | Very large items | Storage | not yet | off | — | Very large items are recorded as too large. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_41 of 54 product modules built._
+_42 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

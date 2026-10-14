@@ -3974,6 +3974,8 @@ public final class AppState {
 
     /// True while a full erase is in flight (drives the Settings button state).
     public private(set) var deletingAllData = false
+    /// W2-5 — set when a legal hold refused a destructive action; the UI shows it and clears it.
+    public var legalHoldBlock: String?
 
     /// User-initiated FULL ERASE of all ingested + derived data — the global
     /// "Delete all my data" the app was missing. Removes every watched folder
@@ -3985,6 +3987,15 @@ public final class AppState {
     @discardableResult
     public func deleteAllData() async -> Int {
         guard let db = database, !deletingAllData else { return 0 }
+        // W2-5 — an active legal hold blocks erasing the ledger.
+        if let held = try? await db.query("""
+            SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
+            WHERE h.released_at IS NULL AND i.removed_at IS NULL;
+            """, []).first?.int(0), held > 0 {
+            legalHoldBlock = "Not erased: \(held) document\(held == 1 ? " is" : "s are") under a legal hold. Release the hold first (Tools → Legal production)."
+            KalsmritikoshLog.app.notice("Erase refused: \(held, privacy: .public) documents under legal hold")
+            return 0
+        }
         deletingAllData = true
         defer { deletingAllData = false }
 
@@ -4082,6 +4093,7 @@ public final class AppState {
         let wipe = beginProcess("Erasing all ingested data")
         let cleared = await deleteAllData()
         finishProcess(wipe)
+        if let block = legalHoldBlock { return block }
         // Let boot-time one-shots (milestone spine) re-run over the fresh corpus.
         UserDefaults.standard.removeObject(forKey: "kalsmritikosh.milestones.backfilled.v1")
         let n = await ingestAllRoots()
@@ -4152,6 +4164,13 @@ public final class AppState {
             }
         case .stopAndForget:
             if let url, let files {
+                // W2-5 — a legal hold blocks forgetting held documents: nothing is removed.
+                if let db = database,
+                   let held = try? await LegalProductionRepository(database: db).heldCount(underRoot: url), held > 0 {
+                    legalHoldBlock = "Not forgotten: \(held) document\(held == 1 ? "" : "s") from this folder \(held == 1 ? "is" : "are") under a legal hold. Release the hold first (Tools → Legal production)."
+                    KalsmritikoshLog.app.notice("Forget refused: \(held, privacy: .public) held documents under root")
+                    return
+                }
                 try? await files.deleteAllUnderRoot(url)
             }
         }
