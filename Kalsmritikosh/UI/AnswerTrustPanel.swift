@@ -20,6 +20,10 @@ struct AnswerTrustPanel: View {
     @State private var path: [AnswerPathStep]?
     @State private var pathExpanded = false
     @State private var missing: [GapNode]?
+    // I-5
+    @State private var asOfDate = Date()
+    @State private var asOf: AsOfResult?
+    @State private var asOfRunning = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -51,6 +55,9 @@ struct AnswerTrustPanel: View {
                     }
                 }
             }
+            if ProductModuleFlags.isEnabled(.timeTravel), !answer.refused, let question = answer.resolvedQuestion, !question.isEmpty {
+                asOfSection(question)
+            }
             if let path, !path.isEmpty {
                 DisclosureGroup(isExpanded: $pathExpanded) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -74,6 +81,37 @@ struct AnswerTrustPanel: View {
                 checking = true
                 disconfirmation = await appState.disconfirmation(for: answer)
                 checking = false
+            }
+        }
+    }
+
+    /// I-5 — the same question, using only evidence available on a chosen day.
+    @ViewBuilder
+    private func asOfSection(_ question: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                DatePicker("As of", selection: $asOfDate, displayedComponents: .date)
+                    .font(.caption).fixedSize()
+                Button(asOfRunning ? "Asking…" : "Ask as of this date") {
+                    Task {
+                        asOfRunning = true
+                        asOf = await appState.answerAsOf(asOfDate, question: question, current: answer)
+                        asOfRunning = false
+                    }
+                }
+                .font(.caption).disabled(asOfRunning)
+            }
+            if let r = asOf {
+                let text = r.answer.refused ? "On that day your archive had no evidence for this." : (r.answer.answerText ?? r.answer.body)
+                Text(text).font(.caption).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Used only the \(r.sourcesAvailable) source\(r.sourcesAvailable == 1 ? "" : "s") dated on or before that day.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                if !r.laterDocuments.isEmpty {
+                    Text("Changed later by: \(r.laterDocuments.joined(separator: ", "))")
+                        .font(.caption2).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

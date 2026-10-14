@@ -136,8 +136,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .timeTravel:
             return Spec(planID: "I-5", group: "Investigation", title: "As of a date",
-                        detail: "Answer using only evidence dated on or before a chosen day, and see which document changed the answer over time.",
-                        whenOff: "Answers always use all evidence.")
+                        detail: "Ask again using only evidence whose file date is on or before a chosen day, and see which later documents changed the answer. Later material cannot enter the evidence or the citations.",
+                        whenOff: "Answers always use all evidence.",
+                        implemented: true)
         case .liveFactCheck:
             return Spec(planID: "I-6", group: "Writing", title: "Fact-check my writing",
                         detail: "While you write a note or report, each sentence is checked against your evidence: supported, contradicted (with the source) or unsupported.",

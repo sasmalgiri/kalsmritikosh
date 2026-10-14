@@ -107,6 +107,16 @@ public actor InvestigationAnswerService {
         return SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
     }
 
+    /// I-5 — answer over an explicit set of source versions (e.g. "everything dated on or before a day"),
+    /// through the SAME fail-closed SourceScopedRetriever a case uses. An empty set authorizes nothing,
+    /// so the honest result is "no evidence", never a silent widen to the whole archive.
+    public func answer(scopedTo sourceVersionIDs: Set<UUID>, question: String,
+                       access: SensitiveAccessContext) async -> VerifiedAnswer {
+        let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence,
+                                           scope: .authorizing(sourceVersionIDs), scopedRecall: scopedRecall)
+        return await makeBrain(scoped).answer(question: question, access: access)
+    }
+
     /// Ask a question inside an active investigation. The answer is produced by the shared MasterBrain
     /// over the case-scoped retriever, so no unauthorized source can enter the evidence packet or the
     /// citations on any pass. Fast vs Full Evidence is the engine's depth concern; the scope is identical.
