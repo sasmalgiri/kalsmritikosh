@@ -37,6 +37,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | O-7 | `OnlineStatus` failure banner; no automatic mode switch (the user presses Switch to Private) | (this commit) |
 | I-8 | Daily byte limit (0 = send nothing), bytes measured per send; deterministic answers already make no call | (this commit) |
 | N-10 | `OnlinePIIMasker` — ledger people/organisation names, emails, phones, 6+ digit IDs → placeholders, restored locally; preview shows the masked text | (this commit) |
+| O-8 | `release/ONLINE_MODE_DISCLOSURE_DRAFT.md` — privacy-policy section, App Store privacy answers, review notes, listing sentence, consent text. **Draft only; live policy/listing unchanged pending owner/legal review** | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
@@ -54,6 +55,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 ## For the final test phase
 
 - `MigrationMatrixTests` pins `latestVersion == 141`; it is now **143** (v142 user tags, v143 outbound log). Update the pin.
+- `PrivacyPostureTests` likely asserts the no-network promise; reconcile with O-1 (main app still has no network; only the helper may).
 - Online mode cannot be exercised end to end until the helper target exists (O-2 owner step); test the request builders/parsers and masker with recorded responses.
 - O-7 nuance: when an online call fails, the answer pipeline's existing error handling still produces a deterministic answer; the banner says the online answer did not go through. Verify the answer itself is labelled accordingly.
 - Regenerate `MODULE_MATRIX.md` from `ModuleMatrixDocument.render()` and add a drift test.
