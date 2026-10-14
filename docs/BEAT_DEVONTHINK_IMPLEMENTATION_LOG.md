@@ -38,6 +38,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | I-8 | Daily byte limit (0 = send nothing), bytes measured per send; deterministic answers already make no call | (this commit) |
 | N-10 | `OnlinePIIMasker` — ledger people/organisation names, emails, phones, 6+ digit IDs → placeholders, restored locally; preview shows the masked text | (this commit) |
 | O-8 | `release/ONLINE_MODE_DISCLOSURE_DRAFT.md` — privacy-policy section, App Store privacy answers, review notes, listing sentence, consent text. **Draft only; live policy/listing unchanged pending owner/legal review** | (this commit) |
+| W0-C | `scripts/verify-no-network.sh` (signed main app: sandboxed, no network.client/server, no ATS exceptions; helper if bundled: sandboxed, no network.server) + `NoNetworkAttestation` (reads own signed entitlements; unreadable = cannot demonstrate) shown in Settings ▸ Connection. CI wiring on an archived Release build is for the test phase | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

@@ -1544,6 +1544,10 @@ public struct SettingsView: View {
             Text(ConnectivityMode.stored.summary)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // W0-C — the offline claim, read from this app's own signature.
+            Label(NoNetworkAttestation.verdict().summary, systemImage: "lock.shield")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if ConnectivityMode.stored == .online && !ConnectivityMode.onlineAvailableInThisBuild {
                 Label("Online mode is not available in this build, so the app stays Private. Your choice is kept.",
                       systemImage: "lock.fill")
