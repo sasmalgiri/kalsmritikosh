@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 142
+    public static let latestVersion = 143
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -673,7 +673,8 @@ public enum SchemaMigrations {
         (139, v139),
         (140, v140),
         (141, v141),
-        (142, v142)
+        (142, v142),
+        (143, v143)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6885,6 +6886,31 @@ public enum SchemaMigrations {
         FOREIGN KEY (tag_id) REFERENCES user_tags(id)
     );
     CREATE INDEX IF NOT EXISTS idx_user_tag_links_subject ON user_tag_links(subject_kind, subject_id);
+    """
+
+
+    // MARK: - v143 — O-5 outbound log (Online mode)
+    //
+    // Every online send is recorded: when, to which provider/host/model, how many
+    // bytes, how many personal details were masked, the SHA-256 of exactly what
+    // was sent (and the text itself, which is the user's own data on their own
+    // Mac), and the outcome. Append-only; nothing here is ever deleted.
+    private static let v143: String = """
+    CREATE TABLE IF NOT EXISTS outbound_log (
+        id             TEXT PRIMARY KEY NOT NULL,
+        sent_at        REAL NOT NULL,
+        provider       TEXT NOT NULL,
+        model          TEXT NOT NULL,
+        host           TEXT NOT NULL,
+        bytes_sent     INTEGER NOT NULL,
+        masked_count   INTEGER NOT NULL DEFAULT 0,
+        payload_sha256 TEXT NOT NULL,
+        payload_text   TEXT NOT NULL,
+        response_bytes INTEGER,
+        outcome        TEXT NOT NULL,
+        detail         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_outbound_log_sent ON outbound_log(sent_at);
     """
 
 }

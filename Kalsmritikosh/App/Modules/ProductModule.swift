@@ -151,9 +151,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .leastDataOnline:
             return Spec(planID: "I-8", group: "Online (your own key)", title: "Send the least data",
-                        detail: "In Online mode, answer locally whatever can be answered locally and send only the smallest masked question and passages that are needed. Shows what was sent and keeps a per-case limit you can lower to zero.",
-                        whenOff: "Online answers send the passages the question needs, still previewed and logged.",
-                        requiresOnline: true, dependsOn: [.onlineAnswers])
+                        detail: "Answers the ledger can give without AI never go online; for the rest, a daily limit on bytes sent (lower it to zero to send nothing), with every send measured and logged.",
+                        whenOff: "Online answers send the passages the question needs, still previewed and logged; no daily limit.",
+                        implemented: true, requiresOnline: true, dependsOn: [.onlineAnswers])
         case .statementDrift:
             return Spec(planID: "I-9", group: "Investigation", title: "How an account changed",
                         detail: "For one person, line up everything they said or wrote about a topic in date order and flag where dates, amounts, who was present or denials changed, with both quotes.",
@@ -280,7 +280,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "N-10", group: "Online (your own key)", title: "Mask personal details before sending",
                         detail: "Before anything goes online, names, emails, phone numbers, addresses, ID and account numbers are replaced with placeholders; the answer is restored on your Mac.",
                         whenOff: "Passages are sent unmasked, still previewed first.",
-                        requiresOnline: true, dependsOn: [.onlineAnswers])
+                        implemented: true, requiresOnline: true, dependsOn: [.onlineAnswers])
         case .questionMonitors:
             return Spec(planID: "N-11", group: "Investigation", title: "Watch a question",
                         detail: "Pin a question; after each import it is asked again and you are told when the answer, its sources or a contradiction changes, with the old and new answers.",
@@ -317,7 +317,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "O-4", group: "Online (your own key)", title: "Answers with your own cloud AI key",
                         detail: "Use Claude, OpenAI or Gemini with your own key. You see exactly what will be sent before it goes, every send is logged, and answers pass the same evidence check as private ones.",
                         whenOff: "All answers are made on your Mac.",
-                        requiresOnline: true)
+                        implemented: true, requiresOnline: true)
         }
     }
 

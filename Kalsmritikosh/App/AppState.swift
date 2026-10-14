@@ -695,6 +695,8 @@ public final class AppState {
     public var deepLinkMessage: String?
     /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
     public var ledgerLocationNotice: String?
+    /// O-5 — every online send, append-only.
+    public private(set) var outboundLog: OutboundLogRepository?
     /// W1-9 — files waiting, running and finished in this session.
     public let importQueue = ImportQueue()
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
@@ -1270,6 +1272,21 @@ public final class AppState {
             if internalProvidersEnabled {
                 await capabilities.register(CloudProvider())
             }
+            // O-4 — the user's own cloud AI. Registered in every build but resolves
+            // ONLY in Online mode with the network helper bundled (CapabilityRegistry
+            // .cloudEligible); in Private mode it is never eligible.
+            self.outboundLog = OutboundLogRepository(database: db)
+            await capabilities.register(OnlineCloudProvider(
+                outboundLog: self.outboundLog,
+                knownNames: { [db] in
+                    let rows = (try? await db.query("""
+                        SELECT value FROM entities
+                        WHERE kind IN ('person','organization','vendor','client') AND merged_into IS NULL
+                          AND LENGTH(value) >= 4
+                        LIMIT 3000;
+                        """, [])) ?? []
+                    return rows.compactMap { $0.string(0) }
+                }))
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when

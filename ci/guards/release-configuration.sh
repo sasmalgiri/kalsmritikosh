@@ -89,15 +89,26 @@ fi
 # (Sixteenth review.) The active build settings govern the product, but a
 # tracked entitlements file granting network.client/server is a future-signing
 # risk: anything that ever signs against the file directly would ship egress.
+#
+# O-1 (owner decision 2026-10-15, SHIP_DECISIONS change log): Online mode runs
+# ONLY in the separate network helper (XPC service). Exactly one file —
+# KalsmritikoshNetwork/KalsmritikoshNetwork.entitlements — may grant
+# network.client; it may never grant network.server. Every other entitlements
+# file, the main app's included, must still grant no network at all.
+NETWORK_HELPER_ENTITLEMENTS="KalsmritikoshNetwork/KalsmritikoshNetwork.entitlements"
 ENT_FILES=$(git ls-files "*.entitlements" 2>/dev/null || find . -name "*.entitlements" -not -path "./.git/*")
 for ent in $ENT_FILES; do
   [ -f "$ent" ] || continue
-  NET=$(python3 - "$ent" <<'PYENT'
+  ALLOW_CLIENT=0
+  [ "${ent#./}" = "$NETWORK_HELPER_ENTITLEMENTS" ] && ALLOW_CLIENT=1
+  NET=$(python3 - "$ent" "$ALLOW_CLIENT" <<'PYENT'
 import plistlib, sys
 with open(sys.argv[1], "rb") as f:
     d = plistlib.load(f)
-bad = [k for k in ("com.apple.security.network.client",
-                   "com.apple.security.network.server") if d.get(k) is True]
+keys = ["com.apple.security.network.server"]
+if sys.argv[2] != "1":
+    keys.insert(0, "com.apple.security.network.client")
+bad = [k for k in keys if d.get(k) is True]
 print(" ".join(bad))
 PYENT
 )

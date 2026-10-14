@@ -36,6 +36,13 @@ struct KalsmritikoshApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                // O-3/O-7 — Online badge with one-click return to Private, and failure banner.
+                .safeAreaInset(edge: .top, spacing: 0) { OnlineStatusBar().environment(appState) }
+                // O-5 — nothing goes online without this sheet.
+                .sheet(item: Binding(get: { OutboundConsent.shared.pending },
+                                     set: { if $0 == nil, OutboundConsent.shared.pending != nil { OutboundConsent.shared.resolve(allow: false) } })) { preview in
+                    OutboundConsentSheet(preview: preview)
+                }
                 .preferredColorScheme(.light)   // light UI across all phases
                 // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
                 .onOpenURL { url in Task { await appState.handleDeepLink(url) } }

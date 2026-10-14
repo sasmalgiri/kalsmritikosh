@@ -25,7 +25,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | I-5 | As of a date | Investigation | yes | off | — | Answers always use all evidence. |
 | I-6 | Fact-check my writing | Writing | yes | off | — | The fact-check tool is hidden. |
 | I-7 | Accuracy on your archive | Evidence & proof | yes | off | — | No self-test runs; confidence uses the built-in scale. |
-| I-8 | Send the least data | Online (your own key) | not yet | off | Online mode, needs O-4 | Online answers send the passages the question needs, still previewed and logged. |
+| I-8 | Send the least data | Online (your own key) | yes | off | Online mode, needs O-4 | Online answers send the passages the question needs, still previewed and logged; no daily limit. |
 | I-9 | How an account changed | Investigation | yes | off | — | Contradictions between documents only. |
 | I-10 | Signed case slices | Sharing | yes | off | needs W1-4 | Work products export as documents only. |
 | I-11 | How this answer was found | Evidence & proof | yes | off | — | The answer and its citations only. |
@@ -54,7 +54,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-7 | Similar images and faces | Investigation | not yet | off | — | Images are searchable by their text only. |
 | N-8 | Places | Investigation | not yet | off | — | Not shown. |
 | N-9 | Import notes apps | Integration | not yet | off | — | These folders import as plain files. |
-| N-10 | Mask personal details before sending | Online (your own key) | not yet | off | Online mode, needs O-4 | Passages are sent unmasked, still previewed first. |
+| N-10 | Mask personal details before sending | Online (your own key) | yes | off | Online mode, needs O-4 | Passages are sent unmasked, still previewed first. |
 | N-11 | Watch a question | Investigation | not yet | off | — | Pinned questions are kept but not re-asked. |
 | N-12 | Your own record types | Search & organise | not yet | off | — | Types are kept but not filled. |
 | N-13 | What to read first | Investigation | not yet | off | — | No score. |
@@ -62,9 +62,9 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-2 | More file types | Reading files | not yet | off | — | These files are kept but not read. |
 | W4-3 | Deleted email recovery | Email evidence | not yet | off | — | Only live mail is read. |
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
-| O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
+| O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_20 of 54 product modules built._
+_23 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

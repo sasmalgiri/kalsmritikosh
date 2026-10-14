@@ -2,9 +2,12 @@
 //  PrivacyGate.swift
 //  Kalsmritikosh
 //
-//  U-0 (privacy invariant closure): cloud routing does not exist in this
-//  product — no network entitlement, no cloud provider, no toggle in any
-//  build. The gate's remaining job is the offline/no-LLM stance below.
+//  U-0 (privacy invariant closure), amended by O-1 (owner decision
+//  2026-10-15): cloud routing exists ONLY in Online mode — chosen by the user,
+//  with a bundled network helper and the online-answers module on (see
+//  OnlineSettings.cloudAllowed, enforced in CapabilityRegistry). Private mode is
+//  the default and never resolves a cloud provider. This gate keeps the
+//  offline/no-LLM stance below, which overrides Online mode too.
 //
 
 import Foundation

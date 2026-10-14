@@ -28,6 +28,15 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | I-9 | `StatementDrift` — statements naming a person + topic in date order; later statements on the same subject with a different date/amount or flipped polarity flagged with both quotes; `StatementDriftView`. New sidebar **Tools** menu (`ToolSheet`) lists only switched-on tools (fact-check, drift) | (this commit) |
 | I-10 | `CaseSlice` — from a tag: redacted names + import fingerprints, dated events, 3 passages per document; PIIRedactor (emails, phones, listed terms); P-256 signature over sorted-key JSON; `CaseSliceView` exports and opens read-only with verify (Tools menu). Depends on tags | (this commit) |
 | I-12 | `dossierChanges` — per-subject last-opened time; documents that entered the ledger since then mentioning the subject + their dated events; strip in DossierView header | (this commit) |
+| O-1 | SHIP_DECISIONS change-control entry (owner decision 2026-10-15, written sign-off pending); release guard allows `network.client` ONLY in `KalsmritikoshNetwork/KalsmritikoshNetwork.entitlements`, never `network.server`, nothing in any other file | (this commit) |
+| O-2 | Helper sources `KalsmritikoshNetwork/` (XPC service: HTTPS POST to 3 allowlisted hosts, ephemeral session, no storage) + README of owner steps; `NetworkHelperClient` in the app — **target not created (owner step)** | (this commit) |
+| O-3 | `ConnectivityMode` (W0-M) + always-visible Online bar with one-click Switch to Private | (this commit) |
+| O-4 | `OnlineCloudProvider` (Claude Messages API with fallbacks, OpenAI chat completions, Gemini generateContent), key in Keychain, registered in every build but eligible only when `OnlineSettings.cloudAllowed` (CapabilityRegistry.cloudEligible; generation only, never embeddings) and ranked first then | (this commit) |
+| O-5 | `OutboundConsent` sheet before every send (not switchable); schema **v143** `outbound_log` + `OutboundLogRepository`; "What was sent" viewer | (this commit) |
+| O-6 | By construction: the cloud provider is just a provider, so its text goes through the same claim–evidence gate and call budgets | (this commit) |
+| O-7 | `OnlineStatus` failure banner; no automatic mode switch (the user presses Switch to Private) | (this commit) |
+| I-8 | Daily byte limit (0 = send nothing), bytes measured per send; deterministic answers already make no call | (this commit) |
+| N-10 | `OnlinePIIMasker` — ledger people/organisation names, emails, phones, 6+ digit IDs → placeholders, restored locally; preview shows the masked text | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
@@ -44,7 +53,9 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 
 ## For the final test phase
 
-- `MigrationMatrixTests` pins `latestVersion == 141`; it is now **142** (v142 user tags). Update the pin.
+- `MigrationMatrixTests` pins `latestVersion == 141`; it is now **143** (v142 user tags, v143 outbound log). Update the pin.
+- Online mode cannot be exercised end to end until the helper target exists (O-2 owner step); test the request builders/parsers and masker with recorded responses.
+- O-7 nuance: when an online call fails, the answer pipeline's existing error handling still produces a deterministic answer; the banner says the online answer did not go through. Verify the answer itself is labelled accordingly.
 - Regenerate `MODULE_MATRIX.md` from `ModuleMatrixDocument.render()` and add a drift test.
 - Each built item: write the tests named in its "Done means" column.
 - W1-3: import receipts are written only for the Add-files path; the folder-watcher/bulk ingest path does not write one yet.

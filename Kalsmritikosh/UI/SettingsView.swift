@@ -1518,6 +1518,9 @@ public struct SettingsView: View {
             }
             Divider()
             connectivitySection
+            if ProductModuleFlags.isEnabled(.onlineAnswers) || ConnectivityMode.stored == .online {
+                OnlineSettingsSection()
+            }
             productModulesSection
         }
     }
