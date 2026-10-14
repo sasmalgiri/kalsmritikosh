@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture
 
     var id: String { rawValue }
 
@@ -37,6 +37,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .images: return .imageIntelligence
         case .notesImport: return .notesImport
         case .devonthink: return .devonthinkImport
+        case .capture: return .captureExtensions
         }
     }
 
@@ -66,6 +67,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .images: return "photo.stack"
         case .notesImport: return "note.text"
         case .devonthink: return "archivebox"
+        case .capture: return "tray.and.arrow.down"
         }
     }
 
@@ -94,6 +96,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .images: ImageIntelligenceView()
         case .notesImport: NotesImportView()
         case .devonthink: DevonthinkImportView()
+        case .capture: CaptureView()
         }
     }
 

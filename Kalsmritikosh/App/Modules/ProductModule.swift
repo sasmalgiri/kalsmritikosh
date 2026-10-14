@@ -244,7 +244,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Share and capture",
                         detail: "Send files and web pages to the import queue from the Share menu, the Services menu or Safari. Pages are saved on your Mac.",
-                        whenOff: "Add files from inside the app only.")
+                        whenOff: "Add files from inside the app only.",
+                        implemented: true)
         case .spotlightIndex:
             return Spec(planID: "W3-7", group: "Integration", title: "Show in Spotlight",
                         detail: "Make document titles and summaries findable from Spotlight. This copies that text into macOS's own search index, so it is off by default.",
