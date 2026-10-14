@@ -52,7 +52,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-5 | Briefings, FAQs and mind maps | Writing | yes | off | — | Not offered. |
 | N-6 | Ask from anywhere | Integration | yes | off | — | Ask from the main window only. |
 | N-7 | Similar images and faces | Investigation | not yet | off | — | Images are searchable by their text only. |
-| N-8 | Places | Investigation | not yet | off | — | Not shown. |
+| N-8 | Places | Investigation | yes | off | — | Not shown. |
 | N-9 | Import notes apps | Integration | not yet | off | — | These folders import as plain files. |
 | N-10 | Mask personal details before sending | Online (your own key) | yes | off | Online mode, needs O-4 | Passages are sent unmasked, still previewed first. |
 | N-11 | Watch a question | Investigation | yes | off | — | Pinned questions are kept but not re-asked. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_44 of 54 product modules built._
+_45 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

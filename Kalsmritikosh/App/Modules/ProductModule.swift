@@ -287,8 +287,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         whenOff: "Images are searchable by their text only.")
         case .locationMap:
             return Spec(planID: "N-8", group: "Investigation", title: "Places",
-                        detail: "Photo locations and addresses found in documents. Private mode shows a list; the map needs map tiles from the internet, so the map appears only in Online mode.",
-                        whenOff: "Not shown.")
+                        detail: "Photo locations and addresses found in documents, as a list with coordinates. Nothing is looked up online; in Online mode a place can be handed to Apple Maps.",
+                        whenOff: "Not shown.",
+                        implemented: true)
         case .notesImport:
             return Spec(planID: "N-9", group: "Integration", title: "Import notes apps",
                         detail: "Read Obsidian vaults (links between notes become relations), Notion exports and notes exported from Apple Notes.",

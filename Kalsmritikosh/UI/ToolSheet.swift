@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places
 
     var id: String { rawValue }
 
@@ -33,6 +33,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .legalProduction: return .legalProduction
         case .smartCollections: return .smartCollections
         case .exportCenter: return .exportFormats
+        case .places: return .locationMap
         }
     }
 
@@ -58,6 +59,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .legalProduction: return "number.square"
         case .smartCollections: return "folder.badge.gearshape"
         case .exportCenter: return "square.and.arrow.up.on.square"
+        case .places: return "mappin.and.ellipse"
         }
     }
 
@@ -82,6 +84,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .legalProduction: LegalProductionView()
         case .smartCollections: SmartCollectionsView()
         case .exportCenter: ExportCenterView()
+        case .places: PlacesView()
         }
     }
 
