@@ -313,6 +313,68 @@ public actor ChunksRepository {
         return try await hydrateLineage(rows.compactMap(decode))
     }
 
+    /// W1-1 — run a search compiled by `AdvancedSearchCompiler`. The FTS
+    /// expression is used AS GIVEN: it is safe only because the compiler quotes
+    /// every user term and writes every operator itself — never pass user text
+    /// here directly. Filters are bound parameters. With no expression, the
+    /// filters alone select passages (newest file first).
+    public func searchAdvanced(_ compiled: CompiledSearch, limit: Int = 50) async throws -> [Chunk] {
+        guard !compiled.isEmpty else { return [] }
+        var sql = """
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
+        FROM chunks c
+        """
+        var binds: [SQLValue] = []
+        if compiled.ftsExpression != nil { sql += "\nJOIN chunks_fts ON chunks_fts.rowid = c.rowid" }
+        sql += "\nJOIN knowledge_objects ko ON ko.id = c.object_id\nJOIN files f ON f.id = ko.file_id"
+        sql += "\nWHERE c.review_status IS NULL AND c.superseded_by_run IS NULL"
+        if let fts = compiled.ftsExpression {
+            sql += " AND chunks_fts.text MATCH ?"
+            binds.append(.text(fts))
+        }
+        for f in compiled.filters {
+            let clause: String
+            switch f.field {
+            case .type:
+                clause = "ko.source_type = ? COLLATE NOCASE"
+                binds.append(.text(f.value))
+            case .file:
+                clause = "f.url LIKE ? ESCAPE '\\'"
+                binds.append(.text("%" + Self.likeEscaped(f.value) + "%"))
+            case .before:
+                clause = "f.modified_at < ?"
+                binds.append(.real(f.epoch ?? 0))
+            case .after:
+                clause = "f.modified_at > ?"
+                binds.append(.real(f.epoch ?? 0))
+            case .entity:
+                clause = "EXISTS (SELECT 1 FROM entity_mentions m WHERE m.source_object_id = c.object_id AND (m.normalized LIKE ? ESCAPE '\\' OR m.surface LIKE ? ESCAPE '\\'))"
+                let pattern = "%" + Self.likeEscaped(f.value.lowercased()) + "%"
+                binds.append(.text(pattern)); binds.append(.text(pattern))
+            case .tag:
+                clause = """
+                EXISTS (SELECT 1 FROM user_tag_links l JOIN user_tags t ON t.id = l.tag_id
+                        WHERE t.name = ? COLLATE NOCASE AND t.retired_at IS NULL AND l.removed_at IS NULL
+                          AND ((l.subject_kind = 'object' AND l.subject_id = c.object_id)
+                            OR (l.subject_kind = 'chunk' AND l.subject_id = c.id)))
+                """
+                binds.append(.text(f.value))
+            }
+            sql += f.negated ? " AND NOT (\(clause))" : " AND (\(clause))"
+        }
+        sql += compiled.ftsExpression != nil ? "\nORDER BY rank" : "\nORDER BY f.modified_at DESC"
+        sql += "\nLIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        let rows = try await database.query(sql, binds)
+        return try await hydrateLineage(rows.compactMap(decode))
+    }
+
+    private nonisolated static func likeEscaped(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+    }
+
     // MARK: - P2.2 · document-level FTS, so `knowledge_objects_fts` is READ
     //
     // `knowledge_objects_fts` has been trigger-maintained on EVERY

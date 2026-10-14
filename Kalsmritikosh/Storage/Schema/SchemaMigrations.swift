@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 141
+    public static let latestVersion = 142
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -672,7 +672,8 @@ public enum SchemaMigrations {
         (138, v138),
         (139, v139),
         (140, v140),
-        (141, v141)
+        (141, v141),
+        (142, v142)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6856,6 +6857,34 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS evrev_lineage_upd AFTER UPDATE ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT NULL AND (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
     DROP TRIGGER IF EXISTS evrev_blocks_upd;
     CREATE TRIGGER evrev_blocks_upd AFTER UPDATE OF raw_text, normalized_text, locator, kind, attributes, ordinal, parent_block_id, extraction_method, extraction_confidence, language, document_id, source_version_id, superseded_by_run ON evidence_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'blocks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'blocks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    """
+
+
+    // MARK: - v142 — W1-4 user tags (beat-DEVONthink plan)
+    //
+    // Tags are the user's own organisation: they never change what the evidence says.
+    // Nothing here is ever deleted (owner rule): untagging stamps `removed_at`, re-tagging
+    // clears it; merging re-points links and stamps the old tag `retired_at`.
+    private static let v142: String = """
+    CREATE TABLE IF NOT EXISTS user_tags (
+        id          TEXT PRIMARY KEY NOT NULL,
+        name        TEXT NOT NULL COLLATE NOCASE,
+        color       TEXT,
+        created_at  REAL NOT NULL,
+        retired_at  REAL,
+        merged_into TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_tags_live_name ON user_tags(name) WHERE retired_at IS NULL;
+    CREATE TABLE IF NOT EXISTS user_tag_links (
+        tag_id       TEXT NOT NULL,
+        subject_kind TEXT NOT NULL CHECK (subject_kind IN ('object','fact','entity','event','chunk')),
+        subject_id   TEXT NOT NULL,
+        created_at   REAL NOT NULL,
+        removed_at   REAL,
+        PRIMARY KEY (tag_id, subject_kind, subject_id),
+        FOREIGN KEY (tag_id) REFERENCES user_tags(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_tag_links_subject ON user_tag_links(subject_kind, subject_id);
     """
 
 }

@@ -70,11 +70,13 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .advancedSearchSyntax:
             return Spec(planID: "W1-1", group: "Search & organise", title: "Advanced search syntax",
                         detail: "AND, OR, NOT, \"exact phrase\", NEAR/5, wildcards and field filters such as from:, date:, type:, tag: and entity:. An operator the app does not understand is reported, never silently treated as a word.",
-                        whenOff: "Plain keyword search, as before.")
+                        whenOff: "Plain keyword search, as before.",
+                        implemented: true)
         case .searchCoverageBadge:
             return Spec(planID: "W1-2", group: "Search & organise", title: "Search coverage badge",
                         detail: "Under every result list: which fields matched and how much of the archive was searchable for this query, naming any source still being indexed.",
-                        whenOff: "Results only; coverage is still recorded.")
+                        whenOff: "Results only; coverage is still recorded.",
+                        implemented: true)
         case .signedReceipts:
             return Spec(planID: "W1-3", group: "Evidence & proof", title: "Signed import and export receipts",
                         detail: "Every import and export ends in a receipt listing what was read or written with its hashes, signed with this Mac's key so a changed byte or a different signer fails verification.",
@@ -82,7 +84,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .userTags:
             return Spec(planID: "W1-4", group: "Search & organise", title: "Tags",
                         detail: "Tag documents, facts and entities; use a tag as a search or question scope. Tags are your organisation only — they never change what the evidence says.",
-                        whenOff: "Tags are hidden but kept; turning this back on restores them.")
+                        whenOff: "Tags are hidden but kept; turning this back on restores them.",
+                        implemented: true)
         case .deepLinks:
             return Spec(planID: "W1-5", group: "Integration", title: "Links to passages (kalsmritikosh://)",
                         detail: "Copy a link to a document, an exact passage, a citation or a saved answer and paste it into any app; opening it jumps to that place, or says plainly that it is no longer in this archive.",
