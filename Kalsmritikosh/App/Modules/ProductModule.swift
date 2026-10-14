@@ -217,8 +217,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         whenOff: "DEVONthink databases are not recognised.")
         case .sendToDevonthink:
             return Spec(planID: "W3-2", group: "Integration", title: "Send to DEVONthink",
-                        detail: "Send a dossier or answer to DEVONthink as Markdown or PDF with links back to the exact passages; falls back to showing the file in Finder.",
-                        whenOff: "Not offered.")
+                        detail: "Send an answer to DEVONthink as a Markdown note with a link back to each quoted passage; when DEVONthink is not installed the note is shown in Finder.",
+                        whenOff: "Not offered.",
+                        implemented: true)
         case .timelineGraph:
             return Spec(planID: "W3-3", group: "Investigation", title: "Timeline and relationship views",
                         detail: "An interactive timeline and a graph of people and organisations; every point and line opens its evidence.",
@@ -240,7 +241,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .spotlightIndex:
             return Spec(planID: "W3-7", group: "Integration", title: "Show in Spotlight",
                         detail: "Make document titles and summaries findable from Spotlight. This copies that text into macOS's own search index, so it is off by default.",
-                        whenOff: "Nothing is given to Spotlight, and any earlier entries are removed.")
+                        whenOff: "Nothing is given to Spotlight, and any earlier entries are removed.",
+                        implemented: true)
 
         // ── Wave N ───────────────────────────────────────────────────────
         case .issueChronology:

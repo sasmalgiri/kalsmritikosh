@@ -59,6 +59,7 @@ extension AppState {
             }
         }
         if ProductModuleFlags.isEnabled(.questionMonitors) { await rerunPinnedQuestions(alerts: alerts) }
+        if ProductModuleFlags.isEnabled(.spotlightIndex) { await syncSpotlight() }   // W3-7
     }
 
     private func alertWatchlistHits(since: Date, database: Database, alerts: ProductAlertsRepository) async {

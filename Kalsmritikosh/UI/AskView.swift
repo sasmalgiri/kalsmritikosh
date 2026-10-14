@@ -717,6 +717,19 @@ public struct AskView: View {
                         } label: {
                             Label("Export verifiable receipt…", systemImage: "checkmark.seal")
                         }
+                        // W3-2 — hand the answer to DEVONthink with links back to each passage.
+                        if ProductModuleFlags.isEnabled(.sendToDevonthink), let verified = verifiedAnswers[turn.id] {
+                            Button {
+                                let idx = turns.firstIndex(where: { $0.id == turn.id })
+                                let q = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+                                Task { @MainActor in
+                                    let outcome = await appState.sendToDevonthink(question: q, answer: verified)
+                                    appState.deepLinkMessage = outcome == .sentToDevonthink ? nil : outcome.message
+                                }
+                            } label: {
+                                Label("Send to DEVONthink", systemImage: "square.and.arrow.up.on.square")
+                            }
+                        }
                         // I-1 — a bundle anyone can verify without this app.
                         if ProductModuleFlags.isEnabled(.proofBundles) {
                             Button {

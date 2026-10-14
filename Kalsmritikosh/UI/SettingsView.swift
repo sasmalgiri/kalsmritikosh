@@ -1574,7 +1574,11 @@ public struct SettingsView: View {
                         let reason = ProductModuleFlags.disabledReason(module)
                         Toggle(isOn: Binding(
                             get: { ProductModuleFlags.isEnabled(module) },
-                            set: { ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1 }
+                            set: {
+                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
+                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
+                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+                            }
                         )) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(module.title)

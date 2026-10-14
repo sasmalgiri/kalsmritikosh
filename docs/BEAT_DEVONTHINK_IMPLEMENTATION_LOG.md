@@ -52,6 +52,8 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | N-12 | `CustomTypesView` — user types with fields, filled from open-field `generic_facts` by field name (value + source count; empty = no source states it) | (this commit) |
 | N-5 | `StudioOutputsView` — deterministic briefing, FAQ, mind-map outline from the ledger, exported as Markdown, read aloud by AVSpeechSynthesizer (on-device) | (this commit) |
 | N-6 | `MenuBarExtra` panel (Ask / Search → main window with sources) shown while the module is on; Ask now also picks up a question arriving while open. No global hotkey — it would need Accessibility permission (stated in the module text) | (this commit) |
+| W3-2 | `sendToDevonthink` — answer → Markdown note with kalsmritikosh:// links per quote → `NSWorkspace.open(_:withApplicationAt:)` for DEVONthink (bundle ids tried), else shown in Finder; outcome reported | (this commit) |
+| W3-7 | `syncSpotlight` — CoreSpotlight items (file name + 240-char snippet) after each import and when switched on; switching off deletes the app's domain; opening a result goes through the deep-link handler | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner
@@ -76,4 +78,5 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 - Each built item: write the tests named in its "Done means" column.
 - W1-3: import receipts are written only for the Add-files path; the folder-watcher/bulk ingest path does not write one yet.
 - W1-5: links do nothing until the `kalsmritikosh` URL type is registered (owner step).
+- W3-7: opening a Spotlight result goes through `handleDeepLink`, which refuses when the Links module is off — decide whether Spotlight should bypass that.
 - Search screen: a search with issues but zero hits shows the empty state, so the issues are not visible — check and fix.

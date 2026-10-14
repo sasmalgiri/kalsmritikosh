@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import CoreSpotlight
 #if canImport(TipKit)
 import TipKit
 #endif
@@ -50,6 +51,12 @@ struct KalsmritikoshApp: App {
                 .appLockOverlay()               // W2-7 — Touch ID / password lock
                 // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
                 .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
+                // W3-7 — a Spotlight result was opened.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                        Task { await appState.openSpotlightItem(id) }
+                    }
+                }
                 .sheet(item: Binding(get: { appState.deepLinkTarget },
                                      set: { appState.deepLinkTarget = $0 })) { target in
                     CitationSourceSheet(target: target) { appState.deepLinkTarget = nil }
