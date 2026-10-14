@@ -48,6 +48,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | N-4 | `CodingSuggester` (multinomial naive Bayes on the reviewer's own responsive/not codes, ≥3 per class; probability + top words as reasons) + `ReviewCodingView` (responsive / not / privileged / hot; recoding keeps history) | (this commit) |
 | N-13 | `riskScores` — contradictions citing the doc (+3), watchlist names (+3), gaps (+1), added this week (+1), every point explained; 'Read first' sort in review coding | (this commit) |
 | N-2 | `communicationReport` — sender→recipient pairs from `email_participant_occurrences`, monthly volume from each email's Date header, replies whose In-Reply-To Message-ID is not held (header evidence blocks, mapped to documents through their chunks); `CommunicationView` with a Swift Charts volume chart | (this commit) |
+| W3-3 | `RelationshipGraphView` — top 40 people/organisations by relationship degree, deterministic `ForceLayout`, click a node or link for its evidence documents; event timeline (Swift Charts) by kind | (this commit) |
 | W1-4 | Schema **v142** `user_tags` + `user_tag_links` (soft remove, merge retires), `TagsRepository`, `TagEditorSheet`, Tag button on results, `tag:` search filter | (this commit) |
 
 ## Pending from the owner

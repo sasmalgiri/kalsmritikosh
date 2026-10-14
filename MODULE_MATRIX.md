@@ -40,7 +40,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W2-8 | Very large items | Storage | not yet | off | — | Very large items are recorded as too large. |
 | W3-1 | Import a DEVONthink database | Integration | not yet | off | — | DEVONthink databases are not recognised. |
 | W3-2 | Send to DEVONthink | Integration | not yet | off | — | Not offered. |
-| W3-3 | Timeline and relationship views | Investigation | not yet | off | — | Lists only. |
+| W3-3 | Timeline and relationship views | Investigation | yes | off | — | Lists only. |
 | W3-4 | Alerts | Investigation | yes | off | — | No alerts; contradictions still appear in answers. |
 | W3-5 | Smart collections and rules | Search & organise | not yet | off | — | Saved searches run only when opened; rules do not run. |
 | W3-6 | Share and capture | Integration | not yet | off | — | Add files from inside the app only. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_31 of 54 product modules built._
+_32 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

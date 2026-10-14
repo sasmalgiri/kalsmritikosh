@@ -222,7 +222,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .timelineGraph:
             return Spec(planID: "W3-3", group: "Investigation", title: "Timeline and relationship views",
                         detail: "An interactive timeline and a graph of people and organisations; every point and line opens its evidence.",
-                        whenOff: "Lists only.")
+                        whenOff: "Lists only.",
+                        implemented: true)
         case .proactiveAlerts:
             return Spec(planID: "W3-4", group: "Investigation", title: "Alerts",
                         detail: "Tells you when a new document contradicts what the ledger said, fills or opens a gap, or mentions someone you watch.",
