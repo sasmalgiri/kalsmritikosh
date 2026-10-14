@@ -528,6 +528,27 @@ public struct SettingsView: View {
                     .textSelection(.enabled)
             }
 
+            // I-7 — accuracy on your own archive (module "Accuracy on your archive").
+            if ProductModuleFlags.isEnabled(.archiveSelfScore) {
+                Divider().padding(.vertical, 4)
+                Text("Measure accuracy — asks up to 20 questions whose answers your ledger already proves, plus 3 that have no answer, and scores the results. Answers then show how often answers at their confidence were right on your archive. Uses the on-device model, so it takes a few minutes.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await runSelfScore() }
+                } label: {
+                    Label(selfScoreRunning ? "Measuring…" : "Measure accuracy on my archive",
+                          systemImage: selfScoreRunning ? "hourglass" : "target")
+                }
+                .disabled(selfScoreRunning)
+                if let card = selfScoreCard ?? ArchiveSelfScore.latest() {
+                    Text(card.summary)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
             Divider().padding(.vertical, 4)
 
             // D-1 — the only diagnostic here that WRITES, so it is confirmed
@@ -1036,6 +1057,16 @@ public struct SettingsView: View {
         }
     }
 
+    private func runSelfScore() async {
+        selfScoreRunning = true
+        defer { selfScoreRunning = false }
+        do {
+            selfScoreCard = try await ArchiveSelfScore.run(appState)
+        } catch {
+            KalsmritikoshLog.app.error("Self-score failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func runAnswerHarness() async {
         answerHarnessRunning = true
         answerHarnessStatus = "Asking…"
@@ -1322,6 +1353,9 @@ public struct SettingsView: View {
     // SwiftUI does not observe. Bumping this token in each setter forces the
     // modules section to recompute so the switch reflects its new state.
     @State private var moduleFlagsVersion = 0
+    // I-7 — accuracy on your archive.
+    @State private var selfScoreRunning = false
+    @State private var selfScoreCard: ArchiveScorecard?
     // True while a regime change is rebuilding the topic layer in the background.
     @State private var regimeRebuildRunning = false
 

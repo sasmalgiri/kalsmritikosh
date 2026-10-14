@@ -642,6 +642,9 @@ public struct AskView: View {
                                     revealSource(objectID: objectID, quote: quote)
                                 }
                             )
+                            AnswerTrustPanel(answer: verified) { objectID, quote in
+                                revealSource(objectID: objectID, quote: quote)
+                            }
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)

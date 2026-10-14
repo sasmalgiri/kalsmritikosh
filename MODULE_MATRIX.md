@@ -20,15 +20,15 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W1-9 | Import queue | Storage | not yet | off | — | Imports run in the order added, with progress in the toolbar. |
 | I-1 | Proof bundles | Evidence & proof | not yet | off | needs W1-3 | Answers export as before, without a bundle. |
 | I-2 | What is missing | Investigation | not yet | off | — | Gaps are still detected in the background but not shown. |
-| I-3 | Corroboration meter | Evidence & proof | not yet | off | — | Citations only. |
-| I-4 | Look for contradicting evidence | Evidence & proof | not yet | off | — | Contradictions are shown only when they are found during the normal search. |
+| I-3 | Corroboration meter | Evidence & proof | yes | off | — | Citations only. |
+| I-4 | Look for contradicting evidence | Evidence & proof | yes | off | — | Contradictions are shown only when they are found during the normal search. |
 | I-5 | As of a date | Investigation | not yet | off | — | Answers always use all evidence. |
 | I-6 | Fact-check my writing | Writing | not yet | off | — | Plain editor. |
-| I-7 | Accuracy on your archive | Evidence & proof | not yet | off | — | No self-test runs; confidence uses the built-in scale. |
+| I-7 | Accuracy on your archive | Evidence & proof | yes | off | — | No self-test runs; confidence uses the built-in scale. |
 | I-8 | Send the least data | Online (your own key) | not yet | off | Online mode, needs O-4 | Online answers send the passages the question needs, still previewed and logged. |
 | I-9 | How an account changed | Investigation | not yet | off | — | Contradictions between documents only. |
 | I-10 | Signed case slices | Sharing | not yet | off | needs W1-3 | Work products export as documents only. |
-| I-11 | How this answer was found | Evidence & proof | not yet | off | — | The answer and its citations only. |
+| I-11 | How this answer was found | Evidence & proof | yes | off | — | The answer and its citations only. |
 | I-12 | Living dossiers | Investigation | not yet | off | — | Dossiers are built when opened. |
 | W2-1 | Highlights and notes | Writing | not yet | off | — | Highlights are hidden but kept. |
 | W2-2 | Email authenticity checks | Email evidence | not yet | off | — | Emails are read as before; no authenticity result. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | not yet | off | Online mode | All answers are made on your Mac. |
 
-_0 of 54 product modules built._
+_4 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

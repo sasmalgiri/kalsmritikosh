@@ -118,11 +118,13 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .corroborationMeter:
             return Spec(planID: "I-3", group: "Evidence & proof", title: "Corroboration meter",
                         detail: "Beside each claim, how many INDEPENDENT sources support it. Copies and forwards of one message count once; a claim with a single source is marked as a lead, not a fact.",
-                        whenOff: "Citations only.")
+                        whenOff: "Citations only.",
+                        implemented: true)
         case .devilsAdvocate:
             return Spec(planID: "I-4", group: "Evidence & proof", title: "Look for contradicting evidence",
                         detail: "Before an answer is shown, the app searches your archive for evidence against it and reports either the conflict, with both sources, or how many sources it checked.",
-                        whenOff: "Contradictions are shown only when they are found during the normal search.")
+                        whenOff: "Contradictions are shown only when they are found during the normal search.",
+                        implemented: true)
         case .timeTravel:
             return Spec(planID: "I-5", group: "Investigation", title: "As of a date",
                         detail: "Answer using only evidence dated on or before a chosen day, and see which document changed the answer over time.",
@@ -134,7 +136,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .archiveSelfScore:
             return Spec(planID: "I-7", group: "Evidence & proof", title: "Accuracy on your archive",
                         detail: "The app tests itself with questions whose answers your ledger already proves, plus questions it must refuse, and shows a personal accuracy score; displayed confidence is tuned to that score.",
-                        whenOff: "No self-test runs; confidence uses the built-in scale.")
+                        whenOff: "No self-test runs; confidence uses the built-in scale.",
+                        implemented: true)
         case .leastDataOnline:
             return Spec(planID: "I-8", group: "Online (your own key)", title: "Send the least data",
                         detail: "In Online mode, answer locally whatever can be answered locally and send only the smallest masked question and passages that are needed. Shows what was sent and keeps a per-case limit you can lower to zero.",
@@ -152,7 +155,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .answerPath:
             return Spec(planID: "I-11", group: "Evidence & proof", title: "How this answer was found",
                         detail: "For every answer, which kinds of search ran, what each found, what the evidence check kept or dropped and why, and how many AI calls were used.",
-                        whenOff: "The answer and its citations only.")
+                        whenOff: "The answer and its citations only.",
+                        implemented: true)
         case .livingDossiers:
             return Spec(planID: "I-12", group: "Investigation", title: "Living dossiers",
                         detail: "A profile per person or organisation that updates after each import, with 'what changed since you last looked'.",
