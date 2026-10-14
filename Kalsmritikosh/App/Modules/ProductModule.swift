@@ -179,7 +179,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .annotations:
             return Spec(planID: "W2-1", group: "Writing", title: "Highlights and notes",
                         detail: "Highlight and annotate any passage. Notes are stored beside the source, never written into it, and count as your own confirmed or corrected evidence.",
-                        whenOff: "Highlights are hidden but kept.")
+                        whenOff: "Highlights are hidden but kept.",
+                        implemented: true)
         case .emailAuthenticity:
             return Spec(planID: "W2-2", group: "Email evidence", title: "Email authenticity checks",
                         detail: "Checks DKIM and ARC signatures and S/MIME, and reads hidden time values in message identifiers. No internet lookups: keys come from the message or from you.",

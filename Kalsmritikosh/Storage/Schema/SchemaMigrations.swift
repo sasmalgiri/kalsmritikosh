@@ -6972,10 +6972,11 @@ public enum SchemaMigrations {
     private static let v145: String = """
     CREATE TABLE IF NOT EXISTS annotations (
         id TEXT PRIMARY KEY NOT NULL, object_id TEXT NOT NULL, chunk_id TEXT,
-        quote TEXT NOT NULL, note TEXT, color TEXT NOT NULL DEFAULT 'yellow',
-        created_at REAL NOT NULL, removed_at REAL
+        source_url TEXT, quote TEXT NOT NULL, note TEXT, color TEXT NOT NULL DEFAULT 'yellow',
+        stance TEXT NOT NULL DEFAULT 'note', created_at REAL NOT NULL, removed_at REAL
     );
     CREATE INDEX IF NOT EXISTS idx_annotations_object ON annotations(object_id);
+    CREATE INDEX IF NOT EXISTS idx_annotations_source ON annotations(source_url);
     CREATE TABLE IF NOT EXISTS near_duplicate_members (
         object_id TEXT PRIMARY KEY NOT NULL, group_id TEXT NOT NULL,
         similarity REAL NOT NULL, computed_at REAL NOT NULL

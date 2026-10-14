@@ -184,6 +184,11 @@ public struct CitationSourceSheet: View {
             }
             .padding(10)
             Divider()
+            // W2-1 — highlights and notes beside the source (never written into it).
+            if ProductModuleFlags.isEnabled(.annotations) {
+                AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.quote)
+                Divider()
+            }
             SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
         }
         .frame(minWidth: 640, minHeight: 480)
