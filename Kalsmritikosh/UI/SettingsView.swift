@@ -551,6 +551,25 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
+            // W0-1 — scale-run recorder: memory footprint + documents read, for SHIP_DECISIONS.
+            Text("Scale run recorder — start it, then add a large folder in Sources. It samples this app's memory footprint and documents read every 10 seconds; stop it when reading ends to get a summary (baseline, peak, whether memory stayed flat) to record in SHIP_DECISIONS.md. Saved to Application Support/Kalsmritikosh/ScaleRuns.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if ScaleRunRecorder.shared.running {
+                    Button("Stop and summarise (\(ScaleRunRecorder.shared.samples.count) samples)") {
+                        scaleRunSummary = ScaleRunRecorder.shared.stop()
+                    }
+                } else {
+                    Button("Start scale run recorder") { ScaleRunRecorder.shared.start(appState: appState); scaleRunSummary = nil }
+                }
+            }
+            if let scaleRunSummary {
+                Text(scaleRunSummary).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
             // D-1 — the only diagnostic here that WRITES, so it is confirmed
             // first. Every other one is read-only and needs no permission.
             Text("Check For Drift — runs every background pass three times and checks that the second and third runs change nothing. If they do, some part of your ledger is being rewritten on every launch, which is how counts grow without new documents. UNLIKE THE OTHER CHECKS, THIS ONE WRITES: the property being tested is a property of writing, so it cannot be done read-only. Your original files and stored evidence are never touched. Takes a few minutes on a large archive. Writes fixed-point-check.md to ~/Documents/EvalBaselines/.")
@@ -1355,6 +1374,7 @@ public struct SettingsView: View {
     @State private var moduleFlagsVersion = 0
     // I-7 — accuracy on your archive.
     @State private var selfScoreRunning = false
+    @State private var scaleRunSummary: String?
     @State private var selfScoreCard: ArchiveScorecard?
     // True while a regime change is rebuilding the topic layer in the background.
     @State private var regimeRebuildRunning = false
