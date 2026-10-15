@@ -240,7 +240,8 @@ public struct IMessageStructuralParser: StructuralParser {
 nonisolated enum TypedStreamText {
     static func firstString(_ data: Data) -> String? {
         let bytes = [UInt8](data)
-        guard bytes.count > 16, let header = String(bytes: bytes.prefix(16), encoding: .ascii), header.contains("streamtyped") else { return nil }
+        // The header holds non-ASCII bytes (e.g. 0x81) next to the "streamtyped" magic, so search bytes, not a decoded string.
+        guard bytes.count > 16, find(Array("streamtyped".utf8), in: Array(bytes.prefix(24))) != nil else { return nil }
         let marker = Array("NSString".utf8)
         guard let at = find(marker, in: bytes) else { return nil }
         var i = at + marker.count
