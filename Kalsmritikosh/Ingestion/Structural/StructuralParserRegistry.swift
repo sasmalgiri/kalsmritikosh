@@ -51,24 +51,29 @@ public struct StructuralParserRegistry: Sendable {
         AmcacheStructuralParser(),         // HOST-6c — Windows Amcache inventory
         MFTStructuralParser(),             // HOST-5 — NTFS master file table
         JumpListStructuralParser(),        // HOST-6b — Windows jump lists
-        PrefetchStructuralParser(),        // HOST-6d — Windows prefetch (.pf)
-        SafariHistoryStructuralParser(),   // W4-2 — Safari History.db (behind “More file types”)
-        ChromeHistoryStructuralParser(),   // W4-2 — Chrome History
-        IMessageStructuralParser(),        // W4-2 — Messages chat.db
-        KeynoteStructuralParser()          // W4-2 — Keynote .key (IWA, partial)
+        PrefetchStructuralParser()         // HOST-6d — Windows prefetch (.pf)
     ]
+
+    /// W4-2 — parsers behind the "More file types" switch. Registered ONLY while the switch is on,
+    /// so with it off these formats keep exactly their previous path (legacy loaders / preserved-only).
+    /// The registry is built at launch: turning the switch on or off takes effect at the next launch.
+    static var extraParsers: [StructuralParser] {
+        guard ProductModuleFlags.isEnabled(.extraParsers) else { return [] }
+        return [SafariHistoryStructuralParser(), ChromeHistoryStructuralParser(),
+                IMessageStructuralParser(), KeynoteStructuralParser()]
+    }
 
     /// The default v1 registry — every format with a dependency-free structural
     /// parser. Formats not listed here fall back to the legacy path. Use
     /// `standard(ocr:)` to additionally get OCR-backed formats (PDF, images).
-    public static let standard = StructuralParserRegistry(parsers: selfContainedParsers)
+    public static var standard: StructuralParserRegistry { StructuralParserRegistry(parsers: selfContainedParsers + extraParsers) }
 
     /// The full registry including formats that require an OCR engine: PDF
     /// (native page text with a per-page OCR fallback for scanned pages) and
     /// images (Vision OCR → text + table blocks). The app wires this with its
     /// real `VisionOCR`; tests that don't need OCR use `.standard`.
     public static func standard(ocr: any OCREngine) -> StructuralParserRegistry {
-        StructuralParserRegistry(parsers: selfContainedParsers + [
+        StructuralParserRegistry(parsers: selfContainedParsers + extraParsers + [
             PDFStructuralParser(ocr: ocr),
             ImageStructuralParser(ocr: ocr)
         ])

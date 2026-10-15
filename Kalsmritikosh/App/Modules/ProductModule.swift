@@ -62,6 +62,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         public var requiresOnline: Bool = false
         public var requiresAI: Bool = false
         public var dependsOn: [ProductModule] = []
+        /// Built but not yet verified on real data or hardware: unavailable unless
+        /// "Show preview features" is on, and never part of a role preset.
+        public var preview: Bool = false
     }
 
     public var spec: Spec {
@@ -286,15 +289,15 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         whenOff: "Ask from the main window only.",
                         implemented: true)
         case .imageIntelligence:
-            return Spec(planID: "N-7", group: "Investigation", title: "Similar images and faces",
-                        detail: "Find copies and crops of a photo across your archive. Face grouping is a separate choice inside this module; groups are named by you and the app never claims who a person is.",
+            return Spec(planID: "N-7", group: "Investigation", title: "Similar images",
+                        detail: "Find copies and crops of a photo across your archive, on this Mac. Face grouping is not part of this version.",
                         whenOff: "Images are searchable by their text only.",
                         implemented: true)
         case .locationMap:
             return Spec(planID: "N-8", group: "Investigation", title: "Places",
                         detail: "Photo locations and addresses found in documents, as a list with coordinates. Nothing is looked up online; in Online mode a place can be handed to Apple Maps.",
                         whenOff: "Not shown.",
-                        implemented: true)
+                        implemented: true, preview: true)
         case .notesImport:
             return Spec(planID: "N-9", group: "Integration", title: "Import notes apps",
                         detail: "Read Obsidian vaults (links between notes become relations), Notion exports and notes exported from Apple Notes.",
@@ -329,7 +332,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .extraParsers:
             return Spec(planID: "W4-2", group: "Reading files", title: "More file types",
-                        detail: "Keynote, older PowerPoint, Messages history, Safari and Chrome history, and 7z/RAR archives where a licence-clean reader exists.",
+                        detail: "Reads Messages history, Safari and Chrome history, and Keynote text (partial). Older PowerPoint and 7z/RAR are not read yet. Takes effect the next time the app starts.",
                         whenOff: "These files are kept but not read.",
                         implemented: true)
         case .mailRecovery:
@@ -341,7 +344,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W4-4", group: "Sharing", title: "Team review over a shared folder",
                         detail: "Reviewers work on one case through a shared folder with signed logs; tampering is reported at the exact entry. No server.",
                         whenOff: "Single-user cases.",
-                        implemented: true)
+                        implemented: true, preview: true)
 
         // ── Wave O ───────────────────────────────────────────────────────
         case .onlineAnswers:
@@ -391,6 +394,7 @@ nonisolated public enum ProductModuleFlags {
     public nonisolated static func disabledReason(_ m: ProductModule) -> String? {
         let s = m.spec
         guard s.implemented else { return "Coming in a later build (\(s.planID))" }
+        if s.preview, !showPreviewFeatures { return "Preview — not yet verified; turn on “Show preview features” to try it" }
         if s.requiresOnline {
             if !ConnectivityMode.onlineAvailableInThisBuild { return "Online mode is not available in this build" }
             if ConnectivityMode.current != .online { return "Needs Online mode" }
@@ -404,6 +408,14 @@ nonisolated public enum ProductModuleFlags {
         return nil
     }
 
+    static let showPreviewKey = "kalsmritikosh.product.showPreview"
+
+    /// Preview features (built, not yet verified on real data/hardware) are hidden unless this is on.
+    public nonisolated static var showPreviewFeatures: Bool {
+        get { UserDefaults.standard.bool(forKey: showPreviewKey) }
+        set { UserDefaults.standard.set(newValue, forKey: showPreviewKey) }
+    }
+
     public nonisolated static func setEnabled(_ m: ProductModule, _ on: Bool) {
         UserDefaults.standard.set(on, forKey: m.storageKey)
     }
@@ -414,3 +426,39 @@ nonisolated public enum ProductModuleFlags {
         return d.bool(forKey: m.storageKey)
     }
 }
+
+/// Role presets: choosing a role in onboarding or on Home switches ON the modules
+/// that role needs. A preset only turns modules on — it never turns off anything
+/// the person chose — and never includes preview modules.
+nonisolated public enum ModulePreset {
+    public static let everyone: [ProductModule] = [
+        .advancedSearchSyntax, .searchCoverageBadge, .userTags, .signedReceipts,
+        .corroborationMeter, .devilsAdvocate, .answerPath, .nearDuplicates, .annotations
+    ]
+
+    public static func modules(forPersona id: String) -> [ProductModule] {
+        let extra: [ProductModule]
+        switch id {
+        case "legal":
+            extra = [.reviewCoding, .issueChronology, .legalProduction, .caseSlices, .proofBundles, .gapMap, .exportFormats]
+        case "investigation":
+            extra = [.emailAuthenticity, .mailRecovery, .timelineGraph, .communicationAnalysis, .livingDossiers,
+                     .watchlists, .proactiveAlerts, .imageIntelligence]
+        case "journalism":
+            extra = [.liveFactCheck, .statementDrift, .gapMap, .proofBundles, .watchlists, .proactiveAlerts]
+        case "research":
+            extra = [.notesImport, .studioOutputs, .smartCollections, .exportFormats, .timeTravel]
+        case "devonthink":
+            extra = [.devonthinkImport, .sendToDevonthink, .smartCollections, .exportFormats, .captureExtensions]
+        default:
+            extra = []
+        }
+        return (everyone + extra).filter { !$0.spec.preview && $0.spec.implemented }
+    }
+
+    /// Switch on the persona's modules (never switches anything off).
+    public static func apply(persona id: String) {
+        for m in modules(forPersona: id) { ProductModuleFlags.setEnabled(m, true) }
+    }
+}
+

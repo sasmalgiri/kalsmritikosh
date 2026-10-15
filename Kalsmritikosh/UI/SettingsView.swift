@@ -1588,6 +1588,14 @@ public struct SettingsView: View {
         let groups = Dictionary(grouping: built, by: \.group)
         VStack(alignment: .leading, spacing: 10) {
             Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Toggle(isOn: Binding(get: { ProductModuleFlags.showPreviewFeatures },
+                                 set: { ProductModuleFlags.showPreviewFeatures = $0; moduleFlagsVersion &+= 1 })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show preview features")
+                    Text("Features that are built but not yet verified on real data or hardware (team review, places, iPhone/iPad snapshot). Use them knowing they may change.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
             ForEach(groups.keys.sorted(), id: \.self) { groupName in
                 VStack(alignment: .leading, spacing: 10) {
                     Text(groupName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -1602,7 +1610,7 @@ public struct SettingsView: View {
                             }
                         )) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(module.title)
+                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
                                 Text(module.detail)
                                     .font(.caption).foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -1712,7 +1720,8 @@ public struct SettingsView: View {
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
-                // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer.
+                // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
+                if ProductModuleFlags.showPreviewFeatures {
                 Toggle("Include original files in snapshots (so citations open on the device)", isOn: $snapshotIncludeOriginals)
                     .font(.caption)
                 HStack {
@@ -1727,6 +1736,7 @@ public struct SettingsView: View {
                     } label: {
                         Label("Check a snapshot…", systemImage: "checkmark.shield")
                     }
+                }
                 }
                 if let s = backupStatus {
                     Text(s).font(.caption).foregroundStyle(.secondary)

@@ -6,10 +6,9 @@
 //    • Similar images: a feature print per photo; photos whose prints are closer
 //      than the threshold are grouped (copies, resizes, crops). "Where else does
 //      this photo appear" ranks every photo by distance to one.
-//    • Faces: OFF until the user turns it on here. Faces are detected and grouped
-//      by appearance; groups are unnamed until the user names one, and a name is
-//      stored only as the user's own tag ("Face: <name>") on those documents. The
-//      app never claims who anyone is.
+//    • Faces: not in this version (owner decision 2026-10-15 — biometric grouping
+//      carries legal/policy risk for little gain in v1.1). No face is detected,
+//      grouped or stored.
 //  Prints are computed when asked and kept only for this window; nothing leaves the Mac.
 //
 
@@ -23,12 +22,6 @@ nonisolated struct ImageItem: Sendable, Hashable, Identifiable {
     let url: URL
 }
 
-nonisolated struct FaceSample: Sendable {
-    let objectID: UUID
-    let name: String
-    let print: FeaturePrintObservation
-}
-
 nonisolated enum ImageIntelligence {
     static func featurePrint(_ url: URL, region: NormalizedRect? = nil) async -> FeaturePrintObservation? {
         let scoped = url.startAccessingSecurityScopedResource()
@@ -36,12 +29,6 @@ nonisolated enum ImageIntelligence {
         var request = GenerateImageFeaturePrintRequest()
         if let region { request.regionOfInterest = region }
         return try? await request.perform(on: url)
-    }
-
-    static func faces(_ url: URL) async -> [NormalizedRect] {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        return ((try? await DetectFaceRectanglesRequest().perform(on: url)) ?? []).map(\.boundingBox)
     }
 
     /// Groups indices whose pairwise distance is below `threshold` (union–find over all pairs).
@@ -75,7 +62,6 @@ extension AppState {
 struct ImageIntelligenceView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("kalsmritikosh.faces.enabled") private var facesEnabled = false
 
     @State private var items: [ImageItem] = []
     @State private var prints: [UUID: FeaturePrintObservation] = [:]
@@ -83,18 +69,13 @@ struct ImageIntelligenceView: View {
     @State private var groups: [[ImageItem]] = []
     @State private var probe: UUID?
     @State private var ranked: [(ImageItem, Double)] = []
-    @State private var faceGroups: [[FaceSample]] = []
-    @State private var faceNames: [Int: String] = [:]
     @State private var progress: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Similar images and faces").font(.title3.bold())
+            Text("Similar images").font(.title3.bold())
             Text("Computed on this Mac. Nothing is uploaded.").font(.caption).foregroundStyle(.secondary)
-            TabView {
-                similarTab.tabItem { Text("Similar images") }
-                facesTab.tabItem { Text("Faces") }
-            }
+            similarTab
             HStack {
                 if let progress { Text(progress).font(.caption).foregroundStyle(.secondary) }
                 Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
@@ -136,33 +117,6 @@ struct ImageIntelligenceView: View {
         .padding(6)
     }
 
-    private var facesTab: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle("Group faces by appearance", isOn: $facesEnabled)
-            Text("Off by default. Groups are unnamed until you name one; a name is saved only as your own tag on those documents. The app never says who a person is.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if facesEnabled {
-                Button("Find and group faces") { Task { await computeFaces() } }.disabled(progress != nil || items.isEmpty)
-                List(Array(faceGroups.enumerated()), id: \.offset) { i, g in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Group \(i + 1) · \(g.count) faces").font(.caption.weight(.semibold))
-                            TextField("Name this group (optional)", text: Binding(get: { faceNames[i] ?? "" }, set: { faceNames[i] = $0 }))
-                                .frame(width: 200)
-                            Button("Save name as tag") { Task { await nameGroup(i) } }
-                                .disabled((faceNames[i] ?? "").trimmingCharacters(in: .whitespaces).isEmpty || appState.tagsRepository == nil)
-                        }
-                        Text(Set(g.map(\.name)).sorted().joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
-                    }
-                }
-                if appState.tagsRepository == nil {
-                    Text("Naming needs Tags switched on (Settings → Modules).").font(.caption2).foregroundStyle(.orange)
-                }
-            }
-        }
-        .padding(6)
-    }
-
     private func ensurePrints() async {
         var done = 0
         for item in items where prints[item.id] == nil {
@@ -195,32 +149,4 @@ struct ImageIntelligenceView: View {
         progress = nil
     }
 
-    private func computeFaces() async {
-        guard facesEnabled else { return }
-        var samples: [FaceSample] = []
-        for (n, item) in items.enumerated() {
-            for box in await ImageIntelligence.faces(item.url) {
-                if let p = await ImageIntelligence.featurePrint(item.url, region: box) {
-                    samples.append(FaceSample(objectID: item.id, name: item.name, print: p))
-                }
-            }
-            if n % 10 == 0 { progress = "Looking for faces… \(n)/\(items.count)" }
-        }
-        let idx = ImageIntelligence.group(count: samples.count, threshold: 0.6) { i, j in try? samples[i].print.distance(to: samples[j].print) }
-        faceGroups = idx.map { $0.map { samples[$0] } }
-        faceNames = [:]
-        progress = samples.isEmpty ? "No faces found." : nil
-    }
-
-    private func nameGroup(_ i: Int) async {
-        guard let tags = appState.tagsRepository, faceGroups.indices.contains(i),
-              let name = faceNames[i]?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return }
-        do {
-            let tag = try await tags.tag(named: "Face: \(name)")
-            for id in Set(faceGroups[i].map(\.objectID)) { try await tags.attach(tagID: tag, to: .object, id) }
-            progress = "Tagged \(Set(faceGroups[i].map(\.objectID)).count) document(s) “Face: \(name)”."
-        } catch {
-            KalsmritikoshLog.app.error("Face tag failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
 }
