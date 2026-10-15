@@ -229,7 +229,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .byteRangeItems:
             return Spec(planID: "W2-8", group: "Storage", title: "Very large items",
-                        detail: "A streamed record larger than the per-record budget is kept by byte range: its leading part is indexed with the exact range and marked partial, instead of being recorded as failed.",
+                        detail: "A message or record larger than the per-record budget is read by byte range: only its leading part is decoded (memory stays flat), indexed with the exact byte range and marked partial, instead of being recorded as failed.",
                         whenOff: "Very large items are recorded as too large.",
                         implemented: true)
 

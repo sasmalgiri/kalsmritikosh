@@ -176,9 +176,28 @@ public struct EmailLoader: StreamingIngestor {
         while start < data.count {
             let end = Self.nextMboxBoundary(data, after: start)
             defer { start = end }
-            guard let piece = Self.mboxPiece(data, from: start, to: end) else { continue }
+            // W2-8 — a message larger than the per-record budget is read by byte range: only its
+            // leading part (cut at a line end) is ever decoded, so memory stays flat; the record says
+            // exactly which bytes it holds. One record per message either way (positions unchanged).
+            var cutEnd = end
+            let oversized = end - start > budget.maxRecordBytes && ProductModuleFlags.isEnabled(.byteRangeItems)
+            if oversized { cutEnd = Self.lineCut(data, from: start, maxBytes: budget.maxRecordBytes) }
+            guard let piece = Self.mboxPiece(data, from: start, to: cutEnd) else { continue }
             defer { pieceIndex += 1 }
-            guard let ko = perMessageKO(from: piece, index: pieceIndex, url: url) else { continue }
+            guard var ko = perMessageKO(from: piece, index: pieceIndex, url: url) else { continue }
+            if oversized {
+                var meta = ko.metadata
+                meta["byteRangeStart"] = AnyCodable(.int(Int64(start)))
+                meta["byteRangeEnd"] = AnyCodable(.int(Int64(cutEnd)))
+                meta["recordTotalBytes"] = AnyCodable(.int(Int64(end - start)))
+                meta["partialReason"] = AnyCodable(.string(
+                    "Only bytes \(start)–\(cutEnd) of this message (\(end - start) bytes) are read; the whole message is kept with custody."))
+                ko = KnowledgeObject(id: ko.id, sourceFile: ko.sourceFile, sourceType: ko.sourceType,
+                                     content: String(ko.content.utf8.prefix(budget.maxRecordBytes)) ?? ko.content,
+                                     metadata: meta, entities: ko.entities, events: ko.events,
+                                     relationships: ko.relationships, summaries: ko.summaries,
+                                     confidence: ko.confidence, createdAt: ko.createdAt, updatedAt: ko.updatedAt)
+            }
             if let batch = batcher.add(ko) { try await emit(batch) }
         }
         if let rest = batcher.drain() { try await emit(rest) }
@@ -243,6 +262,21 @@ public struct EmailLoader: StreamingIngestor {
     }
 
     /// One mbox message's trimmed text, or nil when the slice is blank.
+    /// W2-8 — the last line end at or before `start + maxBytes` (never splits a line or a UTF-8 sequence).
+    nonisolated static func lineCut(_ data: Data, from start: Int, maxBytes: Int) -> Int {
+        let limit = min(data.count, start + maxBytes)
+        var i = limit
+        while i > start + maxBytes / 2 {
+            if data[data.startIndex + i - 1] == 0x0A { return i }
+            i -= 1
+        }
+        // No line end in the second half: back off to a UTF-8 character boundary.
+        var j = limit
+        while j > start, (data[data.startIndex + j - 1] & 0xC0) == 0x80 { j -= 1 }
+        if j > start, data[data.startIndex + j - 1] >= 0xC0 { j -= 1 }
+        return j
+    }
+
     nonisolated static func mboxPiece(_ data: Data, from start: Int, to end: Int) -> String? {
         let slice = data[(data.startIndex + start)..<(data.startIndex + end)]
         let messageString = String(data: slice, encoding: .utf8)
