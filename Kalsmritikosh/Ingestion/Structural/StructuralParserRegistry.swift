@@ -60,7 +60,7 @@ public struct StructuralParserRegistry: Sendable {
     static var extraParsers: [StructuralParser] {
         guard ProductModuleFlags.isEnabled(.extraParsers) else { return [] }
         return [SafariHistoryStructuralParser(), ChromeHistoryStructuralParser(),
-                IMessageStructuralParser(), KeynoteStructuralParser()]
+                IMessageStructuralParser(), KeynoteStructuralParser(), PPTStructuralParser()]
     }
 
     /// The default v1 registry — every format with a dependency-free structural

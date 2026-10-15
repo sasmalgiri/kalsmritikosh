@@ -345,7 +345,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .extraParsers:
             return Spec(planID: "W4-2", group: "Reading files", title: "More file types",
-                        detail: "Reads Messages history, Safari and Chrome history, and Keynote text (partial). Older PowerPoint and 7z/RAR are not read yet. Takes effect the next time the app starts.",
+                        detail: "Reads Messages history, Safari and Chrome history, PowerPoint 97–2003 (.ppt) and Keynote text (partial). Takes effect the next time the app starts.",
                         whenOff: "These files are kept but not read.",
                         implemented: true)
         case .mailRecovery:
