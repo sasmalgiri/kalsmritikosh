@@ -399,3 +399,18 @@ struct SevenZipAndPPTTests {
                          .init(slide: 2, kind: 2, text: "Speaker note")])
     }
 }
+
+@Suite("O-2 network helper")
+struct NetworkHelperTests {
+    @Test func helperIsEmbedded() {
+        // The test host is the built app: the helper must be bundled under Contents/Extensions.
+        #expect(ConnectivityMode.onlineAvailableInThisBuild)
+    }
+
+    @Test func refusesNonAllowlistedAndNonHTTPSDestinations() async {
+        for url in ["https://example.com/v1/messages", "http://api.anthropic.com/v1/messages", "https://api.anthropic.com.evil.test/x"] {
+            let req = OutboundHTTPRequest(url: url, headers: [:], body: Data())
+            await #expect(throws: NetworkHelperError.self) { _ = try await NetworkHelperClient.send(req) }
+        }
+    }
+}

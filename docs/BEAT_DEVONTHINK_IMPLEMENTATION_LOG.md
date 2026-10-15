@@ -29,7 +29,7 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | I-10 | `CaseSlice` — from a tag: redacted names + import fingerprints, dated events, 3 passages per document; PIIRedactor (emails, phones, listed terms); P-256 signature over sorted-key JSON; `CaseSliceView` exports and opens read-only with verify (Tools menu). Depends on tags | (this commit) |
 | I-12 | `dossierChanges` — per-subject last-opened time; documents that entered the ledger since then mentioning the subject + their dated events; strip in DossierView header | (this commit) |
 | O-1 | SHIP_DECISIONS change-control entry (owner decision 2026-10-15, written sign-off pending); release guard allows `network.client` ONLY in `KalsmritikoshNetwork/KalsmritikoshNetwork.entitlements`, never `network.server`, nothing in any other file | (this commit) |
-| O-2 | Helper sources `KalsmritikoshNetwork/` (XPC service: HTTPS POST to 3 allowlisted hosts, ephemeral session, no storage) + README of owner steps; `NetworkHelperClient` in the app — **target not created (owner step)** | (this commit) |
+| O-2 | **Done.** Target `KalsmritikoshNetworkHelper` (ExtensionKit, no UI, macOS 15.6 floor, code gated to macOS 26) embedded at `Contents/Extensions`; the app declares the `network-helper` extension point (`EX_ENABLE_EXTENSION_POINT_GENERATION`). Only the helper has `network.client` (build settings); the main app has none. `NetworkHelperClient` resumes once. Old `KalsmritikoshNetwork/` XPC sources retired. `release-configuration.sh` now finds the app by bundle ID and allows network ONLY in the helper target (negative-tested); `verify-no-network.sh` checks the helper plus every other embedded bundle — PASS on the built app. Tests: `NetworkHelperTests` | (this commit) |
 | O-3 | `ConnectivityMode` (W0-M) + always-visible Online bar with one-click Switch to Private | (this commit) |
 | O-4 | `OnlineCloudProvider` (Claude Messages API with fallbacks, OpenAI chat completions, Gemini generateContent), key in Keychain, registered in every build but eligible only when `OnlineSettings.cloudAllowed` (CapabilityRegistry.cloudEligible; generation only, never embeddings) and ranked first then | (this commit) |
 | O-5 | `OutboundConsent` sheet before every send (not switchable); schema **v143** `outbound_log` + `OutboundLogRepository`; "What was sent" viewer | (this commit) |
@@ -89,8 +89,8 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 | ID | Needed |
 |---|---|
 | O-1 | Approve the SHIP_DECISIONS change-control entry (Online mode) |
-| O-2 | Create the `KalsmritikoshNetwork` XPC service target in Xcode (network-client entitlement on the helper only) |
-| W1-5 | Add the `kalsmritikosh` URL type in Xcode (Info tab ▸ URL Types) |
+| O-2 | ~~Create the helper target~~ — done by the agent under the owner's 2026-10-15 grant |
+| W1-5 | ~~Add the `kalsmritikosh` URL type~~ — done by the agent (CFBundleURLTypes in Info.plist) |
 | W3-1 | A test DEVONthink database to verify the package layout |
 | W3-6 | Share / Safari extension targets in Xcode |
 | W0-A | DEVONthink trial + local model + API key; run DEVONthink's side of the benchmark |
@@ -100,12 +100,12 @@ to keep the tree building. Every feature is behind its `ProductModule` switch an
 
 - `MigrationMatrixTests` pins `latestVersion == 141`; it is now **144** (v142 user tags, v143 outbound log, v144 plan feature tables). Update the pin.
 - `PrivacyPostureTests` likely asserts the no-network promise; reconcile with O-1 (main app still has no network; only the helper may).
-- Online mode cannot be exercised end to end until the helper target exists (O-2 owner step); test the request builders/parsers and masker with recorded responses.
+- Online mode: the helper target now exists; a live send needs the user's own API key, so it is exercised with recorded responses and the allowlist/refusal tests.
 - O-7 nuance: when an online call fails, the answer pipeline's existing error handling still produces a deterministic answer; the banner says the online answer did not go through. Verify the answer itself is labelled accordingly.
 - Regenerate `MODULE_MATRIX.md` from `ModuleMatrixDocument.render()` and add a drift test.
 - Each built item: write the tests named in its "Done means" column.
 - W1-3: import receipts are written only for the Add-files path; the folder-watcher/bulk ingest path does not write one yet.
-- W1-5: links do nothing until the `kalsmritikosh` URL type is registered (owner step).
+- W1-5: the `kalsmritikosh` URL type is registered.
 - W3-7: opening a Spotlight result goes through `handleDeepLink`, which refuses when the Links module is off — decide whether Spotlight should bypass that.
 - W2-2: re-run mailin's published worked examples (Metaspike boundary, ValiMail ARC suite) against the port.
 - Search screen: a search with issues but zero hits shows the empty state, so the issues are not visible — check and fix.

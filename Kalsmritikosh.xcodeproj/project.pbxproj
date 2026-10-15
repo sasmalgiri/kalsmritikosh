@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B49084FE3080C75200D67076 /* KalsmritikoshNetworkHelper.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B47CBE6A3010B2DF0079FE03 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -14,10 +18,32 @@
 			remoteGlobalIDString = B4B18B3D2FD0E4B300840C82;
 			remoteInfo = Kalsmritikosh;
 		};
+		B49084FC3080C75200D67076 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4B18B362FD0E4B300840C82 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B49084F63080C75200D67076;
+			remoteInfo = KalsmritikoshNetworkHelper;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B49085033080C75200D67076 /* Embed ExtensionKit Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				B49084FE3080C75200D67076 /* KalsmritikoshNetworkHelper.appex in Embed ExtensionKit Extensions */,
+			);
+			name = "Embed ExtensionKit Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KalsmritikoshTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = KalsmritikoshNetworkHelper.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kalsmritikosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -29,12 +55,27 @@
 			);
 			target = B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */;
 		};
+		B49085023080C75200D67076 /* Exceptions for "KalsmritikoshNetworkHelper" folder in "KalsmritikoshNetworkHelper" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = KalsmritikoshTests;
+			sourceTree = "<group>";
+		};
+		B49084F83080C75200D67076 /* KalsmritikoshNetworkHelper */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B49085023080C75200D67076 /* Exceptions for "KalsmritikoshNetworkHelper" folder in "KalsmritikoshNetworkHelper" target */,
+			);
+			path = KalsmritikoshNetworkHelper;
 			sourceTree = "<group>";
 		};
 		B4B18B402FD0E4B300840C82 /* Kalsmritikosh */ = {
@@ -49,6 +90,13 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		B47CBE633010B2DF0079FE03 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B49084F43080C75200D67076 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -70,6 +118,7 @@
 			children = (
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
 				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
+				B49084F83080C75200D67076 /* KalsmritikoshNetworkHelper */,
 				B4B18B3F2FD0E4B300840C82 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -79,6 +128,7 @@
 			children = (
 				B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */,
 				B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */,
+				B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -109,6 +159,28 @@
 			productReference = B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B49084FF3080C75200D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshNetworkHelper" */;
+			buildPhases = (
+				B49084F33080C75200D67076 /* Sources */,
+				B49084F43080C75200D67076 /* Frameworks */,
+				B49084F53080C75200D67076 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B49084F83080C75200D67076 /* KalsmritikoshNetworkHelper */,
+			);
+			name = KalsmritikoshNetworkHelper;
+			packageProductDependencies = (
+			);
+			productName = KalsmritikoshNetworkHelper;
+			productReference = B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */;
+			productType = "com.apple.product-type.extensionkit-extension";
+		};
 		B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B4B18B492FD0E4B500840C82 /* Build configuration list for PBXNativeTarget "Kalsmritikosh" */;
@@ -116,10 +188,12 @@
 				B4B18B3A2FD0E4B300840C82 /* Sources */,
 				B4B18B3B2FD0E4B300840C82 /* Frameworks */,
 				B4B18B3C2FD0E4B300840C82 /* Resources */,
+				B49085033080C75200D67076 /* Embed ExtensionKit Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B49084FD3080C75200D67076 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
@@ -138,12 +212,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2660;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					B47CBE653010B2DF0079FE03 = {
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = B4B18B3D2FD0E4B300840C82;
+					};
+					B49084F63080C75200D67076 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 					B4B18B3D2FD0E4B300840C82 = {
 						CreatedOnToolsVersion = 26.5;
@@ -166,12 +243,20 @@
 			targets = (
 				B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */,
 				B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */,
+				B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		B47CBE643010B2DF0079FE03 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B49084F53080C75200D67076 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -195,6 +280,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B49084F33080C75200D67076 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B4B18B3A2FD0E4B300840C82 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -209,6 +301,11 @@
 			isa = PBXTargetDependency;
 			target = B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */;
 			targetProxy = B47CBE6A3010B2DF0079FE03 /* PBXContainerItemProxy */;
+		};
+		B49084FD3080C75200D67076 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */;
+			targetProxy = B49084FC3080C75200D67076 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -256,6 +353,100 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kalsmritikosh.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kalsmritikosh";
+			};
+			name = Release;
+		};
+		B49085003080C75200D67076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KalsmritikoshNetworkHelper/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = KalsmritikoshNetworkHelper;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshNetworkHelper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B49085013080C75200D67076 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KalsmritikoshNetworkHelper/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = KalsmritikoshNetworkHelper;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshNetworkHelper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -385,6 +576,7 @@
 		B4B18B4A2FD0E4B500840C82 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -433,6 +625,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EMIT_CONST_VALUES = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -442,6 +635,7 @@
 		B4B18B4B2FD0E4B500840C82 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -490,6 +684,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ENABLE_EMIT_CONST_VALUES = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -504,6 +699,15 @@
 			buildConfigurations = (
 				B47CBE6D3010B2DF0079FE03 /* Debug */,
 				B47CBE6E3010B2DF0079FE03 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B49084FF3080C75200D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshNetworkHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B49085003080C75200D67076 /* Debug */,
+				B49085013080C75200D67076 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

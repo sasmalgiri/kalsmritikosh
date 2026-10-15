@@ -39,7 +39,7 @@ nonisolated public enum ConnectivityMode: String, CaseIterable, Identifiable, Se
     private static let key = "kalsmritikosh.connectivity.mode"
 
     /// Name of the bundled network helper (an XPC service inside the app).
-    public static let networkHelperName = "KalsmritikoshNetwork.xpc"
+    public static let networkHelperName = "KalsmritikoshNetworkHelper.appex"
 
     /// The user's choice. Private when never set.
     public nonisolated static var stored: ConnectivityMode {
@@ -61,7 +61,7 @@ nonisolated public enum ConnectivityMode: String, CaseIterable, Identifiable, Se
     /// so it becomes true automatically when the helper target is added.
     public nonisolated static var onlineAvailableInThisBuild: Bool {
         let url = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/XPCServices", isDirectory: true)
+            .appendingPathComponent("Contents/Extensions", isDirectory: true)
             .appendingPathComponent(networkHelperName, isDirectory: true)
         return FileManager.default.fileExists(atPath: url.path)
     }

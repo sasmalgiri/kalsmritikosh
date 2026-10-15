@@ -9,8 +9,9 @@
 #
 # Checks (non-zero exit on the first failure):
 #   main app   — sandboxed; network.client NOT granted; network.server NOT granted
-#   helper     — if Contents/XPCServices/KalsmritikoshNetwork.xpc exists (Online mode, O-2):
+#   helper     — if Contents/Extensions/KalsmritikoshNetworkHelper.appex exists (Online mode, O-2):
 #                sandboxed; network.server NOT granted (network.client is its only job)
+#   others     — every other embedded .appex / .xpc: sandboxed, no network at all
 #   Info.plist — no NSAppTransportSecurity exceptions in either bundle
 set -uo pipefail
 
@@ -41,7 +42,12 @@ check_bundle() {
 }
 
 check_bundle "$APP" "main app" "no"
-HELPER="$APP/Contents/XPCServices/KalsmritikoshNetwork.xpc"
+HELPER="$APP/Contents/Extensions/KalsmritikoshNetworkHelper.appex"
+for other in "$APP"/Contents/Extensions/*.appex "$APP"/Contents/PlugIns/*.appex "$APP"/Contents/XPCServices/*.xpc; do
+  [ -d "$other" ] || continue
+  [ "$other" = "$HELPER" ] && continue
+  check_bundle "$other" "$(basename "$other")" "no"
+done
 if [ -d "$HELPER" ]; then
   check_bundle "$HELPER" "network helper" "yes"
   echo "Online mode is available in this build; Private mode never launches the helper."

@@ -32,7 +32,7 @@ any build until the network helper target exists (O-2), so nothing here is in ef
 > the user supplies their own API key for Anthropic, OpenAI or Google Gemini. Before any text is
 > sent, a consent screen shows the exact text, the destination host and its size; nothing is sent
 > without the user pressing Send. Network access is confined to a bundled XPC service
-> (KalsmritikoshNetwork) that may only make HTTPS requests to those three hosts; the main app has
+> (KalsmritikoshNetworkHelper) that may only make HTTPS requests to those three hosts; the main app has
 > no network entitlement. To test: Settings ▸ Modules ▸ Connection ▸ Online, enter a key, ask a
 > question, and observe the consent screen.
 
