@@ -19,6 +19,27 @@ nonisolated struct ScanItem: Identifiable, Sendable, Hashable {
 }
 
 extension AppState {
+    /// W4-1 — re-read every PDF whose structure came from an older parser version (once each).
+    func rereadScannedPDFs(progress: @escaping @MainActor (Int, Int) -> Void) async -> (reprocessed: Int, upToDate: Int, failed: Int) {
+        guard let database, let ingest else { return (0, 0, 0) }
+        let ids = ((try? await database.query("SELECT id FROM source_versions WHERE detected_type = 'pdf';", [])) ?? []).compactMap { $0.uuid(0) }
+        var done = 0, fresh = 0, failed = 0
+        for (i, id) in ids.enumerated() {
+            do {
+                switch try await ingest.reprocess(sourceVersionID: id) {
+                case .upToDate: fresh += 1
+                case .changedOutputRejected: failed += 1
+                default: done += 1
+                }
+            } catch {
+                failed += 1
+                KalsmritikoshLog.app.error("OCR re-read failed: \(error.localizedDescription, privacy: .public)")
+            }
+            progress(i + 1, ids.count)
+        }
+        return (done, fresh, failed)
+    }
+
     func scannedItems(limit: Int = 3000) async -> [ScanItem] {
         guard let database else { return [] }
         return ((try? await database.query("""
@@ -60,6 +81,9 @@ struct TextRecognitionView: View {
             }
             .frame(minHeight: 280)
             HStack {
+                Button(working ? "Working…" : "Re-read scanned PDFs at 300 dpi") { Task { await reread() } }
+                    .disabled(working)
+                    .help("Re-reads each PDF once with the improved text recognition; a page's text is replaced only if the new reading is not worse.")
                 Button(working ? "Working…" : "Save searchable PDF…") { Task { await makePDF() } }
                     .disabled(working || selection == nil)
                 if let status { Text(status).font(.caption).foregroundStyle(.secondary) }
@@ -71,6 +95,13 @@ struct TextRecognitionView: View {
         .padding(16)
         .frame(minWidth: 620, minHeight: 460)
         .task { items = await appState.scannedItems() }
+    }
+
+    private func reread() async {
+        working = true; defer { working = false }
+        let r = await appState.rereadScannedPDFs { done, total in status = "Re-reading \(done) of \(total)…" }
+        status = "Re-read \(r.reprocessed) PDF(s); \(r.upToDate) already up to date; \(r.failed) kept their earlier reading."
+        items = await appState.scannedItems()
     }
 
     private func makePDF() async {
