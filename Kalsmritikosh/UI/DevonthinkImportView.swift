@@ -11,7 +11,7 @@
 //  Not imported: DEVONthink's group tree and its own metadata, which live in
 //  DEVONthink's undocumented `.dtMeta` files; indexed (not imported) items, which
 //  live outside the package — add those folders in Sources directly. The package
-//  layout must be confirmed on a real DEVONthink database (owner step).
+//  layout is exercised against a simulated database (DevonthinkPackageTests).
 //
 
 import SwiftUI
@@ -43,6 +43,27 @@ nonisolated struct DevonthinkPackage: Sendable {
     /// Finder tags on a stored file.
     static func finderTags(_ url: URL) -> [String] {
         (try? url.resourceValues(forKeys: [.tagNamesKey]).tagNames) ?? []
+    }
+
+    /// Stored files on disk compared with the files the ledger holds (paths standardized).
+    struct Accounting: Sendable, Equatable {
+        let total: Int
+        let inLedger: Int
+        let missing: [String]          // file names not yet read, sorted
+
+        var summary: String {
+            missing.isEmpty
+                ? "All \(total) stored documents are in the ledger."
+                : "\(inLedger) of \(total) stored documents are in the ledger. Not yet read (\(missing.count)): "
+                    + missing.prefix(5).joined(separator: ", ") + (missing.count > 5 ? "…" : "")
+        }
+    }
+
+    func accounting(ledgerPaths: Set<String>) -> Accounting {
+        let onDisk = Set(files.map { $0.standardizedFileURL.path })
+        let inLedger = onDisk.intersection(ledgerPaths)
+        let missing = onDisk.subtracting(inLedger).map { ($0 as NSString).lastPathComponent }.sorted()
+        return Accounting(total: onDisk.count, inLedger: inLedger.count, missing: missing)
     }
 }
 
@@ -144,12 +165,6 @@ struct DevonthinkImportView: View {
     private func account() async {
         guard let pkg else { return }
         let ledger = await ledgerFiles()
-        let onDisk = Set(pkg.files.map { $0.standardizedFileURL.path })
-        let inLedger = onDisk.filter { ledger[$0] != nil }
-        let missing = onDisk.subtracting(inLedger)
-        accounting = missing.isEmpty
-            ? "All \(onDisk.count) stored documents are in the ledger."
-            : "\(inLedger.count) of \(onDisk.count) stored documents are in the ledger. Not yet read (\(missing.count)): "
-                + missing.prefix(5).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ") + (missing.count > 5 ? "…" : "")
+        accounting = pkg.accounting(ledgerPaths: Set(ledger.keys)).summary
     }
 }

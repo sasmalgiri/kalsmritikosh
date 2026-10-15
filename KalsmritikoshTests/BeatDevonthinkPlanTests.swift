@@ -414,3 +414,71 @@ struct NetworkHelperTests {
         }
     }
 }
+
+@Suite("W3-1 DEVONthink package (simulated .dtBase2)")
+struct DevonthinkPackageTests {
+    /// Builds a package shaped like DEVONthink's: stored files under Files.noindex/<type>/<bucket>/,
+    /// database metadata at the package root, a hidden file, and Finder tags on two files.
+    private func makePackage() throws -> URL {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("dt-\(UUID().uuidString)", isDirectory: true)
+        let pkg = base.appendingPathComponent("Research.dtBase2", isDirectory: true)
+        let fm = FileManager.default
+        for meta in ["DEVONthink-1.dtMeta", "DEVONthink-2.dtMeta", "Properties.plist"] {
+            try fm.createDirectory(at: pkg, withIntermediateDirectories: true)
+            try Data("meta".utf8).write(to: pkg.appendingPathComponent(meta))
+        }
+        let stored: [(String, String, [String])] = [
+            ("pdf/3", "Grant letter.pdf", ["patent", "2024"]),
+            ("md/a", "Meeting notes.md", ["meeting"]),
+            ("html/0", "Clipped page.html", []),
+            ("txt/f", "plain.txt", []),
+        ]
+        for (dir, name, tags) in stored {
+            let d = pkg.appendingPathComponent("Files.noindex/\(dir)", isDirectory: true)
+            try fm.createDirectory(at: d, withIntermediateDirectories: true)
+            let u = d.appendingPathComponent(name)
+            try Data("content of \(name)".utf8).write(to: u)
+            if !tags.isEmpty { try (u as NSURL).setResourceValue(tags, forKey: .tagNamesKey) }
+        }
+        try Data().write(to: pkg.appendingPathComponent("Files.noindex/pdf/.DS_Store"))
+        return pkg
+    }
+
+    @Test func opensOnlyStoredFilesNotMetadataOrHidden() throws {
+        let pkg = try makePackage()
+        defer { try? FileManager.default.removeItem(at: pkg.deletingLastPathComponent()) }
+        let p = try #require(DevonthinkPackage.open(pkg))
+        #expect(Set(p.files.map(\.lastPathComponent)) == ["Grant letter.pdf", "Meeting notes.md", "Clipped page.html", "plain.txt"])
+    }
+
+    @Test func rejectsNonPackages() throws {
+        let pkg = try makePackage()
+        defer { try? FileManager.default.removeItem(at: pkg.deletingLastPathComponent()) }
+        #expect(DevonthinkPackage.open(pkg.deletingLastPathComponent()) == nil)          // wrong extension
+        let noFiles = pkg.deletingLastPathComponent().appendingPathComponent("Empty.dtBase2", isDirectory: true)
+        try FileManager.default.createDirectory(at: noFiles, withIntermediateDirectories: true)
+        #expect(DevonthinkPackage.open(noFiles) == nil)                                  // no Files.noindex
+    }
+
+    @Test func readsFinderTags() throws {
+        let pkg = try makePackage()
+        defer { try? FileManager.default.removeItem(at: pkg.deletingLastPathComponent()) }
+        let p = try #require(DevonthinkPackage.open(pkg))
+        let byName = Dictionary(uniqueKeysWithValues: p.files.map { ($0.lastPathComponent, Set(DevonthinkPackage.finderTags($0))) })
+        #expect(byName["Grant letter.pdf"] == ["patent", "2024"])
+        #expect(byName["Meeting notes.md"] == ["meeting"])
+        #expect(byName["plain.txt"] == [])
+    }
+
+    @Test func accountingNamesWhatIsNotYetRead() throws {
+        let pkg = try makePackage()
+        defer { try? FileManager.default.removeItem(at: pkg.deletingLastPathComponent()) }
+        let p = try #require(DevonthinkPackage.open(pkg))
+        let read = Set(p.files.filter { $0.pathExtension != "txt" && $0.pathExtension != "html" }.map { $0.standardizedFileURL.path })
+        let a = p.accounting(ledgerPaths: read.union(["/elsewhere/other.pdf"]))
+        #expect(a == .init(total: 4, inLedger: 2, missing: ["Clipped page.html", "plain.txt"]))
+        #expect(a.summary.hasPrefix("2 of 4 stored documents are in the ledger. Not yet read (2): Clipped page.html, plain.txt"))
+        let all = p.accounting(ledgerPaths: Set(p.files.map { $0.standardizedFileURL.path }))
+        #expect(all.summary == "All 4 stored documents are in the ledger.")
+    }
+}
