@@ -181,8 +181,11 @@ enum GuideContent {
             ("Distill memory", "Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it."),
             ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.")
         ]
+        // O-3 — Private is the default; Online is opt-in with the user's own key.
+        items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with your own Claude, OpenAI or Gemini key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))
+        items.append(("Modules", "Every feature is a switch in Settings → Modules. Switched-off features disappear; stand-alone tools appear in the sidebar Tools menu while switched on."))
         #if DEBUG
-        items.append(("Allow cloud providers (dev builds)", "Dev-only toggle. Release builds have no cloud path at all — every file, question, and answer stays on your Mac."))
+        items.append(("Allow cloud providers (dev builds)", "Dev-only toggle for developer cloud testing; separate from Online mode."))
         #endif
         items.append(("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
         items.append(("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
@@ -215,6 +218,18 @@ enum GuideContent {
             ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
             ("Transcription", "Turns audio and video into text, fully on-device (Apple Speech, English). Runs while importing when \u{201C}Transcribe audio & video\u{201D} is on (the default); turn it off for faster imports.")
+        ]),
+        // W4-8 — switcher map; full page in docs/COMING_FROM_DEVONTHINK.md.
+        ("Coming from DEVONthink", "arrow.left.arrow.right", [
+            ("Your database", "Tools → Import a DEVONthink database reads the documents stored in a .dtBase2 where they are, and turns Finder tags into tags. Groups are not read; add indexed folders in Sources."),
+            ("Groups", "Use tags, smart collections or case slices — a document can carry many tags."),
+            ("Smart groups / rules", "Tools → Smart collections and rules. Collections stay up to date; a rule is saved only after a dry run."),
+            ("See Also", "The corroboration meter and near-duplicates: how many independent sources support a fact."),
+            ("Annotations", "Highlights and notes, stored beside the source and never written into it."),
+            ("Item links", "kalsmritikosh:// links open the exact passage."),
+            ("Stamps / Bates", "Tools → Production sets: Bates PDFs, load files, privilege log and legal holds."),
+            ("Sync", "None, by design. Team review uses a shared folder with signed logs."),
+            ("AI chat", "Ask answers only from your documents, each claim cited; conflicts are shown, never averaged.")
         ]),
         // RC-2 — the 1.2 roadmap, linked from Help (direction, not dates).
         ("What's next (1.2)", "map", [
