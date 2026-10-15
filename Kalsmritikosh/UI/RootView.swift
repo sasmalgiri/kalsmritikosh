@@ -341,7 +341,7 @@ public struct RootView: View {
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     @State private var showImportQueue = false   // W1-9
-    @State private var openTool: ToolSheet?       // plan tools menu
+    @State private var openTool: ToolHub?         // plan tools menu (grouped)
     /// D-10 — set when a palette/menu entry targets a Settings group; the
     /// router hands it to SettingsView, which expands + scrolls + flashes.
     @State private var pendingSettingsAnchor: SettingsAnchor?
@@ -707,10 +707,10 @@ public struct RootView: View {
                     }
                 }
                 // Plan tools — one menu listing only the tools whose module is on.
-                if !ToolSheet.available.isEmpty {
+                if !ToolHub.available.isEmpty {
                     Menu {
-                        ForEach(ToolSheet.available) { tool in
-                            Button { openTool = tool } label: { Label(tool.title, systemImage: tool.symbol) }
+                        ForEach(ToolHub.available) { hub in
+                            Button { openTool = hub } label: { Label(hub.title, systemImage: hub.symbol) }
                         }
                     } label: {
                         Label("Tools", systemImage: "wrench.and.screwdriver").frame(maxWidth: .infinity)
@@ -719,7 +719,7 @@ public struct RootView: View {
                     .controlSize(.small)
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
-                    .sheet(item: $openTool) { $0.view }
+                    .sheet(item: $openTool) { ToolHubView(hub: $0) }
                 }
                 // W1-9 — the queue for added files.
                 if ProductModuleFlags.isEnabled(.importQueue), !appState.importQueue.items.isEmpty {

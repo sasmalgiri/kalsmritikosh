@@ -113,3 +113,84 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         }
     }
 }
+
+/// The Tools menu groups related tools into one window with tabs, so the menu
+/// stays short (about ten entries) however many modules are switched on. A hub
+/// appears only when at least one of its tools is on; a hub with one tool opens
+/// that tool directly.
+enum ToolHub: String, Identifiable, CaseIterable {
+    case legal, watch, people, emailForensics, writing, documents, bringIn, export, team
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .legal: return "Legal review"
+        case .watch: return "Watch & alerts"
+        case .people: return "People & connections"
+        case .emailForensics: return "Email forensics"
+        case .writing: return "Writing & checking"
+        case .documents: return "Documents"
+        case .bringIn: return "Bring documents in"
+        case .export: return "Export"
+        case .team: return "Team review"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .legal: return "scalemass"
+        case .watch: return "bell.badge"
+        case .people: return "person.2.wave.2"
+        case .emailForensics: return "envelope.badge.shield.half.filled"
+        case .writing: return "text.badge.checkmark"
+        case .documents: return "doc.on.doc"
+        case .bringIn: return "tray.and.arrow.down"
+        case .export: return "square.and.arrow.up.on.square"
+        case .team: return "person.2.badge.key"
+        }
+    }
+
+    var tools: [ToolSheet] {
+        switch self {
+        case .legal: return [.reviewCoding, .chronology, .legalProduction, .caseSlices]
+        case .watch: return [.alerts, .watchlists, .smartCollections]
+        case .people: return [.graph, .communication, .places]
+        case .emailForensics: return [.emailAuthenticity, .mailRecovery]
+        case .writing: return [.factCheck, .statementDrift, .highlights, .studio]
+        case .documents: return [.nearDuplicates, .textRecognition, .images, .customTypes]
+        case .bringIn: return [.devonthink, .notesImport, .capture]
+        case .export: return [.exportCenter]
+        case .team: return [.teamReview]
+        }
+    }
+
+    @MainActor var availableTools: [ToolSheet] {
+        let on = Set(ToolSheet.available)
+        return tools.filter(on.contains)
+    }
+
+    @MainActor static var available: [ToolHub] { allCases.filter { !$0.availableTools.isEmpty } }
+}
+
+struct ToolHubView: View {
+    let hub: ToolHub
+    @State private var selection: ToolSheet?
+
+    var body: some View {
+        let tools = hub.availableTools
+        if tools.count == 1, let only = tools.first {
+            only.view
+        } else {
+            TabView(selection: $selection) {
+                ForEach(tools) { tool in
+                    tool.view
+                        .tabItem { Label(tool.title, systemImage: tool.symbol) }
+                        .tag(Optional(tool))
+                }
+            }
+            .frame(minWidth: 820, minHeight: 600)
+            .onAppear { if selection == nil { selection = tools.first } }
+        }
+    }
+}

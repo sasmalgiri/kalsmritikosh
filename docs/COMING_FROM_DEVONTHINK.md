@@ -4,12 +4,12 @@ This page is for people who already keep their documents in DEVONthink. It shows
 
 The short version: **DEVONthink is a place to keep and organise documents. Kalsmritikosh reads the documents you already keep and builds a record of what they say** — who, what, when, which source — so you can ask questions and get answers that cite the exact passage.
 
-Most features below are switches. Find them in **Settings → Modules**; switched-off features disappear from the app. Stand-alone tools appear in the sidebar **Tools** menu while their switch is on.
+Most features below are switches. Find them in **Settings → Modules**; switched-off features disappear from the app. Stand-alone tools appear in the sidebar **Tools** menu, grouped into a few windows with tabs, while their switch is on.
 
 ## Bringing your DEVONthink database across
 
-1. Switch on **Import a DEVONthink database** (Settings → Modules).
-2. Open **Tools → Import a DEVONthink database** and choose your `.dtBase2` file.
+1. Switch on **Import a DEVONthink database** (Settings → Modules), or tick *I'm coming from DEVONthink* during onboarding — that switches on the import and smart-collection tools for you.
+2. Open **Tools → Bring documents in → Import a DEVONthink database** and choose your `.dtBase2` file.
 3. Press **Add and read**. Kalsmritikosh reads the documents stored inside the database where they are. Nothing is copied out and nothing is written into the database, so DEVONthink keeps working exactly as before.
 4. Press **Apply Finder tags** to turn your tags into Kalsmritikosh tags.
 5. Press **Check every file is accounted for** when reading finishes.
@@ -26,7 +26,7 @@ What does not come across:
 | Database | Your sources (folders you add in **Sources**) plus one ledger | Files stay where they are; Kalsmritikosh never moves or copies your originals. |
 | Group | Tags, smart collections or case slices | No folder tree inside the app; a document can carry many tags. |
 | Tag | Tags (**Tags** switch) | Rename and merge tags without losing links. |
-| Smart group | Smart collection (**Tools → Smart collections and rules**) | Uses the search syntax, e.g. `type:email org:acme after:2024-01-01 "invoice"`. Counts stay up to date while open. |
+| Smart group | Smart collection (**Tools → Watch & alerts**) | Uses the search syntax, e.g. `type:email org:acme after:2024-01-01 "invoice"`. Counts stay up to date while open. |
 | Smart rule | Rule (same tool) | "When a new document matches → tag it / alert me". A rule can be saved only after a dry run shows what it would match. |
 | Search with operators | Search with the search syntax (**Advanced search syntax**) | `type:`, `file:`, `before:`, `after:`, `entity:`/`person:`/`org:`, `tag:`, quotes, `-` to exclude. A badge shows how much of your archive the search covered. |
 | See Also / Classify | Corroboration meter, related entities, near-duplicates | Instead of "similar documents", answers say how many *independent* sources support a fact. |
@@ -42,7 +42,7 @@ What does not come across:
 | Stamps and Bates numbering | **Production sets** | Bates-numbered PDFs, Concordance/Relativity load files, privilege log, and legal holds that block deletion. |
 | Encrypted database | **Lock with Touch ID** + FileVault | Whole-database encryption is an open decision. |
 | Web clipper / Sorter | **Share and capture** | Drop or paste into the capture window; each item gets a custody record. Share-menu and Safari extensions are planned. |
-| Sync | None, by design | Team work uses **Team review over a shared folder** — signed logs, no server. |
+| Sync | None, by design | Team work uses **Team review over a shared folder** (preview) — signed logs, no server. |
 | DEVONthink To Go | Not yet | A read-only iPhone/iPad viewer from a signed snapshot is planned. |
 
 ## What Kalsmritikosh adds
@@ -59,4 +59,4 @@ What does not come across:
 - It is not a document editor or a writing environment.
 - It does not sync between your devices.
 - It does not keep a group hierarchy.
-- It does not read Keynote, PowerPoint 97–2003 or 7z/RAR contents yet; those files are kept but not read.
+- It does not read PowerPoint 97–2003 or 7z/RAR contents yet; those files are kept but not read. Keynote text is read in part (with **More file types** on).
