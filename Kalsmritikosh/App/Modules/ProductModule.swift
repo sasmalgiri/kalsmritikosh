@@ -189,7 +189,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .specPSTReader:
             return Spec(planID: "W2-3", group: "Email evidence", title: "Outlook PST reader (MS-PST)",
                         detail: "Reads Outlook PST and OST files by Microsoft's published format: every folder, message, recipient and attachment.",
-                        whenOff: "The current PST reader is used.")
+                        whenOff: "The current PST reader is used.",
+                        implemented: true)
         case .nearDuplicates:
             return Spec(planID: "W2-4", group: "Search & organise", title: "Near-duplicates",
                         detail: "Links drafts, forwards and re-saved copies as versions of one another. Nothing is merged or deleted.",

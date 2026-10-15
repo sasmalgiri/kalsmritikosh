@@ -32,7 +32,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | I-12 | Living dossiers | Investigation | yes | off | — | Dossiers are built when opened, without the since-last-time strip. |
 | W2-1 | Highlights and notes | Writing | yes | off | — | Highlights are hidden but kept. |
 | W2-2 | Email authenticity checks | Email evidence | yes | off | — | Emails are read as before; no authenticity result. |
-| W2-3 | Outlook PST reader (MS-PST) | Email evidence | not yet | off | — | The current PST reader is used. |
+| W2-3 | Outlook PST reader (MS-PST) | Email evidence | yes | off | — | The current PST reader is used. |
 | W2-4 | Near-duplicates | Search & organise | yes | off | — | Exact duplicates only. |
 | W2-5 | Production sets | Legal | yes | off | — | Exports without Bates numbers or load files; holds are kept but not enforced. |
 | W2-6 | More export formats | Sharing | yes | off | — | The current export formats. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_51 of 54 product modules built._
+_52 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 
