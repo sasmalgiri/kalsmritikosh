@@ -11,7 +11,8 @@
 //
 //  Each emits a header, then one dated, readable sentence per visit / message,
 //  capped with a stated warning. Messages whose text exists only in the
-//  `attributedBody` archive are counted and reported, not silently dropped.
+//  `attributedBody` typedstream archive are decoded byte-wise (no archived class
+//  is ever instantiated); any that cannot be decoded are counted and reported.
 //  Read-only on a private copy, deterministic, offline. Behind the "More file
 //  types" switch: when it is off the file is reported as kept but not read.
 //
@@ -189,7 +190,7 @@ public struct IMessageStructuralParser: StructuralParser {
                 ? "(SELECT COALESCE(NULLIF(c.display_name, ''), c.chat_identifier) FROM chat_message_join j JOIN chat c ON c.ROWID = j.chat_id WHERE j.message_id = m.ROWID LIMIT 1)"
                 : "NULL"
             let rows = try db.query("""
-                SELECT m.text, m.date, m.is_from_me, h.id, \(chatColumn), (m.attributedBody IS NOT NULL)
+                SELECT m.text, m.date, m.is_from_me, h.id, \(chatColumn), m.attributedBody
                 FROM message m LEFT JOIN handle h ON h.ROWID = m.handle_id
                 ORDER BY m.date LIMIT \(Self.cap);
                 """)
@@ -200,8 +201,13 @@ public struct IMessageStructuralParser: StructuralParser {
             b.add(.documentHeader, header, path: [], attributes: ["messageCount": AnyCodable(.int(Int64(rows.count)))])
             for (i, r) in rows.enumerated() {
                 guard r.cells.count >= 6 else { continue }
-                guard let text = r.cells[0].string, !text.isEmpty else {
-                    if (r.cells[5].int64 ?? 0) != 0 { withoutText += 1 }
+                // Newer macOS keeps the text only in attributedBody (a typedstream archive).
+                var fromArchive = false
+                let plain = r.cells[0].string.flatMap { $0.isEmpty ? nil : $0 }
+                let archived = plain == nil ? r.cells[5].data.flatMap(TypedStreamText.firstString) : nil
+                if archived != nil { fromArchive = true }
+                guard let text = plain ?? archived, !text.isEmpty else {
+                    if r.cells[5].data != nil { withoutText += 1 }
                     continue
                 }
                 let when = AppleEpoch.date(fromAppleSecondsOrNanoseconds: r.cells[1].double)
@@ -212,17 +218,52 @@ public struct IMessageStructuralParser: StructuralParser {
                 var attrs: [String: AnyCodable] = ["direction": AnyCodable(.string(fromMe ? "sent" : "received")),
                                                    "participant": AnyCodable(.string(other))]
                 if let chat { attrs["chat"] = AnyCodable(.string(chat)) }
+                if fromArchive { attrs["textSource"] = AnyCodable(.string("attributedBody")) }
                 if let when { attrs["timestamp"] = AnyCodable(.string(SQLiteAdapterSupport.iso.string(from: when))) }
                 b.add(.logRecord, "\(when.map { SQLiteAdapterSupport.iso.string(from: $0) } ?? "no recorded time") \(who)\(chat.map { " [\($0)]" } ?? ""): \(text)",
                       path: [chat ?? other, String(i)], attributes: attrs)
             }
             if withoutText > 0 {
                 b.warnings.append(ParserWarning(severity: .warning, code: "imessage.attributed_body_only",
-                    message: "\(withoutText) message(s) store their text only in the attributedBody archive and are not yet read."))
+                    message: "\(withoutText) message(s) have an attributedBody archive whose text could not be decoded."))
             }
             if rows.count >= Self.cap {
                 b.warnings.append(ParserWarning(severity: .warning, code: "imessage.cap", message: "Stopped after \(Self.cap) messages."))
             }
         }
+    }
+}
+
+/// The message string inside an Apple typedstream `attributedBody` (NSAttributedString archive),
+/// read byte-wise without instantiating any archived class: after the `NSString` class name the
+/// archive holds `+` followed by a length (1 byte; 0x81 + 2 bytes LE; 0x82 + 4 bytes LE) and UTF-8.
+nonisolated enum TypedStreamText {
+    static func firstString(_ data: Data) -> String? {
+        let bytes = [UInt8](data)
+        guard bytes.count > 16, let header = String(bytes: bytes.prefix(16), encoding: .ascii), header.contains("streamtyped") else { return nil }
+        let marker = Array("NSString".utf8)
+        guard let at = find(marker, in: bytes) else { return nil }
+        var i = at + marker.count
+        // Skip the class-version bytes up to the '+' that introduces the C string.
+        while i < bytes.count, i < at + marker.count + 8, bytes[i] != 0x2B { i += 1 }
+        guard i < bytes.count, bytes[i] == 0x2B else { return nil }
+        i += 1
+        guard i < bytes.count else { return nil }
+        var length = Int(bytes[i]); i += 1
+        if length == 0x81 {
+            guard i + 2 <= bytes.count else { return nil }
+            length = Int(bytes[i]) | Int(bytes[i + 1]) << 8; i += 2
+        } else if length == 0x82 {
+            guard i + 4 <= bytes.count else { return nil }
+            length = Int(bytes[i]) | Int(bytes[i + 1]) << 8 | Int(bytes[i + 2]) << 16 | Int(bytes[i + 3]) << 24; i += 4
+        }
+        guard length > 0, i + length <= bytes.count else { return nil }
+        return String(bytes: bytes[i..<(i + length)], encoding: .utf8)
+    }
+
+    private static func find(_ needle: [UInt8], in hay: [UInt8]) -> Int? {
+        guard needle.count <= hay.count else { return nil }
+        for i in 0...(hay.count - needle.count) where hay[i] == needle[0] && Array(hay[i..<(i + needle.count)]) == needle { return i }
+        return nil
     }
 }
