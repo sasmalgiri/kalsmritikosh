@@ -1785,7 +1785,7 @@ public actor IngestCoordinator {
                 bookkeeping.maxBatchContentBytes = max(bookkeeping.maxBatchContentBytes,
                                                        batch.reduce(0) { $0 + $1.content.utf8.count })
                 for raw in batch {
-                    let ko = Self.rebindingSourceFile(raw, to: url)
+                    var ko = Self.rebindingSourceFile(raw, to: url)
                     // The document class comes from the first record, as on the whole-file path.
                     if tally == nil {
                         docClass = classifier.classify(ContentDecoder().decode(cleaner.clean(ko)))
@@ -1803,7 +1803,22 @@ public actor IngestCoordinator {
                     // A record above the per-record budget is not processed: recorded as failed with the
                     // reason (custody kept) — raise the budget and retry to commit it.
                     let size = ko.content.utf8.count
-                    if size > budget.maxRecordBytes {
+                    // W2-8 — with "Very large items" on, keep the record by byte range instead: its first
+                    // budget's worth of text is committed with the exact range and an explicit partial mark.
+                    if size > budget.maxRecordBytes, ProductModuleFlags.isEnabled(.byteRangeItems),
+                       let head = LargeItemRange.head(of: ko.content, maxBytes: budget.maxRecordBytes) {
+                        var meta = ko.metadata
+                        meta["byteRangeStart"] = AnyCodable(.int(0))
+                        meta["byteRangeEnd"] = AnyCodable(.int(Int64(head.utf8.count)))
+                        meta["recordTotalBytes"] = AnyCodable(.int(Int64(size)))
+                        meta["partialReason"] = AnyCodable(.string(
+                            "Only bytes 0–\(head.utf8.count) of \(size) are indexed (per-record budget \(budget.maxRecordBytes)); the whole item is kept with custody."))
+                        ko = KnowledgeObject(id: ko.id, sourceFile: ko.sourceFile, sourceType: ko.sourceType, content: head,
+                                             metadata: meta, entities: ko.entities, events: ko.events,
+                                             relationships: ko.relationships, summaries: ko.summaries,
+                                             confidence: ko.confidence, createdAt: ko.createdAt, updatedAt: ko.updatedAt)
+                    }
+                    if ko.content.utf8.count > budget.maxRecordBytes {
                         failedRecords += 1; bookkeeping.oversizedRecords += 1
                         try? await outcomes?.beginAttempt(sourceVersionID: svid, position: position, objectID: ko.id, at: Date())
                         try? await outcomes?.fail(sourceVersionID: svid, position: position,

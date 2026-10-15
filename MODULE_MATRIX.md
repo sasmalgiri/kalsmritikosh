@@ -37,7 +37,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W2-5 | Production sets | Legal | yes | off | — | Exports without Bates numbers or load files; holds are kept but not enforced. |
 | W2-6 | More export formats | Sharing | yes | off | — | The current export formats. |
 | W2-7 | Lock with Touch ID | Storage | yes | off | — | No app lock; the Mac's own login protects the data. |
-| W2-8 | Very large items | Storage | not yet | off | — | Very large items are recorded as too large. |
+| W2-8 | Very large items | Storage | yes | off | — | Very large items are recorded as too large. |
 | W3-1 | Import a DEVONthink database | Integration | yes | off | — | DEVONthink databases are not recognised. |
 | W3-2 | Send to DEVONthink | Integration | yes | off | — | Not offered. |
 | W3-3 | Timeline and relationship views | Investigation | yes | off | — | Lists only. |
@@ -64,7 +64,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | not yet | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 
-_52 of 54 product modules built._
+_53 of 54 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

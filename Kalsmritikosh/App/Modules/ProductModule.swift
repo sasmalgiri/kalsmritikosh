@@ -213,8 +213,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .byteRangeItems:
             return Spec(planID: "W2-8", group: "Storage", title: "Very large items",
-                        detail: "Messages and attachments over 100 MB are read from the original file by byte range instead of being loaded whole.",
-                        whenOff: "Very large items are recorded as too large.")
+                        detail: "A streamed record larger than the per-record budget is kept by byte range: its leading part is indexed with the exact range and marked partial, instead of being recorded as failed.",
+                        whenOff: "Very large items are recorded as too large.",
+                        implemented: true)
 
         // ── Wave 3 ───────────────────────────────────────────────────────
         case .devonthinkImport:
