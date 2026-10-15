@@ -54,7 +54,8 @@ public struct StructuralParserRegistry: Sendable {
         PrefetchStructuralParser(),        // HOST-6d — Windows prefetch (.pf)
         SafariHistoryStructuralParser(),   // W4-2 — Safari History.db (behind “More file types”)
         ChromeHistoryStructuralParser(),   // W4-2 — Chrome History
-        IMessageStructuralParser()         // W4-2 — Messages chat.db
+        IMessageStructuralParser(),        // W4-2 — Messages chat.db
+        KeynoteStructuralParser()          // W4-2 — Keynote .key (IWA, partial)
     ]
 
     /// The default v1 registry — every format with a dependency-free structural
