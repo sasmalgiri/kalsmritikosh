@@ -4,6 +4,8 @@ This page is for people who already keep their documents in DEVONthink. It shows
 
 The short version: **DEVONthink is a place to keep and organise documents. Kalsmritikosh reads the documents you already keep and builds a record of what they say** — who, what, when, which source — so you can ask questions and get answers that cite the exact passage.
 
+**Use both.** Kalsmritikosh is built to work beside DEVONthink, not to replace it: keep organising in DEVONthink, and use Kalsmritikosh for what DEVONthink does not do — dated facts, cited answers, corroboration, gaps, email forensics, legal production. Features that DEVONthink already has (tags, smart collections, annotations, clipping, OCR, export formats and similar) start **switched off** in Kalsmritikosh; turn any of them on in Settings → Modules under *Also in DEVONthink*. Reading your DEVONthink database and sending answers back to DEVONthink are on from the start.
+
 Most features below are switches. Find them in **Settings → Modules**; switched-off features disappear from the app. Stand-alone tools appear in the sidebar **Tools** menu, grouped into a few windows with tabs, while their switch is on.
 
 ## Bringing your DEVONthink database across

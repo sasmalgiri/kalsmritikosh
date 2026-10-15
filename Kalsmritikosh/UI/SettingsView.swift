@@ -1585,7 +1585,10 @@ public struct SettingsView: View {
     private var productModulesSection: some View {
         let _ = moduleFlagsVersion
         let built = ProductModule.allCases.filter(\.implemented)
-        let groups = Dictionary(grouping: built, by: \.group)
+        // Companion positioning: what fills DEVONthink's gaps first; what DEVONthink already does
+        // is listed separately and stays off until switched on.
+        let groups = Dictionary(grouping: built.filter { !$0.alsoInDevonthink }, by: \.group)
+        let overlap = built.filter(\.alsoInDevonthink).sorted { $0.title < $1.title }
         VStack(alignment: .leading, spacing: 10) {
             Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             Toggle(isOn: Binding(get: { ProductModuleFlags.showPreviewFeatures },
@@ -1600,6 +1603,41 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(groupName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                        let reason = ProductModuleFlags.disabledReason(module)
+                        Toggle(isOn: Binding(
+                            get: { ProductModuleFlags.isEnabled(module) },
+                            set: {
+                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
+                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
+                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
+                                Text(module.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Off: \(module.spec.whenOff)")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let reason {
+                                    Label(reason, systemImage: "lock.fill")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .disabled(reason != nil)
+                    }
+                }
+            }
+            if !overlap.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Also in DEVONthink — off until you turn them on").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Kalsmritikosh works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    ForEach(overlap) { module in
                         let reason = ProductModuleFlags.disabledReason(module)
                         Toggle(isOn: Binding(
                             get: { ProductModuleFlags.isEnabled(module) },

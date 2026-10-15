@@ -2,7 +2,7 @@
 
 Kalsmritikosh reads the documents and email you already have, on your Mac, and builds a record of what they say: people and organisations, dated events, a timeline, and the exact passage each fact came from. You ask questions in plain language and get answers that cite their sources — or an honest "the documents don't say".
 
-Coming from DEVONthink? Read [Coming from DEVONthink](COMING_FROM_DEVONTHINK.md) first.
+Kalsmritikosh works beside DEVONthink: it reads your DEVONthink database in place, sends answers back to it, and adds what DEVONthink does not do. Features DEVONthink already has start switched off (Settings → Modules → *Also in DEVONthink*). Coming from DEVONthink? Read [Coming from DEVONthink](COMING_FROM_DEVONTHINK.md) first.
 
 ## 1. Getting started
 

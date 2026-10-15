@@ -49,6 +49,19 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
 
     public var id: String { rawValue }
 
+    /// Companion positioning (owner decision 2026-10-15): Kalsmritikosh works beside DEVONthink —
+    /// it fills DEVONthink's gaps and adds its own evidence features. Modules whose feature
+    /// DEVONthink already has stay OFF until the person turns them on, and no role preset
+    /// switches them on.
+    public static let alsoInDevonthinkSet: Set<ProductModule> = [
+        .advancedSearchSyntax, .userTags, .deepLinks, .shortcutsActions, .ledgerRelocation,
+        .annotations, .exportFormats, .appLock, .smartCollections, .captureExtensions,
+        .spotlightIndex, .timelineGraph, .notesImport, .menuBarAsk, .customEntityTypes,
+        .ocrUpgrade, .extraParsers
+    ]
+
+    public var alsoInDevonthink: Bool { Self.alsoInDevonthinkSet.contains(self) }
+
     /// Everything that describes one module, in one place.
     public struct Spec: Sendable {
         public let planID: String
@@ -225,12 +238,12 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W3-1", group: "Integration", title: "Import a DEVONthink database",
                         detail: "Read the files stored in a DEVONthink database in place, keeping its groups as collections and its tags. Nothing is written into the database.",
                         whenOff: "DEVONthink databases are not recognised.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .sendToDevonthink:
             return Spec(planID: "W3-2", group: "Integration", title: "Send to DEVONthink",
                         detail: "Send an answer to DEVONthink as a Markdown note with a link back to each quoted passage; when DEVONthink is not installed the note is shown in Finder.",
                         whenOff: "Not offered.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .timelineGraph:
             return Spec(planID: "W3-3", group: "Investigation", title: "Timeline and relationship views",
                         detail: "An interactive timeline and a graph of people and organisations; every point and line opens its evidence.",
@@ -429,11 +442,12 @@ nonisolated public enum ProductModuleFlags {
 
 /// Role presets: choosing a role in onboarding or on Home switches ON the modules
 /// that role needs. A preset only turns modules on — it never turns off anything
-/// the person chose — and never includes preview modules.
+/// the person chose — and never includes preview modules or modules whose feature
+/// DEVONthink already has (those stay off until the person turns them on).
 nonisolated public enum ModulePreset {
     public static let everyone: [ProductModule] = [
-        .advancedSearchSyntax, .searchCoverageBadge, .userTags, .signedReceipts,
-        .corroborationMeter, .devilsAdvocate, .answerPath, .nearDuplicates, .annotations
+        .searchCoverageBadge, .signedReceipts, .corroborationMeter, .devilsAdvocate,
+        .answerPath, .nearDuplicates, .gapMap, .devonthinkImport, .sendToDevonthink
     ]
 
     public static func modules(forPersona id: String) -> [ProductModule] {
@@ -449,11 +463,11 @@ nonisolated public enum ModulePreset {
         case "research":
             extra = [.notesImport, .studioOutputs, .smartCollections, .exportFormats, .timeTravel]
         case "devonthink":
-            extra = [.devonthinkImport, .sendToDevonthink, .smartCollections, .exportFormats, .captureExtensions]
+            extra = [.devonthinkImport, .sendToDevonthink, .proofBundles, .timeTravel, .livingDossiers]
         default:
             extra = []
         }
-        return (everyone + extra).filter { !$0.spec.preview && $0.spec.implemented }
+        return (everyone + extra).filter { !$0.spec.preview && $0.spec.implemented && !$0.alsoInDevonthink }
     }
 
     /// Switch on the persona's modules (never switches anything off).
