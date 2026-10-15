@@ -55,3 +55,39 @@ struct MenuBarAskView: View {
         #endif
     }
 }
+
+#if canImport(AppKit)
+/// N-6 — the menu-bar item, managed with AppKit (NSStatusItem + NSPopover) rather than a
+/// SwiftUI `MenuBarExtra` scene: an extra scene in the App body stopped the unit-test host
+/// from ever connecting to the test runner, even with the panel switched off. The item
+/// exists only while its module is on.
+@MainActor
+final class MenuBarAskController {
+    static let shared = MenuBarAskController()
+    private var item: NSStatusItem?
+    private let popover = NSPopover()
+
+    /// Show or remove the item to match the module switch.
+    func update(appState: AppState) {
+        let on = ProductModuleFlags.isEnabled(.menuBarAsk)
+        if on, item == nil {
+            let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+            status.button?.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: "Ask Kalsmritikosh")
+            status.button?.target = self
+            status.button?.action = #selector(toggle(_:))
+            popover.behavior = .transient
+            popover.contentViewController = NSHostingController(rootView: MenuBarAskView(appState: appState).padding(12))
+            item = status
+        } else if !on, let status = item {
+            popover.performClose(nil)
+            NSStatusBar.system.removeStatusItem(status)
+            item = nil
+        }
+    }
+
+    @objc private func toggle(_ sender: NSStatusBarButton) {
+        if popover.isShown { popover.performClose(sender) }
+        else { popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY); NSApp.activate() }
+    }
+}
+#endif

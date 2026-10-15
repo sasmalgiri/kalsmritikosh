@@ -68,6 +68,8 @@ struct KalsmritikoshApp: App {
                 } message: {
                     Text(appState.deepLinkMessage ?? "")
                 }
+                // N-6 — the menu-bar item follows its module switch (AppKit status item, not a scene).
+                .onChange(of: menuBarAskOn, initial: true) { _, _ in MenuBarAskController.shared.update(appState: appState) }
                 .task {
                     IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
                     #if DEBUG
@@ -112,11 +114,6 @@ struct KalsmritikoshApp: App {
                 Button("Delete All My Data…") { postPaletteEntry("act.deleteAllData") }
             }
         }
-        // N-6 — ask from anywhere (menu bar). Shown only while its module is on.
-        MenuBarExtra("Kalsmritikosh", systemImage: "text.magnifyingglass", isInserted: $menuBarAskOn) {
-            MenuBarAskView(appState: appState)
-        }
-        .menuBarExtraStyle(.window)
     }
 
     private func postPaletteEntry(_ id: String) {
