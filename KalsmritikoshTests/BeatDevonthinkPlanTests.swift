@@ -333,3 +333,69 @@ struct ImageGroupingTests {
         #expect(Set(groups.map { Set($0) }) == [Set([0, 1]), Set([2, 3])])
     }
 }
+
+// MARK: - W4-2 7z and PowerPoint 97–2003
+
+@Suite("W4-2 7z archives and legacy PowerPoint")
+struct SevenZipAndPPTTests {
+    private func fixture(_ name: String) throws -> Data {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Archives", isDirectory: true)
+        return try Data(contentsOf: dir.appendingPathComponent(name))
+    }
+
+    private func expected() throws -> [String: String] {
+        try JSONDecoder().decode([String: String].self, from: fixture("expected.json"))
+    }
+
+    @Test("A 7-Zip-layout archive (LZMA2 data, LZMA-encoded header) lists and extracts every member exactly",
+          arguments: ["sample-lzma2-encoded.7z", "sample-lzma-plain.7z"])
+    func readsArchive(_ name: String) throws {
+        let reader = try SevenZipReader(data: fixture(name), maxFolderBytes: 64 << 20)
+        #expect(reader.entries.map(\.name) == ["docs", "docs/a.txt", "b.txt", "empty.txt"])
+        #expect(reader.entries[0].isDirectory)
+        #expect(!reader.entries[3].isDirectory && reader.entries[3].size == 0)
+        let want = try expected()
+        for e in reader.entries where !e.isDirectory {
+            let bytes = try reader.extract(e)
+            let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+            #expect(digest == want[e.name], "\(name): \(e.name)")
+        }
+    }
+
+    @Test("A folder larger than the cap is refused, not decoded")
+    func capRefused() throws {
+        let data = try fixture("sample-lzma-plain.7z")       // plain header: the cap applies at extraction
+        let reader = try SevenZipReader(data: data, maxFolderBytes: 100)
+        #expect(throws: SevenZipError.tooLarge) { try reader.extract(reader.entries[1]) }
+        // With an encoded header the header itself is a capped folder: refused while opening.
+        #expect(throws: (any Error).self) { try SevenZipReader(data: try fixture("sample-lzma2-encoded.7z"), maxFolderBytes: 100) }
+    }
+
+    @Test("Not a 7z file is reported as such")
+    func notSevenZip() {
+        #expect(throws: SevenZipError.notSevenZip) { try SevenZipReader(data: Data("PK\u{3}\u{4}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".utf8), maxFolderBytes: 1 << 20) }
+    }
+
+    /// One PowerPoint record: 8-byte header (version/instance, type, length) + body.
+    private func rec(_ verInst: UInt16, _ type: UInt16, _ body: [UInt8]) -> [UInt8] {
+        var h: [UInt8] = [UInt8(verInst & 0xFF), UInt8(verInst >> 8), UInt8(type & 0xFF), UInt8(type >> 8)]
+        let n = UInt32(body.count)
+        h += [UInt8(n & 0xFF), UInt8((n >> 8) & 0xFF), UInt8((n >> 16) & 0xFF), UInt8(n >> 24)]
+        return h + body
+    }
+
+    @Test("PowerPoint text atoms come out per slide with titles, body and notes")
+    func pptTextRuns() {
+        func u32(_ v: UInt32) -> [UInt8] { [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF), UInt8((v >> 16) & 0xFF), UInt8(v >> 24)] }
+        let utf16 = Array("Quarterly review".utf16).flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] }
+        let slideList = rec(0x000F, 0x0FF0,
+            rec(0, 0x03F3, Array(repeating: 0, count: 20)) + rec(0, 0x0F9F, u32(0)) + rec(0, 0x0FA0, utf16)
+          + rec(0, 0x0F9F, u32(1)) + rec(0, 0x0FA8, Array("Revenue grew\rCosts fell".utf8))
+          + rec(0, 0x0FA8, Array("Revenue grew\rCosts fell".utf8))                     // duplicate kept once
+          + rec(0, 0x03F3, Array(repeating: 0, count: 20)) + rec(0, 0x0F9F, u32(2)) + rec(0, 0x0FA8, Array("Speaker note".utf8)))
+        let runs = PPTStructuralParser.textRuns(rec(0x000F, 0x03E8, slideList))
+        #expect(runs == [.init(slide: 1, kind: 0, text: "Quarterly review"),
+                         .init(slide: 1, kind: 1, text: "Revenue grew\nCosts fell"),
+                         .init(slide: 2, kind: 2, text: "Speaker note")])
+    }
+}

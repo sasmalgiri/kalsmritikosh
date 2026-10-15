@@ -42,6 +42,14 @@ public struct ContainerProcessingCoordinator: Sendable {
                        context: ContainerTraversalContext, now: Date, ingestMember: IngestMember) async {
         // Recognized-but-undecodable containers (RAR/7z): custody preserved, contents not enumerated.
         // "Unsupported with unknown contents" ≠ "empty container" — the manifest EXISTS to say so.
+        // W4-2 — 7z is read natively while "More file types" is on (Copy/LZMA/LZMA2).
+        if containerType == .sevenZip, ProductModuleFlags.isEnabled(.extraParsers) {
+            await expandSevenZip(containerVersionID: containerVersionID, byteURL: byteURL, context: context,
+                                 now: now, ingestMember: ingestMember)
+            return
+        }
+        // RAR's format is proprietary and its licence forbids reimplementing the decoder, so RAR
+        // stays recognised-not-expanded; 7z without the switch stays the same.
         if containerType == .rar || containerType == .sevenZip {
             do {
                 _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
@@ -175,5 +183,101 @@ public struct ContainerProcessingCoordinator: Sendable {
         guard SourceType.sniffMagicBytes(head) == .zip else { return false }
         let ext = (originName as NSString).pathExtension
         return SourceType.zipSubtype(forDeclaredExtension: ext) == .zip
+    }
+
+    // MARK: - 7z (W4-2)
+
+    /// Expand a .7z the same way as a ZIP: safe paths, per-member and ratio caps, the SHARED root
+    /// budget, recursion limits, full ingest per member, and a manifest where nothing is dropped silently.
+    private func expandSevenZip(containerVersionID: UUID, byteURL: URL, context: ContainerTraversalContext,
+                                now: Date, ingestMember: IngestMember) async {
+        func record(_ status: ContainerManifestStatus, _ members: [ContainerMember]) async {
+            do {
+                _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: .sevenZip,
+                                                 status: status, members: members, at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: 7z manifest record failed — \(String(describing: error), privacy: .public)")
+            }
+        }
+        let maxFolder = Int(min(policy.maxSingleMemberBytes * 4, Int64(Int32.max)))
+        guard let bytes = try? Data(contentsOf: byteURL, options: .mappedIfSafe),
+              let reader = try? SevenZipReader(data: bytes, maxFolderBytes: maxFolder) else {
+            await record(.failed, []); return
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("usfm2-7z-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var members: [ContainerMember] = []
+        var sawProblem = false
+        for (ordinal, e) in reader.entries.enumerated() {
+            func member(_ normalized: String, _ disp: ContainerMemberDisposition, _ kind: ContainerEntryKind = .file,
+                        detail: String? = nil, child: UUID? = nil, hash: String? = nil, type: SourceType? = nil) -> ContainerMember {
+                ContainerMember(parentSourceVersionID: containerVersionID, ordinal: ordinal, memberPath: e.name,
+                                normalizedMemberPath: normalized, entryKind: kind,
+                                compressedSize: e.folder.map { reader.packedSize(folder: $0) } ?? 0, uncompressedSize: e.size,
+                                detectedType: kind == .file ? (type ?? SourceType.detect(from: URL(fileURLWithPath: normalized))) : nil,
+                                disposition: disp, childSourceVersionID: child, contentHash: hash, detail: detail)
+            }
+            if e.isDirectory { members.append(member(e.name, .directory, .directory)); continue }
+            let normalized: String
+            switch ZIPContainerExtractor.classifyPath(e.name) {
+            case .directory: members.append(member(e.name, .directory, .directory)); continue
+            case .unsafe(let reason): sawProblem = true; members.append(member(e.name, .blockedUnsafePath, detail: reason)); continue
+            case .file(let n): normalized = n
+            }
+            if ordinal >= policy.maxEntriesPerContainer {
+                sawProblem = true; members.append(member(normalized, .blockedEntryLimit, detail: "beyond per-container entry limit")); continue
+            }
+            if let f = e.folder, let why = reader.unsupportedReason(folder: f) {
+                sawProblem = true
+                members.append(member(normalized, why.hasPrefix("encrypted") ? .encrypted : .unsupported, detail: why)); continue
+            }
+            if e.size > policy.maxSingleMemberBytes {
+                sawProblem = true; members.append(member(normalized, .blockedSizeLimit, detail: "size exceeds per-member cap")); continue
+            }
+            if let f = e.folder, reader.packedSize(folder: f) > 0, e.size / max(1, reader.packedSize(folder: f)) > Int64(policy.maxCompressionRatio) {
+                sawProblem = true; members.append(member(normalized, .blockedCompressionRatio, detail: "compression ratio exceeds cap")); continue
+            }
+            let dest = root.appendingPathComponent(normalized)
+            guard ZIPContainerExtractor.isContained(dest, inRoot: root) else {
+                sawProblem = true; members.append(member(normalized, .blockedUnsafePath, detail: "escapes extraction root")); continue
+            }
+            let verdict = context.budget.reserveMember(uncompressedBytes: e.size)
+            if verdict != .ok {
+                sawProblem = true; members.append(member(normalized, .blockedRootBudget, detail: "\(verdict)")); continue
+            }
+            do {
+                try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try reader.extract(e).write(to: dest)
+            } catch {
+                sawProblem = true; members.append(member(normalized, .failedExtraction, detail: "\(error)")); continue
+            }
+            let childHash = Self.hashFile(dest)
+            let expandable = Self.isExpandableZip(fileURL: dest, originName: normalized)
+            if expandable {
+                if context.isCycle(childHash: childHash) {
+                    sawProblem = true; members.append(member(normalized, .blockedCycle, detail: "cycle with ancestor container")); continue
+                }
+                if context.wouldExceedDepth {
+                    sawProblem = true; members.append(member(normalized, .blockedDepth, detail: "nesting depth exceeded")); continue
+                }
+                if context.budget.registerNestedContainer() != .ok {
+                    sawProblem = true; members.append(member(normalized, .blockedRootBudget, detail: "nested container limit")); continue
+                }
+            }
+            let origin = Self.origin(parent: containerVersionID, ordinal: ordinal, name: normalized)
+            let parentRef = SourceParentReference(parentSourceVersionID: containerVersionID, relation: .archiveMember, ordinal: ordinal)
+            let outcome = await ingestMember(dest, origin, parentRef)
+            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else {
+                sawProblem = true; members.append(member(normalized, .failedExtraction, detail: "member ingest failed")); continue
+            }
+            members.append(member(normalized, .admitted, child: childID, hash: ch, type: outcome.detectedType))
+            if (outcome.detectedType ?? .unknown) == .zip || expandable {
+                await expand(containerVersionID: childID, containerType: .zip, byteURL: dest,
+                             context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+            }
+        }
+        await record(sawProblem ? .partial : .complete, members)
     }
 }
