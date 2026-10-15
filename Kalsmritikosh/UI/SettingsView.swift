@@ -1360,6 +1360,7 @@ public struct SettingsView: View {
     @State private var confirmDeleteAll = false
     @State private var deleteAllStatus: String?
     @State private var backupStatus: String?
+    @State private var snapshotIncludeOriginals = false
     @State private var backingUp = false
     @State private var cleanupStatus: String?
     @State private var cleaningUp = false
@@ -1711,6 +1712,22 @@ public struct SettingsView: View {
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer.
+                Toggle("Include original files in snapshots (so citations open on the device)", isOn: $snapshotIncludeOriginals)
+                    .font(.caption)
+                HStack {
+                    Button {
+                        exportSnapshot()
+                    } label: {
+                        Label("Export signed snapshot…", systemImage: "ipad.and.iphone")
+                    }
+                    .disabled(backingUp)
+                    Button {
+                        checkSnapshot()
+                    } label: {
+                        Label("Check a snapshot…", systemImage: "checkmark.shield")
+                    }
+                }
                 if let s = backupStatus {
                     Text(s).font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1764,6 +1781,47 @@ public struct SettingsView: View {
                     backupStatus = "Backup failed: \(error.localizedDescription)"
                 }
             }
+        }
+        #endif
+    }
+
+    /// W4-6 — write a signed snapshot folder (ledger + optional originals).
+    private func exportSnapshot() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.prompt = "Save Snapshot Here"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        backingUp = true; backupStatus = nil
+        let include = snapshotIncludeOriginals
+        Task {
+            let scoped = dir.startAccessingSecurityScopedResource()
+            defer { if scoped { dir.stopAccessingSecurityScopedResource() } }
+            do {
+                let summary = try await appState.exportCompanionSnapshot(to: dir, includeOriginals: include)
+                backupStatus = summary
+            } catch {
+                backupStatus = "Snapshot failed: \(error.localizedDescription)"
+            }
+            backingUp = false
+        }
+        #endif
+    }
+
+    /// W4-6 — verify a snapshot's signature and every file against its manifest.
+    private func checkSnapshot() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.treatsFilePackagesAsDirectories = false
+        panel.prompt = "Check Snapshot"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        switch CompanionSnapshot.verify(folder: dir) {
+        case .valid(let fp, let store, let files):
+            backupStatus = "Snapshot OK — signed by key \(fp) (\(store)); all \(files) files match."
+        case .unsigned: backupStatus = "This snapshot is not signed."
+        case .badSignature: backupStatus = "Signature check FAILED — the snapshot was changed or signed by a different key."
+        case .damaged(let why): backupStatus = "Snapshot damaged — \(why)."
         }
         #endif
     }
