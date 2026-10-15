@@ -340,7 +340,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .teamReview:
             return Spec(planID: "W4-4", group: "Sharing", title: "Team review over a shared folder",
                         detail: "Reviewers work on one case through a shared folder with signed logs; tampering is reported at the exact entry. No server.",
-                        whenOff: "Single-user cases.")
+                        whenOff: "Single-user cases.",
+                        implemented: true)
 
         // ── Wave O ───────────────────────────────────────────────────────
         case .onlineAnswers:
