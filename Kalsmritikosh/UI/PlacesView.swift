@@ -4,8 +4,9 @@
 //
 //  N-8 — places: photo GPS read from the image files' own metadata (ImageIO,
 //  on-device) and place names found in documents (address / city / country /
-//  location entities). Private mode shows a list with coordinates and makes no
-//  request of any kind. The app itself never loads map tiles (it has no network
+//  location entities). Private mode shows a list with coordinates and an offline
+//  plot of the photo locations on a latitude/longitude grid (drawn on this Mac —
+//  no map tiles, no request of any kind). The app never loads map tiles (it has no network
 //  entitlement); in Online mode a row can be handed to Apple Maps, which is a
 //  separate app the user chooses to open.
 //
@@ -97,11 +98,12 @@ struct PlacesView: View {
             Text("Places").font(.title3.bold())
             Text(online
                  ? "Read on this Mac from photo metadata and your documents. “Open in Maps” hands one place to Apple Maps, a separate app."
-                 : "Read on this Mac from photo metadata and your documents. Private mode: a list only — nothing is looked up online.")
+                 : "Read on this Mac from photo metadata and your documents. Private mode: a list and an offline plot — nothing is looked up online.")
                 .font(.caption).foregroundStyle(.secondary)
             HSplitView {
                 VStack(alignment: .leading) {
                     Text("Photos with a location (\(photos.count))").font(.headline)
+                    if !photos.isEmpty { PlacesPlot(points: photos).frame(height: 180) }
                     List(photos) { p in
                         HStack {
                             VStack(alignment: .leading) {
@@ -147,5 +149,65 @@ struct PlacesView: View {
         var c = URLComponents(string: "maps://")
         c?.queryItems = [URLQueryItem(name: "ll", value: "\(lat),\(lon)"), URLQueryItem(name: "q", value: name)]
         if let url = c?.url { NSWorkspace.shared.open(url) }
+    }
+}
+
+
+/// Offline plot of photo coordinates on an equirectangular latitude/longitude grid. Zooms to the
+/// points' extent (with margin); no map data or network is used.
+struct PlacesPlot: View {
+    let points: [PhotoPlace]
+    @State private var hovered: PhotoPlace?
+
+    var body: some View {
+        let lats = points.map(\.latitude), lons = points.map(\.longitude)
+        let pad = 2.0
+        let minLat = max(-90, (lats.min() ?? 0) - pad), maxLat = min(90, (lats.max() ?? 0) + pad)
+        let minLon = max(-180, (lons.min() ?? 0) - pad), maxLon = min(180, (lons.max() ?? 0) + pad)
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let sx = w / max(maxLon - minLon, 0.01), sy = h / max(maxLat - minLat, 0.01)
+            let pt: (PhotoPlace) -> CGPoint = { p in CGPoint(x: (p.longitude - minLon) * sx, y: (maxLat - p.latitude) * sy) }
+            ZStack(alignment: .topLeading) {
+                Canvas { ctx, size in
+                    ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.secondary.opacity(0.06)))
+                    let step = Self.gridStep(maxLon - minLon)
+                    var lon = (minLon / step).rounded(.up) * step
+                    while lon <= maxLon {
+                        let x = (lon - minLon) * sx
+                        ctx.stroke(Path { $0.move(to: CGPoint(x: x, y: 0)); $0.addLine(to: CGPoint(x: x, y: size.height)) }, with: .color(.secondary.opacity(0.2)))
+                        ctx.draw(Text(String(format: "%.0f°", lon)).font(.system(size: 8)).foregroundColor(.secondary), at: CGPoint(x: x + 10, y: size.height - 6))
+                        lon += step
+                    }
+                    var lat = (minLat / step).rounded(.up) * step
+                    while lat <= maxLat {
+                        let y = (maxLat - lat) * sy
+                        ctx.stroke(Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: size.width, y: y)) }, with: .color(.secondary.opacity(0.2)))
+                        ctx.draw(Text(String(format: "%.0f°", lat)).font(.system(size: 8)).foregroundColor(.secondary), at: CGPoint(x: 12, y: y - 6))
+                        lat += step
+                    }
+                    for p in points {
+                        let c = pt(p)
+                        ctx.fill(Path(ellipseIn: CGRect(x: c.x - 3.5, y: c.y - 3.5, width: 7, height: 7)), with: .color(.accentColor))
+                    }
+                }
+                ForEach(points) { p in
+                    Color.clear.frame(width: 14, height: 14).contentShape(Rectangle())
+                        .position(pt(p))
+                        .onHover { inside in hovered = inside ? p : (hovered == p ? nil : hovered) }
+                        .help("\(p.name) — \(String(format: "%.4f, %.4f", p.latitude, p.longitude))")
+                }
+                if let hv = hovered {
+                    Text(hv.name).font(.caption2).padding(3).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4)).padding(4)
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityLabel("Plot of \(points.count) photo locations")
+    }
+
+    static func gridStep(_ span: Double) -> Double {
+        for s in [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 15, 30] where span / s <= 8 { return s }
+        return 60
     }
 }

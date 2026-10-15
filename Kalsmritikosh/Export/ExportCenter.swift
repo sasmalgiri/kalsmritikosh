@@ -14,6 +14,8 @@
 //
 
 import Foundation
+import CoreGraphics
+import ImageIO
 
 public nonisolated struct LedgerExportTable: Sendable {
     public var title: String
@@ -33,7 +35,7 @@ public nonisolated struct LedgerExportTable: Sendable {
 }
 
 public nonisolated enum LedgerExportFormat: String, Sendable, CaseIterable, Identifiable {
-    case csv, json, markdown, html, docx, xlsx, pdf, mbox
+    case csv, json, markdown, html, docx, xlsx, pdf, tiff, mbox, emlZip
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -44,10 +46,20 @@ public nonisolated enum LedgerExportFormat: String, Sendable, CaseIterable, Iden
         case .docx: return "Word (.docx)"
         case .xlsx: return "Excel (.xlsx)"
         case .pdf: return "PDF"
+        case .tiff: return "TIFF (page images)"
         case .mbox: return "mbox (original emails)"
+        case .emlZip: return "EML files in a ZIP (original emails)"
         }
     }
-    public var fileExtension: String { self == .markdown ? "md" : rawValue }
+    public var fileExtension: String {
+        switch self {
+        case .markdown: return "md"
+        case .emlZip: return "zip"
+        default: return rawValue
+        }
+    }
+    /// Formats built from original email files (shown only for source sets).
+    public var needsOriginals: Bool { self == .mbox || self == .emlZip }
 }
 
 public nonisolated struct LedgerExportPreflight: Sendable {
@@ -68,7 +80,7 @@ public nonisolated struct LedgerExportPreflight: Sendable {
 public nonisolated enum LedgerExportRenderer {
 
     public static func preflight(_ t: LedgerExportTable, format: LedgerExportFormat) -> LedgerExportPreflight {
-        guard format == .mbox else { return LedgerExportPreflight(rows: t.rows.count, originalsReadable: 0, originalsMissing: []) }
+        guard format.needsOriginals else { return LedgerExportPreflight(rows: t.rows.count, originalsReadable: 0, originalsMissing: []) }
         var ok = 0; var missing: [String] = []
         for (i, url) in t.originals.enumerated() {
             if let url, isEmailFile(url), FileManager.default.isReadableFile(atPath: url.path) { ok += 1 }
@@ -89,7 +101,9 @@ public nonisolated enum LedgerExportRenderer {
         case .docx: return DocumentExporter.docx(records(t))
         case .xlsx: return DocumentExporter.xlsx(grid: [t.columns] + t.rows)
         case .pdf: return DocumentExporter.pdf(records(t)) ?? Data()
+        case .tiff: return tiff(fromPDF: DocumentExporter.pdf(records(t)) ?? Data())
         case .mbox: return mbox(t, missing: &missing)
+        case .emlZip: return emlZip(t, missing: &missing)
         }
     }
 
@@ -173,6 +187,50 @@ public nonisolated enum LedgerExportRenderer {
             if !body.hasSuffix("\n\n") { out.append(Data("\n".utf8)) }
         }
         return out
+    }
+
+    /// Multipage TIFF: each page of the PDF rendering at 200 dpi (ImageIO, on-device).
+    static func tiff(fromPDF pdf: Data) -> Data {
+        guard let provider = CGDataProvider(data: pdf as CFData), let doc = CGPDFDocument(provider), doc.numberOfPages > 0 else { return Data() }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.tiff" as CFString, doc.numberOfPages, nil) else { return Data() }
+        for i in 1...doc.numberOfPages {
+            guard let page = doc.page(at: i) else { continue }
+            let box = page.getBoxRect(.mediaBox)
+            let scale: CGFloat = 200 / 72
+            let w = Int(box.width * scale), h = Int(box.height * scale)
+            guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { continue }
+            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.scaleBy(x: scale, y: scale); ctx.drawPDFPage(page)
+            if let img = ctx.makeImage() {
+                CGImageDestinationAddImage(dest, img, [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]] as CFDictionary)
+            }
+        }
+        return CGImageDestinationFinalize(dest) ? out as Data : Data()
+    }
+
+    /// The original .eml/.emlx bytes as individual .eml files inside a ZIP (emlx unwrapped by byte count).
+    static func emlZip(_ t: LedgerExportTable, missing: inout [String]) -> Data {
+        var zip = ZIPArchiveWriter()
+        var used = Set<String>()
+        for (i, url) in t.originals.enumerated() {
+            guard let url, isEmailFile(url) else { missing.append(t.sources[safe: i] ?? "row \(i + 1)"); continue }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard var data = try? Data(contentsOf: url) else { missing.append(t.sources[safe: i] ?? url.lastPathComponent); continue }
+            if url.pathExtension.lowercased() == "emlx", let nl = data.firstIndex(of: 0x0A),
+               let count = Int(String(decoding: data[data.startIndex..<nl], as: UTF8.self).trimmingCharacters(in: .whitespaces)) {
+                let start = data.index(after: nl)
+                data = data.subdata(in: start..<min(data.endIndex, start + count))
+            }
+            var name = url.deletingPathExtension().lastPathComponent + ".eml"
+            var n = 2
+            while used.contains(name) { name = url.deletingPathExtension().lastPathComponent + " \(n).eml"; n += 1 }
+            used.insert(name)
+            zip.addFile(path: name, data: data)
+        }
+        return zip.build()
     }
 
     /// Receipt drafts: one per row (claim = first column; passage = the row's supporting text).

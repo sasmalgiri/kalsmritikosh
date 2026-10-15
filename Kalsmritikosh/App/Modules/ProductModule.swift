@@ -308,7 +308,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .locationMap:
             return Spec(planID: "N-8", group: "Investigation", title: "Places",
-                        detail: "Photo locations and addresses found in documents, as a list with coordinates. Nothing is looked up online; in Online mode a place can be handed to Apple Maps.",
+                        detail: "Photo locations and addresses found in documents: a list with coordinates and an offline plot on a latitude/longitude grid. Nothing is looked up online; in Online mode a place can be handed to Apple Maps.",
                         whenOff: "Not shown.",
                         implemented: true, preview: true)
         case .notesImport:

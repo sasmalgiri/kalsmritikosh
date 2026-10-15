@@ -121,7 +121,7 @@ struct ExportCenterView: View {
                 TextField("Search (e.g. type:email org:acme) or #tag", text: $query)
             }
             Picker("Format", selection: $format) {
-                ForEach(LedgerExportFormat.allCases.filter { $0 != .mbox || subject == .sources }) { Text($0.label).tag($0) }
+                ForEach(LedgerExportFormat.allCases.filter { !$0.needsOriginals || subject == .sources }) { Text($0.label).tag($0) }
             }
             HStack {
                 Button("Check") { Task { await check() } }
@@ -138,7 +138,7 @@ struct ExportCenterView: View {
         }
         .padding(16)
         .frame(minWidth: 560, minHeight: 380)
-        .onChange(of: subject) { _, _ in preflight = nil; table = nil; if subject != .sources && format == .mbox { format = .csv } }
+        .onChange(of: subject) { _, _ in preflight = nil; table = nil; if subject != .sources && format.needsOriginals { format = .csv } }
         .onChange(of: format) { _, _ in preflight = nil }
         .onChange(of: query) { _, _ in preflight = nil }
     }
