@@ -19,10 +19,18 @@
 //  fails closed (no file is produced) — matching the RedactionVerifier ethos
 //  already used by the export pipeline.
 //
+//  W0-2 — text inside images. With `scanImages` (default on), every page is also
+//  read with on-device text recognition; a term found in a page IMAGE (a scan, a
+//  stamp, a screenshot) is burned in like any other match, and every flattened
+//  page is recognised again after redaction — a term still readable there fails
+//  the whole operation closed. The output is written into a fresh PDF context
+//  with no document info, so the source's title/author/keywords never carry over.
+//
 
 import Foundation
 import PDFKit
 import CoreGraphics
+import Vision
 
 public struct PDFRedactionResult: Sendable {
     public let data: Data
@@ -89,7 +97,8 @@ public struct PDFRedactionService: Sendable {
         source: URL,
         terms: [String],
         caseSensitive: Bool = false,
-        dpi: CGFloat = 200
+        dpi: CGFloat = 200,
+        scanImages: Bool = true
     ) throws -> PDFRedactionResult {
         let cleanedTerms = terms
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -112,6 +121,23 @@ public struct PDFRedactionService: Sendable {
                 }
             }
         }
+        // 1b) W0-2 — terms inside page images, found by on-device text recognition.
+        var imageMatchCount = 0
+        if scanImages {
+            for i in 0..<doc.pageCount {
+                guard let page = doc.page(at: i) else { continue }
+                let box = page.bounds(for: .mediaBox)
+                guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { continue }
+                let found = Self.recognizedTermRects(in: image, terms: cleanedTerms, caseSensitive: caseSensitive)
+                    .map { CGRect(x: box.minX + $0.minX * box.width, y: box.minY + $0.minY * box.height,
+                                  width: $0.width * box.width, height: $0.height * box.height) }
+                // Only boxes not already covered by a text-layer match count as new.
+                let existing = rectsByPage[i] ?? []
+                let new = found.filter { r in !existing.contains { $0.insetBy(dx: -2, dy: -2).contains(CGPoint(x: r.midX, y: r.midY)) } }
+                if !new.isEmpty { rectsByPage[i, default: []].append(contentsOf: new); imageMatchCount += new.count }
+            }
+        }
+        matchCount += imageMatchCount
         guard matchCount > 0 else { throw PDFRedactionError.noMatches(cleanedTerms) }
 
         // 2) Re-emit the document. Redacted pages are flattened to an image with
@@ -159,6 +185,19 @@ public struct PDFRedactionService: Sendable {
         let leaks = try Self.residualTerms(in: produced, terms: cleanedTerms, caseSensitive: caseSensitive,
                                            expectedPageCount: doc.pageCount)
         if !leaks.isEmpty { throw PDFRedactionError.verificationLeak(leaks) }
+        // W0-2 — and nothing is still READABLE in the flattened page images.
+        if scanImages, let outDoc = PDFDocument(data: produced) {
+            var imageLeaks = Set<String>()
+            for i in rectsByPage.keys.sorted() {
+                guard let page = outDoc.page(at: i) else { throw PDFRedactionError.verificationUnreadable }
+                let box = page.bounds(for: .mediaBox)
+                guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { throw PDFRedactionError.verificationUnreadable }
+                for t in cleanedTerms where !Self.recognizedTermRects(in: image, terms: [t], caseSensitive: caseSensitive).isEmpty {
+                    imageLeaks.insert(t)
+                }
+            }
+            if !imageLeaks.isEmpty { throw PDFRedactionError.verificationLeak(imageLeaks.sorted()) }
+        }
 
         return PDFRedactionResult(
             data: produced,
@@ -209,6 +248,30 @@ public struct PDFRedactionService: Sendable {
             bmp.fill(px)
         }
         return bmp.makeImage()
+    }
+
+    /// W0-2 — normalised boxes (origin lower-left) of every recognised occurrence of the terms in an image.
+    static func recognizedTermRects(in image: CGImage, terms: [String], caseSensitive: Bool) -> [CGRect] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false   // a name or number must be read as written
+        do { try VNImageRequestHandler(cgImage: image, options: [:]).perform([request]) } catch { return [] }
+        let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
+        var out: [CGRect] = []
+        for obs in request.results ?? [] {
+            guard let candidate = obs.topCandidates(1).first else { continue }
+            let text = candidate.string
+            for term in terms {
+                var searchStart = text.startIndex
+                while let r = text.range(of: term, options: options, range: searchStart..<text.endIndex) {
+                    // Exact word box when Vision can give one; otherwise the whole line (over-redacts, never under).
+                    let box = (try? candidate.boundingBox(for: r))?.boundingBox ?? obs.boundingBox
+                    out.append(box)
+                    searchStart = r.upperBound
+                }
+            }
+        }
+        return out
     }
 
     /// Build a per-page media-box dictionary for `beginPDFPage`.
