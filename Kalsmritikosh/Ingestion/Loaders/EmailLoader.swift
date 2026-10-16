@@ -132,14 +132,17 @@ public struct EmailLoader: StreamingIngestor {
         var batcher = KnowledgeObjectBatcher(budget: budget)
         switch type {
         case .pst:
+            // W0-1 — one autorelease pool per record (see streamMbox: the loop is one job).
             for msg in try pstMessageIterator(at: url) {
-                if let ko = buildKO(fromPSTMessage: msg, source: url), let batch = batcher.add(ko) { try await emit(batch) }
+                let ko = autoreleasepool { buildKO(fromPSTMessage: msg, source: url) }
+                if let ko, let batch = batcher.add(ko) { try await emit(batch) }
             }
             if let rest = batcher.drain() { try await emit(rest) }
             return
         case .nsf:
             for note in try nsfNoteIterator(at: url) where note.isMailNote {
-                if let ko = buildKO(fromNSFNote: note, source: url), let batch = batcher.add(ko) { try await emit(batch) }
+                let ko = autoreleasepool { buildKO(fromNSFNote: note, source: url) }
+                if let ko, let batch = batcher.add(ko) { try await emit(batch) }
             }
             if let rest = batcher.drain() { try await emit(rest) }
             return
@@ -182,9 +185,19 @@ public struct EmailLoader: StreamingIngestor {
             var cutEnd = end
             let oversized = end - start > budget.maxRecordBytes && ProductModuleFlags.isEnabled(.byteRangeItems)
             if oversized { cutEnd = Self.lineCut(data, from: start, maxBytes: budget.maxRecordBytes) }
-            guard let piece = Self.mboxPiece(data, from: start, to: cutEnd) else { continue }
+            // W0-1 — decode and build inside a per-message autorelease pool. The loop runs as one
+            // concurrency job (emit rarely suspends), and a job's pool drains only when it suspends,
+            // so without this the bridged Foundation temporaries of every message pile up until the
+            // whole mailbox has been read.
+            var isPiece = false
+            let built: KnowledgeObject? = autoreleasepool {
+                guard let piece = Self.mboxPiece(data, from: start, to: cutEnd) else { return nil }
+                isPiece = true
+                return perMessageKO(from: piece, index: pieceIndex, url: url)
+            }
+            guard isPiece else { continue }
             defer { pieceIndex += 1 }
-            guard var ko = perMessageKO(from: piece, index: pieceIndex, url: url) else { continue }
+            guard var ko = built else { continue }
             if oversized {
                 var meta = ko.metadata
                 meta["byteRangeStart"] = AnyCodable(.int(Int64(start)))

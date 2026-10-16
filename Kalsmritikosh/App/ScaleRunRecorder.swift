@@ -36,6 +36,8 @@ nonisolated struct ScaleSample: Sendable {
 
 nonisolated enum ScaleRunSummary {
     static let mib = 1_048_576.0
+    /// Below this, a per-hour slope extrapolates seconds of noise; the summary says so instead.
+    static let minimumTrendMinutes = 10.0
 
     /// Least-squares slope of footprint (MiB per hour) over the second half of the samples.
     static func lateSlopeMiBPerHour(_ s: [ScaleSample]) -> Double? {
@@ -55,14 +57,18 @@ nonisolated enum ScaleRunSummary {
         let minutes = last.at.timeIntervalSince(first.at) / 60
         let docs = last.documents - first.documents
         let slope = lateSlopeMiBPerHour(s)
-        // "Flat" = the second half grows by less than 5 % of the peak per hour.
-        let flat = slope.map { abs($0) < Double(peak) / mib * 0.05 } ?? false
+        // "Flat" = the second half grows by less than 5 % of the peak per hour. Falling memory
+        // (caches released, pages returned) is not growth, so a negative slope counts as flat.
+        let flat = slope.map { $0 < Double(peak) / mib * 0.05 } ?? false
+        let interval = last.at.timeIntervalSince(first.at) / Double(s.count - 1)
         return """
         Scale run \(ISO8601DateFormatter().string(from: first.at)) on \(hardware):
         \(docs) documents read in \(String(format: "%.1f", minutes)) min (\(minutes > 0 ? String(format: "%.0f", Double(docs) / minutes) : "–") per min); \(last.documents) in the ledger at the end.
         Memory footprint: baseline \(String(format: "%.0f", Double(first.footprint) / mib)) MiB, peak \(String(format: "%.0f", Double(peak) / mib)) MiB, end \(String(format: "%.0f", Double(last.footprint) / mib)) MiB.
-        Second-half trend: \(slope.map { String(format: "%+.0f MiB/hour", $0) } ?? "not measurable") — \(flat ? "flat" : "NOT flat").
-        Samples: \(s.count) (every 10 s).
+        Second-half trend: \(minutes < Self.minimumTrendMinutes
+            ? "not judged — the run lasted under \(Int(Self.minimumTrendMinutes)) minutes, too short for an hourly trend"
+            : (slope.map { String(format: "%+.0f MiB/hour", $0) } ?? "not measurable") + " — " + (flat ? "flat" : "NOT flat")).
+        Samples: \(s.count) (every \(interval >= 1 ? String(format: "%.0f s", interval) : String(format: "%.2f s", interval)) on average).
         """
     }
 }
