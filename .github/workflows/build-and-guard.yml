@@ -82,7 +82,9 @@ jobs:
   # proven from the .xcresult by ci/verify-xcresult-tests.sh.
   build-and-test:
     runs-on: macos-26
-    timeout-minutes: 45
+    # 60 so the log/result upload below still runs when the test step hits its own 40-minute
+    # limit (a job-level timeout cancels every remaining step, so a hang left no evidence).
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -116,6 +118,7 @@ jobs:
             build 2>&1 | tee build.log
 
       - name: Test (full KalsmritikoshTests target)
+        timeout-minutes: 40
         env:
           NSUnbufferedIO: YES
         run: |
@@ -210,7 +213,7 @@ jobs:
           echo "kalverify attack matrix: all attacks refused, clean bundle verified."
 
       - name: Upload logs + result bundle on failure
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: build-and-test-logs

@@ -64,6 +64,11 @@ public nonisolated enum ConformanceSigningKey {
     /// preferred, Keychain software key as the fallback. Returns nil only when
     /// neither store is available (tests inject an ephemeral key instead).
     public static func loadOrGenerateBackend() -> Backend? {
+        // Under the unit-test host (this same app), one process-lifetime software key and never
+        // the Keychain or Secure Enclave: a headless CI runner's locked keychain blocks these
+        // calls, which stalled the whole suite once receipts, proof bundles, case slices and
+        // snapshots began signing through here.
+        if let testKey = testHostKey { return .software(testKey) }
         if SecureEnclave.isAvailable {
             if let data = load(account: enclaveAccount),
                let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) {
@@ -81,8 +86,12 @@ public nonisolated enum ConformanceSigningKey {
         return store(key.rawRepresentation, account: account) ? .software(key) : nil
     }
 
+    private static let testHostKey: P256.Signing.PrivateKey? =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ? P256.Signing.PrivateKey() : nil
+
     /// Compatibility: the software key path (used before Secure Enclave support).
     public static func loadOrGenerate() -> P256.Signing.PrivateKey? {
+        if let testHostKey { return testHostKey }
         if let data = load(account: account), let key = try? P256.Signing.PrivateKey(rawRepresentation: data) {
             return key
         }
