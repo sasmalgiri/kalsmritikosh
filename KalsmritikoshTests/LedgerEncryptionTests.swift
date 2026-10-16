@@ -31,7 +31,7 @@ struct LedgerEncryptionTests {
 
     @Test func cipherIsLinkedAndTestsUseTheirOwnKeychainItem() {
         #expect(AppState.cipherVersion != nil, "SQLCipher is not the SQLite this app runs on")
-        #expect(LedgerKeychain.service.hasSuffix(".tests"), "tests must never touch the person's ledger key")
+        #expect(LedgerKeychain.usesMemoryStore, "tests must never touch the Keychain (person's key, CI hang)")
     }
 
     @Test func aKeyedLedgerIsEncryptedOnDisk() async throws {

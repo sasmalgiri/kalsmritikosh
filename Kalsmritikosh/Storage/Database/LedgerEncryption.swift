@@ -68,21 +68,25 @@ public struct LedgerKey: Sendable, Equatable {
 
 /// The Keychain item holding the ledger key (this Mac only, available after first unlock).
 public enum LedgerKeychain {
-    /// The unit-test host IS this app (same bundle id, same Keychain), so tests use their own
-    /// item: a test storing a key must never be able to replace the key of the person's ledger.
-    static var service: String {
-        let base = "ecosanskritiinnovation.Kalsmritikosh.ledger-key"
-        return ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil ? base : base + ".tests"
-    }
+    static let service = "ecosanskritiinnovation.Kalsmritikosh.ledger-key"
     static let account = "ledger"
+
+    /// The unit-test host IS this app (same bundle id, same Keychain). Under it the ledger key
+    /// lives only in memory for the life of the process: a test can never replace the person's
+    /// key, and tests never wait on a Keychain that a headless CI runner cannot unlock (a locked
+    /// keychain blocks the call, and with main-actor isolation that stalled every test).
+    static let usesMemoryStore = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    private static let memory = MemoryKeyStore()
 
     /// The person's own ledger key, READ ONLY, even from the test host — for the owner-archive
     /// harnesses that copy the live ledger. Nothing may ever store under this service from tests.
     static func loadPersonKey() -> LedgerKey? {
-        load(service: "ecosanskritiinnovation.Kalsmritikosh.ledger-key")
+        load(service: service)
     }
 
-    public static func load() -> LedgerKey? { load(service: service) }
+    public static func load() -> LedgerKey? {
+        usesMemoryStore ? memory.key : load(service: service)
+    }
 
     private static func load(service: String) -> LedgerKey? {
         let query: [String: Any] = [
@@ -98,6 +102,7 @@ public enum LedgerKeychain {
     }
 
     public static func store(_ key: LedgerKey) throws {
+        if usesMemoryStore { memory.key = key; return }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -112,6 +117,15 @@ public enum LedgerKeychain {
             KalsmritikoshLog.storage.error("Ledger key could not be saved to the Keychain (OSStatus \(rc, privacy: .public))")
             throw LedgerEncryptionError.keychain(rc)
         }
+    }
+}
+
+private final class MemoryKeyStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: LedgerKey?
+    var key: LedgerKey? {
+        get { lock.lock(); defer { lock.unlock() }; return value }
+        set { lock.lock(); value = newValue; lock.unlock() }
     }
 }
 

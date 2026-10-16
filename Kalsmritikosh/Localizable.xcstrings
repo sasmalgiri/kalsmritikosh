@@ -1,0 +1,7044 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "   unresolved: %@" : {
+
+    },
+    " posted. Quote it anywhere; find it in Work Center ▸ Documents." : {
+
+    },
+    "-%@ quoted" : {
+
+    },
+    "—" : {
+
+    },
+    "— %@" : {
+
+    },
+    "…and %lld more" : {
+
+    },
+    "· %@" : {
+
+    },
+    "· %lld result%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "· %1$lld result%2$@"
+          }
+        }
+      }
+    },
+    "· complete" : {
+
+    },
+    "· last run %@" : {
+
+    },
+    "· last: %@" : {
+
+    },
+    "· no synthesis" : {
+
+    },
+    "· runs total: %lld" : {
+
+    },
+    "“%@”" : {
+
+    },
+    "(%lld events in this chapter — no prose available.)" : {
+
+    },
+    "(%lld events recorded.)" : {
+
+    },
+    "(%lld item(s) recorded.)" : {
+
+    },
+    "(%lld src)" : {
+
+    },
+    "(%lld) → this event" : {
+
+    },
+    "(no answer recorded)" : {
+
+    },
+    "(was %@)" : {
+
+    },
+    "[%lld] %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "[%1$lld] %2$@"
+          }
+        }
+      }
+    },
+    "%@" : {
+
+    },
+    "%@\n\nThe app switches to that screen. Do the work there, then come back to Work Center — this run reopens exactly where you left off%@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@\n\nThe app switches to that screen. Do the work there, then come back to Work Center — this run reopens exactly where you left off%2$@."
+          }
+        }
+      }
+    },
+    "%@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@"
+          }
+        }
+      }
+    },
+    "%@ — %@  [%lld]" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@  [%3$lld]"
+          }
+        }
+      }
+    },
+    "%@ — %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ — %2$@%3$@"
+          }
+        }
+      }
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$@"
+          }
+        }
+      }
+    },
+    "%@ · %@ · %@ · %lld bytes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ · %3$@ · %4$lld bytes"
+          }
+        }
+      }
+    },
+    "%@ · %lld red flag(s) · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$lld red flag(s) · %3$@"
+          }
+        }
+      }
+    },
+    "%@ · %lld section(s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$lld section(s)"
+          }
+        }
+      }
+    },
+    "%@ · %lld sources · %lld subjects" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$lld sources · %3$lld subjects"
+          }
+        }
+      }
+    },
+    "%@ · %lld steps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$lld steps"
+          }
+        }
+      }
+    },
+    "%@ · ctx %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · ctx %2$lld"
+          }
+        }
+      }
+    },
+    "%@ · ctx %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · ctx %2$lld · %3$@"
+          }
+        }
+      }
+    },
+    "%@ · ingested %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · ingested %2$@"
+          }
+        }
+      }
+    },
+    "%@ · matched “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · matched “%2$@”"
+          }
+        }
+      }
+    },
+    "%@ (%lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "%@ (%lld%%) — because of: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (%2$lld%%) — because of: %3$@"
+          }
+        }
+      }
+    },
+    "%@ / %@  ·  %lld%%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ / %2$@  ·  %3$lld%%"
+          }
+        }
+      }
+    },
+    "%@ %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@…"
+          }
+        }
+      }
+    },
+    "%@ → %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "%@ → %@ by %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ → %2$@ by %3$@"
+          }
+        }
+      }
+    },
+    "%@ template" : {
+
+    },
+    "%@ text" : {
+
+    },
+    "%@ v%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ v%2$lld"
+          }
+        }
+      }
+    },
+    "%@ v%lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ v%2$lld · %3$@"
+          }
+        }
+      }
+    },
+    "%@, %lld links" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$lld links"
+          }
+        }
+      }
+    },
+    "%@:" : {
+
+    },
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%@: %@ (%lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ (%3$lld)"
+          }
+        }
+      }
+    },
+    "%@: %@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@. %3$@"
+          }
+        }
+      }
+    },
+    "%@: %lld notes, %lld links (%lld point to notes that are not in the folder and are kept as text), %lld tags applied." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$lld notes, %3$lld links (%4$lld point to notes that are not in the folder and are kept as text), %5$lld tags applied."
+          }
+        }
+      }
+    },
+    "%@: %lld stored documents." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$lld stored documents."
+          }
+        }
+      }
+    },
+    "%@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@"
+          }
+        }
+      }
+    },
+    "%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%2$@"
+          }
+        }
+      }
+    },
+    "%@%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%2$@%3$@"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld %2$@"
+          }
+        }
+      }
+    },
+    "%lld added" : {
+
+    },
+    "%lld allegation(s) · %lld evidence" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld allegation(s) · %2$lld evidence"
+          }
+        }
+      }
+    },
+    "%lld bytes" : {
+
+    },
+    "%lld causal" : {
+
+    },
+    "%lld cause%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld cause%2$@%3$@"
+          }
+        }
+      }
+    },
+    "%lld characters" : {
+
+    },
+    "%lld claim(s)" : {
+
+    },
+    "%lld claim(s) · %lld to run as alleged" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld claim(s) · %2$lld to run as alleged"
+          }
+        }
+      }
+    },
+    "%lld claim(s) need evidence" : {
+
+    },
+    "%lld connected" : {
+
+    },
+    "%lld contradiction(s)" : {
+
+    },
+    "%lld contradiction(s) preserved — both accounts kept, none merged." : {
+
+    },
+    "%lld custody event(s)" : {
+
+    },
+    "%lld dated" : {
+
+    },
+    "%lld dated events across %lld year(s)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld dated events across %2$lld year(s)."
+          }
+        }
+      }
+    },
+    "%lld detected" : {
+
+    },
+    "%lld doc%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld doc%2$@"
+          }
+        }
+      }
+    },
+    "%lld document(s)" : {
+
+    },
+    "%lld entr%@ still missing required fields — complete them before serving." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld entr%2$@ still missing required fields — complete them before serving."
+          }
+        }
+      }
+    },
+    "%lld event · %lld assertion · %lld fact" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld event · %2$lld assertion · %3$lld fact"
+          }
+        }
+      }
+    },
+    "%lld event%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld event%2$@"
+          }
+        }
+      }
+    },
+    "%lld events" : {
+
+    },
+    "%lld evidence" : {
+
+    },
+    "%lld file(s) from this folder are in the knowledge base." : {
+
+    },
+    "%lld file(s) ingested" : {
+
+    },
+    "%lld file%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld file%2$@"
+          }
+        }
+      }
+    },
+    "%lld file%@ changed on disk since first ingest. The original hash is preserved above — review before relying on the affected sources." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld file%2$@ changed on disk since first ingest. The original hash is preserved above — review before relying on the affected sources."
+          }
+        }
+      }
+    },
+    "%lld file%@ in flight" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld file%2$@ in flight"
+          }
+        }
+      }
+    },
+    "%lld file%@ waiting or running." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld file%2$@ waiting or running."
+          }
+        }
+      }
+    },
+    "%lld filter%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld filter%2$@"
+          }
+        }
+      }
+    },
+    "%lld folder(s) added." : {
+
+    },
+    "%lld found" : {
+
+    },
+    "%lld GB" : {
+
+    },
+    "%lld group%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld group%2$@"
+          }
+        }
+      }
+    },
+    "%lld highlight%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld highlight%2$@"
+          }
+        }
+      }
+    },
+    "%lld hop(s)" : {
+
+    },
+    "%lld hypotheses · %lld evidence" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld hypotheses · %2$lld evidence"
+          }
+        }
+      }
+    },
+    "%lld item%@ remaining" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld item%2$@ remaining"
+          }
+        }
+      }
+    },
+    "%lld match%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld match%2$@"
+          }
+        }
+      }
+    },
+    "%lld members" : {
+
+    },
+    "%lld mention(s)" : {
+
+    },
+    "%lld message%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld message%2$@"
+          }
+        }
+      }
+    },
+    "%lld more features are planned and will appear here as they are built." : {
+
+    },
+    "%lld msg" : {
+
+    },
+    "%lld new conflict(s), %lld new gap(s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld new conflict(s), %2$lld new gap(s)"
+          }
+        }
+      }
+    },
+    "%lld new file%@ added" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld new file%2$@ added"
+          }
+        }
+      }
+    },
+    "%lld of %lld coded" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld coded"
+          }
+        }
+      }
+    },
+    "%lld of %lld jobs run" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld jobs run"
+          }
+        }
+      }
+    },
+    "%lld of %lld reviewed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld reviewed"
+          }
+        }
+      }
+    },
+    "%lld of %lld shown · %lld total" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld shown · %3$lld total"
+          }
+        }
+      }
+    },
+    "%lld of %lld steps done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld steps done"
+          }
+        }
+      }
+    },
+    "%lld of %lld terms found" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld terms found"
+          }
+        }
+      }
+    },
+    "%lld open contradiction(s) and %lld open gap(s) are still undecided in this case's scope." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld open contradiction(s) and %2$lld open gap(s) are still undecided in this case's scope."
+          }
+        }
+      }
+    },
+    "%lld page(s) contain no extractable text — likely scanned images. Text redaction cannot see or remove a term hidden inside an image. Before certifying this document, OCR or manually review those pages." : {
+
+    },
+    "%lld page%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld page%2$@"
+          }
+        }
+      }
+    },
+    "%lld page%@ via OCR — extraction may be incomplete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld page%2$@ via OCR — extraction may be incomplete"
+          }
+        }
+      }
+    },
+    "%lld pages read via OCR — extraction may be incomplete" : {
+
+    },
+    "%lld personal detail%@ masked" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld personal detail%2$@ masked"
+          }
+        }
+      }
+    },
+    "%lld pt%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld pt%2$@"
+          }
+        }
+      }
+    },
+    "%lld questions" : {
+
+    },
+    "%lld relationship%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld relationship%2$@"
+          }
+        }
+      }
+    },
+    "%lld result%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld result%2$@"
+          }
+        }
+      }
+    },
+    "%lld result%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld result%2$@%3$@"
+          }
+        }
+      }
+    },
+    "%lld row(s) extracted; PRISMA says %lld included." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld row(s) extracted; PRISMA says %2$lld included."
+          }
+        }
+      }
+    },
+    "%lld rows × %lld cols · v%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld rows × %2$lld cols · v%3$lld"
+          }
+        }
+      }
+    },
+    "%lld rule(s) await your individual attestation — each is recorded under your name with a rationale and sealed with the assessment. There is no attest-all shortcut." : {
+
+    },
+    "%lld running" : {
+
+    },
+    "%lld runs" : {
+
+    },
+    "%lld segments" : {
+
+    },
+    "%lld selected" : {
+
+    },
+    "%lld shared document(s) — both appear here" : {
+
+    },
+    "%lld shown" : {
+
+    },
+    "%lld similar" : {
+
+    },
+    "%lld SOP edition(s) due for re-verification — open Compliance Board" : {
+
+    },
+    "%lld SOP(s) due for periodic re-verification." : {
+
+    },
+    "%lld source(s)" : {
+
+    },
+    "%lld source(s) mention “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld source(s) mention “%2$@”"
+          }
+        }
+      }
+    },
+    "%lld source%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld source%2$@"
+          }
+        }
+      }
+    },
+    "%lld source%@ withheld as privileged." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld source%2$@ withheld as privileged."
+          }
+        }
+      }
+    },
+    "%lld sources" : {
+
+    },
+    "%lld src" : {
+
+    },
+    "%lld steps · posts %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld steps · posts %2$@"
+          }
+        }
+      }
+    },
+    "%lld streams" : {
+
+    },
+    "%lld supported · %lld contradicted · %lld unsupported" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld supported · %2$lld contradicted · %3$lld unsupported"
+          }
+        }
+      }
+    },
+    "%lld topics" : {
+
+    },
+    "%lld transaction(s) · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld transaction(s) · %2$@"
+          }
+        }
+      }
+    },
+    "%lld undated" : {
+
+    },
+    "%lld unsupported" : {
+
+    },
+    "%lld value(s) differ from the base" : {
+
+    },
+    "%lld value(s) were redacted when this slice was made." : {
+
+    },
+    "%lld version%@ on file — tap to view the change history." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld version%2$@ on file — tap to view the change history."
+          }
+        }
+      }
+    },
+    "%lld versions" : {
+
+    },
+    "%lld versions · at least %lld%% alike" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld versions · at least %2$lld%% alike"
+          }
+        }
+      }
+    },
+    "%lld withheld document(s)" : {
+
+    },
+    "%lld." : {
+
+    },
+    "%lld. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld. %2$@"
+          }
+        }
+      }
+    },
+    "%lld. %@ → %@%@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld. %2$@ → %3$@%4$@%5$@"
+          }
+        }
+      }
+    },
+    "%lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "%lld/%lld · %lld%%" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld/%2$lld · %3$lld%%"
+          }
+        }
+      }
+    },
+    "%lld/%lld checks · all formats" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld/%2$lld checks · all formats"
+          }
+        }
+      }
+    },
+    "%lld%%" : {
+
+    },
+    "%lld%% real-subject" : {
+
+    },
+    "%lld%% skipped" : {
+
+    },
+    "%lld+" : {
+
+    },
+    "•" : {
+
+    },
+    "• %@" : {
+
+    },
+    "• %@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "• %1$@ — %2$@"
+          }
+        }
+      }
+    },
+    "• %@ — %@ (%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "• %1$@ — %2$@ (%3$@)"
+          }
+        }
+      }
+    },
+    "• Ledger mode: rule-based extraction + one document-card AI call per file (its first chunk); time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold: one document-card call per file + deep AI only for the important (hot) slice.\n• Full AI runs an AI pass over every slice of text, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) is expensive in every mode because the text has to be recovered first. Audio/video is NOT transcribed during ingest — it is catalogued and preserved; transcription runs only on demand (Transcripts screen, on-device)." : {
+
+    },
+    "← event %@" : {
+
+    },
+    "←/→ move · 1–9 decide" : {
+
+    },
+    "→" : {
+
+    },
+    "→ event %@" : {
+
+    },
+    "+%lld" : {
+
+    },
+    "+5" : {
+
+    },
+    "× %lld" : {
+
+    },
+    "×%lld" : {
+
+    },
+    "~%@ / 100 MB · reference config" : {
+
+    },
+    "~%lld%% likely" : {
+
+    },
+    "⌘K" : {
+
+    },
+    "⚠" : {
+
+    },
+    "✓" : {
+
+    },
+    "✗" : {
+
+    },
+    "⤷ %lld event%@ affected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "⤷ %1$lld event%2$@ affected"
+          }
+        }
+      }
+    },
+    "1 · Draft (optional)" : {
+
+    },
+    "1 min" : {
+
+    },
+    "1. Add files   2. Pick an output format   3. Convert, then Save as…" : {
+
+    },
+    "2 · Structure" : {
+
+    },
+    "2 min" : {
+
+    },
+    "3 · Compile & test" : {
+
+    },
+    "4 · Sign & register" : {
+
+    },
+    "5 min" : {
+
+    },
+    "5 Whys" : {
+
+    },
+    "10 min" : {
+
+    },
+    "15 min" : {
+
+    },
+    "30 min" : {
+
+    },
+    "A clean, plain-language summary you can hand to a non-technical reader — counsel, a manager. Copy or print it." : {
+
+    },
+    "A complete, append-only record of what happened to your data — every file acquisition and integrity check, and every human decision. Nothing here is editable or deletable; it is the receipt for the ledger." : {
+
+    },
+    "A corrections path exists after publishing (pinned comment / description edit / erratum)" : {
+
+    },
+    "A corrections path exists post-publication" : {
+
+    },
+    "A deviation resolves the rule as an authorized departure and downgrades the sealed status to 'conformant with deviations'. Prohibitions are non-waivable — a deviation on one fails the run. Every departure stays on the certificate with who authorized it and why." : {
+
+    },
+    "A fact confirmed a year ago may no longer hold. Flagging the oldest confirmations keeps them from being reused as if freshly checked — the difference between a current answer and a confidently wrong one." : {
+
+    },
+    "A finding can be right on the evidence yet fail if the process was unfair — confirm both fairness steps." : {
+
+    },
+    "A focused, evidence-cited history of one subject — resolved to a canonical identity." : {
+
+    },
+    "A folder anyone can verify without Kalsmritikosh — integrity, authenticity and conformance replay (spec: BUNDLE_FORMAT.md; CLI: kalverify)." : {
+
+    },
+    "A large email dump, made navigable — exact duplicates removed and scattered replies grouped into conversations, most-recently-active first." : {
+
+    },
+    "A matter is the container all jobs run against (a case, story, research question, or personal topic). Name it, pick the workspace holding its documents, and start." : {
+
+    },
+    "A one-shot file converter — nothing here is saved to your knowledge base. Reads PDF, Word, Excel, images (OCR), email/PST/NSF, and audio & video (transcribed); exports to text, Markdown, JSON, HTML, CSV, PDF, RTF, Word, Excel, or PNG." : {
+
+    },
+    "A patent number, a person, a company, a project. The app gathers everything it extracted about it into one cited, chronological file — overview, parties, timeline, clauses, roadblocks, and what's still missing." : {
+
+    },
+    "A re-parse of the output found none of the protected terms in its extractable text. Save it above." : {
+
+    },
+    "A signed receipt (.receipt.json) is written beside every export, one entry per row, so anyone can check the file was not changed." : {
+
+    },
+    "A top-k gate runs specialist “super-experts” (Analyst, Skeptic, Historian, Connector, Quant) in parallel and folds their perspectives into the answer. Highest quality; adds several model passes (slower)." : {
+
+    },
+    "A transparent screening log with PRISMA-compatible flow counts. Single-user v1 — not independent dual-review compliance, meta-analysis, or a final risk-of-bias judgment. No AI makes the final inclusion decision." : {
+
+    },
+    "A workspace is a focused view over your existing archive. It never copies files — it filters them." : {
+
+    },
+    "Accept" : {
+
+    },
+    "Accepted unresolved items (one per line)" : {
+
+    },
+    "Account" : {
+
+    },
+    "Account A" : {
+
+    },
+    "Account B (the conflicting account)" : {
+
+    },
+    "ACH points to: %@. You decide — record your judgment below." : {
+
+    },
+    "Action" : {
+
+    },
+    "Action (statement / EUO / records / ISO…)" : {
+
+    },
+    "Activate" : {
+
+    },
+    "Active tasks" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add .gguf file…" : {
+
+    },
+    "Add %lld suggested views" : {
+
+    },
+    "Add a field (column)" : {
+
+    },
+    "Add a finding" : {
+
+    },
+    "Add a folder to start building your knowledge base." : {
+
+    },
+    "Add a hypothesis" : {
+
+    },
+    "Add a limitation (missing records, offered no opinion on…)" : {
+
+    },
+    "Add a number field (or run an analysis) to chart this dataset." : {
+
+    },
+    "Add a person to assess" : {
+
+    },
+    "Add a possible cause and press Return" : {
+
+    },
+    "Add a recommendation" : {
+
+    },
+    "Add a tag" : {
+
+    },
+    "Add an allegation as a question" : {
+
+    },
+    "Add and read" : {
+
+    },
+    "Add another “why”" : {
+
+    },
+    "Add any `.gguf` file (Hugging Face, TheBloke, custom builds). Kalsmritikosh parses its header for context-length + family." : {
+
+    },
+    "Add assertion" : {
+
+    },
+    "Add asset" : {
+
+    },
+    "Add at least one source before creating a report." : {
+
+    },
+    "Add at least two hypotheses and one piece of evidence to build the matrix." : {
+
+    },
+    "Add calculated column" : {
+
+    },
+    "Add claim" : {
+
+    },
+    "Add discrepancy" : {
+
+    },
+    "Add endpoint" : {
+
+    },
+    "Add event" : {
+
+    },
+    "Add evidence" : {
+
+    },
+    "Add evidence or an interview" : {
+
+    },
+    "Add file(s)…" : {
+
+    },
+    "Add files" : {
+
+    },
+    "Add files to Kalsmritikosh" : {
+
+    },
+    "Add files to your archive. They are read on this Mac and an import receipt is written when receipts are on." : {
+
+    },
+    "Add filter" : {
+
+    },
+    "Add five empty rows at once" : {
+
+    },
+    "Add Folder…" : {
+
+    },
+    "Add issue" : {
+
+    },
+    "Add item" : {
+
+    },
+    "Add material" : {
+
+    },
+    "Add person" : {
+
+    },
+    "Add red flag" : {
+
+    },
+    "Add reply entry" : {
+
+    },
+    "Add row" : {
+
+    },
+    "Add search" : {
+
+    },
+    "Add Sources" : {
+
+    },
+    "Add sources to %@" : {
+
+    },
+    "Add sources…" : {
+
+    },
+    "Add step" : {
+
+    },
+    "Add study" : {
+
+    },
+    "Add the columns of a ready-made table to this dataset — this workspace's profession first. Existing columns are kept, so it's safe to apply." : {
+
+    },
+    "Add to chat" : {
+
+    },
+    "Add transaction" : {
+
+    },
+    "Add withheld document" : {
+
+    },
+    "Add your documents" : {
+
+    },
+    "Add your files" : {
+
+    },
+    "Add your files and every dated event in them — payments, letters, filings — lines up here in order, automatically." : {
+
+    },
+    "Add your first %@ entry — it gets a number and stays editable." : {
+
+    },
+    "Adds the corrected spelling so future lookups resolve to this entity. The original is kept; the change is recorded in the Audit trail." : {
+
+    },
+    "Adds this key fingerprint to this Mac's trusted-signer list: bundle verification then binds identity to it instead of reporting 'key-consistent only'. Trust is local and revocable." : {
+
+    },
+    "Advanced" : {
+
+    },
+    "After drafting, the model fact-checks itself against the findings and revises. Improves faithfulness; adds ~2 model passes." : {
+
+    },
+    "After Ollama is running, return to Kalsmritikosh and Settings will offer a one-tap download." : {
+
+    },
+    "agent: %@" : {
+
+    },
+    "Agreements, disagreements and what no source settles — each line from the sources." : {
+
+    },
+    "AI" : {
+
+    },
+    "AI proofread" : {
+
+    },
+    "AI providers ready" : {
+
+    },
+    "AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Kalsmritikosh still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes." : {
+
+    },
+    "Alert me" : {
+
+    },
+    "Alert note (optional)" : {
+
+    },
+    "Alerts" : {
+
+    },
+    "All analyses" : {
+
+    },
+    "All claim files" : {
+
+    },
+    "All claims supported" : {
+
+    },
+    "All datasets" : {
+
+    },
+    "All engagements" : {
+
+    },
+    "All events" : {
+
+    },
+    "All fact-checks" : {
+
+    },
+    "All investigations" : {
+
+    },
+    "All logs" : {
+
+    },
+    "All material connections are disclosed in or alongside the piece" : {
+
+    },
+    "All records" : {
+
+    },
+    "All statements (%lld)" : {
+
+    },
+    "All times below are per 100 MB of that file type" : {
+
+    },
+    "All workflows" : {
+
+    },
+    "Already run against this matter — run again any time." : {
+
+    },
+    "Also in DEVONthink — off until you turn them on" : {
+
+    },
+    "Also include tag (optional)" : {
+
+    },
+    "Also redact these terms (comma-separated)" : {
+
+    },
+    "Also remove (comma-separated names, numbers)" : {
+
+    },
+    "Amount" : {
+
+    },
+    "An unexplained increase is a lead, not proof." : {
+
+    },
+    "Analysis & correlation" : {
+
+    },
+    "and" : {
+
+    },
+    "Answer" : {
+
+    },
+    "Answer general questions too (clearly marked)" : {
+
+    },
+    "Answer history" : {
+
+    },
+    "Answer Journal" : {
+
+    },
+    "Answer status: %@" : {
+
+    },
+    "Answered from %lld%% of your archive" : {
+
+    },
+    "Answering depth and diagnostics — power users only. The app works fully without touching these." : {
+
+    },
+    "Answering intelligence" : {
+
+    },
+    "Answers open in the main window with their sources." : {
+
+    },
+    "Anything else worth recording" : {
+
+    },
+    "API key" : {
+
+    },
+    "API key (stored in Keychain)" : {
+
+    },
+    "Apple AI writes the final answer" : {
+
+    },
+    "Apply" : {
+
+    },
+    "Apply a profession template" : {
+
+    },
+    "Apply filter view" : {
+
+    },
+    "Apply Finder tags" : {
+
+    },
+    "Apply team codes here" : {
+
+    },
+    "Approve" : {
+
+    },
+    "Approve & sign" : {
+
+    },
+    "Approved — ready to submit" : {
+
+    },
+    "ARC chain" : {
+
+    },
+    "Archive" : {
+
+    },
+    "Archived" : {
+
+    },
+    "As of" : {
+
+    },
+    "as of %@" : {
+
+    },
+    "Ask" : {
+
+    },
+    "Ask a precise question of your own data — pick what you're looking at, add a few filters, and run. No formulas, no code. Every result comes straight from your on-device ledger." : {
+
+    },
+    "Ask a question" : {
+
+    },
+    "Ask a question about your archive. The answer comes only from your documents, with its sources; if the evidence is not there, it says so." : {
+
+    },
+    "Ask a question and get a sealed receipt file listing the answer and every quoted source passage, signed when signed receipts are on." : {
+
+    },
+    "Ask a question in the Ask tab — grounded answers land here for later audit." : {
+
+    },
+    "Ask across every document" : {
+
+    },
+    "Ask anything" : {
+
+    },
+    "Ask as of this date" : {
+
+    },
+    "Ask before every send" : {
+
+    },
+    "Ask Kalsmritikosh" : {
+
+    },
+    "Ask Kalsmritikosh ${question}" : {
+
+    },
+    "Ask Kalsmritikosh ${question} with a receipt" : {
+
+    },
+    "Ask Kalsmritikosh to reconstruct a history…" : {
+
+    },
+    "Ask Kalsmritikosh to tell you the story of a project, person, or topic. Each chapter is grounded in the source events that produced it." : {
+
+    },
+    "Ask Kalsmritikosh with a receipt" : {
+
+    },
+    "Ask one question across every document at once — e.g. a party name, a clause, a payment." : {
+
+    },
+    "Ask or search your archive" : {
+
+    },
+    "Ask questions in plain language. Every answer is grounded in your files and shows the sources it used." : {
+
+    },
+    "Asking…" : {
+
+    },
+    "Assembling the story from your documents…" : {
+
+    },
+    "Assertions" : {
+
+    },
+    "Assertions about this event (%lld)" : {
+
+    },
+    "Asset (clip / image / quote / track)" : {
+
+    },
+    "Assumptions / downgrades" : {
+
+    },
+    "Assurance label" : {
+
+    },
+    "Attach a supported file and the app reads it — so this step can cite and answer over it. Supported: %@" : {
+
+    },
+    "Attach files" : {
+
+    },
+    "Attach files — they're ingested into your archive and become searchable, citable evidence for this and every future question." : {
+
+    },
+    "Attach the files this step rests on — the app reads them into your archive so they're searchable and citable. Supported: %@" : {
+
+    },
+    "Attest" : {
+
+    },
+    "Attest all" : {
+
+    },
+    "Attest rule" : {
+
+    },
+    "Attest…" : {
+
+    },
+    "Audit" : {
+
+    },
+    "Audit trail" : {
+
+    },
+    "Auditing…" : {
+
+    },
+    "Authenticity" : {
+
+    },
+    "Authenticity signals" : {
+
+    },
+    "Author" : {
+
+    },
+    "Author custom protocol…" : {
+
+    },
+    "Author your organization's own constitution on the Compliance Board: AI drafts from your SOP text, you structure and test every rule, then sign it as an offline pack. Off by default — the built-in doctrines govern until you opt in." : {
+
+    },
+    "Authorized by (required)" : {
+
+    },
+    "Authors" : {
+
+    },
+    "Auto" : {
+
+    },
+    "Auto-complete steps when filled" : {
+
+    },
+    "Auto-save as I go" : {
+
+    },
+    "Automation — turn auto-save and auto-complete on or off" : {
+
+    },
+    "Available when: %@" : {
+
+    },
+    "Back" : {
+
+    },
+    "Back — previous place you visited  (⌘[)" : {
+
+    },
+    "Back to my archive" : {
+
+    },
+    "Back up now…" : {
+
+    },
+    "Back up your knowledge base" : {
+
+    },
+    "Background maintenance" : {
+
+    },
+    "Background services" : {
+
+    },
+    "Background work running" : {
+
+    },
+    "Backing up…" : {
+
+    },
+    "Band" : {
+
+    },
+    "Base URL" : {
+
+    },
+    "Batch list" : {
+
+    },
+    "Batch list searches many terms at once — every name on a roster, every account number — and shows hits per term" : {
+
+    },
+    "Bates prefix" : {
+
+    },
+    "Bates range / control number" : {
+
+    },
+    "Because X, supported by Y…" : {
+
+    },
+    "Because… (this becomes the next question)" : {
+
+    },
+    "Becomes" : {
+
+    },
+    "Big-picture thread: %@, %lld connected people and things" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Big-picture thread: %1$@, %2$lld connected people and things"
+          }
+        }
+      }
+    },
+    "Bind to a source document…" : {
+
+    },
+    "Binder preview" : {
+
+    },
+    "Blank table" : {
+
+    },
+    "Brief" : {
+
+    },
+    "Briefing" : {
+
+    },
+    "Briefings, FAQs and mind maps" : {
+
+    },
+    "Bring your own OpenAI / Anthropic / Azure / custom endpoint. API keys are stored in macOS Keychain. PrivacyGate still gates whether cloud calls are made." : {
+
+    },
+    "Browse past conversations — every Ask is saved." : {
+
+    },
+    "Browse the entities extracted from your files — people, companies, projects — with their mentions and export." : {
+
+    },
+    "Browser history (Safari, Chrome, Brave, Edge, Arc)" : {
+
+    },
+    "Build a standards-conformant, layered citation — full note, short note, and source-list entry — without hand-formatting. Fill only what you have; empty parts are dropped cleanly." : {
+
+    },
+    "Build a table straight from what you've ingested — one row per event or entity, every value drill-through bound to its source (no re-keying)." : {
+
+    },
+    "Build an FRCP 26(b)(5) privilege log the real-life way: describe each withheld document well enough that the claim can be tested — without revealing what's protected — assert the basis, QC it, and serve the exact table courts expect." : {
+
+    },
+    "Build datasets over your evidence and work them into deeper meaning — transform, test what-if scenarios, check quality. Every source cell drills through to the exact evidence behind it; derived values carry their full lineage." : {
+
+    },
+    "Build findings" : {
+
+    },
+    "Build from evidence" : {
+
+    },
+    "Build it" : {
+
+    },
+    "Build the matrix to see the ranking." : {
+
+    },
+    "Build the story" : {
+
+    },
+    "Build topics" : {
+
+    },
+    "Building topics…" : {
+
+    },
+    "Builds distilled memories for the top people and organizations in your ledger right now. Runs on demand; also happens automatically during idle maintenance when enabled above." : {
+
+    },
+    "Built from your ledger; no AI wrote this." : {
+
+    },
+    "Built-in doctrine" : {
+
+    },
+    "Calibrated to THIS Mac (%lld LLM calls, %@s/call)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Calibrated to THIS Mac (%1$lld LLM calls, %2$@s/call)."
+          }
+        }
+      }
+    },
+    "Cancel" : {
+
+    },
+    "Capture" : {
+
+    },
+    "Case “%@” · %lld member(s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Case “%1$@” · %2$lld member(s)"
+          }
+        }
+      }
+    },
+    "Case / matter name" : {
+
+    },
+    "Case Story" : {
+
+    },
+    "Case title" : {
+
+    },
+    "Caseload" : {
+
+    },
+    "Caseload triage" : {
+
+    },
+    "Causal chain" : {
+
+    },
+    "Causal links" : {
+
+    },
+    "Causal links across this entity's events (%lld)" : {
+
+    },
+    "Cause" : {
+
+    },
+    "CC" : {
+
+    },
+    "Certainty of evidence (GRADE)" : {
+
+    },
+    "Change" : {
+
+    },
+    "Change history" : {
+
+    },
+    "Changed later by: %@" : {
+
+    },
+    "Changing the mode now applies on the next launch." : {
+
+    },
+    "Charting the %@ result above." : {
+
+    },
+    "Chat exports (WhatsApp, Signal, Slack TXT)" : {
+
+    },
+    "Check" : {
+
+    },
+    "Check a backup…" : {
+
+    },
+    "Check a file's provenance the way an examiner does — a stable fingerprint, capture metadata, editing-software traces, and (for PDFs) whether it was edited after its original save." : {
+
+    },
+    "Check a snapshot…" : {
+
+    },
+    "Check Answering" : {
+
+    },
+    "Check Answering — builds a handful of questions FROM your own ledger (a subject it knows, a value it holds, a year it has events for), asks them, and checks each answer carries citations. Then it asks one question about a randomly generated reference that cannot exist, and checks the app REFUSES to answer it. Answering that one would mean the evidence gate is not holding, which is reported above everything else. Uses the on-device model, so it takes a minute. Writes answer-harness.md to ~/Documents/EvalBaselines/." : {
+
+    },
+    "Check Data Health" : {
+
+    },
+    "Check Data Health — read-only audit of your LIVE database. Counts every layer (files, KOs, chunks, entities, events, vectors, bonds, memory) and flags incomplete ingestion (KOs without chunks, entities without fact_type, etc.). Writes data-health-report.md to ~/Documents/EvalBaselines/. Safe to run anytime." : {
+
+    },
+    "Check every file is accounted for" : {
+
+    },
+    "Check For Drift" : {
+
+    },
+    "Check For Drift — runs every background pass three times and checks that the second and third runs change nothing. If they do, some part of your ledger is being rewritten on every launch, which is how counts grow without new documents. UNLIKE THE OTHER CHECKS, THIS ONE WRITES: the property being tested is a property of writing, so it cannot be done read-only. Your original files and stored evidence are never touched. Takes a few minutes on a large archive. Writes fixed-point-check.md to ~/Documents/EvalBaselines/." : {
+
+    },
+    "Check if ready to ship" : {
+
+    },
+    "Check now" : {
+
+    },
+    "Check this dataset for missing values, stale sources, unreviewed scenario values and more" : {
+
+    },
+    "Checked" : {
+
+    },
+    "Checking…" : {
+
+    },
+    "Choose a DEVONthink database (.dtBase2). Its stored documents are read where they are — nothing is copied out of or written into the database. Finder tags become your tags. DEVONthink's group folders are not read; indexed items outside the database should be added in Sources." : {
+
+    },
+    "Choose a folder Kalsmritikosh should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from the Sources tab." : {
+
+    },
+    "Choose a photo" : {
+
+    },
+    "Choose a professional focus" : {
+
+    },
+    "Choose an event…" : {
+
+    },
+    "Choose database…" : {
+
+    },
+    "Choose documents to compare" : {
+
+    },
+    "Choose file…" : {
+
+    },
+    "Choose files already ingested into your archive. Adding a source lets this workspace's reports use it." : {
+
+    },
+    "Choose folder and produce…" : {
+
+    },
+    "Choose folder…" : {
+
+    },
+    "Choose Fully private · AI gated · AI free under Modules → AI. That one control turns AI on or off everywhere." : {
+
+    },
+    "Choose match…" : {
+
+    },
+    "Choose notes folder…" : {
+
+    },
+    "Choose PDF…" : {
+
+    },
+    "Choose the PDF you want to redact" : {
+
+    },
+    "Choose this focus" : {
+
+    },
+    "Choose which model reasons over your archive. Auto adapts to your device; pick one to override." : {
+
+    },
+    "Choose your focus" : {
+
+    },
+    "Choose…" : {
+
+    },
+    "Choosing a focus switches on the tools it needs. You can change any of them in Settings → Modules." : {
+
+    },
+    "Citations" : {
+
+    },
+    "Citations complete — every stated fact reopens its source" : {
+
+    },
+    "Cited bytes %lld–%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Cited bytes %1$lld–%2$lld"
+          }
+        }
+      }
+    },
+    "Claim review" : {
+
+    },
+    "Claims extracted from your files land here, each with its supporting evidence. You can also add your own from the Explore tab." : {
+
+    },
+    "Classic" : {
+
+    },
+    "Classic conformance mode (disables enforcement)" : {
+
+    },
+    "Classify sources and findings. Tags are shared across every persona; templates only rename them." : {
+
+    },
+    "Classifying the ledger…" : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear finished" : {
+
+    },
+    "Clear search" : {
+
+    },
+    "Clear Selection" : {
+
+    },
+    "Clear view (show all rows, original order)" : {
+
+    },
+    "Click to change your persona" : {
+
+    },
+    "Click to see everything recorded on this document" : {
+
+    },
+    "Click to see who is named in this document and related documents" : {
+
+    },
+    "Client / matter" : {
+
+    },
+    "Close" : {
+
+    },
+    "Close — you can add folders later from Sources" : {
+
+    },
+    "Close matter" : {
+
+    },
+    "Closeness" : {
+
+    },
+    "Closure" : {
+
+    },
+    "Cloud endpoints" : {
+
+    },
+    "Co-occurring entities (%lld)" : {
+
+    },
+    "Coalesce email threads (Move A)" : {
+
+    },
+    "Code at least %lld documents responsive and %lld not responsive to get suggestions." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Code at least %1$lld documents responsive and %2$lld not responsive to get suggestions."
+          }
+        }
+      }
+    },
+    "Collections" : {
+
+    },
+    "Communications — who contacted whom" : {
+
+    },
+    "Company" : {
+
+    },
+    "Compare %lld documents" : {
+
+    },
+    "Compare Documents" : {
+
+    },
+    "Comparing against your last check…" : {
+
+    },
+    "Comparing…" : {
+
+    },
+    "Comparison brief" : {
+
+    },
+    "Competing Hypotheses" : {
+
+    },
+    "Competing Hypotheses (ACH)" : {
+
+    },
+    "Compile check" : {
+
+    },
+    "Complete the structure to simulate." : {
+
+    },
+    "Completeness" : {
+
+    },
+    "Compliance Board" : {
+
+    },
+    "Compose & Export…" : {
+
+    },
+    "Compose a source-cited work product deterministically from the ledger — dated events, contradictions, and gaps. No AI is used; every dated line cites its source, and conflicts and gaps are shown, not hidden." : {
+
+    },
+    "Composing…" : {
+
+    },
+    "Computed on this Mac. Nothing is uploaded." : {
+
+    },
+    "Computes one value per row and saves the column — every derived cell records exactly which cells fed it" : {
+
+    },
+    "Conclusion" : {
+
+    },
+    "Condition — e.g. Amount > 1000 AND Status = \"open\"" : {
+
+    },
+    "conf: %@" : {
+
+    },
+    "Confidence" : {
+
+    },
+    "confidence %lld%%" : {
+
+    },
+    "Confidence %lld%% · %lld citation(s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Confidence %1$lld%% · %2$lld citation(s)"
+          }
+        }
+      }
+    },
+    "Confirm & post %@" : {
+
+    },
+    "Confirm step" : {
+
+    },
+    "Confirmation age" : {
+
+    },
+    "conflict" : {
+
+    },
+    "Conflicting evidence detected" : {
+
+    },
+    "conflicts" : {
+
+    },
+    "Conflicts to resolve" : {
+
+    },
+    "conflicts with" : {
+
+    },
+    "Connect two entities" : {
+
+    },
+    "Connection" : {
+
+    },
+    "Connections" : {
+
+    },
+    "Consistency matrix" : {
+
+    },
+    "Constitution" : {
+
+    },
+    "Constitution frozen for this run: %@" : {
+
+    },
+    "Constitutions update as SIGNED files imported locally (Files, AirDrop, USB, MDM) — the app never fetches anything. A pack activates only when its signature verifies, its hash matches, and its schema compiles. Activating supersedes the previous active version; sealed runs keep their frozen snapshot forever." : {
+
+    },
+    "Context window (tokens)" : {
+
+    },
+    "Continue" : {
+
+    },
+    "Contradictions" : {
+
+    },
+    "Contradictions and gaps are found as your files are read and questions are asked — an empty archive has nothing to disagree yet." : {
+
+    },
+    "Convert" : {
+
+    },
+    "Convert files" : {
+
+    },
+    "Converting…" : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Copy board as hardcopy" : {
+
+    },
+    "Copy ledger to another disk…" : {
+
+    },
+    "Copy link" : {
+
+    },
+    "Copy link to this passage" : {
+
+    },
+    "Copy my signer fingerprint" : {
+
+    },
+    "Copy report" : {
+
+    },
+    "Copy Report" : {
+
+    },
+    "Copy sealed conformance certificate" : {
+
+    },
+    "Copy the full technical report — every step, value, attestation and document number" : {
+
+    },
+    "Copy the ledger to another disk. The copy is checked before anything changes, Kalsmritikosh uses it from the next launch, and the copy on this Mac is kept." : {
+
+    },
+    "Copy this answer" : {
+
+    },
+    "Copy to Ask Kalsmritikosh" : {
+
+    },
+    "Copying…" : {
+
+    },
+    "Correct spelling" : {
+
+    },
+    "Correct spelling…" : {
+
+    },
+    "corrected — %@" : {
+
+    },
+    "Corrected name" : {
+
+    },
+    "Corrected value" : {
+
+    },
+    "couldn't read" : {
+
+    },
+    "Count" : {
+
+    },
+    "Counts must not grow down the funnel: identified ≥ screened ≥ eligible ≥ included." : {
+
+    },
+    "Coverage" : {
+
+    },
+    "Create" : {
+
+    },
+    "Create a workspace for a case or project and it will appear here, triaged." : {
+
+    },
+    "Create entry" : {
+
+    },
+    "Create one to organize a case, investigation, project, or personal matter as a focused view over your archive." : {
+
+    },
+    "Create one to start reasoning through a case with brainstorming, 5 Whys and a fishbone diagram." : {
+
+    },
+    "Create one to weigh competing explanations against your evidence." : {
+
+    },
+    "Create one, or load the worked example to see the finished document." : {
+
+    },
+    "Create one, or load the worked example to see the finished memo." : {
+
+    },
+    "Create one, or load the worked example to see the finished report." : {
+
+    },
+    "Create one, or load the worked example to see the finished table." : {
+
+    },
+    "Create workspace" : {
+
+    },
+    "Created %@" : {
+
+    },
+    "Creates a dataset in this workspace — blank, or pre-filled with the columns of the chosen template" : {
+
+    },
+    "Credentials, experience, prior testimony…" : {
+
+    },
+    "Cross-Document Matrix" : {
+
+    },
+    "CSV — spreadsheet interchange" : {
+
+    },
+    "ctx %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "ctx %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "current" : {
+
+    },
+    "Current" : {
+
+    },
+    "Custom protocol studio" : {
+
+    },
+    "Custom Protocol Studio" : {
+
+    },
+    "Custom…" : {
+
+    },
+    "Daily limit (bytes, blank = none, 0 = send nothing)" : {
+
+    },
+    "DataLab" : {
+
+    },
+    "Datasets also appear here when a persona job prepares one (e.g. the Investigator's Source Inventory)." : {
+
+    },
+    "Date" : {
+
+    },
+    "Date range" : {
+
+    },
+    "Dated events over time" : {
+
+    },
+    "Deadline" : {
+
+    },
+    "DECIDE — press the number or click" : {
+
+    },
+    "Decide whether this what-if becomes a recorded correction or finding — the human decision is what makes it real" : {
+
+    },
+    "Decision" : {
+
+    },
+    "Decisions made" : {
+
+    },
+    "Decoded offline from the original message. DKIM and ARC are checked only against keys you paste below — no internet lookup is made." : {
+
+    },
+    "Decompose this question into focused sub-questions and synthesize an answer." : {
+
+    },
+    "Default" : {
+
+    },
+    "Define a type and its fields. Values fill in from your documents only where they are written; empty means no document says it." : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete all my data" : {
+
+    },
+    "Delete All My Data…" : {
+
+    },
+    "Delete all your data?" : {
+
+    },
+    "Delete everything" : {
+
+    },
+    "Delete this conversation" : {
+
+    },
+    "Delete this investigation" : {
+
+    },
+    "Delete workspace" : {
+
+    },
+    "Deleted email still present" : {
+
+    },
+    "Describe it — e.g. “documents added last month”, “organizations with confidence over 0.8”, “open conflicts”" : {
+
+    },
+    "Description" : {
+
+    },
+    "Description — enough to assess the claim, without the protected content" : {
+
+    },
+    "Description (optional)" : {
+
+    },
+    "Design" : {
+
+    },
+    "Detect automatically" : {
+
+    },
+    "Detected hardware" : {
+
+    },
+    "Diag" : {
+
+    },
+    "Diagnostic — it distinguishes the hypotheses" : {
+
+    },
+    "Diagnostics" : {
+
+    },
+    "Did …?" : {
+
+    },
+    "Discard" : {
+
+    },
+    "Discipline" : {
+
+    },
+    "Disclosures" : {
+
+    },
+    "Dismiss" : {
+
+    },
+    "Dismiss chip — the file stays ingested in your archive." : {
+
+    },
+    "Dismiss chip." : {
+
+    },
+    "Display name (e.g. \"OpenAI 4o-mini\")" : {
+
+    },
+    "Disposition" : {
+
+    },
+    "Distill memory now" : {
+
+    },
+    "DKIM" : {
+
+    },
+    "DKIM keys (one per line: selector._domainkey.domain  \"v=DKIM1; k=rsa; p=…\")" : {
+
+    },
+    "Document history" : {
+
+    },
+    "Document preview" : {
+
+    },
+    "Documents" : {
+
+    },
+    "Documents tagged" : {
+
+    },
+    "Don’t send" : {
+
+    },
+    "Done" : {
+
+    },
+    "Dossier" : {
+
+    },
+    "Download a reasoning model" : {
+
+    },
+    "Download size: %@  •  context: %lld tokens" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Download size: %1$@  •  context: %2$lld tokens"
+          }
+        }
+      }
+    },
+    "Download with Ollama" : {
+
+    },
+    "Downloading…" : {
+
+    },
+    "Downloading… %lld%%" : {
+
+    },
+    "Draft → Structure → Compile → Test → Sign. The AI only drafts; every shipped rule is yours. The result is a signed offline pack with a \"%@\" assurance label — authorship is proven, legal adequacy is not claimed." : {
+
+    },
+    "Draft from SOP (AI)" : {
+
+    },
+    "Draft with on-device AI" : {
+
+    },
+    "Drafted from your SOP — review before relying on it." : {
+
+    },
+    "Drafting…" : {
+
+    },
+    "Drafts, forwards and re-saved copies, linked as versions of one another. Nothing is merged or deleted; the corroboration meter counts each group as one source." : {
+
+    },
+    "Drop an MLX model directory into the folder below; Kalsmritikosh reads its `config.json` and registers it at the next launch." : {
+
+    },
+    "Drop files" : {
+
+    },
+    "Drop files here" : {
+
+    },
+    "Drop files here, or paste text, to add them to your archive. Each item is saved in the app's intake folder with a custody record (time, origin, SHA-256). Nothing goes online." : {
+
+    },
+    "Drop folders to add them" : {
+
+    },
+    "Dry run" : {
+
+    },
+    "Duplicates are detected by exact file content — identical bytes are collapsed to one. Conversations are grouped by subject with reply/forward prefixes stripped, then ordered by date. This is subject-based threading: the archive doesn't store the email Message-ID / In-Reply-To headers that would let two unrelated \"Re: update\" chains be told apart, so treat a thread as a strong grouping, not a guarantee." : {
+
+    },
+    "e.g. corrected the date after re-checking" : {
+
+    },
+    "e.g. Meets referral criteria §2(b): two or more recognized indicators…" : {
+
+    },
+    "e.g. termination clause, payment terms, non-disclosure…" : {
+
+    },
+    "e.g. the patent number, or a party's name…" : {
+
+    },
+    "E%lld %@ E%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "E%1$lld %2$@ E%3$lld"
+          }
+        }
+      }
+    },
+    "Each run of the in-app SmokeTest with `KALSMRITIKOSH_NARRATIVE_EVAL=1` lands here. Coverage / citation density / contradiction recall / confidence RMSE — arrows show movement vs the previous run." : {
+
+    },
+    "earns a studio" : {
+
+    },
+    "Edit entry" : {
+
+    },
+    "edited" : {
+
+    },
+    "elapsed %@" : {
+
+    },
+    "Email authenticity" : {
+
+    },
+    "Email threads" : {
+
+    },
+    "Email Threads" : {
+
+    },
+    "Emails" : {
+
+    },
+    "Emails per month" : {
+
+    },
+    "empty" : {
+
+    },
+    "Encryption" : {
+
+    },
+    "Enforced in: %@" : {
+
+    },
+    "Engagement title" : {
+
+    },
+    "Engine" : {
+
+    },
+    "Enrichment tiers (Hot / Warm / Cold)" : {
+
+    },
+    "Enter a person, project, or organization. Kalsmritikosh resolves it to a canonical identity and reconstructs its evidence-cited history — chapters, coverage and gaps." : {
+
+    },
+    "Enter a topic to see what each document says." : {
+
+    },
+    "Enter your ledger's recovery key" : {
+
+    },
+    "Entities (%lld)" : {
+
+    },
+    "Entity population" : {
+
+    },
+    "Erase everything Kalsmritikosh has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone." : {
+
+    },
+    "Erasing…" : {
+
+    },
+    "Estimated wall-clock time for 100 MB of a single file type, in each system mode. Scanned PDFs and images cost far more (OCR). Audio/video is catalogued at ingest, not transcribed — on-demand transcription in Transcripts is a separate, later cost." : {
+
+    },
+    "EV-005. Default OFF (**reference mode**): Kalsmritikosh keeps a bookmark + hash + the derived evidence, and your files stay where they are — but if a file is later moved or replaced, its exact original bytes may no longer reopen. Turn ON (**managed mode**) to also keep a local, read-only, content-addressed copy of each ingested file, so every version can always be reopened byte-for-byte — recommended for investigations and legal matters. Costs disk (identical files are stored once). Applies to newly-ingested files." : {
+
+    },
+    "Event" : {
+
+    },
+    "Event change history" : {
+
+    },
+    "Event detail" : {
+
+    },
+    "Event restricted" : {
+
+    },
+    "Event types" : {
+
+    },
+    "Events" : {
+
+    },
+    "Events touching this entity (%lld)" : {
+
+    },
+    "Every answer is recorded with its evidence, so any reply can be traced back to the files, events and blocks that supported it." : {
+
+    },
+    "Every claim cited" : {
+
+    },
+    "Every description lets the claim be assessed WITHOUT revealing protected content" : {
+
+    },
+    "Every entry asserts a specific privilege basis (AC / WP / both)" : {
+
+    },
+    "Every external SOP the app implements, at the exact edition verified — with a periodic re-check so compliance is maintained, not just achieved once. Checks are on-device reminders; re-verification is a human act against the governing body's current text." : {
+
+    },
+    "Every fact the app (or you) has asserted — filter by predicate or agent, and retract any you don't trust." : {
+
+    },
+    "Every fact you've confirmed, ranked by how long since it was last checked. Aging and stale confirmations are flagged so they get a fresh look before they're relied on again." : {
+
+    },
+    "Every ingested file is already in this workspace, or nothing has been ingested yet. Add files to your archive from the Sources tab first." : {
+
+    },
+    "Every matter ranked by how much attention it needs — so the oldest, largest untouched cases don't slip. Active matters only; archived ones are excluded." : {
+
+    },
+    "Every model runs on this Mac. The app is built without the network permission, so no document, question, or answer can leave your computer." : {
+
+    },
+    "Every question you ask is saved on this Mac. Reopen a thread to keep going where you left off." : {
+
+    },
+    "Every source cell cited" : {
+
+    },
+    "Every unverified/disputed claim is framed as ALLEGED in copy" : {
+
+    },
+    "Everything your documents record a person saying or being described as saying about a topic, in date order. Changes are leads to read, not findings." : {
+
+    },
+    "Evidence" : {
+
+    },
+    "Evidence (optional) — a document number or source" : {
+
+    },
+    "Evidence & custody (%lld)" : {
+
+    },
+    "Evidence attached" : {
+
+    },
+    "Evidence Canvas" : {
+
+    },
+    "Evidence Explained citations" : {
+
+    },
+    "Evidence Explained's discipline is that a source is cited fully once, briefly thereafter, and listed once in the bibliography — and that the citation records not just where you found it but what it actually is (the \"citing\" line). That's what lets another researcher — or a court — evaluate and re-find your evidence." : {
+
+    },
+    "Evidence for this answer" : {
+
+    },
+    "evidence in the ledger" : {
+
+    },
+    "Evidence not yet verified" : {
+
+    },
+    "Evidence per matter" : {
+
+    },
+    "Evidence restricted" : {
+
+    },
+    "Evidence verified with content hash" : {
+
+    },
+    "Excel workbook (.xlsx)" : {
+
+    },
+    "Exclude this passage from search and answers (reversible, recorded in the Audit trail)" : {
+
+    },
+    "Excluded" : {
+
+    },
+    "Excluded — hidden from answers, kept for the record" : {
+
+    },
+    "Excluded — hidden from the timeline & answers, kept for the record" : {
+
+    },
+    "Excluded (%lld)" : {
+
+    },
+    "Exclusion reason (required)" : {
+
+    },
+    "Exit queue" : {
+
+    },
+    "Explain" : {
+
+    },
+    "Explore" : {
+
+    },
+    "Explore your knowledge graph" : {
+
+    },
+    "Export" : {
+
+    },
+    "Export a tamper-evident receipt: each claim pinned to its cited source + custody hash, re-checkable offline." : {
+
+    },
+    "Export CSV" : {
+
+    },
+    "Export current constitution as signed pack…" : {
+
+    },
+    "Export deposition outline…" : {
+
+    },
+    "Export dossier…" : {
+
+    },
+    "Export Markdown" : {
+
+    },
+    "Export Markdown…" : {
+
+    },
+    "Export proof bundle…" : {
+
+    },
+    "Export quotes" : {
+
+    },
+    "Export report…" : {
+
+    },
+    "Export signed pack…" : {
+
+    },
+    "Export signed snapshot…" : {
+
+    },
+    "Export slice…" : {
+
+    },
+    "Export statement of facts…" : {
+
+    },
+    "Export the built findings as a file. Optional redaction removes the terms below and refuses the export if any would leak." : {
+
+    },
+    "Export verifiable receipt…" : {
+
+    },
+    "Export verification bundle…" : {
+
+    },
+    "Export…" : {
+
+    },
+    "Exported — document " : {
+
+    },
+    "Fact" : {
+
+    },
+    "Fact-Check" : {
+
+    },
+    "Fact-check my writing" : {
+
+    },
+    "Fact-Check Studio" : {
+
+    },
+    "Family" : {
+
+    },
+    "FAQ" : {
+
+    },
+    "Features" : {
+
+    },
+    "Features that are built but not yet verified on real data or hardware (team review, places, iPhone/iPad snapshot). Use them knowing they may change." : {
+
+    },
+    "Fewer document-shaped topics + more AI-polished = AI subject resolution and prose working. Build topics in Settings → Your data to refresh." : {
+
+    },
+    "Fields, comma-separated (parties, value, start date)" : {
+
+    },
+    "File areas" : {
+
+    },
+    "File title" : {
+
+    },
+    "File type · /100 MB" : {
+
+    },
+    "File-type ingest guide" : {
+
+    },
+    "Files" : {
+
+    },
+    "Files by format" : {
+
+    },
+    "filter agent" : {
+
+    },
+    "Filter by subject or participant" : {
+
+    },
+    "Filter documents" : {
+
+    },
+    "filter predicate" : {
+
+    },
+    "Filters" : {
+
+    },
+    "Finalize this step and record who did it and when" : {
+
+    },
+    "Find Gaps" : {
+
+    },
+    "Find in archive" : {
+
+    },
+    "Find near-duplicates" : {
+
+    },
+    "Find the connection" : {
+
+    },
+    "Find the gaps" : {
+
+    },
+    "Finding" : {
+
+    },
+    "Findings" : {
+
+    },
+    "Findings of fact" : {
+
+    },
+    "Findings reached" : {
+
+    },
+    "Finish" : {
+
+    },
+    "First add the folder in Sources (an Obsidian vault, an unzipped Notion export, or notes exported from Apple Notes). Then choose it here: links between notes become links you can follow both ways, and tags become your tags." : {
+
+    },
+    "First review — this becomes your baseline." : {
+
+    },
+    "Fishbone" : {
+
+    },
+    "Flows by strength" : {
+
+    },
+    "Focus the app on this role" : {
+
+    },
+    "Folder type" : {
+
+    },
+    "Folders" : {
+
+    },
+    "Follow the money the way a testifying expert must: name the tracing method, list the materials relied upon, build a schedule where every amount drills to its source document, and produce the FRCP 26(a)(2)(B) expert report — findings distinct from opinion, to a reasonable degree of professional certainty." : {
+
+    },
+    "For: %@" : {
+
+    },
+    "Forensic Accounting" : {
+
+    },
+    "Forensic Accounting Studio" : {
+
+    },
+    "Format" : {
+
+    },
+    "Formula — e.g. Premium * 0.18  or  IF(Amount > 1000, \"high\", \"low\")" : {
+
+    },
+    "Formula reference" : {
+
+    },
+    "Forward  (⌘])" : {
+
+    },
+    "Found a problem or have an idea? Tell us — early feedback shapes what gets built next. The button below opens a draft in your own Mail app: Kalsmritikosh itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send." : {
+
+    },
+    "Freshness" : {
+
+    },
+    "Freshness monitor" : {
+
+    },
+    "From" : {
+
+    },
+    "From every folder you add, kalsmritikosh reads:" : {
+
+    },
+    "Full AI" : {
+
+    },
+    "Full deep check (slow)" : {
+
+    },
+    "Full guide" : {
+
+    },
+    "Full-text search runs instantly across every chunk — no waiting for AI enrichment." : {
+
+    },
+    "Fund flow" : {
+
+    },
+    "Fund Flow" : {
+
+    },
+    "gap" : {
+
+    },
+    "gaps" : {
+
+    },
+    "General knowledge, not from your documents: %@" : {
+
+    },
+    "Generate Knowledge Inventory" : {
+
+    },
+    "Generate Knowledge Inventory — per-file readout of EVERYTHING Kalsmritikosh extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/." : {
+
+    },
+    "Generating…" : {
+
+    },
+    "GGUF files" : {
+
+    },
+    "Global requirements — apply to the whole run, one per line" : {
+
+    },
+    "Go back a step — nothing is lost" : {
+
+    },
+    "GO TO" : {
+
+    },
+    "Got it" : {
+
+    },
+    "Governed review — %@" : {
+
+    },
+    "Governing protocol" : {
+
+    },
+    "Grounded in what your documents actually contain — tap to ask." : {
+
+    },
+    "Grounded in your archive — every answer cites its evidence" : {
+
+    },
+    "Group" : {
+
+    },
+    "Group similar photos (%lld)" : {
+
+    },
+    "Guide" : {
+
+    },
+    "Guided workflows with the rigor built in: each step is gated on the one before it, captures what a defensible record needs, and posts a numbered document you can quote later." : {
+
+    },
+    "H%lld" : {
+
+    },
+    "Halt ingesting, relationship extraction and semantic indexing now. Finished work is kept; a later run resumes the rest." : {
+
+    },
+    "Handoff & Review" : {
+
+    },
+    "Handoff & Review is still starting…" : {
+
+    },
+    "Health & self-check" : {
+
+    },
+    "Held documents cannot be forgotten or erased until the hold is released. Holds stay in force even if this tool is switched off." : {
+
+    },
+    "Hello, world!" : {
+
+    },
+    "Help & feedback" : {
+
+    },
+    "Help for %@" : {
+
+    },
+    "Hide — reopen any time with the ? button" : {
+
+    },
+    "Hide answer" : {
+
+    },
+    "Hide conflicts" : {
+
+    },
+    "Hide evidence ranking" : {
+
+    },
+    "Hide reasoning path" : {
+
+    },
+    "Hide reasoning plan" : {
+
+    },
+    "Hide recovery key" : {
+
+    },
+    "Hide technical details" : {
+
+    },
+    "Highlight" : {
+
+    },
+    "Highlights" : {
+
+    },
+    "Highlights and notes" : {
+
+    },
+    "History" : {
+
+    },
+    "HISTORY Phase A. When off, the retriever filters out entities tagged T3 (mail-server hostnames like `Tyzpr01mb4530`, weekday tokens, base64-ish IDs) from results — they stay on disk, just don't pollute answers. Flip on to see everything every extractor produced." : {
+
+    },
+    "Hold the production set" : {
+
+    },
+    "Home — back to the start screen" : {
+
+    },
+    "Hot/W/C" : {
+
+    },
+    "How an account changed" : {
+
+    },
+    "How did Kalsmritikosh answer this?" : {
+
+    },
+    "How long to ingest 100 MB" : {
+
+    },
+    "How money moved between parties, drawn from the payment relationships in your evidence. Payers on the left, payees on the right; ribbon thickness reflects how strongly each payment is corroborated." : {
+
+    },
+    "How should Kalsmritikosh process your files?" : {
+
+    },
+    "How the on-device brain composes answers. The deeper options give better, more faithful answers but run more model passes, so replies take longer. Turn them off for speed. All answers stay grounded in your evidence either way." : {
+
+    },
+    "How this answer was found" : {
+
+    },
+    "How this file was read into the knowledge base" : {
+
+    },
+    "How this job works" : {
+
+    },
+    "How this job works — show the step-by-step guide again" : {
+
+    },
+    "How threading works" : {
+
+    },
+    "HR Investigation" : {
+
+    },
+    "HR Investigation Studio" : {
+
+    },
+    "Human review is authoritative and preserved as a new ledger entry — it never overwrites history, and never replaces professional legal/forensic judgment." : {
+
+    },
+    "Hybrid on-device Apple AI + NLP: fixes OCR typos/names using the document's own context. Never changes numbers, dates or IDs." : {
+
+    },
+    "Hypotheses" : {
+
+    },
+    "Hypotheses (ACH)" : {
+
+    },
+    "Hypothesis" : {
+
+    },
+    "Hypothesis note" : {
+
+    },
+    "I acknowledge the red flags are indicators — not, on their own, proof of fraud" : {
+
+    },
+    "I’m coming from DEVONthink (switch on the import and smart-collection tools)" : {
+
+    },
+    "I'm looking at…" : {
+
+    },
+    "I've reviewed the open items and am approving with them recorded as open" : {
+
+    },
+    "Identifier (e.g. sutra.acme.hr)" : {
+
+    },
+    "idle" : {
+
+    },
+    "Images and PDFs get the deepest checks" : {
+
+    },
+    "iMessage (chat.db)" : {
+
+    },
+    "Import a DEVONthink database" : {
+
+    },
+    "Import a discipline from an SOP (AI)" : {
+
+    },
+    "Import CSV" : {
+
+    },
+    "Import CSV/text…" : {
+
+    },
+    "Import protocol pack…" : {
+
+    },
+    "Import queue" : {
+
+    },
+    "Import queue (%lld)" : {
+
+    },
+    "Include native files" : {
+
+    },
+    "Include notes in export" : {
+
+    },
+    "Include original files in snapshots (so citations open on the device)" : {
+
+    },
+    "Inconsistency" : {
+
+    },
+    "Independent corroboration — or its absence" : {
+
+    },
+    "Indicator" : {
+
+    },
+    "Ingest a mailbox (mbox, eml, msg, pst…) and its messages will be deduplicated and threaded here." : {
+
+    },
+    "Ingest All" : {
+
+    },
+    "Ingest an audio/video file, then transcribe it here." : {
+
+    },
+    "Ingest and process some documents and their trends will appear here." : {
+
+    },
+    "Ingest documents and the ledger's events, claims, contradictions and gaps will appear here — each labelled by how well the evidence supports it." : {
+
+    },
+    "Ingest files into your private archive so you can ask and cite over them. Supported: %@" : {
+
+    },
+    "Ingest workflow" : {
+
+    },
+    "Ingest: AI off · Semantic index on · Full-text on · Ledger on" : {
+
+    },
+    "Ingestion time · per 100 MB" : {
+
+    },
+    "Insights" : {
+
+    },
+    "Insights surfaces missing documents and conflicting facts across your archive — rule-based, no AI involved." : {
+
+    },
+    "Install" : {
+
+    },
+    "Install **%@** (%@) — a better fit that answers much faster. Your current model keeps working until then." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Install **%1$@** (%2$@) — a better fit that answers much faster. Your current model keeps working until then."
+          }
+        }
+      }
+    },
+    "Install a local model to enable answers" : {
+
+    },
+    "Integrity chain" : {
+
+    },
+    "Integrity check FAILED — the chain does not match the seal" : {
+
+    },
+    "Integrity check passed — hash chain is internally consistent" : {
+
+    },
+    "Interpreted as — %@. Edit the filters below, then Run." : {
+
+    },
+    "Intersecting the evidence…" : {
+
+    },
+    "Investigate an event" : {
+
+    },
+    "Investigating…" : {
+
+    },
+    "Investigation" : {
+
+    },
+    "Investigation dashboard" : {
+
+    },
+    "Investigation steps" : {
+
+    },
+    "Issue" : {
+
+    },
+    "Issues and chronology" : {
+
+    },
+    "Item (will / policy / account / deed)" : {
+
+    },
+    "Item %lld of %lld · %lld reviewed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Item %1$lld of %2$lld · %3$lld reviewed"
+          }
+        }
+      }
+    },
+    "Jump to a screen or run a command…" : {
+
+    },
+    "Jump to any screen or command  (⌘K)" : {
+
+    },
+    "Jump to any screen or command (⌘K)" : {
+
+    },
+    "Jump to any screen or run a command (⌘K)" : {
+
+    },
+    "Jump to the next step" : {
+
+    },
+    "Jump to…" : {
+
+    },
+    "Justification — why this departure is authorized" : {
+
+    },
+    "Justification…" : {
+
+    },
+    "Kalsmritikosh" : {
+
+    },
+    "Kalsmritikosh auto-detects models you've already installed (Ollama, MLX). You can also add `.gguf` files or your own cloud endpoint below." : {
+
+    },
+    "Kalsmritikosh can't answer yet" : {
+
+    },
+    "Kalsmritikosh couldn't start." : {
+
+    },
+    "Kalsmritikosh is locked" : {
+
+    },
+    "Kalsmritikosh is still opening its ledger. Try again in a moment." : {
+
+    },
+    "Kalsmritikosh keeps your knowledge base tidy (summaries + distilled memories) while your Mac is idle, and stops the moment you come back. Choose how it behaves." : {
+
+    },
+    "Kalsmritikosh reconstructs answers only from your ingested files — every claim carries its evidence." : {
+
+    },
+    "Kalsmritikosh runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced." : {
+
+    },
+    "Kalsmritikosh will dynamically pick a model that fits your hardware. You can override in Settings later." : {
+
+    },
+    "Kalsmritikosh works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too." : {
+
+    },
+    "KEEP ROWS WHERE…" : {
+
+    },
+    "Keeps your place — reopen the guide any time to resume this step." : {
+
+    },
+    "Kept beside your sources, never written into them. Open a citation to add one." : {
+
+    },
+    "Key saved — paste a new one to replace" : {
+
+    },
+    "Keyboard shortcuts" : {
+
+    },
+    "Kind" : {
+
+    },
+    "Knowledge" : {
+
+    },
+    "KO %@ · chunk #%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "KO %1$@ · chunk #%2$lld"
+          }
+        }
+      }
+    },
+    "KO id: %@" : {
+
+    },
+    "large" : {
+
+    },
+    "Last checked %@" : {
+
+    },
+    "last file: %@" : {
+
+    },
+    "Last reviewed %@." : {
+
+    },
+    "last run %@" : {
+
+    },
+    "Launches this job against the open matter." : {
+
+    },
+    "Leading hypothesis" : {
+
+    },
+    "Ledger" : {
+
+    },
+    "Ledger auto-maintained · %lld gaps · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ledger auto-maintained · %1$lld gaps · %2$@"
+          }
+        }
+      }
+    },
+    "Ledger event-driven · minimum AI" : {
+
+    },
+    "Ledger location" : {
+
+    },
+    "Legacy checklist over the recorded gates — not a per-rule conformance determination. Turn off “Classic conformance readout” in Settings for the assessed, sealed certificate." : {
+
+    },
+    "Legal & Privacy" : {
+
+    },
+    "Legal hold" : {
+
+    },
+    "Legal holds" : {
+
+    },
+    "Legal production" : {
+
+    },
+    "Legend" : {
+
+    },
+    "Lets the work finish — you won't be asked again until it completes." : {
+
+    },
+    "Library" : {
+
+    },
+    "Lightning skips semantic indexing. Everything stays searchable by structure and full text; the semantic index resumes when you switch to Full power." : {
+
+    },
+    "Likelihood %lld%% — inferred" : {
+
+    },
+    "Likely missing (gaps)" : {
+
+    },
+    "Limitations" : {
+
+    },
+    "Link" : {
+
+    },
+    "List name" : {
+
+    },
+    "List rival explanations — ideally mutually exclusive. Aim for a complete set before rating." : {
+
+    },
+    "Live" : {
+
+    },
+    "Live metrics not booted yet" : {
+
+    },
+    "LLM budget" : {
+
+    },
+    "Load a worked example" : {
+
+    },
+    "loader: %@" : {
+
+    },
+    "Loading event context…" : {
+
+    },
+    "Loading investigation…" : {
+
+    },
+    "Loading topics…" : {
+
+    },
+    "Loading version chain…" : {
+
+    },
+    "Log title" : {
+
+    },
+    "Logs & Trackers" : {
+
+    },
+    "Looking for evidence against this answer…" : {
+
+    },
+    "Looking…" : {
+
+    },
+    "Loss chronology" : {
+
+    },
+    "low ASR confidence" : {
+
+    },
+    "Lowest score = survives the evidence best. It is not proof — if several stay close, treat them as live." : {
+
+    },
+    "Malformed" : {
+
+    },
+    "Managed evidence copies (keep originals reopenable)" : {
+
+    },
+    "Mark all read" : {
+
+    },
+    "Mark as a probable cause" : {
+
+    },
+    "Mark as quote" : {
+
+    },
+    "Mark reviewed" : {
+
+    },
+    "Mark reviewed, then next time you'll see only what's new." : {
+
+    },
+    "Markdown (.md)" : {
+
+    },
+    "Markdown table" : {
+
+    },
+    "Match case exactly" : {
+
+    },
+    "Matching every document…" : {
+
+    },
+    "Matching…" : {
+
+    },
+    "Matter" : {
+
+    },
+    "Matter / witness name" : {
+
+    },
+    "Matter title" : {
+
+    },
+    "Maximum results" : {
+
+    },
+    "Measure accuracy — asks up to 20 questions whose answers your ledger already proves, plus 3 that have no answer, and scores the results. Answers then show how often answers at their confidence were right on your archive. Uses the on-device model, so it takes a few minutes." : {
+
+    },
+    "Measure accuracy on my archive" : {
+
+    },
+    "Measuring…" : {
+
+    },
+    "medium" : {
+
+    },
+    "Memo preview" : {
+
+    },
+    "Memo title" : {
+
+    },
+    "Memory" : {
+
+    },
+    "Merge “%@” into…" : {
+
+    },
+    "Merge duplicate facts into one entry each (keeping every source) and remove extraction noise. Your original documents and evidence are untouched — this only cleans the derived index. Safe to run any time." : {
+
+    },
+    "Merge into" : {
+
+    },
+    "Merge into…" : {
+
+    },
+    "Merged — folded into another entity, kept for the record" : {
+
+    },
+    "Merged (%lld)" : {
+
+    },
+    "Message Kalsmritikosh…" : {
+
+    },
+    "Messages a mail program marked deleted or moved to the trash but did not erase. They are shown as recovered and partial, separately from live mail. Carving unlisted messages out of Outlook or Notes free space is not included." : {
+
+    },
+    "Method" : {
+
+    },
+    "Method-run input" : {
+
+    },
+    "Methodology" : {
+
+    },
+    "Mind map" : {
+
+    },
+    "Missing chapters" : {
+
+    },
+    "Missing evidence / follow-ups" : {
+
+    },
+    "Missing links and rule-based investigation — no AI involved, all from your ledger." : {
+
+    },
+    "MLX checkpoints" : {
+
+    },
+    "Mode" : {
+
+    },
+    "Model name" : {
+
+    },
+    "Model name (from your provider)" : {
+
+    },
+    "Model too heavy for this Mac" : {
+
+    },
+    "Month" : {
+
+    },
+    "More diagnostic tools (advanced)" : {
+
+    },
+    "Most frequent sender → recipient" : {
+
+    },
+    "Most tools draw a rectangle over the text and leave the words underneath — copy-paste or a text dump reveals them, which has caused real disclosure leaks. Here, any page with a match is rebuilt as an image with no text layer, so the words are gone. Pages with nothing to redact keep their selectable text. The output is then searched again for every term, and if even one survives, no file is produced." : {
+
+    },
+    "Move down" : {
+
+    },
+    "Move up" : {
+
+    },
+    "Must run as alleged" : {
+
+    },
+    "Name" : {
+
+    },
+    "name this job so you can find it later" : {
+
+    },
+    "NAMED IN THIS DOCUMENT" : {
+
+    },
+    "Narrative Eval" : {
+
+    },
+    "Narrative Eval History" : {
+
+    },
+    "Near-duplicates" : {
+
+    },
+    "Needs date, description, amount, and a source document." : {
+
+    },
+    "Needs date, type, author, and a description." : {
+
+    },
+    "Needs evidence or a note" : {
+
+    },
+    "Net-worth workpaper" : {
+
+    },
+    "New" : {
+
+    },
+    "New %@ entry" : {
+
+    },
+    "New analysis" : {
+
+    },
+    "New and resolved contradictions and gaps since your last review. Run the scans in Insights first for the freshest picture." : {
+
+    },
+    "New case in folder…" : {
+
+    },
+    "New claim file" : {
+
+    },
+    "New column name" : {
+
+    },
+    "New conflicts" : {
+
+    },
+    "New content becomes semantically searchable as the background index catches up. Exact and structured search already covers everything." : {
+
+    },
+    "New dataset — what is this table about?" : {
+
+    },
+    "New date / precision" : {
+
+    },
+    "New engagement" : {
+
+    },
+    "New entry" : {
+
+    },
+    "New fact-check" : {
+
+    },
+    "New field name" : {
+
+    },
+    "New gaps" : {
+
+    },
+    "New hold name" : {
+
+    },
+    "New investigation" : {
+
+    },
+    "New issue (e.g. Breach of contract)" : {
+
+    },
+    "New name" : {
+
+    },
+    "New privilege log" : {
+
+    },
+    "New scenario title" : {
+
+    },
+    "New tag name" : {
+
+    },
+    "New view title" : {
+
+    },
+    "New workspace" : {
+
+    },
+    "Next" : {
+
+    },
+    "Next up" : {
+
+    },
+    "Next: %@" : {
+
+    },
+    "No" : {
+
+    },
+    "No analyses yet" : {
+
+    },
+    "No answers recorded yet" : {
+
+    },
+    "No assertions recorded for this entity yet. Add one below to capture knowledge that isn't in any source." : {
+
+    },
+    "No assertions yet" : {
+
+    },
+    "No audio or video sources" : {
+
+    },
+    "No audit events yet" : {
+
+    },
+    "No bookmarked roots yet." : {
+
+    },
+    "No causal chain found." : {
+
+    },
+    "No causes here yet." : {
+
+    },
+    "No claim files yet" : {
+
+    },
+    "No cloud endpoints added." : {
+
+    },
+    "No co-occurrences yet — the cooccurrence builder may not have run." : {
+
+    },
+    "No confirmed facts yet" : {
+
+    },
+    "No conflicting claims found — tap Scan above." : {
+
+    },
+    "No connection found within 5 hops. They may be linked only through documents not yet ingested." : {
+
+    },
+    "No connections yet — entities and related documents appear as background analysis completes." : {
+
+    },
+    "No contributing causes found." : {
+
+    },
+    "No data." : {
+
+    },
+    "No document matches the current search / date range." : {
+
+    },
+    "No document mentions both — they don't co-appear in the archive yet." : {
+
+    },
+    "No document mentions that." : {
+
+    },
+    "No documents yet." : {
+
+    },
+    "No edits yet — this entry is unchanged since it was created." : {
+
+    },
+    "No eligible files" : {
+
+    },
+    "No email found" : {
+
+    },
+    "No email participants found yet." : {
+
+    },
+    "No engagements yet" : {
+
+    },
+    "No entities linked to this event." : {
+
+    },
+    "No entries yet" : {
+
+    },
+    "No eval runs persisted yet." : {
+
+    },
+    "No events available" : {
+
+    },
+    "No events recorded for this entity." : {
+
+    },
+    "No fact-checks yet" : {
+
+    },
+    "No files ingested yet." : {
+
+    },
+    "No files were given to add." : {
+
+    },
+    "No filters — running now returns everything (up to the row limit)." : {
+
+    },
+    "No gaps detected yet — tap Scan. Gaps can only be found once your files have been read, so add files first if the archive is empty." : {
+
+    },
+    "No GGUF files added." : {
+
+    },
+    "No ideas yet. Aim for quantity — 8–12 is a good start." : {
+
+    },
+    "No ingested documents yet." : {
+
+    },
+    "No investigations yet" : {
+
+    },
+    "No investigations yet." : {
+
+    },
+    "No jobs match “%@”." : {
+
+    },
+    "No logs yet" : {
+
+    },
+    "No longer applicable" : {
+
+    },
+    "No matches" : {
+
+    },
+    "No matching task. Try the sidebar, or clear the search." : {
+
+    },
+    "No matters yet" : {
+
+    },
+    "No MLX checkpoints registered." : {
+
+    },
+    "No notable signals." : {
+
+    },
+    "No past conversations yet." : {
+
+    },
+    "No payment flows yet" : {
+
+    },
+    "No providers registered." : {
+
+    },
+    "No recorded events yet." : {
+
+    },
+    "No rows match. Loosen a filter and run again." : {
+
+    },
+    "No rows yet — add rows or paste a table from the panel on the right." : {
+
+    },
+    "No saved questions yet." : {
+
+    },
+    "No saved views yet." : {
+
+    },
+    "No shared documents" : {
+
+    },
+    "No source KnowledgeObject linked." : {
+
+    },
+    "No sources have been added. Add files from your archive to define what this workspace may use." : {
+
+    },
+    "No structured documentation is recorded for this job yet." : {
+
+    },
+    "No structured evidence recorded for this answer." : {
+
+    },
+    "no supporting evidence" : {
+
+    },
+    "no text" : {
+
+    },
+    "No topics — and nothing is wrong." : {
+
+    },
+    "No topics yet." : {
+
+    },
+    "No version history recorded — this event has only its initial state." : {
+
+    },
+    "No workspace yet — starting your first matter creates one named “General” automatically." : {
+
+    },
+    "No workspaces yet" : {
+
+    },
+    "None" : {
+
+    },
+    "normalized: %@" : {
+
+    },
+    "Not an answer — the closest passage in your documents" : {
+
+    },
+    "Not an answer. The closest passage in your documents: %@" : {
+
+    },
+    "Not available yet" : {
+
+    },
+    "Not checked yet" : {
+
+    },
+    "Not diagnostic — rated the same across hypotheses" : {
+
+    },
+    "Not from your documents" : {
+
+    },
+    "Not now" : {
+
+    },
+    "not sampled yet" : {
+
+    },
+    "Not signed — it shows the entries are consistent, not who produced them." : {
+
+    },
+    "Not signed." : {
+
+    },
+    "not transcribed" : {
+
+    },
+    "Not transcribed yet" : {
+
+    },
+    "Not yet classified" : {
+
+    },
+    "Not yet decided" : {
+
+    },
+    "not yet run" : {
+
+    },
+    "Note (optional)" : {
+
+    },
+    "Note: this removes the terms you listed. It does not strip document metadata (author, title) or remove attachments — check those separately before a legal production." : {
+
+    },
+    "Notebook" : {
+
+    },
+    "Notes (what changed, impact)" : {
+
+    },
+    "Notes apps" : {
+
+    },
+    "Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents." : {
+
+    },
+    "Nothing aging or stale — all confirmations are recent." : {
+
+    },
+    "Nothing here yet" : {
+
+    },
+    "Nothing looks missing from the patterns found so far." : {
+
+    },
+    "Nothing new since your last review." : {
+
+    },
+    "Nothing to chart yet" : {
+
+    },
+    "Nothing to reconstruct yet" : {
+
+    },
+    "Nothing to search yet? Point the app at a folder — search works the moment files are read" : {
+
+    },
+    "Notices version %@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Notices version %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Notices version %@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Notices version %1$@. %2$@"
+          }
+        }
+      }
+    },
+    "now: %@" : {
+
+    },
+    "object value" : {
+
+    },
+    "Obligations (one per line)" : {
+
+    },
+    "OCR images during ingest" : {
+
+    },
+    "off" : {
+
+    },
+    "Off = save and confirm each step yourself." : {
+
+    },
+    "Off: %@" : {
+
+    },
+    "OK" : {
+
+    },
+    "Ollama is running" : {
+
+    },
+    "ollama pull %@" : {
+
+    },
+    "On this item" : {
+
+    },
+    "On this Mac." : {
+
+    },
+    "On-device AI — what it needs" : {
+
+    },
+    "On-device AI proposes candidate causes to consider — you keep or discard each. Nothing is uploaded." : {
+
+    },
+    "On-device AI proposes the next answer to test — you edit or discard it." : {
+
+    },
+    "On-device AI reads your request and fills the builder — you stay in control, and it never writes SQL. Runs privately on this Mac." : {
+
+    },
+    "On-device AI requirements: AI prose needs Apple silicon with Apple Intelligence enabled. Without it, every answer still comes from your evidence with citations, in plainer prose. Answers may be slower until first indexing completes." : {
+
+    },
+    "On-device Apple Speech · speakers are assigned manually" : {
+
+    },
+    "Once you accept or correct facts in Review/Findings, they're monitored here for staleness." : {
+
+    },
+    "Once you ingest files and review facts, every action is recorded here." : {
+
+    },
+    "One button checks whether the app is ready to share. It runs the built-in tests and audits, then shows a single verdict — **green means ready**. Takes a couple of minutes; no internet." : {
+
+    },
+    "One engine, many subjects — each discipline is authored as a Sūtra alone (no new screens). Switch and watch the same inspector render a different constitution; the clinical differential's analysis phase reuses the very same Competing-Hypotheses matrix." : {
+
+    },
+    "One name per line — people or companies. Matches include other spellings and word orders; each is a lead to check, not proof of identity." : {
+
+    },
+    "One per line, or comma-separated — names, numbers, addresses. Every occurrence is removed." : {
+
+    },
+    "One question, one row per source — the best-matching passage from each document, verbatim and cited. No summarizing, no guessing." : {
+
+    },
+    "One search per line" : {
+
+    },
+    "Online — answers may use %@" : {
+
+    },
+    "Online (your own key)" : {
+
+    },
+    "Online mode is not available in this build, so the app stays Private. Your choice is kept." : {
+
+    },
+    "Only files with little or no recognised text" : {
+
+    },
+    "Only hot documents get deep AI enrichment in Hot/Warm/Cold mode." : {
+
+    },
+    "Only runs the experts that have supporting evidence for the question instead of all of them. Recommended on — faster with no quality loss." : {
+
+    },
+    "Only the built-in Apple model is available right now. Add local models (Ollama / MLX / GGUF) or a cloud endpoint below to unlock more choices." : {
+
+    },
+    "Open" : {
+
+    },
+    "Open %@ — do this step's work there" : {
+
+    },
+    "Open a dossier." : {
+
+    },
+    "Open a Kalsmritikosh link" : {
+
+    },
+    "Open a kalsmritikosh:// link at its passage." : {
+
+    },
+    "Open a matter first (Start matter above), then run." : {
+
+    },
+    "Open a receipt ’.json’ exported by Kalsmritikosh — from this Mac or anyone else’s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed." : {
+
+    },
+    "Open a slice…" : {
+
+    },
+    "Open app" : {
+
+    },
+    "Open as guided workflow" : {
+
+    },
+    "Open at this passage" : {
+
+    },
+    "Open case folder…" : {
+
+    },
+    "Open Explore" : {
+
+    },
+    "Open externally" : {
+
+    },
+    "Open in Maps" : {
+
+    },
+    "Open inventory" : {
+
+    },
+    "Open items acked" : {
+
+    },
+    "Open Ledger" : {
+
+    },
+    "Open MLX Models folder" : {
+
+    },
+    "Open now" : {
+
+    },
+    "Open ollama.com/download" : {
+
+    },
+    "Open receipt…" : {
+
+    },
+    "Open report" : {
+
+    },
+    "Open result" : {
+
+    },
+    "Open results" : {
+
+    },
+    "Open screening log" : {
+
+    },
+    "Open source" : {
+
+    },
+    "Open Sources and add a folder. Kalsmritikosh reads everything inside — PDFs, Office docs, images, email, audio — into your private knowledge base." : {
+
+    },
+    "Open the Analysis of Competing Hypotheses matrix — rate evidence against rival explanations and rank by fewest inconsistencies." : {
+
+    },
+    "Open the map" : {
+
+    },
+    "Open the Reasoning Studio — brainstorm, 5 Whys and a fishbone diagram to a root-cause conclusion and an approval-ready report." : {
+
+    },
+    "Open the source at this passage" : {
+
+    },
+    "Open the source document for this link" : {
+
+    },
+    "Open the source file" : {
+
+    },
+    "Open the Sources tab anytime to see per-file ingest health, or the Explore tab to browse what's been extracted." : {
+
+    },
+    "Open the Sources tab to ingest your folder, then ask a question on the Ask tab." : {
+
+    },
+    "Open the tool to do this step now — this run reopens when you come back" : {
+
+    },
+    "Open this dataset in the lab" : {
+
+    },
+    "Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." : {
+
+    },
+    "Open to restore this event" : {
+
+    },
+    "Open to view or edit — changes are saved with a history entry" : {
+
+    },
+    "Open trace" : {
+
+    },
+    "Open uncertainties" : {
+
+    },
+    "Opening a tool for this step" : {
+
+    },
+    "Opening…" : {
+
+    },
+    "Opens the bundled ProjectDelta sample (8 emails and contracts) in its own separate ledger, so you can see Kalsmritikosh reconstruct a project without adding your data — nothing is ever mixed with your own documents. The app relaunches; “Back to my archive” returns you." : {
+
+    },
+    "Operators: + − * /  ·  = <> < <= > >=  ·  AND OR NOT  ·  & (join text)\nFunctions: IF, COALESCE, ISBLANK, ABS, ROUND, FLOOR, CEIL, SQRT, MOD, MIN, MAX, NUMBER, LEN, UPPER, LOWER, TRIM, CONCAT, CONTAINS, STARTSWITH, ENDSWITH, TEXT, PERCENT, DATEDIFF, YEAR, MONTH, DAY\nRefer to columns by name; quote text values." : {
+
+    },
+    "Opinion" : {
+
+    },
+    "Optional ingest" : {
+
+    },
+    "or click **Add file(s)…** below" : {
+
+    },
+    "Or email %@ directly. Never include privileged or confidential case material in a report." : {
+
+    },
+    "or run:" : {
+
+    },
+    "Or start a new one:" : {
+
+    },
+    "Organization-approved" : {
+
+    },
+    "Original question" : {
+
+    },
+    "Other professions…" : {
+
+    },
+    "Outcome measured" : {
+
+    },
+    "Output" : {
+
+    },
+    "Output:" : {
+
+    },
+    "Outstanding" : {
+
+    },
+    "Override in scenario" : {
+
+    },
+    "Overrides the auto-recommendation. Choose \"Auto\" to let the registry rank by hardware + benchmark." : {
+
+    },
+    "p.%lld" : {
+
+    },
+    "Package preview" : {
+
+    },
+    "Parallel expert council (MoE)" : {
+
+    },
+    "Park — keep but set aside" : {
+
+    },
+    "part of a filename (optional)" : {
+
+    },
+    "passage sha256: %@…" : {
+
+    },
+    "Passage to highlight (exact text from the source)" : {
+
+    },
+    "Passages" : {
+
+    },
+    "Past conversations" : {
+
+    },
+    "Paste a block of cells copied from Excel or Numbers — it fills new rows across your columns, left to right. Values are recorded as hand-entered." : {
+
+    },
+    "Paste a discipline's SOP; the on-device AI drafts a Sūtra you can review. It can only map steps onto the app's known phases — it never invents tooling, and nothing is adopted until you keep it. Full power only; runs privately on this Mac." : {
+
+    },
+    "Paste a whole list — names, companies, account or policy numbers — and search them all at once. You'll see which ones your archive actually mentions, including the ones you'd never have searched by hand." : {
+
+    },
+    "Paste table" : {
+
+    },
+    "Paste your organization's SOP text; the on-device model proposes a structure. Skip this to edit the standard skeleton directly." : {
+
+    },
+    "Patterns across everything you've ingested — when activity happened, what kinds of events dominate, and the makeup of the people and organizations involved." : {
+
+    },
+    "Pause" : {
+
+    },
+    "Paused — the current file finishes first, so nothing is left half-read." : {
+
+    },
+    "Pauses ingest/enrichment (resume any time from the Live panel) and cancels the maintenance scan — nothing is left half-written." : {
+
+    },
+    "Payee" : {
+
+    },
+    "Payer" : {
+
+    },
+    "Payments — payer → payee" : {
+
+    },
+    "PDF report" : {
+
+    },
+    "People & organizations — from entities" : {
+
+    },
+    "Per-rule certificate with the constitution's SHA-256 and an ECDSA P-256 signature — verifiable outside this app." : {
+
+    },
+    "Performance" : {
+
+    },
+    "Person" : {
+
+    },
+    "PERSONA · %@" : {
+
+    },
+    "Persona jobs are still starting…" : {
+
+    },
+    "Phone / email" : {
+
+    },
+    "Photos with a location (%lld)" : {
+
+    },
+    "Pick" : {
+
+    },
+    "Pick a value field to draw the chart." : {
+
+    },
+    "Pick a workspace and a matter to review." : {
+
+    },
+    "Pick an ingestion path. **Full AI** (assertive) extracts the most meaning up front — richest ledger, slowest. **Ledger event-driven** (fast) runs rules and semantic indexing only and defers the AI to question time. Each card shows how it behaves and roughly how long it takes per 100 MB. You can change this later in Settings." : {
+
+    },
+    "Pick an investigation from the list." : {
+
+    },
+    "Pick the entity these are the same as. “%@” will fold into it — mentions combine and the old spelling still resolves. Reversible; recorded in the Audit trail." : {
+
+    },
+    "Pick the focus that fits your work. It tailors the sidebar to the screens you'll use most — you can change it any time, and everything else stays one click away." : {
+
+    },
+    "Pick the lens that fits your work — every path answers only from what you ingest." : {
+
+    },
+    "Pick the lens that fits your work." : {
+
+    },
+    "Pick two people or organizations. See the shortest chain of relationships that links them, or the documents where they both appear — evidence either way." : {
+
+    },
+    "Pick your first folder" : {
+
+    },
+    "Pin a provider per capability" : {
+
+    },
+    "Pin a question to re-ask after each import" : {
+
+    },
+    "Pipeline coverage" : {
+
+    },
+    "Places" : {
+
+    },
+    "Places named in documents (%lld)" : {
+
+    },
+    "Plain-text exports — no system access required. Recognized by filename prefix (WhatsApp Chat …, _chat …, signal-…, slack-export…). Default on. Takes effect on next app launch." : {
+
+    },
+    "Planning sub-questions…" : {
+
+    },
+    "Play" : {
+
+    },
+    "Plot of %lld photo locations" : {
+
+    },
+    "Policy / rule engaged" : {
+
+    },
+    "Posts %@" : {
+
+    },
+    "predicate (e.g. works_for, lives_in)" : {
+
+    },
+    "Prefer classic surfaces" : {
+
+    },
+    "Prepare a contested story the newsroom way: check every claim to its sources, log the right of reply with deadlines, flag what must run as alleged, and hand the editor the exact pre-publication memo." : {
+
+    },
+    "Previous" : {
+
+    },
+    "Print" : {
+
+    },
+    "Print — or choose “Save as PDF” in the print dialog" : {
+
+    },
+    "Print / Save as PDF" : {
+
+    },
+    "Print the technical report" : {
+
+    },
+    "Privacy" : {
+
+    },
+    "Private · on-device · evidence-gated" : {
+
+    },
+    "Privilege Log" : {
+
+    },
+    "Privilege Log Studio" : {
+
+    },
+    "Probable causes you starred" : {
+
+    },
+    "Problem statement" : {
+
+    },
+    "Produces documents coded Responsive or Hot (Tools → Review coding), plus any with the tag below. Documents coded Privileged get a numbered slip sheet and a line in the privilege log." : {
+
+    },
+    "Producing…" : {
+
+    },
+    "Production set" : {
+
+    },
+    "Prohibited conclusions" : {
+
+    },
+    "Project name" : {
+
+    },
+    "Promote what-ifs (%lld change%@, %lld reviewed)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Promote what-ifs (%1$lld change%2$@, %3$lld reviewed)"
+          }
+        }
+      }
+    },
+    "Proof & report" : {
+
+    },
+    "Proof declared" : {
+
+    },
+    "Propose a counterfactual" : {
+
+    },
+    "Propose counterfactual…" : {
+
+    },
+    "Protocol packs" : {
+
+    },
+    "Protocol title (e.g. ACME HR Investigations)" : {
+
+    },
+    "Provenance (who owns this SOP)" : {
+
+    },
+    "Provider" : {
+
+    },
+    "Publish my review codes" : {
+
+    },
+    "Publisher (your organization's exact name)" : {
+
+    },
+    "Publisher %@ · signer %@%@ · sha256 %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Publisher %1$@ · signer %2$@%3$@ · sha256 %4$@…"
+          }
+        }
+      }
+    },
+    "Qualifications (26(a)(2)(B))" : {
+
+    },
+    "Quality" : {
+
+    },
+    "Quality inspector" : {
+
+    },
+    "Query" : {
+
+    },
+    "Query your ledger" : {
+
+    },
+    "Question" : {
+
+    },
+    "Questions from your archive" : {
+
+    },
+    "Questions you bookmarked — re-ask them in Ask or re-run an investigation in one click." : {
+
+    },
+    "Questions you watch" : {
+
+    },
+    "Rank evidence" : {
+
+    },
+    "Ranking — fewest inconsistencies first" : {
+
+    },
+    "Rate each cell for how consistent the evidence is with that hypothesis: CC very consistent · C consistent · N neutral · I inconsistent · II very inconsistent. Only I / II count against a hypothesis." : {
+
+    },
+    "Rationale" : {
+
+    },
+    "Rationale — how you verified this rule was met" : {
+
+    },
+    "Rationale (required for approve / close / reopen)" : {
+
+    },
+    "Re-check these first" : {
+
+    },
+    "Re-ingest legacy Word/Excel (.doc/.xls) files that failed before the real OLE2 parsers landed. Idempotent." : {
+
+    },
+    "Re-investigate" : {
+
+    },
+    "Re-investigation" : {
+
+    },
+    "Re-read scanned PDFs at 300 dpi" : {
+
+    },
+    "Re-reads each PDF once with the improved text recognition; a page's text is replaced only if the new reading is not worse." : {
+
+    },
+    "Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds." : {
+
+    },
+    "Re-transcribe" : {
+
+    },
+    "Read aloud" : {
+
+    },
+    "Read first" : {
+
+    },
+    "Read intake now" : {
+
+    },
+    "Read into your archive — searchable and citable." : {
+
+    },
+    "Read on this Mac from photo metadata and your documents. “Open in Maps” hands one place to Apple Maps, a separate app." : {
+
+    },
+    "Read on this Mac from photo metadata and your documents. Private mode: a list and an offline plot — nothing is looked up online." : {
+
+    },
+    "Read the SOP Handbook" : {
+
+    },
+    "Read-first score %lld: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Read-first score %1$lld: %2$@"
+          }
+        }
+      }
+    },
+    "Read-only. This is exactly the query that ran — every value is bound, so nothing you type can change or write your data." : {
+
+    },
+    "Reading photo locations…" : {
+
+    },
+    "Reading what each source says…" : {
+
+    },
+    "reading…" : {
+
+    },
+    "Reading…" : {
+
+    },
+    "Reads ~/Library/Messages/chat.db when it appears in a watched folder. Requires Full Disk Access for the original path; in the App Store build, copy chat.db to an Kalsmritikosh-watched folder first. Takes effect on next app launch." : {
+
+    },
+    "Reads Safari History.db or Chromium History when copied into a watched folder. Both browsers lock the file while running — Kalsmritikosh reads a copy. Takes effect on next app launch." : {
+
+    },
+    "Reads text out of images and scanned pages. This is the **slowest part of ingest** — Apple Vision processes one image at a time, so archives with many images (e.g. email attachments) take much longer. Turn OFF for much faster ingest when you don't need to search text inside images. Applies to newly-ingested files." : {
+
+    },
+    "Ready" : {
+
+    },
+    "Ready to use" : {
+
+    },
+    "Real redaction" : {
+
+    },
+    "Real-life rule: recommend outcomes ONLY if your terms of reference authorise it — otherwise the report omits them." : {
+
+    },
+    "Real-time view of ingestion and the engine — pipeline stages, throughput, enrichment tiers, gaps and service health." : {
+
+    },
+    "Reason (optional)" : {
+
+    },
+    "Reason (required)" : {
+
+    },
+    "Reason for this change (optional)" : {
+
+    },
+    "Reasoned assessment" : {
+
+    },
+    "Reasoning Studio" : {
+
+    },
+    "Rebuild legal milestones" : {
+
+    },
+    "Rebuilding topics for the new AI setting…" : {
+
+    },
+    "Received hops" : {
+
+    },
+    "Recently Ingested" : {
+
+    },
+    "Recipient(s)" : {
+
+    },
+    "Recommendation" : {
+
+    },
+    "Recommendations" : {
+
+    },
+    "Recommendations (authorised by the mandate)" : {
+
+    },
+    "Recommended" : {
+
+    },
+    "Recommended model: %@" : {
+
+    },
+    "Recommended: %@" : {
+
+    },
+    "Reconstruct" : {
+
+    },
+    "Reconstruct your history." : {
+
+    },
+    "Reconstructing from your archive…" : {
+
+    },
+    "Reconstructs narratives from your archive — each chapter is built from dated events and cited sources." : {
+
+    },
+    "Record authorized deviation" : {
+
+    },
+    "Record deviation" : {
+
+    },
+    "Record deviation…" : {
+
+    },
+    "Record governed review…" : {
+
+    },
+    "Record signed review" : {
+
+    },
+    "Recorded as a new ledger entry — it never overwrites history, and never replaces professional judgment." : {
+
+    },
+    "Recorded assessment · revision %lld · %@ · constitution sha256 %@…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Recorded assessment · revision %1$lld · %2$@ · constitution sha256 %3$@…"
+          }
+        }
+      }
+    },
+    "Recorded with the change so the history explains itself." : {
+
+    },
+    "Records a what-if value in the scenario — the base cell stays untouched" : {
+
+    },
+    "Records WHO reviewed %@'s current text against the app's %@, and what was decided. The record is signed with this installation's key; the truthful status is “reviewed as of date”, never automatically “current”." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Records WHO reviewed %1$@'s current text against the app's %2$@, and what was decided. The record is signed with this installation's key; the truthful status is “reviewed as of date”, never automatically “current”."
+          }
+        }
+      }
+    },
+    "Recover legacy .doc/.xls" : {
+
+    },
+    "Redact" : {
+
+    },
+    "Redact email addresses" : {
+
+    },
+    "Redact phone numbers" : {
+
+    },
+    "Redact terms (comma-separated, optional)" : {
+
+    },
+    "Redaction" : {
+
+    },
+    "Redo" : {
+
+    },
+    "Refresh" : {
+
+    },
+    "Refreshing %@ record%@ with newer rules…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Refreshing %1$@ record%2$@ with newer rules…"
+          }
+        }
+      }
+    },
+    "Refreshing %lld records with newer rules in the background" : {
+
+    },
+    "Register" : {
+
+    },
+    "Register in this app" : {
+
+    },
+    "Registered providers" : {
+
+    },
+    "Reject" : {
+
+    },
+    "Reject (exclude)" : {
+
+    },
+    "Reject this link" : {
+
+    },
+    "Relation" : {
+
+    },
+    "Relationships" : {
+
+    },
+    "Release" : {
+
+    },
+    "Release Readiness" : {
+
+    },
+    "RELEASE READY: NO" : {
+
+    },
+    "RELEASE READY: YES" : {
+
+    },
+    "Relevance-gated experts" : {
+
+    },
+    "Reload notebook" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove “%@”" : {
+
+    },
+    "Remove collection" : {
+
+    },
+    "Remove from workspace (keeps the file and its evidence)" : {
+
+    },
+    "Remove key" : {
+
+    },
+    "Remove rule" : {
+
+    },
+    "Remove source" : {
+
+    },
+    "Remove tag %@" : {
+
+    },
+    "Remove the last source?" : {
+
+    },
+    "Remove this attachment from the step" : {
+
+    },
+    "Remove this counterfactual" : {
+
+    },
+    "Removes the words from the PDF, not just a black box on top. Redacted pages are flattened so the hidden text can't be selected, copied, or extracted — and the result is re-checked to prove nothing survived." : {
+
+    },
+    "Removing this source will leave the workspace empty. The source and its evidence will remain in the archive." : {
+
+    },
+    "Rename" : {
+
+    },
+    "Rename “%@”" : {
+
+    },
+    "Rename / merge to…" : {
+
+    },
+    "Rename…" : {
+
+    },
+    "Render this investigation as a markdown report and save it." : {
+
+    },
+    "Reopen" : {
+
+    },
+    "Reopen matter" : {
+
+    },
+    "Reopenable filter sets — e.g. \"disputed findings\" or \"privilege candidates\". Filters are wired to the review model as F2 lands more targets." : {
+
+    },
+    "Replies to %@, which is not in your archive" : {
+
+    },
+    "Replies whose original is missing (%lld)" : {
+
+    },
+    "Report" : {
+
+    },
+    "Report a problem / send feedback" : {
+
+    },
+    "Report preview" : {
+
+    },
+    "Report sections" : {
+
+    },
+    "Reports" : {
+
+    },
+    "Repository" : {
+
+    },
+    "required" : {
+
+    },
+    "Rescan" : {
+
+    },
+    "Research screening" : {
+
+    },
+    "Reserved human decisions" : {
+
+    },
+    "Resolution of conflicting evidence" : {
+
+    },
+    "Resolve conflicts and follow up on missing evidence. Every decision is recorded and reversible; nothing changes your sources." : {
+
+    },
+    "Resolve them on the Contradiction & Gap desk, or acknowledge that you're approving with them open." : {
+
+    },
+    "Respondent's response" : {
+
+    },
+    "Response — or 'no response by deadline'" : {
+
+    },
+    "Restore" : {
+
+    },
+    "Restores the previous behavior IN FULL: the legacy checklist readout, AND findings approval is no longer blocked by the per-rule conformance gate, AND assessments are not recorded or sealed. Deliverables produced in classic mode carry no conformance certificate. Switching back to strict never deletes recorded assessments." : {
+
+    },
+    "Result" : {
+
+    },
+    "Result — or 'NIL result' (log it anyway)" : {
+
+    },
+    "Results appear here — one row per term, hits at a glance." : {
+
+    },
+    "Results appear here." : {
+
+    },
+    "Results may omit this source until it is fully indexed." : {
+
+    },
+    "Resume" : {
+
+    },
+    "Resume this run where you left off" : {
+
+    },
+    "Resume where you left off" : {
+
+    },
+    "Retract this assertion" : {
+
+    },
+    "Retrieval self-check" : {
+
+    },
+    "Return" : {
+
+    },
+    "Reuse this run's field entries next time by starting from this variant." : {
+
+    },
+    "Rev %lld" : {
+
+    },
+    "Reveal in Finder" : {
+
+    },
+    "Reveal probe" : {
+
+    },
+    "Reveal report" : {
+
+    },
+    "Review" : {
+
+    },
+    "Review a matter's findings and evidence, then record the human decisions that hand it off — approve findings, close, or reopen. Nothing is approved or closed automatically." : {
+
+    },
+    "Review coding" : {
+
+    },
+    "Review due" : {
+
+    },
+    "Review fact" : {
+
+    },
+    "Review tags" : {
+
+    },
+    "Review…" : {
+
+    },
+    "Reviewed as of %@ by %@%@ — %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reviewed as of %1$@ by %2$@%3$@ — %4$@%5$@"
+          }
+        }
+      }
+    },
+    "Reviewed within the last year" : {
+
+    },
+    "Reviewer (required)" : {
+
+    },
+    "Revision %lld · updated %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Revision %1$lld · updated %2$@"
+          }
+        }
+      }
+    },
+    "Revoke…" : {
+
+    },
+    "Revoked: %@" : {
+
+    },
+    "Ribbon width is corroboration strength (how often and from how many documents the payment was observed) — not a dollar amount. The ledger doesn't hold a reliable per-payment figure, so none is drawn. \"×N\" is the corroboration count; \"src\" is the number of distinct source documents." : {
+
+    },
+    "Rights / licence / permission" : {
+
+    },
+    "Role" : {
+
+    },
+    "Role (e.g. owner, counsel)" : {
+
+    },
+    "Role (optional)" : {
+
+    },
+    "Root cause" : {
+
+    },
+    "Row" : {
+
+    },
+    "Rows" : {
+
+    },
+    "Rule name" : {
+
+    },
+    "Rules (run on every new batch)" : {
+
+    },
+    "Run" : {
+
+    },
+    "Run \"Ingest All\" after adding a folder to see KnowledgeObjects here." : {
+
+    },
+    "Run a structured investigation from start to finish — brainstorm, 5 Whys, a fishbone cause-and-effect diagram, then a written conclusion and an approval-ready report you can submit. Everything stays on this Mac." : {
+
+    },
+    "Run a workplace investigation the way it's really done — mandate, allegations framed as questions, evidence, credibility, classified findings on the balance of probabilities — and produce the exact report an investigator signs." : {
+
+    },
+    "Run an investigation from the Ask tab — the magnifying-glass button next to Send opens a focused planner." : {
+
+    },
+    "Run it" : {
+
+    },
+    "Run job now" : {
+
+    },
+    "Run maintenance now?" : {
+
+    },
+    "Run now" : {
+
+    },
+    "Run self-check" : {
+
+    },
+    "Run the drift check?" : {
+
+    },
+    "Run this job as a step-by-step Work Center workflow — gated steps, typed fields, and a numbered document for every step you confirm." : {
+
+    },
+    "Run workflow" : {
+
+    },
+    "running" : {
+
+    },
+    "Running self-check…" : {
+
+    },
+    "Same data, two presentations — Simple is outcome-first; Advanced exposes fields, formulas and scenarios" : {
+
+    },
+    "Sample" : {
+
+    },
+    "Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." : {
+
+    },
+    "Sample archive mode. Your own documents are untouched." : {
+
+    },
+    "Save" : {
+
+    },
+    "Save & close" : {
+
+    },
+    "Save a copy of your extracted ledger (knowledge.sqlite) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused." : {
+
+    },
+    "Save as Variant" : {
+
+    },
+    "Save as…" : {
+
+    },
+    "Save changes" : {
+
+    },
+    "Save collection" : {
+
+    },
+    "Save counterfactual" : {
+
+    },
+    "Save key" : {
+
+    },
+    "Save list" : {
+
+    },
+    "Save redacted PDF…" : {
+
+    },
+    "Save rule" : {
+
+    },
+    "Save searchable PDF…" : {
+
+    },
+    "Save text" : {
+
+    },
+    "Save the current view (including an active scenario) for Excel, Word or print — every export posts a numbered Export document in the Work Center register" : {
+
+    },
+    "Save this question for later (visible in the Saved surface)." : {
+
+    },
+    "Save this run's entries as a reusable variant — next time, start pre-filled in one click" : {
+
+    },
+    "Save value" : {
+
+    },
+    "Save view" : {
+
+    },
+    "Saved" : {
+
+    },
+    "Saved %@" : {
+
+    },
+    "Saved lists" : {
+
+    },
+    "Saved questions" : {
+
+    },
+    "Saved views" : {
+
+    },
+    "Scale run recorder — start it, then add a large folder in Sources. It samples this app's memory footprint and documents read every 10 seconds; stop it when reading ends to get a summary (baseline, peak, whether memory stayed flat) to record in SHIP_DECISIONS.md. Saved to Application Support/Kalsmritikosh/ScaleRuns." : {
+
+    },
+    "Scan" : {
+
+    },
+    "Scan again" : {
+
+    },
+    "Scan for Risks" : {
+
+    },
+    "Scan ingested documents for legal/patent milestones (filed, hearing, objection, granted) and add them as dated events — the story spine." : {
+
+    },
+    "Scanned PDFs and photos, fewest recognised characters first. Make a searchable PDF copy of any of them; the original is not changed." : {
+
+    },
+    "Scanning…" : {
+
+    },
+    "Schedule total: $%@" : {
+
+    },
+    "Scope" : {
+
+    },
+    "Scope: this report uses only sources added to this workspace. Claims with evidence outside the workspace are excluded." : {
+
+    },
+    "Screening log" : {
+
+    },
+    "Seal: %@…" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search (e.g. type:email org:acme) or #tag" : {
+
+    },
+    "Search %@s…" : {
+
+    },
+    "Search %lld jobs by name or persona…" : {
+
+    },
+    "Search all" : {
+
+    },
+    "Search by number, title, or any entered value — e.g. WF-2026 or a matter name" : {
+
+    },
+    "Search entities — Khurana, Project Delta, gmail.com…" : {
+
+    },
+    "Search entries" : {
+
+    },
+    "Search everywhere \"%@\" appears" : {
+
+    },
+    "Search filename or path" : {
+
+    },
+    "Search for a person, organization, project, or identifier. Click any neighbor or event to keep traversing — use Back to retrace." : {
+
+    },
+    "Search Kalsmritikosh" : {
+
+    },
+    "Search Kalsmritikosh for ${query}" : {
+
+    },
+    "Search people or organizations…" : {
+
+    },
+    "Search transcript…" : {
+
+    },
+    "Search your archive — type and press return…" : {
+
+    },
+    "Search your archive and get the best-matching passages with their file names. Advanced syntax works when it is switched on." : {
+
+    },
+    "Search your knowledge base" : {
+
+    },
+    "Search your tasks…" : {
+
+    },
+    "Searching… %lld/%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Searching… %1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "SEE ALSO — RELATED DOCUMENTS" : {
+
+    },
+    "See the actual passages for this term" : {
+
+    },
+    "See the big picture" : {
+
+    },
+    "Select a source" : {
+
+    },
+    "Select a workspace" : {
+
+    },
+    "Select All Visible" : {
+
+    },
+    "Select an entity to see its relationships." : {
+
+    },
+    "Select two or more. The brief compares the fields they have in common." : {
+
+    },
+    "Selected · %@" : {
+
+    },
+    "Self-authored" : {
+
+    },
+    "Self-check found issues" : {
+
+    },
+    "Self-check passed" : {
+
+    },
+    "Self-critique + refine" : {
+
+    },
+    "Semantic index catching up — %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Semantic index catching up — %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Semantic indexing paused — %lld waiting" : {
+
+    },
+    "Send" : {
+
+    },
+    "Send and don’t ask again this session" : {
+
+    },
+    "Send to %@?" : {
+
+    },
+    "Send to DEVONthink" : {
+
+    },
+    "Set KALSMRITIKOSH_NARRATIVE_EVAL=1 in the Run scheme's Environment, then run the in-app SmokeTest. Each run lands in this list." : {
+
+    },
+    "Set to %@" : {
+
+    },
+    "Set to: %@" : {
+
+    },
+    "Set up the net-worth method: adds the input columns (assets, liabilities, opening net worth, reported income, known expenditures) and the derived columns (net worth, increase, funds applied, income from unknown sources). Fill inputs from source documents." : {
+
+    },
+    "Settings" : {
+
+    },
+    "SHA-256 %@…  masked %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "SHA-256 %1$@…  masked %2$lld"
+          }
+        }
+      }
+    },
+    "SHA-256 fingerprint" : {
+
+    },
+    "Share part of a case as one signed, redacted, read-only file. Emails and phone numbers are always removed; add names or numbers to remove below. Anyone with Kalsmritikosh can open it and see whether it was changed." : {
+
+    },
+    "Shares: %@" : {
+
+    },
+    "Shortcuts actions are switched off. Turn on “Shortcuts actions” in Kalsmritikosh ▸ Settings ▸ Modules." : {
+
+    },
+    "Show" : {
+
+    },
+    "Show %lld conflict%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show %1$lld conflict%2$@"
+          }
+        }
+      }
+    },
+    "Show all analyses" : {
+
+    },
+    "Show answer & evidence" : {
+
+    },
+    "Show fewer — just this profession's" : {
+
+    },
+    "Show intake folder" : {
+
+    },
+    "Show low-quality (T3) entities in results" : {
+
+    },
+    "Show only documents created between two dates" : {
+
+    },
+    "Show preview features" : {
+
+    },
+    "Show recovery key…" : {
+
+    },
+    "Show Relationship" : {
+
+    },
+    "Show shared documents" : {
+
+    },
+    "Show unconfirmed AI readings (marked)" : {
+
+    },
+    "Showing the first 60 — refine your search to narrow." : {
+
+    },
+    "Showing the top %lld payers and payees by corroboration. %lld smaller flow(s) are not drawn." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Showing the top %1$lld payers and payees by corroboration. %2$lld smaller flow(s) are not drawn."
+          }
+        }
+      }
+    },
+    "Shows how the answer was built and the raw identifiers behind it." : {
+
+    },
+    "Shows only matching rows — a view, not a deletion; clear it any time" : {
+
+    },
+    "Signals" : {
+
+    },
+    "Signature FAILED — the receipt was changed after signing, or the signature is not genuine." : {
+
+    },
+    "Signature FAILED — this slice was changed or is not genuine." : {
+
+    },
+    "Signature valid — signed by key %@. Nothing was changed." : {
+
+    },
+    "Signed by key %@ (%@) on %@. Any change to the receipt, or a different signer, would fail this check." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Signed by key %1$@ (%2$@) on %3$@. Any change to the receipt, or a different signer, would fail this check."
+          }
+        }
+      }
+    },
+    "Signed case slices" : {
+
+    },
+    "Signs of change" : {
+
+    },
+    "Similar images" : {
+
+    },
+    "Similarity at least %lld%%" : {
+
+    },
+    "Similarity to this document" : {
+
+    },
+    "Simple" : {
+
+    },
+    "SIU" : {
+
+    },
+    "SIU Studio" : {
+
+    },
+    "Skip" : {
+
+    },
+    "Skip for now" : {
+
+    },
+    "small" : {
+
+    },
+    "Smart collections and rules" : {
+
+    },
+    "Some fields were filled in from your earlier runs — check and adjust." : {
+
+    },
+    "SOP Compliance Board" : {
+
+    },
+    "SOP editions verified %@ · next periodic review %@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "SOP editions verified %1$@ · next periodic review %2$@ — %3$@"
+          }
+        }
+      }
+    },
+    "SOP Handbook" : {
+
+    },
+    "Sort by" : {
+
+    },
+    "source" : {
+
+    },
+    "Source" : {
+
+    },
+    "source (optional)" : {
+
+    },
+    "source / producing party" : {
+
+    },
+    "Source %lld: %@. Opens at the quoted passage." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Source %1$lld: %2$@. Opens at the quoted passage."
+          }
+        }
+      }
+    },
+    "Source consulted (URL or edition of the official text)" : {
+
+    },
+    "Source document" : {
+
+    },
+    "Source document (required)" : {
+
+    },
+    "Source it was checked against" : {
+
+    },
+    "Source KO: %@" : {
+
+    },
+    "source not linked" : {
+
+    },
+    "source on file" : {
+
+    },
+    "Source restricted" : {
+
+    },
+    "Source searched" : {
+
+    },
+    "Source type" : {
+
+    },
+    "Sources" : {
+
+    },
+    "Sources compared" : {
+
+    },
+    "Sources supporting it" : {
+
+    },
+    "Speaker ?" : {
+
+    },
+    "Speaker (blank = unassigned)" : {
+
+    },
+    "Stage" : {
+
+    },
+    "Standard of proof" : {
+
+    },
+    "Standards of proof" : {
+
+    },
+    "Start" : {
+
+    },
+    "Start a new run of this workflow — it gets its own WF number" : {
+
+    },
+    "Start a run pre-filled from this saved variant (%@)" : {
+
+    },
+    "Start after idle for" : {
+
+    },
+    "Start fresh: erase all ingested data and re-ingest every source folder through the current pipeline. Destructive — clears the ledger (workspaces/reviews too). Runs in place; no relaunch needed." : {
+
+    },
+    "Start from a ready-made table for your profession. This workspace's tools come first; other professions are under “Other professions…”." : {
+
+    },
+    "Start from: %@" : {
+
+    },
+    "Start here — open a matter" : {
+
+    },
+    "Start matter" : {
+
+    },
+    "Start review queue (%lld to go)" : {
+
+    },
+    "Start scale run recorder" : {
+
+    },
+    "Start the chain" : {
+
+    },
+    "Start this job as a guided run — gated steps and a numbered document per step." : {
+
+    },
+    "started %@" : {
+
+    },
+    "Status" : {
+
+    },
+    "Status: %@  ·  %lld evidence block(s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Status: %1$@  ·  %2$lld evidence block(s)"
+          }
+        }
+      }
+    },
+    "Step %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Step %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Step 1 — install Ollama" : {
+
+    },
+    "Step 2 — pull %@" : {
+
+    },
+    "Still current — app matches" : {
+
+    },
+    "Stop" : {
+
+    },
+    "Stop all background work" : {
+
+    },
+    "Stop and forget everything from this folder" : {
+
+    },
+    "Stop and summarise (%lld samples)" : {
+
+    },
+    "Stop reading" : {
+
+    },
+    "Stop viewing this scenario (it stays saved)" : {
+
+    },
+    "Stop watching" : {
+
+    },
+    "Stop watching (keep what was learned)" : {
+
+    },
+    "Stopping…" : {
+
+    },
+    "Store your entries for this step" : {
+
+    },
+    "Story of “%@”" : {
+
+    },
+    "STUB" : {
+
+    },
+    "Study (author, year)" : {
+
+    },
+    "Sub-questions" : {
+
+    },
+    "Subject" : {
+
+    },
+    "Subject (person / org)" : {
+
+    },
+    "Subject (person, project, organization)…" : {
+
+    },
+    "Submit for approval" : {
+
+    },
+    "Suggest (AI)" : {
+
+    },
+    "Suggest next (AI)" : {
+
+    },
+    "Suggestions learn from your coding. They never change a document or its evidence." : {
+
+    },
+    "Summary" : {
+
+    },
+    "Summary (for the reader)" : {
+
+    },
+    "Summary for a non-technical reader" : {
+
+    },
+    "Supplier / Person" : {
+
+    },
+    "Sūtra conformance — every rule of the frozen constitution is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently." : {
+
+    },
+    "Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded)." : {
+
+    },
+    "Switch between the classic fixed launchers and the newer catalog-driven ones. Also in Settings ▸ Answering & modes." : {
+
+    },
+    "Switch to Private" : {
+
+    },
+    "Synthesis" : {
+
+    },
+    "Synthesizing final answer…" : {
+
+    },
+    "Tag" : {
+
+    },
+    "Tag “%@”" : {
+
+    },
+    "Tag all “Recovered”" : {
+
+    },
+    "Tag it" : {
+
+    },
+    "Tag name" : {
+
+    },
+    "Tag the document this passage comes from" : {
+
+    },
+    "Tag the documents you want to share first (Tags must be on)." : {
+
+    },
+    "Tags" : {
+
+    },
+    "Tags is switched off in Settings → Modules." : {
+
+    },
+    "Tags organise your work. They never change what the evidence says, and removing a tag keeps its history." : {
+
+    },
+    "Tags were not applied: Tags is switched off in Settings → Modules." : {
+
+    },
+    "Take for 1 hour" : {
+
+    },
+    "Takes effect immediately — no relaunch needed." : {
+
+    },
+    "Team review" : {
+
+    },
+    "Technical details" : {
+
+    },
+    "Tell the whole story of…" : {
+
+    },
+    "Template" : {
+
+    },
+    "Template: %@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Template: %1$@ — %2$@"
+          }
+        }
+      }
+    },
+    "Terms to remove" : {
+
+    },
+    "Test on my real files" : {
+
+    },
+    "Test rival explanations the disciplined way: list every hypothesis, rate each piece of evidence for consistency, and let the matrix show which hypothesis has the fewest inconsistencies. You disprove, not confirm — the matrix aids judgment, it doesn't decide." : {
+
+    },
+    "Text recognition" : {
+
+    },
+    "That file isn’t a Kalsmritikosh receipt." : {
+
+    },
+    "The 8D “escape” cause: why existing checks didn't detect this earlier. Fixing it prevents recurrence, not just this instance." : {
+
+    },
+    "The AI only mapped your steps onto known phases; the engine assigned the tooling. Ratify it by keeping it, or discard it." : {
+
+    },
+    "The argument completes with a written conclusion and the citation check." : {
+
+    },
+    "The binder completes when the review is confirmed." : {
+
+    },
+    "The broad threads running through your archive — each one groups several of the topics below." : {
+
+    },
+    "The claim" : {
+
+    },
+    "The claim, as it will appear in copy" : {
+
+    },
+    "The constitution (Sūtra)" : {
+
+    },
+    "The constitution the next findings build will freeze and be assessed against. A protocol never changes mid-run." : {
+
+    },
+    "The doctrine the app runs on — every phase, the tooling it earns, its obligations, the decisions reserved for a human, and the conclusions it must never assert. Write this once for a discipline and the app becomes its practice." : {
+
+    },
+    "The evidence for this fact could not be resolved to a stored source." : {
+
+    },
+    "The files this workspace may use. Reports draw only on these sources." : {
+
+    },
+    "The format your files are converted to." : {
+
+    },
+    "The key is kept in your Mac's Keychain and sent only to %@." : {
+
+    },
+    "The ledger is not open yet." : {
+
+    },
+    "The log isn't ready: complete the matter, the entries, and both QC confirmations." : {
+
+    },
+    "The mandate authorises recommendations" : {
+
+    },
+    "The mandate does not authorise recommendations — the report will state that they are omitted." : {
+
+    },
+    "The memo completes when both checks are confirmed." : {
+
+    },
+    "The on-device model composes the answer prose from the experts' verified findings. Off = deterministic bullet answer from the ledger (fast)." : {
+
+    },
+    "The online answer did not go through: %@" : {
+
+    },
+    "The package completes when the corrections path is confirmed." : {
+
+    },
+    "The recovery key was shown in Settings ▸ Your data ▸ Encryption on the Mac where the ledger was set up. Without it the ledger cannot be read." : {
+
+    },
+    "The report unlocks when a disposition, its rationale, and the acknowledgment(s) are recorded." : {
+
+    },
+    "The respondent had a fair opportunity to respond before findings" : {
+
+    },
+    "The respondent was given notice of the allegations" : {
+
+    },
+    "Then" : {
+
+    },
+    "These are provenance signals, not a verdict. A clean metadata trail is not proof a file is genuine, and a warning is not proof it's fake — it's a lead to investigate. Pixel-level manipulation and AI-generation detection are deliberately out of scope: doing them honestly needs tooling this on-device app doesn't ship, and a false green light would be worse than none." : {
+
+    },
+    "These figures assume a %@ — NOT your Mac. After your first LLM-heavy ingest they self-calibrate to this Mac." : {
+
+    },
+    "These loaders read external chat + browser data that requires explicit user authorization. Off by default. **App Store**: the sandbox enforces this regardless of toggle." : {
+
+    },
+    "These pages were scanned images; the text was recovered by optical character recognition and may be incomplete or imperfect." : {
+
+    },
+    "Things your documents imply should exist but are not in the archive. Each is an inference from a pattern in your files, not a fact; dismissing one hides it but keeps it." : {
+
+    },
+    "This app has no network access; there is nothing to toggle." : {
+
+    },
+    "This build runs a single pipeline: the minimum-AI, ledger-first engine. Ingestion uses no generative AI — rules, semantic indexing and a full-text index only. The model is used only at question time, to explain the evidence it retrieves." : {
+
+    },
+    "This content is not available at the current access level." : {
+
+    },
+    "This control is active." : {
+
+    },
+    "This event → (%lld)" : {
+
+    },
+    "This event is not available at the current access level." : {
+
+    },
+    "This external referral is made in good faith under the applicable reporting statute" : {
+
+    },
+    "This flags an expected-but-absent item. Absence is not proof — the item may simply live outside this archive." : {
+
+    },
+    "This history is printed on the exported hardcopy as an appendix." : {
+
+    },
+    "This is an analysis job — open its canvas directly (%@). Derived from the tooling map." : {
+
+    },
+    "This is stored as a hypothesis next to the verified history. It is never mixed into the timeline or used to answer questions as fact." : {
+
+    },
+    "This job never: %@" : {
+
+    },
+    "This Mac: %@ · %@ GB RAM · %@ tier" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This Mac: %1$@ · %2$@ GB RAM · %3$@ tier"
+          }
+        }
+      }
+    },
+    "This opinion is held to a reasonable degree of professional certainty" : {
+
+    },
+    "This permanently erases the ingested ledger (documents, timeline, entities, search index). Your original files on disk are NOT affected. This cannot be undone." : {
+
+    },
+    "This run references a workflow definition that no longer exists." : {
+
+    },
+    "This run was auto-saved to your Notebook." : {
+
+    },
+    "This runs every background pass three times over your ledger. It is the one check that WRITES — a pass that isn't repeatable will have changed your derived data, and that is inseparable from finding out. Your original files and the stored evidence behind every answer are not touched. It can take several minutes on a large archive." : {
+
+    },
+    "This story has claims short of verified — the memo won't complete without at least one reply entry." : {
+
+    },
+    "This tailors the sidebar to the screens you’ll use most. You can change it any time; answers and evidence are the same for everyone." : {
+
+    },
+    "This text will be sent to %@ (model %@) with your own key. Nothing else leaves your Mac." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This text will be sent to %1$@ (model %2$@) with your own key. Nothing else leaves your Mac."
+          }
+        }
+      }
+    },
+    "This value comes from a source — it can be questioned in a scenario, but not edited away." : {
+
+    },
+    "Threshold" : {
+
+    },
+    "Throughput (last %lld samples)" : {
+
+    },
+    "Tidy up now" : {
+
+    },
+    "Tidy up the knowledge index" : {
+
+    },
+    "Tidying…" : {
+
+    },
+    "Tie each action to the cause it addresses — including the escape cause, so it prevents recurrence, not just this instance." : {
+
+    },
+    "Tie this hand-entered value to the document it came from, so it drills through like sourced data (turns the cell green + citable)." : {
+
+    },
+    "Tier" : {
+
+    },
+    "tier=%@ · context=%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "tier=%1$@ · context=%2$lld"
+          }
+        }
+      }
+    },
+    "Time" : {
+
+    },
+    "Timeline" : {
+
+    },
+    "Timeline — from dated events" : {
+
+    },
+    "Timeline hidden in the message" : {
+
+    },
+    "Tip: click a cell and type; press Return to drop to the next row." : {
+
+    },
+    "Tip: describe what happened, where, and how you know — not why yet. Example: “The claimant's stated injury date is inconsistent across three documents.”" : {
+
+    },
+    "Title" : {
+
+    },
+    "Title for pasted text" : {
+
+    },
+    "To" : {
+
+    },
+    "Today this matches %lld document%@. Once saved, it acts only on documents added from now on." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Today this matches %1$lld document%2$@. Once saved, it acts only on documents added from now on."
+          }
+        }
+      }
+    },
+    "Tools" : {
+
+    },
+    "Topic (e.g. the meeting, the payment)" : {
+
+    },
+    "Topic quality" : {
+
+    },
+    "Topics discovered across your archive — tap one to reconstruct the story of that subject." : {
+
+    },
+    "Trace One Document" : {
+
+    },
+    "Trace One Document — follows a single document through every stage in order (file → version → blocks → derivation → chunks → vectors → keyword → entities → events → facts → retrieval → citation) and reports where the chain breaks. Ends with a LIVE search and citation check, so it proves the document is actually findable and quotable, not merely stored. Leave the box empty to trace the most recent document. Writes golden-thread.md to ~/Documents/EvalBaselines/." : {
+
+    },
+    "Tracing method" : {
+
+    },
+    "Tracing the graph…" : {
+
+    },
+    "Tracing…" : {
+
+    },
+    "Transcribe" : {
+
+    },
+    "Transcription runs on-device and produces timecoded lines you can search, play, and quote. It does not run during ingest." : {
+
+    },
+    "Transcripts" : {
+
+    },
+    "Trends" : {
+
+    },
+    "Triaged" : {
+
+    },
+    "Trust signer" : {
+
+    },
+    "Try a person, an amount, or a phrase that appears in the files — or add more files." : {
+
+    },
+    "TRY ASKING" : {
+
+    },
+    "Try the sample archive" : {
+
+    },
+    "Turn a spreadsheet into a dataset — export it from Excel/Numbers as CSV first; the header row becomes the fields" : {
+
+    },
+    "Turn any file into text, PDF, Word, Excel and more — one-shot, without adding it to your knowledge base." : {
+
+    },
+    "Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question." : {
+
+    },
+    "Turn on Full power in Settings to draft from an SOP." : {
+
+    },
+    "Type" : {
+
+    },
+    "Type (Email / Memo …)" : {
+
+    },
+    "Type a plain-language question; it fills the builder below — you stay in control, and it works offline." : {
+
+    },
+    "Type a question in Ask Kalsmritikosh and tap the bookmark icon next to the input field to save it here." : {
+
+    },
+    "Type name (e.g. Contract)" : {
+
+    },
+    "Type to search all %lld job workflows across every persona, then Start one — it gets its own numbered run." : {
+
+    },
+    "Un-park" : {
+
+    },
+    "Unarchive" : {
+
+    },
+    "Undo %@" : {
+
+    },
+    "Undo the last scenario change" : {
+
+    },
+    "Unevaluated rules (%lld)" : {
+
+    },
+    "Unknown workflow" : {
+
+    },
+    "Unlock" : {
+
+    },
+    "Unmark quote" : {
+
+    },
+    "Unmerge" : {
+
+    },
+    "Untrust signer" : {
+
+    },
+    "Update required" : {
+
+    },
+    "updated %@" : {
+
+    },
+    "Updated %@" : {
+
+    },
+    "Use the copy on this Mac" : {
+
+    },
+    "Use the previous fixed Analyze launchers instead of the newer catalog-driven studio launchers. Both surfaces stay available; this only changes which the persona hub offers by default." : {
+
+    },
+    "Use the search syntax, e.g. `type:email org:acme after:2024-01-01 \"invoice\"`." : {
+
+    },
+    "Used only the %lld source%@ dated on or before that day." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Used only the %1$lld source%2$@ dated on or before that day."
+          }
+        }
+      }
+    },
+    "User assertions (%lld)" : {
+
+    },
+    "User correction" : {
+
+    },
+    "v%lld" : {
+
+    },
+    "Valid — reads: %@" : {
+
+    },
+    "Valid — uses no columns" : {
+
+    },
+    "value" : {
+
+    },
+    "Value" : {
+
+    },
+    "Variant" : {
+
+    },
+    "Variant name" : {
+
+    },
+    "Verdict" : {
+
+    },
+    "Verifiable receipt (.json)" : {
+
+    },
+    "Verifiable receipt…" : {
+
+    },
+    "Verified — no matching text remains" : {
+
+    },
+    "Verified %@ · re-check every %lld days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Verified %1$@ · re-check every %2$lld days"
+          }
+        }
+      }
+    },
+    "Verifies and imports the pack into this Mac's registry — activate it on the Compliance Board to govern new runs." : {
+
+    },
+    "Verify a receipt" : {
+
+    },
+    "Verify all logs" : {
+
+    },
+    "Verify integrity" : {
+
+    },
+    "Verify Receipt" : {
+
+    },
+    "View" : {
+
+    },
+    "View the SQL" : {
+
+    },
+    "Wait for AppState to finish booting; the live polling task starts as the final boot step." : {
+
+    },
+    "Walk the entity graph — click through neighbours, events, causal links and assertions." : {
+
+    },
+    "warming up…" : {
+
+    },
+    "Watch" : {
+
+    },
+    "Watchlists" : {
+
+    },
+    "Welcome to Kalsmritikosh" : {
+
+    },
+    "Well-formed" : {
+
+    },
+    "What" : {
+
+    },
+    "What are you trying to explain or decide?" : {
+
+    },
+    "What changed" : {
+
+    },
+    "What Changed" : {
+
+    },
+    "What do you want to do?" : {
+
+    },
+    "What do you want to know?" : {
+
+    },
+    "What every screen does, and the words the app uses for how well a fact is known. Kalsmritikosh answers only from the documents you add — nothing is invented." : {
+
+    },
+    "What is missing" : {
+
+    },
+    "What is this?" : {
+
+    },
+    "What it extracts (privacy-first, on-device):" : {
+
+    },
+    "What it is" : {
+
+    },
+    "What kalsmritikosh can see" : {
+
+    },
+    "What may be missing for this answer" : {
+
+    },
+    "What the app is doing — tap for details" : {
+
+    },
+    "What the thickness means" : {
+
+    },
+    "What this can and can't tell you" : {
+
+    },
+    "What this job does, needs, produces, and must not conclude" : {
+
+    },
+    "What to do here" : {
+
+    },
+    "What was observed in THIS claim" : {
+
+    },
+    "What was put to them (in full)" : {
+
+    },
+    "What was sent" : {
+
+    },
+    "What was sent…" : {
+
+    },
+    "What will you use Kalsmritikosh for?" : {
+
+    },
+    "What-if hypotheses" : {
+
+    },
+    "When a new document matches" : {
+
+    },
+    "When on, email ingest folds an entire reply chain into a single KO instead of one KO per message. Memory distillation gets the whole conversation in one shot; storage drops on busy mailboxes. **Requires re-ingest of affected mailboxes** to take effect." : {
+
+    },
+    "When the evidence check cannot confirm what the AI read, show it anyway with the badge “Unverified — AI reading; evidence check failed” and no sources. Off = such readings are withheld and the answer falls back to checked material only. Keep this off for legal, compliance, or HR work." : {
+
+    },
+    "When the ledger extracts payment relationships (payer → payee) from your documents, they'll be drawn here." : {
+
+    },
+    "When your documents don't hold the answer, the on-device AI may add a separate block marked “Not from your documents”. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. On by default; turn it off for legal, compliance, or HR work." : {
+
+    },
+    "Where else does this appear?" : {
+
+    },
+    "Where it lives" : {
+
+    },
+    "Where the account changed (%lld)" : {
+
+    },
+    "Which subject did you mean?" : {
+
+    },
+    "Which written criteria do these flags meet?" : {
+
+    },
+    "Who can access, and how" : {
+
+    },
+    "Who talks to whom" : {
+
+    },
+    "Why #%lld" : {
+
+    },
+    "Why direct tracing isn't possible (required for an indirect method)" : {
+
+    },
+    "Why it matters" : {
+
+    },
+    "Why it matters (materiality)" : {
+
+    },
+    "Why it wasn't caught sooner — escape cause (optional)" : {
+
+    },
+    "Why layered citations" : {
+
+    },
+    "Why the difference" : {
+
+    },
+    "Why this answer? (%lld step%@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Why this answer? (%1$lld step%2$@)"
+          }
+        }
+      }
+    },
+    "Why this beats a black box" : {
+
+    },
+    "Why this what-if? (recorded with each override)" : {
+
+    },
+    "Why: %@" : {
+
+    },
+    "Why? (required — this reason goes on the record)" : {
+
+    },
+    "Wipe & re-ingest everything" : {
+
+    },
+    "Withdraw" : {
+
+    },
+    "Word report (.docx)" : {
+
+    },
+    "Work a referred claim the way an SIU really does: record red flags against objective criteria (indicators, never proof), build the loss chronology, document the investigation, preserve discrepancies, and file the exact report — whether it returns to claims or refers out." : {
+
+    },
+    "Work Center" : {
+
+    },
+    "Work down the phases below — the highlighted phase is your next step. Every job stays evidence-cited." : {
+
+    },
+    "Work log — %lld action(s) on this matter" : {
+
+    },
+    "Work on one case with other reviewers through a folder you all can reach. Each reviewer writes a signed log of their own; nothing goes through a server." : {
+
+    },
+    "Work products this template offers (produced by the export engine):" : {
+
+    },
+    "Work through items one at a time — decide with the number keys, and it advances for you" : {
+
+    },
+    "Work through this step in the app, then press Next. Your place is saved if you close." : {
+
+    },
+    "Work-product input" : {
+
+    },
+    "Working finding" : {
+
+    },
+    "working result" : {
+
+    },
+    "Working…" : {
+
+    },
+    "Workspace" : {
+
+    },
+    "Workspaces" : {
+
+    },
+    "Write down the recovery key and keep it somewhere safe. It is the only way to open this ledger on another Mac (for example, from a backup) or if this Mac's Keychain is reset. Kalsmritikosh cannot recover it for you." : {
+
+    },
+    "Write or paste a draft. Each sentence is checked against your archive after you pause typing. It shows what your documents support — it never calls a sentence false." : {
+
+    },
+    "XXXX-XXXX-XXXX-…" : {
+
+    },
+    "Year" : {
+
+    },
+    "Yes" : {
+
+    },
+    "You only need a local model if **Apple Intelligence isn't available** on this Mac (older hardware, macOS earlier than 26, or Apple Intelligence turned off), or for developer model comparisons. If the Live “Apple Intelligence” chip is green, AI already works — you can ignore this. It’s a fallback/developer option and is hidden in the shipping app." : {
+
+    },
+    "You're back — scanning/enrichment is still running. Keep going or stop?" : {
+
+    },
+    "You're ready." : {
+
+    },
+    "Your AI model" : {
+
+    },
+    "Your data" : {
+
+    },
+    "Your documents, worked by the professional's own SOP — cited, evidence-gated, to the real deliverable." : {
+
+    },
+    "Your everyday records — each entry is editable and keeps its full change history, so an amended record still shows who changed what, and when." : {
+
+    },
+    "Your ledger is encrypted on disk (AES-256, SQLCipher %@). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them." : {
+
+    },
+    "Your Mac is idle. Tidy summaries + memories in the background?" : {
+
+    },
+    "Your models" : {
+
+    },
+    "Your name (required)" : {
+
+    },
+    "Your name in the case" : {
+
+    },
+    "Your name, role, rationale and timestamp are recorded on this rule's evaluation and sealed with the assessment when you approve." : {
+
+    },
+    "Your note (optional)" : {
+
+    },
+    "Your own record types" : {
+
+    },
+    "Your private knowledge operating system" : {
+
+    },
+    "Your saved investigations — revisit questions, sub-answers and syntheses without re-running them." : {
+
+    },
+    "Your tags" : {
+
+    },
+    "Your tasks" : {
+
+    },
+    "Your timeline" : {
+
+    },
+    "yyyy-mm-dd" : {
+
+    },
+    "yyyy-mm-dd contacted" : {
+
+    },
+    "Zoom" : {
+
+    }
+  },
+  "version" : "1.3"
+}

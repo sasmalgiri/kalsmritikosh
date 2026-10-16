@@ -11,7 +11,10 @@ import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("Owner ledger probe (read only)")
+// Only where a real ledger exists (the owner's Mac): CI has none, and reading the person's
+// Keychain item on a headless runner can block.
+@Suite("Owner ledger probe (read only)",
+       .enabled(if: FileManager.default.fileExists(atPath: DatabaseLocations.defaultDatabaseURL.path)))
 struct OwnerLedgerProbeTests {
     @Test func reportOwnerLedgerState() {
         let url = DatabaseLocations.defaultDatabaseURL
