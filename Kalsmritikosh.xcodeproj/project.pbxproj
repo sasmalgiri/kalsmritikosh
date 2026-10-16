@@ -98,6 +98,7 @@
 			membershipExceptions = (
 				Assets.xcassets,
 				ContentView.swift,
+				"KalsmritikoshViewer-InfoPlist.xcstrings",
 				KalsmritikoshViewerApp.swift,
 			);
 			target = B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */;
@@ -366,6 +367,16 @@
 			knownRegions = (
 				en,
 				Base,
+				de,
+				es,
+				fr,
+				hi,
+				it,
+				ja,
+				ko,
+				"pt-BR",
+				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = B4B18B352FD0E4B300840C82;
 			minimizedProjectReferenceProxies = 1;
