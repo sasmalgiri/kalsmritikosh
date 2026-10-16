@@ -34,12 +34,12 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W2-2 | Email authenticity checks | Email evidence | yes | off | — | Emails are read as before; no authenticity result. |
 | W2-3 | Outlook PST reader (MS-PST) | Email evidence | yes | off | — | The current PST reader is used. |
 | W2-4 | Near-duplicates | Search & organise | yes | off | — | Exact duplicates only. |
-| W2-5 | Production sets | Legal | yes | off | — | Exports without Bates numbers or load files; holds are kept but not enforced. |
+| W2-5 | Production sets | Legal | yes | off | — | Exports without Bates numbers or load files. Existing holds still block removal. |
 | W2-6 | More export formats | Sharing | yes | off | — | The current export formats. |
 | W2-7 | Lock with Touch ID | Storage | yes | off | — | No app lock; the Mac's own login protects the data. |
 | W2-8 | Very large items | Storage | yes | off | — | Very large items are recorded as too large. |
-| W3-1 | Import a DEVONthink database | Integration | yes | off | — | DEVONthink databases are not recognised. |
-| W3-2 | Send to DEVONthink | Integration | yes | off | — | Not offered. |
+| W3-1 | Import a DEVONthink database | Integration | yes | on | — | DEVONthink databases are not recognised. |
+| W3-2 | Send to DEVONthink | Integration | yes | on | — | Not offered. |
 | W3-3 | Timeline and relationship views | Investigation | yes | off | — | Lists only. |
 | W3-4 | Alerts | Investigation | yes | off | — | No alerts; contradictions still appear in answers. |
 | W3-5 | Smart collections and rules | Search & organise | yes | off | — | Saved searches run only when opened; rules do not run. |
@@ -51,7 +51,7 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | N-4 | Review coding | Legal | yes | off | — | No coding. |
 | N-5 | Briefings, FAQs and mind maps | Writing | yes | off | — | Not offered. |
 | N-6 | Ask from anywhere | Integration | yes | off | — | Ask from the main window only. |
-| N-7 | Similar images and faces | Investigation | yes | off | — | Images are searchable by their text only. |
+| N-7 | Similar images | Investigation | yes | off | — | Images are searchable by their text only. |
 | N-8 | Places | Investigation | yes | off | — | Not shown. |
 | N-9 | Import notes apps | Integration | yes | off | — | These folders import as plain files. |
 | N-10 | Mask personal details before sending | Online (your own key) | yes | off | Online mode, needs O-4 | Passages are sent unmasked, still previewed first. |
