@@ -6,14 +6,18 @@
 //  Entities, Events, Timelines, Relationships, Summaries, Conversations,
 //  Projects, Companies, People — and the sqlite-vec embedding table).
 //
-//  M0 uses the SQLite3 C API straight from Darwin so we ship without an
-//  SPM gate. The `Database` facade is the swap point: a later milestone
-//  can drop in GRDB.swift behind it without touching callers.
+//  The SQLite C API comes from SQLCipher (W2-7, owner decision 2026-10-15):
+//  the same API as Darwin's libsqlite3, plus encryption at rest. A `Database`
+//  opened with a `LedgerKey` is keyed on EVERY connection it opens (main, ask
+//  snapshot, backup copy) through `LedgerCipher.apply`, which refuses to
+//  continue unless the cipher is really present and the key really opens the
+//  file. Without a key (tests, scratch databases, a person's own SQLite files
+//  being read) it behaves exactly like plain SQLite.
 //
 
 import Foundation
 import OSLog
-import SQLite3
+import SQLCipher
 
 /// Errors surfaced by the SQLite layer. Carries the underlying SQLite
 /// message for debugging during development.
@@ -30,6 +34,8 @@ public enum DatabaseError: Error, Sendable {
 public actor Database {
     internal var rawHandle: OpaquePointer?
     public let url: URL
+    /// W2-7 — the ledger key, or nil for an unencrypted database.
+    public let key: LedgerKey?
 
     /// F28 — the ONE transaction ownership model for this shared connection: every transaction is
     /// `withSavepoint`, a synchronous isolated body with no suspension point. There is deliberately
@@ -73,6 +79,14 @@ public actor Database {
             guard sqlite3_open_v2(url.path, &db, flags, nil) == SQLITE_OK, let opened = db else {
                 sqlite3_close(db)
                 return nil
+            }
+            if let key {
+                do { try LedgerCipher.apply(key, to: opened) }
+                catch {
+                    KalsmritikoshLog.storage.error("Ask snapshot connection could not be keyed: \(error.localizedDescription, privacy: .public)")
+                    sqlite3_close(opened)
+                    return nil
+                }
             }
             try? Self.execRaw(handle: opened, sql: "PRAGMA busy_timeout=30000;")
             snapshotHandle = opened
@@ -133,6 +147,15 @@ public actor Database {
             sqlite3_close(dest)
             throw BackupSnapshotError.openFailed(msg)
         }
+        // W2-7 — the copy is encrypted with the same key (Online Backup needs matching keys).
+        if let key {
+            do { try LedgerCipher.apply(key, to: destDB) }
+            catch {
+                sqlite3_close(destDB)
+                try? FileManager.default.removeItem(at: destination)
+                throw BackupSnapshotError.openFailed(error.localizedDescription)
+            }
+        }
         var failure: String?
         if let backup = sqlite3_backup_init(destDB, "main", rawHandle, "main") {
             var rc: Int32
@@ -156,7 +179,7 @@ public actor Database {
             try? FileManager.default.removeItem(at: destination)
             throw BackupSnapshotError.stepFailed(failure)
         }
-        if let problem = Self.quickCheck(fileAt: destination) {
+        if let problem = Self.quickCheck(fileAt: destination, key: key) {
             try? FileManager.default.removeItem(at: destination)
             throw BackupSnapshotError.verifyFailed(problem)
         }
@@ -165,7 +188,11 @@ public actor Database {
     /// F19 — open a database file READ-ONLY (never modifying it), run `PRAGMA quick_check`, close.
     /// Returns nil when the file is a sound SQLite database, else the failure text. Used to vet a
     /// staged restore before it may replace anything; the raw handle never leaves this function.
-    public nonisolated static func quickCheck(fileAt url: URL) -> String? {
+    /// W2-7 — an encrypted file needs `key`; without it the check reports that instead of "not a database".
+    public nonisolated static func quickCheck(fileAt url: URL, key: LedgerKey? = nil) -> String? {
+        if key == nil, LedgerFileState.of(url) == .encrypted {
+            return "the database is encrypted and no key was given"
+        }
         var db: OpaquePointer?
         // `immutable=1`: read the file as-is — no locks, no -shm creation, never a write.
         var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -178,6 +205,10 @@ public actor Database {
             return msg
         }
         defer { sqlite3_close(opened) }
+        // A plaintext file (an older backup) is checked as it is; boot encrypts it once restored.
+        if let key, LedgerFileState.of(url) == .encrypted {
+            do { try LedgerCipher.apply(key, to: opened) } catch { return error.localizedDescription }
+        }
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(opened, "PRAGMA quick_check;", -1, &stmt, nil) == SQLITE_OK, let prepared = stmt else {
             return String(cString: sqlite3_errmsg(opened))
@@ -190,8 +221,9 @@ public actor Database {
         return result == "ok" ? nil : result
     }
 
-    public init(url: URL) throws {
+    public init(url: URL, key: LedgerKey? = nil) throws {
         self.url = url
+        self.key = key
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -206,6 +238,17 @@ public actor Database {
             throw DatabaseError.openFailed(message: msg)
         }
         self.rawHandle = db
+
+        // W2-7 — key first: nothing may touch the file before the cipher is proven present
+        // and the key proven right. A wrong key or a missing cipher closes the handle and throws.
+        if let key {
+            do { try LedgerCipher.apply(key, to: db) }
+            catch {
+                sqlite3_close(db)
+                self.rawHandle = nil
+                throw error
+            }
+        }
 
         // G2-SWIFT6 — the actor `init` is nonisolated (it must be, to
         // bootstrap the actor's state). Calling the actor-isolated

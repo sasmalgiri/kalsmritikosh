@@ -8,7 +8,7 @@
 //
 
 import Foundation
-import SQLite3
+import SQLCipher
 import os
 
 // G2-SWIFT6 — `nonisolated(unsafe)` so this top-level constant isn't

@@ -17,6 +17,7 @@ GUARDS=(
   ui-language-contract.sh
   app-claims-coverage.sh
   reachability.sh
+  ledger-encryption.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do

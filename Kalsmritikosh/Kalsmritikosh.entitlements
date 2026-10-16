@@ -2,45 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-    <key>com.apple.security.files.bookmarks.app-scope</key>
-    <true/>
-    <!--
-      SIXTEENTH REVIEW — network client is FALSE in the tracked file. The
-      product contract is zero network in Release (the active build settings
-      ENABLE_OUTGOING/INCOMING_NETWORK_CONNECTIONS = NO already enforce it);
-      keeping true here was a future-signing risk if anything ever signed
-      against this file directly. Dev-build Ollama access, when needed, is a
-      LOCAL, deliberate, uncommitted toggle — never a tracked default.
-      ci/guards/release-configuration.sh rejects network-client=true in any
-      tracked entitlements file.
-    -->
-    <key>com.apple.security.network.client</key>
-    <false/>
-    <key>com.apple.security.device.audio-input</key>
-    <false/>
-    <!--
-      Hardened runtime entitlements. Required for notarization on
-      App Store distribution and Developer ID outside-the-store
-      distribution. Each true value below documents WHY the
-      exception is needed; flip any to false if the linked
-      framework / behavior is removed.
-    -->
-    <!-- AppleScript / NSAppleEventDescriptor: not used, so disabled. -->
-    <key>com.apple.security.automation.apple-events</key>
-    <false/>
-    <!-- We don't load unsigned plugins or Mach-O at runtime. -->
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <false/>
-    <key>com.apple.security.cs.disable-library-validation</key>
-    <false/>
-    <!-- Foundation Models / on-device LLM may JIT — enable when
-         we adopt MLX or any framework that requires it. Default
-         off because we ship Apple frameworks + Ollama HTTP only. -->
-    <key>com.apple.security.cs.allow-jit</key>
-    <false/>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh</string>
+	</array>
+	<key>com.apple.security.automation.apple-events</key>
+	<false/>
+	<key>com.apple.security.cs.allow-jit</key>
+	<false/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<false/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<false/>
+	<key>com.apple.security.device.audio-input</key>
+	<false/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<false/>
 </dict>
 </plist>

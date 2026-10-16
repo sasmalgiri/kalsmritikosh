@@ -1840,13 +1840,14 @@ public struct SettingsView: View {
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.prompt = "Save Snapshot Here"
         guard panel.runModal() == .OK, let dir = panel.url else { return }
+        guard let passphrase = askSnapshotPassphrase() else { return }
         backingUp = true; backupStatus = nil
         let include = snapshotIncludeOriginals
         Task {
             let scoped = dir.startAccessingSecurityScopedResource()
             defer { if scoped { dir.stopAccessingSecurityScopedResource() } }
             do {
-                let summary = try await appState.exportCompanionSnapshot(to: dir, includeOriginals: include)
+                let summary = try await appState.exportCompanionSnapshot(to: dir, includeOriginals: include, passphrase: passphrase)
                 backupStatus = summary
             } catch {
                 backupStatus = "Snapshot failed: \(error.localizedDescription)"
@@ -1855,6 +1856,37 @@ public struct SettingsView: View {
         }
         #endif
     }
+
+    #if canImport(AppKit)
+    /// W2-7 — the passphrase that encrypts the snapshot's ledger copy (asked twice). nil = cancelled.
+    private func askSnapshotPassphrase() -> String? {
+        var note = ""
+        while true {
+            let alert = NSAlert()
+            alert.messageText = "Set a passphrase for this snapshot"
+            alert.informativeText = "The ledger in the snapshot is encrypted with this passphrase. The iPhone or iPad viewer asks for it. It is not stored anywhere — if it is forgotten, the snapshot cannot be opened."
+                + (note.isEmpty ? "" : "\n\n" + note)
+            let first = NSSecureTextField(frame: NSRect(x: 0, y: 30, width: 280, height: 24))
+            first.placeholderString = "Passphrase (at least \(AppState.minimumSnapshotPassphrase) characters)"
+            let second = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+            second.placeholderString = "Repeat the passphrase"
+            let box = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 56))
+            box.addSubview(first); box.addSubview(second)
+            alert.accessoryView = box
+            alert.addButton(withTitle: "Export")
+            alert.addButton(withTitle: "Cancel")
+            alert.window.initialFirstResponder = first
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+            if first.stringValue.count < AppState.minimumSnapshotPassphrase {
+                note = "The passphrase is too short."
+            } else if first.stringValue != second.stringValue {
+                note = "The two passphrases do not match."
+            } else {
+                return first.stringValue
+            }
+        }
+    }
+    #endif
 
     /// W4-6 — verify a snapshot's signature and every file against its manifest.
     private func checkSnapshot() {
@@ -1985,6 +2017,8 @@ public struct SettingsView: View {
     /// easy to find (the app previously only had a per-folder forget in Sources).
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            LedgerEncryptionSubsection()
+            Divider().padding(.vertical, 4)
             backupSubsection
             Divider().padding(.vertical, 4)
             if ProductModuleFlags.isEnabled(.ledgerRelocation) || appState.ledgerLocationNotice != nil {
@@ -3086,6 +3120,56 @@ public struct SettingsView: View {
                 }
             }
             self.pins = dict
+        }
+    }
+}
+
+
+/// W2-7 — encryption status and the recovery key (shown only after Touch ID / the Mac password).
+private struct LedgerEncryptionSubsection: View {
+    @Environment(AppState.self) private var appState
+    @State private var revealed: String?
+    @State private var problem: String?
+
+    private var encrypted: Bool { appState.database?.key != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: encrypted ? "lock.shield.fill" : "lock.open").foregroundStyle(Theme.brand)
+                Text("Encryption").font(.title3.bold())
+            }
+            Text(encrypted
+                 ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them."
+                 : "The ledger is not open yet.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if encrypted {
+                Text("Write down the recovery key and keep it somewhere safe. It is the only way to open this ledger on another Mac (for example, from a backup) or if this Mac's Keychain is reset. Kalsmritikosh cannot recover it for you.")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button(revealed == nil ? "Show recovery key…" : "Hide recovery key") {
+                        if revealed != nil { revealed = nil; return }
+                        Task {
+                            switch await appState.revealRecoveryKey() {
+                            case .success(let text): revealed = text; problem = nil
+                            case .failure(let error): problem = "The recovery key was not shown: \(error.localizedDescription)"
+                            }
+                        }
+                    }
+                    if let revealed {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(revealed, forType: .string)
+                        }
+                    }
+                }
+                if let revealed {
+                    Text(revealed).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                        .padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+                }
+                if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
+            }
         }
     }
 }

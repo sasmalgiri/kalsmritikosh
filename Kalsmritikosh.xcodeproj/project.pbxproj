@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		B49084FE3080C75200D67076 /* KalsmritikoshNetworkHelper.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B490C10D3080F91100D67076 /* KalsmritikoshShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B490C1063080F91100D67076 /* KalsmritikoshShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B4A1C0DE3081000400D67076 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = B4A1C0DE3081000200D67076 /* SQLCipher */; };
+		B4A1C0DE3081000500D67076 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = B4A1C0DE3081000300D67076 /* SQLCipher */; };
+		B4A1C0DE3081000700D67076 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = B4A1C0DE3081000600D67076 /* SQLCipher */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,6 +29,13 @@
 			remoteGlobalIDString = B49084F63080C75200D67076;
 			remoteInfo = KalsmritikoshNetworkHelper;
 		};
+		B490C10B3080F91100D67076 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4B18B362FD0E4B300840C82 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B490C1053080F91100D67076;
+			remoteInfo = KalsmritikoshShare;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,11 +50,24 @@
 			name = "Embed ExtensionKit Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B490C1203080F91100D67076 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B490C10D3080F91100D67076 /* KalsmritikoshShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KalsmritikoshTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = KalsmritikoshNetworkHelper.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B490C1063080F91100D67076 /* KalsmritikoshShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KalsmritikoshShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B490DF253080FAD500D67076 /* KalsmritikoshViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KalsmritikoshViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kalsmritikosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -62,6 +86,22 @@
 			);
 			target = B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */;
 		};
+		B490C1113080F91100D67076 /* Exceptions for "KalsmritikoshShare" folder in "KalsmritikoshShare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B490C1053080F91100D67076 /* KalsmritikoshShare */;
+		};
+		B490DF403080FAD700D67076 /* Exceptions for "KalsmritikoshViewer" folder in "KalsmritikoshTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				ContentView.swift,
+				KalsmritikoshViewerApp.swift,
+			);
+			target = B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -76,6 +116,22 @@
 				B49085023080C75200D67076 /* Exceptions for "KalsmritikoshNetworkHelper" folder in "KalsmritikoshNetworkHelper" target */,
 			);
 			path = KalsmritikoshNetworkHelper;
+			sourceTree = "<group>";
+		};
+		B490C1073080F91100D67076 /* KalsmritikoshShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B490C1113080F91100D67076 /* Exceptions for "KalsmritikoshShare" folder in "KalsmritikoshShare" target */,
+			);
+			path = KalsmritikoshShare;
+			sourceTree = "<group>";
+		};
+		B490DF263080FAD500D67076 /* KalsmritikoshViewer */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B490DF403080FAD700D67076 /* Exceptions for "KalsmritikoshViewer" folder in "KalsmritikoshTests" target */,
+			);
+			path = KalsmritikoshViewer;
 			sourceTree = "<group>";
 		};
 		B4B18B402FD0E4B300840C82 /* Kalsmritikosh */ = {
@@ -93,6 +149,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B4A1C0DE3081000700D67076 /* SQLCipher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -103,10 +160,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B490C1033080F91100D67076 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B490DF223080FAD500D67076 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B4A1C0DE3081000500D67076 /* SQLCipher in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B4B18B3B2FD0E4B300840C82 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B4A1C0DE3081000400D67076 /* SQLCipher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +192,8 @@
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
 				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
 				B49084F83080C75200D67076 /* KalsmritikoshNetworkHelper */,
+				B490C1073080F91100D67076 /* KalsmritikoshShare */,
+				B490DF263080FAD500D67076 /* KalsmritikoshViewer */,
 				B4B18B3F2FD0E4B300840C82 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -129,6 +204,8 @@
 				B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */,
 				B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */,
 				B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */,
+				B490C1063080F91100D67076 /* KalsmritikoshShare.appex */,
+				B490DF253080FAD500D67076 /* KalsmritikoshViewer.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -151,9 +228,11 @@
 			);
 			fileSystemSynchronizedGroups = (
 				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
+				B490DF263080FAD500D67076 /* KalsmritikoshViewer */,
 			);
 			name = KalsmritikoshTests;
 			packageProductDependencies = (
+				B4A1C0DE3081000600D67076 /* SQLCipher */,
 			);
 			productName = KalsmritikoshTests;
 			productReference = B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */;
@@ -181,6 +260,51 @@
 			productReference = B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */;
 			productType = "com.apple.product-type.extensionkit-extension";
 		};
+		B490C1053080F91100D67076 /* KalsmritikoshShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B490C10E3080F91100D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshShare" */;
+			buildPhases = (
+				B490C1023080F91100D67076 /* Sources */,
+				B490C1033080F91100D67076 /* Frameworks */,
+				B490C1043080F91100D67076 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B490C1073080F91100D67076 /* KalsmritikoshShare */,
+			);
+			name = KalsmritikoshShare;
+			packageProductDependencies = (
+			);
+			productName = KalsmritikoshShare;
+			productReference = B490C1063080F91100D67076 /* KalsmritikoshShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B490DF243080FAD500D67076 /* KalsmritikoshViewer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B490DF2D3080FAD700D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshViewer" */;
+			buildPhases = (
+				B490DF213080FAD500D67076 /* Sources */,
+				B490DF223080FAD500D67076 /* Frameworks */,
+				B490DF233080FAD500D67076 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B490DF263080FAD500D67076 /* KalsmritikoshViewer */,
+			);
+			name = KalsmritikoshViewer;
+			packageProductDependencies = (
+				B4A1C0DE3081000300D67076 /* SQLCipher */,
+			);
+			productName = KalsmritikoshViewer;
+			productReference = B490DF253080FAD500D67076 /* KalsmritikoshViewer.app */;
+			productType = "com.apple.product-type.application";
+		};
 		B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B4B18B492FD0E4B500840C82 /* Build configuration list for PBXNativeTarget "Kalsmritikosh" */;
@@ -189,17 +313,20 @@
 				B4B18B3B2FD0E4B300840C82 /* Frameworks */,
 				B4B18B3C2FD0E4B300840C82 /* Resources */,
 				B49085033080C75200D67076 /* Embed ExtensionKit Extensions */,
+				B490C1203080F91100D67076 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				B49084FD3080C75200D67076 /* PBXTargetDependency */,
+				B490C10C3080F91100D67076 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
 			);
 			name = Kalsmritikosh;
 			packageProductDependencies = (
+				B4A1C0DE3081000200D67076 /* SQLCipher */,
 			);
 			productName = "Atlas chronica memora";
 			productReference = B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */;
@@ -222,6 +349,12 @@
 					B49084F63080C75200D67076 = {
 						CreatedOnToolsVersion = 27.0;
 					};
+					B490C1053080F91100D67076 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					B490DF243080FAD500D67076 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					B4B18B3D2FD0E4B300840C82 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -236,6 +369,9 @@
 			);
 			mainGroup = B4B18B352FD0E4B300840C82;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B4A1C0DE3081000100D67076 /* XCRemoteSwiftPackageReference "SQLCipher" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B4B18B3F2FD0E4B300840C82 /* Products */;
 			projectDirPath = "";
@@ -244,6 +380,8 @@
 				B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */,
 				B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */,
 				B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */,
+				B490C1053080F91100D67076 /* KalsmritikoshShare */,
+				B490DF243080FAD500D67076 /* KalsmritikoshViewer */,
 			);
 		};
 /* End PBXProject section */
@@ -257,6 +395,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B49084F53080C75200D67076 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B490C1043080F91100D67076 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B490DF233080FAD500D67076 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -287,6 +439,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B490C1023080F91100D67076 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B490DF213080FAD500D67076 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B4B18B3A2FD0E4B300840C82 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -306,6 +472,11 @@
 			isa = PBXTargetDependency;
 			target = B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */;
 			targetProxy = B49084FC3080C75200D67076 /* PBXContainerItemProxy */;
+		};
+		B490C10C3080F91100D67076 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B490C1053080F91100D67076 /* KalsmritikoshShare */;
+			targetProxy = B490C10B3080F91100D67076 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -359,7 +530,6 @@
 		B49085003080C75200D67076 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TPTCJD42Q;
@@ -374,6 +544,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KalsmritikoshNetworkHelper/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KalsmritikoshNetworkHelper;
@@ -406,7 +577,6 @@
 		B49085013080C75200D67076 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TPTCJD42Q;
@@ -421,6 +591,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KalsmritikoshNetworkHelper/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = KalsmritikoshNetworkHelper;
@@ -447,6 +618,172 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B490C10F3080F91100D67076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = KalsmritikoshShare/KalsmritikoshShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KalsmritikoshShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Save to Kalsmritikosh";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B490C1103080F91100D67076 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = KalsmritikoshShare/KalsmritikoshShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KalsmritikoshShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Save to Kalsmritikosh";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B490DF2E3080FAD700D67076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Viewer";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.KalsmritikoshViewer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B490DF2F3080FAD700D67076 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Viewer";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.KalsmritikoshViewer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -576,9 +913,9 @@
 		B4B18B4A2FD0E4B500840C82 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Kalsmritikosh/Kalsmritikosh.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TPTCJD42Q;
@@ -596,6 +933,7 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
@@ -613,7 +951,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/Frameworks",
+					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh;
@@ -635,9 +973,9 @@
 		B4B18B4B2FD0E4B500840C82 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Kalsmritikosh/Kalsmritikosh.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6TPTCJD42Q;
@@ -655,6 +993,7 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
+				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
@@ -672,7 +1011,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/Frameworks",
+					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh;
@@ -712,6 +1051,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		B490C10E3080F91100D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B490C10F3080F91100D67076 /* Debug */,
+				B490C1103080F91100D67076 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B490DF2D3080FAD700D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshViewer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B490DF2E3080FAD700D67076 /* Debug */,
+				B490DF2F3080FAD700D67076 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B4B18B392FD0E4B300840C82 /* Build configuration list for PBXProject "Kalsmritikosh" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -731,6 +1088,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B4A1C0DE3081000100D67076 /* XCRemoteSwiftPackageReference "SQLCipher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sqlcipher/SQLCipher.swift";
+			requirement = {
+				kind = exactVersion;
+				version = 4.19.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B4A1C0DE3081000200D67076 /* SQLCipher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4A1C0DE3081000100D67076 /* XCRemoteSwiftPackageReference "SQLCipher" */;
+			productName = SQLCipher;
+		};
+		B4A1C0DE3081000300D67076 /* SQLCipher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4A1C0DE3081000100D67076 /* XCRemoteSwiftPackageReference "SQLCipher" */;
+			productName = SQLCipher;
+		};
+		B4A1C0DE3081000600D67076 /* SQLCipher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4A1C0DE3081000100D67076 /* XCRemoteSwiftPackageReference "SQLCipher" */;
+			productName = SQLCipher;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B4B18B362FD0E4B300840C82 /* Project object */;
 }

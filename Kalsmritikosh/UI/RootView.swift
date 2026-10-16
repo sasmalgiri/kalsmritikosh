@@ -490,6 +490,8 @@ public struct RootView: View {
             loadingView
         case .failed(let message):
             failedView(message)
+        case .needsRecoveryKey(let message):
+            RecoveryKeyView(message: message)
         case .ready:
             VStack(spacing: 0) {
                 // §1.1 — the sample ledger announces itself on every screen.
@@ -509,7 +511,7 @@ public struct RootView: View {
                 .symbolEffect(.pulse)
             ProgressView()
                 .controlSize(.small)
-            Text("Starting Kalsmritikosh…")
+            Text(appState.bootNote ?? "Starting Kalsmritikosh…")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -1780,5 +1782,46 @@ struct SampleArchiveBanner: View {
         .background(Color.purple.opacity(0.14))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sample archive mode. Your own documents are untouched.")
+    }
+}
+
+
+/// W2-7 — the ledger is encrypted and this Mac does not hold its key: ask for the recovery key.
+/// Nothing is opened, created or overwritten until a key that opens the ledger is entered.
+struct RecoveryKeyView: View {
+    @Environment(AppState.self) private var appState
+    let message: String
+    @State private var text = ""
+    @State private var note: String?
+    @State private var working = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "lock.shield").font(.system(size: 40, weight: .light)).foregroundStyle(.tint)
+            Text("Enter your ledger's recovery key").font(.title2.bold())
+            Text(message).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .frame(maxWidth: 520).fixedSize(horizontal: false, vertical: true)
+            TextField("XXXX-XXXX-XXXX-…", text: $text)
+                .font(.system(.body, design: .monospaced))
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 520)
+                .onSubmit(unlock)
+            if let note { Text(note).font(.caption).foregroundStyle(.red) }
+            Button(working ? "Opening…" : "Open Ledger", action: unlock)
+                .keyboardShortcut(.defaultAction)
+                .disabled(working || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Text("The recovery key was shown in Settings ▸ Your data ▸ Encryption on the Mac where the ledger was set up. Without it the ledger cannot be read.")
+                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 520)
+        }
+        .padding(40)
+        .frame(minWidth: 820, minHeight: 520)
+    }
+
+    private func unlock() {
+        working = true; note = nil
+        Task {
+            note = await appState.unlockLedger(recoveryText: text)
+            working = false
+        }
     }
 }

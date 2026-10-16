@@ -6,8 +6,8 @@
 //  files or paste text here; each item is saved into Intake/<date>/ with a
 //  custody line (when, where it came from, SHA-256 of the saved bytes) appended
 //  to intake-custody.jsonl (beside the folder), and the intake folder is read like any source.
-//  The app makes no connection. Share / Services / Safari extensions (owner
-//  step: new targets in Xcode) are meant to drop into this same folder.
+//  The app makes no connection. The Services menu (CaptureServices.swift) and the
+//  Share extension's inbox drop into this same folder.
 //
 
 import SwiftUI
@@ -24,6 +24,10 @@ nonisolated enum CaptureIntake {
 
     struct Saved: Sendable { let file: URL; let sha256: String }
 
+    static func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// Save bytes into today's intake folder and append a custody line. Never overwrites.
     static func save(_ data: Data, name: String, origin: String) throws -> Saved {
         guard let root = folder else { throw CocoaError(.fileNoSuchFile) }
@@ -38,7 +42,7 @@ nonisolated enum CaptureIntake {
             target = dir.appendingPathComponent("\(stem) \(n)" + (ext.isEmpty ? "" : ".\(ext)")); n += 1
         }
         try data.write(to: target, options: .withoutOverwriting)
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let digest = sha256(data)
         let line: [String: String] = ["capturedAt": ISO8601DateFormatter().string(from: Date()), "origin": origin,
                                       "file": target.path, "sha256": digest, "bytes": String(data.count)]
         if let json = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) {
@@ -49,6 +53,29 @@ nonisolated enum CaptureIntake {
             try h.seekToEnd(); try h.write(contentsOf: json + Data("\n".utf8)); try h.close()
         }
         return Saved(file: target, sha256: digest)
+    }
+}
+
+extension AppState {
+    /// W3-6 — register the intake folder as a source once, then read new items. Nil when the
+    /// folder could not be registered. Shared by the Capture window, the Services menu and the
+    /// Share-extension inbox.
+    func readCaptureIntake() async -> Int? {
+        guard let folder = CaptureIntake.folder else { return nil }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let registered = bookmarks.roots.contains { root in
+            guard let url = try? bookmarks.resolve(root) else { return false }
+            defer { bookmarks.stopAccessing(url) }
+            return url.standardizedFileURL == folder.standardizedFileURL
+        }
+        if !registered {
+            do { try bookmarks.register(url: folder) }
+            catch {
+                KalsmritikoshLog.app.error("Intake source failed: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
+        return await ingestAllRoots()
     }
 }
 
@@ -121,24 +148,8 @@ struct CaptureView: View {
         }
     }
 
-    /// Register the intake folder as a source once, then read new items.
     private func readIntake() async {
-        guard let folder = CaptureIntake.folder else { return }
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let registered = appState.bookmarks.roots.contains { root in
-            guard let url = try? appState.bookmarks.resolve(root) else { return false }
-            defer { appState.bookmarks.stopAccessing(url) }
-            return url.standardizedFileURL == folder.standardizedFileURL
-        }
-        if !registered {
-            do { try appState.bookmarks.register(url: folder) }
-            catch {
-                KalsmritikoshLog.app.error("Intake source failed: \(error.localizedDescription, privacy: .public)")
-                log.insert("Could not add the intake folder as a source.", at: 0)
-                return
-            }
-        }
-        let n = await appState.ingestAllRoots()
-        log.insert("Read \(n) new file(s).", at: 0)
+        if let n = await appState.readCaptureIntake() { log.insert("Read \(n) new file(s).", at: 0) }
+        else { log.insert("Could not add the intake folder as a source.", at: 0) }
     }
 }

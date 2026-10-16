@@ -7,15 +7,16 @@
 //  snapshot folder over (AirDrop, Files, a disk).
 //
 //    <name>.kalsnapshot/
-//      <ledger>.sqlite        consistent copy (SQLite Online Backup, inside the Database actor)
+//      <ledger>.sqlite        consistent copy (SQLite Online Backup, inside the Database actor),
+//                             re-encrypted with a passphrase the person sets at export (W2-7)
 //      <originals…>           optional: source files, so citations can open on the device
 //      kalsnapshot-sources.json  file id → snapshot-relative path of each included original
 //      manifest.json          every file's size + SHA-256 (BackupService)
 //      signature.json         ECDSA P-256 over SHA-256(manifest.json) with this Mac's key
 //
 //  `verify` checks the signature AND every file against the manifest; a changed
-//  byte anywhere, or a different signer, fails. The iPad viewer target itself
-//  is an owner step (new target + scope decision).
+//  byte anywhere, or a different signer, fails. The iPhone/iPad viewer is the
+//  KalsmritikoshViewer target; it asks for the passphrase after verifying.
 //
 
 import Foundation
@@ -73,16 +74,27 @@ nonisolated enum CompanionSnapshot {
 }
 
 extension AppState {
-    /// Write a signed snapshot into `parent`. Returns a plain summary.
-    func exportCompanionSnapshot(to parent: URL, includeOriginals: Bool) async throws -> String {
+    /// Shortest passphrase accepted for a snapshot's ledger copy.
+    static let minimumSnapshotPassphrase = 8
+
+    /// Write a signed snapshot into `parent`. Returns a plain summary. W2-7 — the ledger copy in the
+    /// snapshot is encrypted with `passphrase` (never this Mac's own key); the viewer asks for it.
+    func exportCompanionSnapshot(to parent: URL, includeOriginals: Bool, passphrase: String) async throws -> String {
         guard let database else { throw BackupService.BackupError.notADatabaseBackup }
+        guard passphrase.count >= Self.minimumSnapshotPassphrase else {
+            throw LedgerEncryptionError.conversionFailed("the passphrase must be at least \(Self.minimumSnapshotPassphrase) characters")
+        }
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let dest = parent.appendingPathComponent("Kalsmritikosh-\(stamp).kalsnapshot", isDirectory: true)
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("kalsnap-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let consistent = scratch.appendingPathComponent("consistent.sqlite")
+        try await database.backupSnapshot(to: consistent)
         let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
-        try await database.backupSnapshot(to: snapshot)
+        let ledgerKey = database.key
+        try await Task.detached { try LedgerCipher.exportCopy(from: consistent, key: ledgerKey, to: snapshot, passphrase: passphrase) }.value
+        try? FileManager.default.removeItem(at: consistent)
 
         // Originals: every readable source file; unreadable ones are counted, not hidden.
         var originals: [(id: UUID, url: URL)] = []
@@ -101,7 +113,7 @@ extension AppState {
             schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970)
         // Rebuild the snapshot-relative names exactly as createBackup assigned them
         // (database first, then originals in order), since the manifest is sorted by path.
-        var taken = Set<String>()
+        var taken = BackupService.reservedNames
         _ = BackupService.uniqueName(for: snapshot.lastPathComponent, taken: &taken)
         var map: [String: String] = [:]
         for o in originals { map[o.id.uuidString] = BackupService.uniqueName(for: o.url.lastPathComponent, taken: &taken) }
@@ -114,7 +126,7 @@ extension AppState {
                                           coverage: manifest.coverage)
         try JSONEncoder().encode(full).write(to: dest.appendingPathComponent(BackupService.manifestName))
         try CompanionSnapshot.sign(folder: dest)
-        return "Signed snapshot “\(dest.lastPathComponent)”: the ledger" + (includeOriginals ? " and \(originals.count) original file(s)" : "")
+        return "Signed snapshot “\(dest.lastPathComponent)”: the ledger (encrypted with your passphrase)" + (includeOriginals ? " and \(originals.count) original file(s)" : "")
             + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "."
     }
 }

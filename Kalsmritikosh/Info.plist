@@ -15,5 +15,28 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Save to Kalsmritikosh</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>saveToKalsmritikosh</string>
+			<key>NSPortName</key>
+			<string>Kalsmritikosh</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+				<string>public.rtf</string>
+				<string>public.html</string>
+				<string>public.file-url</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

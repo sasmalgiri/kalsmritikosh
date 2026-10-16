@@ -261,7 +261,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Share and capture",
-                        detail: "Send files and web pages to the import queue from the Share menu, the Services menu or Safari. Pages are saved on your Mac.",
+                        detail: "“Save to Kalsmritikosh” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that.",
                         whenOff: "Add files from inside the app only.",
                         implemented: true)
         case .spotlightIndex:
@@ -431,6 +431,7 @@ nonisolated public enum ProductModuleFlags {
 
     public nonisolated static func setEnabled(_ m: ProductModule, _ on: Bool) {
         UserDefaults.standard.set(on, forKey: m.storageKey)
+        if m == .captureExtensions { ShareInbox.mirrorSwitch() }   // the Share extension reads the copy
     }
 
     private nonisolated static func storedOrDefault(_ m: ProductModule) -> Bool {

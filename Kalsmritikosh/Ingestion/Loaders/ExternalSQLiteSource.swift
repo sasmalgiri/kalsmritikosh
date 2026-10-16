@@ -19,7 +19,7 @@
 //
 
 import Foundation
-import SQLite3
+import SQLCipher
 
 public enum ExternalSQLiteError: Error, CustomStringConvertible {
     case copyFailed(URL, underlying: Error)

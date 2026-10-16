@@ -16,6 +16,7 @@
 
 import Foundation
 import CryptoKit
+import SQLCipher
 
 public struct BackupService: Sendable {
     public init() { self.failPromotionAfter = nil }
@@ -34,6 +35,8 @@ public struct BackupService: Sendable {
         case databaseUnusable(String)
         /// F19 — promotion stopped part-way; everything was rolled back.
         case promotionFailed(String)
+        /// W2-7 — the backup's ledger is encrypted with a key this Mac does not hold.
+        case encryptedWithAnotherKey
     }
 
     /// Copy the database + originals into `destination`, writing a manifest.
@@ -52,7 +55,7 @@ public struct BackupService: Sendable {
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
 
         var entries: [BackupEntry] = []
-        var usedNames = Set<String>()
+        var usedNames = Self.reservedNames
         func copyIn(_ src: URL, kind: BackupEntry.Kind) throws {
             // F17 — a UNIQUE relative path per entry: two originals named "letter.txt" used to share
             // one backup path, so the second overwrote the first and the manifest listed it twice.
@@ -114,17 +117,24 @@ public struct BackupService: Sendable {
     }
 
     /// "letter.txt", then "letter-2.txt", "letter-3.txt", … in input order (deterministic).
+    /// `taken` holds lowercased names: the backup folder usually sits on a case-insensitive
+    /// volume, where "Letter.txt" and "letter.txt" are the same file.
     static func uniqueName(for name: String, taken: inout Set<String>) -> String {
-        if taken.insert(name).inserted { return name }
+        if taken.insert(name.lowercased()).inserted { return name }
         let ext = (name as NSString).pathExtension
         let stem = (name as NSString).deletingPathExtension
         var n = 2
         while true {
             let candidate = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
-            if taken.insert(candidate).inserted { return candidate }
+            if taken.insert(candidate.lowercased()).inserted { return candidate }
             n += 1
         }
     }
+
+    /// Control files a backup or signed snapshot writes beside the copied files. An original
+    /// with one of these names is renamed ("manifest-2.json") so it can never replace — or be
+    /// replaced by — the manifest, the signature or the sources map. Lowercased.
+    static let reservedNames: Set<String> = [manifestName.lowercased(), "signature.json", "kalsnapshot-sources.json"]
 
     /// F19 — test hook: throw after this many files have been promoted (simulates a mid-restore
     /// failure such as a full disk). nil in production.
@@ -141,8 +151,12 @@ public struct BackupService: Sendable {
     ///     moves everything back and the previous data survives intact.
     /// The caller must not restore over a database that is open (the app never does: restore is
     /// not exposed while a ledger is live).
+    /// W2-7 — an encrypted backup is checked with `ledgerKey` (this Mac's key by default). One made
+    /// with another Mac's key throws `encryptedWithAnotherKey`; restore again with that ledger's
+    /// recovery key, which boot then keeps.
     @discardableResult
-    public func restore(backupFolder: URL, into targetFolder: URL) throws -> BackupManifest {
+    public func restore(backupFolder: URL, into targetFolder: URL,
+                        ledgerKey: LedgerKey? = LedgerKeychain.load()) throws -> BackupManifest {
         let (manifest, verdict) = try inspect(backupFolder: backupFolder)
         guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
         guard verdict.unsafe.isEmpty else { throw BackupError.unsafeEntry(verdict.unsafe.joined(separator: ", ")) }
@@ -171,7 +185,17 @@ public struct BackupService: Sendable {
                 throw BackupError.damaged([e.relativePath])
             }
         }
-        if let problem = Database.quickCheck(fileAt: staging.appendingPathComponent(dbEntry.relativePath)) {
+        let stagedDB = staging.appendingPathComponent(dbEntry.relativePath)
+        if LedgerFileState.of(stagedDB) == .encrypted {
+            guard let ledgerKey else { throw BackupError.encryptedWithAnotherKey }
+            var probe: OpaquePointer?
+            defer { sqlite3_close(probe) }
+            if sqlite3_open_v2(stagedDB.path, &probe, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let h = probe {
+                do { try LedgerCipher.apply(ledgerKey, to: h) }
+                catch LedgerEncryptionError.wrongKey { throw BackupError.encryptedWithAnotherKey }
+            }
+        }
+        if let problem = Database.quickCheck(fileAt: stagedDB, key: ledgerKey) {
             throw BackupError.databaseUnusable(problem)
         }
 

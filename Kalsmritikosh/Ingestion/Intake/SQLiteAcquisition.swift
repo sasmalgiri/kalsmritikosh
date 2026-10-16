@@ -24,7 +24,7 @@
 
 import Foundation
 import CryptoKit
-import SQLite3
+import SQLCipher
 
 public nonisolated enum SQLiteAcquisition {
 

@@ -9,9 +9,10 @@
 //  bookmark that boot follows.
 //
 //  Safety rules:
-//   * The database is copied with `VACUUM INTO`, a consistent snapshot of the
-//     live database (never a raw copy of a file that is being written), and the
-//     copy must pass PRAGMA quick_check.
+//   * The database is copied with SQLite's Online Backup (`Database.backupSnapshot`),
+//     a consistent snapshot of the live database (never a raw copy of a file that
+//     is being written), encrypted with the same ledger key (W2-7), and the copy
+//     must pass PRAGMA quick_check.
 //   * Every other file is copied and its SHA-256 compared with the original.
 //   * The switch takes effect at the next launch; the copy on this Mac is kept.
 //   * Boot never silently opens a stale copy: if the disk is absent, or this
@@ -63,8 +64,8 @@ public enum LedgerRelocation {
         try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
 
         // 1. Consistent database snapshot.
-        try await database.exec("VACUUM INTO ?;", [.text(destDB.path)])
-        let copy = try Database(url: destDB)
+        try await database.backupSnapshot(to: destDB)
+        let copy = try Database(url: destDB, key: database.key)
         let check = try await copy.query("PRAGMA quick_check;", []).first?.string(0) ?? "no result"
         guard check == "ok" else { throw LedgerRelocationError.integrityFailed(check) }
 

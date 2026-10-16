@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import AppKit
 import CryptoKit
 import Testing
 @testable import Kalsmritikosh
@@ -480,5 +481,195 @@ struct DevonthinkPackageTests {
         #expect(a.summary.hasPrefix("2 of 4 stored documents are in the ledger. Not yet read (2): Clipped page.html, plain.txt"))
         let all = p.accounting(ledgerPaths: Set(p.files.map { $0.standardizedFileURL.path }))
         #expect(all.summary == "All 4 stored documents are in the ledger.")
+    }
+}
+
+@Suite("W3-6 Share inbox and Services capture")
+struct ShareCaptureTests {
+    /// Writes one item exactly as KalsmritikoshShare does: <stamp>-<uuid>/<name> + item.json.
+    private func shareItem(_ inbox: URL, name: String, data: Data, recordedSHA: String? = nil) throws -> URL {
+        let dir = inbox.appendingPathComponent("2026-10-15T10-00-00Z-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try data.write(to: dir.appendingPathComponent(name))
+        let meta = ["sharedAt": "2026-10-15T10:00:00Z", "origin": "Share menu: Safari", "name": name, "kind": "file",
+                    "sha256": recordedSHA ?? CaptureIntake.sha256(data), "bytes": String(data.count)]
+        try JSONSerialization.data(withJSONObject: meta).write(to: dir.appendingPathComponent(ShareInbox.itemFile))
+        return dir
+    }
+
+    private func tempInbox() throws -> URL {
+        let u = FileManager.default.temporaryDirectory.appendingPathComponent("inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        return u
+    }
+
+    @Test func verifiedItemsMoveWithCustodyAndTamperedOnesStay() throws {
+        let inbox = try tempInbox()
+        defer { try? FileManager.default.removeItem(at: inbox) }
+        let good = try shareItem(inbox, name: "Grant letter.pdf", data: Data("pdf bytes".utf8))
+        let tampered = try shareItem(inbox, name: "notes.txt", data: Data("changed".utf8), recordedSHA: CaptureIntake.sha256(Data("original".utf8)))
+        let noRecord = inbox.appendingPathComponent("broken", isDirectory: true)
+        try FileManager.default.createDirectory(at: noRecord, withIntermediateDirectories: true)
+        let staging = inbox.appendingPathComponent(".tmp-\(UUID().uuidString)", isDirectory: true)   // half-written
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+
+        var saves: [(String, String)] = []
+        let r = ShareInbox.drain(inbox) { data, name, origin in
+            saves.append((name, origin))
+            return CaptureIntake.Saved(file: inbox.appendingPathComponent(name), sha256: CaptureIntake.sha256(data))
+        }
+        #expect(r.moved == 1)
+        #expect(saves.map(\.0) == ["Grant letter.pdf"])
+        #expect(saves[0].1.contains("Share menu: Safari") && saves[0].1.contains("shared 2026-10-15T10:00:00Z"))
+        #expect(!FileManager.default.fileExists(atPath: good.path))          // handed over
+        #expect(FileManager.default.fileExists(atPath: tampered.path))       // kept, not imported
+        #expect(FileManager.default.fileExists(atPath: noRecord.path))
+        #expect(FileManager.default.fileExists(atPath: staging.path))        // never touched
+        #expect(r.refused.count == 2)
+        #expect(r.refused.contains { $0.contains("do not match") })
+    }
+
+    @Test func inboxCopyStaysWhenTheIntakeCopyDoesNotVerify() throws {
+        let inbox = try tempInbox()
+        defer { try? FileManager.default.removeItem(at: inbox) }
+        let item = try shareItem(inbox, name: "a.txt", data: Data("a".utf8))
+        let r = ShareInbox.drain(inbox) { _, name, _ in CaptureIntake.Saved(file: inbox.appendingPathComponent(name), sha256: "bad") }
+        #expect(r.moved == 0)
+        #expect(FileManager.default.fileExists(atPath: item.path))
+    }
+
+    @Test func servicesPasteboardPrefersFilesThenRichestText() throws {
+        let pb = NSPasteboard(name: NSPasteboard.Name("kals-test-\(UUID().uuidString)"))
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("plain words", forType: .string)
+        pb.setData(Data("<p>rich <b>words</b></p>".utf8), forType: .html)
+        let textItems = CapturePasteboard.items(from: pb)
+        #expect(textItems.count == 1)
+        #expect(textItems[0].name.hasSuffix(".html"))
+        #expect(textItems[0].data == Data("<p>rich <b>words</b></p>".utf8))
+
+        pb.clearContents()
+        let file = URL(fileURLWithPath: "/tmp/does-not-matter.pdf")
+        pb.writeObjects([file as NSURL])
+        let fileItems = CapturePasteboard.items(from: pb) { _ in Data("file bytes".utf8) }
+        #expect(fileItems == [.init(data: Data("file bytes".utf8), name: "does-not-matter.pdf", origin: "Services menu: /tmp/does-not-matter.pdf")])
+
+        pb.clearContents()
+        pb.setString("   \n", forType: .string)
+        #expect(CapturePasteboard.items(from: pb).isEmpty)
+    }
+}
+
+@Suite("W4-6 backup names never collide with control files")
+struct BackupReservedNameTests {
+    @Test func originalsNamedLikeControlFilesOrDifferingByCaseStayDistinct() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("bkres-\(UUID().uuidString)", isDirectory: true)
+        let src = base.appendingPathComponent("src", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        var originals: [URL] = []
+        for (i, name) in ["manifest.json", "signature.json", "Letter.txt"].enumerated() {
+            let d = src.appendingPathComponent("d\(i)", isDirectory: true)
+            try fm.createDirectory(at: d, withIntermediateDirectories: true)
+            let u = d.appendingPathComponent(name)
+            try Data("original \(name)".utf8).write(to: u)
+            originals.append(u)
+        }
+        let lower = src.appendingPathComponent("d9", isDirectory: true)
+        try fm.createDirectory(at: lower, withIntermediateDirectories: true)
+        try Data("lowercase twin".utf8).write(to: lower.appendingPathComponent("letter.txt"))
+        originals.append(lower.appendingPathComponent("letter.txt"))
+        let db = src.appendingPathComponent("ledger.sqlite")
+        try Data("SQLite format 3\0".utf8).write(to: db)
+
+        let dest = base.appendingPathComponent("backup", isDirectory: true)
+        let m = try BackupService().createBackup(databaseURL: db, originalURLs: originals, destination: dest,
+                                                 schemaVersion: 1, nowEpoch: 0)
+        let paths = m.entries.map(\.relativePath)
+        #expect(Set(paths.map { $0.lowercased() }).count == paths.count)
+        #expect(!paths.contains { BackupService.reservedNames.contains($0.lowercased()) })
+        // The manifest on disk is the manifest, not the original that shares its name.
+        let onDisk = try JSONDecoder().decode(BackupManifest.self, from: Data(contentsOf: dest.appendingPathComponent(BackupService.manifestName)))
+        #expect(onDisk == m)
+        let verdict = try BackupService().inspect(backupFolder: dest).verdict
+        #expect(verdict.corrupt.isEmpty && verdict.missing.isEmpty)
+    }
+}
+
+/// W4-6 — the iPhone/iPad viewer's own reader (KalsmritikoshViewer/SnapshotVerifier.swift and
+/// SnapshotLedger.swift, compiled into this test target too) against a snapshot the Mac app
+/// really exports: real ingest, real export, real signature.
+@Suite("W4-6 viewer reads a real signed snapshot", .serialized)
+struct CompanionViewerRoundTripTests {
+    static let passphrase = "correct horse battery"
+    @MainActor
+    private func exportSnapshot() async throws -> (snapshot: URL, cleanup: () async -> Void) {
+        let (state, dir) = try await RealArchivePipelineTests.bootState(label: "viewer")
+        let docs = dir.appendingPathComponent("docs", isDirectory: true)
+        try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        let note = docs.appendingPathComponent("Patent grant notice.txt")
+        try Data("""
+            Patent grant notice.
+            The patent office granted patent 11,223,344 to Ecosanskriti Innovation on 4 March 2024.
+            The examiner was Dr. Meera Iyer. Renewal fees fall due every year in March.
+            """.utf8).write(to: note)
+        await state.ingestFiles([note])
+        let out = dir.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        _ = try await state.exportCompanionSnapshot(to: out, includeOriginals: true, passphrase: Self.passphrase)
+        let snap = try #require(try FileManager.default.contentsOfDirectory(at: out, includingPropertiesForKeys: nil)
+            .first { $0.pathExtension == "kalsnapshot" })
+        return (snap, { await RealArchivePipelineTests.teardown(state, dir) })
+    }
+
+    @Test(.timeLimit(.minutes(5)))
+    func viewerVerifiesBrowsesSearchesAndOpensTheOriginal() async throws {
+        let (snap, cleanup) = try await exportSnapshot()
+        let (verdict, entries) = SnapshotVerifier.verify(snap)
+        #expect(verdict.isVerified, "\(verdict.message)")
+        // W2-7 — the snapshot's ledger is encrypted with the export passphrase, not the Mac's key.
+        let db = try #require(entries.first { $0.kind == "database" })
+        #expect(LedgerFileState.of(snap.appendingPathComponent(db.relativePath)) == .encrypted)
+        #expect(throws: SnapshotLedger.OpenError.wrongPassphrase) {
+            _ = try SnapshotLedger(folder: snap, entries: entries, passphrase: "not the passphrase")
+        }
+        let ledger = try SnapshotLedger(folder: snap, entries: entries, passphrase: Self.passphrase)
+        let docs = ledger.documents()
+        let doc = try #require(docs.first { $0.title == "Patent grant notice.txt" }, "documents: \(docs.map(\.title))")
+        #expect(!ledger.passages(of: doc.id).isEmpty)
+        let hits = ledger.search("examiner Iyer")
+        #expect(hits.contains { $0.documentID == doc.id && $0.text.contains("Meera Iyer") })
+        // The citation opens its source: the snapshot's own copy of the original, byte for byte.
+        let original = try #require(ledger.originalURL(fileID: doc.fileID))
+        #expect(try Data(contentsOf: original) == Data(contentsOf: snap.deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("docs/Patent grant notice.txt")))
+        await cleanup()
+    }
+
+    @Test(.timeLimit(.minutes(5)))
+    func oneChangedByteOrAMissingSignatureIsRefused() async throws {
+        let (snap, cleanup) = try await exportSnapshot()
+        let (_, entries) = SnapshotVerifier.verify(snap)
+        let original = try #require(entries.first { $0.kind == "originalSource" && $0.relativePath.hasSuffix(".txt") })
+        let url = snap.appendingPathComponent(original.relativePath)
+        var bytes = try Data(contentsOf: url)
+        bytes[0] ^= 0x01
+        try bytes.write(to: url)
+        if case .damaged = SnapshotVerifier.verify(snap).0 {} else { Issue.record("a changed original byte was not detected") }
+
+        var manifest = try Data(contentsOf: snap.appendingPathComponent(SnapshotVerifier.manifestName))
+        manifest[manifest.count / 2] ^= 0x01
+        try manifest.write(to: snap.appendingPathComponent(SnapshotVerifier.manifestName))
+        #expect(SnapshotVerifier.verify(snap).0 == .badSignature)
+
+        try FileManager.default.removeItem(at: snap.appendingPathComponent(SnapshotVerifier.signatureName))
+        #expect(SnapshotVerifier.verify(snap).0 == .unsigned)
+        await cleanup()
+    }
+
+    @Test func ftsQueryQuotesEveryWord() {
+        #expect(SnapshotLedger.ftsQuery(#"patent "grant" OR"#) == #""patent" """grant""" "OR""#)
+        #expect(SnapshotLedger.ftsQuery("   ").isEmpty)
     }
 }

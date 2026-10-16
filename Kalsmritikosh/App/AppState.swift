@@ -57,9 +57,17 @@ public final class AppState {
         case starting
         case ready
         case failed(String)
+        /// W2-7 — the ledger is encrypted and this Mac does not hold a key that opens it.
+        case needsRecoveryKey(String)
     }
 
     public private(set) var phase: Phase = .starting
+    /// W2-7 — shown on the starting screen while the one-time encryption of an older ledger runs.
+    public private(set) var bootNote: String?
+    /// W2-7 — a recovery key the person entered, used by the next boot attempt only.
+    @ObservationIgnored var bootRecoveryKey: LedgerKey?
+    /// W2-7 — the boot arguments to resume with once the ledger is unlocked.
+    @ObservationIgnored var pendingBoot: (databaseURL: URL?, suppressAutoReingest: Bool)?
     public let bookmarks: BookmarkStore
 
     /// Live count of in-flight ingest tasks. The UI banner reads this
@@ -977,7 +985,24 @@ public final class AppState {
                 resolvedDBURL = boot.url
                 ledgerLocationNotice = boot.notice
             }
-            let db = try Database(url: resolvedDBURL)
+            // W2-7 — open the encrypted ledger (creating the key, or converting a plaintext
+            // ledger once). Off the main actor: converting a large ledger takes a while.
+            let recoveryKey = bootRecoveryKey
+            bootRecoveryKey = nil
+            if LedgerFileState.of(resolvedDBURL) == .plaintext {
+                bootNote = "Encrypting your ledger (one time — this can take a few minutes for a large archive)…"
+            }
+            defer { bootNote = nil }
+            let opened = try await Task.detached { try LedgerOpener.open(at: resolvedDBURL, recoveryKey: recoveryKey) }.value
+            let db: Database
+            switch opened {
+            case .opened(let d):
+                db = d
+            case .needsRecoveryKey(let why):
+                pendingBoot = (databaseURL, suppressAutoReingest)
+                self.phase = .needsRecoveryKey(why)
+                return
+            }
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")

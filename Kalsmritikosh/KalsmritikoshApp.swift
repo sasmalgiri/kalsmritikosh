@@ -71,7 +71,12 @@ struct KalsmritikoshApp: App {
                 // N-6 — the menu-bar item follows its module switch (AppKit status item, not a scene).
                 .onChange(of: menuBarAskOn, initial: true) { _, _ in MenuBarAskController.shared.update(appState: appState) }
                 .task {
+                    // W2-7 — when this process is only the unit-test host, never open the person's
+                    // ledger: tests boot their own AppState on temporary ledgers. Booting the real
+                    // one here would convert it with the TEST Keychain key and lock the person out.
+                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
                     IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
+                    CaptureServiceProvider.shared.install(appState: appState)   // W3-6 — Services menu
                     #if DEBUG
                     // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with
                     // `--pa-prod-gui-smoke`, boot against a disposable database and seed the
