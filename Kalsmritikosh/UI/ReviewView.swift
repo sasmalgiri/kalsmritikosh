@@ -66,7 +66,7 @@ public struct ReviewView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }
+                Button { Task { await reload() } } label: { Label("Reload", systemImage: "arrow.clockwise").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless).controlSize(.small)
             }
             Picker("", selection: $mode) {

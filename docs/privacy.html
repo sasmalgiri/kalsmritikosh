@@ -37,11 +37,11 @@
 </div></nav>
 <div class="wrap">
   <h1 data-claims-exempt="heading">Privacy Policy</h1>
-  <div class="date" data-claims-exempt="narrative">Last updated: 17 August 2026 · Publisher: Eco Sanskriti Innovation · Contact: sasmalgiri@gmail.com</div>
+  <div class="date" data-claims-exempt="narrative">Last updated: 17 October 2026 · Publisher: Eco Sanskriti Innovation · Contact: sasmalgiri@gmail.com</div>
 
   <div class="box" data-claim="privacy.never-leaves privacy.nothing-collected"><strong>The short version.</strong> Kalsmritikosh is a private, on-device application.
-  <strong>Your documents, the knowledge built from them, your questions, and the answers never leave your Mac.</strong>
-  We do not operate servers that receive your content. We do not have accounts, tracking, ads, analytics, or telemetry.
+  <strong>In Private mode — the default — your documents, the knowledge built from them, your questions, and the answers never leave your Mac.</strong>
+  We do not operate servers that receive your content, in any mode. We do not have accounts, tracking, ads, analytics, or telemetry.
   The App Store privacy label (as declared) is <em>Data Not Collected</em>.</div>
 
   <h2 data-claims-exempt="heading">What the app processes, and where</h2>
@@ -51,14 +51,31 @@
     <li data-claim="privacy.local-only"><strong>Derived data</strong> (text excerpts, entities, dates, relationships, embeddings, summaries, answers) is
       stored <strong>only</strong> in the app's local database inside your user Library container. Deleting the app or
       using the in-app "Delete data" removes it. If you enabled the optional managed-evidence copies or made exports, delete those from your disk as well.</li>
-    <li data-claim="privacy.no-cloud-model"><strong>AI models run on-device.</strong> Reasoning and embedding models execute locally; your content is never
-      sent to a cloud model. The v1 release contains <strong>no cloud reasoning path</strong>.</li>
+    <li data-claim="privacy.no-cloud-model"><strong>AI models run on-device.</strong> Reasoning and embedding models execute locally; in Private mode your content is never
+      sent to a cloud model.</li>
+    <li data-claim="privacy.encrypted-at-rest"><strong>Encrypted at rest.</strong> The local database is encrypted on your Mac (AES-256, through Apple's CommonCrypto).
+      Its key is kept in your Mac's Keychain and is shown to you once as a recovery key, which you need to open the database on another Mac. We never receive the key.</li>
   </ul>
 
   <h2 data-claims-exempt="heading">Network use</h2>
-  <p data-claim="privacy.never-leaves">The app is designed to work fully offline. <strong>No document text, questions, answers, filenames, or usage data
-  are transmitted for any purpose</strong>, and there is no analytics or crash-telemetry SDK. The only network activity
+  <p data-claim="privacy.never-leaves">The app is designed to work fully offline. In Private mode <strong>no document text, questions, answers, filenames, or usage data
+  are transmitted for any purpose</strong>, so they never leave your Mac, and there is no analytics or crash-telemetry SDK. The only network activity
   is ordinary system behaviour when you open a cited source file or a link in another app.</p>
+
+  <h2 data-claims-exempt="heading">Online mode (optional)</h2>
+  <p data-claim="privacy.online-opt-in">Online mode is off unless you turn it on (Settings ▸ Modules ▸ Connection). You then enter your own API key
+  for a cloud AI provider you choose — Anthropic, OpenAI or Google — and the key is stored in your Mac's Keychain.</p>
+  <p data-claim="privacy.consent-before-send">When an answer would be worded by that provider, the app first shows you exactly what would be sent —
+  passages from your documents and your question, the destination and its size — and nothing is sent until you agree.
+  You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first. The text goes
+  directly from your Mac to that provider, under your own account and that provider's terms and privacy policy; it never
+  passes through any server of ours, and every send is recorded on your Mac. Only a separate, sandboxed helper inside the
+  app can connect, and only to those three providers over HTTPS. One click returns you to Private mode.</p>
+
+  <h2 data-claims-exempt="heading">Share menu, Services and the iPhone/iPad viewer</h2>
+  <p data-claims-exempt="narrative">Anything you send to Kalsmritikosh from the Share or Services menu is saved into the app's own folder on your Mac
+  with a record of when and from where; nothing is downloaded. A snapshot you export for the iPhone/iPad viewer is a folder
+  you carry yourself (AirDrop, Files, a disk); its database is encrypted with a passphrase you set, and the viewer only reads it.</p>
 
   <h2 data-claims-exempt="heading">Data you export</h2>
   <p data-claim="privacy.exports-local">Any export you trigger (answers, reports, diagnostics) is written to a location you choose or an app-private

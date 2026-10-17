@@ -50,7 +50,7 @@ struct TagEditorSheet: View {
                 FlowRow(items: current) { tag in
                     HStack(spacing: 4) {
                         Text(tag.name)
-                        Button { Task { await remove(tag) } } label: { Image(systemName: "xmark.circle.fill") }
+                        Button { Task { await remove(tag) } } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
                             .buttonStyle(.borderless)
                             .accessibilityLabel("Remove tag \(tag.name)")
                     }
@@ -79,7 +79,7 @@ struct TagEditorSheet: View {
                                             Button(target.name) { Task { await merge(tag, into: target) } }
                                         }
                                     }
-                                } label: { Image(systemName: "ellipsis.circle") }
+                                } label: { Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly) }
                                 .menuStyle(.borderlessButton)
                                 .fixedSize()
                             }

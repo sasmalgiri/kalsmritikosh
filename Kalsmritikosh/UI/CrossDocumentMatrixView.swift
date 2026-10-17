@@ -72,9 +72,7 @@ public struct CrossDocumentMatrixView: View {
                     .textFieldStyle(.plain)
                     .onSubmit { run() }
                 if !query.isEmpty {
-                    Button { query = ""; rows = []; didRun = false } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }.buttonStyle(.plain)
+                    Button { query = ""; rows = []; didRun = false } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }.buttonStyle(.plain)
                 }
                 Button("Search all") { run() }
                     .buttonStyle(.borderedProminent)
@@ -130,9 +128,7 @@ public struct CrossDocumentMatrixView: View {
                         if row.url != nil {
                             Button {
                                 openSource(row)
-                            } label: {
-                                Image(systemName: "arrow.up.forward.square")
-                            }
+                            } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
                             .buttonStyle(.borderless).controlSize(.small)
                             .help("Open the source file")
                         }

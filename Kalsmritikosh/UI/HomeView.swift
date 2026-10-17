@@ -68,9 +68,7 @@ public struct HomeView: View {
                 TextField("Search your tasks…", text: $workSearch)
                     .textFieldStyle(.plain)
                 if !workSearch.isEmpty {
-                    Button { workSearch = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }.buttonStyle(.plain)
+                    Button { workSearch = "" } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }.buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)

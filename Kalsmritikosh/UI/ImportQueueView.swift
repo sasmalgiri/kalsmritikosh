@@ -37,9 +37,9 @@ struct ImportQueueView: View {
                         }
                         Spacer()
                         if item.state == .pending {
-                            Button { queue.move(item.id, by: -1) } label: { Image(systemName: "arrow.up") }
+                            Button { queue.move(item.id, by: -1) } label: { Label("Sort ascending", systemImage: "arrow.up").labelStyle(.iconOnly) }
                                 .buttonStyle(.borderless).help("Move up")
-                            Button { queue.move(item.id, by: 1) } label: { Image(systemName: "arrow.down") }
+                            Button { queue.move(item.id, by: 1) } label: { Label("Sort descending", systemImage: "arrow.down").labelStyle(.iconOnly) }
                                 .buttonStyle(.borderless).help("Move down")
                             Button("Skip") { queue.skip(item.id) }.buttonStyle(.borderless)
                         } else {

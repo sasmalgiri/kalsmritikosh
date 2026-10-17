@@ -64,12 +64,10 @@ public struct OnboardingView: View {
         .overlay(alignment: .topTrailing) {
             Button {
                 dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
+            } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly)
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .padding(10)
-            }
+                    .padding(10) }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)   // Escape
             .help("Close — you can add folders later from Sources")

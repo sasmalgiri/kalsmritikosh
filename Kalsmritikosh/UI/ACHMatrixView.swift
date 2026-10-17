@@ -103,7 +103,7 @@ public struct ACHMatrixView: View {
                 Text("\(a.hypotheses.count) hypotheses · \(a.evidence.count) evidence")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { delete(a) } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { delete(a) } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Delete")
                 Button("Open") { activeID = a.id }.buttonStyle(.bordered).controlSize(.small)
             }
@@ -172,14 +172,14 @@ public struct ACHMatrixView: View {
                     let n = (a.wrappedValue.hypotheses.firstIndex { $0.id == h.id } ?? 0) + 1
                     Text("H\(n)").font(.caption.weight(.bold)).foregroundStyle(.tint).frame(width: 30)
                     TextField("Hypothesis", text: $h.text).textFieldStyle(.roundedBorder)
-                    Button { a.wrappedValue.hypotheses.removeAll { $0.id == h.id } } label: { Image(systemName: "xmark.circle") }
+                    Button { a.wrappedValue.hypotheses.removeAll { $0.id == h.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 TextField("Add a hypothesis", text: $newHypothesis).textFieldStyle(.roundedBorder)
                     .onSubmit { addHypothesis(a) }
-                Button { addHypothesis(a) } label: { Image(systemName: "plus") }
+                Button { addHypothesis(a) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }
                     .disabled(newHypothesis.trimmed.isEmpty)
             }
         }
@@ -217,7 +217,7 @@ public struct ACHMatrixView: View {
                                     .foregroundStyle(a.wrappedValue.isDiagnostic(e) ? Color.green : Color.secondary)
                                     .frame(width: 40)
                                     .help(a.wrappedValue.isDiagnostic(e) ? "Diagnostic — it distinguishes the hypotheses" : "Not diagnostic — rated the same across hypotheses")
-                                Button { a.wrappedValue.evidence.removeAll { $0.id == e.id } } label: { Image(systemName: "xmark.circle") }
+                                Button { a.wrappedValue.evidence.removeAll { $0.id == e.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                     .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                             .padding(.vertical, 2)
@@ -334,13 +334,13 @@ public struct ACHMatrixView: View {
                     TextField("", text: Binding(get: { items.wrappedValue[idx] },
                                                 set: { var x = items.wrappedValue; x[idx] = $0; items.wrappedValue = x }))
                         .textFieldStyle(.plain)
-                    Button { var x = items.wrappedValue; x.remove(at: idx); items.wrappedValue = x } label: { Image(systemName: "xmark.circle") }
+                    Button { var x = items.wrappedValue; x.remove(at: idx); items.wrappedValue = x } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 TextField(placeholder, text: newText).textFieldStyle(.roundedBorder).onSubmit { addTo(items, newText) }
-                Button { addTo(items, newText) } label: { Image(systemName: "plus") }.disabled(newText.wrappedValue.trimmed.isEmpty)
+                Button { addTo(items, newText) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newText.wrappedValue.trimmed.isEmpty)
             }
         }
         .padding(10).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))

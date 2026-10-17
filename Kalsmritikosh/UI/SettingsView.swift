@@ -2706,9 +2706,7 @@ public struct SettingsView: View {
                                     ggufEntries = await reg.load()
                                 }
                             }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
                     }
                 }
@@ -2796,9 +2794,7 @@ public struct SettingsView: View {
                                     cloudEntries = await reg.load()
                                 }
                             }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
                     }
                 }

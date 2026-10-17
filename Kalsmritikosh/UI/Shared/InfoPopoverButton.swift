@@ -34,12 +34,10 @@ public struct InfoPopoverButton: View {
     public var body: some View {
         Button {
             showing.toggle()
-        } label: {
-            Image(systemName: "info.circle")
+        } label: { Label("More information", systemImage: "info.circle").labelStyle(.iconOnly)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(.secondary)
-                .contentShape(Circle())
-        }
+                .contentShape(Circle()) }
         .buttonStyle(.plain)
         .help(title)   // hover tooltip as a bonus
         .popover(isPresented: $showing, arrowEdge: .bottom) {

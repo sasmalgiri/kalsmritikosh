@@ -211,9 +211,7 @@ public struct QueryView: View {
                 Text("and").font(.caption).foregroundStyle(.secondary)
                 valueEditor(filter, field: field, second: true)
             }
-            Button { filters.removeAll { $0.id == filter.wrappedValue.id } } label: {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-            }
+            Button { filters.removeAll { $0.id == filter.wrappedValue.id } } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }
             .buttonStyle(.plain)
         }
         .padding(8)

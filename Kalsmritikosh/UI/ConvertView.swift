@@ -278,10 +278,8 @@ public struct ConvertView: View {
                 .foregroundStyle(Theme.brand)
             Button {
                 withAnimation(Theme.springFast) { _ = inputs.remove(at: idx) }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
-            }
+            } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly)
+                    .foregroundStyle(.secondary) }
             .buttonStyle(.borderless)
         }
         .padding(.horizontal, 12)

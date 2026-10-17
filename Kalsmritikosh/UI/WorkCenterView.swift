@@ -293,7 +293,7 @@ public struct WorkCenterView: View {
                 TextField("Search \(WCCatalog.jobWorkflows.count) jobs by name or persona…", text: $catalogSearch)
                     .textFieldStyle(.plain)
                 if !catalogSearch.isEmpty {
-                    Button { catalogSearch = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    Button { catalogSearch = "" } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                         .help("Clear search")
                 }
@@ -532,9 +532,7 @@ public struct WorkCenterView: View {
                     .foregroundStyle(.tint)
                     Spacer()
                     automationMenu
-                    Button { showIntro = true } label: {
-                        Image(systemName: "questionmark.circle")
-                    }
+                    Button { showIntro = true } label: { Label("Help", systemImage: "questionmark.circle").labelStyle(.iconOnly) }
                     .buttonStyle(.plain)
                     .help("How this job works — show the step-by-step guide again")
                 }
@@ -581,9 +579,7 @@ public struct WorkCenterView: View {
                     .controlSize(.small)
                     .help("Save this run's entries as a reusable variant — next time, start pre-filled in one click")
                     #if os(macOS)
-                    Button { printText(reportText(run, def), jobTitle: run.docNumber, monospace: true) } label: {
-                        Image(systemName: "printer").font(.caption)
-                    }
+                    Button { printText(reportText(run, def), jobTitle: run.docNumber, monospace: true) } label: { Label("Print", systemImage: "printer").labelStyle(.iconOnly).font(.caption) }
                     .controlSize(.small)
                     .help("Print the technical report")
                     #endif
@@ -610,9 +606,7 @@ public struct WorkCenterView: View {
             Toggle(isOn: $autoComplete) { Label("Auto-complete steps when filled", systemImage: "checkmark.circle") }
             Divider()
             Text("Off = save and confirm each step yourself.")
-        } label: {
-            Image(systemName: "slider.horizontal.3")
-        }
+        } label: { Label("Options", systemImage: "slider.horizontal.3").labelStyle(.iconOnly) }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Automation — turn auto-save and auto-complete on or off")
@@ -705,7 +699,7 @@ public struct WorkCenterView: View {
                 Label("How this job works", systemImage: "lightbulb.fill")
                     .font(.callout.weight(.semibold))
                 Spacer()
-                Button { markIntroSeen(def) } label: { Image(systemName: "xmark").imageScale(.small) }
+                Button { markIntroSeen(def) } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly).imageScale(.small) }
                     .buttonStyle(.plain)
                     .help("Hide — reopen any time with the ? button")
             }
@@ -1093,7 +1087,7 @@ public struct WorkCenterView: View {
                     if !disabled {
                         Button {
                             setRefs(stepRefs().filter { $0.id != ref.id }, run: run, op: op)
-                        } label: { Image(systemName: "xmark.circle") }
+                        } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain)
                         .help("Remove this attachment from the step")
                     }

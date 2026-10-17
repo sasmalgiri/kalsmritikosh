@@ -72,7 +72,7 @@ Privacy policy · terms/EULA · acknowledgments — before submission.
 Step-5 physical proof → upload → App Store Connect (listing from
 release/APP_STORE_LISTING.md; pricing reconciled with the page;
 screenshots FROM THE SAMPLE ARCHIVE ONLY; privacy answers "Data Not
-Collected"; export compliance = **OWNER/LEGAL DECISION (changed 2026-10-16)**: the app now bundles SQLCipher (AES-256) to encrypt the ledger at rest on the device, in addition to Apple's own APIs; nothing encrypted is sent anywhere by it. Answer the encryption questions in App Store Connect on that basis (the earlier "standard APIs, exempt" answer was written before SQLCipher); review notes:
+Collected"; export compliance = declared in Info.plist (`ITSAppUsesNonExemptEncryption = NO`: only Apple OS crypto — CommonCrypto under SQLCipher, CryptoKit, HTTPS — protecting the person's own data; see SHIP_DECISIONS 2026-10-17); review notes:
 offline design + the sample flow) → **Submit**.
 
 ## 11. On approval

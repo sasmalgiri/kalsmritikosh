@@ -371,9 +371,7 @@ public struct AskView: View {
                       enabled: appState.ingest != nil)
             Button {
                 Task { await saveCurrentQuestion() }
-            } label: {
-                Image(systemName: "bookmark").font(.system(size: 15)).frame(width: 32, height: 32)
-            }
+            } label: { Label("Bookmark", systemImage: "bookmark").labelStyle(.iconOnly).font(.system(size: 15)).frame(width: 32, height: 32) }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .help("Save this question for later (visible in the Saved surface).")
@@ -462,11 +460,9 @@ public struct AskView: View {
                             .frame(maxWidth: 180)
                         Button {
                             attachments.removeAll { $0.id == att.id }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
+                        } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly)
                                 .foregroundStyle(.secondary)
-                                .imageScale(.small)
-                        }
+                                .imageScale(.small) }
                         .buttonStyle(.borderless)
                         .help(att.state == .ready
                               ? "Dismiss chip — the file stays ingested in your archive."
@@ -568,10 +564,8 @@ public struct AskView: View {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(turn.body, forType: .string)
                                 #endif
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .imageScale(.small)
-                            }
+                            } label: { Label("Copy", systemImage: "doc.on.doc").labelStyle(.iconOnly)
+                                    .imageScale(.small) }
                             .buttonStyle(.borderless)
                             .foregroundStyle(.secondary)
                             .help("Copy this answer")
@@ -1206,9 +1200,7 @@ private struct ConversationHistorySheet: View {
             }
             Button(role: .destructive) {
                 onDelete(conv.id)
-            } label: {
-                Image(systemName: "trash").foregroundStyle(.secondary)
-            }
+            } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly).foregroundStyle(.secondary) }
             .buttonStyle(.borderless)
             .help("Delete this conversation")
         }

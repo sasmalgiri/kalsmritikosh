@@ -173,9 +173,7 @@ public struct SourceViewer: View {
         Menu {
             Button("Reveal in Finder", action: reveal)
             Button("Open externally", action: open)
-        } label: {
-            Image(systemName: "arrow.up.right.square")
-        }
+        } label: { Label("Open", systemImage: "arrow.up.right.square").labelStyle(.iconOnly) }
         .menuStyle(.borderlessButton)
         .fixedSize()
     }

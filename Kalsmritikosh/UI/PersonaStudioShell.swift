@@ -151,7 +151,7 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 Text(m.updatedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { items.removeAll { $0.id == m.id }; persist() } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { items.removeAll { $0.id == m.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = m.id; stage = firstIncomplete(m) }
                     .buttonStyle(.bordered).controlSize(.small)

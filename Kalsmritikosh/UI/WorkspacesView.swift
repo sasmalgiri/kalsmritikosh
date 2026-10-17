@@ -139,7 +139,7 @@ public struct WorkspacesView: View {
                         Button(role: .destructive) {
                             if sources.count == 1 { confirmRemoveLast = src }
                             else { Task { await removeSource(src, from: ws) } }
-                        } label: { Image(systemName: "minus.circle") }
+                        } label: { Label("Remove", systemImage: "minus.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless).controlSize(.small)
                         .help("Remove from workspace (keeps the file and its evidence)")
                     }
@@ -281,9 +281,7 @@ public struct WorkspacesView: View {
                 Button {
                     newTitle = ""; newDescription = ""; newTemplate = .general
                     showingNew = true
-                } label: {
-                    Image(systemName: "plus")
-                }
+                } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }
                 .buttonStyle(.borderless)
                 .help("New workspace")
             }
@@ -401,9 +399,7 @@ public struct WorkspacesView: View {
                     Button("Delete workspace", role: .destructive) {
                         Task { await delete(ws) }
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
+                } label: { Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly) }
                 .menuStyle(.borderlessButton)
                 .frame(width: 40)
             }
@@ -521,7 +517,7 @@ public struct WorkspacesView: View {
                         Spacer()
                         Button(role: .destructive) {
                             Task { await deleteView(view) }
-                        } label: { Image(systemName: "trash") }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless).controlSize(.small)
                     }
                     .padding(.vertical, 2)
@@ -938,9 +934,7 @@ private struct FlowTags: View {
             ForEach(tags) { tag in
                 HStack(spacing: 4) {
                     Text(tag.name).font(.caption)
-                    Button { onDelete(tag) } label: {
-                        Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
-                    }
+                    Button { onDelete(tag) } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly).font(.system(size: 8, weight: .bold)) }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                 }

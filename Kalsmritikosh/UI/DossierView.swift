@@ -188,9 +188,7 @@ public struct DossierView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { Task { await start() } }
                 .disabled(streaming)
-            Button { Task { await start() } } label: {
-                Image(systemName: "doc.text.magnifyingglass").font(.title2)
-            }
+            Button { Task { await start() } } label: { Label("Find in document", systemImage: "doc.text.magnifyingglass").labelStyle(.iconOnly).font(.title2) }
             .buttonStyle(.plain)
             .disabled(streaming || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .guidance(GuidanceTip("Build dossier",

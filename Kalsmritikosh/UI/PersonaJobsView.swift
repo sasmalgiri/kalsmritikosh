@@ -596,9 +596,7 @@ public struct PersonaJobsView: View {
                             if JobDocumentationCatalog.doc(
                                 personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "",
                                 jobTitle: job.title) != nil {
-                                Button { docJob = job } label: {
-                                    Image(systemName: "info.circle")
-                                }
+                                Button { docJob = job } label: { Label("More information", systemImage: "info.circle").labelStyle(.iconOnly) }
                                 .buttonStyle(.borderless)
                                 .help("What this job does, needs, produces, and must not conclude")
                             }

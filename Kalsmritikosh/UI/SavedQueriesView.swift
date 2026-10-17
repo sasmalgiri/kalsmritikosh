@@ -68,9 +68,7 @@ public struct SavedQueriesView: View {
                 .foregroundStyle(.secondary)
             Button {
                 Task { await reload() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
+            } label: { Label("Reload", systemImage: "arrow.clockwise").labelStyle(.iconOnly) }
             .buttonStyle(.borderless)
             .controlSize(.small)
         }

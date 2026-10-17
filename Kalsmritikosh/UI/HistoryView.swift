@@ -502,10 +502,8 @@ public struct HistoryView: View {
                         }
                         Button {
                             removeCounterfactual(cf, in: chapter)
-                        } label: {
-                            Image(systemName: "xmark.circle")
-                                .foregroundStyle(.secondary)
-                        }
+                        } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly)
+                                .foregroundStyle(.secondary) }
                         .buttonStyle(.plain)
                         .help("Remove this counterfactual")
                     }
@@ -740,10 +738,8 @@ public struct HistoryView: View {
                 .disabled(streaming)
             Button {
                 Task { await start() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
-            }
+            } label: { Label("Send", systemImage: "arrow.up.circle.fill").labelStyle(.iconOnly)
+                    .font(.title2) }
             .buttonStyle(.plain)
             .disabled(streaming || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }

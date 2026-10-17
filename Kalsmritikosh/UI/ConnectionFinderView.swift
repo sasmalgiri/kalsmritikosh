@@ -110,7 +110,7 @@ public struct ConnectionFinderView: View {
                             #if canImport(AppKit)
                             if let u = doc.url { NSWorkspace.shared.activateFileViewerSelecting([u]) }
                             #endif
-                        } label: { Image(systemName: "arrow.up.forward.square") }
+                        } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless).controlSize(.small)
                     }
                 }

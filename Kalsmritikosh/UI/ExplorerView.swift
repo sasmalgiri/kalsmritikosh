@@ -100,7 +100,7 @@ public struct ExplorerView: View {
             }
             Button {
                 Task { await runSearch() }
-            } label: { Image(systemName: "arrow.right.circle.fill") }
+            } label: { Label("Go", systemImage: "arrow.right.circle.fill").labelStyle(.iconOnly) }
             .disabled(query.trimmingCharacters(in: .whitespaces).count < 2)
             .guidance(GuidanceTip("Explore",
                                   what: "Explores the graph of people, organizations and documents starting from your term — following the relationships in your evidence.",
@@ -337,10 +337,8 @@ public struct ExplorerView: View {
                             .foregroundStyle(.secondary)
                         Button(role: .destructive) {
                             Task { await retract(a) }
-                        } label: {
-                            Image(systemName: "xmark.circle")
-                                .foregroundStyle(.secondary)
-                        }
+                        } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly)
+                                .foregroundStyle(.secondary) }
                         .buttonStyle(.plain)
                         .help("Retract this assertion")
                     }

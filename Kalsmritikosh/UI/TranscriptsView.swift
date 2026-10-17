@@ -52,7 +52,7 @@ public struct TranscriptsView: View {
                 Image(systemName: "waveform").foregroundStyle(.tint)
                 Text("Transcripts").font(Theme.display(20, .bold))
                 Spacer()
-                Button { Task { await reloadSources() } } label: { Image(systemName: "arrow.clockwise") }
+                Button { Task { await reloadSources() } } label: { Label("Reload", systemImage: "arrow.clockwise").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless).controlSize(.small)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -136,9 +136,9 @@ public struct TranscriptsView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { player?.play() } label: { Image(systemName: "play.fill") }
+            Button { player?.play() } label: { Label("Play", systemImage: "play.fill").labelStyle(.iconOnly) }
                 .help("Play").controlSize(.small)
-            Button { player?.pause() } label: { Image(systemName: "pause.fill") }
+            Button { player?.pause() } label: { Label("Pause", systemImage: "pause.fill").labelStyle(.iconOnly) }
                 .help("Pause").controlSize(.small)
             Button {
                 Task { await transcribe(file) }
@@ -188,7 +188,7 @@ public struct TranscriptsView: View {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Search transcript…", text: $searchText).textFieldStyle(.plain)
             if !searchText.isEmpty {
-                Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                Button { searchText = "" } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }
                     .buttonStyle(.borderless)
             }
         }

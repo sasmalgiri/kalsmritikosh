@@ -446,7 +446,7 @@
 
 <!-- PRIVACY -->
 <section id="privacy"><div class="wrap">
-  <h2 class="center" data-claim="privacy.never-leaves">Your documents never leave your Mac.</h2>
+  <h2 class="center" data-claim="privacy.never-leaves">By default, your documents never leave your Mac.</h2>
   <p class="lead center" data-claim="privacy.no-servers">No servers. No accounts. No analytics or telemetry. No training on your data — because we never receive it.</p>
   <div class="grid g3">
     <div class="card" data-claim="privacy.models-bundled privacy.no-egress"><div class="ic">🖥️</div><h3>On-device AI — nothing to download</h3><p>Reading, search, and answers all run locally: the semantic-search models ship inside the app — a release-acceptance step verifies the compiled models are present in the archive before any build is published — and written answers use Apple's on-device model. The app makes no network connections at all — enforced by the macOS sandbox itself.</p></div>
@@ -480,7 +480,7 @@
 <!-- FAQ -->
 <section class="faq"><div class="wrap">
   <h2>More questions</h2>
-  <details data-claim="privacy.never-leaves"><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
+  <details data-claim="privacy.never-leaves privacy.online-opt-in"><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics. Online mode is off unless you turn it on: then, with your own API key, the cloud AI you choose can word an answer — you see exactly what would be sent, and nothing leaves your Mac until you agree.</p></details>
   <details data-claim="answers.refuses-unsupported"><summary>Can it still be wrong?</summary><p>Any AI can be. The difference is that Kalsmritikosh only answers from your documents, shows the exact evidence for every claim, flags conflicts, and refuses when the record doesn't support an answer — so you can verify in one click instead of trusting blindly.</p></details>
   <details><summary>What can I feed it?</summary><p>Documents (PDF, Word DOC/DOCX, RTF, OpenDocument, EPUB, HTML, Markdown, text), spreadsheets (Excel XLS/XLSX, CSV, ODS), PowerPoint (PPTX), and email (EML, MBOX, Apple Mail, Outlook MSG/PST, Lotus Notes NSF). ZIP archives are opened and read file by file, within safety limits; RAR and 7z archives are kept but not opened. Scans and images are read with on-device OCR, so their accuracy depends on the scan. With “Transcribe audio &amp; video” on (the default), recordings are transcribed on-device while importing; with it off they are kept and searchable by name and date. PowerPoint 97–2003 (PPT) and Keynote files are kept but not read yet. Reading is tuned for English: documents in other languages are kept and keyword-searchable, but names, dates and facts in them may be missed.</p></details>
   <details><summary>Will it mix up two people with the same name?</summary><p>It combines two names only when they clearly refer to the same person or organization, and every combination is listed under Knowledge → Merged. You can undo any of them with Unmerge; nothing is deleted.</p></details>

@@ -34,6 +34,19 @@ struct LedgerEncryptionTests {
         #expect(LedgerKeychain.usesMemoryStore, "tests must never touch the Keychain (person's key, CI hang)")
     }
 
+    /// Export compliance rests on this: SQLCipher must do its cryptography through Apple's own
+    /// CommonCrypto, not a bundled crypto library (release/HOLD2_SCRIPT.md §10, SHIP_DECISIONS).
+    @Test func encryptionUsesApplesCommonCrypto() async throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database(url: dir.appendingPathComponent("p.sqlite"), key: LedgerKey.random())
+        let rows = try await db.query("PRAGMA cipher_provider;", [])
+        let provider = rows.first?.string(0) ?? ""
+        let version = try await db.query("PRAGMA cipher_provider_version;", []).first?.string(0) ?? ""
+        Attachment.record("cipher_provider=\(provider)\ncipher_provider_version=\(version)\n", named: "cipher-provider.txt")
+        #expect(provider == "commoncrypto", "SQLCipher crypto provider is \(provider)")
+        await db.close()
+    }
+
     @Test func aKeyedLedgerIsEncryptedOnDisk() async throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("ledger.sqlite")

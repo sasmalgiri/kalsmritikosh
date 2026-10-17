@@ -23,9 +23,7 @@ struct EntityPickerField: View {
                 HStack(spacing: 8) {
                     Text(sel.value).font(.body.weight(.medium))
                     Spacer()
-                    Button { selection = nil; query = ""; matches = [] } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }.buttonStyle(.plain)
+                    Button { selection = nil; query = ""; matches = [] } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }.buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(Theme.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))

@@ -102,7 +102,7 @@ public struct ForensicStudioView: View {
                 Text("\(e.schedule.count) transaction(s) · \(e.method?.name ?? "no method")")
                     .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 Spacer()
-                Button(role: .destructive) { engagements.removeAll { $0.id == e.id }; persist() } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { engagements.removeAll { $0.id == e.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = e.id; stage = firstIncomplete(e) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -210,7 +210,7 @@ public struct ForensicStudioView: View {
                 HStack(spacing: 8) {
                     TextField("What it is", text: $m.descriptionText).textFieldStyle(.roundedBorder)
                     TextField("source / producing party", text: $m.source).textFieldStyle(.roundedBorder).frame(width: 260)
-                    Button { f.wrappedValue.materials.removeAll { $0.id == m.id } } label: { Image(systemName: "xmark.circle") }
+                    Button { f.wrappedValue.materials.removeAll { $0.id == m.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
@@ -251,7 +251,7 @@ public struct ForensicStudioView: View {
                         TextField("yyyy-mm-dd", text: $t.date).textFieldStyle(.roundedBorder).frame(width: 110)
                         TextField("Description", text: $t.descriptionText).textFieldStyle(.roundedBorder)
                         TextField("Amount", text: $t.amount).textFieldStyle(.roundedBorder).frame(width: 110)
-                        Button { f.wrappedValue.schedule.removeAll { $0.id == t.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { f.wrappedValue.schedule.removeAll { $0.id == t.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     HStack(spacing: 8) {
@@ -285,14 +285,14 @@ public struct ForensicStudioView: View {
                     TextField("", text: Binding(get: { f.wrappedValue.findings[idx] },
                                                 set: { var a = f.wrappedValue.findings; a[idx] = $0; f.wrappedValue.findings = a }))
                         .textFieldStyle(.plain)
-                    Button { var a = f.wrappedValue.findings; a.remove(at: idx); f.wrappedValue.findings = a } label: { Image(systemName: "xmark.circle") }
+                    Button { var a = f.wrappedValue.findings; a.remove(at: idx); f.wrappedValue.findings = a } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 TextField("Add a finding", text: $newFinding).textFieldStyle(.roundedBorder)
                     .onSubmit { addFinding(f) }
-                Button { addFinding(f) } label: { Image(systemName: "plus") }.disabled(newFinding.trimmed.isEmpty)
+                Button { addFinding(f) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newFinding.trimmed.isEmpty)
             }
             Text("Opinion").font(.callout.weight(.semibold))
             TextEditor(text: f.opinion).font(.body).frame(minHeight: 80)
@@ -305,14 +305,14 @@ public struct ForensicStudioView: View {
                     TextField("", text: Binding(get: { f.wrappedValue.limitations[idx] },
                                                 set: { var a = f.wrappedValue.limitations; a[idx] = $0; f.wrappedValue.limitations = a }))
                         .textFieldStyle(.plain)
-                    Button { var a = f.wrappedValue.limitations; a.remove(at: idx); f.wrappedValue.limitations = a } label: { Image(systemName: "xmark.circle") }
+                    Button { var a = f.wrappedValue.limitations; a.remove(at: idx); f.wrappedValue.limitations = a } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 TextField("Add a limitation (missing records, offered no opinion on…)", text: $newLimitation).textFieldStyle(.roundedBorder)
                     .onSubmit { addLimitation(f) }
-                Button { addLimitation(f) } label: { Image(systemName: "plus") }.disabled(newLimitation.trimmed.isEmpty)
+                Button { addLimitation(f) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newLimitation.trimmed.isEmpty)
             }
             Text("Report preview").font(.callout.weight(.semibold))
             ScrollView([.horizontal, .vertical]) {

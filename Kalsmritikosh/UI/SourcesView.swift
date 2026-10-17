@@ -224,7 +224,7 @@ public struct SourcesView: View {
                                 rootPendingRemovalCount = await appState.countFiles(underRoot: root)
                                 rootPendingRemoval = root
                             }
-                        } label: { Image(systemName: "trash") }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
                     }
                     .padding(12)

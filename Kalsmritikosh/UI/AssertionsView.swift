@@ -53,7 +53,7 @@ public struct AssertionsView: View {
                 .foregroundStyle(.secondary)
             Button {
                 Task { await reload() }
-            } label: { Image(systemName: "arrow.clockwise") }
+            } label: { Label("Reload", systemImage: "arrow.clockwise").labelStyle(.iconOnly) }
             .buttonStyle(.borderless)
             .controlSize(.small)
         }
@@ -142,10 +142,8 @@ public struct AssertionsView: View {
                 Spacer()
                 Button(role: .destructive) {
                     Task { await retract(a) }
-                } label: {
-                    Image(systemName: "xmark.circle")
-                        .foregroundStyle(.secondary)
-                }
+                } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary) }
                 .buttonStyle(.plain)
                 .help("Retract this assertion")
             }

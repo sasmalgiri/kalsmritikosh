@@ -339,7 +339,7 @@ public struct DataLabView: View {
                         + Text(number).font(.caption.monospaced().weight(.bold))
                         + Text(" posted. Quote it anywhere; find it in Work Center ▸ Documents.").font(.caption)
                     Spacer()
-                    Button { lastExportNumber = nil } label: { Image(systemName: "xmark") }
+                    Button { lastExportNumber = nil } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly) }
                         .buttonStyle(.plain)
                 }
                 .padding(8)
@@ -628,7 +628,7 @@ public struct DataLabView: View {
                     }
                 }
                 .labelsHidden().frame(width: 90)
-                Button { addField(rec) } label: { Image(systemName: "plus") }
+                Button { addField(rec) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }
                     .disabled(newFieldName.trimmingCharacters(in: .whitespaces).isEmpty)
                     .help("Add a field (column)")
             }
@@ -891,11 +891,11 @@ public struct DataLabView: View {
                 HStack(spacing: 6) {
                     Text(active.scenario.title).font(.caption.weight(.semibold))
                     Spacer()
-                    Button { scenarioUndo() } label: { Image(systemName: "arrow.uturn.backward") }
+                    Button { scenarioUndo() } label: { Label("Undo", systemImage: "arrow.uturn.backward").labelStyle(.iconOnly) }
                         .disabled(!active.canUndo).help("Undo the last scenario change")
-                    Button { scenarioRedo() } label: { Image(systemName: "arrow.uturn.forward") }
+                    Button { scenarioRedo() } label: { Label("Redo", systemImage: "arrow.uturn.forward").labelStyle(.iconOnly) }
                         .disabled(!active.canRedo).help("Redo")
-                    Button { activeScenario = nil } label: { Image(systemName: "eye.slash") }
+                    Button { activeScenario = nil } label: { Label("Hide", systemImage: "eye.slash").labelStyle(.iconOnly) }
                         .help("Stop viewing this scenario (it stays saved)")
                 }
                 .buttonStyle(.plain)
@@ -1033,7 +1033,7 @@ public struct DataLabView: View {
             HStack {
                 sectionLabel(report.isClean ? "Quality — clean" : "Quality — \(surfaced.count) warning(s)")
                 Spacer()
-                Button { showQuality = false } label: { Image(systemName: "xmark") }
+                Button { showQuality = false } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly) }
                     .buttonStyle(.plain)
             }
             ForEach(surfaced.prefix(12)) { warning in
@@ -1063,7 +1063,7 @@ public struct DataLabView: View {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
             Text(text).font(.caption).fixedSize(horizontal: false, vertical: true)
             Spacer()
-            Button { errorMessage = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+            Button { errorMessage = nil } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly) }.buttonStyle(.plain)
         }
         .padding(8)
         .background(.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))

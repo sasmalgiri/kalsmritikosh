@@ -633,9 +633,7 @@ public struct RootView: View {
                     // SHELL-001 — browser-style location Back/Forward, deliberately
                     // distinct from any workflow's Prev/Next stepping.
                     ToolbarItemGroup(placement: .navigation) {
-                        Button { navigate(to: .home) } label: {
-                            Image(systemName: "house")
-                        }
+                        Button { navigate(to: .home) } label: { Label("Home", systemImage: "house").labelStyle(.iconOnly) }
                         .keyboardShortcut(.home, modifiers: .command)
                         .help("Home — back to the start screen")
                         Button(action: navGoBack) {
@@ -652,9 +650,7 @@ public struct RootView: View {
                         .help("Forward  (⌘])")
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        Button { showPalette = true } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
+                        Button { showPalette = true } label: { Label("Search", systemImage: "magnifyingglass").labelStyle(.iconOnly) }
                         .help("Jump to any screen or command  (⌘K)")
                     }
                 }
@@ -1202,9 +1198,7 @@ public struct RootView: View {
                 .focused($headerSearchFocused)
                 .onSubmit(runHeaderSearch)
             if !headerSearch.isEmpty {
-                Button { headerSearch = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
+                Button { headerSearch = "" } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }
                 .buttonStyle(.borderless)
             }
             Button { showPalette = true } label: {
@@ -1293,7 +1287,7 @@ public struct RootView: View {
                         Label("Keyboard shortcuts", systemImage: "keyboard")
                             .font(.headline)
                         Spacer()
-                        Button { showShortcutHelp = false } label: { Image(systemName: "xmark.circle.fill") }
+                        Button { showShortcutHelp = false } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     Divider()
