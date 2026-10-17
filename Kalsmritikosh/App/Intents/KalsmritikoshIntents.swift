@@ -22,6 +22,31 @@ enum IntentBridge {
         guard let state = appState, state.database != nil else { throw KalsmritikoshIntentError.notReady }
         return state
     }
+
+    /// Ask, exactly as the Ask screen does (same ledger, scope and evidence gate). Shared by the
+    /// Shortcuts action and the AppleScript `ask` command.
+    static func ask(_ question: String) async throws -> String {
+        let state = try ready()
+        let answer = await state.brain.answerWithDiagnostics(
+            question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
+        return await IntentText.render(answer, state: state)
+    }
+
+    /// The best-matching passages, each as "file name: passage". Shared by the Shortcuts action
+    /// and the AppleScript `search` command.
+    static func search(_ query: String, limit: Int) async throws -> [String] {
+        let state = try ready()
+        let cap = max(1, min(limit, 100))
+        let hits: [Chunk]
+        if let advanced = await state.advancedSearch(query, limit: cap) {
+            hits = advanced.hits
+        } else {
+            hits = (try? await state.chunks?.searchFTS(query, limit: cap)) ?? []
+        }
+        let visible = await state.screenAuthorizer?.filterChunks(hits, boundary: .globalOwner) ?? []
+        let names = (try? await state.objects?.sourceFilenames(for: Set(visible.map(\.objectID)))) ?? [:]
+        return visible.map { c in "\(names[c.objectID] ?? "Document"): \(c.text.prefix(300))" }
+    }
 }
 
 enum KalsmritikoshIntentError: Error, CustomLocalizedStringResourceConvertible {
@@ -48,10 +73,7 @@ struct AskKalsmritikoshIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let state = try IntentBridge.ready()
-        let answer = await state.brain.answerWithDiagnostics(
-            question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
-        return .result(value: await IntentText.render(answer, state: state))
+        return .result(value: try await IntentBridge.ask(question))
     }
 }
 
@@ -106,19 +128,7 @@ struct SearchKalsmritikoshIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[String]> {
-        let state = try IntentBridge.ready()
-        let cap = max(1, min(limit, 100))
-        let hits: [Chunk]
-        if let advanced = await state.advancedSearch(query, limit: cap) {
-            hits = advanced.hits
-        } else {
-            hits = (try? await state.chunks?.searchFTS(query, limit: cap)) ?? []
-        }
-        let visible = await state.screenAuthorizer?.filterChunks(hits, boundary: .globalOwner) ?? []
-        let names = (try? await state.objects?.sourceFilenames(for: Set(visible.map(\.objectID)))) ?? [:]
-        return .result(value: visible.map { c in
-            "\(names[c.objectID] ?? "Document"): \(c.text.prefix(300))"
-        })
+        return .result(value: try await IntentBridge.search(query, limit: limit))
     }
 }
 
