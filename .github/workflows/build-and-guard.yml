@@ -117,6 +117,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee build.log
 
+      - name: Build the iPhone/iPad app (simulator SDK)
+        env:
+          NSUnbufferedIO: YES
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Kalsmritikosh.xcodeproj \
+            -scheme KalsmritikoshViewer \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/derived-viewer \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee viewer-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
+
       - name: Test (full KalsmritikoshTests target)
         timeout-minutes: 55
         env:

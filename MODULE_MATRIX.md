@@ -64,8 +64,12 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-4 | Team review over a shared folder | Sharing | yes | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
 | P-2 | Your own notes | Writing | yes | off | — | Notes are hidden but kept, with their versions; what the archive learned from them stays. |
+| X-2 | Your own folders | Search & organise | yes | off | — | Groups are hidden but kept, with their members. |
+| X-1 | See Also and filing suggestions | Search & organise | yes | off | needs X-2 | No suggestions; groups and tags work as before. |
+| X-3 | Rich text notes and PDF marks | Writing | yes | off | — | Rich notes and PDF marks are hidden but kept. |
+| X-5 | Sync through a folder | Storage | yes | off | — | Nothing is written to or read from the sync folder; everything stays on this Mac. |
 
-_55 of 55 product modules built._
+_59 of 59 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

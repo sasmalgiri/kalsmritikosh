@@ -157,10 +157,14 @@ actor SyncEngine {
                 let portableKey = spec.keyColumns.map { fields[$0]?.text ?? fields[$0].map { $0.display } ?? "" }
                     .joined(separator: String(SyncTable.keySeparator))
                 for column in spec.nonKeyColumns {
+                    // The value as it stands here (local ids), remembered as the last synced one.
+                    let local = SyncValue(row.values.indices.contains(spec.columns.firstIndex(of: column) ?? -1)
+                                          ? row.values[spec.columns.firstIndex(of: column)!] : .null)
                     try db.exec("""
-                        INSERT INTO sync_field_clocks (tbl, row_key, field, lamport, device) VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT (tbl, row_key, field) DO UPDATE SET lamport = excluded.lamport, device = excluded.device;
-                        """, [.text(tbl), .text(key), .text(column), .integer(clock), .text(me)])
+                        INSERT INTO sync_field_clocks (tbl, row_key, field, lamport, device, synced_value) VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT (tbl, row_key, field) DO UPDATE SET lamport = excluded.lamport, device = excluded.device,
+                            synced_value = excluded.synced_value;
+                        """, [.text(tbl), .text(key), .text(column), .integer(clock), .text(me), .text(Self.encodeValue(local))])
                 }
                 out.append(SyncOp(table: tbl, key: portableKey, fields: fields, lamport: clock, device: me))
             }
@@ -358,12 +362,28 @@ actor SyncEngine {
                                     keyValues.map(\.sql)).first
         var conflicts = 0
         var winners: [String: SyncValue] = [:]
+        // A row changed here and not yet sent: its changed fields are kept (they go out next,
+        // with a later clock, so every device ends with them) and the incoming value is listed.
+        let dirtyRows = try db.query("SELECT 1 FROM sync_dirty WHERE tbl = ? AND row_key = ?;",
+                                     [.text(spec.name), .text(localKey)])
+        let dirtyHere = existing != nil && !dirtyRows.isEmpty
         for (i, column) in spec.nonKeyColumns.enumerated() {
             guard let value = fields[column] else { continue }
-            let clockRow = try db.query("SELECT lamport, device FROM sync_field_clocks WHERE tbl = ? AND row_key = ? AND field = ?;",
+            let clockRow = try db.query("SELECT lamport, device, synced_value FROM sync_field_clocks WHERE tbl = ? AND row_key = ? AND field = ?;",
                                         [.text(spec.name), .text(localKey), .text(column)]).first
             let local = clockRow.map { SyncClock(lamport: $0.int(0) ?? 0, device: $0.string(1) ?? "") }
             let current = existing.map { SyncValue($0.values.indices.contains(i) ? $0.values[i] : .null) }
+            let lastSynced = clockRow?.string(2).flatMap(Self.decodeValue)
+            let changedHere = dirtyHere && (lastSynced == nil || current != lastSynced)
+            if changedHere, let current, current != value {
+                conflicts += 1
+                try db.exec("""
+                    INSERT INTO sync_conflicts (id, tbl, row_key, field, kept_value, other_value, other_device, detected_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    """, [.text(UUID().uuidString), .text(spec.name), .text(localKey), .text(column),
+                          .text(current.display), .text(value.display), .text(op.device), .date(Date())])
+                continue
+            }
             if local == nil || incoming > local! {
                 winners[column] = value
             } else if let current, current != value, local!.device != op.device {
@@ -410,13 +430,23 @@ actor SyncEngine {
                 return .waiting("could not be stored yet: \(error.localizedDescription)")
             }
         }
-        for column in winners.keys {
+        for (column, value) in winners {
             try db.exec("""
-                INSERT INTO sync_field_clocks (tbl, row_key, field, lamport, device) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (tbl, row_key, field) DO UPDATE SET lamport = excluded.lamport, device = excluded.device;
-                """, [.text(spec.name), .text(localKey), .text(column), .integer(op.lamport), .text(op.device)])
+                INSERT INTO sync_field_clocks (tbl, row_key, field, lamport, device, synced_value) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tbl, row_key, field) DO UPDATE SET lamport = excluded.lamport, device = excluded.device,
+                    synced_value = excluded.synced_value;
+                """, [.text(spec.name), .text(localKey), .text(column), .integer(op.lamport), .text(op.device),
+                      .text(encodeValue(value))])
         }
         return .applied(conflicts: conflicts)
+    }
+
+    static func encodeValue(_ v: SyncValue) -> String {
+        (try? String(data: JSONEncoder().encode(v), encoding: .utf8)) ?? "null"
+    }
+
+    static func decodeValue(_ s: String) -> SyncValue? {
+        try? JSONDecoder().decode(SyncValue.self, from: Data(s.utf8))
     }
 
     private static func insert(_ spec: SyncTable, columns: [String], values: [SyncValue], _ db: isolated Database) throws {

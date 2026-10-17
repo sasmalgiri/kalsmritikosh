@@ -7076,7 +7076,9 @@ public enum SchemaMigrations {
     // rows changed since the last sync (filled by triggers on the user-organisation tables —
     // never on evidence tables), the clock that last set each synced field, where each other
     // device's changes were read up to, changes waiting for a document that is not here yet,
-    // conflicts shown to the person, and batches that failed verification. The triggers stay
+    // conflicts shown to the person, and batches that failed verification. Each field's clock
+    // keeps the value last synced, so a change made here and not yet sent is recognised (and
+    // kept) when another device's older-or-newer change to the same field arrives. The triggers stay
     // silent while a sync is applying another device's changes (sync_state 'applying').
     private static let v150: String = """
     CREATE TABLE IF NOT EXISTS sync_state (key TEXT PRIMARY KEY NOT NULL, value TEXT);
@@ -7085,6 +7087,7 @@ public enum SchemaMigrations {
     );
     CREATE TABLE IF NOT EXISTS sync_field_clocks (
         tbl TEXT NOT NULL, row_key TEXT NOT NULL, field TEXT NOT NULL, lamport INTEGER NOT NULL, device TEXT NOT NULL,
+        synced_value TEXT,
         PRIMARY KEY (tbl, row_key, field)
     );
     CREATE TABLE IF NOT EXISTS sync_pending (
