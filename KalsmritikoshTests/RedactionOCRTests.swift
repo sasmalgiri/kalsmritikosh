@@ -14,6 +14,18 @@ import CoreGraphics
 import Testing
 @testable import Kalsmritikosh
 
+/// Whether on-device text recognition answers on this machine (it can stall on runners without
+/// the Neural Engine). Probed once with a short deadline.
+enum TextRecognitionProbe {
+    static let works: Bool = {
+        let size = 64
+        guard let ctx = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let image = ctx.makeImage() else { return false }
+        return PDFRedactionService.recognizedTermRects(in: image, terms: ["x"], caseSensitive: false, deadline: 20) != nil
+    }()
+}
+
 @Suite("W0-2 redaction of text inside images")
 struct RedactionOCRTests {
     /// A raster image of `text` in large black type on white.
@@ -57,7 +69,14 @@ struct RedactionOCRTests {
         #expect(!PDFRedactionService.pageHasImages(try #require(doc.page(at: 1))))
     }
 
-    @Test(.timeLimit(.minutes(3)))
+    /// Recognition that does not answer in time reports "unknown" (nil) — never "nothing found",
+    /// which would let an unverified image page through.
+    @Test func recognitionPastItsDeadlineIsUnknownNotEmpty() throws {
+        let image = try textImage("DEADLINE")
+        #expect(PDFRedactionService.recognizedTermRects(in: image, terms: ["DEADLINE"], caseSensitive: false, deadline: 0) == nil)
+    }
+
+    @Test(.timeLimit(.minutes(3)), .enabled(if: TextRecognitionProbe.works, "text recognition does not answer on this machine"))
     func aTermOnlyInsideAnImageIsFoundBurnedInAndVerified() throws {
         let url = try makePDF(imageText: "MEERA IYER", layerText: "Plain selectable text only.")
         defer { try? FileManager.default.removeItem(at: url) }

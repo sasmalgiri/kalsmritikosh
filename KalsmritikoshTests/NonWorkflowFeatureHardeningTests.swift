@@ -88,7 +88,7 @@ struct NonWorkflowFeatureHardeningTests {
     func redactionMultiTerm() throws {
         let url = try makePDF([.text("Alpha stays? no. Alpha and Bravo are both secret. Bravo again.")])
         defer { try? FileManager.default.removeItem(at: url) }
-        let r = try PDFRedactionService().redact(source: url, terms: ["Alpha", "Bravo"])
+        let r = try PDFRedactionService().redact(source: url, terms: ["Alpha", "Bravo"], scanImages: false)
         #expect(r.matchCount >= 3) // Alpha x2 + Bravo x2 (at least 3 detected)
         let out = PDFDocument(data: r.data)
         #expect(out?.findString("Alpha", withOptions: [.caseInsensitive]).isEmpty ?? false)
@@ -100,7 +100,7 @@ struct NonWorkflowFeatureHardeningTests {
         let url = try makePDF([.text("Alpha is secret.")])
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(throws: PDFRedactionError.self) {
-            _ = try PDFRedactionService(flattener: { _, _, _, _ in nil }).redact(source: url, terms: ["Alpha"])
+            _ = try PDFRedactionService(flattener: { _, _, _, _ in nil }).redact(source: url, terms: ["Alpha"], scanImages: false)
         }
     }
 
@@ -124,7 +124,7 @@ struct NonWorkflowFeatureHardeningTests {
     func redactionScannedPageCaveat() throws {
         let url = try makePDF([.text("Page one has the SECRETWORD here."), .imageOnly])
         defer { try? FileManager.default.removeItem(at: url) }
-        let r = try PDFRedactionService().redact(source: url, terms: ["SECRETWORD"])
+        let r = try PDFRedactionService().redact(source: url, terms: ["SECRETWORD"], scanImages: false)
         #expect(r.pageCount == 2)
         #expect(r.matchCount >= 1)
         #expect(r.scannedPageCount >= 1, "the image-only page must be flagged")
@@ -137,10 +137,10 @@ struct NonWorkflowFeatureHardeningTests {
         let url = try makePDF([.text("The word Confidential appears once.")])
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(throws: PDFRedactionError.self) {
-            _ = try PDFRedactionService().redact(source: url, terms: ["confidential"], caseSensitive: true)
+            _ = try PDFRedactionService().redact(source: url, terms: ["confidential"], caseSensitive: true, scanImages: false)
         }
         // Case-insensitive (default) DOES match.
-        let r = try PDFRedactionService().redact(source: url, terms: ["confidential"])
+        let r = try PDFRedactionService().redact(source: url, terms: ["confidential"], scanImages: false)
         #expect(r.matchCount >= 1)
     }
 

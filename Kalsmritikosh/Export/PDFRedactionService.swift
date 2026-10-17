@@ -59,6 +59,9 @@ public enum PDFRedactionError: Error, LocalizedError, Sendable {
     case verificationLeak([String])
     /// F24 — the produced PDF could not be re-read (or lost pages), so nothing is verified.
     case verificationUnreadable
+    /// W0-2 — on-device text recognition did not answer in time, so text inside page images
+    /// can be neither found nor ruled out. Nothing is produced (fail closed).
+    case imageTextRecognitionUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -72,6 +75,8 @@ public enum PDFRedactionError: Error, LocalizedError, Sendable {
             return "Redaction verification failed — these terms still survived and no file was produced: \(terms.joined(separator: ", "))."
         case .verificationUnreadable:
             return "The redacted PDF could not be re-read to verify it, so no file was produced."
+        case .imageTextRecognitionUnavailable:
+            return "Text recognition did not respond, so text inside the page images could not be checked. No file was produced. Try again, or redact with image scanning off and review image pages yourself."
         }
     }
 }
@@ -131,7 +136,10 @@ public struct PDFRedactionService: Sendable {
                 guard let page = doc.page(at: i), Self.pageHasImages(page) else { continue }
                 let box = page.bounds(for: .mediaBox)
                 guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { continue }
-                let found = Self.recognizedTermRects(in: image, terms: cleanedTerms, caseSensitive: caseSensitive)
+                guard let recognized = Self.recognizedTermRects(in: image, terms: cleanedTerms, caseSensitive: caseSensitive) else {
+                    throw PDFRedactionError.imageTextRecognitionUnavailable
+                }
+                let found = recognized
                     .map { CGRect(x: box.minX + $0.minX * box.width, y: box.minY + $0.minY * box.height,
                                   width: $0.width * box.width, height: $0.height * box.height) }
                 // Only boxes not already covered by a text-layer match count as new.
@@ -195,8 +203,11 @@ public struct PDFRedactionService: Sendable {
                 guard let page = outDoc.page(at: i) else { throw PDFRedactionError.verificationUnreadable }
                 let box = page.bounds(for: .mediaBox)
                 guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { throw PDFRedactionError.verificationUnreadable }
-                for t in cleanedTerms where !Self.recognizedTermRects(in: image, terms: [t], caseSensitive: caseSensitive).isEmpty {
-                    imageLeaks.insert(t)
+                for t in cleanedTerms {
+                    guard let still = Self.recognizedTermRects(in: image, terms: [t], caseSensitive: caseSensitive) else {
+                        throw PDFRedactionError.imageTextRecognitionUnavailable
+                    }
+                    if !still.isEmpty { imageLeaks.insert(t) }
                 }
             }
             if !imageLeaks.isEmpty { throw PDFRedactionError.verificationLeak(imageLeaks.sorted()) }
@@ -290,8 +301,15 @@ public struct PDFRedactionService: Sendable {
         return box.found
     }
 
-    /// W0-2 — normalised boxes (origin lower-left) of every recognised occurrence of the terms in an image.
-    static func recognizedTermRects(in image: CGImage, terms: [String], caseSensitive: Bool) -> [CGRect] {
+    /// Longest a single recognition may take before it is cancelled. On a Mac with the Neural
+    /// Engine a page takes well under a second; without it (some virtual machines) Vision can
+    /// stall indefinitely, and a redaction must then fail closed, never hang.
+    static let recognitionDeadline: TimeInterval = 90
+
+    /// W0-2 — normalised boxes (origin lower-left) of every recognised occurrence of the terms in
+    /// an image; nil when recognition did not finish within `recognitionDeadline`.
+    static func recognizedTermRects(in image: CGImage, terms: [String], caseSensitive: Bool,
+                                    deadline: TimeInterval = recognitionDeadline) -> [CGRect]? {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false   // a name or number must be read as written
@@ -299,7 +317,18 @@ public struct PDFRedactionService: Sendable {
         // would load extra language assets (and could block on a machine that lacks them).
         request.recognitionLanguages = ["en-US"]
         request.automaticallyDetectsLanguage = false
-        do { try VNImageRequestHandler(cgImage: image, options: [:]).perform([request]) } catch { return [] }
+        // Run on its own queue with a deadline; on timeout the request is cancelled and the
+        // caller fails closed. (The caller's thread waits; it never runs Vision itself.)
+        let done = DispatchSemaphore(value: 0)
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = try? handler.perform([request])
+            done.signal()
+        }
+        if done.wait(timeout: .now() + deadline) == .timedOut {
+            request.cancel()
+            return nil
+        }
         let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
         var out: [CGRect] = []
         for obs in request.results ?? [] {

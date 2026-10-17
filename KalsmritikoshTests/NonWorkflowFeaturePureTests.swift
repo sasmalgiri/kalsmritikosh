@@ -55,7 +55,7 @@ struct NonWorkflowFeaturePureTests {
         let src = PDFDocument(url: url)
         #expect(!(src?.findString(secret, withOptions: [.caseInsensitive]).isEmpty ?? true))
 
-        let result = try PDFRedactionService().redact(source: url, terms: [secret])
+        let result = try PDFRedactionService().redact(source: url, terms: [secret], scanImages: false)
         #expect(result.matchCount >= 1)
         #expect(result.redactedPageCount == 1)
         #expect(result.verified)
@@ -70,7 +70,7 @@ struct NonWorkflowFeaturePureTests {
         let url = try makeTextPDF("Nothing sensitive here at all.")
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(throws: PDFRedactionError.self) {
-            _ = try PDFRedactionService().redact(source: url, terms: ["absent-term-zzz"])
+            _ = try PDFRedactionService().redact(source: url, terms: ["absent-term-zzz"], scanImages: false)
         }
     }
 
