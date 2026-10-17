@@ -54,11 +54,12 @@ final class CaptureServiceProvider: NSObject {
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
         // The Share extension's hand-over inbox: drained now and whenever the app comes forward.
-        Task { await appState.receiveSharedItems() }
+        Task { await appState.receiveSharedItems(); await appState.syncIfConfigured() }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let state = self?.appState else { return }
-                Task { await state.receiveSharedItems() }
+                // X-5 — coming forward is also when another device's changes are likely waiting.
+                Task { await state.receiveSharedItems(); await state.syncIfConfigured() }
             }
         }
     }

@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 149
+    public static let latestVersion = 150
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -680,7 +680,8 @@ public enum SchemaMigrations {
         (146, v146),
         (147, v147),
         (148, v148),
-        (149, v149)
+        (149, v149),
+        (150, v150)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7068,6 +7069,152 @@ public enum SchemaMigrations {
         annotation_id TEXT, created_at REAL NOT NULL, removed_at REAL
     );
     CREATE INDEX IF NOT EXISTS idx_pdf_marks_object ON pdf_marks(object_id);
+    """
+
+
+    // MARK: - v150 — X-5 sync through a folder. Bookkeeping only: which of the person's own
+    // rows changed since the last sync (filled by triggers on the user-organisation tables —
+    // never on evidence tables), the clock that last set each synced field, where each other
+    // device's changes were read up to, changes waiting for a document that is not here yet,
+    // conflicts shown to the person, and batches that failed verification. The triggers stay
+    // silent while a sync is applying another device's changes (sync_state 'applying').
+    private static let v150: String = """
+    CREATE TABLE IF NOT EXISTS sync_state (key TEXT PRIMARY KEY NOT NULL, value TEXT);
+    CREATE TABLE IF NOT EXISTS sync_dirty (
+        tbl TEXT NOT NULL, row_key TEXT NOT NULL, changed_at REAL NOT NULL, PRIMARY KEY (tbl, row_key)
+    );
+    CREATE TABLE IF NOT EXISTS sync_field_clocks (
+        tbl TEXT NOT NULL, row_key TEXT NOT NULL, field TEXT NOT NULL, lamport INTEGER NOT NULL, device TEXT NOT NULL,
+        PRIMARY KEY (tbl, row_key, field)
+    );
+    CREATE TABLE IF NOT EXISTS sync_pending (
+        id TEXT PRIMARY KEY NOT NULL, op_json TEXT NOT NULL, reason TEXT NOT NULL,
+        first_seen REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, applied_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+        id TEXT PRIMARY KEY NOT NULL, tbl TEXT NOT NULL, row_key TEXT NOT NULL, field TEXT NOT NULL,
+        kept_value TEXT, other_value TEXT, other_device TEXT NOT NULL, detected_at REAL NOT NULL, resolved_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS sync_quarantine (
+        device TEXT NOT NULL, seq INTEGER NOT NULL, reason TEXT NOT NULL, seen_at REAL NOT NULL,
+        PRIMARY KEY (device, seq)
+    );
+    CREATE TABLE IF NOT EXISTS sync_files (
+        kind TEXT NOT NULL, name TEXT NOT NULL, sha256 TEXT NOT NULL, lamport INTEGER NOT NULL, device TEXT NOT NULL,
+        trashed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (kind, name)
+    );
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tags_ins AFTER INSERT ON user_tags
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tags', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tags_upd AFTER UPDATE ON user_tags
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tags', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tag_links_ins AFTER INSERT ON user_tag_links
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tag_links', NEW.tag_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tag_links_upd AFTER UPDATE ON user_tag_links
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tag_links', NEW.tag_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_groups_ins AFTER INSERT ON user_groups
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_groups', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_groups_upd AFTER UPDATE ON user_groups
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_groups', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_group_members_ins AFTER INSERT ON user_group_members
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_group_members', NEW.group_id || '|' || NEW.object_id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_user_group_members_upd AFTER UPDATE ON user_group_members
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_group_members', NEW.group_id || '|' || NEW.object_id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_annotations_ins AFTER INSERT ON annotations
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('annotations', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_annotations_upd AFTER UPDATE ON annotations
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('annotations', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_pdf_marks_ins AFTER INSERT ON pdf_marks
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pdf_marks', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_pdf_marks_upd AFTER UPDATE ON pdf_marks
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pdf_marks', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_smart_collections_ins AFTER INSERT ON smart_collections
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('smart_collections', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_smart_collections_upd AFTER UPDATE ON smart_collections
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('smart_collections', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_automation_rules_ins AFTER INSERT ON automation_rules
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('automation_rules', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_automation_rules_upd AFTER UPDATE ON automation_rules
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('automation_rules', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_review_codes_ins AFTER INSERT ON review_codes
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('review_codes', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_review_codes_upd AFTER UPDATE ON review_codes
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('review_codes', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlists_ins AFTER INSERT ON watchlists
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlists', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlists_upd AFTER UPDATE ON watchlists
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlists', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlist_entries_ins AFTER INSERT ON watchlist_entries
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlist_entries', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlist_entries_upd AFTER UPDATE ON watchlist_entries
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlist_entries', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_pinned_questions_ins AFTER INSERT ON pinned_questions
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pinned_questions', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_pinned_questions_upd AFTER UPDATE ON pinned_questions
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pinned_questions', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issues_ins AFTER INSERT ON case_issues
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issues', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issues_upd AFTER UPDATE ON case_issues
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issues', NEW.id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issue_links_ins AFTER INSERT ON case_issue_links
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issue_links_upd AFTER UPDATE ON case_issue_links
+    WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+          ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     """
 
 }

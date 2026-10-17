@@ -157,6 +157,27 @@ nonisolated struct NotesStore: Sendable {
         try saveBytes(Data(text.utf8), to: note)
     }
 
+    /// X-5 — replace a note's bytes (e.g. another device's newer text); the text it replaces
+    /// is kept as a version. False when nothing changed.
+    @discardableResult
+    func replace(_ note: URL, with data: Data) throws -> Bool { try saveBytes(data, to: note) }
+
+    /// X-5 — keep `data` as an earlier version of the note without changing the note (the text
+    /// another device wrote at the same time as this one).
+    func addVersion(_ data: Data, to note: URL) throws {
+        try requireNote(note)
+        try keepVersion(data, of: note)
+    }
+
+    /// X-5 — write a note that does not exist on this device yet.
+    func adopt(name: String, data: Data) throws -> URL {
+        try fm.createDirectory(at: notesFolder, withIntermediateDirectories: true)
+        let url = notesFolder.appendingPathComponent(name)
+        try requireNote(url)
+        try data.write(to: url, options: .withoutOverwriting)
+        return url
+    }
+
     private func saveBytes(_ data: Data, to note: URL) throws -> Bool {
         try requireNote(note)
         let previous = try? Data(contentsOf: note)

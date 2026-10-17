@@ -2025,6 +2025,10 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             LedgerEncryptionSubsection()
             Divider().padding(.vertical, 4)
+            if ProductModuleFlags.isEnabled(.folderSync) {
+                SyncSettingsSection()
+                Divider().padding(.vertical, 4)
+            }
             backupSubsection
             Divider().padding(.vertical, 4)
             if ProductModuleFlags.isEnabled(.ledgerRelocation) || appState.ledgerLocationNotice != nil {

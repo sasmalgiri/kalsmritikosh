@@ -11,7 +11,12 @@ import SwiftUI
 struct KalsmritikoshViewerApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabView {
+                SyncLibraryView()
+                    .tabItem { Label("Your archive", systemImage: "arrow.triangle.2.circlepath") }
+                ContentView()
+                    .tabItem { Label("Snapshot", systemImage: "archivebox") }
+            }
         }
     }
 }
