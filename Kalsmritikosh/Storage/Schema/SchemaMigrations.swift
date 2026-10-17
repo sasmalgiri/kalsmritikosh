@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 148
+    public static let latestVersion = 149
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -679,7 +679,8 @@ public enum SchemaMigrations {
         (145, v145),
         (146, v146),
         (147, v147),
-        (148, v148)
+        (148, v148),
+        (149, v149)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7052,6 +7053,21 @@ public enum SchemaMigrations {
         computed_at REAL NOT NULL,
         PRIMARY KEY (object_id, model_id)
     );
+    """
+
+
+    // MARK: - v149 — X-3 marks on PDFs (highlight, underline, strike-out, note), kept in the
+    // ledger beside the PDF — the original file is never written. Rectangles are in PDF page
+    // space, one per line of the marked text. A text mark also has a W2-1 annotation
+    // (annotation_id) so it shows in Highlights; removing the mark removes both (stamps).
+    private static let v149: String = """
+    CREATE TABLE IF NOT EXISTS pdf_marks (
+        id TEXT PRIMARY KEY NOT NULL, object_id TEXT NOT NULL, page INTEGER NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('highlight','underline','strikeout','note')),
+        rects_json TEXT NOT NULL, color TEXT NOT NULL DEFAULT 'yellow', quote TEXT, contents TEXT,
+        annotation_id TEXT, created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_pdf_marks_object ON pdf_marks(object_id);
     """
 
 }

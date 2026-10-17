@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import AppKit
 import os
 
 struct MyNotesView: View {
@@ -26,10 +27,18 @@ struct MyNotesView: View {
     @State private var showVersions = false
     @State private var showTrash = false
     @State private var message: String?
+    /// X-3 — rich-text notes (when "Rich text notes and PDF marks" is on).
+    @State private var newFormat: NotesStore.Format = .markdown
+    @State private var rich = NSAttributedString()
+    @State private var savedRich = NSAttributedString()
 
     private let store = NotesStore.standard
 
-    private var dirty: Bool { selection != nil && text != savedText }
+    private var isRich: Bool { selection.map { NotesStore.format(of: $0) == .richText } ?? false }
+    private var dirty: Bool {
+        guard selection != nil else { return false }
+        return isRich ? !rich.isEqual(to: savedRich) : text != savedText
+    }
 
     var body: some View {
         HSplitView {
@@ -46,6 +55,14 @@ struct MyNotesView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Your notes").font(.title3.bold())
+            if ProductModuleFlags.isEnabled(.richDocuments) {
+                Picker("Format", selection: $newFormat) {
+                    Text("Markdown").tag(NotesStore.Format.markdown)
+                    Text("Rich text").tag(NotesStore.Format.richText)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
             HStack {
                 TextField("New note title", text: $newTitle)
                     .onSubmit(create)
@@ -116,12 +133,14 @@ struct MyNotesView: View {
                         .buttonStyle(.borderless)
                     }
                     Spacer()
-                    Picker("", selection: $preview) {
-                        Text("Edit").tag(false)
-                        Text("Preview").tag(true)
+                    if !isRich {
+                        Picker("", selection: $preview) {
+                            Text("Edit").tag(false)
+                            Text("Preview").tag(true)
+                        }
+                        .pickerStyle(.segmented).frame(width: 150)
+                        .accessibilityLabel("Edit or preview")
                     }
-                    .pickerStyle(.segmented).frame(width: 150)
-                    .accessibilityLabel("Edit or preview")
                     Button {
                         showVersions.toggle()
                     } label: { Label("Versions", systemImage: "clock.arrow.circlepath").labelStyle(.iconOnly) }
@@ -135,7 +154,10 @@ struct MyNotesView: View {
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!dirty)
                 }
-                if preview {
+                if isRich {
+                    RichTextEditor(text: $rich)
+                        .accessibilityLabel("Note text, rich text")
+                } else if preview {
                     ScrollView {
                         Text(Self.rendered(text))
                             .textSelection(.enabled)
@@ -212,6 +234,11 @@ struct MyNotesView: View {
         message = nil
         guard let url, let store else { text = ""; savedText = ""; return }
         do {
+            if NotesStore.format(of: url) == .richText {
+                rich = try store.readRich(url); savedRich = rich
+                text = ""; savedText = ""
+                return
+            }
             text = try store.read(url); savedText = text
         } catch {
             KalsmritikoshLog.app.error("Note read failed: \(error.localizedDescription, privacy: .public)")
@@ -223,7 +250,8 @@ struct MyNotesView: View {
     private func create() {
         guard let store else { return }
         do {
-            let url = try store.create(title: newTitle)
+            let url = try store.create(title: newTitle,
+                                       format: ProductModuleFlags.isEnabled(.richDocuments) ? newFormat : .markdown)
             newTitle = ""
             reload()
             open(url)
@@ -239,8 +267,10 @@ struct MyNotesView: View {
     private func save() {
         guard let store, let note = selection else { return }
         do {
-            if try store.save(text, to: note) {
+            let changed = isRich ? try store.saveRich(rich, to: note) : try store.save(text, to: note)
+            if changed {
                 savedText = text
+                savedRich = rich
                 reload()
                 Task { await appState.readNote(note) }
             }
@@ -296,13 +326,59 @@ struct MyNotesView: View {
         guard let store else { return }
         do {
             try store.restore(version, to: note)
-            text = try store.read(note); savedText = text
+            if NotesStore.format(of: note) == .richText {
+                rich = try store.readRich(note); savedRich = rich
+            } else {
+                text = try store.read(note); savedText = text
+            }
             showVersions = false
             reload()
             Task { await appState.readNote(note) }
         } catch {
             KalsmritikoshLog.app.error("Note version restore failed: \(error.localizedDescription, privacy: .public)")
             message = error.localizedDescription
+        }
+    }
+}
+
+/// X-3 — an editable rich-text view (bold, italic, underline, lists, links, fonts, colours:
+/// the standard Format menu and ⌘B/⌘I/⌘U work in it).
+struct RichTextEditor: NSViewRepresentable {
+    @Binding var text: NSAttributedString
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        view.isRichText = true
+        view.importsGraphics = false          // pictures go in as their own documents
+        view.allowsUndo = true
+        view.usesFontPanel = true
+        view.usesRuler = true
+        view.isAutomaticLinkDetectionEnabled = true
+        view.delegate = context.coordinator
+        view.textStorage?.setAttributedString(text)
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let view = scroll.documentView as? NSTextView, let storage = view.textStorage else { return }
+        if !storage.isEqual(to: text) {
+            context.coordinator.updating = true
+            storage.setAttributedString(text)
+            context.coordinator.updating = false
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: RichTextEditor
+        var updating = false
+        init(_ parent: RichTextEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard !updating, let view = notification.object as? NSTextView else { return }
+            parent.text = NSAttributedString(attributedString: view.attributedString())
         }
     }
 }

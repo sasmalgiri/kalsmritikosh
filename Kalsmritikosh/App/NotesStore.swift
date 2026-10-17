@@ -16,6 +16,7 @@
 //
 
 import Foundation
+import AppKit
 import os
 
 nonisolated struct NotesStore: Sendable {
@@ -76,7 +77,7 @@ nonisolated struct NotesStore: Sendable {
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
         let files = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
                                                  options: [.skipsHiddenFiles])) ?? []
-        return files.filter { $0.pathExtension.lowercased() == "md" }
+        return files.filter { Self.noteExtensions.contains($0.pathExtension.lowercased()) }
             .map { url in
                 let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
                 return Note(url: url, title: url.deletingPathExtension().lastPathComponent, modified: date)
@@ -84,24 +85,65 @@ nonisolated struct NotesStore: Sendable {
             .sorted { $0.modified == $1.modified ? $0.title < $1.title : $0.modified > $1.modified }
     }
 
+    /// X-3 — notes are Markdown or rich text (RTF; read in by the existing RTF parser).
+    enum Format: String, Sendable, CaseIterable {
+        case markdown = "md", richText = "rtf"
+    }
+    static let noteExtensions: Set<String> = Set(Format.allCases.map(\.rawValue))
+
+    static func format(of note: URL) -> Format { Format(rawValue: note.pathExtension.lowercased()) ?? .markdown }
+
     /// A file name for `title`: path separators and colons become dashes.
-    static func fileName(for title: String) -> String {
+    static func fileName(for title: String, format: Format = .markdown) -> String {
         let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
         let noLeadingDot = cleaned.hasPrefix(".") ? "-" + cleaned.dropFirst() : Substring(cleaned)
-        return String(noLeadingDot) + ".md"
+        return String(noLeadingDot) + "." + format.rawValue
     }
 
     /// Create a note. Its first line is the title as a Markdown heading.
-    func create(title: String) throws -> URL {
+    func create(title: String, format: Format = .markdown) throws -> URL {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw NotesError.emptyTitle }
         try fm.createDirectory(at: notesFolder, withIntermediateDirectories: true)
-        let url = notesFolder.appendingPathComponent(Self.fileName(for: trimmed))
-        guard !fm.fileExists(atPath: url.path) else { throw NotesError.exists(trimmed) }
-        try Data("# \(trimmed)\n\n".utf8).write(to: url, options: .withoutOverwriting)
+        // A title already used by a note in the other format counts as taken.
+        for f in Format.allCases where fm.fileExists(atPath: notesFolder.appendingPathComponent(Self.fileName(for: trimmed, format: f)).path) {
+            throw NotesError.exists(trimmed)
+        }
+        let url = notesFolder.appendingPathComponent(Self.fileName(for: trimmed, format: format))
+        let initial: Data
+        switch format {
+        case .markdown: initial = Data("# \(trimmed)\n\n".utf8)
+        case .richText: initial = try Self.rtfData(Self.titled(trimmed))
+        }
+        try initial.write(to: url, options: .withoutOverwriting)
         return url
+    }
+
+    // MARK: - Rich text
+
+    /// A rich note that starts with its title in bold.
+    static func titled(_ title: String) -> NSAttributedString {
+        let s = NSMutableAttributedString(string: title + "\n\n")
+        s.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: 18), range: NSRange(location: 0, length: (title as NSString).length))
+        return s
+    }
+
+    static func rtfData(_ text: NSAttributedString) throws -> Data {
+        try text.data(from: NSRange(location: 0, length: text.length),
+                      documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+    }
+
+    func readRich(_ note: URL) throws -> NSAttributedString {
+        try NSAttributedString(data: Data(contentsOf: note), options: [.documentType: NSAttributedString.DocumentType.rtf],
+                               documentAttributes: nil)
+    }
+
+    /// Save rich text (same versioning as `save(_:to:)`). False when nothing changed.
+    @discardableResult
+    func saveRich(_ text: NSAttributedString, to note: URL) throws -> Bool {
+        try saveBytes(try Self.rtfData(text), to: note)
     }
 
     func read(_ note: URL) throws -> String {
@@ -112,11 +154,15 @@ nonisolated struct NotesStore: Sendable {
     /// the previous text is kept as a version first, then the note is replaced atomically.
     @discardableResult
     func save(_ text: String, to note: URL) throws -> Bool {
+        try saveBytes(Data(text.utf8), to: note)
+    }
+
+    private func saveBytes(_ data: Data, to note: URL) throws -> Bool {
         try requireNote(note)
-        let previous = try? read(note)
-        if previous == text { return false }
+        let previous = try? Data(contentsOf: note)
+        if previous == data { return false }
         if let previous { try keepVersion(previous, of: note) }
-        try Data(text.utf8).write(to: note, options: .atomic)
+        try data.write(to: note, options: .atomic)
         return true
     }
 
@@ -125,7 +171,7 @@ nonisolated struct NotesStore: Sendable {
         try requireNote(note)
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw NotesError.emptyTitle }
-        let target = notesFolder.appendingPathComponent(Self.fileName(for: trimmed))
+        let target = notesFolder.appendingPathComponent(Self.fileName(for: trimmed, format: Self.format(of: note)))
         if target.standardizedFileURL == note.standardizedFileURL { return note }
         guard !fm.fileExists(atPath: target.path) else { throw NotesError.exists(trimmed) }
         try fm.moveItem(at: note, to: target)
@@ -166,7 +212,7 @@ nonisolated struct NotesStore: Sendable {
         let dir = versionsDirectory(for: note)
         let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey],
                                                  options: [.skipsHiddenFiles])) ?? []
-        return files.filter { $0.pathExtension == "md" }
+        return files.filter { Self.noteExtensions.contains($0.pathExtension.lowercased()) }
             .map { url in
                 let date = Self.versionDate(url) ??
                     ((try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast)
@@ -177,8 +223,7 @@ nonisolated struct NotesStore: Sendable {
 
     /// Make an earlier version the current text. The text it replaces is kept as a version.
     func restore(_ version: Version, to note: URL) throws {
-        let text = try String(contentsOf: version.url, encoding: .utf8)
-        try save(text, to: note)
+        _ = try saveBytes(try Data(contentsOf: version.url), to: note)
     }
 
     private func versionsDirectory(for note: URL) -> URL {
@@ -195,19 +240,19 @@ nonisolated struct NotesStore: Sendable {
         return try? stampFormat.parse(stamp)
     }
 
-    private func keepVersion(_ text: String, of note: URL) throws {
+    private func keepVersion(_ data: Data, of note: URL) throws {
         let dir = versionsDirectory(for: note)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let stamp = Date().formatted(Self.stampFormat)
-        let target = uniqueURL(in: dir, named: "\(stamp).md")
-        try Data(text.utf8).write(to: target, options: .withoutOverwriting)
+        let target = uniqueURL(in: dir, named: "\(stamp).\(Self.format(of: note).rawValue)")
+        try data.write(to: target, options: .withoutOverwriting)
     }
 
     // MARK: - Helpers
 
     private func requireNote(_ note: URL) throws {
         guard note.deletingLastPathComponent().standardizedFileURL == notesFolder.standardizedFileURL,
-              note.pathExtension.lowercased() == "md" else { throw NotesError.notANote }
+              Self.noteExtensions.contains(note.pathExtension.lowercased()) else { throw NotesError.notANote }
     }
 
     private func uniqueURL(in dir: URL, named name: String) -> URL {
