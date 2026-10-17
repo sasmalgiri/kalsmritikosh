@@ -205,7 +205,10 @@ struct DocumentSimilarityTests {
         let plain = try #require(try await db.query("SELECT ko.id FROM knowledge_objects ko WHERE content = 'never embedded';", []).first?.uuid(0))
         let engine = DocumentSimilarity(database: db, modelID: "test-model")
         guard case .notYetEmbedded = try await engine.seeAlso(plain) else { Issue.record("expected notYetEmbedded"); return }
-        guard case .notYetEmbedded = try await engine.suggestFiling(plain) else { Issue.record("expected notYetEmbedded"); return }
+        guard case .notYetEmbedded = try await DocumentSimilarity(database: db, modelID: "test-model", thresholds: (0.5, 0.025))
+            .suggestFiling(plain) else { Issue.record("expected notYetEmbedded"); return }
+        // A model nobody calibrated filing for gets no suggestions, never a guess.
+        guard case .notCalibrated = try await engine.suggestFiling(plain) else { Issue.record("expected notCalibrated"); return }
     }
 
     @Test("Filing suggests the group the document resembles, and nothing below the floor")
@@ -217,7 +220,7 @@ struct DocumentSimilarityTests {
         let science = try await groups.create(name: "Science")
         try await groups.add(ids["law1"]!, to: legal); try await groups.add(ids["law2"]!, to: legal)
         try await groups.add(ids["bio1"]!, to: science); try await groups.add(ids["bio2"]!, to: science)
-        let engine = DocumentSimilarity(database: db, modelID: "test-model")
+        let engine = DocumentSimilarity(database: db, modelID: "test-model", thresholds: (0.5, 0.025))
         guard case .results(let s) = try await engine.suggestFiling(ids["law3"]!) else { Issue.record("no suggestion"); return }
         #expect(s.first?.name == "Legal")
         #expect(!s.contains { $0.name == "Science" })           // far below the floor

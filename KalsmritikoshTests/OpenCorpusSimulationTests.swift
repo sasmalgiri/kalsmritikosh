@@ -41,14 +41,18 @@ enum OpenCorpus {
         try JSONDecoder().decode([Article].self, from: Data(contentsOf: url("opencorpus-wikipedia.json")))
     }
 
-    /// The embedder the app itself would use: the bundled model when present, else Apple's.
-    static func embedder() async -> (id: String, embed: @Sendable (String) async -> [Float]) {
-        let coreML = CoreMLEmbedderProvider()
-        if await coreML.isAvailable() {
+    /// Either embedder the app can use: the bundled model (when this build has it) or Apple's.
+    static func embedder(_ which: String) async -> (id: String, embed: @Sendable (String) async -> [Float])? {
+        switch which {
+        case "bge-small.v1":
+            let coreML = CoreMLEmbedderProvider()
+            guard await coreML.isAvailable() else { return nil }
             return ("bge-small.v1", { (try? await coreML.embed(text: $0)) ?? [] })
+        default:
+            let nl = NLEmbedder()
+            guard !(await nl.embed("probe")).isEmpty else { return nil }
+            return ("apple.nl.v1", { await nl.embed($0) })
         }
-        let nl = NLEmbedder()
-        return ("apple.nl.v1", { await nl.embed($0) })
     }
 }
 
@@ -60,14 +64,12 @@ struct OpenCorpusSimulationTests {
     /// A researcher drops 20 articles from four subjects (plus one off-topic) into the archive,
     /// files two per subject into a group, and asks where the rest belong and what is alike.
     @Test("X-1/X-2: See Also stays on subject; filing suggests the right group; off-topic gets no suggestion",
-          .timeLimit(.minutes(10)))
-    func researcherFilesArticles() async throws {
+          .timeLimit(.minutes(10)), arguments: ["bge-small.v1", "apple.nl.v1"])
+    func researcherFilesArticles(model: String) async throws {
+        guard let (modelID, embed) = await OpenCorpus.embedder(model) else { return }   // that embedder is not in this build
         let dir = try ParityFixture.tempFolder("oc-filing")
         defer { try? FileManager.default.removeItem(at: dir) }
         let db = try await ParityFixture.database(in: dir)
-        let (modelID, embed) = await OpenCorpus.embedder()
-        let probe = await embed("probe sentence about a contract")
-        try #require(!probe.isEmpty, "no embedder answers on this machine")
 
         var docs: [(id: UUID, article: OpenCorpus.Article)] = []
         for article in try OpenCorpus.articles() {
@@ -104,6 +106,19 @@ struct OpenCorpusSimulationTests {
             groupOf[category] = g
             for d in categorised.filter({ $0.article.category == category }).prefix(2) { try await groups.add(d.id, to: g) }
         }
+        var stats: [String] = []
+        for d in categorised + docs.filter({ $0.article.category == "Offtopic" }) {
+            stats.append("\(d.article.title): " + (try await engine.groupScores(d.id)).map { "\($0.name)=\(String(format: "%.3f", $0.score))" }.joined(separator: ","))
+        }
+        Attachment.record(stats.joined(separator: "\n"), named: "calibration-\(modelID).txt")
+        let chess = try #require(docs.first { $0.article.category == "Offtopic" })
+        guard DocumentSimilarity.filingThresholds[modelID] != nil else {
+            // Not calibrated for this embedder (see DocumentSimilarity.filingThresholds): no guesses.
+            guard case .notCalibrated = try await engine.suggestFiling(chess.id) else {
+                Issue.record("filing must stay off for the uncalibrated \(modelID)"); return
+            }
+            return
+        }
         var right = 0, asked = 0
         for category in groupOf.keys.sorted() {
             for d in categorised.filter({ $0.article.category == category }).dropFirst(2) {
@@ -114,7 +129,6 @@ struct OpenCorpusSimulationTests {
         #expect(Double(right) / Double(asked) >= 0.8, "filing suggested the right group for \(right) of \(asked) with \(modelID)")
 
         // Off-topic: no group is a confident home for an article about chess.
-        let chess = try #require(docs.first { $0.article.category == "Offtopic" })
         if case .results(let s) = try await engine.suggestFiling(chess.id) {
             Issue.record("off-topic article got suggestions \(s.map { "\($0.name) \($0.score)" }) with \(modelID)")
         }

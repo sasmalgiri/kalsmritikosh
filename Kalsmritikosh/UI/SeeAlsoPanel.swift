@@ -28,6 +28,7 @@ struct SeeAlsoPanel: View {
     @State private var suggestions: [FilingSuggestion] = []
     @State private var names: [UUID: String] = [:]
     @State private var status: String?
+    @State private var filingNote: String?
     @State private var loading = false
 
     var body: some View {
@@ -38,6 +39,7 @@ struct SeeAlsoPanel: View {
                     if loading { ProgressView().controlSize(.small) }
                 }
                 if let status { Text(status).font(.callout).foregroundStyle(.secondary) }
+                if let filingNote { Text(filingNote).font(.caption).foregroundStyle(.secondary) }
                 ForEach(suggestions, id: \.self) { s in
                     HStack {
                         Label(s.name, systemImage: s.isGroup ? "folder" : "tag")
@@ -80,10 +82,16 @@ struct SeeAlsoPanel: View {
             case .notYetEmbedded:
                 similar = []
                 status = "This document has not been read for meaning yet; suggestions appear once it has."
-            case .noConfidentSuggestion:
+            case .noConfidentSuggestion, .notCalibrated:
                 similar = []
             }
-            if case .results(let s) = try await engine.suggestFiling(objectID) { suggestions = s } else { suggestions = [] }
+            switch try await engine.suggestFiling(objectID) {
+            case .results(let s): suggestions = s
+            case .notCalibrated:
+                suggestions = []
+                filingNote = "Filing suggestions need the language model that ships with the app; this Mac is using Apple's built-in one, which is not reliable enough to suggest where things belong."
+            default: suggestions = []
+            }
             names = (try? await appState.objects?.sourceFilenames(for: Set(similar.map(\.objectID)))) ?? [:]
         } catch {
             KalsmritikoshLog.app.error("See Also failed: \(error.localizedDescription, privacy: .public)")

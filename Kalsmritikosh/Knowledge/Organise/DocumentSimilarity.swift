@@ -37,6 +37,9 @@ public nonisolated enum SimilarityOutcome<T: Sendable>: Sendable {
     case results([T])
     case notYetEmbedded
     case noConfidentSuggestion
+    /// Filing suggestions were not calibrated for the embedding model in use, so none are
+    /// offered (see `DocumentSimilarity.filingThresholds`).
+    case notCalibrated
 }
 
 public actor DocumentSimilarity {
@@ -51,12 +54,24 @@ public actor DocumentSimilarity {
     /// the open corpus (Fixtures/OpenCorpus): every on-subject article led by ≥ 0.030, the
     /// off-topic one by 0.018.
     public static let suggestionLead = 0.025
+
+    /// Filing needs thresholds measured for the embedding model in use. Only the bundled model
+    /// is calibrated: with Apple's built-in sentence embedding the open corpus gave an article
+    /// about chess a 0.09 lead for an astronomy group — larger than several right answers — so
+    /// no threshold can say "this belongs nowhere" with it, and filing stays off rather than
+    /// guess. See Also is unaffected (it ranks; it does not decide).
+    public static let filingThresholds: [String: (floor: Double, lead: Double)] = [
+        "bge-small.v1": (suggestionFloor, suggestionLead)
+    ]
     /// See Also hides documents scoring below this (they are not meaningfully alike).
     public static let seeAlsoFloor = 0.3
 
-    public init(database: Database, modelID: String) {
+    private let thresholds: (floor: Double, lead: Double)?
+
+    public init(database: Database, modelID: String, thresholds: (floor: Double, lead: Double)? = nil) {
         self.database = database
         self.modelID = modelID
+        self.thresholds = thresholds ?? Self.filingThresholds[modelID]
     }
 
     // MARK: - Vectors
@@ -175,6 +190,7 @@ public actor DocumentSimilarity {
     /// left out. Nothing is offered below `suggestionFloor`, or when the best candidate does
     /// not lead the next by `suggestionLead`.
     public func suggestFiling(_ objectID: UUID, limit: Int = 3) async throws -> SimilarityOutcome<FilingSuggestion> {
+        guard let limits = thresholds else { return .notCalibrated }
         guard let mine = try await vector(for: objectID) else { return .notYetEmbedded }
         var candidates: [FilingSuggestion] = []
 
@@ -202,17 +218,39 @@ public actor DocumentSimilarity {
             }
         }
         candidates.sort { $0.score == $1.score ? $0.name < $1.name : $0.score > $1.score }
-        guard let top = candidates.first, top.score >= Self.suggestionFloor else { return .noConfidentSuggestion }
+        guard let top = candidates.first, top.score >= limits.floor else { return .noConfidentSuggestion }
         // A clear lead over the next candidate, or no suggestion (it would be a guess).
-        if candidates.count > 1, top.score - candidates[1].score < Self.suggestionLead { return .noConfidentSuggestion }
+        if candidates.count > 1, top.score - candidates[1].score < limits.lead { return .noConfidentSuggestion }
         // The leader, then any others that are themselves well above the rest.
         var out = [top]
         for (i, c) in candidates.enumerated().dropFirst() where out.count < limit {
             let next = i + 1 < candidates.count ? candidates[i + 1].score : 0
-            guard c.score >= Self.suggestionFloor, c.score - next >= Self.suggestionLead, top.score - c.score < Self.suggestionLead * 2 else { break }
+            guard c.score >= limits.floor, c.score - next >= limits.lead, top.score - c.score < limits.lead * 2 else { break }
             out.append(c)
         }
         return .results(out)
+    }
+
+    /// Every candidate group/tag with its score, best first, before any threshold — for calibration.
+    func groupScores(_ objectID: UUID) async throws -> [FilingSuggestion] {
+        guard let mine = try await vector(for: objectID) else { return [] }
+        let rows = try await database.query("""
+            SELECT g.id, g.name, m.object_id FROM user_groups g JOIN user_group_members m ON m.group_id = g.id
+            WHERE g.retired_at IS NULL AND m.removed_at IS NULL;
+            """, [])
+        var members: [UUID: (name: String, docs: [UUID])] = [:]
+        for r in rows {
+            guard let id = r.uuid(0), let name = r.string(1), let doc = r.uuid(2) else { continue }
+            members[id, default: (name, [])].docs.append(doc)
+        }
+        var out: [FilingSuggestion] = []
+        for (id, entry) in members where !entry.docs.contains(objectID) {
+            var vs: [[Float]] = []
+            for d in entry.docs { if let v = try await vector(for: d) { vs.append(v) } }
+            guard let c = Self.normalisedMean(vs) else { continue }
+            out.append(FilingSuggestion(target: .group(id), name: entry.name, score: Self.cosine(mine, c)))
+        }
+        return out.sorted { $0.score > $1.score }
     }
 
     // MARK: - Maths
