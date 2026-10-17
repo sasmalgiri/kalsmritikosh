@@ -112,7 +112,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .shortcutsActions:
             return Spec(planID: "W1-6", group: "Integration", title: "Shortcuts actions",
-                        detail: "Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app or the command line.",
+                        detail: "Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app or the command line, and ask, search, add files and open links from AppleScript.",
                         whenOff: "Actions refuse with a message to turn them on.",
                         implemented: true)
         case .commandPalette:
@@ -268,7 +268,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Share and capture",
-                        detail: "“Save to Kalsmritikosh” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that.",
+                        detail: "“Save to Kalsmritikosh” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that. File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad.",
                         whenOff: "Add files from inside the app only.",
                         implemented: true)
         case .spotlightIndex:
