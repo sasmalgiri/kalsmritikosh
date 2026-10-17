@@ -63,8 +63,9 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | W4-3 | Deleted email recovery | Email evidence | yes | off | — | Only live mail is read. |
 | W4-4 | Team review over a shared folder | Sharing | yes | off | — | Single-user cases. |
 | O-4 | Answers with your own cloud AI key | Online (your own key) | yes | off | Online mode | All answers are made on your Mac. |
+| P-2 | Your own notes | Writing | yes | off | — | Notes are hidden but kept, with their versions; what the archive learned from them stays. |
 
-_54 of 54 product modules built._
+_55 of 55 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

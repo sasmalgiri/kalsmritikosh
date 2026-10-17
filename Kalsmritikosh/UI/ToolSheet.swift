@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture, textRecognition, teamReview
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture, textRecognition, teamReview, myNotes
 
     var id: String { rawValue }
 
@@ -40,6 +40,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .capture: return .captureExtensions
         case .textRecognition: return .ocrUpgrade
         case .teamReview: return .teamReview
+        case .myNotes: return .writtenNotes
         }
     }
 
@@ -72,6 +73,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .capture: return "tray.and.arrow.down"
         case .textRecognition: return "text.viewfinder"
         case .teamReview: return "person.2.badge.key"
+        case .myNotes: return "square.and.pencil"
         }
     }
 
@@ -103,6 +105,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .capture: CaptureView()
         case .textRecognition: TextRecognitionView()
         case .teamReview: TeamReviewView()
+        case .myNotes: MyNotesView()
         }
     }
 
@@ -157,7 +160,7 @@ enum ToolHub: String, Identifiable, CaseIterable {
         case .watch: return [.alerts, .watchlists, .smartCollections]
         case .people: return [.graph, .communication, .places]
         case .emailForensics: return [.emailAuthenticity, .mailRecovery]
-        case .writing: return [.factCheck, .statementDrift, .highlights, .studio]
+        case .writing: return [.myNotes, .factCheck, .statementDrift, .highlights, .studio]
         case .documents: return [.nearDuplicates, .textRecognition, .images, .customTypes]
         case .bringIn: return [.devonthink, .notesImport, .capture]
         case .export: return [.exportCenter]

@@ -46,6 +46,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
     case ocrUpgrade, extraParsers, mailRecovery, teamReview
     // Wave O — online
     case onlineAnswers
+    // Wave P — using the app on its own
+    case writtenNotes
 
     public var id: String { rawValue }
 
@@ -57,7 +59,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         .advancedSearchSyntax, .userTags, .deepLinks, .shortcutsActions, .ledgerRelocation,
         .annotations, .exportFormats, .appLock, .smartCollections, .captureExtensions,
         .spotlightIndex, .timelineGraph, .notesImport, .menuBarAsk, .customEntityTypes,
-        .ocrUpgrade, .extraParsers
+        .ocrUpgrade, .extraParsers, .writtenNotes
     ]
 
     public var alsoInDevonthink: Bool { Self.alsoInDevonthinkSet.contains(self) }
@@ -192,6 +194,11 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
 
         // ── Wave 2 ───────────────────────────────────────────────────────
+        case .writtenNotes:
+            return Spec(planID: "P-2", group: "Writing", title: "Your own notes",
+                        detail: "Write and edit notes in Markdown inside the app. Each note is read into your archive like any document, so you can search it and ask about it. Every save keeps the earlier version, which you can restore.",
+                        whenOff: "Notes are hidden but kept, with their versions; what the archive learned from them stays.",
+                        implemented: true)
         case .annotations:
             return Spec(planID: "W2-1", group: "Writing", title: "Highlights and notes",
                         detail: "Highlight and annotate any passage. Notes are stored beside the source, never written into it, and count as your own confirmed or corrected evidence.",
