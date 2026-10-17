@@ -19,11 +19,14 @@
 //  fails closed (no file is produced) — matching the RedactionVerifier ethos
 //  already used by the export pipeline.
 //
-//  W0-2 — text inside images. With `scanImages` (default on), every page is also
-//  read with on-device text recognition; a term found in a page IMAGE (a scan, a
-//  stamp, a screenshot) is burned in like any other match, and every flattened
-//  page is recognised again after redaction — a term still readable there fails
-//  the whole operation closed. The output is written into a fresh PDF context
+//  W0-2 — text inside images. With `scanImages` (default on), every page that
+//  CONTAINS AN IMAGE is also read with on-device text recognition (pure-text pages
+//  are fully covered by the text search above); a term found in a page image (a
+//  scan, a stamp, a screenshot) is burned in like any other match, and every
+//  flattened page is recognised again after redaction — a term still readable
+//  there fails the whole operation closed. Recognition is configured like
+//  VisionOCR (pinned language, no automatic language detection): detection loads
+//  extra assets, which on a fresh machine could block indefinitely. The output is written into a fresh PDF context
 //  with no document info, so the source's title/author/keywords never carry over.
 //
 
@@ -125,7 +128,7 @@ public struct PDFRedactionService: Sendable {
         var imageMatchCount = 0
         if scanImages {
             for i in 0..<doc.pageCount {
-                guard let page = doc.page(at: i) else { continue }
+                guard let page = doc.page(at: i), Self.pageHasImages(page) else { continue }
                 let box = page.bounds(for: .mediaBox)
                 guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { continue }
                 let found = Self.recognizedTermRects(in: image, terms: cleanedTerms, caseSensitive: caseSensitive)
@@ -250,11 +253,52 @@ public struct PDFRedactionService: Sendable {
         return bmp.makeImage()
     }
 
+    /// W0-2 — true when the page draws at least one raster image (directly or inside a form
+    /// XObject), i.e. when text could exist that the text layer does not carry.
+    static func pageHasImages(_ page: PDFPage) -> Bool {
+        guard let cgPage = page.pageRef, let dict = cgPage.dictionary else { return true }   // unknown → scan
+        var resources: CGPDFDictionaryRef?
+        guard CGPDFDictionaryGetDictionary(dict, "Resources", &resources), let resources else { return false }
+        return resourcesHaveImages(resources, depth: 0)
+    }
+
+    private static func resourcesHaveImages(_ resources: CGPDFDictionaryRef, depth: Int) -> Bool {
+        guard depth < 4 else { return true }                                   // deep nesting → scan
+        var xobjects: CGPDFDictionaryRef?
+        guard CGPDFDictionaryGetDictionary(resources, "XObject", &xobjects), let xobjects else { return false }
+        final class Box { var found = false; var depth = 0 }
+        let box = Box(); box.depth = depth
+        CGPDFDictionaryApplyBlock(xobjects, { _, object, info in
+            guard let info else { return true }
+            let b = Unmanaged<Box>.fromOpaque(info).takeUnretainedValue()
+            var stream: CGPDFStreamRef?
+            guard CGPDFObjectGetValue(object, .stream, &stream), let stream, let sdict = CGPDFStreamGetDictionary(stream) else { return true }
+            var subtype: UnsafePointer<CChar>?
+            if CGPDFDictionaryGetName(sdict, "Subtype", &subtype), let subtype {
+                let name = String(cString: subtype)
+                if name == "Image" { b.found = true; return false }
+                if name == "Form" {
+                    var inner: CGPDFDictionaryRef?
+                    if CGPDFDictionaryGetDictionary(sdict, "Resources", &inner), let inner,
+                       PDFRedactionService.resourcesHaveImages(inner, depth: b.depth + 1) {
+                        b.found = true; return false
+                    }
+                }
+            }
+            return true
+        }, Unmanaged.passUnretained(box).toOpaque())
+        return box.found
+    }
+
     /// W0-2 — normalised boxes (origin lower-left) of every recognised occurrence of the terms in an image.
     static func recognizedTermRects(in image: CGImage, terms: [String], caseSensitive: Bool) -> [CGRect] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false   // a name or number must be read as written
+        // Same configuration as VisionOCR: a pinned language and no automatic detection, which
+        // would load extra language assets (and could block on a machine that lacks them).
+        request.recognitionLanguages = ["en-US"]
+        request.automaticallyDetectsLanguage = false
         do { try VNImageRequestHandler(cgImage: image, options: [:]).perform([request]) } catch { return [] }
         let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
         var out: [CGRect] = []
