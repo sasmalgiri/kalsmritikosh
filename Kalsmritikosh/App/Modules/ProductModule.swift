@@ -475,5 +475,18 @@ nonisolated public enum ModulePreset {
     public static func apply(persona id: String) {
         for m in modules(forPersona: id) { ProductModuleFlags.setEnabled(m, true) }
     }
+
+    /// For someone using Kalsmritikosh on its own, without DEVONthink: the features DEVONthink
+    /// also has (tags, highlights, smart collections, capture, Spotlight and the rest), which the
+    /// companion positioning otherwise leaves off. Built, non-preview modules only.
+    public static var standalone: [ProductModule] {
+        ProductModule.allCases.filter { $0.alsoInDevonthink && $0.spec.implemented && !$0.spec.preview }
+            .sorted { $0.rawValue < $1.rawValue }
+    }
+
+    /// Switch on the standalone set (never switches anything off).
+    public static func applyStandalone() {
+        for m in standalone { ProductModuleFlags.setEnabled(m, true) }
+    }
 }
 
