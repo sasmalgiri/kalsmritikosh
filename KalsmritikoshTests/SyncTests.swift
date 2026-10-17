@@ -296,6 +296,26 @@ struct SyncEngineTests {
         #expect(again.quarantined == 0)               // reported once, not re-read every time
     }
 
+    @Test("A batch that cannot be written loses nothing: the changes go out on the next sync")
+    func failedWriteKeepsChanges() async throws {
+        let (store, root, a, b) = try await pair()
+        defer { cleanup(root, a.dir, b.dir) }
+        _ = try await TagsRepository(database: a.db).tag(named: "Kept")
+        // Something already occupies the file A's next batch would take.
+        let folder = root.appendingPathComponent("log/device-A", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let blocker = folder.appendingPathComponent(SyncFormat.batchName(1))
+        try Data("x".utf8).write(to: blocker)
+        await #expect(throws: SyncStore.Failure.batchExists(1)) { _ = try await a.engine.sync() }
+        #expect(try await a.scalar("SELECT COUNT(*) FROM sync_dirty;") == "1")
+        try FileManager.default.removeItem(at: blocker)
+        let sent = try await a.engine.sync()
+        #expect(sent.changesSent == 1)
+        _ = try await b.engine.sync()
+        #expect(try await TagsRepository(database: b.db).allTags().map(\.name) == ["Kept"])
+        _ = store
+    }
+
     @Test("Three devices converge on the same groups")
     func threeDevices() async throws {
         let root = try ParityFixture.tempFolder("sync3")

@@ -142,3 +142,30 @@ Each item was checked against the code before any implementation:
 Conclusion: every DEVONthink capability listed for the six gaps maps to at least one task
 above, every task has a concrete code path, and the two plan changes (RTF-only rich notes,
 smart-collection writes moved into a repository) are recorded. The plan can complete all six.
+
+
+## Outcome (2026-10-17)
+
+All six are built, tested and simulated on the open corpus. Differences from the plan, each
+for a recorded reason:
+
+| Plan | Built | Why |
+|---|---|---|
+| v147 document vectors, v148 groups, v149 PDF marks | v147 groups, v148 document vectors, v149 `pdf_marks`, v150 sync bookkeeping | Groups were built first (filing suggestions depend on them). |
+| Memberships: add wins over a concurrent remove | Every synced field, memberships included, keeps the latest-clock value; a change made on this device and not yet sent is kept and the other value listed as a conflict | One rule for every field is simpler to reason about and still converges; "unsent local edits are kept" was found necessary by `fieldConflict` (an older remote change silently overwrote a local one). |
+| Filing: suggest when cosine ≥ floor | Also requires a lead of 0.025 over the next candidate | On the open corpus the bundled embedder scored an off-topic article 0.71 to an unrelated group; only the lead separates "belongs nowhere" (0.018) from every on-subject article (≥ 0.030). |
+| X-6.1 generated copy of the sync core | `SyncCore/` is one folder compiled into both the Mac app and the iPhone/iPad app | The project uses synchronised folders; one folder in two targets is simpler than a generated copy and cannot drift. |
+| Rich notes `.rtf`/`.rtfd` | `.rtf` only | No ingestion path reads `.rtfd` (plan check). |
+
+Simulation results (`OpenCorpusSimulationTests`, bundled embedder bge-small):
+
+| Workflow | Result |
+|---|---|
+| Researcher files 20 articles | See Also top-3 on subject ≥ 80 %; the right group suggested for 12 of 12; the off-topic article gets no suggestion. |
+| Lawyer marks up *Loper Bright v. Raimondo* | Holding found, highlighted and noted; marked copy exported; original bytes unchanged; the mark is also a plain highlight. |
+| Historian's rich note on The Federalist No. 1 | Formatting, versions and words kept; the RTF reads back for ingestion. |
+| Clipping two real Wikipedia pages | Page clip keeps every byte plus its address; the Markdown copy is readable, keeps links, drops scripts and navigation. |
+| Two Macs and a phone | Same tags, groups, highlights and notes on all three; the phone's tag reaches both Macs; a forged batch is refused on both. |
+
+Not done here (needs the owner): try each feature in the running app, install the Safari
+extension in Safari (Settings ▸ Extensions), and pair a real iPhone/iPad with a real sync folder.

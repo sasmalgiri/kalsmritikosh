@@ -121,13 +121,16 @@ actor SyncEngine {
         let clock = try await lamport() + 1
         let me = deviceID
         // Rows marked by the triggers → ops (one savepoint: read, then clear what was sent).
-        let exported: ([SyncOp], [String: String]) = try await database.withSavepoint("sync_export_rows") { db in
+        // The marks are cleared only after the batch is safely in the folder (below), and only
+        // if the row has not changed again meanwhile — a failed write loses nothing.
+        let exported: ([SyncOp], [String: String], [(String, String, Double)]) = try await database.withSavepoint("sync_export_rows") { db in
             var out: [SyncOp] = []
             var titles: [String: String] = [:]
-            let dirty = try db.query("SELECT tbl, row_key FROM sync_dirty ORDER BY changed_at, tbl, row_key;", [])
+            var handled: [(String, String, Double)] = []
+            let dirty = try db.query("SELECT tbl, row_key, changed_at FROM sync_dirty ORDER BY changed_at, tbl, row_key;", [])
             for d in dirty {
                 guard let tbl = d.string(0), let key = d.string(1) else { continue }
-                defer { try? db.exec("DELETE FROM sync_dirty WHERE tbl = ? AND row_key = ?;", [.text(tbl), .text(key)]) }
+                handled.append((tbl, key, d.double(2) ?? 0))
                 guard let spec = SyncTable.named(tbl) else { continue }
                 let parts = key.split(separator: SyncTable.keySeparator, omittingEmptySubsequences: false).map(String.init)
                 guard parts.count == spec.keyColumns.count else { continue }
@@ -168,14 +171,24 @@ actor SyncEngine {
                 }
                 out.append(SyncOp(table: tbl, key: portableKey, fields: fields, lamport: clock, device: me))
             }
-            return (out, titles)
+            return (out, titles, handled)
         }
         let ops = exported.0
         let files = try await exportFiles(clock: clock)
-        guard !ops.isEmpty || !files.isEmpty else { return }
+        let clearHandled: () async throws -> Void = { [database] in
+            let handled = exported.2
+            try await database.withSavepoint("sync_export_clear") { db in
+                for (tbl, key, changedAt) in handled {
+                    try db.exec("DELETE FROM sync_dirty WHERE tbl = ? AND row_key = ? AND changed_at <= ?;",
+                                [.text(tbl), .text(key), .real(changedAt)])
+                }
+            }
+        }
+        guard !ops.isEmpty || !files.isEmpty else { try await clearHandled(); return }
         let batch = SyncBatch(device: me, seq: seq, createdAt: Date(), ops: ops, files: files,
                               titles: exported.1.isEmpty ? nil : exported.1)
         try store.write(batch, signingKey: signingKey)
+        try await clearHandled()
         try await setState("my_seq", String(seq))
         try await setState("lamport", String(clock))
         for f in files {

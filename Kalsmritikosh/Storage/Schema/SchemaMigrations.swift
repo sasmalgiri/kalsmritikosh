@@ -7108,115 +7108,115 @@ public enum SchemaMigrations {
     );
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tags_ins AFTER INSERT ON user_tags
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tags', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tags', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tags_upd AFTER UPDATE ON user_tags
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tags', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tags', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tag_links_ins AFTER INSERT ON user_tag_links
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tag_links', NEW.tag_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tag_links', NEW.tag_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_tag_links_upd AFTER UPDATE ON user_tag_links
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tag_links', NEW.tag_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_tag_links', NEW.tag_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_groups_ins AFTER INSERT ON user_groups
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_groups', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_groups', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_groups_upd AFTER UPDATE ON user_groups
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_groups', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_groups', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_group_members_ins AFTER INSERT ON user_group_members
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_group_members', NEW.group_id || '|' || NEW.object_id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_group_members', NEW.group_id || '|' || NEW.object_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_user_group_members_upd AFTER UPDATE ON user_group_members
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_group_members', NEW.group_id || '|' || NEW.object_id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('user_group_members', NEW.group_id || '|' || NEW.object_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_annotations_ins AFTER INSERT ON annotations
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('annotations', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('annotations', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_annotations_upd AFTER UPDATE ON annotations
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('annotations', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('annotations', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_pdf_marks_ins AFTER INSERT ON pdf_marks
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pdf_marks', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pdf_marks', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_pdf_marks_upd AFTER UPDATE ON pdf_marks
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pdf_marks', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pdf_marks', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_smart_collections_ins AFTER INSERT ON smart_collections
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('smart_collections', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('smart_collections', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_smart_collections_upd AFTER UPDATE ON smart_collections
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('smart_collections', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('smart_collections', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_automation_rules_ins AFTER INSERT ON automation_rules
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('automation_rules', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('automation_rules', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_automation_rules_upd AFTER UPDATE ON automation_rules
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('automation_rules', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('automation_rules', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_review_codes_ins AFTER INSERT ON review_codes
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('review_codes', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('review_codes', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_review_codes_upd AFTER UPDATE ON review_codes
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('review_codes', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('review_codes', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlists_ins AFTER INSERT ON watchlists
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlists', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlists', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlists_upd AFTER UPDATE ON watchlists
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlists', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlists', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlist_entries_ins AFTER INSERT ON watchlist_entries
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlist_entries', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlist_entries', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_watchlist_entries_upd AFTER UPDATE ON watchlist_entries
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlist_entries', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('watchlist_entries', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_pinned_questions_ins AFTER INSERT ON pinned_questions
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pinned_questions', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pinned_questions', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_pinned_questions_upd AFTER UPDATE ON pinned_questions
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pinned_questions', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('pinned_questions', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issues_ins AFTER INSERT ON case_issues
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issues', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issues', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issues_upd AFTER UPDATE ON case_issues
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issues', NEW.id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issues', NEW.id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issue_links_ins AFTER INSERT ON case_issue_links
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     CREATE TRIGGER IF NOT EXISTS sync_dirty_case_issue_links_upd AFTER UPDATE ON case_issue_links
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
-    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, strftime('%s','now'))
+    BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
     """
 

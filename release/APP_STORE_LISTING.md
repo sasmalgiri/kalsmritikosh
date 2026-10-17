@@ -48,6 +48,10 @@ viewer added)._
 > • Write your own notes in Markdown — searchable, with every earlier version kept.
 > • Automate with Shortcuts and AppleScript.
 > • Use it beside DEVONthink, or on its own: one switch turns on tags, highlights, smart collections and the other organising tools.
+> • Arrange documents in your own folders — one document can live in several at once — and see what else in your archive is alike, with suggestions for where to file it.
+> • Highlight, underline and comment on PDFs without changing the original; export a marked copy.
+> • Clip any page from Safari: the page, your selection, or a clean Markdown copy.
+> • Keep your Macs and your iPhone or iPad in step through a folder you choose (iCloud Drive, Dropbox, a disk), encrypted with your passphrase. Scan paper on your phone straight into your archive.
 > • Take a signed, read-only snapshot to your iPhone or iPad with the companion viewer.
 >
 > **Rich answers use Apple's on-device intelligence** where your Mac supports it; everywhere else
