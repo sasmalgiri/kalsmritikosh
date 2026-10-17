@@ -297,6 +297,17 @@ struct ModulePresetTests {
         #expect(ProductModule.locationMap.spec.preview)
     }
 
+    @Test("The standalone preset is exactly the built, non-preview features DEVONthink also has")
+    func standalonePreset() {
+        let set = ModulePreset.standalone
+        let expected = ProductModule.alsoInDevonthinkSet.filter { $0.spec.implemented && !$0.spec.preview }
+        #expect(Set(set) == expected)
+        #expect(set.count == expected.count)            // no duplicates
+        #expect(set.contains(.userTags) && set.contains(.smartCollections) && set.contains(.annotations))
+        #expect(!set.contains(.onlineAnswers))          // never reaches an online module
+        #expect(set.allSatisfy { !$0.spec.requiresOnline })
+    }
+
     @Test("Every tool sits in exactly one Tools hub")
     @MainActor func hubsCoverTools() {
         let placed = ToolHub.allCases.flatMap(\.tools)

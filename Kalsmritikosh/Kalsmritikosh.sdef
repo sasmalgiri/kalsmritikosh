@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<!--
+  P-4 — Kalsmritikosh's AppleScript dictionary. The commands do what the Shortcuts actions
+  do and are governed by the same "Shortcuts actions" switch (Settings ▸ Modules).
+-->
+<dictionary title="Kalsmritikosh Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
+    <xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
+
+    <suite name="Kalsmritikosh Suite" code="Kals" description="Ask and search your archive.">
+        <command name="ask" code="KalsAsk " description="Ask a question about your archive. The answer comes only from your documents, with its sources; if the evidence is not there, it says so.">
+            <cocoa class="KalsAskCommand"/>
+            <direct-parameter type="text" description="The question."/>
+            <result type="text" description="The answer and its sources."/>
+        </command>
+
+        <command name="search" code="KalsSrch" description="Search your archive for the best-matching passages.">
+            <cocoa class="KalsSearchCommand"/>
+            <direct-parameter type="text" description="What to search for. Advanced syntax works when it is switched on."/>
+            <parameter name="limit" code="Lmit" type="integer" optional="yes" description="The most passages to return (1 to 100; 10 if not given).">
+                <cocoa key="limit"/>
+            </parameter>
+            <result description="Each passage as “file name: passage”.">
+                <type type="text" list="yes"/>
+            </result>
+        </command>
+
+        <command name="add files" code="KalsAddF" description="Add files to your archive. They are read on this Mac.">
+            <cocoa class="KalsAddFilesCommand"/>
+            <direct-parameter description="The files to add.">
+                <type type="file" list="yes"/>
+            </direct-parameter>
+            <result type="integer" description="How many files were given to the import."/>
+        </command>
+
+        <command name="open link" code="KalsOpnL" description="Open a kalsmritikosh:// link at its passage.">
+            <cocoa class="KalsOpenLinkCommand"/>
+            <direct-parameter type="text" description="The kalsmritikosh:// link."/>
+        </command>
+    </suite>
+</dictionary>

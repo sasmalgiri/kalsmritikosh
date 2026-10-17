@@ -1637,6 +1637,12 @@ public struct SettingsView: View {
                     Text("Also in DEVONthink — off until you turn them on").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Text("Kalsmritikosh works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
                         .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Button("Use on its own: turn all of these on") {
+                        ModulePreset.applyStandalone(); moduleFlagsVersion &+= 1
+                        if ProductModuleFlags.isEnabled(.spotlightIndex) { Task { await appState.syncSpotlight() } }
+                    }
+                    .controlSize(.small)
+                    .help("For using Kalsmritikosh without DEVONthink. Switches on every feature in this list; nothing else changes, and you can turn any of them off again.")
                     ForEach(overlap) { module in
                         let reason = ProductModuleFlags.disabledReason(module)
                         Toggle(isOn: Binding(

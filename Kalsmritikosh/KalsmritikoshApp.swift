@@ -51,6 +51,11 @@ struct KalsmritikoshApp: App {
                 .appLockOverlay()               // W2-7 — Touch ID / password lock
                 // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
                 .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
+                // P-3 — File ▸ Import from iPhone or iPad (Continuity Camera), with "Share and capture" on.
+                .importsItemProviders(ProductModuleFlags.isEnabled(.captureExtensions) ? DeviceImport.acceptedTypes : []) { providers in
+                    Task { await appState.importFromDevice(providers) }
+                    return true
+                }
                 // W3-7 — a Spotlight result was opened.
                 .onContinueUserActivity(CSSearchableItemActionType) { activity in
                     if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
@@ -105,6 +110,7 @@ struct KalsmritikoshApp: App {
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
+            ImportFromDevicesCommands()   // P-3 — Take Photo / Scan Documents from a nearby iPhone or iPad
             // D-10 — menu-bar mirrors of palette entries. Each item posts its
             // catalog entry id; RootView resolves it through the SAME target
             // router as ⌘K, so the menu can never drift from the palette.

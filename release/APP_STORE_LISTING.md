@@ -44,6 +44,10 @@ viewer added)._
 > • See exactly what's been processed, and what couldn't be, with honest per-source coverage.
 > • Works beside DEVONthink: import a DEVONthink database in place, send items back to it.
 > • Save to Kalsmritikosh from the Share and Services menus in Safari, Mail, Finder and more.
+> • Scan a document or take a photo with your iPhone or iPad straight into your archive (Continuity Camera).
+> • Write your own notes in Markdown — searchable, with every earlier version kept.
+> • Automate with Shortcuts and AppleScript.
+> • Use it beside DEVONthink, or on its own: one switch turns on tags, highlights, smart collections and the other organising tools.
 > • Take a signed, read-only snapshot to your iPhone or iPad with the companion viewer.
 >
 > **Rich answers use Apple's on-device intelligence** where your Mac supports it; everywhere else

@@ -27,6 +27,7 @@ public struct OnboardingView: View {
     /// change-focus sheet read, so there is one source of truth.
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
     @AppStorage("kalsmritikosh.fromDevonthink") private var fromDevonthink = false
+    @AppStorage("kalsmritikosh.standalone") private var standalone = false
 
     enum Step: Int { case welcome, persona, hardware, folder, scope, done }
 
@@ -218,6 +219,10 @@ public struct OnboardingView: View {
             Toggle("I\u{2019}m coming from DEVONthink (switch on the import and smart-collection tools)", isOn: Binding(
                 get: { fromDevonthink },
                 set: { on in fromDevonthink = on; if on { ModulePreset.apply(persona: "devonthink") } }))
+                .font(.callout)
+            Toggle("I\u{2019}ll use it on its own, without DEVONthink (switch on tags, highlights, smart collections, capture and the other organising tools)", isOn: Binding(
+                get: { standalone },
+                set: { on in standalone = on; if on { ModulePreset.applyStandalone() } }))
                 .font(.callout)
             Text("Choosing a focus switches on the tools it needs. You can change any of them in Settings \u{2192} Modules.")
                 .font(.caption).foregroundStyle(.secondary)
