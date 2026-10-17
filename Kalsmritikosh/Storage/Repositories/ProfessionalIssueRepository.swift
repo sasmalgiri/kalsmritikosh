@@ -59,21 +59,16 @@ public actor ProfessionalIssueRepository {
                                       createdAt: date, updatedAt: date, closedAt: nil)
         // Atomic: issue row + `created` ledger entry commit or roll back together.
         let savepoint = "issue_create_\(issue.id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             INSERT INTO professional_issues (id, workspace_id, title, detail, issue_type, status, priority, created_at, updated_at, closed_at)
             VALUES (?,?,?,?,?,?,?,?,?,NULL);
             """, [.uuid(issue.id), .uuid(workspaceID), .text(trimmed), .optionalText(detail),
                   .text(type.rawValue), .text(IssueStatus.open.rawValue), .text(priority.rawValue),
                   .date(date), .date(date)])
-            try await insertReview(issueID: issue.id, action: .created, prior: nil, new: .open,
+            try Self.insertReview(db, issueID: issue.id, action: .created, prior: nil, new: .open,
                                    reviewer: reviewer, reason: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
         return issue
     }
@@ -167,21 +162,18 @@ public actor ProfessionalIssueRepository {
 
         let savepoint = "issue_tr_\(issueID.uuidString.replacingOccurrences(of: "-", with: ""))"
         let closesNow = [.resolved, .dismissed, .superseded, .archived].contains(status)
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        let injectBeforeReview = injectFailure == .beforeReviewInsert
+        let priorStatus = issue.status
+        // F28 — one ISOLATED savepoint. A failed ledger write rolls the status change back — never a
+        // silent transition.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             UPDATE professional_issues SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?;
             """, [.text(status.rawValue), .date(date),
                   closesNow ? .date(date) : .null, .uuid(issueID)])
-            if injectFailure == .beforeReviewInsert { throw InjectedIssueFailure() }
-            try await insertReview(issueID: issueID, action: action, prior: issue.status,
-                                   new: status, reviewer: reviewer, reason: reason, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            // A failed ledger write must roll the status change back — never a silent transition.
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
+            if injectBeforeReview { throw InjectedIssueFailure() }
+            try Self.insertReview(db, issueID: issueID, action: action, prior: priorStatus,
+                                  new: status, reviewer: reviewer, reason: reason, at: date)
         }
         issue.status = status
         issue.updatedAt = date
@@ -277,9 +269,9 @@ public actor ProfessionalIssueRepository {
                                  createdAt: created, updatedAt: updated, closedAt: r.date(9))
     }
 
-    private func insertReview(issueID: UUID, action: IssueReviewAction, prior: IssueStatus?,
-                              new: IssueStatus?, reviewer: String, reason: String?, at date: Date) async throws {
-        try await database.exec("""
+    private static func insertReview(_ db: isolated Database, issueID: UUID, action: IssueReviewAction, prior: IssueStatus?,
+                              new: IssueStatus?, reviewer: String, reason: String?, at date: Date) throws {
+        try db.exec("""
         INSERT INTO professional_issue_reviews (id, issue_id, action, prior_status, new_status, reviewer, reason, reviewed_at)
         VALUES (?,?,?,?,?,?,?,?);
         """, [.uuid(UUID()), .uuid(issueID), .text(action.rawValue),

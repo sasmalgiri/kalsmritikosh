@@ -217,8 +217,12 @@ public nonisolated enum ThreadCoalescer {
                 .max(by: { $0.count < $1.count }) ?? ""
             threads.append(Thread(messages: msgs, canonicalSubject: canonical))
         }
+        // Ties on the earliest date break on the lowest message index: the buckets come from a
+        // dictionary, so without a total order two same-day threads swapped places run to run.
         return threads.sorted { (lhs, rhs) in
-            (lhs.earliestDate ?? .distantPast) < (rhs.earliestDate ?? .distantPast)
+            let l = lhs.earliestDate ?? .distantPast, r = rhs.earliestDate ?? .distantPast
+            if l != r { return l < r }
+            return (lhs.messages.map(\.index).min() ?? 0) < (rhs.messages.map(\.index).min() ?? 0)
         }
     }
 }

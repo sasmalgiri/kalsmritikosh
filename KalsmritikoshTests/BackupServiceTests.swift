@@ -9,6 +9,7 @@
 
 import Testing
 import Foundation
+import SQLite3
 @testable import Kalsmritikosh
 
 @Suite("G2 backup service (round-trip)")
@@ -24,7 +25,12 @@ struct BackupServiceTests {
         let src = try tempDir()
         let db = src.appendingPathComponent("knowledge.sqlite")
         let doc = src.appendingPathComponent("grant.eml")
-        try "DATABASE-BYTES".data(using: .utf8)!.write(to: db)
+        // F19 — restore integrity-checks the database, so the fixture is a REAL SQLite file.
+        var h: OpaquePointer?
+        #expect(sqlite3_open_v2(db.path, &h, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(h, "CREATE TABLE t(v TEXT); INSERT INTO t VALUES('DATABASE-BYTES');", nil, nil, nil) == SQLITE_OK)
+        sqlite3_close(h)
+        let dbBytes = try Data(contentsOf: db)
         try "From: office\nSubject: grant".data(using: .utf8)!.write(to: doc)
 
         let backup = try tempDir()
@@ -40,8 +46,7 @@ struct BackupServiceTests {
         // Restore into a clean folder; files come back byte-identical.
         let restored = try tempDir()
         _ = try svc.restore(backupFolder: backup, into: restored)
-        let backDB = try String(contentsOf: restored.appendingPathComponent("knowledge.sqlite"), encoding: .utf8)
-        #expect(backDB == "DATABASE-BYTES")
+        #expect(try Data(contentsOf: restored.appendingPathComponent("knowledge.sqlite")) == dbBytes)
         #expect(FileManager.default.fileExists(atPath: restored.appendingPathComponent("grant.eml").path))
     }
 

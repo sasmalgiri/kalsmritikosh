@@ -40,21 +40,16 @@ public actor InvestigationCaseRepository {
 
         let id = UUID()
         let sp = savepoint("invcase", id)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            try db.exec("""
                 INSERT INTO investigation_cases (id, workspace_id, title, purpose, scope_statement, out_of_scope_statement,
                     time_window_start, time_window_end, status, confirmed_deadline_id, possible_deadline_note, revision, actor, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
-                """, [.uuid(id), .uuid(workspaceID), .text(cleanTitle), opt(purpose), opt(scopeStatement), opt(outOfScopeStatement),
+                """, [.uuid(id), .uuid(workspaceID), .text(cleanTitle), Self.opt(purpose), Self.opt(scopeStatement), Self.opt(outOfScopeStatement),
                       optDate(timeWindowStart), optDate(timeWindowEnd), .text(InvestigationCaseStatus.open.rawValue), .null,
-                      opt(possibleDeadlineNote), .integer(1), .text(cleanActor), .date(date), .date(date)])
-            try await appendEvent(caseID: id, revision: 1, action: .created, actor: cleanActor, detail: cleanTitle, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+                      Self.opt(possibleDeadlineNote), .integer(1), .text(cleanActor), .date(date), .date(date)])
+            try Self.appendEvent(db, caseID: id, revision: 1, action: .created, actor: cleanActor, detail: cleanTitle, at: date)
         }
         return try await requireHeader(id)
     }
@@ -68,23 +63,18 @@ public actor InvestigationCaseRepository {
                             actor: String, at date: Date) async throws -> InvestigationCase {
         let cleanActor = try validatedActor(actor)
         let sp = savepoint("invscope", caseID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let header = try await requireMutableHeader(caseID, expectedRevision: expectedRevision)
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let header = try Self.requireMutableHeader(db, caseID, expectedRevision: expectedRevision)
             let newRevision = header.revision + 1
-            try await database.exec("""
+            try db.exec("""
                 UPDATE investigation_cases SET scope_statement = ?, out_of_scope_statement = ?, time_window_start = ?,
                     time_window_end = ?, possible_deadline_note = ?, revision = ?, actor = ?, updated_at = ?
                 WHERE id = ? AND revision = ?;
-                """, [opt(scopeStatement), opt(outOfScopeStatement), optDate(timeWindowStart), optDate(timeWindowEnd),
-                      opt(possibleDeadlineNote), .integer(Int64(newRevision)), .text(cleanActor), .date(date),
+                """, [Self.opt(scopeStatement), Self.opt(outOfScopeStatement), optDate(timeWindowStart), optDate(timeWindowEnd),
+                      Self.opt(possibleDeadlineNote), .integer(Int64(newRevision)), .text(cleanActor), .date(date),
                       .uuid(caseID), .integer(Int64(header.revision))])
-            try await appendEvent(caseID: caseID, revision: newRevision, action: .scopeSet, actor: cleanActor, detail: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+            try Self.appendEvent(db, caseID: caseID, revision: newRevision, action: .scopeSet, actor: cleanActor, detail: nil, at: date)
         }
         return try await requireHeader(caseID)
     }
@@ -110,27 +100,22 @@ public actor InvestigationCaseRepository {
         let cleanRef = sourceRef.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanRef.isEmpty else { throw InvestigationCaseError.blankSourceRef }
         let sp = savepoint("invsrc", caseID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let header = try await requireMutableHeader(caseID, expectedRevision: expectedRevision)
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let header = try Self.requireMutableHeader(db, caseID, expectedRevision: expectedRevision)
             let newRevision = header.revision + 1
             // One disposition per (case, source): replace any prior binding for this reference.
-            try await database.exec("DELETE FROM investigation_case_sources WHERE case_id = ? AND source_ref = ?;",
+            try db.exec("DELETE FROM investigation_case_sources WHERE case_id = ? AND source_ref = ?;",
                                     [.uuid(caseID), .text(cleanRef)])
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO investigation_case_sources (id, case_id, source_ref, source_kind, in_scope, note, created_at)
                 VALUES (?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(caseID), .text(cleanRef), .text(sourceKind.rawValue),
-                      .integer(inScope ? 1 : 0), opt(note), .date(date)])
-            try await database.exec("UPDATE investigation_cases SET revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                      .integer(inScope ? 1 : 0), Self.opt(note), .date(date)])
+            try db.exec("UPDATE investigation_cases SET revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
                                     [.integer(Int64(newRevision)), .text(cleanActor), .date(date), .uuid(caseID), .integer(Int64(header.revision))])
-            try await appendEvent(caseID: caseID, revision: newRevision,
+            try Self.appendEvent(db, caseID: caseID, revision: newRevision,
                                   action: inScope ? .sourceIncluded : .sourceExcluded, actor: cleanActor, detail: cleanRef, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await requireHeader(caseID)
     }
@@ -152,19 +137,14 @@ public actor InvestigationCaseRepository {
                            action: InvestigationCaseEventAction, actor: String, at date: Date) async throws -> InvestigationCase {
         let cleanActor = try validatedActor(actor)
         let sp = savepoint("invstat", caseID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let header = try await requireMutableHeader(caseID, expectedRevision: expectedRevision)
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let header = try Self.requireMutableHeader(db, caseID, expectedRevision: expectedRevision)
             let newRevision = header.revision + 1
-            try await database.exec("UPDATE investigation_cases SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+            try db.exec("UPDATE investigation_cases SET status = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
                                     [.text(status.rawValue), .integer(Int64(newRevision)), .text(cleanActor), .date(date),
                                      .uuid(caseID), .integer(Int64(header.revision))])
-            try await appendEvent(caseID: caseID, revision: newRevision, action: action, actor: cleanActor, detail: status.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+            try Self.appendEvent(db, caseID: caseID, revision: newRevision, action: action, actor: cleanActor, detail: status.rawValue, at: date)
         }
         return try await requireHeader(caseID)
     }
@@ -177,22 +157,17 @@ public actor InvestigationCaseRepository {
                                       actor: String, at date: Date) async throws -> InvestigationCase {
         let cleanActor = try validatedActor(actor)
         let sp = savepoint("invddl", caseID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let header = try await requireMutableHeader(caseID, expectedRevision: expectedRevision)
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(sp) { db in
+            let header = try Self.requireMutableHeader(db, caseID, expectedRevision: expectedRevision)
             // Reference check against the canonical confirmed deadlines table — read-only, no fork.
-            let confirmed = try await database.query("SELECT 1 FROM deadlines WHERE id = ? LIMIT 1;", [.uuid(deadlineID)]).first != nil
+            let confirmed = try db.query("SELECT 1 FROM deadlines WHERE id = ? LIMIT 1;", [.uuid(deadlineID)]).first != nil
             guard confirmed else { throw InvestigationCaseError.deadlineNotConfirmed(deadlineID) }
             let newRevision = header.revision + 1
-            try await database.exec("UPDATE investigation_cases SET confirmed_deadline_id = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+            try db.exec("UPDATE investigation_cases SET confirmed_deadline_id = ?, revision = ?, actor = ?, updated_at = ? WHERE id = ? AND revision = ?;",
                                     [.uuid(deadlineID), .integer(Int64(newRevision)), .text(cleanActor), .date(date),
                                      .uuid(caseID), .integer(Int64(header.revision))])
-            try await appendEvent(caseID: caseID, revision: newRevision, action: .deadlineBound, actor: cleanActor, detail: deadlineID.uuidString, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+            try Self.appendEvent(db, caseID: caseID, revision: newRevision, action: .deadlineBound, actor: cleanActor, detail: deadlineID.uuidString, at: date)
         }
         return try await requireHeader(caseID)
     }
@@ -215,21 +190,21 @@ public actor InvestigationCaseRepository {
     /// All cases in a workspace, oldest first.
     public func listCases(workspaceID: UUID) async throws -> [InvestigationCase] {
         let rows = try await database.query(
-            "\(headerSelect) WHERE workspace_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(workspaceID)])
-        return rows.compactMap { decodeHeader($0) }
+            "\(Self.headerSelect) WHERE workspace_id = ? ORDER BY created_at ASC, id ASC;", [.uuid(workspaceID)])
+        return rows.compactMap { Self.decodeHeader($0) }
     }
 
     // MARK: - Internals
 
-    private let headerSelect = """
+    private static let headerSelect = """
         SELECT id, workspace_id, title, purpose, scope_statement, out_of_scope_statement, time_window_start,
                time_window_end, status, confirmed_deadline_id, possible_deadline_note, revision, actor, created_at, updated_at
         FROM investigation_cases
         """
 
     private func loadHeader(_ caseID: UUID) async throws -> InvestigationCase? {
-        let rows = try await database.query("\(headerSelect) WHERE id = ? LIMIT 1;", [.uuid(caseID)])
-        return rows.first.flatMap { decodeHeader($0) }
+        let rows = try await database.query("\(Self.headerSelect) WHERE id = ? LIMIT 1;", [.uuid(caseID)])
+        return rows.first.flatMap { Self.decodeHeader($0) }
     }
 
     private func requireHeader(_ caseID: UUID) async throws -> InvestigationCase {
@@ -238,8 +213,12 @@ public actor InvestigationCaseRepository {
     }
 
     /// A mutation precondition: the case exists, is not closed, and matches the expected revision.
-    private func requireMutableHeader(_ caseID: UUID, expectedRevision: Int) async throws -> InvestigationCase {
-        let header = try await requireHeader(caseID)
+    /// A mutation precondition, checked INSIDE the write's savepoint (F28): the case exists, is not
+    /// closed, and matches the expected revision — nothing can change it between check and write.
+    private static func requireMutableHeader(_ db: isolated Database, _ caseID: UUID, expectedRevision: Int) throws -> InvestigationCase {
+        guard let header = try db.query("\(headerSelect) WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first.flatMap({ decodeHeader($0) }) else {
+            throw InvestigationCaseError.caseNotFound(caseID)
+        }
         guard header.status != .closed else { throw InvestigationCaseError.caseClosed(caseID) }
         guard header.revision == expectedRevision else {
             throw InvestigationCaseError.revisionConflict(expected: expectedRevision, actual: header.revision)
@@ -275,18 +254,18 @@ public actor InvestigationCaseRepository {
         }
     }
 
-    private func appendEvent(caseID: UUID, revision: Int, action: InvestigationCaseEventAction,
-                             actor: String, detail: String?, at date: Date) async throws {
-        let maxSeq = try await database.query(
+    private static func appendEvent(_ db: isolated Database, caseID: UUID, revision: Int, action: InvestigationCaseEventAction,
+                             actor: String, detail: String?, at date: Date) throws {
+        let maxSeq = try db.query(
             "SELECT COALESCE(MAX(sequence), 0) FROM investigation_case_events WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0
-        try await database.exec("""
+        try db.exec("""
             INSERT INTO investigation_case_events (id, case_id, sequence, case_revision, action, actor, detail, occurred_at)
             VALUES (?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(caseID), .integer(maxSeq + 1), .integer(Int64(revision)),
-                  .text(action.rawValue), .text(actor), opt(detail), .date(date)])
+                  .text(action.rawValue), .text(actor), Self.opt(detail), .date(date)])
     }
 
-    private nonisolated func decodeHeader(_ r: SQLRow) -> InvestigationCase? {
+    private nonisolated static func decodeHeader(_ r: SQLRow) -> InvestigationCase? {
         guard let id = r.uuid(0), let ws = r.uuid(1), let title = r.string(2),
               let status = r.string(8).flatMap(InvestigationCaseStatus.init(rawValue:)),
               let revision = r.int(11), let actor = r.string(12),
@@ -303,7 +282,7 @@ public actor InvestigationCaseRepository {
         return clean
     }
 
-    private nonisolated func opt(_ s: String?) -> SQLValue {
+    private nonisolated static func opt(_ s: String?) -> SQLValue {
         guard let s, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .null }
         return .text(s)
     }

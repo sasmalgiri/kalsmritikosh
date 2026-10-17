@@ -21,6 +21,7 @@ public struct DossierView: View {
     @State private var streaming = false
     @State private var phase: String = ""
     @State private var resolvedName: String?
+    @State private var dossierChanges: DossierChanges?   // I-12
     @State private var candidates: [SubjectCandidate] = []
     @State private var narrative: HistoryNarrative?
     @State private var coverage: HistoryCoverage?
@@ -50,7 +51,17 @@ public struct DossierView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let name = resolvedName {
-                Text("— \(name)").font(.headline).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("— \(name)").font(.headline).foregroundStyle(.secondary)
+                    // I-12 — what arrived about this subject since the dossier was last opened.
+                    if let changes = dossierChanges {
+                        Text(changes.summary).font(.caption).foregroundStyle(changes.newDocuments.isEmpty ? Color.secondary : Color.orange)
+                        if !changes.newDocuments.isEmpty {
+                            Text(changes.newDocuments.prefix(5).joined(separator: ", "))
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }
+                }
             }
             Spacer()
             if streaming {
@@ -120,14 +131,31 @@ public struct DossierView: View {
     }
 
     private func coverageRibbon(_ c: HistoryCoverage) -> some View {
-        HStack(spacing: 14) {
-            Label("\(c.datedItems) dated", systemImage: "calendar")
-            Label("\(c.undatedItems) undated", systemImage: "calendar.badge.exclamationmark")
-            Label("\(c.evidenceObjectCount) source(s)", systemImage: "doc.text.magnifyingglass")
-            Label("\(c.eventCount) event · \(c.assertionCount) assertion · \(c.genericFactCount) fact",
-                  systemImage: "square.stack.3d.up")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 14) {
+                Label("\(c.datedItems) dated", systemImage: "calendar")
+                Label("\(c.undatedItems) undated", systemImage: "calendar.badge.exclamationmark")
+                Label("\(c.evidenceObjectCount) source(s)", systemImage: "doc.text.magnifyingglass")
+                Label("\(c.eventCount) event · \(c.assertionCount) assertion · \(c.genericFactCount) fact",
+                      systemImage: "square.stack.3d.up")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            // F09 — a story built from capped material says so, with the exact counts left out.
+            if let note = Self.incompleteNote(c) {
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
         }
-        .font(.caption).foregroundStyle(.secondary)
+    }
+
+    /// Plain-language note naming what the story did NOT include, or nil when it saw everything.
+    static func incompleteNote(_ c: HistoryCoverage) -> String? {
+        guard !c.isComplete else { return nil }
+        var parts: [String] = []
+        if c.deferredEventCount > 0 { parts.append("\(c.deferredEventCount) event(s)") }
+        if c.deferredAssertionCount > 0 { parts.append("\(c.deferredAssertionCount) statement(s)") }
+        if c.deferredRelationshipCount > 0 { parts.append("\(c.deferredRelationshipCount) connection(s)") }
+        return "Not everything is in this story: \(parts.joined(separator: ", ")) about this subject were too many to include."
     }
 
     private func chapterCard(_ chapter: RenderedChapter) -> some View {
@@ -160,9 +188,7 @@ public struct DossierView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { Task { await start() } }
                 .disabled(streaming)
-            Button { Task { await start() } } label: {
-                Image(systemName: "doc.text.magnifyingglass").font(.title2)
-            }
+            Button { Task { await start() } } label: { Label("Find in document", systemImage: "doc.text.magnifyingglass").labelStyle(.iconOnly).font(.title2) }
             .buttonStyle(.plain)
             .disabled(streaming || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .guidance(GuidanceTip("Build dossier",
@@ -196,6 +222,7 @@ public struct DossierView: View {
         guard !streaming else { return }
         reset()
         resolvedName = name
+        dossierChanges = await appState.dossierChanges(for: name)
         streaming = true
         defer { streaming = false }
         for await update in appState.reconstructHistory(subject: subject) {

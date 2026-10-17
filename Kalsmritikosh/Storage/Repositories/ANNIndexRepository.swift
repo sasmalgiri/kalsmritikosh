@@ -218,6 +218,32 @@ public actor ANNIndexRepository {
         }
     }
 
+    /// F11 — ONE bounded page of the postings in `cellIDs`, keyset on the table's clustered key
+    /// (cell_id, chunk_id) strictly after `after`. The probe walks a cell batch page by page, so no
+    /// single fetch holds more than `limit` rows even when one cell is pathologically dense.
+    public func postingsPage(inCells cellIDs: [Int], for modelID: String,
+                             after: (cell: Int, chunk: String)?, limit: Int) async throws -> [ANNPosting] {
+        guard !cellIDs.isEmpty, limit > 0 else { return [] }
+        let placeholders = Array(repeating: "?", count: cellIDs.count).joined(separator: ",")
+        var bindings: [SQLValue] = [.text(modelID)] + cellIDs.map { .integer(Int64($0)) }
+        var cursor = ""
+        if let after {
+            cursor = " AND (cell_id > ? OR (cell_id = ? AND chunk_id > ?))"
+            bindings += [.integer(Int64(after.cell)), .integer(Int64(after.cell)), .text(after.chunk)]
+        }
+        bindings.append(.integer(Int64(limit)))
+        let rows = try await database.query("""
+        SELECT cell_id, chunk_id, q, scale FROM ann_postings
+        WHERE model_id = ? AND cell_id IN (\(placeholders))\(cursor)
+        ORDER BY cell_id ASC, chunk_id ASC LIMIT ?;
+        """, bindings)
+        return rows.compactMap { r in
+            guard let cell = r.int(0), let chunk = r.uuid(1),
+                  let q = r.blob(2), let scale = r.double(3) else { return nil }
+            return ANNPosting(cellID: Int(cell), chunkID: chunk, q: q, scale: scale)
+        }
+    }
+
     public func postingCount(for modelID: String) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM ann_postings WHERE model_id = ?;", [.text(modelID)])
@@ -271,17 +297,46 @@ public actor ANNIndexRepository {
     /// Embeddings that have NO posting yet — the reconcile input that closes
     /// the build-vs-concurrent-insert race and doubles as the DataHealthCheck
     /// parity repair. Bounded so a repair pass stays incremental.
-    public func embeddingsMissingPostings(for modelID: String, limit: Int) async throws -> [EmbeddingRow] {
+    public func embeddingsMissingPostings(for modelID: String, indexKey: String? = nil, limit: Int) async throws -> [EmbeddingRow] {
+        // `indexKey` — F11: the posting namespace to check (a staged generation), default the model's own.
         let rows = try await database.query("""
         SELECT e.rowid, e.chunk_id, e.q, e.scale FROM chunk_embeddings e
-        LEFT JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = e.model_id
+        LEFT JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = ?
         WHERE e.model_id = ? AND p.chunk_id IS NULL
         ORDER BY e.rowid LIMIT ?;
-        """, [.text(modelID), .integer(Int64(limit))])
+        """, [.text(indexKey ?? modelID), .text(modelID), .integer(Int64(limit))])
         return rows.compactMap { r in
             guard let rowid = r.int(0), let chunk = r.uuid(1),
                   let q = r.blob(2), let scale = r.double(3) else { return nil }
             return EmbeddingRow(rowid: rowid, chunkID: chunk, q: q, scale: scale)
+        }
+    }
+
+    // MARK: - F11 generation switch
+
+    /// Drop every cell and posting stored under `key` (a staged generation being rebuilt from scratch).
+    public func clearIndex(key: String) async throws {
+        try await database.exec("DELETE FROM ann_postings WHERE model_id = ?;", [.text(key)])
+        try await database.exec("DELETE FROM ann_cells WHERE model_id = ?;", [.text(key)])
+    }
+
+    /// F11 — atomically make the generation staged under `staging` the live index of `modelID`: the old
+    /// cells and postings go, the staged ones take the model's key, the training record moves across,
+    /// the state becomes ready and the staging meta row is removed — all in ONE savepoint, so a reader
+    /// sees the whole old generation or the whole new one, never a mix.
+    public func promote(staging: String, to modelID: String, cellCount: Int, trainedVectorCount: Int,
+                        seed: UInt64, at now: Date) async throws {
+        try await database.withSavepoint("ann_promote") { db in
+            try db.exec("DELETE FROM ann_postings WHERE model_id = ?;", [.text(modelID)])
+            try db.exec("DELETE FROM ann_cells WHERE model_id = ?;", [.text(modelID)])
+            try db.exec("UPDATE ann_cells SET model_id = ? WHERE model_id = ?;", [.text(modelID), .text(staging)])
+            try db.exec("UPDATE ann_postings SET model_id = ? WHERE model_id = ?;", [.text(modelID), .text(staging)])
+            try db.exec("""
+                UPDATE ann_index_meta SET state = 'ready', cell_count = ?, trained_vector_count = ?, train_seed = ?, updated_at = ?
+                 WHERE model_id = ?;
+                """, [.integer(Int64(cellCount)), .integer(Int64(trainedVectorCount)),
+                      .integer(Int64(bitPattern: seed)), .date(now), .text(modelID)])
+            try db.exec("DELETE FROM ann_index_meta WHERE model_id = ?;", [.text(staging)])
         }
     }
 }

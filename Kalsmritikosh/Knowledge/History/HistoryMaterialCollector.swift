@@ -19,18 +19,23 @@ public struct HistoryMaterialCollector: Sendable {
     private let genericFacts: GenericFactRepository
     private let relationships: RelationshipsRepository
 
+    /// F09 — per-kind TOTAL budgets (a guard against pathological subjects), NOT a page size: the
+    /// collector pages through everything up to the budget, and any remainder is COUNTED into
+    /// provenance as deferred — never silently truncated at a fixed first page.
     private let eventLimit: Int
     private let assertionLimit: Int
     private let relationshipLimit: Int
+    private let pageSize: Int
 
     public init(
         events: EventsRepository,
         assertions: AssertionsRepository,
         genericFacts: GenericFactRepository,
         relationships: RelationshipsRepository,
-        eventLimit: Int = 5_000,
-        assertionLimit: Int = 5_000,
-        relationshipLimit: Int = 500
+        eventLimit: Int = 100_000,
+        assertionLimit: Int = 100_000,
+        relationshipLimit: Int = 20_000,
+        pageSize: Int = 1_000
     ) {
         self.events = events
         self.assertions = assertions
@@ -39,6 +44,20 @@ public struct HistoryMaterialCollector: Sendable {
         self.eventLimit = eventLimit
         self.assertionLimit = assertionLimit
         self.relationshipLimit = relationshipLimit
+        self.pageSize = max(1, pageSize)
+    }
+
+    /// Page `fetch(offset, size)` until a short page or `budget` rows; returns rows + whether the
+    /// budget stopped it (so the caller counts the remainder).
+    private func pageAll<T>(budget: Int, _ fetch: (Int, Int) async throws -> [T]) async throws -> (rows: [T], capped: Bool) {
+        var out: [T] = []
+        while out.count < budget {
+            let size = min(pageSize, budget - out.count)
+            let page = try await fetch(out.count, size)
+            out.append(contentsOf: page)
+            if page.count < size { return (out, false) }
+        }
+        return (out, true)
     }
 
     public func collect(for subject: ResolvedHistorySubject) async throws -> HistoryMaterial {
@@ -52,10 +71,16 @@ public struct HistoryMaterialCollector: Sendable {
                     genericFactCount: 0, relationshipCount: 0, unscopedSubject: true))
         }
 
-        let evs = try await events.allForEntity(id, pageSize: eventLimit)
-        let asserts = try await assertions.assertions(subjectKind: .entity, subjectID: id, limit: assertionLimit)
+        let evPaged = try await pageAll(budget: eventLimit) { try await events.allForEntity(id, offset: $0, pageSize: $1) }
+        let asPaged = try await pageAll(budget: assertionLimit) {
+            try await assertions.assertions(subjectKind: .entity, subjectID: id, offset: $0, pageSize: $1)
+        }
+        let relPaged = try await pageAll(budget: relationshipLimit) { try await relationships.neighbors(of: id, offset: $0, pageSize: $1) }
+        let evs = evPaged.rows, asserts = asPaged.rows, rels = relPaged.rows
         let facts = try await genericFacts.facts(subjectID: id)
-        let rels = try await relationships.neighbors(of: id, limit: relationshipLimit)
+        let deferredEvents = evPaged.capped ? max(0, try await events.countForEntity(id) - evs.count) : 0
+        let deferredAssertions = asPaged.capped ? max(0, try await assertions.count(subjectKind: .entity, subjectID: id) - asserts.count) : 0
+        let deferredRelationships = relPaged.capped ? max(0, try await relationships.neighborCount(of: id) - rels.count) : 0
 
         // Union the evidence footprint across every material type, deterministic order.
         var seen = Set<KnowledgeObject.ID>()
@@ -86,6 +111,8 @@ public struct HistoryMaterialCollector: Sendable {
             firstDegreeEntityIDs: neighbours,
             provenance: MaterialProvenance(
                 canonicalEntityID: id, eventCount: evs.count, assertionCount: asserts.count,
-                genericFactCount: facts.count, relationshipCount: rels.count, unscopedSubject: false))
+                genericFactCount: facts.count, relationshipCount: rels.count, unscopedSubject: false,
+                deferredEventCount: deferredEvents, deferredAssertionCount: deferredAssertions,
+                deferredRelationshipCount: deferredRelationships))
     }
 }

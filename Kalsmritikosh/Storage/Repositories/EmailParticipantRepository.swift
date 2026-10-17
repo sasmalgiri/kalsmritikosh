@@ -29,31 +29,33 @@ public actor EmailParticipantRepository {
     public func insertBatch(_ occurrences: [EmailParticipantOccurrence]) async throws -> Int {
         guard !occurrences.isEmpty else { return 0 }
         let sp = "epo_insert_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
-        var written = 0
+        let rows: [[SQLValue]] = occurrences.map { occ in [
+            .text(occ.id.uuidString),
+            .text(occ.sourceObjectID.uuidString),
+            .text(occ.entityID.uuidString),
+            .text(occ.role.rawValue),
+            .text(occ.rawAddress),
+            occ.displayName.map { .text($0) } ?? .null,
+            .real(occ.createdAt.timeIntervalSince1970)
+        ] }
+        // F28 — one isolated savepoint: all rows or none, and `changes()` counts OUR insert only
+        // (across awaits it could report another caller's statement).
+        let written: Int
         do {
-            try await database.exec("SAVEPOINT \(sp);")
-            for occ in occurrences {
-                try await database.exec("""
-                INSERT OR IGNORE INTO email_participant_occurrences
-                    (id, source_ko_id, entity_id, role, raw_address, display_name, created_at)
-                VALUES (?,?,?,?,?,?,?);
-                """, [
-                    .text(occ.id.uuidString),
-                    .text(occ.sourceObjectID.uuidString),
-                    .text(occ.entityID.uuidString),
-                    .text(occ.role.rawValue),
-                    .text(occ.rawAddress),
-                    occ.displayName.map { .text($0) } ?? .null,
-                    .real(occ.createdAt.timeIntervalSince1970)
-                ])
-                let changed = try await database.query("SELECT changes();", [])
-                written += Int(changed.first?.int(0) ?? 0)
+            written = try await database.withSavepoint(sp) { db -> Int in
+                var n = 0
+                for binds in rows {
+                    try db.exec("""
+                    INSERT OR IGNORE INTO email_participant_occurrences
+                        (id, source_ko_id, entity_id, role, raw_address, display_name, created_at)
+                    VALUES (?,?,?,?,?,?,?);
+                    """, binds)
+                    n += Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+                }
+                return n
             }
-            try await database.exec("RELEASE \(sp);")
             KalsmritikoshLog.storage.debug("EmailParticipantRepository: inserted \(written, privacy: .public) occurrences")
         } catch {
-            try? await database.exec("ROLLBACK TO \(sp);")
-            try? await database.exec("RELEASE \(sp);")
             KalsmritikoshLog.storage.error("EmailParticipantRepository insertBatch failed: \(String(describing: error), privacy: .public)")
             throw error
         }

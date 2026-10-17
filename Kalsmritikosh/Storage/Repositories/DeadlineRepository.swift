@@ -70,9 +70,9 @@ public actor DeadlineRepository {
                                   ruleID: ruleID, ruleVersion: ruleVersion, status: .pending,
                                   createdAt: date, reviewedAt: nil)
         let savepoint = "dc_create_\(c.id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             INSERT INTO deadline_candidates (id, task_id, due_date, precision, time_zone, deadline_kind,
                                              origin, confidence, proposed_by, rule_id, rule_version,
                                              status, created_at, reviewed_at)
@@ -82,13 +82,8 @@ public actor DeadlineRepository {
                   confidence.map { SQLValue.real($0) } ?? .null, .text(proposedBy),
                   .optionalText(ruleID), .optionalText(ruleVersion),
                   .text(DeadlineCandidateStatus.pending.rawValue), .date(date)])
-            try await insertCandidateReview(candidateID: c.id, action: .created,
+            try Self.insertCandidateReview(db, candidateID: c.id, action: .created,
                                             reviewer: proposedBy, reason: nil, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
         return c
     }
@@ -119,19 +114,14 @@ public actor DeadlineRepository {
             throw DeadlineError.invalidCandidatePrecision(newValue.precision)
         }
         let savepoint = "dc_corr_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             UPDATE deadline_candidates SET due_date = ?, precision = ?, time_zone = ?, reviewed_at = ? WHERE id = ?;
             """, [.date(newValue.date), .integer(Int64(newValue.precision.rawValue)),
                   .text(newValue.timeZoneIdentifier), .date(date), .uuid(id)])
-            try await insertCandidateReview(candidateID: id, action: .corrected,
+            try Self.insertCandidateReview(db, candidateID: id, action: .corrected,
                                             reviewer: reviewer, reason: reason, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
         return try await candidate(id: id) ?? c
     }
@@ -376,17 +366,12 @@ public actor DeadlineRepository {
         }
         guard legal else { throw DeadlineError.invalidCandidateStatusChange(from: c.status, to: status) }
         let savepoint = "dc_st_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("UPDATE deadline_candidates SET status = ?, reviewed_at = ? WHERE id = ?;",
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("UPDATE deadline_candidates SET status = ?, reviewed_at = ? WHERE id = ?;",
                                     [.text(status.rawValue), .date(date), .uuid(id)])
-            try await insertCandidateReview(candidateID: id, action: action,
+            try Self.insertCandidateReview(db, candidateID: id, action: action,
                                             reviewer: reviewer, reason: reason, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
     }
 
@@ -404,22 +389,18 @@ public actor DeadlineRepository {
         }
         guard legal else { throw DeadlineError.invalidStatusChange(from: d.status, to: status) }
         let savepoint = "dl_st_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        let injectBeforeReview = injectFailure == .beforeDeadlineReview
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             UPDATE deadlines SET status = ?, updated_at = ?, satisfied_at = ?, archived_at = ? WHERE id = ?;
             """, [.text(status.rawValue), .date(date),
                   status == .satisfied ? .date(date) : (d.satisfiedAt.map { SQLValue.date($0) } ?? .null),
                   status == .archived ? .date(date) : (d.archivedAt.map { SQLValue.date($0) } ?? .null),
                   .uuid(id)])
-            if injectFailure == .beforeDeadlineReview { throw InjectedDeadlineFailure() }
-            try await insertDeadlineReview(deadlineID: id, action: action,
+            if injectBeforeReview { throw InjectedDeadlineFailure() }
+            try Self.insertDeadlineReview(db, deadlineID: id, action: action,
                                            reviewer: reviewer, reason: reason, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
     }
 

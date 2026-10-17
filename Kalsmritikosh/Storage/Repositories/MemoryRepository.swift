@@ -111,15 +111,23 @@ public actor MemoryRepository {
     @discardableResult
     public func retireSubjects(identifiers: [String]) async throws -> Int {
         guard !identifiers.isEmpty else { return 0 }
+        return try await database.withSavepoint("mem_retire_subjects") { db in
+            try Self.retireSubjects(db, identifiers: identifiers)
+        }
+    }
+
+    /// The synchronous core, composable into the caller's savepoint (F28).
+    static func retireSubjects(_ db: isolated Database, identifiers: [String]) throws -> Int {
+        guard !identifiers.isEmpty else { return 0 }
         let lowered = Set(identifiers.map { $0.lowercased() })
         let placeholders = Array(repeating: "?", count: lowered.count).joined(separator: ",")
         let binds = lowered.map { SQLValue.text($0) }
-        let matching = try await database.query("""
+        let matching = try db.query("""
         SELECT COUNT(*) FROM memory_objects
         WHERE lower(subject_identifier) IN (\(placeholders)) AND status != 'retired';
         """, binds).first?.int(0) ?? 0
         guard matching > 0 else { return 0 }
-        try await database.exec("""
+        try db.exec("""
         UPDATE memory_objects SET status = 'retired'
         WHERE lower(subject_identifier) IN (\(placeholders)) AND status != 'retired';
         """, binds)

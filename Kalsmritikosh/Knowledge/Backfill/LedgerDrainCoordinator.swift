@@ -354,33 +354,31 @@ public final class LedgerDrainCoordinator {
         """
 
     private func sweepOrphanClaims(into receipt: inout DrainReceipt) async throws {
-        try await database.exec("SAVEPOINT drain_claims;", [])
-        do {
-            try await database.exec("""
+        let resetProjection = receipt.eventKOsRewritten > 0 || receipt.factsSourcesRewritten > 0
+        // F28 — one isolated savepoint; each `changes()` counts OUR statement only.
+        let (removed, marked) = try await database.withSavepoint("drain_claims") { db -> (Int, Int) in
+            try db.exec("""
             DELETE FROM claims AS c WHERE \(Self.orphanClaimPredicate)
               AND NOT EXISTS (SELECT 1 FROM claim_reviews r WHERE r.claim_id = c.id)
               AND NOT EXISTS (SELECT 1 FROM claim_usage u WHERE u.claim_id = c.id);
             """, [])
-            receipt.orphanClaimsRemoved = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
-            try await database.exec("""
+            let removed = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+            try db.exec("""
             UPDATE claims AS c SET availability_status = 'missingEvidence'
             WHERE \(Self.orphanClaimPredicate) AND availability_status != 'missingEvidence';
             """, [])
-            receipt.orphanClaimsMarked = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
+            let marked = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
             // Removed claims' child rows (evidence refs / lineage) go with them.
-            try await database.exec("DELETE FROM claim_evidence_ref WHERE claim_id NOT IN (SELECT id FROM claims);", [])
-            try await database.exec("DELETE FROM claim_lineage WHERE claim_id NOT IN (SELECT id FROM claims);", [])
+            try db.exec("DELETE FROM claim_evidence_ref WHERE claim_id NOT IN (SELECT id FROM claims);", [])
+            try db.exec("DELETE FROM claim_lineage WHERE claim_id NOT IN (SELECT id FROM claims);", [])
             // Sources were rewritten → the projection must see them again.
-            if receipt.eventKOsRewritten > 0 || receipt.factsSourcesRewritten > 0 {
-                try await database.exec(
-                    "DELETE FROM claim_projection_progress WHERE source_kind IN ('event', 'genericFact');", [])
+            if resetProjection {
+                try db.exec("DELETE FROM claim_projection_progress WHERE source_kind IN ('event', 'genericFact');", [])
             }
-            try await database.exec("RELEASE drain_claims;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO drain_claims;", [])
-            try? await database.exec("RELEASE drain_claims;", [])
-            throw error
+            return (removed, marked)
         }
+        receipt.orphanClaimsRemoved = removed
+        receipt.orphanClaimsMarked = marked
     }
 
     // ── pass 2: facts → v2 for one KO ───────────────────────────────────────
@@ -517,17 +515,14 @@ public final class LedgerDrainCoordinator {
         var cache: [String: UUID] = [:]
         merged = try await withBoundAnchors(merged, koID: ko.id, cache: &cache)
 
-        try await database.exec("SAVEPOINT drain_facts;", [])
-        do {
-            if !stale.isEmpty { try await facts.delete(ids: stale.map(\.id)) }
+        let staleIDs = stale.map(\.id)
+        let finalMerged = merged
+        // F28 — delete the stale derivation and merge the fresh one in ONE isolated savepoint.
+        try await database.withSavepoint("drain_facts") { db in
+            if !staleIDs.isEmpty { try GenericFactRepository.delete(db, ids: staleIDs) }
             // Topic-Ledger U2 — merge by natural key so a re-derived fact shared
             // across documents lands on ONE canonical row, not a duplicate.
-            if !merged.isEmpty { try await facts.mergeUpsert(merged) }
-            try await database.exec("RELEASE drain_facts;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO drain_facts;", [])
-            try? await database.exec("RELEASE drain_facts;", [])
-            throw error
+            for fact in finalMerged { try GenericFactRepository.mergeUpsert(db, fact) }
         }
         receipt.factsSourcesRewritten += 1
         receipt.factsDeleted += stale.count
@@ -570,18 +565,15 @@ public final class LedgerDrainCoordinator {
         let fresh = EventDeduper.collapse((try? await RuleEventExtractor().extractEvents(
             from: ko, chunks: [], entities: koEntities, blocks: [])) ?? [])
 
-        try await database.exec("SAVEPOINT drain_events;", [])
-        do {
-            try await database.exec("""
+        let inserts = try EventsRepository.insertStatements(for: fresh)
+        let koID = ko.id
+        // F28 — replace this object's stale events in ONE isolated savepoint.
+        try await database.withSavepoint("drain_events") { db in
+            try db.exec("""
             DELETE FROM events
             WHERE source_object_id = ? AND COALESCE(producer_version, 0) != \(DerivedProducerVersions.events);
-            """, [.uuid(ko.id)])
-            if !fresh.isEmpty { try await events.insertBatch(fresh) }
-            try await database.exec("RELEASE drain_events;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO drain_events;", [])
-            try? await database.exec("RELEASE drain_events;", [])
-            throw error
+            """, [.uuid(koID)])
+            for st in inserts { try db.exec(st.sql, st.binds) }
         }
         receipt.eventKOsRewritten += 1
         receipt.eventsDeleted += staleCount

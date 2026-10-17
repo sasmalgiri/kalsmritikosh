@@ -40,6 +40,8 @@ public struct ChunkReindexReceipt: Sendable {
     public var oversizedFound = 0
     public var oversizedSplit = 0
     public var childrenWritten = 0
+    /// F25 — splits whose parent was not proven against its evidence: the pieces carry no digest.
+    public var splitUnproven = 0
     public var embeddingsDropped = 0
     public var salienceBackfilled = 0
     public var prefixesStamped = 0
@@ -177,28 +179,26 @@ public struct ChunkReindexCoordinator {
                 return out
             }
 
-            try await database.exec("SAVEPOINT reindex_pack;", [])
-            do {
-                let dropped = Int((try await database.query("""
+            let inserts = ChunksRepository.insertStatements(finished, lineage: packed.blockIDs, blocks: blocks)   // F15 — digests
+            let packedVersion = Int64(Self.packedChunkVersion)
+            // F28 — drop + repack + stamp for this object in ONE isolated savepoint.
+            let dropped = try await database.withSavepoint("reindex_pack") { db -> Int in
+                let dropped = Int((try db.query("""
                 SELECT COUNT(*) FROM chunk_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE object_id = ?);
                 """, [.uuid(objectID)])).first?.int(0) ?? 0)
-                try await database.exec("""
+                try db.exec("""
                 DELETE FROM chunk_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE object_id = ?);
                 """, [.uuid(objectID)])
-                try await database.exec("DELETE FROM chunks WHERE object_id = ?;", [.uuid(objectID)])
-                try await repo.insertBatch(finished, lineage: packed.blockIDs)
-                try await database.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
-                                        [.integer(Int64(Self.packedChunkVersion)), .uuid(objectID)])
-                try await database.exec("RELEASE reindex_pack;", [])
-                receipt.packedObjects += 1
-                receipt.packedChunksBefore += before
-                receipt.packedChunksAfter += finished.count
-                receipt.embeddingsDropped += dropped
-            } catch {
-                try? await database.exec("ROLLBACK TO reindex_pack;", [])
-                try? await database.exec("RELEASE reindex_pack;", [])
-                throw error
+                try db.exec("DELETE FROM chunks WHERE object_id = ?;", [.uuid(objectID)])
+                for st in inserts { try db.exec(st.sql, st.binds) }
+                try db.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
+                            [.integer(packedVersion), .uuid(objectID)])
+                return dropped
             }
+            receipt.packedObjects += 1
+            receipt.packedChunksBefore += before
+            receipt.packedChunksAfter += finished.count
+            receipt.embeddingsDropped += dropped
         }
         let (docs, before, after) = (receipt.packedObjects, receipt.packedChunksBefore, receipt.packedChunksAfter)
         if docs > 0 {
@@ -212,84 +212,98 @@ public struct ChunkReindexCoordinator {
         let rows = try await database.query("""
         SELECT c.id, c.object_id, c.text, c.char_start, c.page_number, c.context_prefix,
                c.evidence_block_id, c.block_kind, c.source_version_id, c.admit_embedding,
-               ko.document_class
+               ko.document_class, c.derivation_digest
         FROM chunks c JOIN knowledge_objects ko ON ko.id = c.object_id
-        WHERE length(c.text) > \(Self.oversizeChars);
+        WHERE length(c.text) > \(Self.oversizeChars) AND c.superseded_by_run IS NULL;
         """, [])
+        // F25 — only ACTIVE chunks are split: a superseded chunk is a historical citation row of a replaced
+        // derivation; splitting it would delete it and re-insert its text as active search output.
         receipt.oversizedFound = rows.count
         guard !rows.isEmpty else { return }
 
-        try await database.exec("SAVEPOINT reindex_split;", [])
-        do {
-            for row in rows {
-                guard let id = row.uuid(0), let objectID = row.uuid(1), let text = row.string(2) else { continue }
-                let charStart = Int(row.int(3) ?? 0)
-                let pageNumber = row.int(4).map(Int.init)
-                let blockID = row.uuid(6)
-                let blockKind = row.string(7)
-                // P1.8 — a PACKED parent's lineage lives in chunk_blocks; the
-                // children must inherit it, matched to the blocks whose text
-                // each piece actually contains (fallback: all of the parent's).
-                let parentLineage = try await database.query("""
-                    SELECT cb.evidence_block_id, COALESCE(NULLIF(b.normalized_text, ''), b.raw_text)
-                    FROM chunk_blocks cb LEFT JOIN evidence_blocks b ON b.id = cb.evidence_block_id
-                    WHERE cb.chunk_id = ? ORDER BY cb.ordinal;
-                    """, [.uuid(id)]).compactMap { r -> (UUID, String)? in
-                        guard let bid = r.uuid(0) else { return nil }
-                        return (bid, r.string(1) ?? "")
+        // F28 — every oversized split in ONE isolated savepoint.
+        let counts = try await database.withSavepoint("reindex_split") { db -> (dropped: Int, split: Int, children: Int, unproven: Int) in
+            var counts = (dropped: 0, split: 0, children: 0, unproven: 0)
+                for row in rows {
+                    guard let id = row.uuid(0), let objectID = row.uuid(1), let text = row.string(2) else { continue }
+                    let charStart = Int(row.int(3) ?? 0)
+                    let pageNumber = row.int(4).map(Int.init)
+                    let blockID = row.uuid(6)
+                    let blockKind = row.string(7)
+                    // P1.8 — a PACKED parent's lineage lives in chunk_blocks; the
+                    // children must inherit it, matched to the blocks whose text
+                    // each piece actually contains (fallback: all of the parent's).
+                    let parentLineage = try db.query("""
+                        SELECT cb.evidence_block_id, COALESCE(NULLIF(b.normalized_text, ''), b.raw_text)
+                        FROM chunk_blocks cb LEFT JOIN evidence_blocks b ON b.id = cb.evidence_block_id
+                        WHERE cb.chunk_id = ? ORDER BY cb.ordinal;
+                        """, [.uuid(id)]).compactMap { r -> (UUID, String)? in
+                            guard let bid = r.uuid(0) else { return nil }
+                            return (bid, r.string(1) ?? "")
+                        }
+                    let sourceVersionID = row.uuid(8)
+                    let admit = (row.int(9) ?? 1) == 1
+                    let docClass = row.string(10).flatMap(DocumentClass.init(rawValue:))
+
+                    let pieces = Self.split(text, target: Self.splitTargetChars)
+                    guard pieces.count > 1 else { continue }
+
+                    let maxOrdinal = Int((try db.query(
+                        "SELECT COALESCE(MAX(ordinal), 0) FROM chunks WHERE object_id = ?;",
+                        [.uuid(objectID)])).first?.int(0) ?? 0)
+
+                    var offset = 0
+                    var children: [Chunk] = []
+                    for (i, piece) in pieces.enumerated() {
+                        let salience = SalienceTable.salience(forBlockKind: blockKind, documentClass: docClass)
+                        let prefix = ContextPrefixTemplate.render(
+                            title: nil, documentClass: docClass, blockKind: blockKind)
+                        let child = Chunk(
+                            objectID: objectID, ordinal: maxOrdinal + 1 + i, text: piece,
+                            characterRange: (charStart + offset)..<(charStart + offset + piece.count),
+                            pageNumber: pageNumber,
+                            contextPrefix: prefix, contextPrefixSource: prefix == nil ? nil : "template",
+                            admitEmbedding: admit,
+                            evidenceBlockID: blockID, blockKind: blockKind,
+                            sourceVersionID: sourceVersionID,
+                            salience: salience,
+                            contextTemplateVersion: prefix == nil ? nil : ContextPrefixTemplate.currentVersion)
+                        children.append(child.withBlockIDs(Self.lineage(for: piece, from: parentLineage)))
+                        offset += piece.count
                     }
-                let sourceVersionID = row.uuid(8)
-                let admit = (row.int(9) ?? 1) == 1
-                let docClass = row.string(10).flatMap(DocumentClass.init(rawValue:))
-
-                let pieces = Self.split(text, target: Self.splitTargetChars)
-                guard pieces.count > 1 else { continue }
-
-                let maxOrdinal = Int((try await database.query(
-                    "SELECT COALESCE(MAX(ordinal), 0) FROM chunks WHERE object_id = ?;",
-                    [.uuid(objectID)])).first?.int(0) ?? 0)
-
-                var offset = 0
-                var children: [Chunk] = []
-                for (i, piece) in pieces.enumerated() {
-                    let salience = SalienceTable.salience(forBlockKind: blockKind, documentClass: docClass)
-                    let prefix = ContextPrefixTemplate.render(
-                        title: nil, documentClass: docClass, blockKind: blockKind)
-                    let child = Chunk(
-                        objectID: objectID, ordinal: maxOrdinal + 1 + i, text: piece,
-                        characterRange: (charStart + offset)..<(charStart + offset + piece.count),
-                        pageNumber: pageNumber,
-                        contextPrefix: prefix, contextPrefixSource: prefix == nil ? nil : "template",
-                        admitEmbedding: admit,
-                        evidenceBlockID: blockID, blockKind: blockKind,
-                        sourceVersionID: sourceVersionID,
-                        salience: salience,
-                        contextTemplateVersion: prefix == nil ? nil : ContextPrefixTemplate.currentVersion)
-                    children.append(child.withBlockIDs(Self.lineage(for: piece, from: parentLineage)))
-                    offset += piece.count
+                    // Replace: drop the parent's embedding rows + the parent, insert
+                    // the children (FTS follows via triggers).
+                    let dropped = Int((try db.query(
+                        "SELECT COUNT(*) FROM chunk_embeddings WHERE chunk_id = ?;", [.uuid(id)]))
+                        .first?.int(0) ?? 0)
+                    try db.exec("DELETE FROM chunk_embeddings WHERE chunk_id = ?;", [.uuid(id)])
+                    try db.exec("DELETE FROM chunks WHERE id = ?;", [.uuid(id)])
+                    // F15/F25 — a piece inherits proof ONLY from a proven parent. The parent's recorded digest
+                    // is checked against its live text, lineage and blocks first: splitting must never turn
+                    // text that no longer follows from the evidence into "certified" pieces. An unproven
+                    // parent (mismatch, or no digest) yields pieces with NO digest, which reconciliation must
+                    // prove against evidence or rebuild (lineage-less pieces stay explicitly unverified).
+                    let parentIDs = parentLineage.map(\.0)
+                    let content = try ChunkDerivation.content(db, blockIDs: parentIDs + children.flatMap(\.allBlockIDs))
+                    let recorded = row.string(11)
+                    let liveParent = ChunkDerivation.digest(text: text, lineage: parentIDs.isEmpty ? (blockID.map { [$0] } ?? []) : parentIDs,
+                                                            content: content)
+                    let proven = recorded != nil && recorded == liveParent
+                    if !proven { counts.unproven += 1 }
+                    for st in ChunksRepository.insertStatements(children, content: content, certify: proven) { try db.exec(st.sql, st.binds) }
+                    try db.exec(
+                        "UPDATE chunks SET chunk_version = 2 WHERE object_id = ? AND ordinal > ?;",
+                        [.uuid(objectID), .integer(Int64(maxOrdinal))])
+                    counts.dropped += dropped
+                    counts.split += 1
+                    counts.children += children.count
                 }
-                // Replace: drop the parent's embedding rows + the parent, insert
-                // the children (FTS follows via triggers).
-                let dropped = Int((try await database.query(
-                    "SELECT COUNT(*) FROM chunk_embeddings WHERE chunk_id = ?;", [.uuid(id)]))
-                    .first?.int(0) ?? 0)
-                try await database.exec("DELETE FROM chunk_embeddings WHERE chunk_id = ?;", [.uuid(id)])
-                try await database.exec("DELETE FROM chunks WHERE id = ?;", [.uuid(id)])
-                let repo = ChunksRepository(database: database)
-                try await repo.insertBatch(children)
-                try await database.exec(
-                    "UPDATE chunks SET chunk_version = 2 WHERE object_id = ? AND ordinal > ?;",
-                    [.uuid(objectID), .integer(Int64(maxOrdinal))])
-                receipt.embeddingsDropped += dropped
-                receipt.oversizedSplit += 1
-                receipt.childrenWritten += children.count
-            }
-            try await database.exec("RELEASE reindex_split;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO reindex_split;", [])
-            try? await database.exec("RELEASE reindex_split;", [])
-            throw error
+            return counts
         }
+        receipt.embeddingsDropped += counts.dropped
+        receipt.oversizedSplit += counts.split
+        receipt.splitUnproven += counts.unproven
+        receipt.childrenWritten += counts.children
     }
 
     /// The parent blocks a split piece is made of: those whose opening words
@@ -358,25 +372,22 @@ public struct ChunkReindexCoordinator {
         FROM chunks c JOIN knowledge_objects ko ON ko.id = c.object_id
         WHERE c.block_kind IS NOT NULL AND c.salience = 0.6;
         """, [])
-        try await database.exec("SAVEPOINT reindex_salience;", [])
-        do {
+        // F28 — one isolated savepoint; `changes()` counts OUR update only.
+        receipt.salienceBackfilled += try await database.withSavepoint("reindex_salience") { db -> Int in
+            var n = 0
             for pair in pairs {
                 guard let kind = pair.string(0) else { continue }
                 let cls = pair.string(1).flatMap(DocumentClass.init(rawValue:))
                 let s = SalienceTable.salience(forBlockKind: kind, documentClass: cls)
                 guard s != SalienceTable.neutral else { continue }
-                try await database.exec("""
+                try db.exec("""
                 UPDATE chunks SET salience = ?
                 WHERE block_kind = ? AND salience = 0.6 AND object_id IN
                   (SELECT id FROM knowledge_objects WHERE COALESCE(document_class,'') = COALESCE(?,''));
                 """, [.real(s), .text(kind), cls.map { .text($0.rawValue) } ?? .null])
-                receipt.salienceBackfilled += Int((try await database.query("SELECT changes();", [])).first?.int(0) ?? 0)
+                n += Int((try db.query("SELECT changes();", [])).first?.int(0) ?? 0)
             }
-            try await database.exec("RELEASE reindex_salience;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO reindex_salience;", [])
-            try? await database.exec("RELEASE reindex_salience;", [])
-            throw error
+            return n
         }
     }
 
@@ -390,31 +401,29 @@ public struct ChunkReindexCoordinator {
         WHERE c.context_template_version IS NULL
           AND c.object_id IN (SELECT object_id FROM chunks GROUP BY object_id HAVING COUNT(*) >= 2);
         """, [])
-        try await database.exec("SAVEPOINT reindex_prefix;", [])
-        do {
+        let templateVersion = Int64(ContextPrefixTemplate.currentVersion)
+        // F28 — one isolated savepoint.
+        receipt.prefixesStamped += try await database.withSavepoint("reindex_prefix") { db -> Int in
+            var n = 0
             for row in rows {
                 guard let id = row.uuid(0) else { continue }
                 let cls = row.string(2).flatMap(DocumentClass.init(rawValue:))
                 guard let prefix = ContextPrefixTemplate.render(
                     title: nil, documentClass: cls, blockKind: row.string(1)) else { continue }
-                try await database.exec("""
+                try db.exec("""
                 UPDATE chunks SET context_prefix = ?, context_prefix_source = 'template',
                                   context_template_version = ?
                 WHERE id = ?;
-                """, [.text(prefix), .integer(Int64(ContextPrefixTemplate.currentVersion)), .uuid(id)])
+                """, [.text(prefix), .integer(templateVersion), .uuid(id)])
                 // The embedding input changed → the old vector lies; drop it
                 // (the pending queue re-embeds) — but only for admitted rows.
-                try await database.exec("""
+                try db.exec("""
                 DELETE FROM chunk_embeddings WHERE chunk_id = ?
                   AND EXISTS (SELECT 1 FROM chunks WHERE id = ? AND admit_embedding = 1);
                 """, [.uuid(id), .uuid(id)])
-                receipt.prefixesStamped += 1
+                n += 1
             }
-            try await database.exec("RELEASE reindex_prefix;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO reindex_prefix;", [])
-            try? await database.exec("RELEASE reindex_prefix;", [])
-            throw error
+            return n
         }
     }
 

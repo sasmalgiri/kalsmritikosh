@@ -64,73 +64,61 @@ public actor EventMutator {
         reason: String? = nil
     ) async throws {
         let nontargetSources = sourceIDs.filter { $0 != target.id }
-        try await database.exec("SAVEPOINT kalsmritikosh_event_merge;")
+        // Everything read or encoded up front; the savepoint body only writes (F28 — the whole merge
+        // is ONE isolated unit, so a concurrent writer can never see or wedge a half-merged event).
+        let sourceEvents = try await events.findByIDs(nontargetSources)
+        let sourcePayloads = try sourceEvents.map { ($0.id, try EventVersionsRepository.payloadJSON($0)) }
+        let targetPayload = try EventVersionsRepository.payloadJSON(target)
+        let targetRow = try EventsRepository.insertStatements(for: [target])
+        let targetID = target.id
+        let mergeReason = reason
+            ?? "Merged from \(nontargetSources.map { $0.uuidString.prefix(8) }.joined(separator: ", "))"
+        let now = Date()
         do {
-            // 1. Close versions on every source.
-            let sourceEvents = try await events.findByIDs(nontargetSources)
-            for src in sourceEvents {
-                _ = try await versions.recordVersion(
-                    event: src,
-                    agent: "user.merge.source",
-                    activity: "supersededByMerge",
-                    reason: "Merged into \(target.id.uuidString.prefix(8))"
-                )
-            }
-            // 2. Upsert the target row. We INSERT OR REPLACE so the
-            //    same target.id can land whether it existed before
-            //    or not.
-            let targetPayload = try encoder.encode(target)
-            let attrJSON = String(data: targetPayload, encoding: .utf8) ?? "{}"
-            _ = attrJSON  // payload re-encoded for version; the row
-                          // itself goes through writeEventRow.
-            try await writeEventRow(target)
+            try await database.withSavepoint("kalsmritikosh_event_merge") { db in
+                // 1. Close versions on every source.
+                for (id, json) in sourcePayloads {
+                    _ = try EventVersionsRepository.recordVersion(
+                        db, eventID: id, payloadJSON: json, agent: "user.merge.source",
+                        activity: "supersededByMerge", reason: "Merged into \(targetID.uuidString.prefix(8))", at: now)
+                }
+                // 2. Write the target row.
+                for st in targetRow { try db.exec(st.sql, st.binds) }
 
-            // 3. Re-target event_entities + event_links from sources
-            //    to target. event_entities has a composite PK so
-            //    a straight UPDATE would clash if both source and
-            //    target already touched the same entity — INSERT OR
-            //    IGNORE then DELETE handles the dedup.
-            for src in nontargetSources {
-                try await database.exec("""
-                INSERT OR IGNORE INTO event_entities (event_id, entity_id)
-                SELECT ?, entity_id FROM event_entities WHERE event_id = ?;
-                """, [.uuid(target.id), .uuid(src)])
-            }
-            for src in nontargetSources {
-                try await database.exec("""
-                UPDATE event_links SET source_event_id = ?
-                WHERE source_event_id = ?;
-                """, [.uuid(target.id), .uuid(src)])
-                try await database.exec("""
-                UPDATE event_links SET target_event_id = ?
-                WHERE target_event_id = ?;
-                """, [.uuid(target.id), .uuid(src)])
-            }
+                // 3. Re-target event_entities + event_links from sources
+                //    to target. event_entities has a composite PK so
+                //    a straight UPDATE would clash if both source and
+                //    target already touched the same entity — INSERT OR
+                //    IGNORE then DELETE handles the dedup.
+                for src in nontargetSources {
+                    try db.exec("""
+                    INSERT OR IGNORE INTO event_entities (event_id, entity_id)
+                    SELECT ?, entity_id FROM event_entities WHERE event_id = ?;
+                    """, [.uuid(targetID), .uuid(src)])
+                }
+                for src in nontargetSources {
+                    try db.exec("UPDATE event_links SET source_event_id = ? WHERE source_event_id = ?;",
+                                [.uuid(targetID), .uuid(src)])
+                    try db.exec("UPDATE event_links SET target_event_id = ? WHERE target_event_id = ?;",
+                                [.uuid(targetID), .uuid(src)])
+                }
 
-            // 4. Stamp the target's new version row.
-            _ = try await versions.recordVersion(
-                event: target,
-                agent: "user.merge",
-                activity: "mergedFrom",
-                reason: reason
-                    ?? "Merged from \(nontargetSources.map { $0.uuidString.prefix(8) }.joined(separator: ", "))"
-            )
+                // 4. Stamp the target's new version row.
+                _ = try EventVersionsRepository.recordVersion(
+                    db, eventID: targetID, payloadJSON: targetPayload, agent: "user.merge",
+                    activity: "mergedFrom", reason: mergeReason, at: now)
 
-            // 5. Drop the source events — the cascade on event_entities
-            //    is harmless because we already moved the rows above.
-            for src in nontargetSources {
-                try await database.exec(
-                    "DELETE FROM events WHERE id = ?;",
-                    [.uuid(src)]
-                )
+                // 5. Drop the source events — the cascade on event_entities
+                //    is harmless because we already moved the rows above.
+                for src in nontargetSources {
+                    try db.exec("DELETE FROM events WHERE id = ?;", [.uuid(src)])
+                }
             }
-            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_merge;")
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_event_merge;")
-            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_merge;")
             KalsmritikoshLog.knowledge.error("EventMutator.merge: \(String(describing: error), privacy: .public)")
             throw error
         }
+        await versions.notifyRecorded(sourcePayloads.map(\.0) + [targetID])
     }
 
     // MARK: - Split
@@ -149,71 +137,55 @@ public actor EventMutator {
             KalsmritikoshLog.knowledge.info("EventMutator.split: event \(eventID.uuidString.prefix(8), privacy: .public) not found")
             return
         }
-        try await database.exec("SAVEPOINT kalsmritikosh_event_split;")
+        let originalPayload = try EventVersionsRepository.payloadJSON(original)
+        let partRows = try parts.map { part in
+            (id: part.id, rows: try EventsRepository.insertStatements(for: [part]),
+             entityIDs: part.entityIDs, payload: try EventVersionsRepository.payloadJSON(part))
+        }
+        let splitReason = reason ?? "Split from \(eventID.uuidString.prefix(8))"
+        let partCount = parts.count
+        let heirID = parts.first?.id
+        let now = Date()
         do {
-            // 1. Record the original's final version.
-            _ = try await versions.recordVersion(
-                event: original,
-                agent: "user.split.source",
-                activity: "supersededBySplit",
-                reason: "Split into \(parts.count) parts"
-            )
+            // F28 — the whole split is ONE isolated savepoint.
+            try await database.withSavepoint("kalsmritikosh_event_split") { db in
+                // 1. Record the original's final version.
+                _ = try EventVersionsRepository.recordVersion(
+                    db, eventID: eventID, payloadJSON: originalPayload, agent: "user.split.source",
+                    activity: "supersededBySplit", reason: "Split into \(partCount) parts", at: now)
 
-            // 2. Insert each part.
-            for part in parts {
-                try await writeEventRow(part)
-                for entityID in part.entityIDs {
-                    try await database.exec("""
-                    INSERT OR IGNORE INTO event_entities (event_id, entity_id)
-                    VALUES (?, ?);
-                    """, [.uuid(part.id), .uuid(entityID)])
+                // 2. Insert each part.
+                for part in partRows {
+                    for st in part.rows { try db.exec(st.sql, st.binds) }
+                    for entityID in part.entityIDs {
+                        try db.exec("INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?);",
+                                    [.uuid(part.id), .uuid(entityID)])
+                    }
+                    _ = try EventVersionsRepository.recordVersion(
+                        db, eventID: part.id, payloadJSON: part.payload, agent: "user.split",
+                        activity: "splitFrom", reason: splitReason, at: now)
                 }
-                _ = try await versions.recordVersion(
-                    event: part,
-                    agent: "user.split",
-                    activity: "splitFrom",
-                    reason: reason
-                        ?? "Split from \(eventID.uuidString.prefix(8))"
-                )
+
+                // 3. Redirect any links touching the original to the
+                //    FIRST part. The user can re-author after if some
+                //    of those links should attach to a different part.
+                if let heirID {
+                    try db.exec("UPDATE event_links SET source_event_id = ? WHERE source_event_id = ?;",
+                                [.uuid(heirID), .uuid(eventID)])
+                    try db.exec("UPDATE event_links SET target_event_id = ? WHERE target_event_id = ?;",
+                                [.uuid(heirID), .uuid(eventID)])
+                }
+
+                // 4. Drop the original.
+                try db.exec("DELETE FROM events WHERE id = ?;", [.uuid(eventID)])
             }
-
-            // 3. Redirect any links touching the original to the
-            //    FIRST part. The user can re-author after if some
-            //    of those links should attach to a different part.
-            if let heir = parts.first {
-                try await database.exec("""
-                UPDATE event_links SET source_event_id = ?
-                WHERE source_event_id = ?;
-                """, [.uuid(heir.id), .uuid(eventID)])
-                try await database.exec("""
-                UPDATE event_links SET target_event_id = ?
-                WHERE target_event_id = ?;
-                """, [.uuid(heir.id), .uuid(eventID)])
-            }
-
-            // 4. Drop the original.
-            try await database.exec(
-                "DELETE FROM events WHERE id = ?;",
-                [.uuid(eventID)]
-            )
-
-            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_split;")
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_event_split;")
-            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_split;")
             KalsmritikoshLog.knowledge.error("EventMutator.split: \(String(describing: error), privacy: .public)")
             throw error
         }
+        await versions.notifyRecorded([eventID] + partRows.map(\.id))
     }
 
     // MARK: - Internals
 
-    /// Lightweight write of an event row. EventsRepository's
-    /// insertBatch does a multi-row INSERT OR REPLACE under the
-    /// hood, but exposes only the batch shape — for single-row
-    /// writes we go through the same canonical INSERT to keep
-    /// the column list consistent.
-    private func writeEventRow(_ event: Event) async throws {
-        try await events.insertBatch([event])
-    }
 }

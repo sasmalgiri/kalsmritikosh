@@ -79,6 +79,9 @@ Proof kinds:
 | `privacy.no-cloud-model` | `never sent to a cloud model` | ci:sensitive-export |
 | `privacy.no-cloud` | `no cloud` | ci:sensitive-export |
 | `privacy.exports-local` | `never uploaded` | ci:sensitive-export |
+| `privacy.online-opt-in` | `Online mode is off unless you turn it on` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
+| `privacy.consent-before-send` | `nothing is sent until you agree` | grep:OutboundConsentSheet:Kalsmritikosh |
+| `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
 | `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |
 
 Coverage boundary (eighth–tenth audits, stated honestly): the registry

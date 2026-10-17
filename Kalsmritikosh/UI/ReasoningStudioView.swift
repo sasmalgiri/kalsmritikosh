@@ -151,7 +151,7 @@ public struct ReasoningStudioView: View {
                 Text("Updated \(rca.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { delete(rca) } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { delete(rca) } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                     .help("Delete this investigation")
                 Button("Open") { activeID = rca.id; stage = firstIncompleteStage(rca) }
@@ -330,9 +330,7 @@ public struct ReasoningStudioView: View {
                 Image(systemName: idea.wrappedValue.parked ? "arrow.uturn.up" : "moon.zzz")
             }.buttonStyle(.plain).foregroundStyle(.secondary)
                 .help(idea.wrappedValue.parked ? "Un-park" : "Park — keep but set aside")
-            Button { rca.wrappedValue.brainstorm.removeAll { $0.id == idea.wrappedValue.id } } label: {
-                Image(systemName: "xmark.circle.fill")
-            }.buttonStyle(.plain).foregroundStyle(.secondary)
+            Button { rca.wrappedValue.brainstorm.removeAll { $0.id == idea.wrappedValue.id } } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
         }
         .padding(8)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
@@ -376,9 +374,7 @@ public struct ReasoningStudioView: View {
             HStack {
                 Text("Why #\(i + 1)").font(.caption.weight(.bold)).foregroundStyle(.tint)
                 Spacer()
-                Button { rca.wrappedValue.fiveWhys.removeAll { $0.id == step.wrappedValue.id } } label: {
-                    Image(systemName: "xmark.circle")
-                }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Button { rca.wrappedValue.fiveWhys.removeAll { $0.id == step.wrappedValue.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
             }
             TextField("Question", text: step.question).textFieldStyle(.roundedBorder).font(.callout.weight(.medium))
             TextField("Because… (this becomes the next question)", text: step.answer, axis: .vertical)
@@ -416,9 +412,7 @@ public struct ReasoningStudioView: View {
             HStack {
                 Label(cat.wrappedValue.name, systemImage: "fish").font(.callout.weight(.semibold))
                 Spacer()
-                Button { cat.wrappedValue.causes.append(RCAFishboneCause(text: "")) } label: {
-                    Image(systemName: "plus")
-                }.buttonStyle(.plain).foregroundStyle(.tint)
+                Button { cat.wrappedValue.causes.append(RCAFishboneCause(text: "")) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.tint)
             }
             if cat.wrappedValue.causes.isEmpty {
                 Text("No causes here yet.").font(.caption).foregroundStyle(.tertiary)
@@ -430,9 +424,7 @@ public struct ReasoningStudioView: View {
                             .foregroundStyle(cause.likely ? Color.yellow : Color.secondary)
                     }.buttonStyle(.plain).help("Mark as a probable cause")
                     TextField("Cause", text: $cause.text).textFieldStyle(.plain)
-                    Button { cat.wrappedValue.causes.removeAll { $0.id == cause.id } } label: {
-                        Image(systemName: "xmark.circle")
-                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    Button { cat.wrappedValue.causes.removeAll { $0.id == cause.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
         }
@@ -496,15 +488,13 @@ public struct ReasoningStudioView: View {
                     Picker("", selection: $rec.addresses) {
                         ForEach(RCACauseTarget.allCases, id: \.self) { Text($0.label).tag($0) }
                     }.labelsHidden().fixedSize()
-                    Button { rca.wrappedValue.conclusion.recommendations.removeAll { $0.id == rec.id } } label: {
-                        Image(systemName: "xmark.circle")
-                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    Button { rca.wrappedValue.conclusion.recommendations.removeAll { $0.id == rec.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 TextField("Add a recommendation", text: $newRecommendation).textFieldStyle(.roundedBorder)
                     .onSubmit { addRecommendation(rca) }
-                Button { addRecommendation(rca) } label: { Image(systemName: "plus") }
+                Button { addRecommendation(rca) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }
                     .disabled(newRecommendation.trimmed.isEmpty)
             }
         }
@@ -526,15 +516,13 @@ public struct ReasoningStudioView: View {
                     TextField("", text: Binding(get: { items.wrappedValue[idx] },
                                                 set: { var a = items.wrappedValue; a[idx] = $0; items.wrappedValue = a }))
                         .textFieldStyle(.plain)
-                    Button { var a = items.wrappedValue; a.remove(at: idx); items.wrappedValue = a } label: {
-                        Image(systemName: "xmark.circle")
-                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    Button { var a = items.wrappedValue; a.remove(at: idx); items.wrappedValue = a } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 8) {
                 TextField(placeholder, text: newText).textFieldStyle(.roundedBorder)
                     .onSubmit { addToList(items, newText) }
-                Button { addToList(items, newText) } label: { Image(systemName: "plus") }
+                Button { addToList(items, newText) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }
                     .disabled(newText.wrappedValue.trimmed.isEmpty)
             }
         }

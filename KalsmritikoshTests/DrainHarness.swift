@@ -34,6 +34,12 @@ import Testing
 
 @Suite("V5 — live drain (operator-invoked only)", .serialized)
 struct DrainHarness {
+    /// W2-7 — the live ledger is encrypted with the person's key once the app has run; read it
+    /// (never stored from tests) so the harness opens the same ledger the app does.
+    static func liveKey(_ url: URL) -> LedgerKey? {
+        LedgerFileState.of(url) == .encrypted ? LedgerKeychain.loadPersonKey() : nil
+    }
+
 
     @Test("Drain the live archive: snapshot → migrate → six passes → receipt")
     func drainLiveArchive() async throws {
@@ -60,7 +66,7 @@ struct DrainHarness {
             return
         }
         do {
-            let src = try Database(url: liveURL)
+            let src = try Database(url: liveURL, key: DrainHarness.liveKey(liveURL))
             let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
             try await src.exec("VACUUM main INTO '\(escaped)';", [])
             await src.close()
@@ -69,7 +75,7 @@ struct DrainHarness {
         #expect(FileManager.default.fileExists(atPath: snapshotURL.path), "snapshot must exist before any write")
 
         // 2+3 — open the LIVE ledger, guard population, migrate to current.
-        let db = try Database(url: liveURL)
+        let db = try Database(url: liveURL, key: DrainHarness.liveKey(liveURL))
         let koCount = Int((try await db.query("SELECT COUNT(*) FROM knowledge_objects;", [])).first?.int(0) ?? 0)
         guard koCount > 0 else {
             await db.close()
@@ -127,7 +133,7 @@ struct RegisterRefreshHarness {
             return
         }
         do {
-            let src = try Database(url: liveURL)
+            let src = try Database(url: liveURL, key: DrainHarness.liveKey(liveURL))
             let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
             try await src.exec("VACUUM main INTO '\(escaped)';", [])
             await src.close()
@@ -135,7 +141,7 @@ struct RegisterRefreshHarness {
         print("REFRESH: PRE-REFRESH SNAPSHOT WRITTEN → \(snapshotURL.path)")
         #expect(FileManager.default.fileExists(atPath: snapshotURL.path))
 
-        let db = try Database(url: liveURL)
+        let db = try Database(url: liveURL, key: DrainHarness.liveKey(liveURL))
         try await SchemaMigrations.migrate(db)
         let refresh = EntityRegisterRefresh(database: db, entities: EntitiesRepository(database: db))
         let receipt = try await refresh.run()
@@ -169,7 +175,7 @@ struct ChunkReindexHarness {
             return
         }
         do {
-            let src = try Database(url: liveURL)
+            let src = try Database(url: liveURL, key: DrainHarness.liveKey(liveURL))
             let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
             try await src.exec("VACUUM main INTO '\(escaped)';", [])
             await src.close()
@@ -177,7 +183,7 @@ struct ChunkReindexHarness {
         print("REINDEX: PRE-REINDEX SNAPSHOT WRITTEN → \(snapshotURL.path)")
         #expect(FileManager.default.fileExists(atPath: snapshotURL.path))
 
-        let db = try Database(url: liveURL)
+        let db = try Database(url: liveURL, key: DrainHarness.liveKey(liveURL))
         try await SchemaMigrations.migrate(db)
         // The pre-state block set: every evidence block with chunk coverage
         // must still have coverage after (citations anchor to blocks).

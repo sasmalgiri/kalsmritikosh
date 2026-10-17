@@ -55,6 +55,8 @@ public enum ResourceLane: String, Sendable, Hashable, CaseIterable {
 ///   network      = 4                          (parallel HTTP)
 public actor LaneScheduler {
     private var capacities: [ResourceLane: Int]
+    /// F12 — the boot-time caps; `capacities` narrows from these under memory pressure.
+    private let baseCapacities: [ResourceLane: Int]
     private var inFlight: [ResourceLane: Int]
     private var waiters: [ResourceLane: [CheckedContinuation<Void, Never>]]
 
@@ -68,6 +70,7 @@ public actor LaneScheduler {
             waits[lane] = []
         }
         self.capacities = caps
+        self.baseCapacities = caps
         self.inFlight = current
         self.waiters = waits
     }
@@ -114,24 +117,87 @@ public actor LaneScheduler {
         return out
     }
 
+    /// F12 — adapt the memory-heavy lanes to pressure. Warning halves the CPU, disk-I/O and
+    /// GPU-model lanes; critical takes them to one worker; normal restores the boot-time caps.
+    /// Work already running finishes; the narrower cap applies to the next acquire. Widening
+    /// admits queued waiters up to the new cap at once.
+    public func setPressure(_ level: MemoryPressureLevel) {
+        for lane in ResourceLane.allCases {
+            let base = baseCapacities[lane] ?? 1
+            let adapted: Int
+            switch (level, lane) {
+            case (.normal, _), (_, .neuralEngine), (_, .llm), (_, .network): adapted = base
+            case (.warning, _): adapted = max(1, base / 2)
+            case (.critical, _): adapted = 1
+            }
+            capacities[lane] = adapted
+            while (inFlight[lane] ?? 0) + pendingHandoffs(lane) < adapted, var queue = waiters[lane], !queue.isEmpty {
+                let next = queue.removeFirst()
+                waiters[lane] = queue
+                handoffs[lane, default: 0] += 1
+                next.resume()
+            }
+        }
+    }
+
+    /// Current cap of `lane` (after any pressure adaptation).
+    public func capacity(of lane: ResourceLane) -> Int { capacities[lane] ?? 1 }
+
+    /// Waiters resumed but not yet counted in `inFlight` (they increment on wake).
+    private var handoffs: [ResourceLane: Int] = [:]
+    private func pendingHandoffs(_ lane: ResourceLane) -> Int { handoffs[lane] ?? 0 }
+
     private func acquire(_ lane: ResourceLane) async {
         let cap = capacities[lane] ?? 1
-        if (inFlight[lane] ?? 0) < cap {
+        if (inFlight[lane] ?? 0) + pendingHandoffs(lane) < cap {
             inFlight[lane, default: 0] += 1
             return
         }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             waiters[lane, default: []].append(cont)
         }
+        // Woken by a hand-off: the slot was reserved for us when we were resumed.
+        handoffs[lane, default: 0] -= 1
         inFlight[lane, default: 0] += 1
     }
 
     private func release(_ lane: ResourceLane) async {
         inFlight[lane, default: 0] = max(0, (inFlight[lane] ?? 0) - 1)
-        if var queue = waiters[lane], !queue.isEmpty {
+        // Hand the freed slot to the next waiter only while under the (possibly narrowed) cap;
+        // the reservation stops a fresh acquire from taking it before the waiter wakes.
+        let cap = capacities[lane] ?? 1
+        if (inFlight[lane] ?? 0) + pendingHandoffs(lane) < cap, var queue = waiters[lane], !queue.isEmpty {
             let next = queue.removeFirst()
             waiters[lane] = queue
+            handoffs[lane, default: 0] += 1
             next.resume()
         }
+    }
+}
+
+/// F12 — runs `body` over `items` with at most `maxInFlight` child tasks alive at once. The
+/// watcher used to spawn one task per discovered file up front, so a 100k-file folder parked
+/// 100k tasks (each holding its URL, closure and a lane continuation) before any finished.
+/// Every item still runs, in order of submission; only the number resident at once is bounded.
+public enum BoundedFanOut {
+    public static func forEach<Item: Sendable>(_ items: [Item], maxInFlight: Int,
+                                               _ body: @escaping @Sendable (Item) async -> Void) async {
+        let limit = max(1, maxInFlight)
+        await withTaskGroup(of: Void.self) { group in
+            var running = 0
+            for item in items {
+                if running >= limit {
+                    await group.next()
+                    running -= 1
+                }
+                group.addTask { await body(item) }
+                running += 1
+            }
+        }
+    }
+
+    /// In-flight bound for the watcher: enough to keep every lane saturated, twice over.
+    public nonisolated static func watcherLimit(capacities: [ResourceLane: Int]) -> Int {
+        max(4, 2 * capacities.values.reduce(0, +))
     }
 }

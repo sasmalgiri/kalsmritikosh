@@ -19,7 +19,8 @@ public enum UniversalParserRegistryBuilder {
     @MainActor
     public static func standard(ocr: any OCREngine, iMessageEnabled: Bool = false,
                                 browserHistoryEnabled: Bool = false, chatExportEnabled: Bool = false,
-                                mediaTranscriptionEnabled: Bool = false) throws -> UniversalParserRegistry {
+                                mediaTranscriptionEnabled: Bool = false,
+                                transcriber: (any AudioTranscribing)? = nil) throws -> UniversalParserRegistry {
         let structural = StructuralParserRegistry.standard(ocr: ocr)
 
         // Real content loaders. Audio/video join only when transcription is enabled (below).
@@ -47,7 +48,7 @@ public enum UniversalParserRegistryBuilder {
         // the timecodes ASRSegment embeds in the transcript text ride through
         // chunking into cited answers ("in recording.m4a at 12:34").
         if mediaTranscriptionEnabled {
-            let transcriber = SpeechTranscriber()
+            let transcriber = transcriber ?? SpeechTranscriber()   // injectable for tests (F02)
             loaders.append(AudioLoader(transcriber: transcriber))
             loaders.append(VideoLoader(transcriber: transcriber))
         }

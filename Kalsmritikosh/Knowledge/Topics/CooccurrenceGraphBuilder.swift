@@ -190,19 +190,19 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         // Clear + rebuild as ONE unit. The clear used to commit on its own, so
         // a rebuild that then failed left the graph EMPTY until the next run
         // (the owner's ledger: 0 edges while its mentions support 11,565).
+        let binds: [SQLValue] = [
+            .text(listingJSON),
+            .integer(Int64(hubCeiling)),
+            .real(started.timeIntervalSince1970),
+            .integer(Int64(minWeight))
+        ]
         do {
-            try await database.exec("SAVEPOINT cooccurrence_rebuild;", [])
-            try await database.exec("DELETE FROM entity_cooccurrences;", [])
-            try await database.exec(sql, [
-                .text(listingJSON),
-                .integer(Int64(hubCeiling)),
-                .real(started.timeIntervalSince1970),
-                .integer(Int64(minWeight))
-            ])
-            try await database.exec("RELEASE cooccurrence_rebuild;", [])
+            // F28 — one isolated savepoint: no reader sees the graph half-cleared.
+            try await database.withSavepoint("cooccurrence_rebuild") { db in
+                try db.exec("DELETE FROM entity_cooccurrences;", [])
+                try db.exec(sql, binds)
+            }
         } catch {
-            try? await database.exec("ROLLBACK TO cooccurrence_rebuild;", [])
-            try? await database.exec("RELEASE cooccurrence_rebuild;", [])
             KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: rebuild failed, previous graph kept — \(String(describing: error), privacy: .public)")
             return 0
         }

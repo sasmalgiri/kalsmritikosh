@@ -73,6 +73,41 @@ public nonisolated struct NSFReader: Sendable {
         return try parseByScan()
     }
 
+    /// F01 — `readNotes()` one note at a time. The structured pass is a cursor over the mapped bytes,
+    /// so only the current note is resident. When it yields nothing, the text-scan fallback runs —
+    /// that fallback decodes the whole file as text by design, exactly as `readNotes()` does.
+    public func noteIterator() throws -> AnyIterator<NSFNote> {
+        guard data.count >= 256 else { throw NSFError.invalidFormat("File too small") }
+        let signature = Self.readUInt16(data, offset: 0)
+        let validSignatures: Set<UInt16> = [0x001A, 0x1A00]
+        guard validSignatures.contains(signature) || isLikelyNSF() else {
+            throw NSFError.invalidFormat("Not a valid NSF file (signature: 0x\(String(format: "%04X", signature)))")
+        }
+        guard data.count >= 0x2C else { return AnyIterator((try parseByScan()).makeIterator()) }
+        let dbInfoOffset: Int = data.count > 0x30 ? Int(Self.readUInt32(data, offset: 0x28)) : 0
+        var offset = max(dbInfoOffset, 256)
+        var consecutiveFailures = 0
+        let maxConsecutiveFailures = 100_000
+        var yielded = 0
+        var fallback: IndexingIterator<[NSFNote]>? = nil
+        return AnyIterator {
+            if fallback != nil { return fallback?.next() }
+            while offset < self.data.count - 64 && yielded < Self.maxNotes && consecutiveFailures < maxConsecutiveFailures {
+                if let (note, nextOffset) = self.readNoteRecord(at: offset), nextOffset > offset {
+                    offset = nextOffset
+                    consecutiveFailures = 0
+                    yielded += 1
+                    return note
+                }
+                offset += 1
+                consecutiveFailures += 1
+            }
+            guard yielded == 0 else { return nil }
+            fallback = ((try? self.parseByScan()) ?? []).makeIterator()
+            return fallback?.next()
+        }
+    }
+
     // MARK: - Heuristic format check
 
     private func isLikelyNSF() -> Bool {

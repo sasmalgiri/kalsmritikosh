@@ -20,6 +20,11 @@ public actor GenericFactRepository {
     private nonisolated static let decoder = JSONDecoder()
 
     public func upsert(_ fact: GenericFact) async throws {
+        try await database.withSavepoint("gf_upsert") { db in try Self.upsert(db, fact) }
+    }
+
+    /// `upsert` on the caller's isolated savepoint (F28 — composable into a larger unit).
+    static func upsert(_ db: isolated Database, _ fact: GenericFact) throws {
         let blocksJSON = String(data: try Self.encoder.encode(fact.sourceBlockIDs), encoding: .utf8) ?? "[]"
         // Write from the CANONICAL assessment (S0.5 item 2, Commit C): dimension columns ←
         // assessment; status ← the compatibility encoding; legacy_status ← the preserved
@@ -28,7 +33,7 @@ public actor GenericFactRepository {
         // review/origin/availability/conflict.
         let a = fact.assessment
         let enc = LegacyEvidenceStatusAdapter.encode(a)
-        try await database.exec("""
+        try db.exec("""
         INSERT OR REPLACE INTO generic_facts
             (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
              evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
@@ -72,6 +77,13 @@ public actor GenericFactRepository {
     /// This replaces the id-keyed `upsert` on the extraction write path, so
     /// re-extracting the same fact can no longer inflate the ledger.
     public func mergeUpsert(_ fact: GenericFact) async throws {
+        // F28 — the natural-key read, merge and stray collapse are ONE isolated unit: two concurrent
+        // writers of the same fact can no longer both miss the other's row and mint a duplicate.
+        try await database.withSavepoint("gf_merge") { db in try Self.mergeUpsert(db, fact) }
+    }
+
+    /// `mergeUpsert` on the caller's isolated savepoint.
+    static func mergeUpsert(_ db: isolated Database, _ fact: GenericFact) throws {
         // Topic-Ledger U4 — keep extraction noise out of the ledger (the live
         // audit found `amount="rs,"`, `"$0"`, `"$1"`). Degenerate values are
         // dropped at the write path, never stored.
@@ -91,14 +103,14 @@ public actor GenericFactRepository {
         } else {
             unitClause = "unit IS NULL"
         }
-        let rows = try await database.query("""
+        let rows = try db.query("""
         SELECT id, source_blocks_json, confidence, derivation FROM generic_facts
         WHERE \(subjectClause) AND lower(field) = ? AND lower(value) = ? AND \(unitClause)
         ORDER BY created_at ASC;
         """, binds)
 
         guard let firstRow = rows.first, let canonicalID = firstRow.uuid(0) else {
-            try await upsert(fact)   // brand-new fact
+            try upsert(db, fact)   // brand-new fact
             return
         }
         // Merge into the earliest (canonical) row; carry its id AND its existing
@@ -139,13 +151,16 @@ public actor GenericFactRepository {
                 producerVersion: merged.producerVersion,
                 derivation: row.string(3).flatMap { FactDerivation(rawValue: $0) }))
         }
-        try await upsert(merged)
+        try upsert(db, merged)
         let strays = strayRows.compactMap { $0.uuid(0) }
-        if !strays.isEmpty { try await delete(ids: strays) }
+        if !strays.isEmpty { try delete(db, ids: strays) }
     }
 
     public func mergeUpsert(_ facts: [GenericFact]) async throws {
-        for f in facts { try await mergeUpsert(f) }
+        guard !facts.isEmpty else { return }
+        try await database.withSavepoint("gf_merge_batch") { db in
+            for f in facts { try Self.mergeUpsert(db, f) }
+        }
     }
 
     /// Topic-Ledger U3 — one-time cleanup of an ALREADY-inflated ledger: collapse
@@ -308,8 +323,13 @@ public actor GenericFactRepository {
     /// no-delete law protects sources/evidence, not stale derivations. Never
     /// called from the answer path.
     public func delete(ids: [UUID]) async throws {
+        guard !ids.isEmpty else { return }
+        try await database.withSavepoint("gf_delete") { db in try Self.delete(db, ids: ids) }
+    }
+
+    static func delete(_ db: isolated Database, ids: [UUID]) throws {
         for id in ids {
-            try await database.exec("DELETE FROM generic_facts WHERE id = ?;", [.uuid(id)])
+            try db.exec("DELETE FROM generic_facts WHERE id = ?;", [.uuid(id)])
         }
     }
 

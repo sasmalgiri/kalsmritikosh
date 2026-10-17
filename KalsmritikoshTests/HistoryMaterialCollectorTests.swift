@@ -93,6 +93,46 @@ struct HistoryMaterialCollectorTests {
         #expect(material.provenance.unscopedSubject == false)
     }
 
+    /// Subject with 23 events, 17 assertions and 11 relationships.
+    private func seedBusySubject(_ db: Database) async throws -> (ResolvedHistorySubject, EventsRepository, AssertionsRepository, RelationshipsRepository) {
+        let subject = UUID()
+        try await insertEntity(db, subject, "Busy Subject")
+        for i in 0..<23 { try await insertEvent(db, UUID(), title: "event \(i)", source: UUID(), participant: subject) }
+        for i in 0..<17 { try await insertAssertion(db, subject: subject, predicate: "p\(i)", evidence: UUID()) }
+        for _ in 0..<11 { try await insertRelationship(db, from: subject, to: UUID(), source: UUID()) }
+        let resolved = try #require(try await HistorySubjectResolver(entities: EntitiesRepository(database: db)).resolve(entityID: subject))
+        return (resolved, EventsRepository(database: db), AssertionsRepository(database: db), RelationshipsRepository(database: db))
+    }
+
+    @Test("F09 — a tiny page size still traverses EVERYTHING, each row once")
+    func tinyPagesTraverseAll() async throws {
+        let db = try await makeDB()
+        let (subject, events, assertions, rels) = try await seedBusySubject(db)
+        let collector = HistoryMaterialCollector(events: events, assertions: assertions,
+                                                 genericFacts: GenericFactRepository(database: db),
+                                                 relationships: rels, pageSize: 4)
+        let m = try await collector.collect(for: subject)
+        #expect(m.events.count == 23 && Set(m.events.map(\.id)).count == 23)
+        #expect(m.assertions.count == 17 && Set(m.assertions.map(\.id)).count == 17)
+        #expect(m.relationships.count == 11 && Set(m.relationships.map(\.id)).count == 11)
+        #expect(m.provenance.isComplete)
+    }
+
+    @Test("F09 — a budget cut is reported as an honest deferred count, never silent")
+    func budgetCutIsCounted() async throws {
+        let db = try await makeDB()
+        let (subject, events, assertions, rels) = try await seedBusySubject(db)
+        let collector = HistoryMaterialCollector(events: events, assertions: assertions,
+                                                 genericFacts: GenericFactRepository(database: db),
+                                                 relationships: rels,
+                                                 eventLimit: 10, assertionLimit: 5, relationshipLimit: 3, pageSize: 4)
+        let m = try await collector.collect(for: subject)
+        #expect(m.events.count == 10 && m.provenance.deferredEventCount == 13)
+        #expect(m.assertions.count == 5 && m.provenance.deferredAssertionCount == 12)
+        #expect(m.relationships.count == 3 && m.provenance.deferredRelationshipCount == 8)
+        #expect(!m.provenance.isComplete)
+    }
+
     @Test("A corpus/topic subject (no canonical id) returns empty, flagged — never global activity")
     func unscopedSubjectIsEmptyNotGlobal() async throws {
         let db = try await makeDB()

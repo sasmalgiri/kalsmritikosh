@@ -23,7 +23,13 @@ public enum SourceByteCapture {
     /// Stream `url`'s bytes into a SHA-256 and return the captured source metadata.
     /// Throws when the input is not a regular file, cannot be read, or changes during capture.
     public static func capture(_ url: URL) throws -> CapturedSource {
-        try streamCapture(url, identityURL: url, snapshotHandle: nil, snapshotURL: nil).captured
+        // F03 — a live WAL database's identity is its acquired derivative, never its main file alone.
+        if SQLiteAcquisition.needsLogicalAcquisition(url) {
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("capture-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: dir) }
+            return try captureToSnapshot(url, snapshotDirectory: dir).captured
+        }
+        return try streamCapture(url, identityURL: url, snapshotHandle: nil, snapshotURL: nil).captured
     }
 
     /// USF-001.2 — capture the exact bytes AND, in the SAME verified streaming pass, write an
@@ -46,6 +52,20 @@ public enum SourceByteCapture {
     public static func captureToSnapshot(byteURL: URL, identityURL: URL, snapshotDirectory: URL) throws -> (captured: CapturedSource, snapshotURL: URL) {
         try FileManager.default.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
         let snapshotURL = snapshotDirectory.appendingPathComponent(identityURL.lastPathComponent, isDirectory: false)
+        // F03 — a live WAL database is acquired as ONE coherent derivative (online backup), and that
+        // single file is the snapshot: its hash is the version identity, and the loader, structural
+        // parser and vault all read it. Exact-byte capture would hash the main file alone.
+        if SQLiteAcquisition.needsLogicalAcquisition(byteURL) {
+            let modifiedAt = try resourceSnapshot(byteURL).modifiedAt
+            do {
+                let record = try SQLiteAcquisition.acquire(byteURL, into: snapshotURL)
+                let derived = try streamCapture(snapshotURL, identityURL: identityURL, snapshotHandle: nil, snapshotURL: nil).captured
+                return (derived.withSQLiteAcquisition(record, modifiedAt: modifiedAt), snapshotURL)
+            } catch {
+                try? FileManager.default.removeItem(at: snapshotURL)
+                throw error
+            }
+        }
         FileManager.default.createFile(atPath: snapshotURL.path, contents: nil)
         guard let out = try? FileHandle(forWritingTo: snapshotURL) else {
             throw SourceIntakeError.snapshotCreationFailed(byteURL)

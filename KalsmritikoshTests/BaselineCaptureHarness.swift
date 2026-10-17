@@ -190,10 +190,9 @@ struct BaselineCaptureHarness {
         defer { try? FileManager.default.removeItem(at: workDir) }
         let copyURL = workDir.appendingPathComponent("ledger-copy.sqlite")
         do {
-            let src = try Database(url: liveURL)
-            let escaped = copyURL.path.replacingOccurrences(of: "'", with: "''")
-            try await src.exec("VACUUM main INTO '\(escaped)';", [])
-            await src.close()
+            // W2-7 — the live ledger may be encrypted with the person's key (read here, never
+            // written); the throwaway copy is plaintext and boot encrypts it with the test key.
+            try LedgerCipher.plaintextCopy(from: liveURL, key: LedgerKeychain.loadPersonKey(), to: copyURL)
         }
         print("BASELINE: VACUUM copy at \(copyURL.path)")
 

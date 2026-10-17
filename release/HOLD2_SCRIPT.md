@@ -72,7 +72,7 @@ Privacy policy · terms/EULA · acknowledgments — before submission.
 Step-5 physical proof → upload → App Store Connect (listing from
 release/APP_STORE_LISTING.md; pricing reconciled with the page;
 screenshots FROM THE SAMPLE ARCHIVE ONLY; privacy answers "Data Not
-Collected"; export compliance = standard APIs, exempt; review notes:
+Collected"; export compliance = declared in Info.plist (`ITSAppUsesNonExemptEncryption = NO`: only Apple OS crypto — CommonCrypto under SQLCipher, CryptoKit, HTTPS — protecting the person's own data; see SHIP_DECISIONS 2026-10-17); review notes:
 offline design + the sample flow) → **Submit**.
 
 ## 11. On approval

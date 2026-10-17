@@ -122,6 +122,6 @@ public struct CaseStoryView: View {
             title: "Case story: \(subject)",
             drafts: [ReceiptDraft(claim: "Case story of \(subject)", source: "Kalsmritikosh (assembled from cited sources)", passage: md)]
         )
-        save(VerifiableReceipt.json(sealed), ext: "json", type: "json")
+        save(ReceiptSigner.exportJSON(sealed), ext: "json", type: "json")
     }
 }

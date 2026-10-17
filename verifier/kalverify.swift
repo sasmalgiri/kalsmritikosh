@@ -78,12 +78,15 @@ public nonisolated enum LegalNotice {
     """
 
     public static let privacyStatement = """
-    Private by design. Your documents, the extracted ledger, and your questions stay on \
-    this device — they are not sent to any server, and there is no analytics or telemetry. \
-    All AI runs on-device: written answers use Apple’s on-device model (part of macOS), \
-    and the semantic-search models ship inside the app package — so there is no cloud \
-    processing, nothing to install, and nothing to download. The app makes no network \
-    connections at all. You can delete everything by removing the app’s data folder.
+    Private by design. In Private mode — the default — your documents, the extracted \
+    ledger, and your questions stay on this device and the app makes no network connections \
+    at all; there is no analytics or telemetry in any mode. AI runs on-device: written \
+    answers use Apple’s on-device model (part of macOS), and the semantic-search models ship \
+    inside the app package — nothing to install and nothing to download. The ledger is \
+    encrypted on your Mac, with its key in your Keychain. Online mode is off unless you turn \
+    it on: then, with your own API key, the cloud AI you choose may word an answer — you see \
+    exactly what would be sent, and nothing is sent until you agree. You can delete \
+    everything by removing the app’s data folder.
     """
 
     public static let termsStatement = """
@@ -99,9 +102,10 @@ public nonisolated enum LegalNotice {
     Built with Apple frameworks (Vision, Speech, Natural Language, Core ML). Written \
     answers use Apple’s on-device Foundation Models (part of macOS 26 and later, where \
     available); no third-party reasoning model ships with the app. Semantic search uses \
-    bundled on-device BGE embedding + reranker models (BAAI, MIT licence). All \
-    processing is on-device; the model licences and third-party notices ship inside \
-    the app.
+    bundled on-device BGE embedding + reranker models (BAAI, MIT licence). The ledger is \
+    encrypted with SQLCipher (Zetetic LLC, BSD-style licence) using Apple’s CommonCrypto. \
+    In Private mode all processing is on-device; the model licences and third-party \
+    notices ship inside the app.
     """
 
     /// No professional relationship — the clause the strongest legal-tech
@@ -173,7 +177,7 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.5 (2026-08-27)"
+    public static let termsVersion = "1.6 (2026-10-17)"
 
     /// Payment terms: written to hold unchanged whether the app is a one-time
     /// purchase (v1, per SHIP_DECISIONS) or gains paid tiers later.

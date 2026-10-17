@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 133
+    public static let latestVersion = 146
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -664,7 +664,20 @@ public enum SchemaMigrations {
         (130, v130),
         (131, v131),
         (132, v132),
-        (133, v133)
+        (133, v133),
+        (134, v134),
+        (135, v135),
+        (136, v136),
+        (137, v137),
+        (138, v138),
+        (139, v139),
+        (140, v140),
+        (141, v141),
+        (142, v142),
+        (143, v143),
+        (144, v144),
+        (145, v145),
+        (146, v146)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6684,6 +6697,324 @@ public enum SchemaMigrations {
         FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_chunk_blocks_block ON chunk_blocks(evidence_block_id);
+    """
+
+
+    // MARK: - v134 — F15 evidence fingerprint on readiness records
+    //
+    // Readiness was trusted as recorded: completion compared COUNTS, so replacing one derivation
+    // with another (same total) or losing blocks behind a "ready" record went unseen. Each readiness
+    // dimension now records the fingerprint of the version's derived evidence it was measured
+    // against — aggregates over its chunks, blocks and block ownership (count, rowid sum/max, text
+    // length, distinct owners). Reconciliation re-measures a dimension only when the live
+    // fingerprint differs. Computed at readiness-write time, NOT maintained by row triggers: a
+    // trigger per chunk insert measured +43% ingest time on a 3,000-message mailbox.
+    // NULL = recorded before v134 (unknown → always re-checked).
+    private static let v134: String = """
+    ALTER TABLE source_readiness_dimensions ADD COLUMN evidence_fingerprint TEXT;
+    """
+
+    // MARK: - v135 — F16 versioned structural derivations
+    //
+    // Committed structure was attach-once: a newer parser whose output differed could never be
+    // activated, so reprocessing left the version stale forever. A version's blocks now form
+    // derivations. `superseded_by_run` is NULL for the ACTIVE derivation; activating a new parser's
+    // output stamps the old blocks with the parser_runs id that replaced them, in the same savepoint
+    // that inserts the new ones. Superseded blocks are never deleted — citations that name them keep
+    // resolving by id — but version-scoped reads (structure, search, readiness) see only the active set.
+    private static let v135: String = """
+    ALTER TABLE evidence_blocks ADD COLUMN superseded_by_run TEXT;
+    CREATE INDEX IF NOT EXISTS idx_blocks_version_active ON evidence_blocks(source_version_id) WHERE superseded_by_run IS NULL;
+    """
+
+    // MARK: - v136 — F03 SQLite acquisitions that did not preserve their WAL
+    //
+    // Before the logical-derivative acquisition, a live WAL database was versioned by its MAIN
+    // file's hash and only the main file reached the vault; its receipt recorded the WAL as a
+    // sidecar. Those versions' committed WAL rows cannot be reopened. They are marked, not rewritten:
+    // their historical evidence stays as it is, and reopening/reprocessing refuses them explicitly
+    // (`acquisitionIncomplete`) instead of re-reading main-file bytes under the version's identity.
+    // A fresh ingest of the database acquires it completely as a new version.
+    private static let v136: String = """
+    ALTER TABLE source_versions ADD COLUMN acquisition_limitation TEXT;
+    UPDATE source_versions SET acquisition_limitation = 'walNotPreserved'
+     WHERE id IN (SELECT source_version_id FROM source_intake_receipts WHERE detail LIKE '%"sqliteSidecars"%');
+    """
+
+    // MARK: - v137 — F15 genuine evidence revisions
+    //
+    // v134's fingerprint (counts, rowid sums, text lengths, distinct owners) was not a revision: an
+    // equal-length text or locator change, or an ownership swap preserving owner counts, left it
+    // unchanged, so a stale readiness proof stayed "current". Each source version now carries a
+    // monotonically increasing revision per evidence LANE — chunks, blocks, ownership — bumped
+    // transactionally by triggers on every insert, delete and material update (including the F16
+    // active-generation switch, an UPDATE of superseded_by_run, and FK-cascade deletes). A readiness
+    // dimension records the revisions of the lanes it depends on; reconciliation re-verifies it only
+    // when one moved. Absent row = revision 0. Old v134 fingerprints never equal the new tokens, so
+    // every migrated proof is revalidated once. Cost is one indexed upsert per evidence row write.
+    private static let v137: String = """
+    CREATE TABLE IF NOT EXISTS evidence_revisions (
+        source_version_id TEXT NOT NULL,
+        lane              TEXT NOT NULL,
+        revision          INTEGER NOT NULL,
+        PRIMARY KEY (source_version_id, lane)
+    ) WITHOUT ROWID;
+    CREATE TRIGGER IF NOT EXISTS evrev_chunks_ins AFTER INSERT ON chunks WHEN NEW.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (NEW.source_version_id, 'chunks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_chunks_del AFTER DELETE ON chunks WHEN OLD.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (OLD.source_version_id, 'chunks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_chunks_upd AFTER UPDATE OF text, object_id, source_version_id, evidence_block_id ON chunks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'chunks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'chunks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_blocks_ins AFTER INSERT ON evidence_blocks WHEN NEW.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (NEW.source_version_id, 'blocks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_blocks_del AFTER DELETE ON evidence_blocks WHEN OLD.source_version_id IS NOT NULL BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) VALUES (OLD.source_version_id, 'blocks', 1) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_blocks_upd AFTER UPDATE OF raw_text, normalized_text, locator, kind, attributes, ordinal, parent_block_id, extraction_method, source_version_id, superseded_by_run ON evidence_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'blocks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'blocks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_owner_ins AFTER INSERT ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_owner_del AFTER DELETE ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_owner_upd AFTER UPDATE ON evidence_block_objects BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = OLD.evidence_block_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id), 'ownership', 1 WHERE (SELECT source_version_id FROM evidence_blocks WHERE id = NEW.evidence_block_id) IS NOT NULL AND NEW.evidence_block_id IS NOT OLD.evidence_block_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    """
+
+    // MARK: - v138 — F16/F25 search chunks follow the active derivation
+    //
+    // Activating a changed derivation superseded its blocks but left the old derivation's chunks and
+    // vectors serving as current search output. Chunks now carry `superseded_by_run` like blocks: the
+    // index switch stamps the replaced chunks (their rows stay — a historical claim may cite a chunk
+    // id) and a superseded chunk leaves the FTS index (the update trigger re-inserts only an active
+    // chunk). Current-output reads filter it; by-id citation reads do not. The chunk revision trigger
+    // now also counts this column, so a switch moves the chunks lane.
+    private static let v138: String = """
+    ALTER TABLE chunks ADD COLUMN superseded_by_run TEXT;
+    CREATE INDEX IF NOT EXISTS idx_chunks_version_active ON chunks(source_version_id, object_id) WHERE superseded_by_run IS NULL;
+    DROP TRIGGER IF EXISTS chunks_fts_au;
+    CREATE TRIGGER chunks_fts_au AFTER UPDATE ON chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) SELECT 'delete', old.rowid, old.text WHERE old.superseded_by_run IS NULL;
+        INSERT INTO chunks_fts(rowid, text) SELECT new.rowid, new.text WHERE new.superseded_by_run IS NULL;
+    END;
+    DROP TRIGGER IF EXISTS chunks_fts_ad;
+    CREATE TRIGGER chunks_fts_ad AFTER DELETE ON chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) SELECT 'delete', old.rowid, old.text WHERE old.superseded_by_run IS NULL;
+    END;
+    DROP TRIGGER IF EXISTS evrev_chunks_upd;
+    CREATE TRIGGER evrev_chunks_upd AFTER UPDATE OF text, object_id, source_version_id, evidence_block_id, superseded_by_run ON chunks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'chunks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'chunks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    """
+
+    // MARK: - v139 — F01/F15 durable outcome for every streamed record
+    //
+    // The streaming ingest caught a failing record, logged it and continued; readiness then measured
+    // the surviving chunks, so a lost record disappeared behind "ready". Each record of a streamed
+    // version now has a row keyed by its position in the (immutable) acquired stream: `attempting`
+    // before its writes, `committed` after them, `failed` with the reason otherwise. The row also
+    // carries the object id of the attempt (so a half-written attempt can be rolled back before a
+    // retry — never duplicated) and the record's ownership keys (so block ownership is linked from
+    // durable rows, not an in-memory list that grows with the file).
+    private static let v139: String = """
+    CREATE TABLE IF NOT EXISTS stream_record_outcomes (
+        source_version_id TEXT NOT NULL,
+        position          INTEGER NOT NULL,
+        state             TEXT NOT NULL CHECK (state IN ('attempting', 'committed', 'failed')),
+        object_id         TEXT,
+        ownership_keys    TEXT,
+        reason            TEXT,
+        attempts          INTEGER NOT NULL DEFAULT 0,
+        updated_at        REAL NOT NULL,
+        PRIMARY KEY (source_version_id, position)
+    ) WITHOUT ROWID;
+    """
+
+    // MARK: - v140 — F04 durable continuation cursor per scope of a resumable stream
+    //
+    // SQLite ingest stopped each table at a hard 500,000-row cap (and cited only the first 5,000 rows),
+    // so a larger table was never complete. A run now stops at a WORK budget instead and records, per
+    // table (scope) of the EXACT source version, the serialized keyset cursor it reached, the rows it
+    // processed and the rows it discovered. The cursor advances in the same savepoint that commits the
+    // record, so it never runs ahead of committed evidence; a later run resumes from it over the same
+    // immutable acquired bytes. Deferred = discovered − processed, reported, never hidden.
+    private static let v140: String = """
+    CREATE TABLE IF NOT EXISTS stream_cursors (
+        source_version_id TEXT NOT NULL,
+        scope             TEXT NOT NULL,
+        scope_index       INTEGER NOT NULL,
+        cursor            TEXT,
+        processed         INTEGER NOT NULL DEFAULT 0,
+        discovered        INTEGER,
+        updated_at        REAL NOT NULL,
+        PRIMARY KEY (source_version_id, scope)
+    ) WITHOUT ROWID;
+    """
+
+    // MARK: - v141 — F15 citation lineage and every material block field move the evidence revision
+    //
+    // v137 counted chunks, blocks and ownership but not `chunk_blocks` — the lineage that says which
+    // blocks a chunk was assembled from (and therefore what a citation resolves to). Deleting, moving or
+    // re-ordering lineage left every revision unchanged, so the readiness fast path skipped reconciling a
+    // version whose citations had changed. A fourth lane, `lineage`, now moves on every insert, delete
+    // and update of `chunk_blocks`, resolved to the source version THROUGH the chunk (a move between
+    // chunks of different versions moves both). A lineage row deleted by the cascade of its chunk can no
+    // longer resolve that chunk — the chunk's own delete trigger has already moved the `chunks` lane,
+    // which every lineage-dependent dimension also depends on. The block update trigger now also covers
+    // `language`, `extraction_confidence` and `document_id`.
+    //
+    // `chunks.derivation_digest` (F15/F25) binds each chunk to what it was derived from — chunker
+    // version, its text and, in lineage order, each block's id, kind and text — so reconciliation can
+    // tell derived output that no longer matches its evidence from output that merely has the right
+    // counts. NULL for rows written before v141 (a first reconciliation records their baseline).
+    private static let v141: String = """
+    ALTER TABLE chunks ADD COLUMN derivation_digest TEXT;
+    CREATE TRIGGER IF NOT EXISTS evrev_lineage_ins AFTER INSERT ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_lineage_del AFTER DELETE ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    CREATE TRIGGER IF NOT EXISTS evrev_lineage_upd AFTER UPDATE ON chunk_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id), 'lineage', 1 WHERE (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT NULL AND (SELECT source_version_id FROM chunks WHERE id = NEW.chunk_id) IS NOT (SELECT source_version_id FROM chunks WHERE id = OLD.chunk_id) ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    DROP TRIGGER IF EXISTS evrev_blocks_upd;
+    CREATE TRIGGER evrev_blocks_upd AFTER UPDATE OF raw_text, normalized_text, locator, kind, attributes, ordinal, parent_block_id, extraction_method, extraction_confidence, language, document_id, source_version_id, superseded_by_run ON evidence_blocks BEGIN INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT OLD.source_version_id, 'blocks', 1 WHERE OLD.source_version_id IS NOT NULL ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; INSERT INTO evidence_revisions (source_version_id, lane, revision) SELECT NEW.source_version_id, 'blocks', 1 WHERE NEW.source_version_id IS NOT NULL AND NEW.source_version_id IS NOT OLD.source_version_id ON CONFLICT (source_version_id, lane) DO UPDATE SET revision = revision + 1; END;
+    """
+
+
+    // MARK: - v142 — W1-4 user tags (beat-DEVONthink plan)
+    //
+    // Tags are the user's own organisation: they never change what the evidence says.
+    // Nothing here is ever deleted (owner rule): untagging stamps `removed_at`, re-tagging
+    // clears it; merging re-points links and stamps the old tag `retired_at`.
+    private static let v142: String = """
+    CREATE TABLE IF NOT EXISTS user_tags (
+        id          TEXT PRIMARY KEY NOT NULL,
+        name        TEXT NOT NULL COLLATE NOCASE,
+        color       TEXT,
+        created_at  REAL NOT NULL,
+        retired_at  REAL,
+        merged_into TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_tags_live_name ON user_tags(name) WHERE retired_at IS NULL;
+    CREATE TABLE IF NOT EXISTS user_tag_links (
+        tag_id       TEXT NOT NULL,
+        subject_kind TEXT NOT NULL CHECK (subject_kind IN ('object','fact','entity','event','chunk')),
+        subject_id   TEXT NOT NULL,
+        created_at   REAL NOT NULL,
+        removed_at   REAL,
+        PRIMARY KEY (tag_id, subject_kind, subject_id),
+        FOREIGN KEY (tag_id) REFERENCES user_tags(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_tag_links_subject ON user_tag_links(subject_kind, subject_id);
+    """
+
+
+    // MARK: - v143 — O-5 outbound log (Online mode)
+    //
+    // Every online send is recorded: when, to which provider/host/model, how many
+    // bytes, how many personal details were masked, the SHA-256 of exactly what
+    // was sent (and the text itself, which is the user's own data on their own
+    // Mac), and the outcome. Append-only; nothing here is ever deleted.
+    private static let v143: String = """
+    CREATE TABLE IF NOT EXISTS outbound_log (
+        id             TEXT PRIMARY KEY NOT NULL,
+        sent_at        REAL NOT NULL,
+        provider       TEXT NOT NULL,
+        model          TEXT NOT NULL,
+        host           TEXT NOT NULL,
+        bytes_sent     INTEGER NOT NULL,
+        masked_count   INTEGER NOT NULL DEFAULT 0,
+        payload_sha256 TEXT NOT NULL,
+        payload_text   TEXT NOT NULL,
+        response_bytes INTEGER,
+        outcome        TEXT NOT NULL,
+        detail         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_outbound_log_sent ON outbound_log(sent_at);
+    """
+
+
+    // MARK: - v144 — beat-DEVONthink plan: watchlists (N-3), question monitors (N-11),
+    // issues (N-1), review coding (N-4), custom record types (N-12), alerts (W3-4).
+    //
+    // All user organisation or derived signals: none changes evidence status. Nothing is
+    // deleted (owner rule): removals stamp removed_at / retired_at.
+    private static let v144: String = """
+    CREATE TABLE IF NOT EXISTS watchlists (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS watchlist_entries (
+        id TEXT PRIMARY KEY NOT NULL, watchlist_id TEXT NOT NULL, term TEXT NOT NULL,
+        note TEXT, created_at REAL NOT NULL, removed_at REAL,
+        FOREIGN KEY (watchlist_id) REFERENCES watchlists(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_watchlist_entries_list ON watchlist_entries(watchlist_id);
+    CREATE TABLE IF NOT EXISTS pinned_questions (
+        id TEXT PRIMARY KEY NOT NULL, question TEXT NOT NULL, created_at REAL NOT NULL,
+        last_checked_at REAL, last_answer_text TEXT, last_answer_fingerprint TEXT,
+        last_citation_ids TEXT, last_contradictions INTEGER, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS case_issues (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL COLLATE NOCASE, description TEXT,
+        created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS case_issue_links (
+        issue_id TEXT NOT NULL, subject_kind TEXT NOT NULL CHECK (subject_kind IN ('event','fact','object','chunk')),
+        subject_id TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL,
+        PRIMARY KEY (issue_id, subject_kind, subject_id),
+        FOREIGN KEY (issue_id) REFERENCES case_issues(id)
+    );
+    CREATE TABLE IF NOT EXISTS review_codes (
+        id TEXT PRIMARY KEY NOT NULL, object_id TEXT NOT NULL,
+        code TEXT NOT NULL CHECK (code IN ('responsive','not_responsive','privileged','hot')),
+        reviewer TEXT NOT NULL, coded_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_codes_object ON review_codes(object_id);
+    CREATE TABLE IF NOT EXISTS custom_record_types (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, fields_json TEXT NOT NULL,
+        created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS product_alerts (
+        id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, detail TEXT,
+        object_id TEXT, created_at REAL NOT NULL, read_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_alerts_created ON product_alerts(created_at);
+    """
+
+
+    // MARK: - v145 — beat-DEVONthink plan: annotations (W2-1), near-duplicate groups (W2-4),
+    // legal holds and Bates runs (W2-5), smart collections and rules (W3-5).
+    //
+    // User work product and derived links only — none changes evidence. Nothing is deleted:
+    // removals stamp removed_at / released_at / retired_at.
+    private static let v145: String = """
+    CREATE TABLE IF NOT EXISTS annotations (
+        id TEXT PRIMARY KEY NOT NULL, object_id TEXT NOT NULL, chunk_id TEXT,
+        source_url TEXT, quote TEXT NOT NULL, note TEXT, color TEXT NOT NULL DEFAULT 'yellow',
+        stance TEXT NOT NULL DEFAULT 'note', created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_annotations_object ON annotations(object_id);
+    CREATE INDEX IF NOT EXISTS idx_annotations_source ON annotations(source_url);
+    CREATE TABLE IF NOT EXISTS near_duplicate_members (
+        object_id TEXT PRIMARY KEY NOT NULL, group_id TEXT NOT NULL,
+        similarity REAL NOT NULL, computed_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_near_dup_group ON near_duplicate_members(group_id);
+    CREATE TABLE IF NOT EXISTS legal_holds (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, released_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS legal_hold_items (
+        hold_id TEXT NOT NULL, object_id TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL,
+        PRIMARY KEY (hold_id, object_id), FOREIGN KEY (hold_id) REFERENCES legal_holds(id)
+    );
+    CREATE TABLE IF NOT EXISTS bates_runs (
+        id TEXT PRIMARY KEY NOT NULL, prefix TEXT NOT NULL, first_number INTEGER NOT NULL,
+        last_number INTEGER NOT NULL, documents INTEGER NOT NULL, created_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS smart_collections (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, query TEXT NOT NULL,
+        created_at REAL NOT NULL, retired_at REAL
+    );
+    CREATE TABLE IF NOT EXISTS automation_rules (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, query TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('tag','alert')), action_value TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1, created_at REAL NOT NULL, retired_at REAL
+    );
+    """
+
+    // MARK: - v146 — note links (N-9): links between notes from notes apps (Obsidian
+    // [[wiki-links]], Notion page links). Derived from the notes' own text; a re-run
+    // stamps removed_at on links that no longer exist. Nothing is deleted.
+    private static let v146: String = """
+    CREATE TABLE IF NOT EXISTS note_links (
+        id TEXT PRIMARY KEY NOT NULL, from_object_id TEXT NOT NULL, to_object_id TEXT,
+        target TEXT NOT NULL, kind TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_note_links_from ON note_links(from_object_id);
+    CREATE INDEX IF NOT EXISTS idx_note_links_to ON note_links(to_object_id);
     """
 
 }

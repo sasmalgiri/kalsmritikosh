@@ -26,6 +26,7 @@ public struct OnboardingView: View {
     /// onboarding. Same key the sidebar's "For you" section and the
     /// change-focus sheet read, so there is one source of truth.
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
+    @AppStorage("kalsmritikosh.fromDevonthink") private var fromDevonthink = false
 
     enum Step: Int { case welcome, persona, hardware, folder, scope, done }
 
@@ -63,12 +64,10 @@ public struct OnboardingView: View {
         .overlay(alignment: .topTrailing) {
             Button {
                 dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
+            } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly)
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .padding(10)
-            }
+                    .padding(10) }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)   // Escape
             .help("Close — you can add folders later from Sources")
@@ -188,6 +187,7 @@ public struct OnboardingView: View {
                     ForEach(GuideContent.personas) { p in
                         Button {
                             personaID = p.id
+                            ModulePreset.apply(persona: p.id)   // switches ON this role's tools; never off
                         } label: {
                             HStack(spacing: 10) {
                                 Text(p.emoji).font(.system(size: 22))
@@ -215,6 +215,12 @@ public struct OnboardingView: View {
                 }
             }
             .frame(maxHeight: 260)
+            Toggle("I\u{2019}m coming from DEVONthink (switch on the import and smart-collection tools)", isOn: Binding(
+                get: { fromDevonthink },
+                set: { on in fromDevonthink = on; if on { ModulePreset.apply(persona: "devonthink") } }))
+                .font(.callout)
+            Text("Choosing a focus switches on the tools it needs. You can change any of them in Settings \u{2192} Modules.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: 560)
     }

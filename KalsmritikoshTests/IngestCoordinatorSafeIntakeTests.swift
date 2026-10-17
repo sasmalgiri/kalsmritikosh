@@ -102,6 +102,42 @@ struct IngestCoordinatorSafeIntakeTests {
         #expect(attempt?.uuid(1) != nil)
     }
 
+    private struct StubTranscriber: AudioTranscribing {
+        var engineID: String { "stub-asr" }
+        func transcribe(audioAt url: URL) async throws -> String { "" }
+        func transcribeSegments(audioAt url: URL) async throws -> [ASRSegment] {
+            [ASRSegment(start: 3, end: 6, text: "the tribunal hearing moved to thursday", confidence: 0.9),
+             ASRSegment(start: 754, end: 760, text: "counsel confirmed the quorvex settlement", confidence: 0.9)]
+        }
+    }
+
+    @Test("F02 — with transcription on, a recording is transcribed at ingest: searchable, timecoded text")
+    @MainActor func enabledTranscriptionRunsAtIngest() async throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("usf-media-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        try await db.exec("PRAGMA foreign_keys = ON;")
+        let vault = EvidenceVault(root: dir.appendingPathComponent("vault", isDirectory: true))
+        let coordinator = IngestCoordinator(
+            universalRegistry: try UniversalParserRegistryBuilder.standard(
+                ocr: VisionOCR(), mediaTranscriptionEnabled: true, transcriber: StubTranscriber()),
+            entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(), eventExtractor: RuleEventExtractor(),
+            files: FilesRepository(database: db), objects: KnowledgeObjectRepository(database: db),
+            chunks: ChunksRepository(database: db), evidenceStore: EvidenceStore(database: db),
+            ingestAttempts: IngestAttemptsRepository(database: db), sourceRelations: SourceRelationsRepository(database: db),
+            intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db, vault: vault)),
+            custodyModeOverride: .referenced)
+        let url = dir.appendingPathComponent("hearing.m4a")
+        try Data(repeating: 0x33, count: 64).write(to: url)
+        let result = try await coordinator.ingest(fileAt: url)
+        #expect(result.chunkCount > 0)
+        #expect(try await db.query("SELECT COUNT(*) FROM ingest_file_attempts WHERE stage='media-deferred';", []).first?.int(0) == 0)
+        let hits = try await ChunksRepository(database: db).searchFTS("quorvex", limit: 5)
+        #expect(!hits.isEmpty, "the transcript must be searchable")
+        #expect(hits.contains { $0.text.contains("[12:34]") }, "the timecode travels with the text for a timed citation")
+    }
+
     @Test("Deferred video receives custody")
     @MainActor func deferredVideoKeepsCustody() async throws {
         let rig = try await makeRig()

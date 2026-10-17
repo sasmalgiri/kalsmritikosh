@@ -97,7 +97,7 @@ public struct PrivilegeLogStudioView: View {
             HStack {
                 Text("\(l.entries.count) withheld document(s)").font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { logs.removeAll { $0.id == l.id }; persist() } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { logs.removeAll { $0.id == l.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = l.id; stage = firstIncomplete(l) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -207,7 +207,7 @@ public struct PrivilegeLogStudioView: View {
                             ForEach(PrivilegeBasis.allCases, id: \.self) { Text($0.label).tag($0) }
                         }.labelsHidden().frame(maxWidth: 210)
                         Spacer()
-                        Button { p.wrappedValue.entries.removeAll { $0.id == e.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { p.wrappedValue.entries.removeAll { $0.id == e.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     HStack(spacing: 8) {

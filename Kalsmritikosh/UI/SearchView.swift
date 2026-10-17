@@ -30,6 +30,11 @@ public struct SearchView: View {
     @State private var query: String = ""
     @State private var hits: [Chunk] = []
     @State private var searching = false
+    // W1-1 / W1-2
+    @State private var compiledSearch: CompiledSearch?
+    @State private var coverage: SearchCoverage?
+    // W1-4
+    @State private var taggingObject: UUID?
     /// Chunks the user soft-excluded this session (greyed with a Restore).
     @State private var excludedIDs: Set<Chunk.ID> = []
 
@@ -63,7 +68,16 @@ public struct SearchView: View {
         .background(AuroraBackdrop(intensity: 0.6))
         .onAppear { consumePendingQuery() }
         .onChange(of: appState.pendingSearchQuery) { _, _ in consumePendingQuery() }
+        .sheet(item: Binding(
+            get: { taggingObject.map(TaggedSubject.init) },
+            set: { taggingObject = $0?.id }
+        )) { subject in
+            TagEditorSheet(subjectKind: .object, subjectID: subject.id,
+                           subjectLabel: "Document \(subject.id.uuidString.prefix(8))")
+        }
     }
+
+    private struct TaggedSubject: Identifiable { let id: UUID }
 
     // MARK: Batch search
 
@@ -209,12 +223,41 @@ public struct SearchView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
+                searchExplanation
+                    .padding(.horizontal, 4)
                 ForEach(hits) { chunk in
                     resultCard(chunk)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
+        }
+    }
+
+    /// W1-1 / W1-2 — what was searched, anything not understood, and coverage.
+    @ViewBuilder
+    private var searchExplanation: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let c = compiledSearch {
+                if !c.summary.isEmpty {
+                    Text(c.summary).font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(c.issues, id: \.self) { issue in
+                    Label(issue, systemImage: "exclamationmark.circle")
+                        .font(.caption2).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let cov = coverage {
+                Label(cov.headline, systemImage: cov.isComplete ? "checkmark.circle" : "circle.lefthalf.filled")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let note = cov.indexingNote {
+                    Text(note).font(.caption2).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 
@@ -235,6 +278,25 @@ public struct SearchView: View {
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
+                // W1-5 — copy a link that reopens this passage from any app.
+                if ProductModuleFlags.isEnabled(.deepLinks) {
+                    Button {
+                        appState.copyLink(objectID: chunk.objectID, quote: String(chunk.text.prefix(200)))
+                    } label: {
+                        Label("Copy link", systemImage: "link").font(.caption2)
+                    }
+                    .buttonStyle(.borderless).controlSize(.small)
+                }
+                // W1-4 — tag the document this passage belongs to.
+                if ProductModuleFlags.isEnabled(.userTags) {
+                    Button {
+                        taggingObject = chunk.objectID
+                    } label: {
+                        Label("Tag", systemImage: "tag").font(.caption2)
+                    }
+                    .buttonStyle(.borderless).controlSize(.small)
+                    .help("Tag the document this passage comes from")
+                }
                 // Human-in-loop: exclude this passage from search + answers.
                 if excluded {
                     Label("Excluded", systemImage: "eye.slash")
@@ -280,10 +342,21 @@ public struct SearchView: View {
         guard !q.isEmpty, let chunks = appState.chunks else { return }
         searching = true
         Task {
-            let results = (try? await chunks.searchFTS(q, limit: 40)) ?? []
+            // W1-1 — advanced syntax when its module is on; plain keyword search otherwise.
+            var compiled: CompiledSearch?
+            let results: [Chunk]
+            if let advanced = await appState.advancedSearch(q) {
+                compiled = advanced.compiled
+                results = advanced.hits
+            } else {
+                results = (try? await chunks.searchFTS(q, limit: 40)) ?? []
+            }
             let filtered = await appState.screenAuthorizer?.filterChunks(results, boundary: .globalOwner) ?? []
+            let coverage = await appState.searchCoverage(for: compiled)
             await MainActor.run {
                 self.hits = filtered
+                self.compiledSearch = compiled
+                self.coverage = coverage
                 self.searching = false
             }
         }

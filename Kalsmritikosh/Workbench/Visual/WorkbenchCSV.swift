@@ -59,43 +59,8 @@ public nonisolated enum WorkbenchCSV {
     /// CR/LF/CRLF row endings. The inverse of render(); Excel's "Save as
     /// CSV" lands here, so imported spreadsheets become real datasets.
     public static func parse(_ text: String) -> [[String]] {
-        var rows: [[String]] = []
-        var row: [String] = []
-        var field = ""
-        var inQuotes = false
-        var i = text.startIndex
-        while i < text.endIndex {
-            let ch = text[i]
-            if inQuotes {
-                if ch == "\"" {
-                    let next = text.index(after: i)
-                    if next < text.endIndex, text[next] == "\"" {
-                        field.append("\""); i = next
-                    } else {
-                        inQuotes = false
-                    }
-                } else {
-                    field.append(ch)
-                }
-            } else {
-                switch ch {
-                case "\"": inQuotes = true
-                case ",":  row.append(field); field = ""
-                // NOTE: Swift treats CRLF as ONE grapheme-cluster Character,
-                // so "\r\n" is its own case — no lookahead needed.
-                case "\r", "\n", "\r\n":
-                    row.append(field); field = ""
-                    rows.append(row); row = []
-                default:
-                    field.append(ch)
-                }
-            }
-            i = text.index(after: i)
-        }
-        if !field.isEmpty || !row.isEmpty {
-            row.append(field)
-            rows.append(row)
-        }
+        // F30 — the shared scalar-level reader every CSV importer uses.
+        var rows = CSVRowReader.rows(text)
         // Drop fully-empty trailing rows (a final newline is not a row).
         while rows.last?.allSatisfy(\.isEmpty) == true { rows.removeLast() }
         return rows

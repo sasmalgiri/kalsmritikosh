@@ -129,7 +129,24 @@ struct WorkbenchTransformEngineTests {
         let byKey = Dictionary(uniqueKeysWithValues: agg.groups.map { ($0.resultKey ?? "", $0) })
         #expect(byKey["A"]?.value == .number(125))
         #expect(byKey["B"]?.value == .number(50))
-        #expect(Set(byKey["A"]?.inputCellIDs ?? []) == Set([cells["0|amt"]!, cells["2|amt"]!]))
+        // F27 — the grouping cells that placed each row in "A" are read, so they are inputs too.
+        #expect(Set(byKey["A"]?.inputCellIDs ?? []) == Set([cells["0|amt"]!, cells["2|amt"]!, cells["0|cat"]!, cells["2|cat"]!]))
+    }
+
+    @Test("F27 — distinct group tuples never merge, even when their joined labels would match")
+    func groupTuplesStayDistinct() throws {
+        let (rec, cells) = makeRecord(fields: [("a", .text), ("b", .text), ("amt", .number)],
+                                      rows: [["A · B", "C", "1"], ["A", "B · C", "2"],
+                                             [nil, "x", "4"], ["∅", "x", "8"]])
+        let outcome = try WorkbenchTransformEngine.compute(
+            .aggregate(function: .sum, field: "amt", groupBy: ["a", "b"]), over: rec)
+        guard case .aggregate(let agg) = outcome else { Issue.record("expected aggregate"); return }
+        #expect(agg.groups.map(\.value) == [.number(1), .number(2), .number(4), .number(8)])
+        // Labels stay unique, so persisted result keys can tell the groups apart.
+        let labels = agg.groups.compactMap(\.resultKey)
+        #expect(Set(labels).count == 4, "\(labels)")
+        // Lineage includes the grouping cells that decided membership.
+        #expect(Set(agg.groups[0].inputCellIDs) == Set([cells["0|amt"]!, cells["0|a"]!, cells["0|b"]!]))
     }
 
     @Test("Average / min / max / count aggregate correctly (ungrouped)")

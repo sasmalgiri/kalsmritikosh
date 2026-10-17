@@ -528,6 +528,46 @@ public struct SettingsView: View {
                     .textSelection(.enabled)
             }
 
+            // I-7 — accuracy on your own archive (module "Accuracy on your archive").
+            if ProductModuleFlags.isEnabled(.archiveSelfScore) {
+                Divider().padding(.vertical, 4)
+                Text("Measure accuracy — asks up to 20 questions whose answers your ledger already proves, plus 3 that have no answer, and scores the results. Answers then show how often answers at their confidence were right on your archive. Uses the on-device model, so it takes a few minutes.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await runSelfScore() }
+                } label: {
+                    Label(selfScoreRunning ? "Measuring…" : "Measure accuracy on my archive",
+                          systemImage: selfScoreRunning ? "hourglass" : "target")
+                }
+                .disabled(selfScoreRunning)
+                if let card = selfScoreCard ?? ArchiveSelfScore.latest() {
+                    Text(card.summary)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // W0-1 — scale-run recorder: memory footprint + documents read, for SHIP_DECISIONS.
+            Text("Scale run recorder — start it, then add a large folder in Sources. It samples this app's memory footprint and documents read every 10 seconds; stop it when reading ends to get a summary (baseline, peak, whether memory stayed flat) to record in SHIP_DECISIONS.md. Saved to Application Support/Kalsmritikosh/ScaleRuns.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if ScaleRunRecorder.shared.running {
+                    Button("Stop and summarise (\(ScaleRunRecorder.shared.samples.count) samples)") {
+                        scaleRunSummary = ScaleRunRecorder.shared.stop()
+                    }
+                } else {
+                    Button("Start scale run recorder") { ScaleRunRecorder.shared.start(appState: appState); scaleRunSummary = nil }
+                }
+            }
+            if let scaleRunSummary {
+                Text(scaleRunSummary).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+
             Divider().padding(.vertical, 4)
 
             // D-1 — the only diagnostic here that WRITES, so it is confirmed
@@ -1036,6 +1076,16 @@ public struct SettingsView: View {
         }
     }
 
+    private func runSelfScore() async {
+        selfScoreRunning = true
+        defer { selfScoreRunning = false }
+        do {
+            selfScoreCard = try await ArchiveSelfScore.run(appState)
+        } catch {
+            KalsmritikoshLog.app.error("Self-score failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func runAnswerHarness() async {
         answerHarnessRunning = true
         answerHarnessStatus = "Asking…"
@@ -1310,6 +1360,7 @@ public struct SettingsView: View {
     @State private var confirmDeleteAll = false
     @State private var deleteAllStatus: String?
     @State private var backupStatus: String?
+    @State private var snapshotIncludeOriginals = false
     @State private var backingUp = false
     @State private var cleanupStatus: String?
     @State private var cleaningUp = false
@@ -1322,6 +1373,10 @@ public struct SettingsView: View {
     // SwiftUI does not observe. Bumping this token in each setter forces the
     // modules section to recompute so the switch reflects its new state.
     @State private var moduleFlagsVersion = 0
+    // I-7 — accuracy on your archive.
+    @State private var selfScoreRunning = false
+    @State private var scaleRunSummary: String?
+    @State private var selfScoreCard: ArchiveScorecard?
     // True while a regime change is rebuilding the topic layer in the background.
     @State private var regimeRebuildRunning = false
 
@@ -1482,6 +1537,141 @@ public struct SettingsView: View {
                     }
                 }
             }
+            Divider()
+            connectivitySection
+            if ProductModuleFlags.isEnabled(.onlineAnswers) || ConnectivityMode.stored == .online {
+                OnlineSettingsSection()
+            }
+            productModulesSection
+        }
+    }
+
+    /// O-3 — Private (default) or Online (the user's own cloud AI key). The
+    /// choice is kept even when this build cannot go online, and takes effect
+    /// once the network helper is bundled.
+    @ViewBuilder
+    private var connectivitySection: some View {
+        let _ = moduleFlagsVersion
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Connection").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Picker("Connection", selection: Binding(
+                get: { ConnectivityMode.stored },
+                set: { ConnectivityMode.set($0); moduleFlagsVersion &+= 1 }
+            )) {
+                ForEach(ConnectivityMode.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(ConnectivityMode.stored.summary)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            // W0-C — the offline claim, read from this app's own signature.
+            Label(NoNetworkAttestation.verdict().summary, systemImage: "lock.shield")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if ConnectivityMode.stored == .online && !ConnectivityMode.onlineAvailableInThisBuild {
+                Label("Online mode is not available in this build, so the app stays Private. Your choice is kept.",
+                      systemImage: "lock.fill")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// W0-M — product modules from the beat-DEVONthink plan. Built modules get
+    /// a switch; the rest are counted so the list stays short.
+    @ViewBuilder
+    private var productModulesSection: some View {
+        let _ = moduleFlagsVersion
+        let built = ProductModule.allCases.filter(\.implemented)
+        // Companion positioning: what fills DEVONthink's gaps first; what DEVONthink already does
+        // is listed separately and stays off until switched on.
+        let groups = Dictionary(grouping: built.filter { !$0.alsoInDevonthink }, by: \.group)
+        let overlap = built.filter(\.alsoInDevonthink).sorted { $0.title < $1.title }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Toggle(isOn: Binding(get: { ProductModuleFlags.showPreviewFeatures },
+                                 set: { ProductModuleFlags.showPreviewFeatures = $0; moduleFlagsVersion &+= 1 })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show preview features")
+                    Text("Features that are built but not yet verified on real data or hardware (team review, places, iPhone/iPad snapshot). Use them knowing they may change.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            ForEach(groups.keys.sorted(), id: \.self) { groupName in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(groupName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                        let reason = ProductModuleFlags.disabledReason(module)
+                        Toggle(isOn: Binding(
+                            get: { ProductModuleFlags.isEnabled(module) },
+                            set: {
+                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
+                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
+                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
+                                Text(module.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Off: \(module.spec.whenOff)")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let reason {
+                                    Label(reason, systemImage: "lock.fill")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .disabled(reason != nil)
+                    }
+                }
+            }
+            if !overlap.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Also in DEVONthink — off until you turn them on").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Kalsmritikosh works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    ForEach(overlap) { module in
+                        let reason = ProductModuleFlags.disabledReason(module)
+                        Toggle(isOn: Binding(
+                            get: { ProductModuleFlags.isEnabled(module) },
+                            set: {
+                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
+                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
+                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
+                                Text(module.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Off: \(module.spec.whenOff)")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let reason {
+                                    Label(reason, systemImage: "lock.fill")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .disabled(reason != nil)
+                    }
+                }
+            }
+            let coming = ProductModule.allCases.count - built.count
+            if coming > 0 {
+                Text("\(coming) more features are planned and will appear here as they are built.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -1568,6 +1758,24 @@ public struct SettingsView: View {
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
+                if ProductModuleFlags.showPreviewFeatures {
+                Toggle("Include original files in snapshots (so citations open on the device)", isOn: $snapshotIncludeOriginals)
+                    .font(.caption)
+                HStack {
+                    Button {
+                        exportSnapshot()
+                    } label: {
+                        Label("Export signed snapshot…", systemImage: "ipad.and.iphone")
+                    }
+                    .disabled(backingUp)
+                    Button {
+                        checkSnapshot()
+                    } label: {
+                        Label("Check a snapshot…", systemImage: "checkmark.shield")
+                    }
+                }
+                }
                 if let s = backupStatus {
                     Text(s).font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1592,33 +1800,28 @@ public struct SettingsView: View {
         backupStatus = nil
         Task {
             let dbURL = DatabaseLocations.defaultDatabaseURL
-            var sidecars: [URL] = []
-            for suffix in ["-wal", "-shm"] {
-                let u = URL(fileURLWithPath: dbURL.path + suffix)
-                if FileManager.default.fileExists(atPath: u.path) { sidecars.append(u) }
-            }
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Kalsmritikosh-Backup-\(stamp)")
-            // CHECKPOINT BEFORE COPYING. The connection runs in WAL mode, so
-            // recent commits can live in `knowledge.sqlite-wal` while the main
-            // file is copied — and copying a live database with an active log
-            // can capture a torn state even though the sidecars travel too.
-            // Folding the log back first makes the copied main file
-            // self-contained. A partial checkpoint is REPORTED, not hidden:
-            // the user needs to know their backup was taken over a busy log.
-            let checkpointed = (try? await appState.database?.checkpointWAL()) ?? nil
+            // F18 — a CONSISTENT live snapshot via SQLite's Online Backup API, taken inside the
+            // Database actor, instead of "checkpoint, then copy the files": nothing stopped writes
+            // between those copies, so a busy ledger could be captured torn. The snapshot is one
+            // self-contained, integrity-checked file (the log is folded in; no sidecars to carry).
+            let scratch = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kalsmritikosh-backup-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: scratch) }
             do {
+                guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
+                try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+                let snapshot = scratch.appendingPathComponent(dbURL.lastPathComponent)
+                try await database.backupSnapshot(to: snapshot)
                 let manifest = try BackupService().createBackup(
-                    databaseURL: dbURL, originalURLs: sidecars, destination: dest,
+                    databaseURL: snapshot, originalURLs: [], destination: dest,
                     schemaVersion: SchemaMigrations.latestVersion,
                     nowEpoch: Date().timeIntervalSince1970)
                 await MainActor.run {
                     backingUp = false
-                    var msg = "Backed up \(manifest.entries.count) file(s) to “\(dest.lastPathComponent)”."
-                    if checkpointed == false {
-                        msg += " The write-ahead log was busy, so it was copied alongside the database rather than folded into it — the backup is complete, but restore it as a whole folder."
-                    }
-                    backupStatus = msg
+                    backupStatus = "Backed up the ledger to “\(dest.lastPathComponent)” (a consistent, verified snapshot). Original files and the evidence vault are not included."
+                    _ = manifest
                 }
             } catch {
                 await MainActor.run {
@@ -1626,6 +1829,79 @@ public struct SettingsView: View {
                     backupStatus = "Backup failed: \(error.localizedDescription)"
                 }
             }
+        }
+        #endif
+    }
+
+    /// W4-6 — write a signed snapshot folder (ledger + optional originals).
+    private func exportSnapshot() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.prompt = "Save Snapshot Here"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        guard let passphrase = askSnapshotPassphrase() else { return }
+        backingUp = true; backupStatus = nil
+        let include = snapshotIncludeOriginals
+        Task {
+            let scoped = dir.startAccessingSecurityScopedResource()
+            defer { if scoped { dir.stopAccessingSecurityScopedResource() } }
+            do {
+                let summary = try await appState.exportCompanionSnapshot(to: dir, includeOriginals: include, passphrase: passphrase)
+                backupStatus = summary
+            } catch {
+                backupStatus = "Snapshot failed: \(error.localizedDescription)"
+            }
+            backingUp = false
+        }
+        #endif
+    }
+
+    #if canImport(AppKit)
+    /// W2-7 — the passphrase that encrypts the snapshot's ledger copy (asked twice). nil = cancelled.
+    private func askSnapshotPassphrase() -> String? {
+        var note = ""
+        while true {
+            let alert = NSAlert()
+            alert.messageText = "Set a passphrase for this snapshot"
+            alert.informativeText = "The ledger in the snapshot is encrypted with this passphrase. The iPhone or iPad viewer asks for it. It is not stored anywhere — if it is forgotten, the snapshot cannot be opened."
+                + (note.isEmpty ? "" : "\n\n" + note)
+            let first = NSSecureTextField(frame: NSRect(x: 0, y: 30, width: 280, height: 24))
+            first.placeholderString = "Passphrase (at least \(AppState.minimumSnapshotPassphrase) characters)"
+            let second = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+            second.placeholderString = "Repeat the passphrase"
+            let box = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 56))
+            box.addSubview(first); box.addSubview(second)
+            alert.accessoryView = box
+            alert.addButton(withTitle: "Export")
+            alert.addButton(withTitle: "Cancel")
+            alert.window.initialFirstResponder = first
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+            if first.stringValue.count < AppState.minimumSnapshotPassphrase {
+                note = "The passphrase is too short."
+            } else if first.stringValue != second.stringValue {
+                note = "The two passphrases do not match."
+            } else {
+                return first.stringValue
+            }
+        }
+    }
+    #endif
+
+    /// W4-6 — verify a snapshot's signature and every file against its manifest.
+    private func checkSnapshot() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.treatsFilePackagesAsDirectories = false
+        panel.prompt = "Check Snapshot"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        switch CompanionSnapshot.verify(folder: dir) {
+        case .valid(let fp, let store, let files):
+            backupStatus = "Snapshot OK — signed by key \(fp) (\(store)); all \(files) files match."
+        case .unsigned: backupStatus = "This snapshot is not signed."
+        case .badSignature: backupStatus = "Signature check FAILED — the snapshot was changed or signed by a different key."
+        case .damaged(let why): backupStatus = "Snapshot damaged — \(why)."
         }
         #endif
     }
@@ -1644,9 +1920,16 @@ public struct SettingsView: View {
             do {
                 let (manifest, verdict) = try BackupService().inspect(backupFolder: dir)
                 await MainActor.run {
-                    backupStatus = verdict.ok
-                        ? "Backup OK — \(manifest.entries.count) file(s), schema v\(manifest.schemaVersion). Verified complete."
-                        : "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                    // F17 — the verdict now checks every file's size + checksum; say exactly what failed.
+                    if verdict.ok {
+                        backupStatus = "Backup OK — schema v\(manifest.schemaVersion). \(verdict.note)"
+                    } else if !verdict.unsafe.isEmpty {
+                        backupStatus = "Backup refused — unsafe paths in its manifest: \(verdict.unsafe.joined(separator: ", "))."
+                    } else if !verdict.corrupt.isEmpty {
+                        backupStatus = "Damaged backup — these files don't match their checksum: \(verdict.corrupt.joined(separator: ", "))."
+                    } else {
+                        backupStatus = "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -1734,8 +2017,14 @@ public struct SettingsView: View {
     /// easy to find (the app previously only had a per-folder forget in Sources).
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            LedgerEncryptionSubsection()
+            Divider().padding(.vertical, 4)
             backupSubsection
             Divider().padding(.vertical, 4)
+            if ProductModuleFlags.isEnabled(.ledgerRelocation) || appState.ledgerLocationNotice != nil {
+                LedgerRelocationSection()
+                Divider().padding(.vertical, 4)
+            }
             ledgerCleanupSubsection
             Divider().padding(.vertical, 4)
             HStack(spacing: 6) {
@@ -1775,6 +2064,11 @@ public struct SettingsView: View {
                 Task {
                     deleteAllStatus = "Erasing…"
                     let n = await appState.deleteAllData()
+                    if let block = appState.legalHoldBlock {
+                        deleteAllStatus = block
+                        appState.legalHoldBlock = nil
+                        return
+                    }
                     // P4.3 — the erase is VERIFIED, and a failure to verify is
                     // shown here rather than only logged. "Erased" is a claim
                     // the user cannot check for themselves and cannot undo, so
@@ -2412,9 +2706,7 @@ public struct SettingsView: View {
                                     ggufEntries = await reg.load()
                                 }
                             }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
                     }
                 }
@@ -2502,9 +2794,7 @@ public struct SettingsView: View {
                                     cloudEntries = await reg.load()
                                 }
                             }
-                        } label: {
-                            Image(systemName: "trash")
-                        }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
                     }
                 }
@@ -2826,6 +3116,56 @@ public struct SettingsView: View {
                 }
             }
             self.pins = dict
+        }
+    }
+}
+
+
+/// W2-7 — encryption status and the recovery key (shown only after Touch ID / the Mac password).
+private struct LedgerEncryptionSubsection: View {
+    @Environment(AppState.self) private var appState
+    @State private var revealed: String?
+    @State private var problem: String?
+
+    private var encrypted: Bool { appState.database?.key != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: encrypted ? "lock.shield.fill" : "lock.open").foregroundStyle(Theme.brand)
+                Text("Encryption").font(.title3.bold())
+            }
+            Text(encrypted
+                 ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them."
+                 : "The ledger is not open yet.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if encrypted {
+                Text("Write down the recovery key and keep it somewhere safe. It is the only way to open this ledger on another Mac (for example, from a backup) or if this Mac's Keychain is reset. Kalsmritikosh cannot recover it for you.")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button(revealed == nil ? "Show recovery key…" : "Hide recovery key") {
+                        if revealed != nil { revealed = nil; return }
+                        Task {
+                            switch await appState.revealRecoveryKey() {
+                            case .success(let text): revealed = text; problem = nil
+                            case .failure(let error): problem = "The recovery key was not shown: \(error.localizedDescription)"
+                            }
+                        }
+                    }
+                    if let revealed {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(revealed, forType: .string)
+                        }
+                    }
+                }
+                if let revealed {
+                    Text(revealed).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                        .padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
+                }
+                if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
+            }
         }
     }
 }

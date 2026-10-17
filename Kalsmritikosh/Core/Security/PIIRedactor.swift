@@ -62,7 +62,8 @@ public struct PIIRedactor: Sendable {
             if n > 0 { out = replaced; count += n; categories.append("email") }
         }
         if policy.redactPhones {
-            let (replaced, n) = replaceRegex(Self.phonePattern, in: out, with: policy.token)
+            let (replaced, n) = replaceRegex(Self.phonePattern, in: out, with: policy.token,
+                                             skip: Self.isDateLike)
             if n > 0 { out = replaced; count += n; categories.append("phone") }
         }
         return Result(redactedText: out, redactionCount: count, categories: categories)
@@ -70,10 +71,32 @@ public struct PIIRedactor: Sendable {
 
     // MARK: - Helpers
 
-    nonisolated func replaceRegex(_ pattern: String, in s: String, with token: String) -> (String, Int) {
+    /// N1 — the phone pattern also matches dates ("2024-08-06", "06-08-2024") and year ranges
+    /// ("2019 - 2024"). A candidate made only of such tokens is a date, not a phone; everything
+    /// else the pattern matches is still redacted (over-redaction stays the safe side).
+    nonisolated static let dateTokenPattern = #"^(?:[12]\d{3}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|(?:0[1-9]|[12]\d|3[01])-(?:0[1-9]|[12]\d|3[01])-[12]\d{3})$"#
+    nonisolated static let yearRangePattern = #"^[12]\d{3} ?- ?[12]\d{3}$"#
+
+    nonisolated static func isDateLike(_ candidate: String) -> Bool {
+        let trimmed = candidate.trimmingCharacters(in: .whitespaces)
+        if trimmed.range(of: yearRangePattern, options: .regularExpression) != nil { return true }
+        let tokens = trimmed.split(separator: " ", omittingEmptySubsequences: true)
+        return !tokens.isEmpty && tokens.allSatisfy {
+            String($0).range(of: dateTokenPattern, options: .regularExpression) != nil
+        }
+    }
+
+    nonisolated func replaceRegex(_ pattern: String, in s: String, with token: String,
+                                  skip: (String) -> Bool = { _ in false }) -> (String, Int) {
         guard let re = try? NSRegularExpression(pattern: pattern) else { return (s, 0) }
         let ns = NSMutableString(string: s)
-        let n = re.replaceMatches(in: ns, range: NSRange(location: 0, length: ns.length), withTemplate: token)
+        let matches = re.matches(in: s, range: NSRange(location: 0, length: ns.length))
+        var n = 0
+        // Replace back to front so earlier ranges stay valid.
+        for match in matches.reversed() where !skip(ns.substring(with: match.range)) {
+            ns.replaceCharacters(in: match.range, with: token)
+            n += 1
+        }
         return (ns as String, n)
     }
 

@@ -123,6 +123,14 @@ public struct AskView: View {
                 appState.pendingAskQuestion = nil
             }
         }
+        // N-6 — a question sent from the menu bar while Ask is already open.
+        .onChange(of: appState.pendingAskQuestion) { _, new in
+            if let seeded = new, !seeded.isEmpty {
+                question = seeded
+                appState.pendingAskQuestion = nil
+                inputFocused = true
+            }
+        }
         .sheet(isPresented: $showHistory) {
             ConversationHistorySheet(
                 conversations: pastConversations,
@@ -363,9 +371,7 @@ public struct AskView: View {
                       enabled: appState.ingest != nil)
             Button {
                 Task { await saveCurrentQuestion() }
-            } label: {
-                Image(systemName: "bookmark").font(.system(size: 15)).frame(width: 32, height: 32)
-            }
+            } label: { Label("Bookmark", systemImage: "bookmark").labelStyle(.iconOnly).font(.system(size: 15)).frame(width: 32, height: 32) }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .help("Save this question for later (visible in the Saved surface).")
@@ -454,11 +460,9 @@ public struct AskView: View {
                             .frame(maxWidth: 180)
                         Button {
                             attachments.removeAll { $0.id == att.id }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
+                        } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly)
                                 .foregroundStyle(.secondary)
-                                .imageScale(.small)
-                        }
+                                .imageScale(.small) }
                         .buttonStyle(.borderless)
                         .help(att.state == .ready
                               ? "Dismiss chip — the file stays ingested in your archive."
@@ -560,10 +564,8 @@ public struct AskView: View {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(turn.body, forType: .string)
                                 #endif
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .imageScale(.small)
-                            }
+                            } label: { Label("Copy", systemImage: "doc.on.doc").labelStyle(.iconOnly)
+                                    .imageScale(.small) }
                             .buttonStyle(.borderless)
                             .foregroundStyle(.secondary)
                             .help("Copy this answer")
@@ -642,6 +644,9 @@ public struct AskView: View {
                                     revealSource(objectID: objectID, quote: quote)
                                 }
                             )
+                            AnswerTrustPanel(answer: verified) { objectID, quote in
+                                revealSource(objectID: objectID, quote: quote)
+                            }
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
@@ -706,10 +711,66 @@ public struct AskView: View {
                         } label: {
                             Label("Export verifiable receipt…", systemImage: "checkmark.seal")
                         }
+                        // W3-2 — hand the answer to DEVONthink with links back to each passage.
+                        if ProductModuleFlags.isEnabled(.sendToDevonthink), let verified = verifiedAnswers[turn.id] {
+                            Button {
+                                let idx = turns.firstIndex(where: { $0.id == turn.id })
+                                let q = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+                                Task { @MainActor in
+                                    let outcome = await appState.sendToDevonthink(question: q, answer: verified)
+                                    appState.deepLinkMessage = outcome == .sentToDevonthink ? nil : outcome.message
+                                }
+                            } label: {
+                                Label("Send to DEVONthink", systemImage: "square.and.arrow.up.on.square")
+                            }
+                        }
+                        // I-1 — a bundle anyone can verify without this app.
+                        if ProductModuleFlags.isEnabled(.proofBundles) {
+                            Button {
+                                exportProofBundle(for: turn)
+                            } label: {
+                                Label("Export proof bundle…", systemImage: "seal")
+                            }
+                        }
                     }
                 }
                 Spacer(minLength: 60)
             }
+        }
+    }
+
+    /// I-1 — export a signed proof bundle (bundle.json + offline verify.html) into a chosen folder.
+    private func exportProofBundle(for turn: ConversationTurn) {
+        guard let answer = verifiedAnswers[turn.id] else { return }
+        let idx = turns.firstIndex(where: { $0.id == turn.id })
+        let question = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+        Task { @MainActor in
+            let ids = Set(answer.citations.map(\.objectID))
+            let names = (try? await appState.objects?.sourceFilenames(for: ids)) ?? [:]
+            let hashes = (try? await appState.objects?.sourceHashes(for: ids)) ?? [:]
+            let bundle = ProofBundle.build(question: question, answer: answer.answerText ?? answer.body,
+                                           citations: answer.citations.map { ($0.objectID, $0.snippet) },
+                                           filenames: names, hashes: hashes)
+            guard let signed = bundle.signed() else {
+                KalsmritikoshLog.ui.error("Proof bundle: no signing key available")
+                return
+            }
+            #if canImport(AppKit)
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.canCreateDirectories = true
+            panel.prompt = "Save proof bundle here"
+            guard panel.runModal() == .OK, let parent = panel.url else { return }
+            let safe = String(question.prefix(40)).replacingOccurrences(of: "/", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                let dir = try signed.write(into: parent, folderName: "Proof — \(safe.isEmpty ? "answer" : safe)")
+                NSWorkspace.shared.activateFileViewerSelecting([dir])
+            } catch {
+                KalsmritikoshLog.ui.error("Proof bundle write failed: \(error.localizedDescription, privacy: .public)")
+            }
+            #endif
         }
     }
 
@@ -739,7 +800,7 @@ public struct AskView: View {
             let sealed = VerifiableReceipt.seal(
                 title: question.isEmpty ? "Answer receipt" : "Answer: \(question)", drafts: drafts
             )
-            let json = VerifiableReceipt.json(sealed)
+            let json = ReceiptSigner.exportJSON(sealed)
             await MainActor.run { saveReceipt(json, suggestedName: question) }
         }
     }
@@ -1139,9 +1200,7 @@ private struct ConversationHistorySheet: View {
             }
             Button(role: .destructive) {
                 onDelete(conv.id)
-            } label: {
-                Image(systemName: "trash").foregroundStyle(.secondary)
-            }
+            } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly).foregroundStyle(.secondary) }
             .buttonStyle(.borderless)
             .help("Delete this conversation")
         }

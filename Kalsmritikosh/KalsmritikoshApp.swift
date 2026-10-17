@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import CoreSpotlight
 #if canImport(TipKit)
 import TipKit
 #endif
@@ -20,6 +21,9 @@ struct KalsmritikoshApp: App {
     @State private var appState = SampleArchiveMode.isActive
         ? AppState(bookmarks: BookmarkStore(ephemeral: true))
         : AppState()
+
+    /// N-6 — the menu-bar panel's switch (the module's own persisted key).
+    @AppStorage("kalsmritikosh.product.menuBarAsk") private var menuBarAskOn = false
 
     init() {
         #if canImport(TipKit)
@@ -36,8 +40,43 @@ struct KalsmritikoshApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                // O-3/O-7 — Online badge with one-click return to Private, and failure banner.
+                .safeAreaInset(edge: .top, spacing: 0) { OnlineStatusBar().environment(appState) }
+                // O-5 — nothing goes online without this sheet.
+                .sheet(item: Binding(get: { OutboundConsent.shared.pending },
+                                     set: { if $0 == nil, OutboundConsent.shared.pending != nil { OutboundConsent.shared.resolve(allow: false) } })) { preview in
+                    OutboundConsentSheet(preview: preview)
+                }
                 .preferredColorScheme(.light)   // light UI across all phases
+                .appLockOverlay()               // W2-7 — Touch ID / password lock
+                // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
+                .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
+                // W3-7 — a Spotlight result was opened.
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                        Task { await appState.openSpotlightItem(id) }
+                    }
+                }
+                .sheet(item: Binding(get: { appState.deepLinkTarget },
+                                     set: { appState.deepLinkTarget = $0 })) { target in
+                    CitationSourceSheet(target: target) { appState.deepLinkTarget = nil }
+                        .environment(appState)
+                }
+                .alert("Link", isPresented: Binding(get: { appState.deepLinkMessage != nil },
+                                                   set: { if !$0 { appState.deepLinkMessage = nil } })) {
+                    Button("OK") { appState.deepLinkMessage = nil }
+                } message: {
+                    Text(appState.deepLinkMessage ?? "")
+                }
+                // N-6 — the menu-bar item follows its module switch (AppKit status item, not a scene).
+                .onChange(of: menuBarAskOn, initial: true) { _, _ in MenuBarAskController.shared.update(appState: appState) }
                 .task {
+                    // W2-7 — when this process is only the unit-test host, never open the person's
+                    // ledger: tests boot their own AppState on temporary ledgers. Booting the real
+                    // one here would convert it with the TEST Keychain key and lock the person out.
+                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+                    IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
+                    CaptureServiceProvider.shared.install(appState: appState)   // W3-6 — Services menu
                     #if DEBUG
                     // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with
                     // `--pa-prod-gui-smoke`, boot against a disposable database and seed the

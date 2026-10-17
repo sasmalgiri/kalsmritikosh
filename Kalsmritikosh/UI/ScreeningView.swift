@@ -108,7 +108,7 @@ public struct ScreeningView: View {
                     if let a = r.authors { Text("\(a)\(r.year.map { " · \($0)" } ?? "")").font(.caption2).foregroundStyle(.secondary) }
                 }
                 Spacer()
-                Button(role: .destructive) { Task { await delete(r) } } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { Task { await delete(r) } } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless).controlSize(.small)
             }
             HStack(spacing: 8) {

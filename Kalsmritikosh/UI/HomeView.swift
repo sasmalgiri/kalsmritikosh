@@ -68,9 +68,7 @@ public struct HomeView: View {
                 TextField("Search your tasks…", text: $workSearch)
                     .textFieldStyle(.plain)
                 if !workSearch.isEmpty {
-                    Button { workSearch = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }.buttonStyle(.plain)
+                    Button { workSearch = "" } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }.buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -241,7 +239,7 @@ public struct HomeView: View {
             // Tap the header to make this your focus (drives the workbench + the
             // "For you" sidebar). Was display-only before.
             Button {
-                withAnimation(Theme.springFast) { personaID = p.id }
+                withAnimation(Theme.springFast) { personaID = p.id }; ModulePreset.apply(persona: p.id)
             } label: {
                 HStack(spacing: 10) {
                     Text(p.emoji).font(.system(size: 26))
@@ -307,7 +305,7 @@ public struct HomeView: View {
 
             // Primary action — the clear way to pick this persona.
             Button {
-                withAnimation(Theme.springFast) { personaID = p.id }
+                withAnimation(Theme.springFast) { personaID = p.id }; ModulePreset.apply(persona: p.id)
             } label: {
                 Label("Choose this focus", systemImage: "checkmark.seal")
                     .frame(maxWidth: .infinity)

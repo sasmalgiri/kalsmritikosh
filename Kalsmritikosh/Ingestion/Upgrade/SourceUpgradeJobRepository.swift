@@ -76,7 +76,13 @@ public struct SourceUpgradeJobRepository: Sendable {
     public func claim(jobID: UUID, leaseSeconds: TimeInterval = 300, at now: Date) async throws -> SourceUpgradeJob? {
         let sp = "usf_upgrade_claimone_\(jobID.uuidString.prefix(8))"
         return try await database.withSavepoint(sp) { db -> SourceUpgradeJob? in
-            guard let job = try Self.row(db, id: jobID), job.state == .pending, job.notBefore <= now else { return nil }
+            // Eligibility is decided in SQL against the SAME REAL the row stores, as `claimNext` does.
+            // Comparing a decoded Date instead let the 1970↔2001 epoch conversion round `not_before`
+            // up by an ulp, so a job enqueued at `now` intermittently could not be claimed at `now`
+            // and a foreground upgrade silently did nothing.
+            guard try db.query("""
+                SELECT 1 FROM enrichment_jobs WHERE id = ? AND state = 'pending' AND not_before <= ? LIMIT 1;
+                """, [.uuid(jobID), .real(now.timeIntervalSince1970)]).first != nil else { return nil }
             try db.exec("""
                 UPDATE enrichment_jobs SET state = 'running', lease_token = ?, lease_expires_at = ?,
                     attempts = attempts + 1, updated_at = ? WHERE id = ?;
@@ -88,17 +94,25 @@ public struct SourceUpgradeJobRepository: Sendable {
     }
 
     // MARK: - Terminal / retry transitions
+    //
+    // F21 — a WORKER's outcome (succeed / fail / failTerminal, and block when it passes its lease) is
+    // fenced: it lands only while the job is still `running` under the SAME lease token the worker
+    // was given at claim. A reclaimed, cancelled, superseded or already-finished job rejects the
+    // stale write with `staleLease` and nothing changes.
 
-    public func succeed(_ id: UUID, at now: Date) async throws {
-        try await transition(id, to: .done, action: "succeed", detail: nil, clearLease: true, setCompleted: true, now: now)
+    public func succeed(_ claimed: SourceUpgradeJob, at now: Date) async throws {
+        try await transition(claimed.id, to: .done, action: "succeed", detail: nil, clearLease: true,
+                             setCompleted: true, lease: .required(claimed.leaseToken), now: now)
     }
 
     /// Handler failure. Bounded auto-retry: requeue to pending while attempts < max_attempts (with a
     /// backoff), else mark failed. `failed → pending` also available explicitly via `retry`.
-    public func fail(_ id: UUID, error: String, backoff: TimeInterval = 30, at now: Date) async throws {
+    public func fail(_ claimed: SourceUpgradeJob, error: String, backoff: TimeInterval = 30, at now: Date) async throws {
+        let id = claimed.id
         let sp = "usf_upgrade_fail_\(id.uuidString.prefix(8))"
         try await database.withSavepoint(sp) { db in
             guard let job = try Self.row(db, id: id) else { throw SourceUpgradeError.jobNotFound(id) }
+            try Self.requireLease(job, token: claimed.leaseToken)
             let err = String(error.prefix(500))
             if job.attempts < job.maxAttempts {
                 try db.exec("""
@@ -119,10 +133,12 @@ public struct SourceUpgradeJobRepository: Sendable {
 
     /// Terminal failure with NO auto-retry (e.g. a handler ran but did not satisfy its readiness
     /// postcondition — re-running the same work would not change that).
-    public func failTerminal(_ id: UUID, error: String, at now: Date) async throws {
+    public func failTerminal(_ claimed: SourceUpgradeJob, error: String, at now: Date) async throws {
+        let id = claimed.id
         let sp = "usf_upgrade_failt_\(id.uuidString.prefix(8))"
         try await database.withSavepoint(sp) { db in
             guard let job = try Self.row(db, id: id) else { throw SourceUpgradeError.jobNotFound(id) }
+            try Self.requireLease(job, token: claimed.leaseToken)
             try db.exec("""
                 UPDATE enrichment_jobs SET state = 'failed', last_error = ?, lease_token = NULL,
                     lease_expires_at = NULL, updated_at = ? WHERE id = ?;
@@ -131,8 +147,11 @@ public struct SourceUpgradeJobRepository: Sendable {
         }
     }
 
-    public func block(_ id: UUID, reason: String, at now: Date) async throws {
-        try await transition(id, to: .blocked, action: "block", detail: String(reason.prefix(500)), clearLease: true, setCompleted: false, now: now)
+    /// Block a job. A worker blocking the job it holds passes its `lease` (fenced like any worker
+    /// outcome); an administrative block of a pending job passes nil.
+    public func block(_ id: UUID, reason: String, lease: String? = nil, at now: Date) async throws {
+        try await transition(id, to: .blocked, action: "block", detail: String(reason.prefix(500)), clearLease: true,
+                             setCompleted: false, lease: lease.map { .required($0) } ?? .unfenced, now: now)
     }
 
     public func cancel(_ id: UUID, at now: Date) async throws {
@@ -225,11 +244,25 @@ public struct SourceUpgradeJobRepository: Sendable {
 
     // MARK: - Internals
 
+    /// F21 — whether a transition is a fenced worker outcome or an unfenced administrative action.
+    private enum LeaseFence {
+        case unfenced
+        case required(String?)
+    }
+
+    /// F21 — the job must still be `running` under exactly this lease token.
+    private static func requireLease(_ job: SourceUpgradeJob, token: String?) throws {
+        guard job.state == .running, let token, job.leaseToken == token else {
+            throw SourceUpgradeError.staleLease(job.id)
+        }
+    }
+
     private func transition(_ id: UUID, to state: SourceUpgradeJobState, action: String, detail: String?,
-                            clearLease: Bool, setCompleted: Bool, now: Date) async throws {
+                            clearLease: Bool, setCompleted: Bool, lease: LeaseFence = .unfenced, now: Date) async throws {
         let sp = "usf_upgrade_tx_\(id.uuidString.prefix(8))_\(UUID().uuidString.prefix(4))"
         try await database.withSavepoint(sp) { db in
             guard let job = try Self.row(db, id: id) else { throw SourceUpgradeError.jobNotFound(id) }
+            if case .required(let token) = lease { try Self.requireLease(job, token: token) }
             try db.exec("""
                 UPDATE enrichment_jobs SET state = ?, updated_at = ?,
                     lease_token = CASE WHEN ? THEN NULL ELSE lease_token END,

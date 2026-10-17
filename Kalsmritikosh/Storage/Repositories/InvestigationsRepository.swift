@@ -36,51 +36,47 @@ public actor InvestigationsRepository {
     /// investigation already exists, its rows are replaced (the
     /// cascade on `investigations.id` drops the old step rows).
     public func save(_ investigation: Investigation) async throws {
-        try await database.exec("SAVEPOINT kalsmritikosh_investigation_save;")
-        do {
-            try await database.exec(
-                "DELETE FROM investigations WHERE id = ?;",
-                [.uuid(investigation.id)]
-            )
-            try await database.exec("""
+        // Encode outside the savepoint: its body runs synchronously on the database actor.
+        let header: [SQLValue] = [
+            .uuid(investigation.id),
+            .text(investigation.question),
+            investigation.synthesis.map { .text($0) } ?? .null,
+            .real(investigation.createdAt.timeIntervalSince1970),
+            investigation.synthesis != nil ? .real(Date().timeIntervalSince1970) : .null
+        ]
+        let steps: [[SQLValue]] = investigation.steps.enumerated().map { idx, step in
+            let body = step.answer.map { $0.answerText ?? $0.body }
+            let confidence = step.answer?.confidence.value
+            let citationIDs = step.answer?.citations.map(\.objectID) ?? []
+            let citationsData = (try? encoder.encode(citationIDs)) ?? Data("[]".utf8)
+            let citationsJSON = String(data: citationsData, encoding: .utf8) ?? "[]"
+            return [
+                .uuid(step.id),
+                .uuid(investigation.id),
+                .integer(Int64(idx)),
+                .text(step.question),
+                body.map { .text($0) } ?? .null,
+                confidence.map { .real($0) } ?? .null,
+                .text(citationsJSON),
+                .real(step.createdAt.timeIntervalSince1970)
+            ]
+        }
+        let investigationID = investigation.id
+        // F28 — replace the investigation and its steps in ONE isolated savepoint.
+        try await database.withSavepoint("kalsmritikosh_investigation_save") { db in
+            try db.exec("DELETE FROM investigations WHERE id = ?;", [.uuid(investigationID)])
+            try db.exec("""
             INSERT INTO investigations (id, question, synthesis, created_at, finished_at)
             VALUES (?, ?, ?, ?, ?);
-            """, [
-                .uuid(investigation.id),
-                .text(investigation.question),
-                investigation.synthesis.map { .text($0) } ?? .null,
-                .real(investigation.createdAt.timeIntervalSince1970),
-                investigation.synthesis != nil
-                    ? .real(Date().timeIntervalSince1970)
-                    : .null
-            ])
-            for (idx, step) in investigation.steps.enumerated() {
-                let body = step.answer.map { $0.answerText ?? $0.body }
-                let confidence = step.answer?.confidence.value
-                let citationIDs = step.answer?.citations.map(\.objectID) ?? []
-                let citationsData = (try? encoder.encode(citationIDs)) ?? Data("[]".utf8)
-                let citationsJSON = String(data: citationsData, encoding: .utf8) ?? "[]"
-                try await database.exec("""
+            """, header)
+            for binds in steps {
+                try db.exec("""
                 INSERT INTO investigation_steps
                     (id, investigation_id, ordinal, question, answer_body,
                      answer_confidence, answer_citations_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-                """, [
-                    .uuid(step.id),
-                    .uuid(investigation.id),
-                    .integer(Int64(idx)),
-                    .text(step.question),
-                    body.map { .text($0) } ?? .null,
-                    confidence.map { .real($0) } ?? .null,
-                    .text(citationsJSON),
-                    .real(step.createdAt.timeIntervalSince1970)
-                ])
+                """, binds)
             }
-            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_investigation_save;")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_investigation_save;")
-            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_investigation_save;")
-            throw error
         }
     }
 

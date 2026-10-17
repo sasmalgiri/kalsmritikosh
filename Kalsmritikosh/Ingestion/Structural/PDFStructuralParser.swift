@@ -25,7 +25,10 @@ import AppKit
 public struct PDFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.pdf] }
     public nonisolated var parserName: String { "pdf-pdfkit" }
-    public nonisolated var parserVersion: String { "1" }
+    /// W4-1 — version "2" while "Improved text recognition" is on: scanned pages are OCR'd at 300 dpi
+    /// instead of 144 dpi. The version change lets the existing re-processing path re-read each
+    /// scanned PDF exactly once (bytes re-verified; changed output activated only if not worse).
+    public nonisolated var parserVersion: String { ProductModuleFlags.isEnabled(.ocrUpgrade) ? "2" : "1" }
 
     private let ocr: any OCREngine
 
@@ -219,7 +222,7 @@ public struct PDFStructuralParser: StructuralParser {
     /// the page is genuinely a table.
     private static func renderAndOCR(page: PDFPage, ocr: any OCREngine) async -> (text: String, grid: [[String]]) {
         let bounds = page.bounds(for: .mediaBox)
-        let scale: CGFloat = 2.0
+        let scale: CGFloat = ProductModuleFlags.isEnabled(.ocrUpgrade) ? 300.0 / 72.0 : 2.0
         let size = NSSize(width: bounds.width * scale, height: bounds.height * scale)
         guard size.width > 1, size.height > 1 else { return ("", []) }
         let image = page.thumbnail(of: size, for: .mediaBox)

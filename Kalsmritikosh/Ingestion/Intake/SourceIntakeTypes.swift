@@ -173,11 +173,16 @@ public nonisolated struct CapturedSource: Sendable, Hashable {
     public let detectedType: SourceType
     public let detectionBasis: SourceDetectionBasis
     public let mimeType: String?
+    /// F03 — set when this capture is a LOGICAL DERIVATIVE of a live WAL database (SQLite online
+    /// backup), recording how and from which original members it was made. `contentHash` is then the
+    /// derivative's hash. Nil for an exact-byte capture.
+    public let sqliteAcquisition: SQLiteAcquisition.Record?
 
     public nonisolated init(
         contentHash: String, sizeBytes: Int64, modifiedAt: Date?, filename: String,
         declaredExtension: String, detectedType: SourceType,
-        detectionBasis: SourceDetectionBasis, mimeType: String?
+        detectionBasis: SourceDetectionBasis, mimeType: String?,
+        sqliteAcquisition: SQLiteAcquisition.Record? = nil
     ) {
         self.contentHash = contentHash
         self.sizeBytes = sizeBytes
@@ -187,5 +192,14 @@ public nonisolated struct CapturedSource: Sendable, Hashable {
         self.detectedType = detectedType
         self.detectionBasis = detectionBasis
         self.mimeType = mimeType
+        self.sqliteAcquisition = sqliteAcquisition
+    }
+
+    /// The derivative carries the ORIGINAL file's modification time (its own is the acquisition's).
+    nonisolated func withSQLiteAcquisition(_ record: SQLiteAcquisition.Record, modifiedAt: Date?) -> CapturedSource {
+        CapturedSource(contentHash: contentHash, sizeBytes: sizeBytes, modifiedAt: modifiedAt,
+                       filename: filename, declaredExtension: declaredExtension, detectedType: detectedType,
+                       detectionBasis: detectionBasis, mimeType: mimeType, sqliteAcquisition: record)
     }
 }
+

@@ -88,18 +88,43 @@ struct NonWorkflowFeatureHardeningTests {
     func redactionMultiTerm() throws {
         let url = try makePDF([.text("Alpha stays? no. Alpha and Bravo are both secret. Bravo again.")])
         defer { try? FileManager.default.removeItem(at: url) }
-        let r = try PDFRedactionService().redact(source: url, terms: ["Alpha", "Bravo"])
+        let r = try PDFRedactionService().redact(source: url, terms: ["Alpha", "Bravo"], scanImages: false)
         #expect(r.matchCount >= 3) // Alpha x2 + Bravo x2 (at least 3 detected)
         let out = PDFDocument(data: r.data)
         #expect(out?.findString("Alpha", withOptions: [.caseInsensitive]).isEmpty ?? false)
         #expect(out?.findString("Bravo", withOptions: [.caseInsensitive]).isEmpty ?? false)
     }
 
+    @Test("F24 — a page that fails to render refuses the redaction; it never becomes a blank 'verified' page")
+    func redactionRenderFailureFailsClosed() throws {
+        let url = try makePDF([.text("Alpha is secret.")])
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(throws: PDFRedactionError.self) {
+            _ = try PDFRedactionService(flattener: { _, _, _, _ in nil }).redact(source: url, terms: ["Alpha"], scanImages: false)
+        }
+    }
+
+    @Test("F24 — an unreadable or page-losing output is never 'verified'")
+    func unreadableOutputNeverVerified() throws {
+        #expect(throws: PDFRedactionError.self) {
+            _ = try PDFRedactionService.residualTerms(in: Data("not a pdf".utf8), terms: ["x"],
+                                                      caseSensitive: false, expectedPageCount: 1)
+        }
+        let url = try makePDF([.text("One page.")])
+        defer { try? FileManager.default.removeItem(at: url) }
+        let data = try Data(contentsOf: url)
+        #expect(throws: PDFRedactionError.self) {
+            _ = try PDFRedactionService.residualTerms(in: data, terms: ["x"], caseSensitive: false, expectedPageCount: 2)
+        }
+        #expect(try PDFRedactionService.residualTerms(in: data, terms: ["absent"], caseSensitive: false,
+                                                      expectedPageCount: 1).isEmpty)
+    }
+
     @Test("A scanned/image-only page is counted as a redaction caveat")
     func redactionScannedPageCaveat() throws {
         let url = try makePDF([.text("Page one has the SECRETWORD here."), .imageOnly])
         defer { try? FileManager.default.removeItem(at: url) }
-        let r = try PDFRedactionService().redact(source: url, terms: ["SECRETWORD"])
+        let r = try PDFRedactionService().redact(source: url, terms: ["SECRETWORD"], scanImages: false)
         #expect(r.pageCount == 2)
         #expect(r.matchCount >= 1)
         #expect(r.scannedPageCount >= 1, "the image-only page must be flagged")
@@ -112,10 +137,10 @@ struct NonWorkflowFeatureHardeningTests {
         let url = try makePDF([.text("The word Confidential appears once.")])
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(throws: PDFRedactionError.self) {
-            _ = try PDFRedactionService().redact(source: url, terms: ["confidential"], caseSensitive: true)
+            _ = try PDFRedactionService().redact(source: url, terms: ["confidential"], caseSensitive: true, scanImages: false)
         }
         // Case-insensitive (default) DOES match.
-        let r = try PDFRedactionService().redact(source: url, terms: ["confidential"])
+        let r = try PDFRedactionService().redact(source: url, terms: ["confidential"], scanImages: false)
         #expect(r.matchCount >= 1)
     }
 

@@ -340,6 +340,8 @@ public struct RootView: View {
     @State private var showAddFolder = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
+    @State private var showImportQueue = false   // W1-9
+    @State private var openTool: ToolHub?         // plan tools menu (grouped)
     /// D-10 — set when a palette/menu entry targets a Settings group; the
     /// router hands it to SettingsView, which expands + scrolls + flashes.
     @State private var pendingSettingsAnchor: SettingsAnchor?
@@ -488,6 +490,8 @@ public struct RootView: View {
             loadingView
         case .failed(let message):
             failedView(message)
+        case .needsRecoveryKey(let message):
+            RecoveryKeyView(message: message)
         case .ready:
             VStack(spacing: 0) {
                 // §1.1 — the sample ledger announces itself on every screen.
@@ -507,7 +511,7 @@ public struct RootView: View {
                 .symbolEffect(.pulse)
             ProgressView()
                 .controlSize(.small)
-            Text("Starting Kalsmritikosh…")
+            Text(appState.bootNote ?? "Starting Kalsmritikosh…")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -629,9 +633,7 @@ public struct RootView: View {
                     // SHELL-001 — browser-style location Back/Forward, deliberately
                     // distinct from any workflow's Prev/Next stepping.
                     ToolbarItemGroup(placement: .navigation) {
-                        Button { navigate(to: .home) } label: {
-                            Image(systemName: "house")
-                        }
+                        Button { navigate(to: .home) } label: { Label("Home", systemImage: "house").labelStyle(.iconOnly) }
                         .keyboardShortcut(.home, modifiers: .command)
                         .help("Home — back to the start screen")
                         Button(action: navGoBack) {
@@ -648,9 +650,7 @@ public struct RootView: View {
                         .help("Forward  (⌘])")
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        Button { showPalette = true } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
+                        Button { showPalette = true } label: { Label("Search", systemImage: "magnifyingglass").labelStyle(.iconOnly) }
                         .help("Jump to any screen or command  (⌘K)")
                     }
                 }
@@ -703,6 +703,35 @@ public struct RootView: View {
                     if case .success(let urls) = result {
                         Task { await appState.ingestFiles(urls) }
                     }
+                }
+                // Plan tools — one menu listing only the tools whose module is on.
+                if !ToolHub.available.isEmpty {
+                    Menu {
+                        ForEach(ToolHub.available) { hub in
+                            Button { openTool = hub } label: { Label(hub.title, systemImage: hub.symbol) }
+                        }
+                    } label: {
+                        Label("Tools", systemImage: "wrench.and.screwdriver").frame(maxWidth: .infinity)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .sheet(item: $openTool) { ToolHubView(hub: $0) }
+                }
+                // W1-9 — the queue for added files.
+                if ProductModuleFlags.isEnabled(.importQueue), !appState.importQueue.items.isEmpty {
+                    Button {
+                        showImportQueue = true
+                    } label: {
+                        Label("Import queue (\(appState.importQueue.pendingCount))", systemImage: "list.bullet.rectangle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .sheet(isPresented: $showImportQueue) { ImportQueueView(queue: appState.importQueue) }
                 }
                 // HYBRID MODE — the Simple/Advanced and Full power/Lightning
                 // toggles were removed (owner request 2026-09-16): the app runs
@@ -1169,9 +1198,7 @@ public struct RootView: View {
                 .focused($headerSearchFocused)
                 .onSubmit(runHeaderSearch)
             if !headerSearch.isEmpty {
-                Button { headerSearch = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
+                Button { headerSearch = "" } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).foregroundStyle(.secondary) }
                 .buttonStyle(.borderless)
             }
             Button { showPalette = true } label: {
@@ -1260,7 +1287,7 @@ public struct RootView: View {
                         Label("Keyboard shortcuts", systemImage: "keyboard")
                             .font(.headline)
                         Spacer()
-                        Button { showShortcutHelp = false } label: { Image(systemName: "xmark.circle.fill") }
+                        Button { showShortcutHelp = false } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     Divider()
@@ -1293,7 +1320,8 @@ public struct RootView: View {
 
     @ViewBuilder
     private var paletteOverlay: some View {
-        if showPalette {
+        // W1-7 — the palette predates the module matrix; its switch defaults on.
+        if showPalette && ProductModuleFlags.isEnabled(.commandPalette) {
             ZStack(alignment: .top) {
                 Color.black.opacity(0.22)
                     .ignoresSafeArea()
@@ -1748,5 +1776,46 @@ struct SampleArchiveBanner: View {
         .background(Color.purple.opacity(0.14))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sample archive mode. Your own documents are untouched.")
+    }
+}
+
+
+/// W2-7 — the ledger is encrypted and this Mac does not hold its key: ask for the recovery key.
+/// Nothing is opened, created or overwritten until a key that opens the ledger is entered.
+struct RecoveryKeyView: View {
+    @Environment(AppState.self) private var appState
+    let message: String
+    @State private var text = ""
+    @State private var note: String?
+    @State private var working = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "lock.shield").font(.system(size: 40, weight: .light)).foregroundStyle(.tint)
+            Text("Enter your ledger's recovery key").font(.title2.bold())
+            Text(message).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .frame(maxWidth: 520).fixedSize(horizontal: false, vertical: true)
+            TextField("XXXX-XXXX-XXXX-…", text: $text)
+                .font(.system(.body, design: .monospaced))
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 520)
+                .onSubmit(unlock)
+            if let note { Text(note).font(.caption).foregroundStyle(.red) }
+            Button(working ? "Opening…" : "Open Ledger", action: unlock)
+                .keyboardShortcut(.defaultAction)
+                .disabled(working || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Text("The recovery key was shown in Settings ▸ Your data ▸ Encryption on the Mac where the ledger was set up. Without it the ledger cannot be read.")
+                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 520)
+        }
+        .padding(40)
+        .frame(minWidth: 820, minHeight: 520)
+    }
+
+    private func unlock() {
+        working = true; note = nil
+        Task {
+            note = await appState.unlockLedger(recoveryText: text)
+            working = false
+        }
     }
 }

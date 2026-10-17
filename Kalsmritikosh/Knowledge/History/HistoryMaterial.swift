@@ -63,10 +63,20 @@ public struct MaterialProvenance: Sendable, Hashable {
     /// is deferred to a later phase and the material is empty by design, NOT a
     /// silent global fallback.
     public let unscopedSubject: Bool
+    /// F09 — rows that exist for the subject but were NOT collected because the per-kind budget was
+    /// reached (0 = complete). A story built from capped material must be able to say so.
+    public let deferredEventCount: Int
+    public let deferredAssertionCount: Int
+    public let deferredRelationshipCount: Int
+
+    public nonisolated var isComplete: Bool {
+        deferredEventCount == 0 && deferredAssertionCount == 0 && deferredRelationshipCount == 0
+    }
 
     public nonisolated init(
         canonicalEntityID: Entity.ID?, eventCount: Int, assertionCount: Int,
-        genericFactCount: Int, relationshipCount: Int, unscopedSubject: Bool
+        genericFactCount: Int, relationshipCount: Int, unscopedSubject: Bool,
+        deferredEventCount: Int = 0, deferredAssertionCount: Int = 0, deferredRelationshipCount: Int = 0
     ) {
         self.canonicalEntityID = canonicalEntityID
         self.eventCount = eventCount
@@ -74,5 +84,8 @@ public struct MaterialProvenance: Sendable, Hashable {
         self.genericFactCount = genericFactCount
         self.relationshipCount = relationshipCount
         self.unscopedSubject = unscopedSubject
+        self.deferredEventCount = deferredEventCount
+        self.deferredAssertionCount = deferredAssertionCount
+        self.deferredRelationshipCount = deferredRelationshipCount
     }
 }

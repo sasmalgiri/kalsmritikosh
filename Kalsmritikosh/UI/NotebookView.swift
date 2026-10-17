@@ -57,9 +57,7 @@ public struct NotebookView: View {
                 Spacer()
                 Button {
                     Task { await refresh() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
+                } label: { Label("Reload", systemImage: "arrow.clockwise").labelStyle(.iconOnly) }
                 .buttonStyle(.plain)
                 .help("Reload notebook")
             }

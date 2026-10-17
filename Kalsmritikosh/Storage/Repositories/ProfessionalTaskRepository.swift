@@ -424,9 +424,9 @@ public actor ProfessionalTaskRepository {
                                  priority: priority, owner: owner, origin: origin,
                                  createdAt: date, updatedAt: date, completedAt: nil, archivedAt: nil)
         let savepoint = "task_create_\(t.id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             INSERT INTO professional_tasks (id, workspace_id, primary_issue_id, title, detail, task_type,
                                             status, priority, owner, origin, created_at, updated_at, completed_at, archived_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL);
@@ -434,13 +434,8 @@ public actor ProfessionalTaskRepository {
                   .text(trimmed), .optionalText(detail), .text(type.rawValue), .text(status.rawValue),
                   .text(priority.rawValue), .optionalText(owner), .text(origin.rawValue),
                   .date(date), .date(date)])
-            try await insertReview(taskID: t.id, action: .created, prior: nil, new: status,
+            try Self.insertReview(db, taskID: t.id, action: .created, prior: nil, new: status,
                                    reviewer: reviewer, reason: nil, authority: authority, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
         return t
     }
@@ -455,21 +450,17 @@ public actor ProfessionalTaskRepository {
         updated.completedAt = status == .completed ? date : (action == .reopened ? nil : t.completedAt)
         updated.archivedAt = status == .archived ? date : t.archivedAt
         let savepoint = "task_tr_\(t.id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);")
-            try await database.exec("""
+        let injectBeforeReview = injectFailure == .beforeReviewInsert
+        // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
+        try await database.withSavepoint(savepoint) { db in
+            try db.exec("""
             UPDATE professional_tasks SET status = ?, updated_at = ?, completed_at = ?, archived_at = ? WHERE id = ?;
             """, [.text(status.rawValue), .date(date),
                   updated.completedAt.map { SQLValue.date($0) } ?? .null,
                   updated.archivedAt.map { SQLValue.date($0) } ?? .null, .uuid(t.id)])
-            if injectFailure == .beforeReviewInsert { throw InjectedTaskFailure() }
-            try await insertReview(taskID: t.id, action: action, prior: t.status, new: status,
+            if injectBeforeReview { throw InjectedTaskFailure() }
+            try Self.insertReview(db, taskID: t.id, action: action, prior: t.status, new: status,
                                    reviewer: reviewer, reason: reason, authority: authority, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            throw error
         }
         return updated
     }
@@ -508,11 +499,11 @@ public actor ProfessionalTaskRepository {
                                 updatedAt: updated, completedAt: r.date(12), archivedAt: r.date(13))
     }
 
-    private func insertReview(taskID: UUID, action: ProfessionalTaskReviewAction,
+    private static func insertReview(_ db: isolated Database, taskID: UUID, action: ProfessionalTaskReviewAction,
                               prior: ProfessionalTaskStatus?, new: ProfessionalTaskStatus?,
                               reviewer: String, reason: String?,
-                              authority: TaskCreationAuthority?, at date: Date) async throws {
-        try await database.exec("""
+                              authority: TaskCreationAuthority?, at date: Date) throws {
+        try db.exec("""
         INSERT INTO professional_task_reviews (id, task_id, action, prior_status, new_status, reviewer, reason,
                                                reviewed_at, authority_kind, rule_id, rule_version)
         VALUES (?,?,?,?,?,?,?,?,?,?,?);

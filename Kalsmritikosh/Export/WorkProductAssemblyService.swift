@@ -199,7 +199,13 @@ public actor WorkProductAssemblyService {
             context = Self.caseScopeFilter(context, authorizedVersionIDs: caseAuthorizedVersionIDs)
         }
         if plan.requiresDisclosures {
-            let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims)
+            // F22 — every conflict side is authorized against the SAME effective scope as the
+            // claims before its text can reach the report.
+            let permitted = try await disclosurePermittedObjects(
+                allowed: allowedObjectIDs, selected: context.selectedClaims,
+                access: access, caseScoped: caseAuthorizedVersionIDs != nil)
+            let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims,
+                                                           permittedObjectIDs: permitted)
             let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
             context = WorkProductContext(
                 selectedClaims: context.selectedClaims, selectedConflicts: conflicts, selectedGaps: scopedGaps,
@@ -281,6 +287,38 @@ public actor WorkProductAssemblyService {
             subjectLabel:     ctx.subjectLabel,
             workspaceID:      ctx.workspaceID,
             corpusSnapshotID: ctx.corpusSnapshotID)
+    }
+
+    // MARK: - F22 disclosure authorization
+
+    /// The evidence objects a disclosure may cite. A case export may cite only the objects its
+    /// case-authorized, sensitivity-filtered claims already cite (conflict evidence carries no
+    /// source version, so version-exact case authority cannot be checked any other way). A
+    /// workspace export may cite workspace objects the sensitivity scope permits. Fails CLOSED
+    /// on a missing repository or resolution error, like `scopeFilter`.
+    private func disclosurePermittedObjects(allowed: Set<UUID>, selected: [SelectedClaim],
+                                            access: SensitiveAccessContext,
+                                            caseScoped: Bool) async throws -> Set<UUID> {
+        if caseScoped {
+            return Set(selected.flatMap { $0.resolved.claim.evidence.map(\.objectID) }).intersection(allowed)
+        }
+        guard !allowed.isEmpty else { return [] }
+        guard let repository = sensitiveScopes else { throw WorkProductAssemblyError.scopedAccessDenied }
+        let targets = allowed.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
+        let resolutions: [SensitiveScopeTarget: ProtectionResolution]
+        do {
+            resolutions = try await repository.batchResolution(targets)
+        } catch {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: disclosure scope resolution failed — withholding all. \(error, privacy: .public)")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
+        return Set(allowed.filter { id in
+            if case .resolved(let label)? = resolutions[SensitiveScopeTarget(kind: .knowledgeObject, id: id)] {
+                return access.scope.permits(label)
+            }
+            return false
+        })
     }
 
     // MARK: - INV-19 case-scope filter

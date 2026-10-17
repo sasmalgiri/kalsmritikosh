@@ -95,3 +95,38 @@ struct ExportCitationsGuardTests {
         return (0..<pdf.pageCount).compactMap { pdf.page(at: $0)?.string }.joined(separator: "\n")
     }
 }
+
+@Suite("F23 — redaction covers citations and the manifest in every format")
+struct ExportRedactionCoverageTests {
+    private static func document() -> ExportableDocument {
+        var manifest = ExportManifest(exportedAt: Date(timeIntervalSince1970: 1_788_220_800),
+                                      appVersion: "test", schemaVersion: SchemaMigrations.latestVersion)
+        manifest.workspaceTitle = "Matter of Zephyrine Quillfeather"
+        manifest.knownLimitations = ["Scans from zephyrine@example.com were not OCR'd"]
+        return ExportableDocument(
+            title: "Findings",
+            sections: [ExportSection(title: "Summary", paragraphs: ["The grant was recorded."])],
+            citations: [CitationRecord(sourceVersionID: UUID(), displayLabel: "Ex. A — Quillfeather",
+                                       sourceTitle: "Letter to Zephyrine Quillfeather",
+                                       authorOrSender: "zephyrine@example.com",
+                                       locatorText: "call +91 98765 43210")],
+            manifest: manifest)
+    }
+
+    private func text(_ data: Data, _ format: ExportDeliverableFormat) throws -> String {
+        guard format == .pdf else { return String(decoding: data, as: UTF8.self) }
+        let pdf = try #require(PDFDocument(data: data))
+        return (0..<pdf.pageCount).compactMap { pdf.page(at: $0)?.string }.joined(separator: "\n")
+    }
+
+    @Test("PII only in citation title/author/locator and manifest fields is absent from every final artifact",
+          arguments: ExportDeliverableFormat.allCases)
+    func redactedEverywhere(format: ExportDeliverableFormat) throws {
+        let policy = RedactionPolicy(customTerms: ["Quillfeather", "Zephyrine"])
+        let data = try WorkProductExportService().data(for: Self.document(), format: format, redaction: policy)
+        let out = try text(data, format).lowercased()
+        for pii in ["quillfeather", "zephyrine", "zephyrine@example.com", "98765 43210"] {
+            #expect(!out.contains(pii), "\(format.rawValue) leaked '\(pii)'")
+        }
+    }
+}

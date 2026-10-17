@@ -138,39 +138,315 @@ public actor EvidenceStore: EvidenceBlockResolving {
                        .text(Self.json(block.attributes) ?? "{}")])
             }
 
-            try db.exec("""
-            INSERT OR REPLACE INTO document_profiles
-                (source_version_id, filename, detected_type, mime_type, content_hash, size_bytes, parser, parser_version, language, section_outline, first_meaningful_block, block_count, page_count, sheet_count, slide_count, message_count, attachment_count, child_count, extraction_status, warning_count, extraction_confidence, is_queryable, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, [.uuid(profile.sourceVersionID), .text(profile.filename), .text(profile.detectedType.rawValue),
-                   profile.mimeType.map { .text($0) } ?? .null, .text(profile.contentHash), .integer(profile.sizeBytes),
-                   .text(profile.parser), .text(profile.parserVersion), profile.language.map { .text($0) } ?? .null,
-                   .text(Self.json(profile.sectionOutline) ?? "[]"), profile.firstMeaningfulBlock.map { .text($0) } ?? .null,
-                   .integer(Int64(profile.blockCount)), profile.pageCount.map { .integer(Int64($0)) } ?? .null,
-                   profile.sheetCount.map { .integer(Int64($0)) } ?? .null, profile.slideCount.map { .integer(Int64($0)) } ?? .null,
-                   profile.messageCount.map { .integer(Int64($0)) } ?? .null, profile.attachmentCount.map { .integer(Int64($0)) } ?? .null,
-                   profile.childCount.map { .integer(Int64($0)) } ?? .null, .text(profile.extractionStatus.rawValue),
-                   .integer(Int64(profile.warningCount)), .real(profile.extractionConfidence),
-                   .integer(profile.isQueryable ? 1 : 0), .real(now)])
-
-            try db.exec("""
-            INSERT INTO parser_runs
-                (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, [
-            .uuid(parserRunID),
-            .uuid(doc.sourceVersionID),
-            .text(parser),
-            .text(parserVersion),
-            .real(startedAt.timeIntervalSince1970),
-            .real(endedAt.timeIntervalSince1970),
-            .text(doc.extractionStatus.rawValue),
-            .integer(Int64(doc.blocks.count)),
-            .integer(Int64(doc.warnings.count)),
-            .null
-            ])
+            try Self.writeProfile(db, profile, at: now)
+            try Self.writeParserRun(db, id: parserRunID, doc: doc, parser: parser, parserVersion: parserVersion,
+                                    startedAt: startedAt, endedAt: endedAt)
         }
         return receipt
+    }
+
+    private static func writeProfile(_ db: isolated Database, _ profile: DocumentProfile, at now: TimeInterval) throws {
+        try db.exec("""
+        INSERT OR REPLACE INTO document_profiles
+            (source_version_id, filename, detected_type, mime_type, content_hash, size_bytes, parser, parser_version, language, section_outline, first_meaningful_block, block_count, page_count, sheet_count, slide_count, message_count, attachment_count, child_count, extraction_status, warning_count, extraction_confidence, is_queryable, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [.uuid(profile.sourceVersionID), .text(profile.filename), .text(profile.detectedType.rawValue),
+               profile.mimeType.map { .text($0) } ?? .null, .text(profile.contentHash), .integer(profile.sizeBytes),
+               .text(profile.parser), .text(profile.parserVersion), profile.language.map { .text($0) } ?? .null,
+               .text(Self.json(profile.sectionOutline) ?? "[]"), profile.firstMeaningfulBlock.map { .text($0) } ?? .null,
+               .integer(Int64(profile.blockCount)), profile.pageCount.map { .integer(Int64($0)) } ?? .null,
+               profile.sheetCount.map { .integer(Int64($0)) } ?? .null, profile.slideCount.map { .integer(Int64($0)) } ?? .null,
+               profile.messageCount.map { .integer(Int64($0)) } ?? .null, profile.attachmentCount.map { .integer(Int64($0)) } ?? .null,
+               profile.childCount.map { .integer(Int64($0)) } ?? .null, .text(profile.extractionStatus.rawValue),
+               .integer(Int64(profile.warningCount)), .real(profile.extractionConfidence),
+               .integer(profile.isQueryable ? 1 : 0), .real(now)])
+    }
+
+    private static func writeParserRun(_ db: isolated Database, id: UUID, doc: ParsedDocument, parser: String,
+                                       parserVersion: String, startedAt: Date, endedAt: Date) throws {
+        try db.exec("""
+        INSERT INTO parser_runs
+            (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [.uuid(id), .uuid(doc.sourceVersionID), .text(parser), .text(parserVersion),
+               .real(startedAt.timeIntervalSince1970), .real(endedAt.timeIntervalSince1970),
+               .text(doc.extractionStatus.rawValue), .integer(Int64(doc.blocks.count)),
+               .integer(Int64(doc.warnings.count)), .null])
+    }
+
+    // MARK: - F04/F05 — evidence committed WITH each streamed record
+
+    /// Append one streamed record's evidence to its version's document — call INSIDE the savepoint that
+    /// commits the record. The first call of a version attaches `document` (identity-gated exactly like
+    /// `persist`); later calls require the SAME document. Blocks carry deterministic ids, so a redo of a
+    /// record is `INSERT OR IGNORE` (no duplicates); `owned` blocks are linked to `owner`. The run row
+    /// is created once per run and finished by `finishStreamedRun`.
+    static func appendStreamedEvidence(_ db: isolated Database, document doc: ParsedDocument, parser: String,
+                                       parserVersion: String, runID: UUID, runStartedAt: Date, sizeBytes: Int64,
+                                       blocks: [EvidenceBlock], owner: KnowledgeObject.ID, owned: [EvidenceBlock.ID],
+                                       at now: Date) throws {
+        guard let v = try db.query("SELECT logical_source_id, content_hash, document_id FROM source_versions WHERE id = ?;",
+                                   [.uuid(doc.sourceVersionID)]).first else {
+            throw SourceIntakeError.sourceVersionNotFound(doc.sourceVersionID)
+        }
+        guard v.uuid(0) == doc.logicalSourceID, (v.string(1) ?? "").lowercased() == doc.contentHash.lowercased() else {
+            throw SourceIntakeError.parsedDocumentIdentityMismatch("streamed evidence: identity mismatch for version \(doc.sourceVersionID)")
+        }
+        let t = now.timeIntervalSince1970
+        if let existing = v.uuid(2) {
+            guard existing == doc.id else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("version \(doc.sourceVersionID) already has document \(existing)")
+            }
+        } else {
+            try db.exec("""
+            INSERT INTO source_documents
+                (id, logical_source_id, filename, detected_type, mime_type, content_hash, extraction_status, metadata, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(doc.id), .uuid(doc.logicalSourceID), .text(doc.filename), .text(doc.detectedType.rawValue),
+                   doc.mimeType.map { .text($0) } ?? .null, .text(doc.contentHash), .text(ExtractionStatus.partial.rawValue),
+                   .text(Self.json(doc.metadata) ?? "{}"), .real(t)])
+            try db.exec("UPDATE source_versions SET document_id = ? WHERE id = ?;", [.uuid(doc.id), .uuid(doc.sourceVersionID)])
+            try Self.writeProfile(db, DocumentProfile.from(doc, parser: parser, parserVersion: parserVersion, sizeBytes: sizeBytes), at: t)
+        }
+        try db.exec("""
+        INSERT OR IGNORE INTO parser_runs
+            (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL);
+        """, [.uuid(runID), .uuid(doc.sourceVersionID), .text(parser), .text(parserVersion),
+               .real(runStartedAt.timeIntervalSince1970), .real(t), .text(ExtractionStatus.partial.rawValue)])
+        for block in blocks {
+            try db.exec("""
+            INSERT OR IGNORE INTO evidence_blocks
+                (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(block.id), .uuid(doc.id), .uuid(doc.sourceVersionID),
+                   block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                   .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                   .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                   .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                   .text(Self.json(block.attributes) ?? "{}")])
+        }
+        for id in owned {
+            try db.exec("INSERT OR IGNORE INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?, ?, ?);",
+                        [.uuid(id), .uuid(owner), .real(t)])
+        }
+    }
+
+    /// Close a streamed run: its status and the version's live block count on the run, profile and
+    /// document. `complete` only when every discovered unit is committed.
+    public func finishStreamedRun(sourceVersionID svid: UUID, runID: UUID, complete: Bool, at now: Date) async throws {
+        let status = (complete ? ExtractionStatus.complete : .partial).rawValue
+        try await database.withSavepoint("es_stream_finish") { db in
+            let live = try db.query("SELECT COUNT(*) FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL;",
+                                    [.uuid(svid)]).first?.int(0) ?? 0
+            try db.exec("UPDATE parser_runs SET ended_at = ?, status = ?, block_count = ? WHERE id = ?;",
+                        [.real(now.timeIntervalSince1970), .text(status), .integer(live), .uuid(runID)])
+            try db.exec("UPDATE document_profiles SET block_count = ?, extraction_status = ? WHERE source_version_id = ?;",
+                        [.integer(live), .text(status), .uuid(svid)])
+            try db.exec("""
+                UPDATE source_documents SET extraction_status = ?
+                 WHERE id = (SELECT document_id FROM source_versions WHERE id = ?);
+                """, [.text(status), .uuid(svid)])
+        }
+    }
+
+    // MARK: - F16 — versioned derivations
+
+    /// The committed result of activating a newer parser's derivation of a version.
+    public struct DerivationActivation: Sendable {
+        public let receipt: StructuralPersistenceReceipt
+        public let activated: [EvidenceBlock]
+        public let supersededCount: Int
+        /// Activated blocks left without a KnowledgeObject owner because the owner was not knowable.
+        public let unownedCount: Int
+    }
+
+    /// F16 — make `fresh` (a newer parser's output for the version's EXACT bytes) the version's active
+    /// structure, in ONE savepoint: the identity gate, superseding the active blocks (stamped with the
+    /// new parser run, never deleted), inserting the new blocks into the EXISTING document (fresh ids,
+    /// parents remapped), carrying ownership over, and replacing the profile. An interruption rolls
+    /// the whole activation back; nothing is ever half-active.
+    ///
+    /// Ownership: when one KnowledgeObject owns the active blocks, every new block is linked to it.
+    /// With several owners a new block takes the unique owner of the old blocks of the SAME RECORD
+    /// (`recordIdentity`: row key / message index); a block whose record has no single owner, or that
+    /// names no record, stays unowned (counted, never guessed). Display order is never used — a parser
+    /// that inserts or splits a block shifts every ordinal after it.
+    public func activateDerivation(_ fresh: ParsedDocument, parser: String, parserVersion: String,
+                                   startedAt: Date, endedAt: Date = Date()) async throws -> DerivationActivation {
+        let svid = fresh.sourceVersionID
+        let parserRunID = UUID()
+        let freshBlocks = fresh.blocks.sorted { $0.ordinal < $1.ordinal }
+        var idMap: [UUID: UUID] = [:]
+        for b in freshBlocks { idMap[b.id] = UUID() }
+        let newIDs = idMap
+        return try await database.withSavepoint("es_activate_\(svid.uuidString.prefix(8))") { db -> DerivationActivation in
+            guard let v = try db.query("SELECT logical_source_id, content_hash, document_id FROM source_versions WHERE id = ?;",
+                                       [.uuid(svid)]).first else {
+                throw SourceIntakeError.sourceVersionNotFound(svid)
+            }
+            guard v.uuid(0) == fresh.logicalSourceID, (v.string(1) ?? "").lowercased() == fresh.contentHash.lowercased() else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("activate: identity mismatch for version \(svid)")
+            }
+            guard let documentID = v.uuid(2) else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("activate: version \(svid) has no attached structure")
+            }
+
+            var ownersByRecord: [String: Set<UUID>] = [:]
+            var allOwners = Set<UUID>()
+            for r in try db.query("""
+                SELECT b.attributes, ebo.knowledge_object_id FROM evidence_blocks b
+                JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
+                WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
+                """, [.uuid(svid)]) {
+                guard let ko = r.uuid(1) else { continue }
+                allOwners.insert(ko)
+                let attrs = r.string(0).flatMap { Self.decode([String: AnyCodable].self, $0) } ?? [:]
+                let probe = EvidenceBlock(documentID: documentID, ordinal: 0, kind: .paragraph, rawText: "", locator: SourceLocator(), attributes: attrs)
+                if let record = probe.recordIdentity { ownersByRecord[record, default: []].insert(ko) }
+            }
+
+            try db.exec("UPDATE evidence_blocks SET superseded_by_run = ? WHERE source_version_id = ? AND superseded_by_run IS NULL;",
+                        [.uuid(parserRunID), .uuid(svid)])
+            let superseded = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+
+            var activated: [EvidenceBlock] = []
+            var unowned = 0
+            let linkedAt = endedAt.timeIntervalSince1970
+            for b in freshBlocks {
+                let block = EvidenceBlock(
+                    id: newIDs[b.id] ?? UUID(), documentID: documentID, sourceVersionID: svid,
+                    parentBlockID: b.parentBlockID.flatMap { newIDs[$0] }, ordinal: b.ordinal, kind: b.kind,
+                    rawText: b.rawText, normalizedText: b.normalizedText, locator: b.locator,
+                    extractionMethod: b.extractionMethod, extractionConfidence: b.extractionConfidence,
+                    language: b.language, attributes: b.attributes)
+                try db.exec("""
+                INSERT INTO evidence_blocks
+                    (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, [.uuid(block.id), .uuid(documentID), .uuid(svid),
+                       block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                       .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                       .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                       .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                       .text(Self.json(block.attributes) ?? "{}")])
+                let ofRecord = b.recordIdentity.flatMap { ownersByRecord[$0] } ?? []
+                let owner = allOwners.count == 1 ? allOwners.first : (ofRecord.count == 1 ? ofRecord.first : nil)
+                if let owner {
+                    try db.exec("INSERT OR IGNORE INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?, ?, ?);",
+                                [.uuid(block.id), .uuid(owner), .real(linkedAt)])
+                } else {
+                    unowned += 1
+                }
+                activated.append(block)
+            }
+
+            try db.exec("UPDATE source_documents SET extraction_status = ?, metadata = ? WHERE id = ?;",
+                        [.text(fresh.extractionStatus.rawValue), .text(Self.json(fresh.metadata) ?? "{}"), .uuid(documentID)])
+            let size = try db.query("SELECT size_bytes FROM document_profiles WHERE source_version_id = ?;",
+                                    [.uuid(svid)]).first?.int(0) ?? 0
+            try Self.writeProfile(db, DocumentProfile.from(fresh, parser: parser, parserVersion: parserVersion, sizeBytes: size),
+                                  at: endedAt.timeIntervalSince1970)
+            try Self.writeParserRun(db, id: parserRunID, doc: fresh, parser: parser, parserVersion: parserVersion,
+                                    startedAt: startedAt, endedAt: endedAt)
+
+            let substantive = activated.filter(\.isMeaningful)
+            let receipt = StructuralPersistenceReceipt(
+                sourceVersionID: svid, sourceDocumentID: documentID, parserRunID: parserRunID,
+                blockCount: activated.count, substantiveBlockCount: substantive.count,
+                locatedSubstantiveBlockCount: substantive.filter { $0.locator.isResolvable }.count,
+                ocrBlockCount: activated.filter { $0.extractionMethod == .ocr }.count,
+                extractionStatus: fresh.extractionStatus, warningCount: fresh.warnings.count,
+                parserID: parser, parserVersion: parserVersion)
+            return DerivationActivation(receipt: receipt, activated: activated, supersededCount: superseded, unownedCount: unowned)
+        }
+    }
+
+    /// F16 — the committed receipt of the derivation that is ACTIVE because it replaced another (the
+    /// newest parser run that superseded blocks of this version), measured from its live blocks. Nil
+    /// when the version's structure was never replaced.
+    public func activatedDerivationReceipt(forVersion svid: UUID) async throws -> StructuralPersistenceReceipt? {
+        guard let run = try await database.query("""
+            SELECT pr.id, pr.parser, pr.parser_version, pr.status, pr.warning_count, sv.document_id
+              FROM parser_runs pr JOIN source_versions sv ON sv.id = pr.source_version_id
+             WHERE pr.source_version_id = ?
+               AND EXISTS (SELECT 1 FROM evidence_blocks b WHERE b.superseded_by_run = pr.id)
+             ORDER BY pr.started_at DESC, pr.rowid DESC LIMIT 1;
+            """, [.uuid(svid)]).first,
+              let runID = run.uuid(0), let documentID = run.uuid(5) else { return nil }
+        let active = try await blocks(forVersion: svid)
+        let substantive = active.filter(\.isMeaningful)
+        return StructuralPersistenceReceipt(
+            sourceVersionID: svid, sourceDocumentID: documentID, parserRunID: runID,
+            blockCount: active.count, substantiveBlockCount: substantive.count,
+            locatedSubstantiveBlockCount: substantive.filter { $0.locator.isResolvable }.count,
+            ocrBlockCount: active.filter { $0.extractionMethod == .ocr }.count,
+            extractionStatus: run.string(3).flatMap(ExtractionStatus.init(rawValue:)) ?? .partial,
+            warningCount: Int(run.int(4) ?? 0), parserID: run.string(1) ?? "", parserVersion: run.string(2) ?? "")
+    }
+
+    /// The parser that produced a version's active structure (its profile), if any.
+    public func activeParser(forVersion versionID: UUID) async throws -> String? {
+        try await database.query("SELECT parser FROM document_profiles WHERE source_version_id = ?;",
+                                 [.uuid(versionID)]).first?.string(0)
+    }
+
+    // MARK: - F15 — live structural coverage + repair of lost blocks
+
+    /// The version's COMMITTED structure measured now, by the same rules the persist receipt uses.
+    public func liveStructuralCounts(forVersion versionID: UUID) async throws -> (substantive: Int, located: Int, ocr: Int) {
+        let all = try await blocks(forVersion: versionID)
+        let meaningful = all.filter(\.isMeaningful)
+        return (meaningful.count, meaningful.filter { $0.locator.isResolvable }.count,
+                all.filter { $0.extractionMethod == .ocr }.count)
+    }
+
+    /// F15 — restore blocks lost from a version's committed structure. `fresh` is a re-parse of the
+    /// version's exact bytes by the same parser; parsing is deterministic, so a block is identified by
+    /// its ordinal. Surviving blocks are untouched (their ids and ownership stand); each MISSING
+    /// ordinal is inserted into the EXISTING document (attach-once is kept), with its parent re-pointed
+    /// at the surviving block of that ordinal. Returns the restored blocks. Fail-closed on identity.
+    public func restoreMissingBlocks(from fresh: ParsedDocument) async throws -> [EvidenceBlock] {
+        let sp = "es_restore_\(fresh.sourceVersionID.uuidString.prefix(8))"
+        return try await database.withSavepoint(sp) { db -> [EvidenceBlock] in
+            guard let v = try db.query("SELECT logical_source_id, content_hash, document_id FROM source_versions WHERE id = ?;",
+                                       [.uuid(fresh.sourceVersionID)]).first else {
+                throw SourceIntakeError.sourceVersionNotFound(fresh.sourceVersionID)
+            }
+            guard v.uuid(0) == fresh.logicalSourceID, (v.string(1) ?? "").lowercased() == fresh.contentHash.lowercased() else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("restore: identity mismatch for version \(fresh.sourceVersionID)")
+            }
+            guard let documentID = v.uuid(2) else { return [] }   // never attached: a normal persist, not a restore
+            var existing: [Int: UUID] = [:]
+            for r in try db.query("SELECT ordinal, id FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL;",
+                                  [.uuid(fresh.sourceVersionID)]) {
+                if let o = r.int(0), let id = r.uuid(1) { existing[Int(o)] = id }
+            }
+            // fresh id → the id the block has (or will have) in the ledger.
+            var idMap: [UUID: UUID] = [:]
+            for b in fresh.blocks { idMap[b.id] = existing[b.ordinal] ?? b.id }
+            var restored: [EvidenceBlock] = []
+            for b in fresh.blocks.sorted(by: { $0.ordinal < $1.ordinal }) where existing[b.ordinal] == nil {
+                let block = EvidenceBlock(
+                    id: b.id, documentID: documentID, sourceVersionID: fresh.sourceVersionID,
+                    parentBlockID: b.parentBlockID.map { idMap[$0] ?? $0 }, ordinal: b.ordinal, kind: b.kind,
+                    rawText: b.rawText, normalizedText: b.normalizedText, locator: b.locator,
+                    extractionMethod: b.extractionMethod, extractionConfidence: b.extractionConfidence,
+                    language: b.language, attributes: b.attributes)
+                try db.exec("""
+                INSERT INTO evidence_blocks
+                    (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, [.uuid(block.id), .uuid(documentID), .uuid(fresh.sourceVersionID),
+                       block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                       .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                       .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                       .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                       .text(Self.json(block.attributes) ?? "{}")])
+                restored.append(block)
+            }
+            return restored
+        }
     }
 
     // MARK: - B6 — canonical block → KnowledgeObject ownership
@@ -267,11 +543,21 @@ public actor EvidenceStore: EvidenceBlockResolving {
         return out.sorted { $0.ordinal < $1.ordinal }
     }
 
-    /// Blocks for a source version, in reading order.
+    /// The ACTIVE blocks for a source version, in reading order. Blocks superseded by a newer
+    /// parser's derivation (F16) are excluded here; they still resolve by id.
     public func blocks(forVersion versionID: UUID) async throws -> [EvidenceBlock] {
         let rows = try await database.query("""
         SELECT id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes
-        FROM evidence_blocks WHERE source_version_id = ? ORDER BY ordinal ASC;
+        FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL ORDER BY ordinal ASC;
+        """, [.uuid(versionID)])
+        return rows.compactMap(decodeBlock)
+    }
+
+    /// F16 — blocks of a version that a newer derivation replaced (kept for citations), in reading order.
+    public func supersededBlocks(forVersion versionID: UUID) async throws -> [EvidenceBlock] {
+        let rows = try await database.query("""
+        SELECT id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes
+        FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NOT NULL ORDER BY ordinal ASC;
         """, [.uuid(versionID)])
         return rows.compactMap(decodeBlock)
     }
@@ -369,7 +655,7 @@ public actor EvidenceStore: EvidenceBlockResolving {
                eb.language, eb.attributes
         FROM evidence_blocks eb
         JOIN evidence_blocks_fts ON evidence_blocks_fts.rowid = eb.rowid
-        WHERE evidence_blocks_fts MATCH ?
+        WHERE evidence_blocks_fts MATCH ? AND eb.superseded_by_run IS NULL
         ORDER BY rank
         LIMIT ?;
         """, [.text(match), .integer(Int64(limit))])

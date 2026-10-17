@@ -79,11 +79,23 @@ public actor IVFDiskVectorIndex {
     /// RAM cache of the coarse quantizer (loaded from ann_cells).
     private var centroids: [[Float]] = []
     private var ready = false
+    /// F11 — bumped when a rebuilt generation is promoted. A probe that ranked cells with the old
+    /// centroids but read postings after the swap sees the change and re-probes once.
+    private var generation = 0
 
-    public init(repository: ANNIndexRepository, modelID: String, dimension: Int) {
+    /// F11 — the posting/cell namespace a rebuild stages its new generation under, beside the live one.
+    var stagingKey: String { "\(modelID)@next" }
+
+    /// F11 — most postings resident per probe fetch (memory bound, independent of the recall budget).
+    public static let defaultPostingPageSize = 2_048
+    let postingPageSize: Int
+
+    public init(repository: ANNIndexRepository, modelID: String, dimension: Int,
+                postingPageSize: Int = IVFDiskVectorIndex.defaultPostingPageSize) {
         self.repository = repository
         self.modelID = modelID
         self.dimension = dimension
+        self.postingPageSize = max(1, postingPageSize)
     }
 
     // MARK: - State
@@ -113,10 +125,12 @@ public actor IVFDiskVectorIndex {
 
     // MARK: - Build / retrain
 
-    /// Full (re)build: stream-train the coarse quantizer from a reservoir
-    /// sample, then stream-assign every stored embedding into posting lists.
-    /// Idempotent and resumable — a crash leaves state='building' and the
-    /// next call starts over from the durable inputs (chunk_embeddings).
+    /// Full (re)build: stream-train the coarse quantizer from a reservoir sample, then stream-assign
+    /// every stored embedding into posting lists. F11 — the new generation is built BESIDE the live one
+    /// (cells + postings under `stagingKey`) while the live index keeps serving probes and incremental
+    /// inserts; it is then promoted in ONE savepoint and the centroid cache swapped with it. Only the
+    /// very first build (no live generation) leaves the index not-ready while it runs. Idempotent and
+    /// resumable: a crash leaves the live generation intact and the next call restarts the staging.
     public func rebuild(seed: UInt64, now: Date = Date()) async throws {
         try await repository.ensureMeta(modelID: modelID, dimension: dimension, at: now)
         let total = try await repository.embeddingCount(for: modelID)
@@ -124,8 +138,14 @@ public actor IVFDiskVectorIndex {
             KalsmritikoshLog.storage.info("IVF rebuild skipped — no stored embeddings for \(self.modelID, privacy: .public)")
             return
         }
-        try await repository.setState(.building, for: modelID, at: now)
-        ready = false
+        let servingDuringBuild = isReady()
+        if !servingDuringBuild {
+            try await repository.setState(.building, for: modelID, at: now)
+            ready = false
+        }
+        let staging = stagingKey
+        try await repository.ensureMeta(modelID: staging, dimension: dimension, at: now)
+        try await repository.clearIndex(key: staging)
 
         // ── Reservoir sample (deterministic) ────────────────────────────────
         var rng = XorShift64Star(state: seed)
@@ -151,22 +171,18 @@ public actor IVFDiskVectorIndex {
             await Task.yield()   // keep the DB actor responsive to readers
         }
         guard !sample.isEmpty else {
-            try await repository.setState(.empty, for: modelID, at: now)
+            if !servingDuringBuild { try await repository.setState(.empty, for: modelID, at: now) }
             return
         }
 
         // ── Train ───────────────────────────────────────────────────────────
         let k = Self.cellCount(forVectorCount: total)
-        let result = KMeansClusterer(seed: seed).cluster(vectors: sample, k: k)
-        let trained = result.centroids
+        let trained = KMeansClusterer(seed: seed).cluster(vectors: sample, k: k).centroids
         try await repository.replaceCells(
             trained.enumerated().map { ANNCell(cellID: $0.offset, centroid: Self.centroidData($0.element), vectorCount: 0) },
-            for: modelID, at: now)
-        try await repository.recordTraining(cellCount: trained.count, trainedVectorCount: total,
-                                            seed: seed, for: modelID, at: now)
+            for: staging, at: now)
 
-        // ── Populate (streamed, batched, idempotent) ────────────────────────
-        try await repository.deleteAllPostings(for: modelID)
+        // ── Populate the staged generation (streamed, batched, idempotent) ──
         var occupancy = [Int](repeating: 0, count: trained.count)
         cursor = 0
         while true {
@@ -179,20 +195,24 @@ public actor IVFDiskVectorIndex {
                 occupancy[cell] += 1
                 postings.append(ANNPosting(cellID: cell, chunkID: row.chunkID, q: row.q, scale: row.scale))
             }
-            try await repository.insertPostings(postings, for: modelID)
+            try await repository.insertPostings(postings, for: staging)
             cursor = page.last!.rowid
             await Task.yield()
         }
         for (cell, count) in occupancy.enumerated() where count > 0 {
-            try await repository.adjustCellCount(cellID: cell, by: count, for: modelID, at: now)
+            try await repository.adjustCellCount(cellID: cell, by: count, for: staging, at: now)
         }
+        // Embeddings written while the staged generation was being filled.
+        _ = try await reconcile(indexKey: staging, among: trained, now: now)
 
-        // ── Close the concurrent-insert race, then flip ready ───────────────
+        // ── Promote atomically, swap the cache with it, then close the last race ──
+        try await repository.promote(staging: staging, to: modelID, cellCount: trained.count,
+                                     trainedVectorCount: total, seed: seed, at: now)
         centroids = trained
-        try await reconcile(now: now)
-        try await repository.setState(.ready, for: modelID, at: now)
+        generation += 1
         ready = true
-        KalsmritikoshLog.storage.info("IVF rebuild complete — \(trained.count, privacy: .public) cells over \(total, privacy: .public) vectors (\(self.modelID, privacy: .public))")
+        try await reconcile(now: now)   // inserts that reached the OLD generation after the staging reconcile
+        KalsmritikoshLog.storage.info("IVF rebuild complete — \(trained.count, privacy: .public) cells over \(total, privacy: .public) vectors (\(self.modelID, privacy: .public)); served during build: \(servingDuringBuild, privacy: .public)")
     }
 
     /// Insert postings for any stored embedding that has none (idempotent).
@@ -200,22 +220,27 @@ public actor IVFDiskVectorIndex {
     /// Returns the number of postings added.
     @discardableResult
     public func reconcile(now: Date = Date()) async throws -> Int {
-        guard !centroids.isEmpty else { return 0 }
+        try await reconcile(indexKey: modelID, among: centroids, now: now)
+    }
+
+    /// Reconcile the posting namespace `indexKey` (live or staged) against the given quantizer.
+    private func reconcile(indexKey: String, among quantizer: [[Float]], now: Date) async throws -> Int {
+        guard !quantizer.isEmpty else { return 0 }
         var added = 0
         while true {
-            let missing = try await repository.embeddingsMissingPostings(for: modelID, limit: Self.buildPageSize)
+            let missing = try await repository.embeddingsMissingPostings(for: modelID, indexKey: indexKey, limit: Self.buildPageSize)
             guard !missing.isEmpty else { break }
             var postings: [ANNPosting] = []
             postings.reserveCapacity(missing.count)
             for row in missing where row.q.count == dimension {
-                let cell = KMeansClusterer.nearestCentroid(of: Self.dequantize(row.q, scale: row.scale), among: centroids)
+                let cell = KMeansClusterer.nearestCentroid(of: Self.dequantize(row.q, scale: row.scale), among: quantizer)
                 postings.append(ANNPosting(cellID: cell, chunkID: row.chunkID, q: row.q, scale: row.scale))
             }
             guard !postings.isEmpty else { break }
-            try await repository.insertPostings(postings, for: modelID)
+            try await repository.insertPostings(postings, for: indexKey)
             added += postings.count
             for p in postings {
-                try await repository.adjustCellCount(cellID: p.cellID, by: 1, for: modelID, at: now)
+                try await repository.adjustCellCount(cellID: p.cellID, by: 1, for: indexKey, at: now)
             }
             await Task.yield()
         }
@@ -240,6 +265,7 @@ public actor IVFDiskVectorIndex {
 
     public func remove(chunkID: UUID) async throws {
         try await repository.removePosting(chunkID: chunkID, for: modelID)
+        try await repository.removePosting(chunkID: chunkID, for: stagingKey)   // F11 — and any staged copy
     }
 
     // MARK: - Probe
@@ -254,6 +280,13 @@ public actor IVFDiskVectorIndex {
     /// 2·√K rule scanned 98.8% of the corpus (~1.7 s); a fixed pool scans a few
     /// thousand rows regardless of size. Each batch is one SQL round-trip.
     public func nearest(embedding: [Float], limit: Int) async throws -> [Hit] {
+        // F11 — a probe that straddled a generation promotion re-probes once against the new one.
+        let before = generation
+        let hits = try await probe(embedding: embedding, limit: limit)
+        return generation == before ? hits : try await probe(embedding: embedding, limit: limit)
+    }
+
+    private func probe(embedding: [Float], limit: Int) async throws -> [Hit] {
         guard isReady(), limit > 0, embedding.count == dimension,
               let query = VectorQuantization.prepareQuery(embedding) else { return [] }
 
@@ -268,11 +301,24 @@ public actor IVFDiskVectorIndex {
         var idx = 0
         while idx < ranked.count {
             let end = min(idx + Self.probeCellBatch, ranked.count)
-            for posting in try await repository.postings(inCells: Array(ranked[idx..<end]), for: modelID) {
-                if let score = VectorQuantization.cosineScore(query: query, candidate: posting.q, scale: posting.scale) {
-                    top.offer(posting.chunkID, score)
-                    scored += 1
+            // F11 — the MEMORY bound is separate from the recall budget: a cell batch is read in
+            // keyset pages of at most `postingPageSize` rows, so one pathologically dense cell can no
+            // longer pull its whole posting list into memory at once. Recall is unchanged — the stop
+            // decision is still taken only at batch boundaries, over exactly the same rows.
+            let cells = Array(ranked[idx..<end])
+            var cursor: (cell: Int, chunk: String)? = nil
+            while true {
+                try Task.checkCancellation()
+                let page = try await repository.postingsPage(inCells: cells, for: modelID,
+                                                            after: cursor, limit: postingPageSize)
+                for posting in page {
+                    if let score = VectorQuantization.cosineScore(query: query, candidate: posting.q, scale: posting.scale) {
+                        top.offer(posting.chunkID, score)
+                        scored += 1
+                    }
                 }
+                guard page.count == postingPageSize, let last = page.last else { break }
+                cursor = (last.cellID, last.chunkID.uuidString)
             }
             idx = end
             // Stop once the pool is filled AND we can return a full result set.

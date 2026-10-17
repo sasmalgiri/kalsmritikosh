@@ -42,73 +42,84 @@ public actor WorkbenchTransformRepository {
 
         let specJSON = try Self.encodeSpec(spec)
         let transformationID = UUID()
-        let newRev = record.dataset.revision + 1
-        let sp = savepoint("wbtx", transformationID)
+        let expected = record.dataset.revision
+        let newRev = expected + 1
 
-        var derivations: [WorkbenchDerivation] = []
-        var inputs: [WorkbenchDerivationInput] = []
-        var targetFieldID: UUID?
-        var resultJSON: String?
+        // F28 — validation AND every write run inside ONE synchronous, isolated savepoint: no other
+        // caller can interleave on the shared connection between the revision check and the writes,
+        // and a rollback here can only undo THIS transform's rows (a raw SAVEPOINT spanning `await`s
+        // could roll back — or be released by — another caller's interleaved work). The revision is
+        // compared-and-swapped inside the transaction, so a transform computed over a record that
+        // changed meanwhile fails closed instead of writing stale results.
+        let written = try await database.withSavepoint(savepoint("wbtx", transformationID)) { db -> Written in
+            let current = try db.query("SELECT revision FROM workbench_datasets WHERE id = ? LIMIT 1;",
+                                       [.uuid(datasetID)]).first?.int(0).map { Int($0) }
+            guard let current else { throw WorkbenchError.datasetNotFound(datasetID) }
+            guard current == expected else { throw WorkbenchError.revisionConflict(expected: expected, actual: current) }
 
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let sequence = try await nextTransformSequence(datasetID)
-
+            var out = Written(sequence: try Self.nextTransformSequence(db, datasetID))
             switch outcome {
             case .column(let col):
-                targetFieldID = try await insertField(datasetID: datasetID, name: col.newFieldName,
-                                                       shape: col.shape, at: date)
-                try await insertTransformation(id: transformationID, datasetID: datasetID, sequence: sequence,
-                                               kind: spec.kind, formulaText: spec.formulaText, specJSON: specJSON,
-                                               targetFieldID: targetFieldID, resultJSON: nil, actor: actor, at: date)
+                let fieldID = try Self.insertField(db, datasetID: datasetID, name: col.newFieldName, shape: col.shape, at: date)
+                out.targetFieldID = fieldID
+                try Self.insertTransformation(db, id: transformationID, datasetID: datasetID, sequence: out.sequence,
+                                              kind: spec.kind, formulaText: spec.formulaText, specJSON: specJSON,
+                                              targetFieldID: fieldID, resultJSON: nil, actor: actor, at: date)
                 for dv in col.perRow {
                     guard let rowID = dv.rowID else { continue }
-                    let cellID = try await insertDerivedCell(datasetID: datasetID, rowID: rowID,
-                                                             fieldID: targetFieldID!, value: dv.value.storedString, at: date)
-                    let (der, ins) = try await insertDerivation(transformationID: transformationID, datasetID: datasetID,
+                    let cellID = try Self.insertDerivedCell(db, datasetID: datasetID, rowID: rowID, fieldID: fieldID,
+                                                            value: dv.value.storedString, at: date)
+                    let (der, ins) = try Self.insertDerivation(db, transformationID: transformationID, datasetID: datasetID,
                                                                outputCellID: cellID, resultKey: nil,
                                                                outputValue: dv.value.storedString, inputCellIDs: dv.inputCellIDs, at: date)
-                    derivations.append(der); inputs.append(contentsOf: ins)
+                    out.derivations.append(der); out.inputs.append(contentsOf: ins)
                 }
 
             case .projection(let proj):
-                resultJSON = try Self.encodeRowIDs(proj.orderedRowIDs)
-                try await insertTransformation(id: transformationID, datasetID: datasetID, sequence: sequence,
-                                               kind: spec.kind, formulaText: spec.formulaText, specJSON: specJSON,
-                                               targetFieldID: nil, resultJSON: resultJSON, actor: actor, at: date)
+                out.resultJSON = try Self.encodeRowIDs(proj.orderedRowIDs)
+                try Self.insertTransformation(db, id: transformationID, datasetID: datasetID, sequence: out.sequence,
+                                              kind: spec.kind, formulaText: spec.formulaText, specJSON: specJSON,
+                                              targetFieldID: nil, resultJSON: out.resultJSON, actor: actor, at: date)
 
             case .aggregate(let agg):
-                resultJSON = try Self.encodeAggregate(agg)
-                try await insertTransformation(id: transformationID, datasetID: datasetID, sequence: sequence,
-                                               kind: spec.kind, formulaText: nil, specJSON: specJSON,
-                                               targetFieldID: nil, resultJSON: resultJSON, actor: actor, at: date)
+                out.resultJSON = try Self.encodeAggregate(agg)
+                try Self.insertTransformation(db, id: transformationID, datasetID: datasetID, sequence: out.sequence,
+                                              kind: spec.kind, formulaText: nil, specJSON: specJSON,
+                                              targetFieldID: nil, resultJSON: out.resultJSON, actor: actor, at: date)
                 for dv in agg.groups {
-                    let (der, ins) = try await insertDerivation(transformationID: transformationID, datasetID: datasetID,
+                    let (der, ins) = try Self.insertDerivation(db, transformationID: transformationID, datasetID: datasetID,
                                                                outputCellID: nil, resultKey: dv.resultKey,
                                                                outputValue: dv.value.storedString, inputCellIDs: dv.inputCellIDs, at: date)
-                    derivations.append(der); inputs.append(contentsOf: ins)
+                    out.derivations.append(der); out.inputs.append(contentsOf: ins)
                 }
 
             case .unsupported:
                 throw WorkbenchTransformError.notMaterializable(spec.kind)
             }
 
-            try await bumpRevision(datasetID, to: newRev, at: date)
-            try await appendTransformedEvent(datasetID: datasetID, revision: newRev, actor: actor,
-                                             detail: spec.kind.rawValue, at: date)
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+            try db.exec("UPDATE workbench_datasets SET revision = ?, updated_at = ? WHERE id = ? AND revision = ?;",
+                        [.integer(Int64(newRev)), .date(date), .uuid(datasetID), .integer(Int64(expected))])
+            try Self.appendTransformedEvent(db, datasetID: datasetID, revision: newRev, actor: actor,
+                                            detail: spec.kind.rawValue, at: date)
+            return out
         }
 
         let transformation = WorkbenchTransformation(
-            id: transformationID, datasetID: datasetID, sequence: try await maxSequence(datasetID),
+            id: transformationID, datasetID: datasetID, sequence: written.sequence,
             kind: spec.kind, formulaText: (spec.kind == .aggregate ? nil : spec.formulaText),
             engineVersion: WorkbenchTransformEngine.engineVersion, specJSON: specJSON,
-            targetFieldID: targetFieldID, resultJSON: resultJSON, actor: actor, createdAt: date)
-        return WorkbenchTransformationRecord(transformation: transformation, derivations: derivations, inputs: inputs)
+            targetFieldID: written.targetFieldID, resultJSON: written.resultJSON, actor: actor, createdAt: date)
+        return WorkbenchTransformationRecord(transformation: transformation, derivations: written.derivations, inputs: written.inputs)
+    }
+
+    /// What one savepoint wrote (returned out of the isolated closure).
+    private struct Written: Sendable {
+        var sequence: Int
+        var targetFieldID: UUID?
+        var resultJSON: String?
+        var derivations: [WorkbenchDerivation] = []
+        var inputs: [WorkbenchDerivationInput] = []
+        init(sequence: Int) { self.sequence = sequence }
     }
 
     // MARK: - Reads
@@ -157,24 +168,27 @@ public actor WorkbenchTransformRepository {
         return try WorkbenchTransformEngine.compute(spec, over: rec)
     }
 
-    // MARK: - Inserts (inside the caller's SAVEPOINT)
+    // MARK: - Inserts (inside the caller's isolated savepoint — synchronous, no suspension points)
 
-    private func insertField(datasetID: UUID, name: String, shape: FactSchemaRegistry.ValueShape, at date: Date) async throws -> UUID {
+    private static func insertField(_ db: isolated Database, datasetID: UUID, name: String,
+                                    shape: FactSchemaRegistry.ValueShape, at date: Date) throws -> UUID {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw WorkbenchTransformError.emptyFieldName }
         let id = UUID()
-        let ordinal = try await nextOrdinal("workbench_fields", datasetID)
-        try await database.exec("""
+        let ordinal = Int(try db.query("SELECT COALESCE(MAX(ordinal), -1) FROM workbench_fields WHERE dataset_id = ?;",
+                                       [.uuid(datasetID)]).first?.int(0) ?? -1) + 1
+        try db.exec("""
             INSERT INTO workbench_fields (id, dataset_id, name, value_shape, ordinal, created_at)
             VALUES (?,?,?,?,?,?);
             """, [.uuid(id), .uuid(datasetID), .text(clean), .text(shape.rawValue), .integer(Int64(ordinal)), .date(date)])
         return id
     }
 
-    private func insertDerivedCell(datasetID: UUID, rowID: UUID, fieldID: UUID, value: String?, at date: Date) async throws -> UUID {
+    private static func insertDerivedCell(_ db: isolated Database, datasetID: UUID, rowID: UUID, fieldID: UUID,
+                                          value: String?, at date: Date) throws -> UUID {
         let id = UUID()
         // A brand-new column has no prior cell at (row, field); insert a deterministicCalculation cell.
-        try await database.exec("""
+        try db.exec("""
             INSERT INTO workbench_cells (id, dataset_id, row_id, field_id, kind, value, status, created_at)
             VALUES (?,?,?,?,?,?,?,?);
             """, [.uuid(id), .uuid(datasetID), .uuid(rowID), .uuid(fieldID),
@@ -184,10 +198,10 @@ public actor WorkbenchTransformRepository {
         return id
     }
 
-    private func insertTransformation(id: UUID, datasetID: UUID, sequence: Int, kind: WorkbenchTransformKind,
-                                     formulaText: String?, specJSON: String, targetFieldID: UUID?,
-                                     resultJSON: String?, actor: String, at date: Date) async throws {
-        try await database.exec("""
+    private static func insertTransformation(_ db: isolated Database, id: UUID, datasetID: UUID, sequence: Int,
+                                             kind: WorkbenchTransformKind, formulaText: String?, specJSON: String,
+                                             targetFieldID: UUID?, resultJSON: String?, actor: String, at date: Date) throws {
+        try db.exec("""
             INSERT INTO workbench_transformations
               (id, dataset_id, sequence, kind, formula_text, engine_version, spec_json, target_field_id, result_json, actor, created_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?);
@@ -197,11 +211,12 @@ public actor WorkbenchTransformRepository {
                   resultJSON.map { SQLValue.text($0) } ?? .null, .text(actor), .date(date)])
     }
 
-    private func insertDerivation(transformationID: UUID, datasetID: UUID, outputCellID: UUID?, resultKey: String?,
-                                 outputValue: String?, inputCellIDs: [UUID], at date: Date) async throws
-                                 -> (WorkbenchDerivation, [WorkbenchDerivationInput]) {
+    private static func insertDerivation(_ db: isolated Database, transformationID: UUID, datasetID: UUID,
+                                         outputCellID: UUID?, resultKey: String?, outputValue: String?,
+                                         inputCellIDs: [UUID], at date: Date) throws
+                                         -> (WorkbenchDerivation, [WorkbenchDerivationInput]) {
         let id = UUID()
-        try await database.exec("""
+        try db.exec("""
             INSERT INTO workbench_derivations (id, transformation_id, dataset_id, output_cell_id, result_key, output_value, created_at)
             VALUES (?,?,?,?,?,?,?);
             """, [.uuid(id), .uuid(transformationID), .uuid(datasetID),
@@ -211,7 +226,7 @@ public actor WorkbenchTransformRepository {
         var ins: [WorkbenchDerivationInput] = []
         for (i, cellID) in inputCellIDs.enumerated() {
             let inputID = UUID()
-            try await database.exec("""
+            try db.exec("""
                 INSERT INTO workbench_derivation_inputs (id, derivation_id, input_cell_id, ordinal)
                 VALUES (?,?,?,?);
                 """, [.uuid(inputID), .uuid(id), .uuid(cellID), .integer(Int64(i))])
@@ -222,14 +237,11 @@ public actor WorkbenchTransformRepository {
         return (der, ins)
     }
 
-    private func bumpRevision(_ datasetID: UUID, to revision: Int, at date: Date) async throws {
-        try await database.exec("UPDATE workbench_datasets SET revision = ?, updated_at = ? WHERE id = ?;",
-                                [.integer(Int64(revision)), .date(date), .uuid(datasetID)])
-    }
-
-    private func appendTransformedEvent(datasetID: UUID, revision: Int, actor: String, detail: String, at date: Date) async throws {
-        let seq = Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_dataset_events WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? 0) + 1
-        try await database.exec("""
+    private static func appendTransformedEvent(_ db: isolated Database, datasetID: UUID, revision: Int, actor: String,
+                                               detail: String, at date: Date) throws {
+        let seq = Int(try db.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_dataset_events WHERE dataset_id = ?;",
+                                   [.uuid(datasetID)]).first?.int(0) ?? 0) + 1
+        try db.exec("""
             INSERT INTO workbench_dataset_events (id, dataset_id, sequence, dataset_revision, action, actor, detail, occurred_at)
             VALUES (?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(datasetID), .integer(Int64(seq)), .integer(Int64(revision)),
@@ -238,14 +250,9 @@ public actor WorkbenchTransformRepository {
 
     // MARK: - Helpers
 
-    private func nextTransformSequence(_ datasetID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_transformations WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? 0) + 1
-    }
-    private func maxSequence(_ datasetID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_transformations WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? 0)
-    }
-    private func nextOrdinal(_ table: String, _ datasetID: UUID) async throws -> Int {
-        Int(try await database.query("SELECT COALESCE(MAX(ordinal), -1) FROM \(table) WHERE dataset_id = ?;", [.uuid(datasetID)]).first?.int(0) ?? -1) + 1
+    private static func nextTransformSequence(_ db: isolated Database, _ datasetID: UUID) throws -> Int {
+        Int(try db.query("SELECT COALESCE(MAX(sequence), 0) FROM workbench_transformations WHERE dataset_id = ?;",
+                         [.uuid(datasetID)]).first?.int(0) ?? 0) + 1
     }
     private func savepoint(_ prefix: String, _ id: UUID) -> String {
         "\(prefix)_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"

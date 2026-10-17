@@ -131,7 +131,7 @@ enum GuideContent {
         (.history, "History — the evidence-backed narrative",
          "A readable reconstruction of what happened, composed from the dated events in your ledger, with every claim traceable to its source."),
         (.sources, "Sources — what the ledger knows",
-         "Add folders and files here. Text extracts directly from PDF, Word, Excel/CSV, PowerPoint, EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP; images/scans are read by OCR. Audio and video are catalogued and preserved — transcribe them on demand in Transcripts (on-device Apple Speech, English). Every file is hashed, parsed into cited evidence, and indexed; duplicates are detected. Anything unreadable is recorded honestly — never faked."),
+         "Add folders and files here. Text extracts directly from PDF, Word, Excel/CSV, PowerPoint (PPTX), EPUB, email (EML, MBOX, Apple Mail, MSG, PST, NSF), HTML, Markdown, and text. ZIP archives are opened and read file by file within safety limits; RAR and 7z archives are kept but not opened. Images and scans are read by OCR, so accuracy depends on the scan. With \u{201C}Transcribe audio & video\u{201D} on (the default), recordings are transcribed on-device while importing (Apple Speech, English). Reading is tuned for English: other languages are kept and keyword-searchable, but names, dates and facts in them may be missed. Every file is hashed, parsed into cited evidence, and indexed; duplicates are detected. Anything unreadable is recorded honestly — never faked."),
         (.timeline, "Timeline — your documents as dated events",
          "Every dated fact extracted from your sources, in order. Filter by date range, entity, or event kind. Open an event to see its participants, source document, and causal links."),
         (.search, "Search — exact or by meaning",
@@ -181,8 +181,11 @@ enum GuideContent {
             ("Distill memory", "Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it."),
             ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.")
         ]
+        // O-3 — Private is the default; Online is opt-in with the user's own key.
+        items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with your own Claude, OpenAI or Gemini key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))
+        items.append(("Modules", "Every feature is a switch in Settings → Modules. Switched-off features disappear; stand-alone tools appear in the sidebar Tools menu while switched on."))
         #if DEBUG
-        items.append(("Allow cloud providers (dev builds)", "Dev-only toggle. Release builds have no cloud path at all — every file, question, and answer stays on your Mac."))
+        items.append(("Allow cloud providers (dev builds)", "Dev-only toggle for developer cloud testing; separate from Online mode."))
         #endif
         items.append(("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
         items.append(("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
@@ -195,7 +198,7 @@ enum GuideContent {
             ("Ledger", "The app's structured memory — the one database where every fact, date, person, and source lives. The intelligence is here, not in the AI model."),
             ("Knowledge Object", "One document (or email) after the app has read and normalized it."),
             ("Chunk", "A small slice of a document, so search and the AI can handle it a piece at a time."),
-            ("Entity", "A real-world thing the app recognizes: a person, company, place, phone number, or amount. Spellings and aliases are merged into one."),
+            ("Entity", "A real-world thing the app recognizes: a person, company, place, phone number, or amount. Spellings and aliases are combined into one. Every merge is listed under Knowledge \u{2192} Merged and can be undone with Unmerge; nothing is deleted."),
             ("Event", "A dated thing that happened (\"invoice sent on 4 May\"), placed on your Timeline."),
             ("Relationship", "A link between two entities (\"Person A works at Company B\"), shown in the connection graph."),
             ("Distilled memory", "A one-paragraph \"where things stand now\" for a person or company, rolled up from all their mentions and updated over time. Also called the subject's state."),
@@ -214,13 +217,25 @@ enum GuideContent {
             ("Full AI", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
             ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
-            ("Transcription", "Turns audio and video into text — on demand, per file, fully on-device (Apple Speech, English). Never runs automatically during ingest.")
+            ("Transcription", "Turns audio and video into text, fully on-device (Apple Speech, English). Runs while importing when \u{201C}Transcribe audio & video\u{201D} is on (the default); turn it off for faster imports.")
+        ]),
+        // W4-8 — switcher map; full page in docs/COMING_FROM_DEVONTHINK.md.
+        ("Coming from DEVONthink", "arrow.left.arrow.right", [
+            ("Your database", "Tools → Import a DEVONthink database reads the documents stored in a .dtBase2 where they are, and turns Finder tags into tags. Groups are not read; add indexed folders in Sources."),
+            ("Groups", "Use tags, smart collections or case slices — a document can carry many tags."),
+            ("Smart groups / rules", "Tools → Smart collections and rules. Collections stay up to date; a rule is saved only after a dry run."),
+            ("See Also", "The corroboration meter and near-duplicates: how many independent sources support a fact."),
+            ("Annotations", "Highlights and notes, stored beside the source and never written into it."),
+            ("Item links", "kalsmritikosh:// links open the exact passage."),
+            ("Stamps / Bates", "Tools → Production sets: Bates PDFs, load files, privilege log and legal holds."),
+            ("Sync", "None, by design. Team review uses a shared folder with signed logs."),
+            ("AI chat", "Ask answers only from your documents, each claim cited; conflicts are shown, never averaged.")
         ]),
         // RC-2 — the 1.2 roadmap, linked from Help (direction, not dates).
         ("What's next (1.2)", "map", [
             ("Multilingual archives", "One semantic index that understands your documents' own languages — no translate-to-English shortcut."),
             ("Deeper story review", "Approve, correct, or reject story beats inline; your review feeds the next reconstruction."),
-            ("More formats", "Legacy Office (DOC/XLS/PPT) and mail stores (MSG/PST)."),
+            ("More formats", "PowerPoint 97\u{2013}2003 (PPT) and Keynote, which are kept but not read today."),
             ("Better transcription", "On-demand transcription improvements for long audio and video."),
             ("The promise that doesn't change", "Everything stays on-device. The privacy contract is permanent.")
         ])

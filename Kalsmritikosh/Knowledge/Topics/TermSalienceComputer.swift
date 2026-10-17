@@ -84,59 +84,59 @@ public struct TermSalienceComputer {
             if !canon.isEmpty { anchorTermsByKO[ko, default: []].append(canon) }
         }
 
-        var written = 0
-        try await database.exec("SAVEPOINT term_salience;", [])
-        do {
-            for ko in staleKOs {
-                var scored: [(term: String, score: Double, isID: Bool, corroboration: Int)] = []
-                for (term, agg) in termsByKO[ko] ?? [:] {
-                    let df = docFrequency[term] ?? 1
-                    let rarity = log(Double(totalDocs + 1) / Double(df)) + 1
-                    let corroboration = df
-                    // Proper nouns (capitalized-shaped terms) need corroboration:
-                    // single-document names never label anything above a leaf.
-                    let isProperShape = term.first.map { $0.isUppercase } ?? false
-                    let corroborationFactor = isProperShape && df < 2 ? 0.3 : 1.0
-                    let score = Double(agg.count) * rarity * agg.salience * corroborationFactor
-                    scored.append((term, score, false, corroboration))
-                }
-                for canon in anchorTermsByKO[ko] ?? [] {
-                    // Identifier: highest by construction — above any prose score.
-                    let top = (scored.map(\.score).max() ?? 1)
-                    scored.append((canon, top * 2 + 100, true, 2))
-                }
-                // Total order: score desc, then term asc — deterministic winners.
-                // Dedupe by term (an anchor's canon can also appear as a prose
-                // term — the higher-scored identifier form wins, one row per PK).
-                var seenTerms = Set<String>()
-                let winners = scored.sorted {
-                    if $0.score != $1.score { return $0.score > $1.score }
-                    return $0.term < $1.term
-                }
-                .filter { seenTerms.insert($0.term).inserted }
-                .prefix(Self.winnersPerDocument)
+        // Scoring is pure; only the writes run inside the savepoint (F28 — one isolated unit).
+        var plan: [(ko: UUID, winners: [(term: String, score: Double, isID: Bool, corroboration: Int)])] = []
+        for ko in staleKOs {
+            var scored: [(term: String, score: Double, isID: Bool, corroboration: Int)] = []
+            for (term, agg) in termsByKO[ko] ?? [:] {
+                let df = docFrequency[term] ?? 1
+                let rarity = log(Double(totalDocs + 1) / Double(df)) + 1
+                let corroboration = df
+                // Proper nouns (capitalized-shaped terms) need corroboration:
+                // single-document names never label anything above a leaf.
+                let isProperShape = term.first.map { $0.isUppercase } ?? false
+                let corroborationFactor = isProperShape && df < 2 ? 0.3 : 1.0
+                let score = Double(agg.count) * rarity * agg.salience * corroborationFactor
+                scored.append((term, score, false, corroboration))
+            }
+            for canon in anchorTermsByKO[ko] ?? [] {
+                // Identifier: highest by construction — above any prose score.
+                let top = (scored.map(\.score).max() ?? 1)
+                scored.append((canon, top * 2 + 100, true, 2))
+            }
+            // Total order: score desc, then term asc — deterministic winners.
+            // Dedupe by term (an anchor's canon can also appear as a prose
+            // term — the higher-scored identifier form wins, one row per PK).
+            var seenTerms = Set<String>()
+            let winners = scored.sorted {
+                if $0.score != $1.score { return $0.score > $1.score }
+                return $0.term < $1.term
+            }
+            .filter { seenTerms.insert($0.term).inserted }
+            .prefix(Self.winnersPerDocument)
 
-                // Two maintenance triggers can overlap (boot pass + an explicit
-                // rebuild): DELETE-then-INSERT interleaved across runners collided
-                // on the (object_id, term) key. The winners are deterministic, so
-                // an overlapping runner writes the same rows — REPLACE is safe.
-                try await database.exec(
-                    "DELETE FROM document_terms WHERE object_id = ?;", [.uuid(ko)])
+            plan.append((ko, Array(winners)))
+        }
+        // Two maintenance triggers can overlap (boot pass + an explicit
+        // rebuild): DELETE-then-INSERT interleaved across runners collided
+        // on the (object_id, term) key. The winners are deterministic, so
+        // an overlapping runner writes the same rows — REPLACE is safe.
+        let producer = Int64(Self.producerVersion)
+        let finalPlan = plan
+        let written = try await database.withSavepoint("term_salience") { db -> Int in
+            var n = 0
+            for (ko, winners) in finalPlan {
+                try db.exec("DELETE FROM document_terms WHERE object_id = ?;", [.uuid(ko)])
                 for w in winners {
-                    try await database.exec("""
+                    try db.exec("""
                     INSERT OR REPLACE INTO document_terms (object_id, term, score, is_identifier, corroboration, producer_version)
                     VALUES (?, ?, ?, ?, ?, ?);
                     """, [.uuid(ko), .text(w.term), .real(w.score),
-                          .integer(w.isID ? 1 : 0), .integer(Int64(w.corroboration)),
-                          .integer(Int64(Self.producerVersion))])
-                    written += 1
+                          .integer(w.isID ? 1 : 0), .integer(Int64(w.corroboration)), .integer(producer)])
+                    n += 1
                 }
             }
-            try await database.exec("RELEASE term_salience;", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO term_salience;", [])
-            try? await database.exec("RELEASE term_salience;", [])
-            throw error
+            return n
         }
         Self.logger.info("TermSalience: \(staleKOs.count) documents, \(written) winner terms")
         return written

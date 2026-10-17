@@ -16,7 +16,8 @@ import CryptoKit
 public struct CSVStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.csv] }
     public nonisolated var parserName: String { "csv" }
-    public nonisolated var parserVersion: String { "1" }
+    /// "2" — F30: CRLF / CR row endings split rows (v1 collapsed a Windows CSV into one row).
+    public nonisolated var parserVersion: String { "2" }
 
     public nonisolated init() {}
 
@@ -89,45 +90,9 @@ public struct CSVStructuralParser: StructuralParser {
     // MARK: - RFC-4180 CSV parser (pure)
 
     /// Parse CSV text into rows of string cells. Handles quoted fields,
-    /// escaped quotes (""), and newlines inside quotes. Accepts \n and \r\n.
+    /// escaped quotes (""), and newlines inside quotes. Accepts CRLF, LF and CR
+    /// through the shared `CSVRowReader` (F30).
     static func parseCSV(_ text: String) -> [[String]] {
-        var rows: [[String]] = []
-        var field = ""
-        var row: [String] = []
-        var inQuotes = false
-        let chars = Array(text)
-        var i = 0
-        while i < chars.count {
-            let c = chars[i]
-            if inQuotes {
-                if c == "\"" {
-                    if i + 1 < chars.count, chars[i + 1] == "\"" {
-                        field.append("\""); i += 2; continue   // escaped quote
-                    }
-                    inQuotes = false; i += 1; continue
-                }
-                field.append(c); i += 1; continue
-            }
-            switch c {
-            case "\"":
-                inQuotes = true
-            case ",":
-                row.append(field); field = ""
-            case "\r":
-                break   // handled with \n
-            case "\n":
-                row.append(field); field = ""
-                rows.append(row); row = []
-            default:
-                field.append(c)
-            }
-            i += 1
-        }
-        // Trailing field/row (no final newline).
-        if !field.isEmpty || !row.isEmpty {
-            row.append(field)
-            rows.append(row)
-        }
-        return rows
+        CSVRowReader.rows(text)
     }
 }

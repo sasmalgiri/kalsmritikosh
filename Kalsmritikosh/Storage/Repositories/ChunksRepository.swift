@@ -20,11 +20,31 @@ public actor ChunksRepository {
     /// L1 — insert chunks and record every block each was assembled from
     /// (`chunk_blocks`). A chunk with no lineage entry records its own
     /// `evidenceBlockID`, so single-block chunks are covered too.
-    public func insertBatch(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]]) async throws {
+    public func insertBatch(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]], blocks: [EvidenceBlock] = []) async throws {
+        for statement in Self.insertStatements(chunks, lineage: lineage, blocks: blocks) {
+            try await database.exec(statement.sql, statement.binds)
+        }
+    }
+
+    /// The exact statements `insertBatch` runs, so a caller can compose them into its own isolated
+    /// savepoint (F28) instead of awaiting this actor across a transaction.
+    /// F15/F25 — `blocks` are the evidence blocks the chunks were derived from (their content binds each
+    /// chunk's `derivation_digest`); a chunk whose lineage names a block not given here gets no digest
+    /// (a later reconciliation records its baseline).
+    /// `certify: false` writes NO digest — for chunks whose text is not (yet) proven to follow from the
+    /// evidence (e.g. pieces of an unproven parent): reconciliation must prove or rebuild them.
+    nonisolated static func insertStatements(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]] = [:],
+                                             blocks: [EvidenceBlock] = [],
+                                             content extra: [UUID: ChunkDerivation.BlockContent] = [:],
+                                             certify: Bool = true) -> [(sql: String, binds: [SQLValue])] {
+        var out: [(sql: String, binds: [SQLValue])] = []
+        let content = extra.merging(blocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { _, b in b })
         for chunk in chunks {
-            try await database.exec("""
-            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            let chunkLineage = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
+            let digest = certify ? ChunkDerivation.digest(text: chunk.text, lineage: chunkLineage, content: content) : nil
+            out.append(("""
+            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version, derivation_digest)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(chunk.id),
                 .uuid(chunk.objectID),
@@ -41,15 +61,15 @@ public actor ChunksRepository {
                 chunk.blockKind.map { .text($0) } ?? .null,
                 chunk.sourceVersionID.map { .uuid($0) } ?? .null,
                 .real(chunk.salience),
-                chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null
-            ])
-            let blocks = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
-            for (i, blockID) in blocks.enumerated() {
-                try await database.exec("""
-                INSERT OR IGNORE INTO chunk_blocks (chunk_id, evidence_block_id, ordinal) VALUES (?, ?, ?);
-                """, [.uuid(chunk.id), .uuid(blockID), .integer(Int64(i))])
+                chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null,
+                digest.map { .text($0) } ?? .null
+            ]))
+            for (i, blockID) in chunkLineage.enumerated() {
+                out.append(("INSERT OR IGNORE INTO chunk_blocks (chunk_id, evidence_block_id, ordinal) VALUES (?, ?, ?);",
+                            [.uuid(chunk.id), .uuid(blockID), .integer(Int64(i))]))
             }
         }
+        return out
     }
 
     /// L1 — every block a chunk was assembled from, in reading order; falls
@@ -98,11 +118,33 @@ public actor ChunksRepository {
         FROM chunks c
         LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
         WHERE ce.chunk_id IS NULL
-          AND c.admit_embedding = 1
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL
         ORDER BY c.created_at DESC
         LIMIT ?;
         """, [.text(modelID), .integer(Int64(limit))])
         return try await hydrateLineage(rows.compactMap(decode))
+    }
+
+    /// F10 — one KEYSET page of chunks awaiting a vector for `modelID`, newest first by rowid,
+    /// strictly older than `beforeRowID` (nil = from the newest). `lastRowID` is the cursor for the
+    /// next page (nil when the page is empty). Paging past a page lets the drain move beyond chunks
+    /// the embedder cannot vectorize instead of re-reading the same front page forever.
+    public func findChunksMissingVectorPage(limit: Int, modelID: String,
+                                            beforeRowID: Int64?) async throws -> (chunks: [Chunk], lastRowID: Int64?) {
+        let rows = try await database.query("""
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind, c.rowid
+        FROM chunks c
+        LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
+        WHERE ce.chunk_id IS NULL
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL
+          AND (? IS NULL OR c.rowid < ?)
+        ORDER BY c.rowid DESC
+        LIMIT ?;
+        """, [.text(modelID),
+              beforeRowID.map { .integer($0) } ?? .null, beforeRowID.map { .integer($0) } ?? .null,
+              .integer(Int64(limit))])
+        let last = rows.last?.int(12)
+        return (try await hydrateLineage(rows.compactMap(decode)), last)
     }
 
     /// PERF.1 — count of chunks awaiting embedding for the active model.
@@ -111,7 +153,7 @@ public actor ChunksRepository {
         SELECT COUNT(*) FROM chunks c
         LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
         WHERE ce.chunk_id IS NULL
-          AND c.admit_embedding = 1;
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL;
         """, [.text(modelID)])
         return Int(rows.first?.int(0) ?? 0)
     }
@@ -145,7 +187,7 @@ public actor ChunksRepository {
 
     public func count(forObject id: KnowledgeObject.ID) async throws -> Int {
         let rows = try await database.query(
-            "SELECT COUNT(*) FROM chunks WHERE object_id = ?;",
+            "SELECT COUNT(*) FROM chunks WHERE object_id = ? AND superseded_by_run IS NULL;",
             [.uuid(id)]
         )
         return Int(rows.first?.int(0) ?? 0)
@@ -158,7 +200,7 @@ public actor ChunksRepository {
     public func findByObjectID(_ id: KnowledgeObject.ID) async throws -> [Chunk] {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
-        FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
+        FROM chunks WHERE object_id = ? AND superseded_by_run IS NULL ORDER BY ordinal ASC;
         """, [.uuid(id)])
         return try await hydrateLineage(rows.compactMap(decode))
     }
@@ -169,9 +211,36 @@ public actor ChunksRepository {
     public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
-        FROM chunks WHERE object_id = ? AND review_status IS NULL ORDER BY ordinal ASC LIMIT 1;
+        FROM chunks WHERE object_id = ? AND review_status IS NULL AND superseded_by_run IS NULL ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
         return try await hydrateLineage(rows.compactMap(decode)).first
+    }
+
+    /// F08 — ids of the chunks belonging to `sourceVersionIDs`: the candidate set that restricts a
+    /// vector scan to a case BEFORE its top-k cut. Capped; the cap is the caller's recall budget.
+    public func chunkIDs(sourceVersionIDs: Set<UUID>, limit: Int) async throws -> [Chunk.ID] {
+        guard !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        return try await database.query("""
+            SELECT id FROM chunks WHERE source_version_id IN (\(ids.map { _ in "?" }.joined(separator: ",")))
+               AND review_status IS NULL AND superseded_by_run IS NULL ORDER BY rowid LIMIT ?;
+            """, ids.map { .uuid($0) } + [.integer(Int64(limit))]).compactMap { $0.uuid(0) }
+    }
+
+    /// F08 — chunks by id, restricted to `sourceVersionIDs` in the query, each carrying its version.
+    public func findByIDs(_ ids: [Chunk.ID], sourceVersionIDs: Set<UUID>) async throws -> [Chunk] {
+        guard !ids.isEmpty, !sourceVersionIDs.isEmpty else { return [] }
+        let vs = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        var out: [Chunk] = []
+        for id in ids {
+            let rows = try await database.query("""
+                SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version, source_version_id
+                FROM chunks WHERE id = ? AND review_status IS NULL
+                  AND source_version_id IN (\(vs.map { _ in "?" }.joined(separator: ","))) LIMIT 1;
+                """, [.uuid(id)] + vs.map { .uuid($0) })
+            if let row = rows.first, let chunk = decode(row) { out.append(chunk) }
+        }
+        return out
     }
 
     public func findByIDs(_ ids: [Chunk.ID]) async throws -> [Chunk] {
@@ -189,6 +258,34 @@ public actor ChunksRepository {
             }
         }
         return chunks
+    }
+
+    /// F08 — keyword search restricted to `sourceVersionIDs` INSIDE the query (before ranking/LIMIT),
+    /// so a small authorized scope is not crowded out by higher-ranked chunks from elsewhere. Chunks
+    /// come back stamped with their source version. Large scopes are queried in bounded batches.
+    public func searchFTS(_ query: String, limit: Int, sourceVersionIDs: Set<UUID>) async throws -> [Chunk] {
+        let match = FTSQuerySanitizer.sanitize(query)
+        guard !match.isEmpty, !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        var out: [Chunk] = []
+        for start in stride(from: 0, to: ids.count, by: 400) {
+            let slice = ids[start..<min(start + 400, ids.count)]
+            let qs = slice.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind, c.source_version_id
+            FROM chunks c
+            JOIN chunks_fts ON chunks_fts.rowid = c.rowid
+            WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL AND c.superseded_by_run IS NULL AND c.source_version_id IN (\(qs))
+            ORDER BY rank
+            LIMIT ?;
+            """, [.text(match)] + slice.map { .uuid($0) } + [.integer(Int64(limit))])
+            for r in rows {
+                guard let c = decode(r) else { continue }
+                out.append(r.uuid(12).map { c.withSourceVersion($0) } ?? c)
+            }
+            if out.count >= limit { break }
+        }
+        return try await hydrateLineage(Array(out.prefix(limit)))
     }
 
     public func searchFTS(_ query: String, limit: Int = 50) async throws -> [Chunk] {
@@ -209,11 +306,94 @@ public actor ChunksRepository {
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
         JOIN chunks_fts ON chunks_fts.rowid = c.rowid
-        WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL
+        WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL AND c.superseded_by_run IS NULL
         ORDER BY rank
         LIMIT ?;
         """, [.text(match), .integer(Int64(limit))])
         return try await hydrateLineage(rows.compactMap(decode))
+    }
+
+    /// W1-1 — run a search compiled by `AdvancedSearchCompiler`. The FTS
+    /// expression is used AS GIVEN: it is safe only because the compiler quotes
+    /// every user term and writes every operator itself — never pass user text
+    /// here directly. Filters are bound parameters. With no expression, the
+    /// filters alone select passages (newest file first).
+    public func searchAdvanced(_ compiled: CompiledSearch, limit: Int = 50) async throws -> [Chunk] {
+        guard !compiled.isEmpty else { return [] }
+        let (fragment, filterBinds) = Self.advancedFragment(compiled)
+        var sql = """
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
+        FROM chunks c
+        """ + fragment
+        var binds = filterBinds
+        sql += compiled.ftsExpression != nil ? "\nORDER BY rank" : "\nORDER BY f.modified_at DESC"
+        sql += "\nLIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        let rows = try await database.query(sql, binds)
+        return try await hydrateLineage(rows.compactMap(decode))
+    }
+
+    /// W3-5 — distinct documents matching advanced syntax, optionally only those created since `since`
+    /// (rules on ingest) — the same joins and filters as `searchAdvanced`.
+    public func objectsMatchingAdvanced(_ compiled: CompiledSearch, since: Date? = nil, limit: Int = 100_000) async throws -> [UUID] {
+        guard !compiled.isEmpty else { return [] }
+        let (fragment, filterBinds) = Self.advancedFragment(compiled)
+        var sql = "SELECT DISTINCT c.object_id FROM chunks c" + fragment
+        var binds = filterBinds
+        if let since { sql += " AND ko.created_at >= ?"; binds.append(.date(since)) }
+        sql += "\nLIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        return try await database.query(sql, binds).compactMap { $0.uuid(0) }
+    }
+
+    /// Joins + WHERE clause (starting with a newline) and binds for compiled advanced syntax.
+    nonisolated static func advancedFragment(_ compiled: CompiledSearch) -> (String, [SQLValue]) {
+        var sql = ""
+        var binds: [SQLValue] = []
+        if compiled.ftsExpression != nil { sql += "\nJOIN chunks_fts ON chunks_fts.rowid = c.rowid" }
+        sql += "\nJOIN knowledge_objects ko ON ko.id = c.object_id\nJOIN files f ON f.id = ko.file_id"
+        sql += "\nWHERE c.review_status IS NULL AND c.superseded_by_run IS NULL"
+        if let fts = compiled.ftsExpression {
+            sql += " AND chunks_fts.text MATCH ?"
+            binds.append(.text(fts))
+        }
+        for f in compiled.filters {
+            let clause: String
+            switch f.field {
+            case .type:
+                clause = "ko.source_type = ? COLLATE NOCASE"
+                binds.append(.text(f.value))
+            case .file:
+                clause = "f.url LIKE ? ESCAPE '\\'"
+                binds.append(.text("%" + Self.likeEscaped(f.value) + "%"))
+            case .before:
+                clause = "f.modified_at < ?"
+                binds.append(.real(f.epoch ?? 0))
+            case .after:
+                clause = "f.modified_at > ?"
+                binds.append(.real(f.epoch ?? 0))
+            case .entity:
+                clause = "EXISTS (SELECT 1 FROM entity_mentions m WHERE m.source_object_id = c.object_id AND (m.normalized LIKE ? ESCAPE '\\' OR m.surface LIKE ? ESCAPE '\\'))"
+                let pattern = "%" + Self.likeEscaped(f.value.lowercased()) + "%"
+                binds.append(.text(pattern)); binds.append(.text(pattern))
+            case .tag:
+                clause = """
+                EXISTS (SELECT 1 FROM user_tag_links l JOIN user_tags t ON t.id = l.tag_id
+                        WHERE t.name = ? COLLATE NOCASE AND t.retired_at IS NULL AND l.removed_at IS NULL
+                          AND ((l.subject_kind = 'object' AND l.subject_id = c.object_id)
+                            OR (l.subject_kind = 'chunk' AND l.subject_id = c.id)))
+                """
+                binds.append(.text(f.value))
+            }
+            sql += f.negated ? " AND NOT (\(clause))" : " AND (\(clause))"
+        }
+        return (sql, binds)
+    }
+
+    private nonisolated static func likeEscaped(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
     }
 
     // MARK: - P2.2 · document-level FTS, so `knowledge_objects_fts` is READ
@@ -265,7 +445,7 @@ public actor ChunksRepository {
             let rows = try await database.query("""
             SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
             FROM chunks
-            WHERE object_id = ? AND review_status IS NULL
+            WHERE object_id = ? AND review_status IS NULL AND superseded_by_run IS NULL
             ORDER BY ordinal ASC LIMIT ?;
             """, [.uuid(id), .integer(Int64(chunksPerDocument))])
             out.append(contentsOf: try await hydrateLineage(rows.compactMap(decode)))
@@ -280,7 +460,7 @@ public actor ChunksRepository {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks
-        WHERE review_status IS NULL AND admit_embedding = 1 AND length(text) >= 40
+        WHERE review_status IS NULL AND superseded_by_run IS NULL AND admit_embedding = 1 AND length(text) >= 40
         ORDER BY rowid
         LIMIT ?;
         """, [.integer(Int64(limit))])
@@ -300,7 +480,7 @@ public actor ChunksRepository {
         FROM chunks
         WHERE (evidence_block_id IN (\(placeholders))
                OR id IN (SELECT chunk_id FROM chunk_blocks WHERE evidence_block_id IN (\(placeholders))))
-          AND review_status IS NULL
+          AND review_status IS NULL AND superseded_by_run IS NULL
         ORDER BY rowid
         LIMIT ?;
         """, ids.map { SQLValue.uuid($0) } + ids.map { SQLValue.uuid($0) } + [.integer(Int64(limit))])
@@ -370,6 +550,8 @@ public actor ChunksRepository {
             blockKind: row.string(11),
             // S2-U1 — projected only by SELECTs that carry column 12; narrower
             // queries fall back to the neutral prior, same as legacy rows.
+            // F08 — projected (column 14) only by the scoped readers; nil everywhere else.
+            sourceVersionID: row.uuid(14),
             salience: row.double(12) ?? SalienceTable.neutral,
             contextTemplateVersion: row.int(13).map(Int.init)
         )

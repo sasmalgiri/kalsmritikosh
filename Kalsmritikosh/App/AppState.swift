@@ -57,9 +57,17 @@ public final class AppState {
         case starting
         case ready
         case failed(String)
+        /// W2-7 — the ledger is encrypted and this Mac does not hold a key that opens it.
+        case needsRecoveryKey(String)
     }
 
     public private(set) var phase: Phase = .starting
+    /// W2-7 — shown on the starting screen while the one-time encryption of an older ledger runs.
+    public private(set) var bootNote: String?
+    /// W2-7 — a recovery key the person entered, used by the next boot attempt only.
+    @ObservationIgnored var bootRecoveryKey: LedgerKey?
+    /// W2-7 — the boot arguments to resume with once the ledger is unlocked.
+    @ObservationIgnored var pendingBoot: (databaseURL: URL?, suppressAutoReingest: Bool)?
     public let bookmarks: BookmarkStore
 
     /// Live count of in-flight ingest tasks. The UI banner reads this
@@ -397,11 +405,21 @@ public final class AppState {
     /// archive with the full pipeline, tracked on the live panel so the user sees
     /// progress. Picker URLs are sandbox security-scoped, so access is started per
     /// file for the read. Folders are handled by the Sources watcher, not here.
+    /// W1-9 — the visible queue for added files (used when its module is on).
+    public func noteIngestFile(current name: String?, finished: Bool = false) {
+        if finished { ingestLastFile = name } else { ingestCurrentFile = name }
+    }
+
     public func ingestFiles(_ urls: [URL]) async {
         guard let ingest, !urls.isEmpty else { return }
+        if ProductModuleFlags.isEnabled(.importQueue) {
+            importQueue.enqueue(urls, state: self)
+            return
+        }
         let activity = beginProcess("Adding \(urls.count) file(s)…", total: urls.count)
         defer { finishProcess(activity); ingestCurrentFile = nil }
         var done = 0
+        var outcomes: [ImportOutcome] = []   // W1-3 import receipt
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -409,12 +427,16 @@ public final class AppState {
             do {
                 _ = try await ingest.ingest(fileAt: url, intent: .fullAvailable)
                 ingestLastFile = url.lastPathComponent
+                outcomes.append(ImportOutcome(url: url, error: nil))
             } catch {
                 KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                outcomes.append(ImportOutcome(url: url, error: error.localizedDescription))
             }
             done += 1
             updateProcess(activity, done: done)
         }
+        await writeImportReceipt(outcomes)
+        await runPostIngestChecksSinceLast()   // W3-4 / N-11
     }
 
     // MARK: - Device-suitable model install (consent-gated)
@@ -677,6 +699,15 @@ public final class AppState {
     /// picks it up on appear / change, runs it, then clears this. Lets the
     /// user search from anywhere without first navigating to Search.
     public var pendingSearchQuery: String?
+    /// W1-5 — a source opened from a kalsmritikosh:// link, and any message about a link that could not open.
+    public var deepLinkTarget: CitationOpenTarget?
+    public var deepLinkMessage: String?
+    /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
+    public var ledgerLocationNotice: String?
+    /// O-5 — every online send, append-only.
+    public private(set) var outboundLog: OutboundLogRepository?
+    /// W1-9 — files waiting, running and finished in this session.
+    public let importQueue = ImportQueue()
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
     /// this on appear, then clears it. Lets a persona example open Ask ready
     /// to run.
@@ -751,6 +782,10 @@ public final class AppState {
     public private(set) var entityTimeline: EntityTimeline?
     /// In-memory Trie + fuzzy index for entity hint resolution.
     public private(set) var entityTrie: EntityTrie?
+    /// F12 — the memory-pressure governor (kernel signal → drains, lanes, caches).
+    public private(set) var memoryPressure: MemoryPressureGovernor?
+    /// The watcher's ingest lanes; kept so memory pressure can narrow them.
+    private var laneScheduler: LaneScheduler?
     /// HNSW ANN index over the `vectors` table. Built at boot in
     /// parallel with the other caches. When built, SQLiteVectorStore
     /// .nearest takes the index path; brute-force is the fallback.
@@ -941,8 +976,33 @@ public final class AppState {
             // at a throwaway temp-dir DB so the eval can't read from
             // (or write to) the user's real archive. nil = production
             // path under Application Support.
-            let resolvedDBURL = databaseURL ?? DatabaseLocations.defaultDatabaseURL
-            let db = try Database(url: resolvedDBURL)
+            // W1-8 — follow a relocated ledger when its disk is present and current.
+            let resolvedDBURL: URL
+            if let databaseURL {
+                resolvedDBURL = databaseURL
+            } else {
+                let boot = LedgerRelocation.bootURL()
+                resolvedDBURL = boot.url
+                ledgerLocationNotice = boot.notice
+            }
+            // W2-7 — open the encrypted ledger (creating the key, or converting a plaintext
+            // ledger once). Off the main actor: converting a large ledger takes a while.
+            let recoveryKey = bootRecoveryKey
+            bootRecoveryKey = nil
+            if LedgerFileState.of(resolvedDBURL) == .plaintext {
+                bootNote = "Encrypting your ledger (one time — this can take a few minutes for a large archive)…"
+            }
+            defer { bootNote = nil }
+            let opened = try await Task.detached { try LedgerOpener.open(at: resolvedDBURL, recoveryKey: recoveryKey) }.value
+            let db: Database
+            switch opened {
+            case .opened(let d):
+                db = d
+            case .needsRecoveryKey(let why):
+                pendingBoot = (databaseURL, suppressAutoReingest)
+                self.phase = .needsRecoveryKey(why)
+                return
+            }
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
@@ -1038,6 +1098,14 @@ public final class AppState {
             #else
             let internalProvidersEnabled = false
             #endif
+            // The developer local-model-server providers (Ollama daemon probe +
+            // MLX reasoning download) are OFF even in DEBUG unless explicitly
+            // opted in: `defaults write <bundle-id> devLocalModelServers -bool YES`.
+            // Without the opt-in the sandboxed app would poll localhost:11434
+            // every few seconds (DNS is denied, so every probe fails) and keep
+            // logging a model-fit exclusion for a provider it can never use.
+            let devLocalModelServersEnabled = internalProvidersEnabled
+                && UserDefaults.standard.bool(forKey: "devLocalModelServers")
 
             await capabilities.register(FoundationModelsProvider())
             // P6.2 — bundled on-device sentence embedder. Resolves over the
@@ -1046,7 +1114,7 @@ public final class AppState {
             // embedding behaviour is unchanged. See docs/EMBEDDER_SWAP.md.
             let coreMLEmbedder = CoreMLEmbedderProvider()
             await capabilities.register(coreMLEmbedder)
-            if internalProvidersEnabled {
+            if devLocalModelServersEnabled {
             await capabilities.register(
                 MLXProvider(
                     id: "provider.local.mlx.reasoning",
@@ -1068,7 +1136,7 @@ public final class AppState {
                     downloader: ModelDownloader()
                 )
             )
-            } // internalProvidersEnabled (MLX reasoning)
+            } // devLocalModelServersEnabled (MLX reasoning)
             // SIXTEENTH REVIEW — LlamaCpp is an INTENTIONAL NON-SHIPPING
             // PROVIDER STUB (SHIP_DECISIONS §4): registered in internal
             // builds only, so a Release capability resolution can never
@@ -1154,7 +1222,7 @@ public final class AppState {
             // must make zero network connections, so it never probes the daemon
             // and never surfaces a setup suggestion.
             var internalOllamaSetupSuggestion: OllamaSetupAdvisor.SetupSuggestion? = nil
-            if internalProvidersEnabled {
+            if devLocalModelServersEnabled {
             let ollamaBase = URL(string: "http://localhost:11434")!
             let detectedOllama = await OllamaDiscovery.list(baseURL: ollamaBase)
             let ollamaReachable: Bool
@@ -1226,10 +1294,25 @@ public final class AppState {
                     ))
                 }
             }
-            } // internalProvidersEnabled (Ollama probe + discovery + registration)
+            } // devLocalModelServersEnabled (Ollama probe + discovery + registration)
             if internalProvidersEnabled {
                 await capabilities.register(CloudProvider())
             }
+            // O-4 — the user's own cloud AI. Registered in every build but resolves
+            // ONLY in Online mode with the network helper bundled (CapabilityRegistry
+            // .cloudEligible); in Private mode it is never eligible.
+            self.outboundLog = OutboundLogRepository(database: db)
+            await capabilities.register(OnlineCloudProvider(
+                outboundLog: self.outboundLog,
+                knownNames: { [db] in
+                    let rows = (try? await db.query("""
+                        SELECT value FROM entities
+                        WHERE kind IN ('person','organization','vendor','client') AND merged_into IS NULL
+                          AND LENGTH(value) >= 4
+                        LIMIT 3000;
+                        """, [])) ?? []
+                    return rows.compactMap { $0.string(0) }
+                }))
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when
@@ -1750,6 +1833,8 @@ public final class AppState {
             let sourceUpgradeJobs = SourceUpgradeJobRepository(database: db)
             await ingest.configureUpgrades(database: db, jobs: sourceUpgradeJobs, priorityGate: priorityGate)
             _ = try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
+            // F20 — the supervised background worker that actually runs scheduled upgrades.
+            await ingest.startUpgradeDrain()
 
             // AEE-M1 — now that the upgrade subsystem is live, give the brain its adaptive
             // evidence bridge so a mission that needs evidence-ready DECISIVE sources can
@@ -2145,12 +2230,13 @@ public final class AppState {
             //   network      = 4           (cloud OCR / reasoning)
             // Mixed-format corpora hit ~3× speedup; same-format
             // bursts unchanged (still bounded by their own lane).
-            let laneScheduler = LaneScheduler(
-                capacities: LaneScheduler.defaultCapacities(
-                    processorCount: ProcessInfo.processInfo.activeProcessorCount,
-                    availableRAMBytes: hardware.totalRAMBytes
-                )
+            let laneCapacities = LaneScheduler.defaultCapacities(
+                processorCount: ProcessInfo.processInfo.activeProcessorCount,
+                availableRAMBytes: hardware.totalRAMBytes
             )
+            let laneScheduler = LaneScheduler(capacities: laneCapacities)
+            let watcherInFlightLimit = BoundedFanOut.watcherLimit(capacities: laneCapacities)
+            self.laneScheduler = laneScheduler
             // Phase L — chat + browser loaders are flag-gated for
             // App Store compatibility. Default OFF; user opts in via
             // Settings. Plain-text chat exports default ON since
@@ -2179,20 +2265,17 @@ public final class AppState {
                     if discovered > 0 {
                         await MainActor.run { self.noteDiscoveredFiles(discovered) }
                     }
-                    await withTaskGroup(of: Void.self) { group in
-                        for url in event.urls {
-                            group.addTask { [weak self, weak ingest] in
-                                guard let self, let ingest else { return }
-                                let type = SourceType.detect(from: url)
-                                let lane = loaderRegistry.loader(for: type).primaryLane
-                                await laneScheduler.withLane(lane) {
-                                    await self.withIngestActivity(file: url.lastPathComponent) {
-                                        do {
-                                            _ = try await ingest.ingest(fileAt: url)
-                                        } catch {
-                                            KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                                        }
-                                    }
+                    // F12 — bounded fan-out: only `watcherLimit` files resident at once.
+                    await BoundedFanOut.forEach(event.urls, maxInFlight: watcherInFlightLimit) { [weak self, weak ingest] url in
+                        guard let self, let ingest else { return }
+                        let type = SourceType.detect(from: url)
+                        let lane = loaderRegistry.loader(for: type).primaryLane
+                        await laneScheduler.withLane(lane) {
+                            await self.withIngestActivity(file: url.lastPathComponent) {
+                                do {
+                                    _ = try await ingest.ingest(fileAt: url)
+                                } catch {
+                                    KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                                 }
                             }
                         }
@@ -2262,7 +2345,13 @@ public final class AppState {
                         objects: objects, priorityGate: priorityGate, typedFields: TypedFieldRepository(database: db),
                         sensitiveScope: sensitiveScopesRepo)
                 },
-                artifacts: casePhaseArtifactsRepo)
+                artifacts: casePhaseArtifactsRepo,
+                // F08 — case-scoped recall on every lane (keyword, vector, events, entities, graph), the
+                // scope inside each query before LIMIT. nil policy MIRRORS the shared HybridRetriever
+                // (sensitivity is enforced downstream in ExpertContext for base and recovered items alike).
+                scopedRecall: SourceScopedRetriever.ScopedRecall(
+                    chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
+                    events: events, entities: entities, relationships: relationships))
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.
@@ -2564,6 +2653,18 @@ public final class AppState {
             self.memoryCache = memoryHashCache
             self.entityTimeline = entityTimelineCache
             self.entityTrie = entityTrieCache
+            // F12 — memory pressure pauses background drains, narrows the ingest lanes, and at
+            // critical sheds the retrieval caches (retrieval falls back to SQL).
+            let pressure = MemoryPressureGovernor()
+            await MemoryPressureResponse.install(on: pressure, ingest: ingest, lanes: laneScheduler,
+                                                 memory: memoryHashCache, timeline: entityTimelineCache,
+                                                 trie: entityTrieCache,
+                                                 rewarm: .init(
+                                                    memory: { await memoryHashCache.warm(memory: memoryRepo) },
+                                                    timeline: { await entityTimelineCache.warm(events: events) },
+                                                    trie: { await entityTrieCache.warm(entities: entities) }))
+            await pressure.startMonitoring()
+            self.memoryPressure = pressure
             self.hnswIndex = hnsw
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
@@ -3898,6 +3999,8 @@ public final class AppState {
 
     /// True while a full erase is in flight (drives the Settings button state).
     public private(set) var deletingAllData = false
+    /// W2-5 — set when a legal hold refused a destructive action; the UI shows it and clears it.
+    public var legalHoldBlock: String?
 
     /// User-initiated FULL ERASE of all ingested + derived data — the global
     /// "Delete all my data" the app was missing. Removes every watched folder
@@ -3909,6 +4012,15 @@ public final class AppState {
     @discardableResult
     public func deleteAllData() async -> Int {
         guard let db = database, !deletingAllData else { return 0 }
+        // W2-5 — an active legal hold blocks erasing the ledger.
+        if let held = try? await db.query("""
+            SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
+            WHERE h.released_at IS NULL AND i.removed_at IS NULL;
+            """, []).first?.int(0), held > 0 {
+            legalHoldBlock = "Not erased: \(held) document\(held == 1 ? " is" : "s are") under a legal hold. Release the hold first (Tools → Legal production)."
+            KalsmritikoshLog.app.notice("Erase refused: \(held, privacy: .public) documents under legal hold")
+            return 0
+        }
         deletingAllData = true
         defer { deletingAllData = false }
 
@@ -3917,6 +4029,12 @@ public final class AppState {
         for root in Array(bookmarks.roots) {
             await removeRoot(root, strategy: .stopAndForget)
         }
+        // Stop the background Claim-projection pass and await its wind-down: a pass still
+        // running after the wipe writes its cursor rows back and the erase reads as incomplete.
+        // The actor stays usable; the next ingest drives it again over the empty ledger.
+        claimProjectionBackfillTask?.cancel()
+        claimProjectionBackfillTask = nil
+        await claimProjection?.cancel()
         // 2. Empty every user table. Skip sqlite internals and FTS shadow
         //    tables (those are maintained by triggers on their base tables, so
         //    deleting the base rows cleans the index). FK off during the wipe so
@@ -4006,6 +4124,7 @@ public final class AppState {
         let wipe = beginProcess("Erasing all ingested data")
         let cleared = await deleteAllData()
         finishProcess(wipe)
+        if let block = legalHoldBlock { return block }
         // Let boot-time one-shots (milestone spine) re-run over the fresh corpus.
         UserDefaults.standard.removeObject(forKey: "kalsmritikosh.milestones.backfilled.v1")
         let n = await ingestAllRoots()
@@ -4076,6 +4195,13 @@ public final class AppState {
             }
         case .stopAndForget:
             if let url, let files {
+                // W2-5 — a legal hold blocks forgetting held documents: nothing is removed.
+                if let db = database,
+                   let held = try? await LegalProductionRepository(database: db).heldCount(underRoot: url), held > 0 {
+                    legalHoldBlock = "Not forgotten: \(held) document\(held == 1 ? "" : "s") from this folder \(held == 1 ? "is" : "are") under a legal hold. Release the hold first (Tools → Legal production)."
+                    KalsmritikoshLog.app.notice("Forget refused: \(held, privacy: .public) held documents under root")
+                    return
+                }
                 try? await files.deleteAllUnderRoot(url)
             }
         }
@@ -4259,13 +4385,15 @@ public final class AppState {
         let plan = QuestionPlan.derive(question: question, anchors: anchors)
         guard plan.shape != QuestionShape.outOfScope.rawValue else { return nil }
 
-        let tools = LedgerTools(
+        var tools = LedgerTools(
             events: { [weak events] tokens in (try? await events?.findByTitleTokens(tokens)) ?? [] },
             facts: { [weak genericFacts] field in (try? await genericFacts?.facts(field: field)) ?? [] },
             chunksForQuestion: { [weak chunks] q in
                 let hits = (try? await chunks?.searchFTS(SlotFieldResolver.expandAliases(q), limit: 15)) ?? []
                 return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
             })
+        // F06 — field results cite the document that owns their source blocks.
+        if let evidenceStore { tools.blockOwners = LedgerTools.blockOwners(using: evidenceStore) }
         // The loop law: history → field lookup → ONE span fetch.
         let shape = QuestionShape(rawValue: plan.shape) ?? .unresolved
         var results: [ToolResult]
@@ -4462,6 +4590,7 @@ public final class AppState {
         // (dedup + AI subject resolution + minimization + prose), so the archive
         // is answer-ready without a manual button. No-op if the run was stopped.
         if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
+        if !(await ingestControl.isStopped) { await runPostIngestChecksSinceLast() }   // W3-4 / N-11
     }
 
     @discardableResult
@@ -4545,6 +4674,7 @@ public final class AppState {
         // here (the function's defer resets it), so the idle pass stays deferred
         // through the build and won't race it.
         if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
+        if !(await ingestControl.isStopped) { await runPostIngestChecksSinceLast() }   // W3-4 / N-11
         return succeeded
     }
 

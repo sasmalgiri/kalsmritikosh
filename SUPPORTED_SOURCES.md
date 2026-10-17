@@ -5,6 +5,13 @@
 > the app actually parses. Regenerate with
 > `ParserCapabilityManifest.renderMarkdown(registry:)`. Supersedes the format claims in
 > `SUPPORTED_FORMATS_V1.md`.
+>
+> **F13 — claimed vs measured.** The Coverage column below is what the registry *claims*.
+> What each format *measurably* yields — its fixture parsed through the real parser, with
+> status, located blocks and a planted fact checked — is in
+> [`CAPABILITY_MATRIX.md`](CAPABILITY_MATRIX.md), generated and drift-guarded by
+> `AllDomainSyntheticMatrixTests.capabilityMatrixIsMeasured`. Advertising reads the measured
+> matrix: a FULL claim its fixture does not bear out reads UNVERIFIED there and fails the test.
 
 Coverage states (from the locked product contract):
 
@@ -72,7 +79,8 @@ Coverage states (from the locked product contract):
 | chatExport (WhatsApp/Signal/Slack) | chat | FULL when opted in, else PRESERVED-ONLY | discussion-export | 1 |
 | imessage | chat | PRESERVED-ONLY | — | — |
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
-| zip, rar, sevenZip | archive | CONTAINER | — | — |
+| zip | archive | CONTAINER (expanded within `ContainerSafetyPolicy` limits) | — | — |
+| rar, sevenZip | archive | NOT EXPANDED (kept with custody; members not read) | — | — |
 
 **Totals (code-generated): 36 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
@@ -84,11 +92,21 @@ derives this table from it so the matrix cannot drift from what actually runs.
 
 ## Caveats (honest limits)
 
-- **Archives (zip/rar/7z)** are *containers*, not content: the ingest pipeline expands them
-  and parses each member by its own type. They are not "preserved-only" in the content sense —
-  the manifest lists them without a structural parser because the archive bytes themselves
-  carry no evidence blocks. (The manifest's raw output labels these PRESERVED-ONLY; read them
-  as CONTAINER per this note.)
+- **Archives.** A **ZIP** is a *container*, not content: the ingest pipeline expands it and
+  parses each member by its own type, within `ContainerSafetyPolicy.standard` — nesting depth 8;
+  20,000 entries and 4 GiB per archive; 1 GiB per member; 200,000 members and 16 GiB per root;
+  256 nested archives; a 200:1 compression ratio. A member beyond a limit, an unsafe path, or an
+  encrypted member is recorded as blocked and stays visible — it is never read. **RAR and 7z**
+  have no native decoder: the archive is kept with custody and recorded as unsupported, and its
+  members are **not** read. (The manifest's raw output labels all three PRESERVED-ONLY.)
+- **Language — English only in v1 (owner decision; multilingual is v2, bge-m3).** OCR, speech
+  transcription, entity and date extraction are tuned for English. A document in another
+  language is kept, hashed and keyword-searchable by its exact text, but names, dates and facts
+  in it may be missed; the data-health check counts such documents rather than hiding them.
+- **Identity merges are reviewable and reversible.** Mentions are unified into one entity by
+  name and alias when they clearly refer to the same thing. Every merge is listed under
+  Knowledge → Merged and can be undone with Unmerge; merging never deletes the merged record.
+  Same-name people are never silently folded into one history subject.
 - **PARTIAL (OCR)** fidelity depends on image/scan quality; a currency glyph or handwriting
   may be misread. Native-text PDFs extract exactly; scanned pages fall back to Vision OCR.
 - **PARTIAL (container) — Windows event logs (`.evtx`, HOST-3).** An EVTX file has two layers.

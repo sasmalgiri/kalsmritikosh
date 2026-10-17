@@ -14,6 +14,16 @@ public actor EventsRepository {
     }
 
     public func insertBatch(_ events: [Event]) async throws {
+        for statement in try Self.insertStatements(for: events) {
+            try await database.exec(statement.sql, statement.binds)
+        }
+    }
+
+    /// The exact statements `insertBatch` runs — so a caller can compose them into its own
+    /// isolated savepoint (F28) instead of awaiting across a transaction.
+    nonisolated static func insertStatements(for events: [Event]) throws -> [(sql: String, binds: [SQLValue])] {
+        let encoder = JSONEncoder()
+        var out: [(sql: String, binds: [SQLValue])] = []
         for e in events {
             let attrs = try encoder.encode(e.attributes)
             // T16 — persist an evidentiary status. If the event still carries
@@ -26,7 +36,7 @@ public actor EventsRepository {
                     contentConfidence: e.confidence.value,
                     kind: e.kind)
                 : e.status
-            try await database.exec("""
+            out.append(("""
             INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision, status,
                                 producer_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \(DerivedProducerVersions.events));
@@ -44,13 +54,13 @@ public actor EventsRepository {
                 .text(e.qualityTier.rawValue),
                 .integer(Int64(e.datePrecision.rawValue)),
                 .text(status.rawValue)
-            ])
+            ]))
             for entityID in e.entityIDs {
-                try await database.exec("""
-                INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?);
-                """, [.uuid(e.id), .uuid(entityID)])
+                out.append(("INSERT OR IGNORE INTO event_entities (event_id, entity_id) VALUES (?, ?);",
+                            [.uuid(e.id), .uuid(entityID)]))
             }
         }
+        return out
     }
 
     public func count() async throws -> Int {
@@ -82,6 +92,28 @@ public actor EventsRepository {
         LIMIT ?;
         """, [.date(start), .date(end), .integer(Int64(limit))])
         return rows.compactMap(decode)
+    }
+
+    /// F08 — events whose source object belongs to one of `sourceVersionIDs` (the object's file's
+    /// CURRENT version — the same mapping the case-scope filter resolves by), with the scope predicate
+    /// INSIDE the query, before LIMIT, so a small case's events are not crowded out by the corpus.
+    public func forSourceVersions(_ sourceVersionIDs: Set<UUID>, start: Date? = nil, end: Date? = nil,
+                                  limit: Int = 200) async throws -> [Event] {
+        guard !sourceVersionIDs.isEmpty else { return [] }
+        let ids = sourceVersionIDs.sorted { $0.uuidString < $1.uuidString }
+        var sql = """
+        SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id, e.confidence, e.date_confidence, e.quality_tier, e.date_precision, e.status
+        FROM events e
+        JOIN knowledge_objects ko ON ko.id = e.source_object_id
+        JOIN source_versions sv ON sv.logical_source_id = ko.file_id AND sv.is_current = 1
+        WHERE sv.id IN (\(ids.map { _ in "?" }.joined(separator: ","))) AND e.review_status IS NULL
+        """
+        var binds: [SQLValue] = ids.map { .uuid($0) }
+        if let start { sql += " AND e.date >= ?"; binds.append(.date(start)) }
+        if let end { sql += " AND e.date <= ?"; binds.append(.date(end)) }
+        sql += " ORDER BY e.date DESC LIMIT ?;"
+        binds.append(.integer(Int64(limit)))
+        return try await database.query(sql, binds).compactMap(decode)
     }
 
     public func findByIDs(_ ids: [Event.ID]) async throws -> [Event] {
@@ -541,6 +573,12 @@ public actor EventsRepository {
     /// that replaces the "recent global events" anti-pattern — results are bounded
     /// to the subject by the event_entities join, never the whole archive.
     /// Deterministic order: date, then id for stable ties. Paged.
+    /// F09 — how many events an entity participates in (for honest deferred counts).
+    public func countForEntity(_ entityID: Entity.ID) async throws -> Int {
+        Int(try await database.query("SELECT COUNT(*) FROM event_entities WHERE entity_id = ?;",
+                                     [.uuid(entityID)]).first?.int(0) ?? 0)
+    }
+
     public func allForEntity(_ entityID: Entity.ID, offset: Int = 0, pageSize: Int = 1_000) async throws -> [Event] {
         let rows = try await database.query("""
         SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id,

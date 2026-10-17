@@ -35,11 +35,13 @@ public struct SourceVersionByteResolver: Sendable {
 
     public func resolve(sourceVersionID: UUID, at now: Date) async throws -> Resolved {
         guard let row = try await database.query("""
-            SELECT content_hash, custody_mode, vault_address, original_url, detected_type, filename
+            SELECT content_hash, custody_mode, vault_address, original_url, detected_type, filename, acquisition_limitation
               FROM source_versions WHERE id = ? LIMIT 1;
             """, [.uuid(sourceVersionID)]).first, let hash = row.string(0) else {
             throw SourceUpgradeError.sourceVersionMissing(sourceVersionID)
         }
+        // F03 — an acquisition that never preserved its whole source cannot be reopened as its state.
+        guard row.string(6) == nil else { throw SourceUpgradeError.acquisitionIncomplete(sourceVersionID) }
         let custody = row.string(1) ?? "referenced"
         let vaultAddress = row.string(2)
         let originalURL = row.string(3)

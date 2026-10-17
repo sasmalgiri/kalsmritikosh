@@ -229,7 +229,10 @@ struct SQLiteRecordIngestTests {
             logicalSourceID: UUID(), sourceVersionID: UUID())
         let warning = try #require(doc.warnings.first { $0.code == "sqlite.row_cap" })
         #expect(warning.message.contains("of 5200"))
-        #expect(warning.message.contains("remain searchable"))
+        // F04 — no blanket "every row remains searchable": the bounded parse names what IT cites, and
+        // points at the resumable ingest (which cites every row it has processed).
+        #expect(warning.message.contains("first 5000 of 5200"))
+        #expect(!warning.message.contains("remain searchable"))
     }
 
     // MARK: - Wiring

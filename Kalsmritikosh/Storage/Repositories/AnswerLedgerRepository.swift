@@ -178,7 +178,7 @@ public actor AnswerLedgerRepository {
         let blockRows = (try? await database.query("""
         SELECT eb.id FROM evidence_blocks eb
         JOIN evidence_blocks_fts ON evidence_blocks_fts.rowid = eb.rowid
-        WHERE eb.source_version_id = ? AND evidence_blocks_fts MATCH ?
+        WHERE eb.source_version_id = ? AND eb.superseded_by_run IS NULL AND evidence_blocks_fts MATCH ?
         ORDER BY rank LIMIT 3;
         """, [.uuid(versionID), .text(match)])) ?? []
         return blockRows.compactMap { $0.uuid(0)?.uuidString }

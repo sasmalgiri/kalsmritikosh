@@ -76,7 +76,9 @@ public struct SpreadsheetLoader: Ingestor {
             content: normalized,
             metadata: [
                 "filename": AnyCodable(.string(url.lastPathComponent)),
-                "rowCount": AnyCodable(.int(Int64(normalized.split(separator: "\n").count)))
+                // F30 — count CSV records (CR / LF / CRLF, quoted newlines), not raw lines.
+                "rowCount": AnyCodable(.int(Int64(CSVRowReader.rows(normalized)
+                    .filter { !($0.count == 1 && $0[0].isEmpty) }.count)))
             ]
         )
     }
@@ -98,29 +100,21 @@ public struct SpreadsheetLoader: Ingestor {
         // this, headers in the KO content are useless paths like
         // "xl/worksheets/sheet1.xml". With it, downstream entity
         // extraction sees real section names.
-        var sheetNameByPath: [String: String] = [:]
-        if entries.contains(where: { $0.name == "xl/workbook.xml" }) {
-            let wbData = try zip.read("xl/workbook.xml")
-            sheetNameByPath = parseWorkbookSheetNames(wbData)
-        }
-
-        let sheetPaths = entries
-            .map(\.name)
-            .filter { $0.hasPrefix("xl/worksheets/sheet") && $0.hasSuffix(".xml") }
-            .sorted()
-        guard !sheetPaths.isEmpty else {
+        // F31 — the SAME workbook-order / relationship-resolved sheet list the structural
+        // parser uses (the Nth <sheet> is not necessarily sheetN.xml).
+        let names = entries.map(\.name)
+        let sheets = XLSXStructuralParser.orderedSheets(
+            workbook: names.contains("xl/workbook.xml") ? try zip.read("xl/workbook.xml") : nil,
+            relationships: names.contains("xl/_rels/workbook.xml.rels") ? try zip.read("xl/_rels/workbook.xml.rels") : nil,
+            entries: names)
+        guard !sheets.isEmpty else {
             throw IngestorError.parseFailure(url, reason: "no worksheets in XLSX")
         }
 
         var lines: [String] = []
-        for (index, sheetPath) in sheetPaths.enumerated() {
-            let data = try zip.read(sheetPath)
-            // Prefer the friendly name; fall back to "Sheet N" for
-            // workbooks without the mapping.
-            let title = sheetNameByPath[sheetPath]
-                ?? sheetNameByPath["sheet\(index + 1)"]
-                ?? "Sheet \(index + 1)"
-            lines.append("# \(title)")
+        for sheet in sheets {
+            let data = try zip.read(sheet.path)
+            lines.append("# \(sheet.name)")
             lines.append("")
             let tableLines = parseSheetAsMarkdownTable(data, sharedStrings: sharedStrings)
             lines.append(contentsOf: tableLines)
@@ -134,40 +128,10 @@ public struct SpreadsheetLoader: Ingestor {
             content: content,
             metadata: [
                 "filename": AnyCodable(.string(url.lastPathComponent)),
-                "loader": AnyCodable(.string("xlsx-ooxml-v2")),
-                "sheetCount": AnyCodable(.int(Int64(sheetPaths.count)))
+                "loader": AnyCodable(.string("xlsx-ooxml-v3")),
+                "sheetCount": AnyCodable(.int(Int64(sheets.count)))
             ]
         )
-    }
-
-    /// Maps the worksheet ZIP path (e.g. "xl/worksheets/sheet3.xml")
-    /// to its user-visible sheet name. Workbook order matters because
-    /// the OOXML spec assigns sheet1, sheet2, … in declaration order.
-    private func parseWorkbookSheetNames(_ data: Data) -> [String: String] {
-        let xml = String(decoding: data, as: UTF8.self)
-        var map: [String: String] = [:]
-        var cursor = xml.startIndex
-        var index = 1
-        while cursor < xml.endIndex {
-            guard let open = xml.range(of: "<sheet ", range: cursor..<xml.endIndex),
-                  let close = xml.range(of: "/>", range: open.upperBound..<xml.endIndex)
-            else { break }
-            let attrs = String(xml[open.upperBound..<close.lowerBound])
-            // Pull the name="..." attribute via a small scan.
-            if let nameRange = attrs.range(of: "name=\"") {
-                let valueStart = nameRange.upperBound
-                if let valueEnd = attrs.range(of: "\"", range: valueStart..<attrs.endIndex) {
-                    let name = String(attrs[valueStart..<valueEnd.lowerBound])
-                    let path = "xl/worksheets/sheet\(index).xml"
-                    map[path] = name
-                    // Secondary key without the path prefix for fallback.
-                    map["sheet\(index)"] = name
-                }
-            }
-            index += 1
-            cursor = close.upperBound
-        }
-        return map
     }
 
     private func ingestODS(at url: URL) throws -> KnowledgeObject {
@@ -228,15 +192,17 @@ public struct SpreadsheetLoader: Ingestor {
     /// spreadsheet ingestion preserves the table boundary so downstream
     /// NER + Chunker can treat each row as a structured record (and the
     /// brain can answer "what's in the X column?" questions). Falls
-    /// back to no table when the sheet has no rows.
+    /// back to no table when the sheet has no rows. F31 — rows come from the
+    /// shared `XLSXStructuralParser.parseSheet`, so a sparse row keeps its
+    /// columns and a formula cell shows its cached value, not formula + value.
     private func parseSheetAsMarkdownTable(_ data: Data, sharedStrings: [String]) -> [String] {
-        let rows = parseSheet(data, sharedStrings: sharedStrings)
+        let rows = XLSXStructuralParser.parseSheet(data, sharedStrings: sharedStrings, formats: [:])
+            .map(\.values)
+            .filter { $0.contains { !$0.isEmpty } }
         guard !rows.isEmpty else { return [] }
-        // Split each tab-joined row back into cells.
-        let cells: [[String]] = rows.map { $0.components(separatedBy: "\t") }
-        let widest = cells.map(\.count).max() ?? 0
+        let widest = rows.map(\.count).max() ?? 0
         guard widest > 0 else { return [] }
-        let normalized = cells.map { row in
+        let normalized = rows.map { row in
             row + Array(repeating: "", count: max(0, widest - row.count))
         }
         var out: [String] = []
@@ -246,67 +212,5 @@ public struct SpreadsheetLoader: Ingestor {
             out.append("| " + row.joined(separator: " | ") + " |")
         }
         return out
-    }
-
-    /// Reads <c t="..."><v>idx</v></c> + inline strings, emits one line
-    /// per row with cells separated by `\t`.
-    private func parseSheet(_ data: Data, sharedStrings: [String]) -> [String] {
-        let xml = String(decoding: data, as: UTF8.self)
-        var lines: [String] = []
-        var cursor = xml.startIndex
-        while cursor < xml.endIndex {
-            guard let rowOpen = xml.range(of: "<row", range: cursor..<xml.endIndex),
-                  let rowClose = xml.range(of: "</row>", range: rowOpen.upperBound..<xml.endIndex)
-            else { break }
-            let row = String(xml[rowOpen.upperBound..<rowClose.lowerBound])
-            var cellValues: [String] = []
-            var inner = row.startIndex
-            while inner < row.endIndex {
-                guard let cellOpen = row.range(of: "<c", range: inner..<row.endIndex),
-                      let cellGT = row.range(of: ">", range: cellOpen.upperBound..<row.endIndex)
-                else { break }
-                let cellHeader = String(row[cellOpen.upperBound..<cellGT.lowerBound])
-                // A self-closing cell `<c .../>` has no body. Detect it by
-                // checking the character immediately before `>`: a slash
-                // means the header itself terminates the element. Without
-                // this branch the legacy code searched for `/>` in a
-                // backward range and produced an inverted slice that
-                // crashed Swift's String.subscript with "Range requires
-                // lowerBound <= upperBound".
-                let isSelfClosing = cellHeader.hasSuffix("/")
-                let body: String
-                let advanceTo: String.Index
-                if isSelfClosing {
-                    body = ""
-                    advanceTo = cellGT.upperBound
-                } else if let cellEnd = row.range(of: "</c>", range: cellGT.upperBound..<row.endIndex) {
-                    body = String(row[cellGT.upperBound..<cellEnd.lowerBound])
-                    advanceTo = cellEnd.upperBound
-                } else {
-                    // Malformed cell — no closing tag found. Skip body
-                    // and resume scanning after the `>` so the loop
-                    // doesn't spin in place.
-                    body = ""
-                    advanceTo = cellGT.upperBound
-                }
-                let isString = cellHeader.contains("t=\"s\"")
-                let isInlineStr = cellHeader.contains("t=\"inlineStr\"")
-                let plain = DocxLoader.stripTags(body)
-                if isString, let idx = Int(plain.trimmingCharacters(in: .whitespaces)),
-                   idx >= 0, idx < sharedStrings.count {
-                    cellValues.append(sharedStrings[idx])
-                } else if isInlineStr {
-                    cellValues.append(plain)
-                } else if !plain.isEmpty {
-                    cellValues.append(plain)
-                }
-                inner = advanceTo
-            }
-            if !cellValues.isEmpty {
-                lines.append(cellValues.joined(separator: "\t"))
-            }
-            cursor = rowClose.upperBound
-        }
-        return lines
     }
 }

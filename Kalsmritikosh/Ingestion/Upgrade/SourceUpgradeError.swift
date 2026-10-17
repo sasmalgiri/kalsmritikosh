@@ -19,11 +19,20 @@ public nonisolated enum SourceUpgradeError: Error, Sendable, Equatable {
     case sourceBytesChanged(UUID)          // referenced bytes differ from the exact version hash
     case vaultBlobMissing(UUID)            // managed version's vault blob is gone
     case hashMismatch(UUID)                // reopened bytes do not hash to the version's hash
+    /// F03 — the version's acquisition never preserved all of its source (a WAL database captured
+    /// before logical acquisition); its bytes cannot be reopened as the version's state.
+    case acquisitionIncomplete(UUID)
 
     // Ledger.
+    /// F15 — the version's evidence kept changing while it was being measured; nothing was stamped.
+    /// RETRYABLE: readiness stays unverified (never "satisfied") until a measurement completes unchanged.
+    case evidenceChanging(UUID)
     case jobNotFound(UUID)
     case sourceVersionMissing(UUID)
     case notAnActiveJob(UUID)
+    /// F21 — a worker tried to finish a job it no longer owns (lease reclaimed, cancelled,
+    /// superseded, or already finished). Its write is rejected; nothing changed.
+    case staleLease(UUID)
     // A handler returned but the expected durable readiness postcondition was not met (§27).
     case postconditionNotSatisfied(kind: SourceUpgradeKind, sourceVersionID: UUID)
 }

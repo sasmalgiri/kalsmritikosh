@@ -97,7 +97,7 @@ public struct JournalistStudioView: View {
                 Text("\(m.claims.count) claim(s) · \(flagged) to run as alleged")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { memos.removeAll { $0.id == m.id }; persist() } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { memos.removeAll { $0.id == m.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = m.id; stage = firstIncomplete(m) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -212,7 +212,7 @@ public struct JournalistStudioView: View {
                                 .font(.caption2).foregroundStyle(.orange)
                         }
                         Spacer()
-                        Button { m.wrappedValue.claims.removeAll { $0.id == c.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { m.wrappedValue.claims.removeAll { $0.id == c.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     TextField("Sources supporting it", text: $c.sources).textFieldStyle(.roundedBorder).font(.caption)
@@ -240,7 +240,7 @@ public struct JournalistStudioView: View {
                         TextField("Subject (person / org)", text: $r.subject).textFieldStyle(.roundedBorder)
                         TextField("yyyy-mm-dd contacted", text: $r.contactedDate).textFieldStyle(.roundedBorder).frame(width: 160)
                         TextField("Method", text: $r.method).textFieldStyle(.roundedBorder).frame(width: 120)
-                        Button { m.wrappedValue.replies.removeAll { $0.id == r.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { m.wrappedValue.replies.removeAll { $0.id == r.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     TextField("What was put to them (in full)", text: $r.claimSummary, axis: .vertical)

@@ -74,6 +74,14 @@ public struct CitationChips: View {
                         .frame(maxWidth: 220)
                         .help(citation.snippet.isEmpty ? name : String(citation.snippet.prefix(200)))
                         .accessibilityLabel("Source \(index + 1): \(name). Opens at the quoted passage.")
+                        .contextMenu {
+                            // W1-5 — a link that reopens this exact passage from any app.
+                            if ProductModuleFlags.isEnabled(.deepLinks) {
+                                Button("Copy link to this passage") {
+                                    appState.copyLink(objectID: citation.objectID, quote: citation.snippet)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -176,6 +184,14 @@ public struct CitationSourceSheet: View {
             }
             .padding(10)
             Divider()
+            // W2-1 — highlights and notes beside the source (never written into it).
+            if ProductModuleFlags.isEnabled(.annotations) {
+                AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.quote)
+                Divider()
+            }
+            if ProductModuleFlags.isEnabled(.notesImport) {
+                NoteLinksStrip(objectID: target.objectID)
+            }
             SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
         }
         .frame(minWidth: 640, minHeight: 480)

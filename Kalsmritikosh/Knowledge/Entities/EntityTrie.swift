@@ -27,6 +27,10 @@
 //  Memory: ~3-5x the entity name corpus size. For 100k entities
 //  averaging 20 chars: ~10-20MB. Fine.
 //
+//  F12 — byte-accounted: nodes, id-set entries and tokens are counted as they are added; past
+//  `byteBudget` (or under memory pressure) the trie sheds whole and reports cold, and the Entity
+//  and Timeline layers take their SQL paths.
+//
 
 import Foundation
 import OSLog
@@ -50,8 +54,35 @@ public actor EntityTrie {
     private var warmed = false
     private var lastStats: Stats?
     private var loadedNodes = 0
+    private let byteBudget: Int
+    private var estimatedBytes = 0
+    private var shedReason: String?
+    /// Bumped by every warm and shed; a warm that resumes after a newer one (or a shed) abandons.
+    private var generation = 0
+    /// Estimated resident costs: a node (object header + empty dictionary + empty set), one id
+    /// in a set, and one token entry beyond its characters.
+    nonisolated static let nodeBytes = 112
+    nonisolated static let idEntryBytes = 24
+    nonisolated static let tokenEntryBytes = 96
 
-    public init() {}
+    public init(byteBudget: Int = CacheByteBudget.defaultBytes()) { self.byteBudget = max(1, byteBudget) }
+
+    /// F12 — the estimated resident bytes, and why the trie last went cold (nil = never shed).
+    public func residentBytes() -> Int { estimatedBytes }
+    public func lastShedReason() -> String? { shedReason }
+
+    /// F12 — drop everything and report cold; retrieval falls back to SQL. Idempotent.
+    public func shed(reason: String) {
+        root = Node()
+        tokenIndex = [:]
+        allTokens = []
+        loadedNodes = 0
+        estimatedBytes = 0
+        warmed = false
+        shedReason = reason
+        generation += 1
+        KalsmritikoshLog.knowledge.notice("EntityTrie: shed — \(reason, privacy: .public)")
+    }
 
     public func isWarm() -> Bool { warmed }
     public func stats() -> Stats? { lastStats }
@@ -63,6 +94,11 @@ public actor EntityTrie {
         tokenIndex.removeAll(keepingCapacity: true)
         allTokens.removeAll(keepingCapacity: true)
         loadedNodes = 0
+        estimatedBytes = 0
+        warmed = false
+        shedReason = nil
+        generation += 1
+        let myGeneration = generation
         let started = Date()
         KalsmritikoshLog.knowledge.info("EntityTrie: warm starting")
         var offset = 0
@@ -75,15 +111,22 @@ public actor EntityTrie {
                 KalsmritikoshLog.knowledge.error("EntityTrie: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
+            // Reentrancy: a shed or a newer warm ran while this page was fetched.
+            guard generation == myGeneration else { return }
             if page.isEmpty { break }
             for (id, value, normalized) in page {
                 index(id: id, source: value)
                 if let n = normalized { index(id: id, source: n) }
                 total += 1
             }
+            if estimatedBytes > byteBudget {
+                shed(reason: "warm exceeded the \(byteBudget)-byte budget after \(total) entities")
+                return
+            }
             offset += page.count
             if page.count < pageSize { break }
         }
+        guard generation == myGeneration else { return }
         let elapsed = Date().timeIntervalSince(started)
         lastStats = Stats(entitiesLoaded: total, trieNodes: loadedNodes, warmSeconds: elapsed)
         warmed = true
@@ -163,8 +206,10 @@ public actor EntityTrie {
     // MARK: - Writes (incremental)
 
     public func note(id: UUID, value: String, normalized: String? = nil) {
+        guard shedReason == nil else { return }   // shed: SQL is serving; do not regrow piecemeal
         index(id: id, source: value)
         if let n = normalized { index(id: id, source: n) }
+        if estimatedBytes > byteBudget { shed(reason: "grew past the \(byteBudget)-byte budget") }
     }
 
     // MARK: - Internals
@@ -173,8 +218,8 @@ public actor EntityTrie {
         let tokens = tokenize(source)
         for token in tokens {
             // Whole-token map
-            tokenIndex[token, default: []].insert(id)
-            allTokens.insert(token)
+            if tokenIndex[token, default: []].insert(id).inserted { estimatedBytes += Self.idEntryBytes }
+            if allTokens.insert(token).inserted { estimatedBytes += 2 * (Self.tokenEntryBytes + token.utf8.count) }
             // Prefix Trie — descend, leaving the id at EVERY node so
             // any prefix length returns it.
             var cursor = root
@@ -186,8 +231,9 @@ public actor EntityTrie {
                     cursor.children[c] = new
                     cursor = new
                     loadedNodes += 1
+                    estimatedBytes += Self.nodeBytes
                 }
-                cursor.ids.insert(id)
+                if cursor.ids.insert(id).inserted { estimatedBytes += Self.idEntryBytes }
             }
         }
     }

@@ -56,6 +56,15 @@ YOURS, NOT RENTED
 Kalsmritikosh is a one-time purchase — no subscription, no per-gigabyte fees.
 Your data remains yours and exportable, always.
 
+WHAT IT READS — STATED PLAINLY
+Documents, spreadsheets, PowerPoint (PPTX), and email (EML, MBOX, Apple Mail,
+Outlook MSG/PST) are read with exact citations. ZIP archives are opened within
+safety limits; RAR and 7z are kept but not opened. Scans are read by on-device
+OCR, so accuracy depends on the scan. Reading is tuned for English: other
+languages are kept and keyword-searchable, but names and dates in them may be
+missed. When two names clearly mean the same person, they are combined — every
+merge is listed and can be undone.
+
 Requires macOS 15.6 or later. AI-written answers use Apple's on-device model
 where available; the app is fully useful without it — instant, deterministic,
 cited answers from your evidence ledger.

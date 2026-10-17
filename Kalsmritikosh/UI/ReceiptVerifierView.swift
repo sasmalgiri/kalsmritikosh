@@ -24,6 +24,7 @@ public struct ReceiptVerifierView: View {
     @State private var filename: String?
     @State private var parseError = false
     @State private var showOpen = false
+    @State private var signature: ReceiptSignatureCheck?
 
     public init() {}
 
@@ -55,6 +56,7 @@ public struct ReceiptVerifierView: View {
 
             if let receipt, let isValid {
                 resultBanner(isValid: isValid, receipt: receipt)
+                signatureRow
                 entryList(receipt)
             }
             Spacer()
@@ -83,6 +85,28 @@ public struct ReceiptVerifierView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background((isValid ? Color.green : Color.red).opacity(0.08),
                     in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// W1-3 — who signed it, when the receipt carries a signature.
+    @ViewBuilder
+    private var signatureRow: some View {
+        switch signature {
+        case .unsigned?:
+            Label("Not signed — it shows the entries are consistent, not who produced them.",
+                  systemImage: "signature")
+                .font(.caption).foregroundStyle(.secondary)
+        case .valid(let fingerprint, let store, let signedAt)?:
+            Label("Signed by key \(fingerprint) (\(store == "secure-enclave" ? "Secure Enclave" : "Keychain")) on \(signedAt). Any change to the receipt, or a different signer, would fail this check.",
+                  systemImage: "checkmark.seal")
+                .font(.caption).foregroundStyle(.green)
+                .fixedSize(horizontal: false, vertical: true)
+        case .invalid?:
+            Label("Signature FAILED — the receipt was changed after signing, or the signature is not genuine.",
+                  systemImage: "xmark.seal")
+                .font(.caption.weight(.semibold)).foregroundStyle(.red)
+        case nil:
+            EmptyView()
+        }
     }
 
     private func entryList(_ receipt: SealedReceipt) -> some View {
@@ -118,6 +142,7 @@ public struct ReceiptVerifierView: View {
         }
         receipt = parsed
         isValid = VerifiableReceipt.verify(parsed)
+        signature = ReceiptSigner.check(data)
         filename = url.lastPathComponent
     }
 }

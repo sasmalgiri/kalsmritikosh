@@ -318,10 +318,12 @@ struct InvestigationReportTests {
     func conflictsWorkspaceScoped() async throws {
         let r = try await rig()
         let subject = UUID(), workspace = UUID()
-        try await addMember(r, subject: subject, workspace: workspace)
+        let memberKO = try await addMember(r, subject: subject, workspace: workspace)
         let inScope = try await saveClaim(r, subject: subject, statement: "in-scope finding")
         // A conflict linked to the in-scope claim → surfaces.
-        let cIn = Contradiction(id: UUID(), description: "d-in", claimA: "IN-SIDE-A", claimB: "IN-SIDE-B", status: .open)
+        // F22 — a real detector records each side's evidence object; an evidence-less side is withheld.
+        let cIn = Contradiction(id: UUID(), description: "d-in", claimA: "IN-SIDE-A", claimB: "IN-SIDE-B",
+                                evidenceA: memberKO, evidenceB: memberKO, status: .open)
         await r.contradictions.insert(cIn)
         try await r.claimContradictions.link(claimID: inScope, contradictionID: cIn.id)
         // A conflict linked to a claim backed only by an out-of-scope object → absent.

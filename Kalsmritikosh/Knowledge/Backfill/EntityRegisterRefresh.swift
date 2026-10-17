@@ -55,52 +55,55 @@ public struct EntityRegisterRefresh {
 
     public func run() async throws -> EntityRegisterRefreshReceipt {
         var receipt = EntityRegisterRefreshReceipt()
-        try await database.exec("SAVEPOINT register_refresh;", [])
+        let version = Int64(DerivedProducerVersions.entities)
+        let kinds = Self.rewritableKinds
         do {
-            let rows = try await database.query("""
-            SELECT id, kind, value, normalized FROM entities
-            WHERE COALESCE(producer_version, 0) != ? AND merged_into IS NULL;
-            """, [.integer(Int64(DerivedProducerVersions.entities))])
-            receipt.scanned = rows.count
+            // F28 — scan, clean, merge and stamp in ONE isolated savepoint (the merge is composed in,
+            // not awaited across the transaction).
+            receipt = try await database.withSavepoint("register_refresh") { db -> EntityRegisterRefreshReceipt in
+                var r = EntityRegisterRefreshReceipt()
+                let rows = try db.query("""
+                SELECT id, kind, value, normalized FROM entities
+                WHERE COALESCE(producer_version, 0) != ? AND merged_into IS NULL;
+                """, [.integer(version)])
+                r.scanned = rows.count
 
-            for row in rows {
-                guard let id = row.uuid(0), let kind = row.string(1), let value = row.string(2) else { continue }
+                for row in rows {
+                    guard let id = row.uuid(0), let kind = row.string(1), let value = row.string(2) else { continue }
 
-                guard Self.rewritableKinds.contains(kind) else {
-                    try await stamp(id); receipt.stampedOnly += 1; continue
-                }
-                let cleaned = EntitiesRepository.stripEdgePunctuation(
-                    EntitiesRepository.collapseWhitespace(value))
-                guard !cleaned.isEmpty, cleaned != value else {
-                    try await stamp(id); receipt.stampedOnly += 1; continue
-                }
-                let cleanedNorm = cleaned.lowercased()
+                    guard kinds.contains(kind) else {
+                        try Self.stamp(db, id, version); r.stampedOnly += 1; continue
+                    }
+                    let cleaned = EntitiesRepository.stripEdgePunctuation(
+                        EntitiesRepository.collapseWhitespace(value))
+                    guard !cleaned.isEmpty, cleaned != value else {
+                        try Self.stamp(db, id, version); r.stampedOnly += 1; continue
+                    }
+                    let cleanedNorm = cleaned.lowercased()
 
-                // Collision with an existing canonical? Soft-merge, never delete.
-                let existing = try await database.query("""
-                SELECT id FROM entities
-                WHERE kind = ? AND normalized = ? AND id != ? AND merged_into IS NULL
-                LIMIT 1;
-                """, [.text(kind), .text(cleanedNorm), .uuid(id)])
-                if let winnerID = existing.first?.uuid(0) {
-                    try await entities.merge(loserID: id, winnerID: winnerID)
-                    try await stamp(id)
-                    try await stamp(winnerID)
-                    receipt.mergedIntoExisting += 1
-                } else {
-                    try await database.exec("""
-                    UPDATE entities SET value = ?, normalized = ?, producer_version = ?
-                    WHERE id = ?;
-                    """, [.text(cleaned), .text(cleanedNorm),
-                          .integer(Int64(DerivedProducerVersions.entities)), .uuid(id)])
-                    receipt.cleanedInPlace += 1
+                    // Collision with an existing canonical? Soft-merge, never delete.
+                    let existing = try db.query("""
+                    SELECT id FROM entities
+                    WHERE kind = ? AND normalized = ? AND id != ? AND merged_into IS NULL
+                    LIMIT 1;
+                    """, [.text(kind), .text(cleanedNorm), .uuid(id)])
+                    if let winnerID = existing.first?.uuid(0) {
+                        try EntitiesRepository.merge(db, loserID: id, winnerID: winnerID)
+                        try Self.stamp(db, id, version)
+                        try Self.stamp(db, winnerID, version)
+                        r.mergedIntoExisting += 1
+                    } else {
+                        try db.exec("""
+                        UPDATE entities SET value = ?, normalized = ?, producer_version = ?
+                        WHERE id = ?;
+                        """, [.text(cleaned), .text(cleanedNorm), .integer(version), .uuid(id)])
+                        r.cleanedInPlace += 1
+                    }
                 }
+                return r
             }
-            try await database.exec("RELEASE register_refresh;", [])
         } catch {
-            Self.log.error("EntityRegisterRefresh failed, rolling back: \(String(describing: error))")
-            try? await database.exec("ROLLBACK TO register_refresh;", [])
-            try? await database.exec("RELEASE register_refresh;", [])
+            Self.log.error("EntityRegisterRefresh failed, rolled back: \(String(describing: error))")
             throw error
         }
         Self.log.info("REGISTER REFRESH: \(receipt.scanned) scanned, \(receipt.cleanedInPlace) cleaned, \(receipt.mergedIntoExisting) merged, \(receipt.stampedOnly) stamped")
@@ -119,9 +122,8 @@ public struct EntityRegisterRefresh {
         return Int(rows.first?.int(0) ?? 0)
     }
 
-    private func stamp(_ id: Entity.ID) async throws {
-        try await database.exec(
-            "UPDATE entities SET producer_version = ? WHERE id = ?;",
-            [.integer(Int64(DerivedProducerVersions.entities)), .uuid(id)])
+
+    private static func stamp(_ db: isolated Database, _ id: Entity.ID, _ version: Int64) throws {
+        try db.exec("UPDATE entities SET producer_version = ? WHERE id = ?;", [.integer(version), .uuid(id)])
     }
 }

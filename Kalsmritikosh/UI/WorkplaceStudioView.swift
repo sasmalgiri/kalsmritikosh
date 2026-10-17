@@ -105,7 +105,7 @@ public struct WorkplaceStudioView: View {
                 Text("\(c.allegations.count) allegation(s) · \(c.evidence.count) evidence")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { cases.removeAll { $0.id == c.id }; persist() } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { cases.removeAll { $0.id == c.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = c.id; stage = firstIncomplete(c) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -219,7 +219,7 @@ public struct WorkplaceStudioView: View {
                     TextField("Policy / rule engaged", text: $a.policy).textFieldStyle(.roundedBorder).font(.caption)
                     HStack {
                         Spacer()
-                        Button { w.wrappedValue.allegations.removeAll { $0.id == a.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { w.wrappedValue.allegations.removeAll { $0.id == a.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                 }
@@ -228,7 +228,7 @@ public struct WorkplaceStudioView: View {
             HStack(spacing: 8) {
                 TextField("Add an allegation as a question", text: $newAllegation).textFieldStyle(.roundedBorder)
                     .onSubmit { addAllegation(w) }
-                Button { addAllegation(w) } label: { Image(systemName: "plus") }
+                Button { addAllegation(w) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }
                     .disabled(newAllegation.trimmed.isEmpty)
             }
             next(.evidence)
@@ -244,7 +244,7 @@ public struct WorkplaceStudioView: View {
                     TextField("What it is", text: $e.descriptionText).textFieldStyle(.plain)
                     TextField("source", text: $e.source).textFieldStyle(.plain).font(.caption).frame(width: 170)
                     TextField("yyyy-mm-dd", text: $e.date).textFieldStyle(.plain).font(.caption).frame(width: 90)
-                    Button { w.wrappedValue.evidence.removeAll { $0.id == e.id } } label: { Image(systemName: "xmark.circle") }
+                    Button { w.wrappedValue.evidence.removeAll { $0.id == e.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
                 .padding(8).background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
@@ -252,7 +252,7 @@ public struct WorkplaceStudioView: View {
             HStack(spacing: 8) {
                 TextField("Add evidence or an interview", text: $newEvidence).textFieldStyle(.roundedBorder)
                     .onSubmit { addEvidence(w) }
-                Button { addEvidence(w) } label: { Image(systemName: "plus") }.disabled(newEvidence.trimmed.isEmpty)
+                Button { addEvidence(w) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newEvidence.trimmed.isEmpty)
             }
             Text("Methodology").font(.callout.weight(.semibold))
             TextEditor(text: w.methodologyNote).font(.body).frame(minHeight: 70)
@@ -276,7 +276,7 @@ public struct WorkplaceStudioView: View {
             HStack(spacing: 8) {
                 TextField("Add a person to assess", text: $newPerson).textFieldStyle(.roundedBorder)
                     .onSubmit { addCredibility(w) }
-                Button { addCredibility(w) } label: { Image(systemName: "plus") }.disabled(newPerson.trimmed.isEmpty)
+                Button { addCredibility(w) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newPerson.trimmed.isEmpty)
             }
             next(.findings)
         }
@@ -322,14 +322,14 @@ public struct WorkplaceStudioView: View {
                 ForEach(w.recommendations) { $r in
                     HStack(spacing: 8) {
                         TextField("Recommendation", text: $r.text).textFieldStyle(.plain)
-                        Button { w.wrappedValue.recommendations.removeAll { $0.id == r.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { w.wrappedValue.recommendations.removeAll { $0.id == r.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                 }
                 HStack(spacing: 8) {
                     TextField("Add a recommendation", text: $newRecommendation).textFieldStyle(.roundedBorder)
                         .onSubmit { addRecommendation(w) }
-                    Button { addRecommendation(w) } label: { Image(systemName: "plus") }.disabled(newRecommendation.trimmed.isEmpty)
+                    Button { addRecommendation(w) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newRecommendation.trimmed.isEmpty)
                 }
             } else {
                 Text("The mandate does not authorise recommendations — the report will state that they are omitted.")

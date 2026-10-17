@@ -100,7 +100,7 @@ public struct SIUStudioView: View {
                 Text("Updated \(r.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { referrals.removeAll { $0.id == r.id }; persist() } label: { Image(systemName: "trash") }
+                Button(role: .destructive) { referrals.removeAll { $0.id == r.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = r.id; stage = firstIncomplete(r) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -219,7 +219,7 @@ public struct SIUStudioView: View {
                     TextField("What was observed in THIS claim", text: $f.note, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(1...2)
                     HStack { Spacer()
-                        Button { r.wrappedValue.redFlags.removeAll { $0.id == f.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { r.wrappedValue.redFlags.removeAll { $0.id == f.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                 }
@@ -243,7 +243,7 @@ public struct SIUStudioView: View {
                     TextField("yyyy-mm-dd", text: $c.date).textFieldStyle(.roundedBorder).frame(width: 110)
                     TextField("Event", text: $c.event).textFieldStyle(.roundedBorder)
                     TextField("Source", text: $c.source).textFieldStyle(.roundedBorder).frame(width: 180)
-                    Button { r.wrappedValue.chronology.removeAll { $0.id == c.id } } label: { Image(systemName: "xmark.circle") }
+                    Button { r.wrappedValue.chronology.removeAll { $0.id == c.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
@@ -255,7 +255,7 @@ public struct SIUStudioView: View {
                     TextField("yyyy-mm-dd", text: $t.date).textFieldStyle(.roundedBorder).frame(width: 110)
                     TextField("Action (statement / EUO / records / ISO…)", text: $t.action).textFieldStyle(.roundedBorder)
                     TextField("Result", text: $t.result).textFieldStyle(.roundedBorder).frame(width: 220)
-                    Button { r.wrappedValue.steps.removeAll { $0.id == t.id } } label: { Image(systemName: "xmark.circle") }
+                    Button { r.wrappedValue.steps.removeAll { $0.id == t.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
@@ -275,7 +275,7 @@ public struct SIUStudioView: View {
                     TextField("Account B (the conflicting account)", text: $d.accountB).textFieldStyle(.roundedBorder)
                     TextField("Why it matters (materiality)", text: $d.materiality).textFieldStyle(.roundedBorder)
                     HStack { Spacer()
-                        Button { r.wrappedValue.discrepancies.removeAll { $0.id == d.id } } label: { Image(systemName: "xmark.circle") }
+                        Button { r.wrappedValue.discrepancies.removeAll { $0.id == d.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                 }

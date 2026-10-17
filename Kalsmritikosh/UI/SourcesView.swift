@@ -30,6 +30,7 @@ public struct SourcesView: View {
     @State private var durableReadiness: SourceReadinessSummary?
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
+    @State private var holdBlock: String?
     /// Minimum-touch: drop folders anywhere on this screen to add them —
     /// no picker panel needed.
     @State private var dropTargeted = false
@@ -89,6 +90,11 @@ public struct SourcesView: View {
                 await refresh()
             }
         }
+        .alert("Legal hold", isPresented: Binding(get: { holdBlock != nil }, set: { if !$0 { holdBlock = nil } })) {
+            Button("OK", role: .cancel) { holdBlock = nil }
+        } message: {
+            Text(holdBlock ?? "")
+        }
         .confirmationDialog(
             rootRemovalTitle,
             isPresented: Binding(
@@ -111,6 +117,8 @@ public struct SourcesView: View {
                     Task {
                         await appState.removeRoot(root, strategy: .stopAndForget)
                         rootPendingRemoval = nil
+                        holdBlock = appState.legalHoldBlock
+                        appState.legalHoldBlock = nil
                         await refresh()
                     }
                 }
@@ -216,7 +224,7 @@ public struct SourcesView: View {
                                 rootPendingRemovalCount = await appState.countFiles(underRoot: root)
                                 rootPendingRemoval = root
                             }
-                        } label: { Image(systemName: "trash") }
+                        } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
                         .buttonStyle(.borderless)
                     }
                     .padding(12)

@@ -57,9 +57,43 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         }
     }
 
+    /// F01 — the snapshot's bytes for the structural parser, MEMORY-MAPPED (page-cache backed, paged
+    /// in on demand and evictable) rather than copied onto the heap, and read ONLY when a structural
+    /// parser will actually run. The old eager `Data(contentsOf:)` held a full private copy of every
+    /// file for the whole parse — even for loader-only formats that never looked at it.
+    static func snapshotBytes(_ url: URL) throws -> Data {
+        // A zero-length file cannot be mapped; it is also free to read plainly.
+        if let mapped = try? Data(contentsOf: url, options: .alwaysMapped) { return mapped }
+        return try Data(contentsOf: url)
+    }
+
+    /// F01 — this plugin's loader when it can stream records of `type` under the current
+    /// configuration; nil otherwise. The coordinator uses it to ingest a large file batch by batch.
+    public nonisolated func streamingLoader(for type: SourceType) -> (any StreamingIngestor)? {
+        guard supportedTypes.contains(type), let streaming = loader as? any StreamingIngestor,
+              streaming.streamsRecords(type: type) else { return nil }
+        return streaming
+    }
+
+    /// F01 — the structural document for a file ingested batch by batch, but ONLY when this plugin's
+    /// structural parser is bounded by design; nil otherwise (the caller records structure as held
+    /// back by a resource limit). The parsed document's identity is checked against the request.
+    public func parseBoundedStructure(_ request: UniversalParserRequest) async throws -> ParsedDocument? {
+        guard let structural, structural.boundedMemory else { return nil }
+        let bytes = try Self.snapshotBytes(request.processingSnapshotURL)
+        let doc = try await structural.parse(
+            data: bytes, filename: request.originalURL.lastPathComponent, type: request.sourceType,
+            logicalSourceID: request.logicalSourceID, sourceVersionID: request.sourceVersionID)
+        guard doc.logicalSourceID == request.logicalSourceID, doc.sourceVersionID == request.sourceVersionID,
+              doc.contentHash.lowercased() == request.contentHash.lowercased(), doc.detectedType == request.sourceType else {
+            throw UniversalParserError.contentHashMismatch(pluginID: pluginID)
+        }
+        return doc
+    }
+
     public func execute(_ request: UniversalParserRequest) async throws -> UniversalParserResult {
         // Read ONLY the immutable snapshot — never the mutable original.
-        guard let snapshotData = try? Data(contentsOf: request.processingSnapshotURL) else {
+        guard FileManager.default.isReadableFile(atPath: request.processingSnapshotURL.path) else {
             throw UniversalParserError.snapshotUnreadable(pluginID: pluginID)
         }
         // Loader runs ONCE via ingestMany (single-KO formats return one; mbox/pst return many).
@@ -75,6 +109,9 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         let skipStructureForSearchCore = request.intent == .searchCore && loaderProducedText
         var parsedDocument: ParsedDocument? = nil
         if let structural, !skipStructureForSearchCore {
+            guard let snapshotData = try? Self.snapshotBytes(request.processingSnapshotURL) else {
+                throw UniversalParserError.snapshotUnreadable(pluginID: pluginID)
+            }
             do {
                 parsedDocument = try await structural.parse(
                     data: snapshotData, filename: request.originalURL.lastPathComponent, type: request.sourceType,

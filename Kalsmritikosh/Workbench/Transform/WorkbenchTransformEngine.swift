@@ -156,17 +156,19 @@ public nonisolated enum WorkbenchTransformEngine {
             throw WorkbenchTransformError.unknownField("<aggregate field>")
         }
 
-        // Group rows in first-seen key order for determinism.
-        var order: [String] = []
-        var members: [String: [WorkbenchRow]] = [:]
+        // Group rows in first-seen key order for determinism. F27 — the identity is the TYPED tuple
+        // (nil = missing, distinct from any text), never a joined string, so ["A · B","C"] and
+        // ["A","B · C"] — or a missing value and the literal text "∅" — stay separate groups.
+        var order: [[String?]] = []
+        var members: [[String?]: [WorkbenchRow]] = [:]
         for row in index.rows {
-            let key = groupFields.map { f -> String in
-                WorkbenchValue.coerce(index.cellValue(rowID: row.id, fieldID: f.id), shape: f.valueShape).storedString ?? "∅"
-            }.joined(separator: " · ")
+            let key = groupFields.map { f -> String? in
+                WorkbenchValue.coerce(index.cellValue(rowID: row.id, fieldID: f.id), shape: f.valueShape).storedString
+            }
             if members[key] == nil { order.append(key); members[key] = [] }
             members[key]?.append(row)
         }
-        if order.isEmpty { order = [""]; members[""] = [] }
+        if order.isEmpty { order = [[]]; members[[]] = [] }
 
         var groups: [WorkbenchDerivedValue] = []
         for key in order {
@@ -174,6 +176,10 @@ public nonisolated enum WorkbenchTransformEngine {
             var inputCells: [UUID] = []
             var numbers: [Double] = []
             for row in rows {
+                // The grouping cells decided this row's membership, so they are inputs too.
+                for f in groupFields {
+                    if let cid = index.cellID(rowID: row.id, fieldID: f.id) { inputCells.append(cid) }
+                }
                 if let t = target {
                     if let cid = index.cellID(rowID: row.id, fieldID: t.id) { inputCells.append(cid) }
                     let v = WorkbenchValue.coerce(index.cellValue(rowID: row.id, fieldID: t.id), shape: t.valueShape)
@@ -191,9 +197,25 @@ public nonisolated enum WorkbenchTransformEngine {
             case .min: value = numbers.min().map(WorkbenchValue.number) ?? .null
             case .max: value = numbers.max().map(WorkbenchValue.number) ?? .null
             }
-            groups.append(WorkbenchDerivedValue(rowID: nil, resultKey: key, value: value, inputCellIDs: inputCells))
+            // Grouping by the aggregated field reads the same cell twice — record it once.
+            var seenCells: Set<UUID> = []
+            inputCells = inputCells.filter { seenCells.insert($0).inserted }
+            groups.append(WorkbenchDerivedValue(rowID: nil, resultKey: groupLabel(key), value: value, inputCellIDs: inputCells))
         }
         return WorkbenchAggregateResult(function: function, groups: groups)
+    }
+
+    /// The persisted, human-readable group label — injective over typed tuples. A plain value is
+    /// written as-is (so a one-field group reads "A"); a missing value is "∅"; a value that could be
+    /// confused with either (contains the " · " separator, starts with a quote, or IS "∅") is quoted.
+    nonisolated static func groupLabel(_ key: [String?]) -> String {
+        key.map { part -> String in
+            guard let part else { return "∅" }
+            if part == "∅" || part.contains(" · ") || part.hasPrefix("\"") {
+                return "\"" + part.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            }
+            return part
+        }.joined(separator: " · ")
     }
 
     // MARK: - Value comparison for sort (nulls last)

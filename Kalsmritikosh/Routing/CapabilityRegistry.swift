@@ -41,6 +41,8 @@ public actor CapabilityRegistry {
     // a transient blip. Exponential backoff after N consecutive fails.
     private var consecutiveFailures: [String: Int] = [:]
     private var cooldownUntil: [String: Date] = [:]
+    /// Providers whose model-fit exclusion has already been logged.
+    private var fitGateLogged: Set<String> = []
     /// Consecutive failures before the first cooldown kicks in (so a
     /// single slow call doesn't sideline a provider).
     private let failuresBeforeCooldown = 3
@@ -167,7 +169,7 @@ public actor CapabilityRegistry {
         let eligible = providers.values.filter { provider -> Bool in
             let manifest = provider.manifest
             guard spec.requires.isSubset(of: manifest.capabilities) else { return false }
-            guard isPrivacyEligible(manifest: manifest, spec: spec) else { return false }
+            guard isPrivacyEligible(manifest: manifest, spec: spec) || cloudEligible(manifest: manifest, spec: spec) else { return false }
             // STRICT device-fit gate. A GENERATIVE model whose estimated working
             // set exceeds 70% of device RAM only "runs" by swapping to disk
             // (a 26 GB model on a 16 GB Mac = unusably slow), so we never select
@@ -177,6 +179,9 @@ public actor CapabilityRegistry {
             if manifest.capabilities.contains(.textGeneration), manifest.minRAMBytes > 0 {
                 let budget = Int64(Double(hardware.totalRAMBytes) * 0.7)
                 if manifest.minRAMBytes > budget {
+                    // Logged once per provider: resolve runs on every capability
+                    // request, and the verdict cannot change for a fixed device.
+                    guard fitGateLogged.insert(manifest.id).inserted else { return false }
                     KalsmritikoshLog.app.info("Model-fit gate: excluding \(manifest.id, privacy: .public) — needs \(manifest.minRAMBytes / 1_073_741_824, privacy: .public)GB > budget \(budget / 1_073_741_824, privacy: .public)GB")
                     return false
                 }
@@ -213,7 +218,12 @@ public actor CapabilityRegistry {
         // Pinned providers first, then ranked, deduplicated.
         var seen = Set<String>()
         var out: [any ModelProvider] = []
-        for p in pinned + scored where seen.insert(p.id).inserted {
+        // O-4 — in Online mode the user's chosen cloud AI leads; in Private mode
+        // cloud providers are not even eligible (cloudEligible above).
+        let ordered = OnlineSettings.cloudAllowed
+            ? scored.filter { $0.manifest.privacyLevel == .cloud } + scored.filter { $0.manifest.privacyLevel != .cloud }
+            : scored
+        for p in pinned + ordered where seen.insert(p.id).inserted {
             out.append(p)
         }
         return out
@@ -226,11 +236,18 @@ public actor CapabilityRegistry {
         case .localNetwork:
             return manifest.privacyLevel == .onDevice || manifest.privacyLevel == .localNetwork
         case .cloud:
-            // U-0 (privacy invariant closure): cloud-tier manifests never
-            // resolve — the product has no network entitlement and no cloud
-            // path in any build; there is no toggle.
             return manifest.privacyLevel != .cloud
         }
+    }
+
+    /// O-1/O-4 — a cloud-tier provider is eligible ONLY when the user has chosen
+    /// Online mode, this build bundles the network helper, and the online-answers
+    /// module is on — and only for text generation (embeddings never leave the Mac).
+    /// In Private mode this is always false, so cloud manifests never resolve.
+    private func cloudEligible(manifest: ModelManifest, spec: CapabilitySpec) -> Bool {
+        manifest.privacyLevel == .cloud
+            && spec.requires.contains(.textGeneration)
+            && OnlineSettings.cloudAllowed
     }
 
     private func score(

@@ -11,13 +11,24 @@
 //
 
 import Foundation
+import os
 
 /// One tool result: an id the composition may cite + the payload text the
 /// sweep checks names/dates/amounts against.
 public struct ToolResult: Sendable, Codable, Equatable, Identifiable {
     public let id: String            // "T1", "T2", … / span ids "S1", …
     public let text: String
-    public let objectIDs: [UUID]     // the source documents behind it
+    public let objectIDs: [UUID]     // the source documents behind it (KnowledgeObject ids ONLY)
+    /// F06 — the evidence blocks behind it, kept apart from `objectIDs` so a block id can never
+    /// be shipped as a citation's document id (it would not open).
+    public let blockIDs: [UUID]
+
+    public init(id: String, text: String, objectIDs: [UUID], blockIDs: [UUID] = []) {
+        self.id = id
+        self.text = text
+        self.objectIDs = objectIDs
+        self.blockIDs = blockIDs
+    }
 }
 
 /// The plan — A3.1. The deterministic router/resolver DERIVES it (primary);
@@ -92,13 +103,38 @@ public struct LedgerTools: Sendable {
         guard FieldRegistry.isKnown(canon) else { return [] }
         let rows = await facts(canon)
         var seen = Set<String>()
-        return rows.filter { seen.insert($0.value.lowercased()).inserted }.prefix(6).enumerated().map { n, f in
+        let kept = Array(rows.filter { seen.insert($0.value.lowercased()).inserted }.prefix(6))
+        // F06 — the blocks are resolved to the documents that OWN them before anything is cited.
+        // A block with no resolvable owner is kept as provenance but never becomes an object id;
+        // with no resolver wired the result carries no citable object at all (fail closed).
+        let owners = await blockOwners?(Array(Set(kept.flatMap(\.sourceBlockIDs)))) ?? [:]
+        return kept.enumerated().map { n, f in
             // G1/Stage-2.1 — PROVENANCE: a field fact's evidence is the SOURCE
             // BLOCKS that asserted it (sourceBlockIDs → real passages), never
             // the subject/entity id. A subjectID masquerading as a document id
             // produced citations that pointed at an entity, not the text.
-            ToolResult(id: "F\(n + 1)", text: "\(canon): \(f.value)",
-                       objectIDs: f.sourceBlockIDs)
+            var docSeen = Set<UUID>()
+            let docs = f.sourceBlockIDs.compactMap { owners[$0] }.filter { docSeen.insert($0).inserted }
+            return ToolResult(id: "F\(n + 1)", text: "\(canon): \(f.value)",
+                              objectIDs: docs, blockIDs: f.sourceBlockIDs)
+        }
+    }
+
+    /// F06 — block id → owning KnowledgeObject id. Injected (like `shelf`) so the tools stay pure.
+    public var blockOwners: (@Sendable ([UUID]) async -> [UUID: UUID])? = nil
+
+    /// The production resolver: the same `EvidenceStore.resolveEvidenceBlocks` path history
+    /// citations use, so a cited object id is one the citation view can open.
+    public static func blockOwners(using store: EvidenceStore) -> @Sendable ([UUID]) async -> [UUID: UUID] {
+        { [weak store] blockIDs in
+            guard let store, !blockIDs.isEmpty else { return [:] }
+            do {
+                let resolved = try await store.resolveEvidenceBlocks(blockIDs)
+                return Dictionary(resolved.map { ($0.blockID, $0.objectID) }, uniquingKeysWith: { first, _ in first })
+            } catch {
+                KalsmritikoshLog.brain.error("lookupField: block owner resolution failed: \(error.localizedDescription)")
+                return [:]
+            }
         }
     }
 

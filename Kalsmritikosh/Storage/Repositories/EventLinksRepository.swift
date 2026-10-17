@@ -27,9 +27,14 @@ public actor EventLinksRepository {
     /// upstream (the discoverer does so by hashing on source+target+
     /// relation before calling).
     public func insert(_ link: CausalLink) async throws {
+        let statement = try insertStatement(link)
+        try await database.exec(statement.sql, statement.binds)
+    }
+
+    private func insertStatement(_ link: CausalLink) throws -> (sql: String, binds: [SQLValue]) {
         let evidenceData = try encoder.encode(link.evidenceObjectIDs)
         let evidenceJSON = String(data: evidenceData, encoding: .utf8) ?? "[]"
-        try await database.exec("""
+        return ("""
         INSERT INTO event_links
             (id, source_event_id, target_event_id, relation, confidence,
              evidence_object_ids_json, allen, source, reason, created_at, superseded_by)
@@ -66,18 +71,11 @@ public actor EventLinksRepository {
     /// the new row. Both stay queryable; reads filter on
     /// `superseded_by IS NULL` to see only current.
     public func supersede(oldLinkID: UUID, with newLink: CausalLink) async throws {
-        try await database.exec("SAVEPOINT kalsmritikosh_link_supersede;")
-        do {
-            try await database.exec(
-                "UPDATE event_links SET superseded_by = ? WHERE id = ?;",
-                [.uuid(newLink.id), .uuid(oldLinkID)]
-            )
-            try await insert(newLink)
-            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_link_supersede;")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_link_supersede;")
-            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_link_supersede;")
-            throw error
+        let insert = try insertStatement(newLink)
+        // F28 — one isolated savepoint: no other caller's write can interleave between the two.
+        try await database.withSavepoint("kalsmritikosh_link_supersede") { db in
+            try db.exec("UPDATE event_links SET superseded_by = ? WHERE id = ?;", [.uuid(newLink.id), .uuid(oldLinkID)])
+            try db.exec(insert.sql, insert.binds)
         }
     }
 

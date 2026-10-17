@@ -76,7 +76,7 @@ public struct ResearcherStudioView: View {
                                 TextField("Study (author, year)", text: $s.study).textFieldStyle(.roundedBorder)
                                 TextField("Design", text: $s.design).textFieldStyle(.roundedBorder).frame(width: 120)
                                 TextField("Sample", text: $s.sample).textFieldStyle(.roundedBorder).frame(width: 100)
-                                Button { m.wrappedValue.studies.removeAll { $0.id == s.id } } label: { Image(systemName: "xmark.circle") }
+                                Button { m.wrappedValue.studies.removeAll { $0.id == s.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                     .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                             HStack(spacing: 8) {
@@ -149,7 +149,7 @@ public struct GenealogistStudioView: View {
                             HStack(spacing: 8) {
                                 TextField("yyyy-mm-dd", text: $r.date).textFieldStyle(.roundedBorder).frame(width: 120)
                                 TextField("Repository", text: $r.repository).textFieldStyle(.roundedBorder)
-                                Button { m.wrappedValue.searches.removeAll { $0.id == r.id } } label: { Image(systemName: "xmark.circle") }
+                                Button { m.wrappedValue.searches.removeAll { $0.id == r.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                     .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                             TextField("Source searched", text: $r.source).textFieldStyle(.roundedBorder)
@@ -224,7 +224,7 @@ public struct CreatorStudioView: View {
                                 TextField("The claim", text: $c.text, axis: .vertical)
                                     .textFieldStyle(.roundedBorder).lineLimit(1...2)
                                 Toggle("Checked", isOn: $c.checked).toggleStyle(.checkbox)
-                                Button { m.wrappedValue.claims.removeAll { $0.id == c.id } } label: { Image(systemName: "xmark.circle") }
+                                Button { m.wrappedValue.claims.removeAll { $0.id == c.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                     .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                             TextField("Source it was checked against", text: $c.source).textFieldStyle(.roundedBorder).font(.caption)
@@ -241,7 +241,7 @@ public struct CreatorStudioView: View {
                         HStack(spacing: 8) {
                             TextField("Asset (clip / image / quote / track)", text: $a.asset).textFieldStyle(.roundedBorder)
                             TextField("Rights / licence / permission", text: $a.rights).textFieldStyle(.roundedBorder)
-                            Button { m.wrappedValue.assets.removeAll { $0.id == a.id } } label: { Image(systemName: "xmark.circle") }
+                            Button { m.wrappedValue.assets.removeAll { $0.id == a.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                 .buttonStyle(.plain).foregroundStyle(.secondary)
                         }
                         .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
@@ -295,7 +295,7 @@ public struct BinderStudioView: View {
                             TextField("Name", text: $c.name).textFieldStyle(.roundedBorder)
                             TextField("Role", text: $c.role).textFieldStyle(.roundedBorder)
                             TextField("Phone / email", text: $c.reach).textFieldStyle(.roundedBorder)
-                            Button { m.wrappedValue.contacts.removeAll { $0.id == c.id } } label: { Image(systemName: "xmark.circle") }
+                            Button { m.wrappedValue.contacts.removeAll { $0.id == c.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                 .buttonStyle(.plain).foregroundStyle(.secondary)
                         }
                         .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
@@ -310,7 +310,7 @@ public struct BinderStudioView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
                                 TextField("Item (will / policy / account / deed)", text: $i.item).textFieldStyle(.roundedBorder)
-                                Button { m.wrappedValue.items.removeAll { $0.id == i.id } } label: { Image(systemName: "xmark.circle") }
+                                Button { m.wrappedValue.items.removeAll { $0.id == i.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                     .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                             HStack(spacing: 8) {

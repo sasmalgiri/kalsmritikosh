@@ -20,7 +20,8 @@ import Foundation
 /// The bumpable identity of the transformation engine's semantics. Persisted with every derived value
 /// so a later reproduction knows which evaluator rules produced it. Bump ONLY on a semantic change.
 public nonisolated enum WorkbenchTransformEngineVersion {
-    public static let current = "workbench-transform-1"
+    /// "2" — F26: declared number grammar, significance-preserving stored numbers, bounded ROUND.
+    public static let current = "workbench-transform-2"
 }
 
 /// Unary operators (closed set).

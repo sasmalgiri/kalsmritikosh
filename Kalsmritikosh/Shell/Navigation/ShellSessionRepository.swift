@@ -23,27 +23,27 @@ public actor ShellSessionRepository {
         guard !clean.isEmpty else { throw ShellSessionError.blankScope }
         let sessionID = UUID()
         let sp = savepoint("shellsess", sessionID)
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let priorRevision = Int(try await database.query(
+        let currentIndex = Int64(history.currentIndex)
+        let entries: [[SQLValue]] = history.entries.enumerated().map { ordinal, entry in
+            [.uuid(UUID()), .uuid(sessionID), .integer(Int64(ordinal)), .text(entry.destination.rawValue),
+             entry.contextKind.map { SQLValue.text($0) } ?? .null, entry.contextID.map { SQLValue.text($0) } ?? .null]
+        }
+        // F28 — read the prior revision, replace the session and write its entries in ONE isolated
+        // savepoint, so two autosaves cannot both read revision N and both write N+1.
+        try await database.withSavepoint(sp) { db in
+            let priorRevision = Int(try db.query(
                 "SELECT revision FROM app_navigation_sessions WHERE scope_key = ? LIMIT 1;", [.text(clean)]).first?.int(0) ?? 0)
-            try await database.exec("DELETE FROM app_navigation_sessions WHERE scope_key = ?;", [.text(clean)])
-            try await database.exec("""
+            try db.exec("DELETE FROM app_navigation_sessions WHERE scope_key = ?;", [.text(clean)])
+            try db.exec("""
                 INSERT INTO app_navigation_sessions (id, scope_key, current_index, revision, updated_at)
                 VALUES (?,?,?,?,?);
-                """, [.uuid(sessionID), .text(clean), .integer(Int64(history.currentIndex)), .integer(Int64(priorRevision + 1)), .date(date)])
-            for (ordinal, entry) in history.entries.enumerated() {
-                try await database.exec("""
+                """, [.uuid(sessionID), .text(clean), .integer(currentIndex), .integer(Int64(priorRevision + 1)), .date(date)])
+            for binds in entries {
+                try db.exec("""
                     INSERT INTO app_navigation_entries (id, session_id, ordinal, destination, context_kind, context_id)
                     VALUES (?,?,?,?,?,?);
-                    """, [.uuid(UUID()), .uuid(sessionID), .integer(Int64(ordinal)), .text(entry.destination.rawValue),
-                          entry.contextKind.map { SQLValue.text($0) } ?? .null, entry.contextID.map { SQLValue.text($0) } ?? .null])
+                    """, binds)
             }
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
     }
 

@@ -27,6 +27,7 @@ public struct InsightsView: View {
     @State private var gapCount: Int = 0
     @State private var scanning = false
     @State private var loadingGaps = false
+    @State private var showMissingMap = false   // I-2
 
     // Contradictions
     @State private var contradictions: [Contradiction] = []
@@ -115,6 +116,12 @@ public struct InsightsView: View {
                     }
                 }
                 Spacer()
+                // I-2 — the grouped "what is missing" map.
+                if ProductModuleFlags.isEnabled(.gapMap) {
+                    Button("Open the map") { showMissingMap = true }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .sheet(isPresented: $showMissingMap) { WhatIsMissingView() }
+                }
                 scanButton
             }
 

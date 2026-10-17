@@ -37,16 +37,21 @@ elif [ "$FOUND_TARGETS" != "15.6" ]; then
 fi
 
 # ── 2 + 3. App-target Release build configuration ──────────────────────────
-# The app target's Release block is the only Debug/Release XCBuildConfiguration
-# that carries ENABLE_APP_SANDBOX (project- and test-target blocks do not), so
-# it can be located without hard-coding an object ID.
-RELEASE_BLOCK=$(awk '
-  /^\t\t[A-F0-9]+ \/\* (Debug|Release) \*\/ = \{$/ { inblk=1; buf="" }
-  inblk { buf = buf $0 "\n" }
-  inblk && /^\t\t\};$/ {
-    if (buf ~ /ENABLE_APP_SANDBOX/ && buf ~ /name = Release;/) print buf
-    inblk=0
-  }' "$PBX")
+# The app target's Release block is the Release XCBuildConfiguration whose
+# bundle identifier is exactly the app's (the network helper target also
+# carries ENABLE_APP_SANDBOX, so the sandbox key alone no longer singles it out).
+APP_BUNDLE_ID="ecosanskritiinnovation.Kalsmritikosh"
+HELPER_BUNDLE_ID="ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshNetworkHelper"
+config_blocks() {   # $1 = exact PRODUCT_BUNDLE_IDENTIFIER, $2 = config name regex
+  awk -v bid="PRODUCT_BUNDLE_IDENTIFIER = $1;" -v cfg="$2" '
+    /^\t\t[A-F0-9]+ \/\* (Debug|Release) \*\/ = \{$/ { inblk=1; buf="" }
+    inblk { buf = buf $0 "\n" }
+    inblk && /^\t\t\};$/ {
+      if (index(buf, bid) > 0 && buf ~ ("name = (" cfg ");")) print buf
+      inblk=0
+    }' "$PBX"
+}
+RELEASE_BLOCK=$(config_blocks "$APP_BUNDLE_ID" "Release")
 
 if [ -z "$RELEASE_BLOCK" ]; then
   echo "::error::Release-configuration guard: could not locate the app target Release configuration (block with ENABLE_APP_SANDBOX + name = Release) in $PBX"
@@ -77,6 +82,30 @@ else
   fi
 fi
 
+# ── 2b. Network grants per target (O-2) ─────────────────────────────────────
+# Only the network helper target may set ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+# it must keep incoming connections off and stay sandboxed. No other build
+# configuration in the project may enable either direction.
+HELPER_BLOCKS=$(config_blocks "$HELPER_BUNDLE_ID" "Debug|Release")
+if [ -n "$HELPER_BLOCKS" ]; then
+  case "$HELPER_BLOCKS" in *"ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;"*)
+    echo "::error::Release-configuration guard: the network helper must not accept incoming connections"; FAIL=1 ;; esac
+  case "$HELPER_BLOCKS" in *"ENABLE_APP_SANDBOX = YES;"*) : ;; *)
+    echo "::error::Release-configuration guard: the network helper must be sandboxed"; FAIL=1 ;; esac
+fi
+NET_YES=$(awk -v hid="PRODUCT_BUNDLE_IDENTIFIER = $HELPER_BUNDLE_ID;" '
+  /^\t\t[A-F0-9]+ \/\* [^*]+ \*\/ = \{$/ { inblk=1; buf="" }
+  inblk { buf = buf $0 "\n" }
+  inblk && /^\t\t\};$/ {
+    if (buf ~ /isa = XCBuildConfiguration;/ && buf ~ /ENABLE_(OUTGOING|INCOMING)_NETWORK_CONNECTIONS = YES;/ && index(buf, hid) == 0) print buf
+    inblk=0
+  }' "$PBX")
+if [ -n "$NET_YES" ]; then
+  echo "::error::Release-configuration guard: a build configuration other than the network helper enables network connections:"
+  printf '%s\n' "$NET_YES" | grep -nE "/\*|PRODUCT_BUNDLE_IDENTIFIER|NETWORK_CONNECTIONS = YES"
+  FAIL=1
+fi
+
 # ── 3b. Shipped plists must not mention Ollama or its port ─────────────────
 PLIST_HITS=$(grep -niE "ollama|11434" Kalsmritikosh/Info.plist Kalsmritikosh/PrivacyInfo.xcprivacy 2>/dev/null || true)
 if [ -n "$PLIST_HITS" ]; then
@@ -89,15 +118,28 @@ fi
 # (Sixteenth review.) The active build settings govern the product, but a
 # tracked entitlements file granting network.client/server is a future-signing
 # risk: anything that ever signs against the file directly would ship egress.
+#
+# O-1 (owner decision 2026-10-15, SHIP_DECISIONS change log): Online mode runs
+# ONLY in the separate network helper (the KalsmritikoshNetworkHelper ExtensionKit
+# target, whose grant comes from build settings — checked in 2b). Should that
+# target ever get an entitlements file, exactly that one —
+# KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.entitlements — may grant
+# network.client; none may grant network.server. Every other entitlements file,
+# the main app's included, must still grant no network at all.
+NETWORK_HELPER_ENTITLEMENTS="KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.entitlements"
 ENT_FILES=$(git ls-files "*.entitlements" 2>/dev/null || find . -name "*.entitlements" -not -path "./.git/*")
 for ent in $ENT_FILES; do
   [ -f "$ent" ] || continue
-  NET=$(python3 - "$ent" <<'PYENT'
+  ALLOW_CLIENT=0
+  [ "${ent#./}" = "$NETWORK_HELPER_ENTITLEMENTS" ] && ALLOW_CLIENT=1
+  NET=$(python3 - "$ent" "$ALLOW_CLIENT" <<'PYENT'
 import plistlib, sys
 with open(sys.argv[1], "rb") as f:
     d = plistlib.load(f)
-bad = [k for k in ("com.apple.security.network.client",
-                   "com.apple.security.network.server") if d.get(k) is True]
+keys = ["com.apple.security.network.server"]
+if sys.argv[2] != "1":
+    keys.insert(0, "com.apple.security.network.client")
+bad = [k for k in keys if d.get(k) is True]
 print(" ".join(bad))
 PYENT
 )
@@ -110,4 +152,4 @@ done
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
-echo "Release-configuration guard clean (floor 15.6, offline Release, no Ollama release metadata, no network entitlements)."
+echo "Release-configuration guard clean (floor 15.6, offline app Release, network only in the helper target, no Ollama release metadata, no network entitlements)."

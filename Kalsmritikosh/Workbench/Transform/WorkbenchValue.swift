@@ -44,18 +44,67 @@ public nonisolated enum WorkbenchValue: Sendable, Equatable {
         }
     }
 
-    /// Parse a number, tolerating money/grouping decoration (currency symbols, thousands separators,
-    /// surrounding whitespace, a trailing % which is kept as a plain number). Pure — no locale.
+    /// Parse a number by a DECLARED grammar (F26) — pure, no locale:
+    ///   [ "(" ] [sign] [currency] [sign] core [ "%" ] [currency] [ ")" ]
+    /// where core is digits with optional western (1,234,567) or Indian (12,34,567) grouping, an
+    /// optional "." fraction and an optional exponent. Currency is a Unicode currency symbol or one
+    /// of a small closed set of codes. Anything else — letters mixed into digits, ambiguous grouping
+    /// such as "1,23", a second decimal point, a non-finite result — is not a number (nil), never a
+    /// value built from whichever digits happened to be present.
     public nonisolated static func parseNumber(_ raw: String) -> Double? {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\u{2212}", with: "-")          // Unicode minus sign
         if s.isEmpty { return nil }
         // Parenthesised negatives, e.g. accounting "(1,234.50)".
         var negative = false
-        if s.hasPrefix("(") && s.hasSuffix(")") { negative = true; s = String(s.dropFirst().dropLast()) }
-        s = s.filter { $0.isNumber || $0 == "." || $0 == "-" || $0 == "+" }
-        if s.isEmpty || s == "-" || s == "+" || s == "." { return nil }
-        guard let v = Double(s) else { return nil }
+        if s.hasPrefix("(") && s.hasSuffix(")") {
+            negative = true
+            s = String(s.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        var sawSign = false
+        func takeSign() -> Bool {
+            guard let c = s.first, c == "-" || c == "+" else { return true }
+            if sawSign { return false }
+            sawSign = true
+            if c == "-" { negative.toggle() }
+            s.removeFirst()
+            s = s.trimmingCharacters(in: .whitespaces)
+            return true
+        }
+        guard takeSign() else { return nil }
+        s = stripCurrency(s, leading: true)
+        guard takeSign() else { return nil }
+        s = stripCurrency(s, leading: false)
+        if s.hasSuffix("%") { s = String(s.dropLast()).trimmingCharacters(in: .whitespaces) }
+        guard s.range(of: numberCorePattern, options: .regularExpression) != nil,
+              let v = Double(s.replacingOccurrences(of: ",", with: "")), v.isFinite else { return nil }
         return negative ? -v : v
+    }
+
+    /// Digits (plain, western-grouped or Indian-grouped), optional fraction, optional exponent.
+    /// The lookahead requires a digit up front, so "", "e5" and "." never match.
+    private nonisolated static let numberCorePattern =
+        #"^(?=\.?\d)(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})?(?:\.\d+)?(?:[eE][+-]?\d+)?$"#
+
+    private nonisolated static let currencyCodes = ["USD", "EUR", "GBP", "INR", "JPY", "CNY", "AUD", "CAD", "Rs.", "Rs"]
+
+    /// Remove one currency decoration (symbol or code) from the leading or trailing edge.
+    private nonisolated static func stripCurrency(_ s: String, leading: Bool) -> String {
+        var t = s
+        if leading {
+            if let c = t.unicodeScalars.first, c.properties.generalCategory == .currencySymbol {
+                t.unicodeScalars.removeFirst()
+            } else if let code = currencyCodes.first(where: { t.hasPrefix($0) }) {
+                t.removeFirst(code.count)
+            }
+        } else {
+            if let c = t.unicodeScalars.last, c.properties.generalCategory == .currencySymbol {
+                t.unicodeScalars.removeLast()
+            } else if let code = currencyCodes.first(where: { t.hasSuffix($0) }) {
+                t.removeLast(code.count)
+            }
+        }
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     /// Parse a boolean from a small closed set of textual spellings.
@@ -113,19 +162,42 @@ public nonisolated enum WorkbenchValue: Sendable, Equatable {
         case .text(let s): return s
         case .boolean(let b): return b ? "true" : "false"
         case .date(let d): return WorkbenchValue.iso8601WithTime.string(from: d)
-        case .number(let n): return WorkbenchValue.renderNumber(n)
+        case .number(let n): return n.isFinite ? WorkbenchValue.renderNumber(n) : nil   // F26: missing, not "null" text
         }
     }
 
     /// Fixed-form decimal rendering: integral values without a fractional part, others trimmed of
-    /// trailing zeros (deterministic, no locale grouping).
+    /// trailing zeros (deterministic, no locale grouping). F26 — the digits are the value's 15
+    /// significant digits, written out positionally, so 1e-11 stays 0.00000000001 instead of
+    /// rounding to "0" at a fixed ten decimal places.
     public nonisolated static func renderNumber(_ n: Double) -> String {
         if !n.isFinite { return "null" }
         if n == n.rounded() && abs(n) < 1e15 { return String(Int64(n)) }
-        var s = String(format: "%.10f", n)
-        while s.hasSuffix("0") { s.removeLast() }
-        if s.hasSuffix(".") { s.removeLast() }
-        return s
+        return positional(String(format: "%.15g", n))
+    }
+
+    /// Rewrite a "%g" string ("1.5e+20", "-2.5e-07", "0.3") as a plain positional decimal.
+    private nonisolated static func positional(_ g: String) -> String {
+        var s = g
+        var sign = ""
+        if s.hasPrefix("-") { sign = "-"; s.removeFirst() }
+        var exponent = 0
+        if let e = s.firstIndex(where: { $0 == "e" || $0 == "E" }) {
+            exponent = Int(s[s.index(after: e)...]) ?? 0
+            s = String(s[..<e])
+        }
+        let parts = s.split(separator: ".", omittingEmptySubsequences: false)
+        let intPart = String(parts[0])
+        let fracPart = parts.count > 1 ? String(parts[1]) : ""
+        var digits = intPart + fracPart
+        var point = intPart.count + exponent                  // decimal point position within `digits`
+        if point <= 0 { digits = String(repeating: "0", count: 1 - point) + digits; point = 1 }
+        if point > digits.count { digits += String(repeating: "0", count: point - digits.count) }
+        var whole = String(digits.prefix(point))
+        var fraction = String(digits.dropFirst(point))
+        while fraction.hasSuffix("0") { fraction.removeLast() }
+        while whole.count > 1 && whole.hasPrefix("0") { whole.removeFirst() }
+        return sign + whole + (fraction.isEmpty ? "" : "." + fraction)
     }
 
     // MARK: - Numeric / boolean projections used by the evaluator

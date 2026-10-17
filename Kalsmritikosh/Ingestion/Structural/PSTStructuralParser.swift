@@ -52,12 +52,46 @@ public struct PSTStructuralParser: StructuralParser {
                 message: "Not a readable PST/OST container: \(error)")])
         }
 
-        let messages: [PSTReader.PSTMessage]
+        var messages: [PSTReader.PSTMessage]
         do { messages = try reader.readAllMessages() }
         catch {
             return result([], .corrupt, [ParserWarning(
                 severity: .error, code: "pst.walk_failed",
                 message: "PST node walk failed: \(error)")])
+        }
+
+        // W2-3 — behind its switch, the [MS-PST] spec reader (ported from mailin) is used and both
+        // readers' counts are recorded; the current reader stays as a stated fallback.
+        var specWarnings: [ParserWarning] = []
+        var specMetadata: [String: AnyCodable] = [:]
+        var attachmentNames: [Int: [String]] = [:]
+        if ProductModuleFlags.isEnabled(.specPSTReader) {
+            specMetadata["legacyReaderMessageCount"] = AnyCodable(.int(Int64(messages.count)))
+            do {
+                let items = try MSPSTSpecReader(data: data).items()
+                specMetadata["specReaderMessageCount"] = AnyCodable(.int(Int64(items.count)))
+                if items.isEmpty {
+                    specWarnings.append(ParserWarning(severity: .warning, code: "pst.spec_empty",
+                        message: "The MS-PST reader found no mail; the earlier reader's \(messages.count) message(s) are used."))
+                } else {
+                    if items.count != messages.count {
+                        specWarnings.append(ParserWarning(severity: .info, code: "pst.reader_counts_differ",
+                            message: "MS-PST reader: \(items.count) message(s); earlier reader: \(messages.count). The MS-PST reader's result is used."))
+                    }
+                    let unreadable = items.filter(\.unreadable).count
+                    if unreadable > 0 {
+                        specWarnings.append(ParserWarning(severity: .warning, code: "pst.unreadable_items",
+                            message: "\(unreadable) message(s) had unreadable properties and are kept empty."))
+                    }
+                    messages = items.map(\.message)
+                    for (i, item) in items.enumerated() where !item.attachments.isEmpty {
+                        attachmentNames[i] = item.attachments.map(\.name)
+                    }
+                }
+            } catch {
+                specWarnings.append(ParserWarning(severity: .warning, code: "pst.spec_failed",
+                    message: "The MS-PST reader could not read this file (\(error)); the earlier reader's \(messages.count) message(s) are used."))
+            }
         }
 
         guard !messages.isEmpty else {
@@ -86,14 +120,20 @@ public struct PSTStructuralParser: StructuralParser {
                 add(.emailHeader, value,
                     SourceLocator(messageID: messageID, emailHeaderField: field))
             }
+            if let names = attachmentNames[index] {
+                add(.emailHeader, names.joined(separator: ", "),
+                    SourceLocator(messageID: messageID, emailHeaderField: "attachments"))
+            }
             let body = Self.body(of: message)
             if !body.isEmpty {
-                add(.emailBody, body, SourceLocator(messageID: messageID))
+                add(.emailBody, body, SourceLocator(sectionPath: ["body"], messageID: messageID))
             }
         }
 
-        let metadata: [String: AnyCodable] = ["messageCount": AnyCodable(.int(Int64(messages.count)))]
-        return result(blocks, blocks.isEmpty ? .empty : .complete, [], metadata)
+        var metadata: [String: AnyCodable] = ["messageCount": AnyCodable(.int(Int64(messages.count)))]
+        metadata.merge(specMetadata) { a, _ in a }
+        let degraded = specWarnings.contains { $0.severity != .info }
+        return result(blocks, blocks.isEmpty ? .empty : (degraded ? .partial : .complete), specWarnings, metadata)
     }
 
     // MARK: - Pure field mapping

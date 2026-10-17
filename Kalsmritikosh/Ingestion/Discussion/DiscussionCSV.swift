@@ -21,47 +21,9 @@ enum DiscussionCSV {
     /// input yields the rows it could read, because a damaged export should still
     /// produce the evidence that survived.
     nonisolated static func parse(_ text: String) -> [[String]] {
-        var rows: [[String]] = []
-        var row: [String] = []
-        var field = ""
-        var inQuotes = false
-        var index = text.startIndex
-
-        func endField() { row.append(field); field = "" }
-        func endRow() {
-            endField()
-            // Skip the blank trailing line rather than emitting a phantom row.
-            if !(row.count == 1 && row[0].isEmpty) { rows.append(row) }
-            row = []
-        }
-
-        while index < text.endIndex {
-            let c = text[index]
-            if inQuotes {
-                if c == "\"" {
-                    let next = text.index(after: index)
-                    if next < text.endIndex, text[next] == "\"" {
-                        field.append("\"")          // "" inside quotes = one literal quote
-                        index = next
-                    } else {
-                        inQuotes = false
-                    }
-                } else {
-                    field.append(c)                 // includes newlines, deliberately
-                }
-            } else {
-                switch c {
-                case "\"": inQuotes = true
-                case ",":  endField()
-                case "\n": endRow()
-                case "\r": break                    // CRLF
-                default:   field.append(c)
-                }
-            }
-            index = text.index(after: index)
-        }
-        if !field.isEmpty || !row.isEmpty { endRow() }
-        return rows
+        // F30 — the shared scalar-level reader (CRLF / LF / CR). Blank lines are skipped
+        // rather than emitted as phantom rows.
+        CSVRowReader.rows(text).filter { !($0.count == 1 && $0[0].isEmpty) }
     }
 
     /// Column-name → index lookup over a header row, so mappers address fields by
