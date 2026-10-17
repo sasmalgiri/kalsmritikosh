@@ -44,13 +44,13 @@ struct USFFINALBoundaryTests {
     }
 
     @Test("Completion reuses SourceCompletionState — it declares no second completion vocabulary")
-    func noDuplicateCompletionState() {
+    func noDuplicateCompletionState() throws {
         for (name, text) in completion {
             #expect(!text.contains("enum SourceCompletionState"), "\(name) must not redefine completion state")
             #expect(!text.lowercased().contains("case fullyprocessed"))
             #expect(!text.contains("PercentReady"))
         }
-        #expect(try! read("Kalsmritikosh/Ingestion/Completion/IngestionCompletionEvaluator.swift").contains("completionState: readiness.completionState"))
+        #expect(try read("Kalsmritikosh/Ingestion/Completion/IngestionCompletionEvaluator.swift").contains("completionState: readiness.completionState"))
     }
 
     @Test("Completion is derived from readiness, not from ingest-attempt status")

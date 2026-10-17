@@ -82,9 +82,9 @@ jobs:
   # proven from the .xcresult by ci/verify-xcresult-tests.sh.
   build-and-test:
     runs-on: macos-26
-    # 60 so the log/result upload below still runs when the test step hits its own 40-minute
+    # 80 so the log/result upload below still runs when the test step hits its own 55-minute
     # limit (a job-level timeout cancels every remaining step, so a hang left no evidence).
-    timeout-minutes: 60
+    timeout-minutes: 80
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -118,7 +118,7 @@ jobs:
             build 2>&1 | tee build.log
 
       - name: Test (full KalsmritikoshTests target)
-        timeout-minutes: 40
+        timeout-minutes: 55
         env:
           NSUnbufferedIO: YES
         run: |
@@ -127,25 +127,16 @@ jobs:
           # natively on any macOS 26 runner. The former 26.5 test-target pin (and its
           # labelled compatibility override) is gone.
           echo "Runner macOS: $(sw_vers -productVersion)"
-          rm -rf build/TestResults.xcresult
-          # Watchdog: if the suite is still running after 10 and 20 minutes, record what the test
-          # host's threads are doing (uploaded with the logs) — a stall otherwise leaves no trace.
-          ( for t in 600 1200; do sleep $(( t - ${prev:-0} )); prev=$t
+          rm -rf build/TestResults.xcresult test.log
+          # Watchdog: if the suite is still running after 10, 20 and 30 minutes, record what the
+          # test host's threads are doing (uploaded with the logs) — a stall otherwise leaves no trace.
+          ( for t in 600 1200 1800; do sleep $(( t - ${prev:-0} )); prev=$t
               pid=$(pgrep -f "Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh" | head -1)
               [ -n "$pid" ] && sample "$pid" 5 -file "host-sample-${t}s.txt" >/dev/null 2>&1
             done ) &
-          xcodebuild \
-            -project Kalsmritikosh.xcodeproj \
-            -scheme Kalsmritikosh \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath build/derived \
-            -resultBundlePath build/TestResults.xcresult \
-            -skipMacroValidation \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_ALLOWED=NO \
-            test 2>&1 | tee test.log
+          # The target runs as batches of suites, each in a fresh test host, merged into one
+          # bundle for the verifier below (why: see the script's header).
+          bash ci/run-tests-batched.sh build/derived build/TestResults.xcresult 10
 
       - name: Verify tests actually executed (from .xcresult, not console text)
         run: |
@@ -228,6 +219,7 @@ jobs:
             test.log
             verify.log
             host-sample-*.txt
+            build/batches/*.log
             build/TestResults.xcresult
           retention-days: 14
           if-no-files-found: ignore
