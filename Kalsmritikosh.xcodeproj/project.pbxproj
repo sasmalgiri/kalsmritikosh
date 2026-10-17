@@ -12,6 +12,7 @@
 		B4A1C0DE3081000400D67076 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = B4A1C0DE3081000200D67076 /* SQLCipher */; };
 		B4A1C0DE3081000500D67076 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = B4A1C0DE3081000300D67076 /* SQLCipher */; };
 		B4A1C0DE3081000700D67076 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = B4A1C0DE3081000600D67076 /* SQLCipher */; };
+		B4C1CE013081000000D67076 /* KalsmritikoshClipper.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B4C1CE003081000000D67076 /* KalsmritikoshClipper.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,13 @@
 			remoteGlobalIDString = B490C1053080F91100D67076;
 			remoteInfo = KalsmritikoshShare;
 		};
+		B4C1CE023081000000D67076 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4B18B362FD0E4B300840C82 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B4C1CE093081000000D67076;
+			remoteInfo = KalsmritikoshClipper;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -57,6 +65,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				B490C10D3080F91100D67076 /* KalsmritikoshShare.appex in Embed Foundation Extensions */,
+				B4C1CE013081000000D67076 /* KalsmritikoshClipper.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -69,6 +78,7 @@
 		B490C1063080F91100D67076 /* KalsmritikoshShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KalsmritikoshShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B490DF253080FAD500D67076 /* KalsmritikoshViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KalsmritikoshViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kalsmritikosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4C1CE003081000000D67076 /* KalsmritikoshClipper.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KalsmritikoshClipper.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -100,6 +110,33 @@
 				ContentView.swift,
 				"KalsmritikoshViewer-InfoPlist.xcstrings",
 				KalsmritikoshViewerApp.swift,
+			);
+			target = B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */;
+		};
+		B4C1CE043081000000D67076 /* Exceptions for "KalsmritikoshClipper" folder in "KalsmritikoshClipper" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B4C1CE093081000000D67076 /* KalsmritikoshClipper */;
+		};
+		B4C1CE0D3081000000D67076 /* Exceptions for "KalsmritikoshClipper" folder in "KalsmritikoshTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				background.js,
+				clip.js,
+				content.js,
+				"icon-48.png",
+				"icon-96.png",
+				"icon-128.png",
+				Info.plist,
+				manifest.json,
+				popup.css,
+				popup.html,
+				popup.js,
+				SafariWebExtensionHandler.swift,
+				"toolbar-16.png",
+				"toolbar-32.png",
 			);
 			target = B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */;
 		};
@@ -143,6 +180,15 @@
 			path = Kalsmritikosh;
 			sourceTree = "<group>";
 		};
+		B4C1CE053081000000D67076 /* KalsmritikoshClipper */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B4C1CE0D3081000000D67076 /* Exceptions for "KalsmritikoshClipper" folder in "KalsmritikoshTests" target */,
+				B4C1CE043081000000D67076 /* Exceptions for "KalsmritikoshClipper" folder in "KalsmritikoshClipper" target */,
+			);
+			path = KalsmritikoshClipper;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -184,6 +230,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B4C1CE063081000000D67076 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -194,6 +247,7 @@
 				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
 				B49084F83080C75200D67076 /* KalsmritikoshNetworkHelper */,
 				B490C1073080F91100D67076 /* KalsmritikoshShare */,
+				B4C1CE053081000000D67076 /* KalsmritikoshClipper */,
 				B490DF263080FAD500D67076 /* KalsmritikoshViewer */,
 				B4B18B3F2FD0E4B300840C82 /* Products */,
 			);
@@ -206,6 +260,7 @@
 				B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */,
 				B49084F73080C75200D67076 /* KalsmritikoshNetworkHelper.appex */,
 				B490C1063080F91100D67076 /* KalsmritikoshShare.appex */,
+				B4C1CE003081000000D67076 /* KalsmritikoshClipper.appex */,
 				B490DF253080FAD500D67076 /* KalsmritikoshViewer.app */,
 			);
 			name = Products;
@@ -230,6 +285,7 @@
 			fileSystemSynchronizedGroups = (
 				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
 				B490DF263080FAD500D67076 /* KalsmritikoshViewer */,
+				B4C1CE053081000000D67076 /* KalsmritikoshClipper */,
 			);
 			name = KalsmritikoshTests;
 			packageProductDependencies = (
@@ -321,6 +377,7 @@
 			dependencies = (
 				B49084FD3080C75200D67076 /* PBXTargetDependency */,
 				B490C10C3080F91100D67076 /* PBXTargetDependency */,
+				B4C1CE033081000000D67076 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
@@ -332,6 +389,28 @@
 			productName = "Atlas chronica memora";
 			productReference = B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B4C1CE093081000000D67076 /* KalsmritikoshClipper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B4C1CE0A3081000000D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshClipper" */;
+			buildPhases = (
+				B4C1CE083081000000D67076 /* Sources */,
+				B4C1CE063081000000D67076 /* Frameworks */,
+				B4C1CE073081000000D67076 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B4C1CE053081000000D67076 /* KalsmritikoshClipper */,
+			);
+			name = KalsmritikoshClipper;
+			packageProductDependencies = (
+			);
+			productName = KalsmritikoshClipper;
+			productReference = B4C1CE003081000000D67076 /* KalsmritikoshClipper.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -359,6 +438,9 @@
 					B4B18B3D2FD0E4B300840C82 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					B4C1CE093081000000D67076 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 				};
 			};
 			buildConfigurationList = B4B18B392FD0E4B300840C82 /* Build configuration list for PBXProject "Kalsmritikosh" */;
@@ -383,6 +465,7 @@
 				B49084F63080C75200D67076 /* KalsmritikoshNetworkHelper */,
 				B490C1053080F91100D67076 /* KalsmritikoshShare */,
 				B490DF243080FAD500D67076 /* KalsmritikoshViewer */,
+				B4C1CE093081000000D67076 /* KalsmritikoshClipper */,
 			);
 		};
 /* End PBXProject section */
@@ -417,6 +500,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B4B18B3C2FD0E4B300840C82 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B4C1CE073081000000D67076 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -461,6 +551,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B4C1CE083081000000D67076 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -478,6 +575,11 @@
 			isa = PBXTargetDependency;
 			target = B490C1053080F91100D67076 /* KalsmritikoshShare */;
 			targetProxy = B490C10B3080F91100D67076 /* PBXContainerItemProxy */;
+		};
+		B4C1CE033081000000D67076 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B4C1CE093081000000D67076 /* KalsmritikoshClipper */;
+			targetProxy = B4C1CE023081000000D67076 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1035,6 +1137,88 @@
 			};
 			name = Release;
 		};
+		B4C1CE0B3081000000D67076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = KalsmritikoshClipper/KalsmritikoshClipper.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KalsmritikoshClipper/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Clipper";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshClipper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B4C1CE0C3081000000D67076 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = KalsmritikoshClipper/KalsmritikoshClipper.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KalsmritikoshClipper/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Clipper";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh.KalsmritikoshClipper;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1088,6 +1272,15 @@
 			buildConfigurations = (
 				B4B18B4A2FD0E4B500840C82 /* Debug */,
 				B4B18B4B2FD0E4B500840C82 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B4C1CE0A3081000000D67076 /* Build configuration list for PBXNativeTarget "KalsmritikoshClipper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B4C1CE0B3081000000D67076 /* Debug */,
+				B4C1CE0C3081000000D67076 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
