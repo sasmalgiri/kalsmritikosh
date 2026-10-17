@@ -128,6 +128,12 @@ jobs:
           # labelled compatibility override) is gone.
           echo "Runner macOS: $(sw_vers -productVersion)"
           rm -rf build/TestResults.xcresult
+          # Watchdog: if the suite is still running after 10 and 20 minutes, record what the test
+          # host's threads are doing (uploaded with the logs) — a stall otherwise leaves no trace.
+          ( for t in 600 1200; do sleep $(( t - ${prev:-0} )); prev=$t
+              pid=$(pgrep -f "Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh" | head -1)
+              [ -n "$pid" ] && sample "$pid" 5 -file "host-sample-${t}s.txt" >/dev/null 2>&1
+            done ) &
           xcodebuild \
             -project Kalsmritikosh.xcodeproj \
             -scheme Kalsmritikosh \
@@ -221,6 +227,7 @@ jobs:
             build.log
             test.log
             verify.log
+            host-sample-*.txt
             build/TestResults.xcresult
           retention-days: 14
           if-no-files-found: ignore
