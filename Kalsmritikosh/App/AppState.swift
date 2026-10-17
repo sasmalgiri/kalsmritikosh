@@ -4029,6 +4029,12 @@ public final class AppState {
         for root in Array(bookmarks.roots) {
             await removeRoot(root, strategy: .stopAndForget)
         }
+        // Stop the background Claim-projection pass and await its wind-down: a pass still
+        // running after the wipe writes its cursor rows back and the erase reads as incomplete.
+        // The actor stays usable; the next ingest drives it again over the empty ledger.
+        claimProjectionBackfillTask?.cancel()
+        claimProjectionBackfillTask = nil
+        await claimProjection?.cancel()
         // 2. Empty every user table. Skip sqlite internals and FTS shadow
         //    tables (those are maintained by triggers on their base tables, so
         //    deleting the base rows cleans the index). FK off during the wipe so
