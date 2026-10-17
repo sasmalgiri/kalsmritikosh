@@ -1,0 +1,31 @@
+Lease
+
+A lease is a contractual arrangement calling for the user (referred to as the lessee) to pay the owner (referred to as the lessor) for the use of an asset. Property, buildings and vehicles are common assets that are leased. Industrial or business equipment are also leased. In essence, a lease agreement is a contract between two parties: the lessor and the lessee. The lessor is the legal owner of the asset, while the lessee obtains the right to use the asset in return for regular rental payments. The lessee also agrees to abide by various conditions regarding their use of the property or equipment. For example, a person leasing a car may agree to the condition that the car will only be used for personal use.
+The term rental agreement can refer to two kinds of leases:
+
+A lease in which the asset is tangible property. Here, the user rents the asset (e.g. land or goods) let out or rented out by the owner (the verb to lease is less precise because it can refer to either of these actions). Examples of a lease for intangible property include use of a computer program (similar to a license, but with different provisions), or use of a radio frequency (such as a contract with a cell-phone provider).
+A periodic lease agreement (most often a month-to-month lease) internationally and in some regions of the United States.
+
+
+== General terms ==
+A lease is a legal contract, and thus enforceable by all parties under the contract law of the applicable jurisdiction. Some kinds of leases may have specific clauses required by statute depending upon the property being leased, the jurisdiction in which the agreement was signed, and the residence of the parties.
+Common elements of a lease agreement include:
+
+Names of the parties of the agreement.
+The starting date and duration of the agreement.
+Identifies the specific object (by street address, VIN, or make/model, serial number) being leased.
+Provides conditions for renewal or non-renewal.
+Has a specific consideration (a lump sum, or periodic payments) for granting the use of this object.
+Has provisions for a security deposit and terms for its return.
+May have a specific list of conditions which are therein described as Default Conditions and specific Remedies.
+May have other specific conditions placed upon the parties such as:
+Need to provide insurance for loss.
+Restrictive use.
+Which party is responsible for maintenance.
+Termination clause (describing what will happen if the contract is ended early or cancelled by either of the parties, stating the rights of parties to terminate the lease, and their obligations)
+All kinds of personal property (e.g. cars and furniture) or real property (e.g. raw land, apartments, single family homes, and business property, which includes wholesale and retail) may be leased. As a result of the lease, the owner (lessor) grants the use of the stated property to the lessee.
+
+
+== Leases of land ==
+The narrower term 'tenancy' describes a lease in which the tangible property is land (including at any vertical section such as airspace, storey of building or mine). A premium is an amount paid by the tenant for the lease to be granted or to secure the former tenant's lease, often in order to secure a low rent, in long leases termed a ground rent. For parts of buildings it is most common for users to pay also by collateral contract, or by the same contract, a service charge which is normally an express list of services in a lease to minimize disputes over service charges. A gross lease or tenancy stipulates a rent that is for the global amount due including all service charges.
+A cancelable lease (UK: determinable/breakable lease) is a lease that may be terminated (formally determined) solely by the lessee or solely by the lessor without penalty. A mutually determinable lease can be determined by either. A non-cancelable lease is a lease that cannot be so terminated. Commonly, "lease" may imply a non-cancelable lease, whereas "rental agreement" may connote a cancelable lease.

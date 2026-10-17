@@ -1,0 +1,22 @@
+Negligence
+
+Negligence (Latin: negligentia) is a failure to exercise appropriate care expected to be exercised in similar circumstances.
+Within the scope of tort law, negligence pertains to harm caused by the violation of a duty of care through a negligent act or failure to act. The concept of negligence is linked to the obligation of individuals to exercise reasonable care in their actions and to consider foreseeable harm that their conduct might cause to other people or property. The elements of a negligence claim include the duty to act or refrain from action, breach of that duty, actual and proximate cause of harm, and damages. Someone who suffers loss caused by another's negligence may be able to sue for damages to compensate for their harm. Such loss may include physical injury, harm to property, psychiatric illness, or economic loss.
+
+
+== Elements of negligence claims ==
+To successfully pursue a claim of negligence through a lawsuit, a plaintiff must establish the "elements" of negligence. In most jurisdictions there are four elements to a negligence action:
+
+duty: the defendant has a duty to others, including the plaintiff, to exercise reasonable care,
+breach: the defendant breaches that duty through an act or culpable omission,
+damages: as a result of that act or omission, the plaintiff suffers an injury, and
+causation: the injury to the plaintiff is a reasonably foreseeable consequence of the defendant's act or omission.
+Some jurisdictions narrow the definition down to three elements: duty, breach and proximately caused harm. Some jurisdictions recognize five elements, duty, breach, actual cause, proximate cause, and damages. Despite these differences, definitions of what constitutes negligent conduct remain similar.
+
+
+=== Duty of care ===
+
+The legal liability of a defendant to a plaintiff is based on the defendant's failure to fulfil a responsibility, recognised by law, of which the plaintiff is the intended beneficiary. The first step in determining the existence of a legally recognised responsibility is the concept of an obligation or duty. In the tort of negligence, the term used is duty of care.
+The case of Donoghue v Stevenson (1932) established the modern law of negligence, laying the foundations of the duty of care and the fault principle which, (through the Privy Council), have been adopted throughout the Commonwealth. May Donoghue and her friend were in a café in Paisley. The friend bought Donoghue a ginger beer float. She drank some of the beer and later poured the remainder over her ice-cream and was horrified to see the decomposed remains of a snail exit the bottle. Donoghue suffered nervous shock and gastro-enteritis, but did not sue the cafe owner, instead suing the manufacturer, Stevenson. (As Donoghue had not herself bought the beer, the doctrine of privity precluded a contractual action against Stevenson.)
+The Scottish judge, Lord MacMillan, considered the case to fall within a new category of delict (the Scots law nearest equivalent of tort). The case proceeded to the House of Lords, where Lord Atkin interpreted the biblical ordinance to "love thy neighbour" as a legal requirement to "not harm thy neighbour". He then went on to define neighbour as "persons who are so closely and directly affected by my act that I ought reasonably to have them in contemplation as being so affected when I am directing my mind to the acts or omissions that are called in question."
+In England the case of Caparo Industries Plc v Dickman (1990) introduced a "threefold test" for a duty of care. Harm must be (1) reasonably foreseeable (2) there must be a relationship of proximity between the plaintiff and defendant and (3) it must be "fair, just, and reasonable" to impose liability. However, these act as guidelines for the courts in establishing a duty of care; much of the principle is still at the discretion of judges.

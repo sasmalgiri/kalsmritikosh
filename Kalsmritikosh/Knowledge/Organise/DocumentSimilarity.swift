@@ -42,8 +42,15 @@ public nonisolated enum SimilarityOutcome<T: Sendable>: Sendable {
 public actor DocumentSimilarity {
     private let database: Database
     private let modelID: String
-    /// Below this cosine a group/tag is not suggested. Calibrated on the open corpus (X-7).
+    /// Below this cosine a group/tag is never suggested.
     public static let suggestionFloor = 0.5
+    /// The best group must beat the next one by at least this much, or nothing is suggested.
+    /// Embedding models score unrelated text far above zero (on the open corpus, bge-small
+    /// gave an article about chess 0.71 to an astronomy group and 0.70 to a law group), so an
+    /// absolute floor alone cannot say "this belongs nowhere"; a clear lead can. Calibrated on
+    /// the open corpus (Fixtures/OpenCorpus): every on-subject article led by ≥ 0.030, the
+    /// off-topic one by 0.018.
+    public static let suggestionLead = 0.025
     /// See Also hides documents scoring below this (they are not meaningfully alike).
     public static let seeAlsoFloor = 0.3
 
@@ -165,7 +172,8 @@ public actor DocumentSimilarity {
 
     /// Groups (with at least two members) and tags (on at least two documents) this document
     /// most resembles, by cosine to the members' mean. Groups and tags it is already in are
-    /// left out. Below `suggestionFloor` nothing is offered.
+    /// left out. Nothing is offered below `suggestionFloor`, or when the best candidate does
+    /// not lead the next by `suggestionLead`.
     public func suggestFiling(_ objectID: UUID, limit: Int = 3) async throws -> SimilarityOutcome<FilingSuggestion> {
         guard let mine = try await vector(for: objectID) else { return .notYetEmbedded }
         var candidates: [FilingSuggestion] = []
@@ -190,13 +198,21 @@ public actor DocumentSimilarity {
                 for doc in entry.docs { if let v = try await vector(for: doc) { vectors.append(v) } }
                 guard vectors.count >= 2, let centroid = Self.normalisedMean(vectors) else { continue }
                 let s = Self.cosine(mine, centroid)
-                guard s >= Self.suggestionFloor else { continue }
                 candidates.append(FilingSuggestion(target: isGroup ? .group(id) : .tag(id), name: entry.name, score: s))
             }
         }
-        guard !candidates.isEmpty else { return .noConfidentSuggestion }
         candidates.sort { $0.score == $1.score ? $0.name < $1.name : $0.score > $1.score }
-        return .results(Array(candidates.prefix(limit)))
+        guard let top = candidates.first, top.score >= Self.suggestionFloor else { return .noConfidentSuggestion }
+        // A clear lead over the next candidate, or no suggestion (it would be a guess).
+        if candidates.count > 1, top.score - candidates[1].score < Self.suggestionLead { return .noConfidentSuggestion }
+        // The leader, then any others that are themselves well above the rest.
+        var out = [top]
+        for (i, c) in candidates.enumerated().dropFirst() where out.count < limit {
+            let next = i + 1 < candidates.count ? candidates[i + 1].score : 0
+            guard c.score >= Self.suggestionFloor, c.score - next >= Self.suggestionLead, top.score - c.score < Self.suggestionLead * 2 else { break }
+            out.append(c)
+        }
+        return .results(out)
     }
 
     // MARK: - Maths
