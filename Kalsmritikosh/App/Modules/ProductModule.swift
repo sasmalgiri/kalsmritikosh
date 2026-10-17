@@ -48,6 +48,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
     case onlineAnswers
     // Wave P — using the app on its own
     case writtenNotes
+    // Wave X — the last DEVONthink gaps, offline (docs/PARITY_SIX_TODO.md)
+    case userGroups, filingSuggestions, richDocuments, folderSync
 
     public var id: String { rawValue }
 
@@ -59,7 +61,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         .advancedSearchSyntax, .userTags, .deepLinks, .shortcutsActions, .ledgerRelocation,
         .annotations, .exportFormats, .appLock, .smartCollections, .captureExtensions,
         .spotlightIndex, .timelineGraph, .notesImport, .menuBarAsk, .customEntityTypes,
-        .ocrUpgrade, .extraParsers, .writtenNotes
+        .ocrUpgrade, .extraParsers, .writtenNotes, .userGroups, .filingSuggestions,
+        .richDocuments, .folderSync
     ]
 
     public var alsoInDevonthink: Bool { Self.alsoInDevonthinkSet.contains(self) }
@@ -194,6 +197,26 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
 
         // ── Wave 2 ───────────────────────────────────────────────────────
+        case .userGroups:
+            return Spec(planID: "X-2", group: "Search & organise", title: "Your own folders",
+                        detail: "Arrange documents in groups and sub-groups of your own. One document can sit in several groups at once without being copied. Search or ask inside a group with group:Name. Optionally build groups from a source folder's sub-folders — files on disk are never moved.",
+                        whenOff: "Groups are hidden but kept, with their members.",
+                        implemented: true)
+        case .filingSuggestions:
+            return Spec(planID: "X-1", group: "Search & organise", title: "See Also and filing suggestions",
+                        detail: "For any document: the documents most like it, and the groups and tags it most resembles, computed on this Mac from the documents' own meaning. Suggestions only — nothing is filed until you choose.",
+                        whenOff: "No suggestions; groups and tags work as before.",
+                        implemented: true, dependsOn: [.userGroups])
+        case .richDocuments:
+            return Spec(planID: "X-3", group: "Writing", title: "Rich text notes and PDF marks",
+                        detail: "Write notes in rich text as well as Markdown, and highlight, underline, strike out or comment on PDFs. Marks are kept beside the PDF — the original file is never changed — and you can export an annotated copy.",
+                        whenOff: "Rich notes and PDF marks are hidden but kept.",
+                        implemented: true)
+        case .folderSync:
+            return Spec(planID: "X-5", group: "Storage", title: "Sync through a folder",
+                        detail: "Keep your notes, tags, groups, highlights, PDF marks and the files you added inside the app in step between your Macs and your iPhone or iPad, through a folder you choose (iCloud Drive, Dropbox, a shared or USB disk). Everything in the folder is encrypted with a passphrase you set; the app itself makes no connection — the folder's own service moves the files.",
+                        whenOff: "Nothing is written to or read from the sync folder; everything stays on this Mac.",
+                        implemented: true)
         case .writtenNotes:
             return Spec(planID: "P-2", group: "Writing", title: "Your own notes",
                         detail: "Write and edit notes in Markdown inside the app. Each note is read into your archive like any document, so you can search it and ask about it. Every save keeps the earlier version, which you can restore.",

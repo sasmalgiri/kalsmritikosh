@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 146
+    public static let latestVersion = 148
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -677,7 +677,9 @@ public enum SchemaMigrations {
         (143, v143),
         (144, v144),
         (145, v145),
-        (146, v146)
+        (146, v146),
+        (147, v147),
+        (148, v148)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7015,6 +7017,41 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_note_links_from ON note_links(from_object_id);
     CREATE INDEX IF NOT EXISTS idx_note_links_to ON note_links(to_object_id);
+    """
+
+
+    // MARK: - v147 — X-2 your own folders: groups (a tree) and their members. A document
+    // may sit in several groups at once (a replicant: one document, many places). User
+    // organisation only — never changes evidence. Nothing is deleted: removing a member
+    // stamps removed_at; retiring a group stamps retired_at and leaves its members restorable.
+    private static let v147: String = """
+    CREATE TABLE IF NOT EXISTS user_groups (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, parent_id TEXT,
+        sort_index INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL, retired_at REAL,
+        source_path TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_groups_parent ON user_groups(parent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_groups_live_name
+        ON user_groups(COALESCE(parent_id, ''), name COLLATE NOCASE) WHERE retired_at IS NULL;
+    CREATE TABLE IF NOT EXISTS user_group_members (
+        group_id TEXT NOT NULL, object_id TEXT NOT NULL, added_at REAL NOT NULL, removed_at REAL,
+        PRIMARY KEY (group_id, object_id), FOREIGN KEY (group_id) REFERENCES user_groups(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_group_members_object ON user_group_members(object_id);
+    """
+
+
+    // MARK: - v148 — X-1 document vectors for See Also and filing suggestions: the mean of a
+    // document's live chunk embeddings for one embedding model, cached with the signature of
+    // the chunk set it was built from (count + newest embedding time) so a changed document
+    // is rebuilt. Derived and disposable; never evidence.
+    private static let v148: String = """
+    CREATE TABLE IF NOT EXISTS document_vectors (
+        object_id TEXT NOT NULL, model_id TEXT NOT NULL, dims INTEGER NOT NULL,
+        vector BLOB NOT NULL, chunk_count INTEGER NOT NULL, signature TEXT NOT NULL,
+        computed_at REAL NOT NULL,
+        PRIMARY KEY (object_id, model_id)
+    );
     """
 
 }

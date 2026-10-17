@@ -384,6 +384,16 @@ public actor ChunksRepository {
                             OR (l.subject_kind = 'chunk' AND l.subject_id = c.id)))
                 """
                 binds.append(.text(f.value))
+            case .group:
+                // X-2 — members of every live group with this name and of every live group beneath it.
+                clause = """
+                EXISTS (WITH RECURSIVE b(id) AS (
+                            SELECT id FROM user_groups WHERE name = ? COLLATE NOCASE AND retired_at IS NULL
+                            UNION SELECT g.id FROM user_groups g JOIN b ON g.parent_id = b.id WHERE g.retired_at IS NULL)
+                        SELECT 1 FROM user_group_members m
+                        WHERE m.group_id IN (SELECT id FROM b) AND m.object_id = c.object_id AND m.removed_at IS NULL)
+                """
+                binds.append(.text(f.value))
             }
             sql += f.negated ? " AND NOT (\(clause))" : " AND (\(clause))"
         }

@@ -44,7 +44,18 @@ extension AppState {
         let compiled = AdvancedSearchCompiler.compile(query)
         guard !compiled.isEmpty else { return (compiled, []) }
         do {
-            return (compiled, try await chunks.searchAdvanced(compiled, limit: limit))
+            // X-2 — a group: filter naming no live group is said, not shown as an empty result.
+            var issues = compiled.issues
+            if let database {
+                for f in compiled.filters where f.field == .group && !f.negated {
+                    let live = try await database.query(
+                        "SELECT 1 FROM user_groups WHERE name = ? COLLATE NOCASE AND retired_at IS NULL LIMIT 1;", [.text(f.value)])
+                    if live.isEmpty { issues.append("There is no group called \u{201C}\(f.value)\u{201D} (it may have been removed).") }
+                }
+            }
+            let result = CompiledSearch(ftsExpression: compiled.ftsExpression, filters: compiled.filters,
+                                        issues: issues, summary: compiled.summary)
+            return (result, try await chunks.searchAdvanced(compiled, limit: limit))
         } catch {
             KalsmritikoshLog.app.error("Advanced search failed: \(error.localizedDescription, privacy: .public)")
             return (CompiledSearch(ftsExpression: compiled.ftsExpression, filters: compiled.filters,
@@ -77,6 +88,7 @@ extension AppState {
                 case .before, .after: name = "file date"
                 case .entity: name = "people and organisations"
                 case .tag: name = "tags"
+                case .group: name = "groups"
                 }
                 if !fields.contains(name) { fields.append(name) }
             }
