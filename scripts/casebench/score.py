@@ -63,9 +63,16 @@ def main():
             cases += 1; src = t["source"]
             for c in t.get("checks", []):
                 extract[f"{src}:{c['id']}-total"] += 1
-                if "date" in c: hit = c["date"] in r["eventDates"]
-                else: hit = any(c["entity"].lower() in e.lower() for e in r["entities"])
-                extract[f"{src}:{c['id']}-extracted"] += hit
+                facts = r.get("facts", [])
+                if "date" in c:
+                    in_events = c["date"] in r["eventDates"]
+                    in_facts = any(f.split("=", 1)[-1].startswith(c["date"]) for f in facts)
+                else:
+                    in_events = any(c["entity"].lower() in e.lower() for e in r["entities"])
+                    in_facts = any(c["entity"].lower() in f.split("=", 1)[-1].lower() for f in facts)
+                extract[f"{src}:{c['id']}-extracted"] += in_events or in_facts
+                extract[f"{src}:{c['id']} as fact-extracted"] += in_facts
+                extract[f"{src}:{c['id']} as fact-total"] += 1
             extract[f"{src}:ingest-errors"] += sum(1 for d in r["docs"] if d.get("error"))
             qs = {q["id"]: q for q in t["questions"]}
             for ans in r["answers"]:

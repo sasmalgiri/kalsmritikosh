@@ -36,6 +36,9 @@ struct CaseBenchRunner {
         let `case`: String; let source: String
         let docs: [DocResult]
         let eventDates: [String]; let entities: [String]
+        /// field=value of every fact the ledger holds from this case's documents (the
+        /// open-field and domain-pack extractors write facts, not entities).
+        let facts: [String]
         let answers: [AnswerResult]
     }
     struct ShardSummary: Encodable {
@@ -100,6 +103,7 @@ struct CaseBenchRunner {
         var docsByCase: [String: [DocResult]] = [:]
         var objectsByCase: [String: [UUID]] = [:]
         var caseOfObject: [UUID: String] = [:]
+        var versionsByCase: [String: [UUID]] = [:]
         let t0 = Date()
         for line in truth {
             let folder = shard.appendingPathComponent(line.case, isDirectory: true)
@@ -111,6 +115,7 @@ struct CaseBenchRunner {
                     let r = try await ingest.ingest(fileAt: file)
                     objectsByCase[line.case, default: []].append(r.object.id)
                     caseOfObject[r.object.id] = line.case + "/" + file.lastPathComponent
+                    if let v = r.sourceVersionID { versionsByCase[line.case, default: []].append(v) }
                     docsByCase[line.case, default: []].append(.init(doc: file.lastPathComponent, chunks: r.chunkCount,
                         entities: r.entityCount, events: r.eventCount, seconds: Date().timeIntervalSince(s), error: nil))
                 } catch {
@@ -145,7 +150,15 @@ struct CaseBenchRunner {
         for (index, line) in truth.enumerated() {
             let ids = objectsByCase[line.case] ?? []
             let marks = ids.map { _ in "?" }.joined(separator: ",")
-            var dates: [String] = [], names: [String] = []
+            var dates: [String] = [], names: [String] = [], facts: [String] = []
+            let versions = versionsByCase[line.case] ?? []
+            if !versions.isEmpty {
+                let vmarks = versions.map { _ in "?" }.joined(separator: ",")
+                facts = ((try? await db.query("""
+                    SELECT DISTINCT gf.field || '=' || gf.value FROM generic_facts gf, json_each(gf.source_blocks_json) j
+                    JOIN evidence_blocks eb ON eb.id = j.value WHERE eb.source_version_id IN (\(vmarks))
+                    """, versions.map { .uuid($0) })) ?? []).compactMap { $0.string(0) }
+            }
             if !ids.isEmpty {
                 let f = ISO8601DateFormatter(); f.formatOptions = [.withFullDate]
                 dates = ((try? await db.query("SELECT date FROM events WHERE source_object_id IN (\(marks))", ids.map { .uuid($0) })) ?? [])
@@ -157,7 +170,8 @@ struct CaseBenchRunner {
             // Every case is checked for extraction; questions go to every askEvery-th case.
             if index % askEvery == 0 { for q in line.questions { answers.append(await ask(q.id, q.q)) } }
             let r = CaseResult(case: line.case, source: line.source, docs: docsByCase[line.case] ?? [],
-                               eventDates: Array(Set(dates)).sorted(), entities: names.sorted(), answers: answers)
+                               eventDates: Array(Set(dates)).sorted(), entities: names.sorted(),
+                               facts: facts.sorted(), answers: answers)
             lines.append(String(decoding: try enc.encode(r), as: UTF8.self))
             try progressHandle.write(contentsOf: Data((lines.last! + "\n").utf8))   // visible while the shard runs
         }
