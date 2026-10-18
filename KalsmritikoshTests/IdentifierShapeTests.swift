@@ -66,3 +66,42 @@ struct IdentifierShapeTests {
         #expect(!OpenFieldExtractor.isLabelLike("OSHA accident 200072106"))
     }
 }
+
+@Suite("Legal pack — US court captions")
+struct LegalCaseUSCaptionTests {
+
+    private let caption = """
+    UNITED STATES v. SOUTHERN RY. CO.
+    (District Court, D. Tennessee.
+    August 8, 1924.)
+    No. 173.
+    Action by the United States, plaintiff, against the defendant railway.
+    """
+
+    @Test("Caption docket line and caption date become case number and decision date")
+    func captionFacts() {
+        let facts = LegalCaseDomainPack.extractFacts(fromText: caption, subjectLabel: "case", blockID: UUID())
+        #expect(facts.contains { $0.field.lowercased() == "decisiondate" && $0.value == "1924-08-08" }, "\(facts.map { "\($0.field)=\($0.value)" })")
+        #expect(facts.contains { $0.field.lowercased() == "casenumber" && $0.value == "173" })
+    }
+
+    @Test("Appellate captions: Decided line and docket number")
+    func appellate() {
+        let text = """
+        SWEET HOME CHAPTER OF COMMUNITIES FOR A GREAT OREGON, et al., Appellants,
+        v. Bruce BABBITT, Secretary of the Interior, et al., Appellees.
+        No. 92-5255.
+        Argued March 10, 1993.
+        Decided July 23, 1993.
+        """
+        let facts = LegalCaseDomainPack.extractFacts(fromText: text, subjectLabel: "case", blockID: UUID())
+        #expect(facts.contains { $0.field.lowercased() == "casenumber" && $0.value == "92-5255" }, "\(facts.map { "\($0.field)=\($0.value)" })")
+        #expect(facts.contains { $0.field.lowercased() == "decisiondate" && $0.value == "1993-07-23" })
+    }
+
+    @Test("A numbered clause in prose is not a docket number")
+    func proseNumberIgnored() {
+        #expect(LegalCaseDomainPack.captionDocketNumber(in: "See No. 5 of the agreement, which the plaintiff signed.") == nil)
+        #expect(LegalCaseDomainPack.captionDateLine(in: "The defendant was served on August 8, 1924, at home.") == nil)
+    }
+}

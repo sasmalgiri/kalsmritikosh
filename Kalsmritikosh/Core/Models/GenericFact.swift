@@ -332,7 +332,7 @@ public enum FactSchemaRegistry {
         // constants in SlotAnswerComposer; dates use the precision canon;
         // money uses renderMoney; text renders its own atom.
         "accountnumber": .identifier, "idnumber": .identifier,
-        "visitdate": .date, "hearingdate": .date, "birthdate": .date,
+        "visitdate": .date, "hearingdate": .date, "decisiondate": .date, "birthdate": .date,
         "deathdate": .date, "marriagedate": .date, "deeddate": .date,
         "issuedate": .date, "expirydate": .date,
         "balance": .money, "consideration": .money,

@@ -22,7 +22,7 @@ while IFS= read -r truth; do
   w=$((i % WORKERS)); mkdir -p "$WORK/w$w/$src"
   ln -s "$shard" "$WORK/w$w/$src/$(basename "$shard")"
   i=$((i + 1))
-done < <(find "$CASES" -name truth.jsonl | sort)
+done < <(find -L "$CASES" -name truth.jsonl -not -path "*/.workers/*" | sort)
 echo "$i shards to run on $WORKERS workers"
 pids=()
 for d in "$WORK"/w*; do
@@ -30,12 +30,12 @@ for d in "$WORK"/w*; do
   n=$(basename "$d")
   TEST_RUNNER_CASEBENCH_NOAI=$NOAI TEST_RUNNER_CASEBENCH_DIR="$d" TEST_RUNNER_CASEBENCH_OUT="$OUT" \
     xcodebuild test-without-building -scheme Kalsmritikosh -destination 'platform=macOS,arch=arm64' \
-      -derivedDataPath build/dd -resultBundlePath "$WORK/$n.xcresult" \
+      -derivedDataPath "${DD:-build/dd}" -resultBundlePath "$WORK/$n.xcresult" \
       -only-testing:KalsmritikoshTests/CaseBenchRunner > "$WORK/$n.log" 2>&1 &
   pids+=($!)
   sleep 5
 done
 fail=0
-for p in "${pids[@]}"; do wait "$p" || fail=1; done
+for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || fail=1; done
 echo "done (worker failure: $fail); $(ls "$OUT"/*.jsonl 2>/dev/null | wc -l) shard results in $OUT"
 exit $fail
