@@ -66,8 +66,10 @@ public nonisolated enum LegalNotice {
     inside the app package — nothing to install and nothing to download. The ledger is \
     encrypted on your Mac, with its key in your Keychain. Online mode is off unless you turn \
     it on: then, with your own API key, the cloud AI you choose may word an answer — you see \
-    exactly what would be sent, and nothing is sent until you agree. You can delete \
-    everything by removing the app’s data folder.
+    exactly what would be sent, and nothing is sent until you agree. Sync through a folder, if \
+    you turn it on, writes your own work into a folder you choose, encrypted with your \
+    passphrase; that folder's service moves it. The free trial and the purchase are handled by \
+    Apple through the App Store. You can delete everything by removing the app’s data folder.
     """
 
     public static let termsStatement = """
@@ -158,7 +160,7 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.6 (2026-10-17)"
+    public static let termsVersion = "1.7 (2026-10-18)"
 
     /// Payment terms: written to hold unchanged whether the app is a one-time
     /// purchase (v1, per SHIP_DECISIONS) or gains paid tiers later.
