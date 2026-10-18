@@ -115,7 +115,9 @@ public struct FactTypeClassifier: Sendable {
             // (a commitment IS a kind of recorded decision). Confidence
             // is medium since we may want a Commitment type in v2.
             return Result(type: .decision, confidence: 0.60, reason: "event.kind=taskAssigned (mapped to Decision)")
-        case .other:
+        case .incidentOccurred, .other:
+            // The v1 ontology has no Incident type yet; an incident keeps its event kind and
+            // is not forced into a business type it is not.
             return nil
         }
     }

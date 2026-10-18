@@ -551,6 +551,7 @@ public struct RuleEventExtractor: EventExtractor {
         case .taskAssigned: return "Task assigned"
         case .deliveryDelayed: return "Delivery delayed"
         case .deliveryCompleted: return "Delivery completed"
+        case .incidentOccurred: return "Incident"
         case .emailReceived: return "Email received"
         case .emailSent: return "Email sent"
         case .other: return "Event"

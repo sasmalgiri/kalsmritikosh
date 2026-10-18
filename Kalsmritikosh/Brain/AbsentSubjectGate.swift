@@ -94,10 +94,22 @@ public struct AbsentSubjectGate: Sendable {
             // An identifier's digits come in a RUN. "COVID-19" and "MP3-320"
             // are names with a couple of digits attached, not references, and
             // admitting them meant refusing any question that mentioned one.
-            guard longestDigitRun(clean) >= 4 else { continue }
+            // FOUND BY THE CASE BENCH, 2026-10-18. Agency case numbers interleave
+            // letters and digits — NTSB "MIA08MA051", "SEA08LA057" — so no digit run
+            // reaches four, and a question about a case that does not exist
+            // ("NTSB case ZZZ99ZZ999") went to retrieval and came back as a cited
+            // answer about other accidents (3 of 9 not-in-archive controls). Admit a
+            // token whose letters and digits alternate at least twice and carry three
+            // or more digits: that is a reference's shape, while "COVID-19" and
+            // "MP3-320" alternate once and "iPhone15Pro" has only two digits.
+            guard longestDigitRun(clean) >= 4 || isInterleavedReference(clean) else { continue }
             out.append(clean)
         }
         return out
+    }
+
+    nonisolated static func isInterleavedReference(_ s: String) -> Bool {
+        IdentifierShape.isInterleavedReference(s)
     }
 
     /// yyyy-mm-dd, dd/mm/yyyy, dd-mm-yy, yyyy/mm/dd — the written forms.
@@ -132,11 +144,7 @@ public struct AbsentSubjectGate: Sendable {
     }
 
     nonisolated static func longestDigitRun(_ s: String) -> Int {
-        var best = 0, run = 0
-        for ch in s {
-            if ch.isNumber { run += 1; best = max(best, run) } else { run = 0 }
-        }
-        return best
+        IdentifierShape.longestDigitRun(s)
     }
 
     /// Check the question's identifiers against the ledger.

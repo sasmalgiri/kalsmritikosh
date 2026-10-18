@@ -239,6 +239,16 @@ public enum OpenFieldExtractor {
         if label.range(of: #"^[0-9]{1,3}(st|nd|rd|th)\b"#, options: .regularExpression) != nil {
             return false
         }
+        // A label that CARRIES A REFERENCE is a document title, not a field name. Found by
+        // the case bench (2026-10-18): "NTSB SEA08LA057 — factual narrative" and "OSHA
+        // accident 200072106 — injured employees" minted the fields "ntsbsea08la057" and
+        // "oshaaccident200072106", burying the case number inside a field id where no
+        // anchor, search or answer could use it. Real labels hold small numbers at most
+        // ("Line 2 Address", "Form 1040"), so the bar is an interleaved code or five or more
+        // digits in a row.
+        if words.contains(where: { IdentifierShape.isInterleavedReference($0) || IdentifierShape.longestDigitRun($0) >= 5 }) {
+            return false
+        }
         // Clause markers — the two gates that kill most prose.
         if let first = words.first?.lowercased().trimmingCharacters(in: .punctuationCharacters),
            proseLabelHeads.contains(first) { return false }

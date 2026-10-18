@@ -106,6 +106,8 @@ public nonisolated enum EventClaimStatementRenderer {
             return meaningfulTitleOrSummary(event) ?? "Delivery was delayed."
         case .deliveryCompleted:
             return meaningfulTitleOrSummary(event) ?? "Delivery completed."
+        case .incidentOccurred:
+            return meaningfulTitleOrSummary(event) ?? "An incident was reported."
         case .other:
             return meaningfulTitleOrSummary(event) ?? "An event was recorded in the source."
         }
@@ -256,6 +258,7 @@ public nonisolated enum EventClaimStatementRenderer {
         case .taskAssigned:              return "Task"
         case .deliveryDelayed:           return "Delivery"
         case .deliveryCompleted:         return "Delivery"
+        case .incidentOccurred:          return "Incident"
         case .other:                     return "Event"
         }
     }

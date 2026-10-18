@@ -885,6 +885,8 @@ struct AbsentSubjectGateTests {
             "EPOC Email Version 2.10",
             "What was the total of INR 25,00,000?",
             "Emails involving 60 of 526 total",
+            "Does the MP3-320 player have a warranty?",
+            "Is the iPhone15Pro covered?",
           ])
     func measuredOverFiresStayQuiet(question: String) {
         #expect(AbsentSubjectGate.candidateTokens(in: question).isEmpty,
@@ -898,6 +900,9 @@ struct AbsentSubjectGateTests {
             "Show me invoice INV-2024-0093",
             "Roll No. 700321",
             "Who called from 9876543210?",
+            // Case bench 2026-10-18: interleaved agency case numbers.
+            "What was the probable cause of NTSB case MIA08MA051?",
+            "When did the accident in NTSB case ZZZ99ZZ999 happen?",
           ])
     func realReferencesStillDetected(question: String) {
         #expect(!AbsentSubjectGate.candidateTokens(in: question).isEmpty,

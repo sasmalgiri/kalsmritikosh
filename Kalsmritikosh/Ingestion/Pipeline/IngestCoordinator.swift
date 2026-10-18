@@ -2815,7 +2815,15 @@ public actor IngestCoordinator {
             // P1.10 — one document states one happening once: same-source
             // repeats collapse BEFORE insert, so nothing downstream can hold a
             // dropped id (extractedEvents below is this same list).
-            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents).map { event in
+            // The incident itself — accident, injury, collision, crime — dated from the
+            // sentence that reports it (case bench, 2026-10-18: investigation documents
+            // produced no events at all without this).
+            let incidentEvents = IncidentEventExtractor.extract(
+                text: object.content,
+                sourceObjectID: object.id,
+                entityIDs: extractedEntities.map(\.id)
+            )
+            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             })
             // P1.2 — a failed event INSERT loses dated evidence silently, so
