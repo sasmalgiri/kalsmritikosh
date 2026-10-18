@@ -17,7 +17,7 @@ import TipKit
 @available(macOS 15.0, *)
 struct AddSourceTip: Tip {
     var title: Text { Text("Add your files") }
-    var message: Text? { Text("Open Sources and add a folder. Kalsmritikosh reads everything inside — PDFs, Office docs, images, email, audio — into your private knowledge base.") }
+    var message: Text? { Text("Open Sources and add a folder. Investigation Docs Made Easy reads everything inside — PDFs, Office docs, images, email, audio — into your private knowledge base.") }
     var image: Image? { Image(systemName: "folder.badge.plus") }
 }
 

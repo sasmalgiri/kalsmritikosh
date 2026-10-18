@@ -786,7 +786,7 @@ public enum ReleaseReadiness {
         let softFails = checks.filter { !$0.passed && !$0.blocker }
         let ready = blockerFails.isEmpty
 
-        var md = "# Kalsmritikosh — Release Readiness Report\n\n"
+        var md = "# Investigation Docs Made Easy — Release Readiness Report\n\n"
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n"
         md += "Total runtime: \(String(format: "%.1f", totalSeconds))s\n\n"
 

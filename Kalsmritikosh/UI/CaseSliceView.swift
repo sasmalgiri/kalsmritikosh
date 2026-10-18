@@ -23,7 +23,7 @@ struct CaseSliceView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Signed case slices").font(.title3.bold())
-            Text("Share part of a case as one signed, redacted, read-only file. Emails and phone numbers are always removed; add names or numbers to remove below. Anyone with Kalsmritikosh can open it and see whether it was changed.")
+            Text("Share part of a case as one signed, redacted, read-only file. Emails and phone numbers are always removed; add names or numbers to remove below. Anyone with Investigation Docs Made Easy can open it and see whether it was changed.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if tags.isEmpty {
@@ -67,7 +67,7 @@ struct CaseSliceView: View {
             if let data = try? Data(contentsOf: url), let s = try? JSONDecoder().decode(CaseSlice.self, from: data) {
                 opened = s; openCheck = s.verify()
             } else {
-                status = "That file is not a Kalsmritikosh slice."
+                status = "That file is not an Investigation Docs Made Easy slice."
             }
         }
     }

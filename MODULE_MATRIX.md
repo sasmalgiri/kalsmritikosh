@@ -1,4 +1,4 @@
-# MODULE_MATRIX — every switch in Kalsmritikosh
+# MODULE_MATRIX — every switch in Investigation Docs Made Easy
 
 Generated from `ProductModule` and `KnowledgeModule`. Do not hand-edit.
 

@@ -470,7 +470,7 @@ public struct ConvertView: View {
             }
             return "[]"
         case .html:
-            var out = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Kalsmritikosh conversion</title>\n"
+            var out = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Investigation Docs Made Easy conversion</title>\n"
             out += "<style>body{font:14px -apple-system,system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1c1c1e}"
             out += "h2{border-bottom:1px solid #ddd;padding-bottom:.25rem} .meta{color:#8a8a8e;font-size:12px} pre{white-space:pre-wrap;word-wrap:break-word} .fail{color:#c0392b}</style>\n</head>\n<body>\n"
             for (url, ko) in pieces {

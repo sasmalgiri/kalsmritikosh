@@ -3,7 +3,7 @@
 > (matching `LegalNotice.termsVersion` 1.5, 2026-08-27). This draft is
 > retained for history only; do not link or submit it.
 
-# Kalsmritikosh — Support
+# Investigation Docs Made Easy — Support
 
 _Draft for the owner to host at the App Store "Support URL". Covers the §8 support-operations
 checklist. Last reviewed 2026-07-22._
@@ -12,7 +12,7 @@ checklist. Last reviewed 2026-07-22._
 
 _Owner to insert a public support email or page before submission._
 
-## What Kalsmritikosh is
+## What Investigation Docs Made Easy is
 
 A private, on-device workspace that turns your own documents and email into a searchable,
 evidence-cited knowledge base — fully on your Mac, with no account and no data leaving the device.

@@ -30,7 +30,7 @@ enum ShareInboxWire {
 }
 
 final class ShareViewController: NSViewController {
-    private let label = NSTextField(labelWithString: "Saving to Kalsmritikosh…")
+    private let label = NSTextField(labelWithString: "Saving to Investigation Docs Made Easy…")
 
     override func loadView() {
         let v = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 90))
@@ -60,12 +60,12 @@ final class ShareViewController: NSViewController {
     private func run() async {
         let defaults = UserDefaults(suiteName: ShareInboxWire.appGroup)
         guard defaults?.bool(forKey: ShareInboxWire.enabledKey) == true else {
-            await finish("“Share and capture” is switched off. Turn it on in Kalsmritikosh ▸ Settings ▸ Modules.", error: true)
+            await finish("“Share and capture” is switched off. Turn it on in Investigation Docs Made Easy ▸ Settings ▸ Modules.", error: true)
             return
         }
         guard let inbox = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: ShareInboxWire.appGroup)?
             .appendingPathComponent(ShareInboxWire.inboxFolder, isDirectory: true) else {
-            await finish("Kalsmritikosh's shared folder is not available.", error: true)
+            await finish("Investigation Docs Made Easy's shared folder is not available.", error: true)
             return
         }
         let source = (extensionContext?.inputItems.first as? NSExtensionItem)?.attributedContentText?.string
@@ -83,7 +83,7 @@ final class ShareViewController: NSViewController {
         if saved == 0 {
             await finish("Nothing could be saved from this item.", error: true)
         } else {
-            await finish("Saved \(saved) item\(saved == 1 ? "" : "s") for Kalsmritikosh" + (failed > 0 ? " (\(failed) could not be read)." : "."), error: false)
+            await finish("Saved \(saved) item\(saved == 1 ? "" : "s") for Investigation Docs Made Easy" + (failed > 0 ? " (\(failed) could not be read)." : "."), error: false)
         }
     }
 

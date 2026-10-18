@@ -21,7 +21,7 @@ change — copy and registry move together or not at all.
 | app.evidence-only-state | `still answers every question from your evidence` | Kalsmritikosh/UI/OnboardingView.swift |
 | app.private-mode | `Fully private (no AI)` | Kalsmritikosh/UI/SettingsView.swift |
 | app.twin-badge | `Independent AI reading agreed.` | Kalsmritikosh/Brain/ComposeTwin.swift |
-| app.q0-refusal | `Kalsmritikosh answers only from your ingested documents` | Kalsmritikosh/Brain/QuestionShapeRouter.swift |
+| app.q0-refusal | `Investigation Docs Made Easy answers only from your ingested documents` | Kalsmritikosh/Brain/QuestionShapeRouter.swift |
 | app.gk-banner | `Not from your documents — general knowledge from the on-device AI` | Kalsmritikosh/Brain/GeneralKnowledgeLane.swift |
 
 ## App Store description sentences

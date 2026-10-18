@@ -184,7 +184,7 @@ public enum WorkProductComposer {
 
     private static func limitationsSection() -> WorkProductSection {
         section("Limitations", preamble: [
-            "Kalsmritikosh organizes and links user-supplied records. It does not certify evidence, determine admissibility, or provide professional advice.",
+            "Investigation Docs Made Easy organizes and links user-supplied records. It does not certify evidence, determine admissibility, or provide professional advice.",
             "Findings reflect only what has been ingested and indexed; anything outside the archive is not represented."
         ])
     }

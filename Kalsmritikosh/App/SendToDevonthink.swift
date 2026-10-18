@@ -38,9 +38,9 @@ extension AppState {
         var md = ["# \(question.isEmpty ? "Answer" : question)", "", answer.answerText ?? answer.body, "", "## Sources", ""]
         for (i, c) in answer.citations.enumerated() {
             let link = DeepLink.document(id: c.objectID, quote: c.snippet).url?.absoluteString ?? ""
-            md.append("\(i + 1). **\(names[c.objectID] ?? "Source")** — “\(c.snippet.prefix(240))” [Open in Kalsmritikosh](\(link))")
+            md.append("\(i + 1). **\(names[c.objectID] ?? "Source")** — “\(c.snippet.prefix(240))” [Open in Investigation Docs Made Easy](\(link))")
         }
-        md.append(""); md.append("_From Kalsmritikosh, \(Date().formatted(date: .abbreviated, time: .shortened))._")
+        md.append(""); md.append("_From Investigation Docs Made Easy, \(Date().formatted(date: .abbreviated, time: .shortened))._")
         return md.joined(separator: "\n")
     }
 

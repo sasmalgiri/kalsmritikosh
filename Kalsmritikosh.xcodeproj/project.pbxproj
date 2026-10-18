@@ -747,7 +747,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KalsmritikoshShare/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Save to Kalsmritikosh";
+				INFOPLIST_KEY_CFBundleDisplayName = "Save to Investigation Docs Made Easy";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -788,7 +788,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KalsmritikoshShare/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Save to Kalsmritikosh";
+				INFOPLIST_KEY_CFBundleDisplayName = "Save to Investigation Docs Made Easy";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -826,10 +826,10 @@
 				DEVELOPMENT_TEAM = 6TPTCJD42Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Viewer";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Scan paper documents into your Kalsmritikosh archive.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Investigation Docs Made Easy";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan paper documents into your Investigation Docs Made Easy archive.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -870,10 +870,10 @@
 				DEVELOPMENT_TEAM = 6TPTCJD42Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Viewer";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Scan paper documents into your Kalsmritikosh archive.";
+				INFOPLIST_KEY_CFBundleDisplayName = "Investigation Docs Made Easy";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan paper documents into your Investigation Docs Made Easy archive.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -1053,7 +1053,7 @@
 				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
+				INFOPLIST_KEY_CFBundleDisplayName = "Investigation Docs Made Easy";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "To ingest files you keep on your Desktop into your private knowledge ledger.";
@@ -1114,7 +1114,7 @@
 				EX_ENABLE_EXTENSION_POINT_GENERATION = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
+				INFOPLIST_KEY_CFBundleDisplayName = "Investigation Docs Made Easy";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "To ingest files you keep on your Desktop into your private knowledge ledger.";
@@ -1162,7 +1162,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KalsmritikoshClipper/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Clipper";
+				INFOPLIST_KEY_CFBundleDisplayName = "Investigation Docs Clipper";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1203,7 +1203,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = KalsmritikoshClipper/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Kalsmritikosh Clipper";
+				INFOPLIST_KEY_CFBundleDisplayName = "Investigation Docs Clipper";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

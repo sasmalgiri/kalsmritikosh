@@ -13,7 +13,7 @@ public enum ModuleMatrixDocument {
 
     public static func render() -> String {
         var out: [String] = []
-        out.append("# MODULE_MATRIX — every switch in Kalsmritikosh")
+        out.append("# MODULE_MATRIX — every switch in Investigation Docs Made Easy")
         out.append("")
         out.append("Generated from `ProductModule` and `KnowledgeModule`. Do not hand-edit.")
         out.append("")

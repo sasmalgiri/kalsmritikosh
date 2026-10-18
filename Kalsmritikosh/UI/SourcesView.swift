@@ -156,7 +156,7 @@ public struct SourcesView: View {
             }
             InfoPopoverButton(
                 title: "Sources = your knowledge base",
-                message: "Add folders here. Kalsmritikosh watches them and ingests every supported file into the searchable, answerable ledger.",
+                message: "Add folders here. Investigation Docs Made Easy watches them and ingests every supported file into the searchable, answerable ledger.",
                 systemImage: "folder.badge.plus",
                 bullets: [
                     "New files dropped into a watched folder are ingested automatically",

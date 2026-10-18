@@ -58,7 +58,7 @@ struct AnswerPresentationTests {
     }
 
     @Test func refusalIsCompleteEvidence() {
-        let body = "Kalsmritikosh can't ground an answer to that yet.\nReason: nothing on file.\n\nConfidence: weak"
+        let body = "Investigation Docs Made Easy can't ground an answer to that yet.\nReason: nothing on file.\n\nConfidence: weak"
         let answer = makeAnswer(body: body, answerText: nil, refused: true, state: .notFound)
         let split = AnswerPresentation.split(body: body, answer: answer)
         #expect(split.evidence.state == .complete)
