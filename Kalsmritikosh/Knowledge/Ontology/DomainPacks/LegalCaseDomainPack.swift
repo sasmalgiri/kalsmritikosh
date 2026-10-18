@@ -46,7 +46,7 @@ public enum LegalCaseDomainPack {
 
         if let v = DomainPackText.labeledIdentifier(after: ["case no", "suit no", "case number", "c.a. no", "w.p. no",
                                                             "docket no", "docket number"], in: text)
-            ?? captionDocketNumber(in: text) {
+            ?? captionDocketNumber(in: text) ?? flowingDocketNumber(in: text) {
             facts.append(fact(subjectLabel, "caseNumber", v, blockID, 0.8))
         }
         if let v = DomainPackText.labeledValue(after: ["in the court of", "court of", "before the", "tribunal"], in: text) {
@@ -92,6 +92,16 @@ public enum LegalCaseDomainPack {
             if first.count >= 3, first.contains(where: \.isNumber) { return String(first) }
         }
         return nil
+    }
+
+    /// The docket number when the block's line breaks were normalized away: "No. 92-5255"
+    /// near the start of a legal block. A hyphenated court number ("92-5255", "3:06-cv-00862")
+    /// is what separates it from "No. 5 of the agreement".
+    nonisolated static func flowingDocketNumber(in text: String) -> String? {
+        let head = String(text.prefix(800))
+        let pattern = #"\bNos?\.\s+((?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6}(?:[-–][0-9A-Za-z]+)*)"#
+        guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
+        return head[r].replacingOccurrences(of: #"^Nos?\.\s+"#, with: "", options: .regularExpression)
     }
 
     /// A caption line that is ONLY a date ("August 8, 1924.)"), among the first lines.

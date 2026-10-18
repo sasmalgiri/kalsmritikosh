@@ -64,7 +64,12 @@ public actor IdentifierAnchoredRetriever: Retriever {
 
     /// The scope the question's references single out, or nil to retrieve unanchored.
     func anchorScope(for question: String) async -> RetrievalSourceScope? {
-        let tokens = AbsentSubjectGate.candidateTokens(in: question)
+        // References, and named cases written as their caption ("Great Oregon v. Babbitt" is
+        // looked up as "oregon v. babbitt", "oregon v babbitt" and "oregon vs. babbitt").
+        var tokens = AbsentSubjectGate.candidateTokens(in: question)
+        for c in AbsentSubjectGate.captionCores(in: question) {
+            tokens += ["\(c.left) v. \(c.right)", "\(c.left) v \(c.right)", "\(c.left) vs. \(c.right)"]
+        }
         guard !tokens.isEmpty else { return nil }
         var versions = Set<UUID>()
         for token in tokens {

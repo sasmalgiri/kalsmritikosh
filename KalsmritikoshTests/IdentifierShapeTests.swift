@@ -105,3 +105,19 @@ struct LegalCaseUSCaptionTests {
         #expect(LegalCaseDomainPack.captionDateLine(in: "The defendant was served on August 8, 1924, at home.") == nil)
     }
 }
+
+@Suite("Legal pack — docket numbers in flowing text")
+struct LegalFlowingDocketTests {
+    @Test("Normalized captions still yield the docket", arguments: [
+        ("SWEET HOME CHAPTER, Appellants, v. Bruce BABBITT, Appellees. No. 92-5255. Argued March 10, 1993.", "92-5255"),
+        ("EEOC v. Autozone Stores, No. 3:06-cv-00862 (M.D. Fla.), plaintiff", "3:06-cv-00862"),
+    ])
+    func flowing(text: String, expected: String) {
+        #expect(LegalCaseDomainPack.flowingDocketNumber(in: text) == expected)
+    }
+
+    @Test("A numbered clause is not a docket")
+    func clause() {
+        #expect(LegalCaseDomainPack.flowingDocketNumber(in: "See No. 5 of the agreement signed by the plaintiff.") == nil)
+    }
+}

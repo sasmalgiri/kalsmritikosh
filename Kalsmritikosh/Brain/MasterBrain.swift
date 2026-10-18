@@ -598,11 +598,22 @@ public actor MasterBrain {
             ) {
                 return rag
             }
+            // Case bench 2026-10-18: with no chapters and no fallback, the header-only "No
+            // history found for …" went out as an ordinary, unrefused answer. Nothing was
+            // reconstructed, so say so as a refusal.
+            if narrative.chapters.isEmpty {
+                return VerifiedAnswer(
+                    body: "No dated events about this were found in your archive, so there is no history to tell.",
+                    citations: [],
+                    confidence: .zero,
+                    refused: true,
+                    refusalReason: "Reconstruction found no events in scope.")
+            }
         }
 
         // Fold the narrative into a VerifiedAnswer the legacy
         // callers (EvalKit, old UI) can consume unchanged.
-        var body = Self.foldNarrativeToBody(narrative)
+        var body = Self.foldNarrativeToBody(narrative, events: retrieval.events)
 
         // A7.1 / A7.3 — append the deterministic reconstruction outline
         // (coverage + alternative accounts) beneath the prose. Kinded
@@ -1331,7 +1342,12 @@ public actor MasterBrain {
     /// legacy `VerifiedAnswer.body` callers. The new NarrativeView
     /// (Phase E) renders from `narrative.chapters` directly and
     /// doesn't use this; EvalKit + the chat-shaped UI do.
-    private static func foldNarrativeToBody(_ narrative: ReconstructedNarrative) -> String {
+    private static func foldNarrativeToBody(_ narrative: ReconstructedNarrative, events: [Event] = []) -> String {
+        let byID = Dictionary(events.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Day-precision events are stored at midnight UTC; format them in UTC so a reader west
+        // of Greenwich does not see the day before.
+        var dayFormat = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(Locale(identifier: "en_US_POSIX"))
+        dayFormat.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         var out: [String] = [narrative.title, "", narrative.summary]
         if !narrative.downgrades.isEmpty {
             out.append("")
@@ -1346,7 +1362,18 @@ public actor MasterBrain {
             if !chapter.prose.isEmpty {
                 out.append(chapter.prose)
             } else {
-                out.append("(No prose available for this chapter — \(chapter.eventIDs.count) events recorded.)")
+                // Case bench 2026-10-18 — without the on-device AI the chapter said only "No prose
+                // available — 1 events recorded", so "What happened in OSHA investigation …?" got
+                // no answer although the event was found. State the events themselves: the date
+                // and what the source says happened, in the source's own words.
+                let stated = chapter.eventIDs.compactMap { byID[$0] }.sorted { $0.date < $1.date }
+                if stated.isEmpty {
+                    out.append("(No prose available for this chapter — \(chapter.eventIDs.count) events recorded.)")
+                } else {
+                    for e in stated {
+                        out.append("- \(e.date.formatted(dayFormat)): \(e.summary ?? e.title)")
+                    }
+                }
             }
             for contradiction in chapter.contradictions {
                 out.append("⚠️ \(contradiction.description): \"\(contradiction.claimA)\" vs \"\(contradiction.claimB)\"")

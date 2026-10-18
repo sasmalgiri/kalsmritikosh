@@ -13,7 +13,7 @@
 //
 //  A sentence that reports harm or damage (an accident, collision, explosion, fire, fall,
 //  injury or death) and carries a FULL written date — in the sentence itself, or in the
-//  sentence before it when that one opens "On <date>" — becomes one `incidentOccurred` event
+//  sentence just before or after it — becomes one `incidentOccurred` event
 //  on that date. A sentence without a full date yields nothing: a year alone or a bare
 //  weekday is not a date an investigator can put on a chronology, and the file's own date is
 //  never substituted.
@@ -55,11 +55,13 @@ public enum IncidentEventExtractor {
         for (i, sentence) in sentences.enumerated() {
             let lower = sentence.lowercased()
             guard markers.contains(where: { containsWordStart($0, in: lower) }) else { continue }
+            // The date is often a neighbour, not a part, of the harm sentence: a narrative opens
+            // "At 2:00 p.m. on December 3, 2004, Employee #1 was …" and the explosion follows; a
+            // form puts "Event date: December 3, 2003" on the line after the event title. So the
+            // sentence's own date first, then the one before, then the one after.
             var date = firstDate(in: sentence)
-            if date == nil, i > 0 {
-                let previous = sentences[i - 1].trimmingCharacters(in: .whitespaces)
-                if previous.lowercased().hasPrefix("on ") { date = firstDate(in: previous) }
-            }
+            if date == nil, i > 0, lendsDate(sentences[i - 1]) { date = firstDate(in: sentences[i - 1]) }
+            if date == nil, i + 1 < sentences.count, lendsDate(sentences[i + 1]) { date = firstDate(in: sentences[i + 1]) }
             guard let day = date, byDay[day] == nil else { continue }
             byDay[day] = Event(
                 kind: .incidentOccurred,
@@ -78,6 +80,23 @@ public enum IncidentEventExtractor {
     }
 
     // MARK: - Pieces
+
+    /// Words that date a PROCEDURAL step, not the incident: a neighbour sentence carrying one
+    /// ("The complaint was filed on May 1, 1990.") never lends its date.
+    nonisolated static let proceduralWords: [String] = [
+        // Not "entered" or "received": "entered a sand hopper", "received burns" are the incident.
+        "filed", "decided", "argued", "served", "docketed", "submitted", "dated",
+        "signed", "issued", "hearing", "appeal",
+    ]
+
+    /// May a neighbouring sentence lend its date? Only a narrative opener ("On …", "At 2:00 p.m.
+    /// on …") or a short form line ("Event date: December 3, 2003"), and never a procedural one.
+    nonisolated static func lendsDate(_ sentence: String) -> Bool {
+        let s = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = s.lowercased()
+        guard !proceduralWords.contains(where: { containsWordStart($0, in: lower) }) else { return false }
+        return lower.hasPrefix("on ") || lower.hasPrefix("at ") || s.count <= 80
+    }
 
     nonisolated static func splitSentences(_ text: String) -> [String] {
         var out: [String] = []

@@ -112,6 +112,18 @@ public struct AbsentSubjectGate: Sendable {
         IdentifierShape.isInterleavedReference(s)
     }
 
+    /// The two party words a case caption joins with "v." — "Great Oregon v. Babbitt" →
+    /// ("Oregon", "Babbitt"), "United States v. Brewster" → ("States", "Brewster").
+    public nonisolated static func captionCores(in question: String) -> [(left: String, right: String)] {
+        let pattern = #"([A-Z][A-Za-z'&\-]+)\.?,?\s+(?:v|vs)\.?\s+(?:[A-Z][a-z]?\.\s+)?([A-Z][A-Za-z'&\-]+)"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = question as NSString
+        return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            let l = ns.substring(with: m.range(at: 1)), r = ns.substring(with: m.range(at: 2))
+            return (l.count >= 2 && r.count >= 2) ? (l, r) : nil
+        }
+    }
+
     /// yyyy-mm-dd, dd/mm/yyyy, dd-mm-yy, yyyy/mm/dd — the written forms.
     nonisolated static func isDateShaped(_ s: String) -> Bool {
         let parts = s.split(whereSeparator: { $0 == "-" || $0 == "/" }).map(String.init)
@@ -155,6 +167,22 @@ public struct AbsentSubjectGate: Sendable {
     public nonisolated static func absence(
         in question: String, database: Database
     ) async -> Absence? {
+        // A named CASE ("Zyxwv Holdings v. Qorvane Mutual") is a subject too. Case bench
+        // 2026-10-18: such a question carries no reference-shaped token, so it went to retrieval
+        // and came back as a cited answer about other decisions (3 of 5 court-case controls).
+        // Refuse only when a distinctive party word (five letters or more) appears NOWHERE in
+        // the archive — a common name like "Smith" or "United" never triggers it.
+        for caption in captionCores(in: question) {
+            for word in [caption.left, caption.right] where word.count >= 5 {
+                guard let rows = try? await database.query(
+                    "SELECT 1 FROM chunks WHERE LOWER(text) LIKE ? LIMIT 1;", [.text("%\(word.lowercased())%")]) else {
+                    return nil   // a failed probe never reads as "absent"
+                }
+                if rows.isEmpty {
+                    return Absence(token: "\(caption.left) v. \(caption.right)", nearestKnown: [])
+                }
+            }
+        }
         let tokens = candidateTokens(in: question)
         guard !tokens.isEmpty else { return nil }
 

@@ -58,3 +58,23 @@ struct IdentifierAnchoredRetrieverTests {
         #expect(await r.anchorScope(for: "What about NTSB ZZZ99ZZ999?") == nil)
     }
 }
+
+@Suite("Named cases — captions anchor and absent ones refuse")
+struct CaptionAnchorTests {
+
+    @Test("Caption cores are the party words around v.",
+          arguments: [("When was Sweet Home Chapter of Communities for a Great Oregon v. Babbitt, 1 F.3d 1 decided?", "Oregon", "Babbitt"),
+                      ("Which court decided United States v. Brewster, 1 F.3d 51?", "States", "Brewster"),
+                      ("Who were the parties in Rahilly v. O'Laughlin?", "Rahilly", "O'Laughlin"),
+                      ("Smith vs. Jones", "Smith", "Jones")])
+    func cores(question: String, left: String, right: String) {
+        let c = AbsentSubjectGate.captionCores(in: question)
+        #expect(c.first?.left == left && c.first?.right == right, "\(c)")
+    }
+
+    @Test("No caption in ordinary prose")
+    func noCaption() {
+        #expect(AbsentSubjectGate.captionCores(in: "What did we decide about the roof?").isEmpty)
+        #expect(AbsentSubjectGate.captionCores(in: "Where did the NTSB SEA08LA057 accident happen?").isEmpty)
+    }
+}

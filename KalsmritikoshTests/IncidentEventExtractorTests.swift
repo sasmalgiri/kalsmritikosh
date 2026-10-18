@@ -26,6 +26,8 @@ struct IncidentEventExtractorTests {
             ("On January 4, 2008, Employee #1 entered a sand hopper. The frozen sand gave way, and Employee #1 became engulfed. He was killed.", 2008, 1, 4),
             ("The plaintiff was injured on 3 March 1990 when the scaffold collapsed.", 1990, 3, 3),
             ("Two employees sustained burns when an LP gas tank exploded on 2003-12-03.", 2003, 12, 3),
+            // Case bench: OSHA forms put the date on the line after the event title.
+            ("Event: Two employees sustain burns when LP gas tank explodes\nEvent date: December 3, 2003\n", 2003, 12, 3),
           ])
     func incidentsAreDated(text: String, y: Int, m: Int, d: Int) {
         let events = IncidentEventExtractor.extract(text: text, sourceObjectID: UUID(), entityIDs: [])
@@ -41,6 +43,7 @@ struct IncidentEventExtractorTests {
             "He was fired on March 3, 2020 after the review.",
             "The accident happened on February 31, 2008.",
             "The court affirmed the judgment on May 2, 1999.",
+            "The complaint was filed on May 1, 1990. The plaintiff alleges she was injured at work.",
           ])
     func silentWithoutFullDateOrHarm(text: String) {
         #expect(IncidentEventExtractor.extract(text: text, sourceObjectID: UUID(), entityIDs: []).isEmpty)
