@@ -1,0 +1,46 @@
+{
+  "identifier" : "6D2E5C1A",
+  "nonRenewingSubscriptions" : [ ],
+  "products" : [
+    {
+      "displayPrice" : "0.0",
+      "familyShareable" : true,
+      "internalID" : "7A1F3B20",
+      "localizations" : [
+        {
+          "description" : "Try everything in Kalsmritikosh free for 14 days. Nothing is charged.",
+          "displayName" : "14-day free trial",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "ecosanskritiinnovation.Kalsmritikosh.trial14",
+      "referenceName" : "14-day free trial",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "79.0",
+      "familyShareable" : true,
+      "internalID" : "7A1F3B21",
+      "localizations" : [
+        {
+          "description" : "Unlock Kalsmritikosh for good: one purchase, no subscription, every Mac on your Apple account.",
+          "displayName" : "Kalsmritikosh",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "ecosanskritiinnovation.Kalsmritikosh.unlock",
+      "referenceName" : "Unlock Kalsmritikosh",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "6TPTCJD42Q",
+    "_storeKitErrors" : [ ]
+  },
+  "subscriptionGroups" : [ ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
