@@ -15,7 +15,7 @@ taken from the publisher's own coded fields — never from the app.
 
 | Source | Persona(s) | Documents per case | Answer key | Licence | Available |
 |---|---|---|---|---|---|
-| NTSB aviation investigations (data.ntsb.gov/avdata) | Investigator | report page 1, factual narrative, analysis, probable cause | date, place, registration, fatalities, probable cause | US Government work | ~170k |
+| NTSB aviation investigations (data.ntsb.gov/avdata) | Investigator | report page 1, factual narrative, analysis, probable cause | date, place, registration, fatalities, probable cause | US Government work | 62,846 with full narratives |
 | Caselaw Access Project decisions (static.case.law) | Lawyer; SIU, Forensic, Compliance, Genealogist by subject | the decision (caption, head matter, opinions) | decision date, court, parties, docket, author, disposition | released without restriction, Mar 2024 (CC0) | ~6.7M |
 | OSHA accident investigations (data.dol.gov) | Compliance / EHS | investigation summary, injury record | event date, what happened, injured count, fatal | US Government work | ~150k |
 
@@ -47,7 +47,7 @@ full narratives and a probable cause, so court decisions make up the rest.
 Two tiers, because of measured cost (§ Throughput):
 
 - **Tier A — every case:** ingest + extraction checks (event date, case/docket/complaint
-  number, registration, parties) + answers on every 10th case, in the evidence-only answer mode
+  number, registration, parties) + answers on every 50th case, in the evidence-only answer mode
   ("Fully private (no AI)"), switched on in memory for the test process only.
 - **Tier B — sample:** full on-device-AI answers on a few thousand cases.
 
