@@ -20,9 +20,9 @@ nonisolated struct SyncStore {
         case notAStore, alreadyAStore, newerFormat(Int), unknownDevice(String), batchExists(Int), mismatched(String)
         var errorDescription: String? {
             switch self {
-            case .notAStore: return "That folder is not a Kalsmritikosh sync folder yet."
+            case .notAStore: return "That folder is not an Investigation Docs Made Easy sync folder yet."
             case .alreadyAStore: return "That folder already holds a sync store; open it with its passphrase instead."
-            case .newerFormat(let v): return "This sync folder was written by a newer version of Kalsmritikosh (format \(v)). Update the app to use it."
+            case .newerFormat(let v): return "This sync folder was written by a newer version of Investigation Docs Made Easy (format \(v)). Update the app to use it."
             case .unknownDevice(let d): return "A change comes from a device this sync folder does not list (\(d))."
             case .batchExists(let s): return "Change \(s) from this device is already in the sync folder."
             case .mismatched(let what): return "A file in the sync folder does not match what it says it is (\(what))."

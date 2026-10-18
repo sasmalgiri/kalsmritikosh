@@ -29,7 +29,7 @@ public nonisolated enum SOPHandbook {
 
     public static func markdown(now: Date) -> String {
         let f = DateFormatter(); f.dateStyle = .long
-        var out = "# Kalsmritikosh SOP Handbook — \(f.string(from: now))\n\n"
+        var out = "# Investigation Docs Made Easy SOP Handbook — \(f.string(from: now))\n\n"
         out += """
         ## The system flow (how this app works)
 

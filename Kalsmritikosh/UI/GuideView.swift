@@ -35,7 +35,7 @@ public struct GuideView: View {
             Text("Guide")
                 .font(Theme.display(24, .bold))
                 .foregroundStyle(Theme.brandGradient())
-            Text("What every screen does, and the words the app uses for how well a fact is known. Kalsmritikosh answers only from the documents you add — nothing is invented.")
+            Text("What every screen does, and the words the app uses for how well a fact is known. Investigation Docs Made Easy answers only from the documents you add — nothing is invented.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

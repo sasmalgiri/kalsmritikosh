@@ -46,7 +46,7 @@ public nonisolated enum LegalNotice {
 
     // MARK: - Settings "Legal & Privacy" copy
 
-    public static let disclaimerHeadline = "Kalsmritikosh is an evidence aid, not an authority."
+    public static let disclaimerHeadline = "Investigation Docs Made Easy is an evidence aid, not an authority."
 
     public static let accuracyStatement = """
     Kalsmritikosh reconstructs the most evidence-supported version of events from the \
@@ -160,7 +160,7 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.7 (2026-10-18)"
+    public static let termsVersion = "1.8 (2026-10-18)"
 
     /// Payment terms: written to hold unchanged whether the app is a one-time
     /// purchase (v1, per SHIP_DECISIONS) or gains paid tiers later.

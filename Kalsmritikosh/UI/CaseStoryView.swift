@@ -120,7 +120,7 @@ public struct CaseStoryView: View {
     private func exportReceipt(_ md: String) {
         let sealed = VerifiableReceipt.seal(
             title: "Case story: \(subject)",
-            drafts: [ReceiptDraft(claim: "Case story of \(subject)", source: "Kalsmritikosh (assembled from cited sources)", passage: md)]
+            drafts: [ReceiptDraft(claim: "Case story of \(subject)", source: "Investigation Docs Made Easy (assembled from cited sources)", passage: md)]
         )
         save(ReceiptSigner.exportJSON(sealed), ext: "json", type: "json")
     }

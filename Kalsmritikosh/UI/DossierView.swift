@@ -102,7 +102,7 @@ public struct DossierView: View {
         VStack(spacing: 12) {
             Image(systemName: "person.text.rectangle").font(.system(size: 36)).foregroundStyle(.tint)
             Text("Open a dossier.").font(.title3.weight(.medium))
-            Text("Enter a person, project, or organization. Kalsmritikosh resolves it to a canonical identity and reconstructs its evidence-cited history — chapters, coverage and gaps.")
+            Text("Enter a person, project, or organization. Investigation Docs Made Easy resolves it to a canonical identity and reconstructs its evidence-cited history — chapters, coverage and gaps.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 520)
         }
         .padding(40).frame(maxWidth: .infinity)

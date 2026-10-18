@@ -26,7 +26,7 @@ struct LedgerRelocationSection: View {
             }
             Text(LedgerRelocation.relocatedPath.map { "Set to: \($0)" } ?? "On this Mac.")
                 .font(.caption).foregroundStyle(.secondary)
-            Text("Copy the ledger to another disk. The copy is checked before anything changes, Kalsmritikosh uses it from the next launch, and the copy on this Mac is kept.")
+            Text("Copy the ledger to another disk. The copy is checked before anything changes, Investigation Docs Made Easy uses it from the next launch, and the copy on this Mac is kept.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
@@ -35,7 +35,7 @@ struct LedgerRelocationSection: View {
                 if LedgerRelocation.relocatedPath != nil {
                     Button("Use the copy on this Mac") {
                         LedgerRelocation.useThisMac()
-                        status = "From the next launch, Kalsmritikosh will use the copy on this Mac. The disk copy was left in place."
+                        status = "From the next launch, Investigation Docs Made Easy will use the copy on this Mac. The disk copy was left in place."
                     }
                 }
             }
@@ -57,7 +57,7 @@ struct LedgerRelocationSection: View {
         do {
             let r = try await LedgerRelocation.copy(database: db, sourceDatabaseURL: db.url, toParent: folder)
             let size = ByteCountFormatter.string(fromByteCount: r.bytesCopied, countStyle: .file)
-            status = "Copied and verified \(r.filesCopied) files (\(size)) to \(r.destination.path). Quit and reopen Kalsmritikosh to use it."
+            status = "Copied and verified \(r.filesCopied) files (\(size)) to \(r.destination.path). Quit and reopen Investigation Docs Made Easy to use it."
         } catch {
             status = error.localizedDescription
             KalsmritikoshLog.storage.error("Ledger relocation failed: \(error.localizedDescription, privacy: .public)")

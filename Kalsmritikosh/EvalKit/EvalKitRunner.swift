@@ -363,7 +363,7 @@ public struct EvalKitRunner {
         perQuestion: [PerQuestionRecord],
         to url: URL
     ) throws {
-        var md = "# Kalsmritikosh — Eval Report\n\n"
+        var md = "# Investigation Docs Made Easy — Eval Report\n\n"
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n\n"
         md += "## Targets (Gate 1)\n\n"
         md += "- lookup citation precision ≥ 0.9\n"

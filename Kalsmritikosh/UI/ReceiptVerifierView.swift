@@ -32,7 +32,7 @@ public struct ReceiptVerifierView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Verify a receipt")
                 .font(.title3.bold())
-            Text("Open a receipt \u{2019}.json\u{2019} exported by Kalsmritikosh — from this Mac or anyone else\u{2019}s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed.")
+            Text("Open a receipt \u{2019}.json\u{2019} exported by Investigation Docs Made Easy — from this Mac or anyone else\u{2019}s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -50,7 +50,7 @@ public struct ReceiptVerifierView: View {
             }
 
             if parseError {
-                Label("That file isn\u{2019}t a Kalsmritikosh receipt.", systemImage: "xmark.octagon")
+                Label("That file isn\u{2019}t an Investigation Docs Made Easy receipt.", systemImage: "xmark.octagon")
                     .foregroundStyle(.orange)
             }
 

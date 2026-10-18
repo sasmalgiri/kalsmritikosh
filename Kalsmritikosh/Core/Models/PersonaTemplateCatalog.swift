@@ -70,13 +70,13 @@ public enum PersonaTemplateCatalog {
     public static func disclaimer(for template: WorkspaceTemplate) -> String {
         switch template {
         case .general:
-            return "Kalsmritikosh organizes and summarizes the records you supply, with a source for each finding. It does not provide professional advice."
+            return "Investigation Docs Made Easy organizes and summarizes the records you supply, with a source for each finding. It does not provide professional advice."
         case .legalMatter:
-            return "Kalsmritikosh flags candidates and organizes source material. It does not determine privilege, admissibility, legal relevance, or legal conclusions."
+            return "Investigation Docs Made Easy flags candidates and organizes source material. It does not determine privilege, admissibility, legal relevance, or legal conclusions."
         case .investigation:
             return "The report summarizes and links user-supplied records. It does not certify evidence, perform surveillance, determine legality, or guarantee admissibility."
         case .journalism:
-            return "Kalsmritikosh analyzes documents you supply. It does not perform live OSINT, scraping, FOIA filing, publishing, or source communication."
+            return "Investigation Docs Made Easy analyzes documents you supply. It does not perform live OSINT, scraping, FOIA filing, publishing, or source communication."
         case .researchReview:
             return "Single-user v1 provides a transparent screening log and PRISMA-compatible counts. It does not claim independent dual-review compliance, statistical meta-analysis, or final risk-of-bias judgment."
         case .personalMatter:

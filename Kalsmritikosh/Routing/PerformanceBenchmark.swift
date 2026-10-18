@@ -83,7 +83,7 @@ public actor PerformanceBenchmark {
     /// invokes this from CapabilityRegistry.bootstrap after registration.
     public func benchmark(_ provider: any ModelProvider) async {
         guard cached[provider.id] == nil else { return }
-        let prompt = "Kalsmritikosh warmup. Reply with one short sentence."
+        let prompt = "Investigation Docs Made Easy warmup. Reply with one short sentence."
         let start = Date()
         let memoryBefore = currentResidentMemory()
         let response = try? await provider.generate(

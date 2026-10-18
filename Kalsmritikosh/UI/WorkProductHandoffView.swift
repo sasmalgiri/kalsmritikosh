@@ -939,7 +939,7 @@ public struct WorkProductHandoffView: View {
                             exportBundle(stored, title: snap.title)
                         } label: { Label("Export verification bundle…", systemImage: "shippingbox") }
                         .buttonStyle(.bordered).controlSize(.small)
-                        .help("A folder anyone can verify without Kalsmritikosh — integrity, authenticity and conformance replay (spec: BUNDLE_FORMAT.md; CLI: kalverify).")
+                        .help("A folder anyone can verify without Investigation Docs Made Easy — integrity, authenticity and conformance replay (spec: BUNDLE_FORMAT.md; CLI: kalverify).")
                     }
                 }
             }

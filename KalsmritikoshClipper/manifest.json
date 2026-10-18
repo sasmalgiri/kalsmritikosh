@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
-    "name": "Kalsmritikosh Clipper",
-    "description": "Clip the page you are reading, or your selection, into your Kalsmritikosh archive. Nothing is downloaded or sent anywhere: the page your browser already shows goes straight to the app on this Mac.",
+    "name": "Investigation Docs Clipper",
+    "description": "Clip the page you are reading, or your selection, into your Investigation Docs Made Easy archive. Nothing is downloaded or sent anywhere: the page your browser already shows goes straight to the app on this Mac.",
     "version": "1.0",
     "icons": {
         "48": "icon-48.png",

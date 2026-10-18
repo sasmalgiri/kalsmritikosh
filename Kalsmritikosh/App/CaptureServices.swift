@@ -67,12 +67,12 @@ final class CaptureServiceProvider: NSObject {
     /// NSMessage "saveToKalsmritikosh" in Info.plist.
     @objc func saveToKalsmritikosh(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         guard ProductModuleFlags.isEnabled(.captureExtensions) else {
-            error.pointee = "“Share and capture” is switched off. Turn it on in Kalsmritikosh ▸ Settings ▸ Modules." as NSString
+            error.pointee = "“Share and capture” is switched off. Turn it on in Investigation Docs Made Easy ▸ Settings ▸ Modules." as NSString
             return
         }
         let items = CapturePasteboard.items(from: pboard)
         guard !items.isEmpty else {
-            error.pointee = "Nothing to save: the selection held no text or files Kalsmritikosh can keep." as NSString
+            error.pointee = "Nothing to save: the selection held no text or files Investigation Docs Made Easy can keep." as NSString
             return
         }
         var saved = 0
@@ -81,7 +81,7 @@ final class CaptureServiceProvider: NSObject {
             catch { KalsmritikoshLog.app.error("Services capture failed: \(error.localizedDescription, privacy: .public)") }
         }
         guard saved > 0 else {
-            error.pointee = "Kalsmritikosh could not save the selection (see the app log)." as NSString
+            error.pointee = "Investigation Docs Made Easy could not save the selection (see the app log)." as NSString
             return
         }
         if let appState { Task { _ = await appState.readCaptureIntake() } }

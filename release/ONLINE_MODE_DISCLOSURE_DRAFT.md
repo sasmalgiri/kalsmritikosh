@@ -6,10 +6,10 @@ any build until the network helper target exists (O-2), so nothing here is in ef
 
 ## 1. Privacy policy — new section (insert after "What stays on your Mac")
 
-> **Online mode (optional, off by default).** Kalsmritikosh starts in Private mode, in which
+> **Online mode (optional, off by default).** Investigation Docs Made Easy starts in Private mode, in which
 > nothing you add or ask ever leaves your Mac. You may switch on Online mode in Settings and enter
 > your own API key for a cloud AI provider you choose (Anthropic, OpenAI or Google). In Online
-> mode, when Kalsmritikosh needs AI to word an answer, it shows you exactly the text it intends to
+> mode, when Investigation Docs Made Easy needs AI to word an answer, it shows you exactly the text it intends to
 > send — passages from your documents and your question — before sending it, and sends it only if
 > you agree. You can have names, email addresses, phone numbers and long identifiers replaced by
 > placeholders before anything is sent. The text goes directly from your Mac to that provider,
@@ -28,7 +28,7 @@ any build until the network helper target exists (O-2), so nothing here is in ef
 
 ## 3. App Review notes (add)
 
-> Kalsmritikosh is fully offline by default (Private mode). Online mode is an explicit opt-in:
+> Investigation Docs Made Easy is fully offline by default (Private mode). Online mode is an explicit opt-in:
 > the user supplies their own API key for Anthropic, OpenAI or Google Gemini. Before any text is
 > sent, a consent screen shows the exact text, the destination host and its size; nothing is sent
 > without the user pressing Send. Network access is confined to a bundled XPC service

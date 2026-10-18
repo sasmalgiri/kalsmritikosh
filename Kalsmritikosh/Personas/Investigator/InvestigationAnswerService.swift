@@ -147,7 +147,7 @@ public actor InvestigationAnswerService {
             }
         }
         let answer = verified ?? VerifiedAnswer(
-            body: "Kalsmritikosh produced no terminal answer.", citations: [], confidence: .zero,
+            body: "Investigation Docs Made Easy produced no terminal answer.", citations: [], confidence: .zero,
             refused: true, refusalReason: "answerStream closed without a terminal event.")
         // PHASE B-2 — observable ask phase (question digest only in the
         // detail; the question text never persists). A failed write loses

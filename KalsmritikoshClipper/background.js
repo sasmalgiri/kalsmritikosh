@@ -2,8 +2,8 @@
 import { clip } from "./clip.js";
 
 browser.runtime.onInstalled.addListener(() => {
-    browser.contextMenus.create({ id: "kals-page", title: "Clip page to Kalsmritikosh", contexts: ["page"] });
-    browser.contextMenus.create({ id: "kals-selection", title: "Clip selection to Kalsmritikosh", contexts: ["selection"] });
+    browser.contextMenus.create({ id: "kals-page", title: "Clip page to Investigation Docs Made Easy", contexts: ["page"] });
+    browser.contextMenus.create({ id: "kals-selection", title: "Clip selection to Investigation Docs Made Easy", contexts: ["selection"] });
 });
 
 browser.contextMenus.onClicked.addListener((info, tab) => {
