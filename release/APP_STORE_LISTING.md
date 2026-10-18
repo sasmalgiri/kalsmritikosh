@@ -12,7 +12,7 @@ viewer added)._
 - **Subtitle (≤30 chars):** `Private, cited answers on-device`
 - **Category:** Productivity (secondary: Reference)
 - **Age rating:** 4+ (no objectionable content; user supplies their own files)
-- **Price:** One-time purchase in the $29–49 band — recommended tier **$39** _(owner confirms in App Store Connect)_. No subscriptions, no in-app purchases.
+- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Kalsmritikosh" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
   `documents,email,search,evidence,timeline,on-device,private,archive,pdf,notes,offline,citations`
@@ -48,7 +48,13 @@ viewer added)._
 > • Write your own notes in Markdown — searchable, with every earlier version kept.
 > • Automate with Shortcuts and AppleScript.
 > • Use it beside DEVONthink, or on its own: one switch turns on tags, highlights, smart collections and the other organising tools.
+> • Arrange documents in your own folders — one document can live in several at once — and see what else in your archive is alike, with suggestions for where to file it.
+> • Highlight, underline and comment on PDFs without changing the original; export a marked copy.
+> • Clip any page from Safari: the page, your selection, or a clean Markdown copy.
+> • Keep your Macs and your iPhone or iPad in step through a folder you choose (iCloud Drive, Dropbox, a disk), encrypted with your passphrase. Scan paper on your phone straight into your archive.
 > • Take a signed, read-only snapshot to your iPhone or iPad with the companion viewer.
+>
+> **Try it free for 14 days, then buy it once — no subscription, no yearly fee.**
 >
 > **Rich answers use Apple's on-device intelligence** where your Mac supports it; everywhere else
 > the app still works fully in a deterministic mode (search, timelines, matrices, contradictions,
@@ -102,7 +108,11 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic — safe for
 > "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
 > citations. Work products export from the Studio/report screens.
 >
-> **No hidden purchases** (one-time price). **No model download** in this version. Minimum OS
+> **Free trial and one purchase.** On first launch the app offers "Start free trial" (a free
+> non-consumable in-app purchase that starts a 14-day trial) or "Buy now" ($79 non-consumable that
+> unlocks everything for good). "Restore purchase" is on the same screen. After the trial, the main
+> window shows the purchase screen; Settings (backup and export) stays usable. To test in the
+> sandbox: start the trial, then buy; or buy directly. **No subscription, no other purchases.** **No model download** in this version. Minimum OS
 > macOS 15.6; AI-written answers require macOS 26+ with Apple Intelligence on supported hardware.
 > Workflows cite US and international instruments; procedures are jurisdiction-neutral and
 > deviations are recorded on the certificate.

@@ -47,6 +47,8 @@ public struct SourceViewer: View {
 
     @Environment(AppState.self) private var appState
     @State private var authorized: Bool? = nil
+    /// X-3 — marks on this PDF (only when "Rich text notes and PDF marks" is on).
+    @State private var marks: PDFMarksController?
 
     public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil) {
         self.url = url
@@ -116,8 +118,19 @@ public struct SourceViewer: View {
     @ViewBuilder
     private var pdfBody: some View {
         #if canImport(PDFKit)
-        PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote)
-            .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        VStack(spacing: 0) {
+            PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote,
+                          onView: { view in marks?.attach(view) })
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+            if let marks { PDFMarksBar(controller: marks, original: url) }
+        }
+        .task(id: koID) {
+            if ProductModuleFlags.isEnabled(.richDocuments), let db = appState.database {
+                marks = PDFMarksController(objectID: koID, sourceURL: url, repository: PDFMarksRepository(database: db))
+            } else {
+                marks = nil
+            }
+        }
         #else
         fallbackBody
         #endif
@@ -198,6 +211,8 @@ private struct PDFInlineView: NSViewRepresentable {
     let page: Int?
     let characterRange: Range<Int>?
     let quote: String?
+    /// X-3 — hands the view to the marks controller (which draws marks in memory only).
+    var onView: ((PDFView) -> Void)? = nil
 
     func makeNSView(context: Context) -> PDFView {
         let view = PDFView()
@@ -206,6 +221,7 @@ private struct PDFInlineView: NSViewRepresentable {
         view.displayDirection = .vertical
         view.document = PDFDocument(url: url)
         scrollAndHighlight(view)
+        onView?(view)
         return view
     }
 
@@ -214,6 +230,7 @@ private struct PDFInlineView: NSViewRepresentable {
             view.document = PDFDocument(url: url)
         }
         scrollAndHighlight(view)
+        onView?(view)
     }
 
     /// Scroll to the cited page (1-indexed in our model, 0-indexed

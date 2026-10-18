@@ -19,6 +19,7 @@ enum IntentBridge {
 
     static func ready() throws -> AppState {
         guard ProductModuleFlags.isEnabled(.shortcutsActions) else { throw KalsmritikoshIntentError.switchedOff }
+        guard PurchaseCenter.shared.entitlement.allowsUse else { throw KalsmritikoshIntentError.notPurchased }
         guard let state = appState, state.database != nil else { throw KalsmritikoshIntentError.notReady }
         return state
     }
@@ -50,12 +51,13 @@ enum IntentBridge {
 }
 
 enum KalsmritikoshIntentError: Error, CustomLocalizedStringResourceConvertible {
-    case switchedOff, notReady, nothingToAdd
+    case switchedOff, notReady, nothingToAdd, notPurchased
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .switchedOff:  return "Shortcuts actions are switched off. Turn on “Shortcuts actions” in Kalsmritikosh ▸ Settings ▸ Modules."
         case .notReady:     return "Kalsmritikosh is still opening its ledger. Try again in a moment."
         case .nothingToAdd: return "No files were given to add."
+        case .notPurchased: return "The free trial has ended. Buy Kalsmritikosh once in the app to keep using it."
         }
     }
 }

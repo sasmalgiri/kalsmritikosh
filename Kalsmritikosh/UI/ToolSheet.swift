@@ -9,7 +9,7 @@
 import SwiftUI
 
 enum ToolSheet: String, Identifiable, CaseIterable {
-    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture, textRecognition, teamReview, myNotes
+    case factCheck, statementDrift, caseSlices, watchlists, alerts, chronology, reviewCoding, communication, graph, customTypes, studio, emailAuthenticity, mailRecovery, nearDuplicates, highlights, legalProduction, smartCollections, exportCenter, places, images, notesImport, devonthink, capture, textRecognition, teamReview, myNotes, organise
 
     var id: String { rawValue }
 
@@ -41,6 +41,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .textRecognition: return .ocrUpgrade
         case .teamReview: return .teamReview
         case .myNotes: return .writtenNotes
+        case .organise: return .userGroups
         }
     }
 
@@ -74,6 +75,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .textRecognition: return "text.viewfinder"
         case .teamReview: return "person.2.badge.key"
         case .myNotes: return "square.and.pencil"
+        case .organise: return "folder.badge.plus"
         }
     }
 
@@ -106,6 +108,7 @@ enum ToolSheet: String, Identifiable, CaseIterable {
         case .textRecognition: TextRecognitionView()
         case .teamReview: TeamReviewView()
         case .myNotes: MyNotesView()
+        case .organise: OrganiseView()
         }
     }
 
@@ -161,7 +164,7 @@ enum ToolHub: String, Identifiable, CaseIterable {
         case .people: return [.graph, .communication, .places]
         case .emailForensics: return [.emailAuthenticity, .mailRecovery]
         case .writing: return [.myNotes, .factCheck, .statementDrift, .highlights, .studio]
-        case .documents: return [.nearDuplicates, .textRecognition, .images, .customTypes]
+        case .documents: return [.organise, .nearDuplicates, .textRecognition, .images, .customTypes]
         case .bringIn: return [.devonthink, .notesImport, .capture]
         case .export: return [.exportCenter]
         case .team: return [.teamReview]

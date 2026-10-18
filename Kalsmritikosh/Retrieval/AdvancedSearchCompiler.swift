@@ -35,6 +35,8 @@ public nonisolated struct AdvancedSearchFilter: Sendable, Equatable {
         case entity
         /// the document carries a user tag (W1-4)
         case tag
+        /// the document is in a group of yours, or in a group beneath it (X-2)
+        case group
     }
     public let field: Field
     public let value: String
@@ -71,6 +73,7 @@ public nonisolated enum AdvancedSearchCompiler {
         "before": .before, "after": .after,
         "entity": .entity, "person": .entity, "org": .entity,
         "tag": .tag, "label": .tag,
+        "group": .group, "folder": .group,
     ]
 
     public static func compile(_ input: String) -> CompiledSearch {
@@ -285,6 +288,7 @@ public nonisolated enum AdvancedSearchCompiler {
         case .after:  return "\(not)with a file date after \(v)"
         case .entity: return "\(not)mentioning “\(v)”"
         case .tag:    return "\(not)tagged “\(v)”"
+        case .group:  return "\(not)in the group “\(v)”"
         }
     }
 }

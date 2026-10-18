@@ -37,6 +37,14 @@ nonisolated enum ShareInbox {
     struct Result: Sendable, Equatable {
         var moved = 0
         var refused: [String] = []      // item folder names left in the inbox, with the reason
+        /// X-4 — clips that asked for a Markdown copy: the saved HTML, its title and address.
+        var markdownRequests: [MarkdownRequest] = []
+    }
+
+    struct MarkdownRequest: Sendable, Equatable {
+        let savedHTML: URL
+        let title: String
+        let sourceURL: String
     }
 
     /// Move every complete item (folders whose name does not start with ".") into the intake.
@@ -67,6 +75,12 @@ nonisolated enum ShareInbox {
                 guard saved.sha256 == expected else { result.refused.append("\(tag): intake copy did not verify"); continue }
                 try fm.removeItem(at: dir)
                 result.moved += 1
+                if meta["kind"] == "markdown" {
+                    result.markdownRequests.append(MarkdownRequest(
+                        savedHTML: saved.file,
+                        title: (name as NSString).deletingPathExtension,
+                        sourceURL: meta["url"] ?? ""))
+                }
             } catch {
                 KalsmritikoshLog.app.error("Share inbox item failed: \(error.localizedDescription, privacy: .public)")
                 result.refused.append("\(tag): \(error.localizedDescription)")
@@ -84,6 +98,17 @@ extension AppState {
         guard database != nil, ProductModuleFlags.isEnabled(.captureExtensions), let inbox = ShareInbox.inbox else { return }
         let r = await Task.detached { ShareInbox.drain(inbox) }.value
         for line in r.refused { KalsmritikoshLog.app.notice("Share inbox kept: \(line, privacy: .private)") }
+        // X-4 — "Clip page as Markdown": the clipped HTML is kept; a Markdown copy is added beside it.
+        for req in r.markdownRequests {
+            guard let html = try? String(contentsOf: req.savedHTML, encoding: .utf8) else { continue }
+            let md = HTMLMarkdown.markdown(fromHTML: html, title: req.title, sourceURL: req.sourceURL)
+            do {
+                _ = try CaptureIntake.save(Data(md.utf8), name: req.title + ".md",
+                                           origin: "Markdown copy of a Safari clip (\(req.sourceURL))")
+            } catch {
+                KalsmritikoshLog.app.error("Markdown copy failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         if r.moved > 0 { _ = await readCaptureIntake() }
     }
 }

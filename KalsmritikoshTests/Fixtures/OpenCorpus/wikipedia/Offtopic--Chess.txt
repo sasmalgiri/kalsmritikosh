@@ -1,0 +1,20 @@
+Chess
+
+Chess is a board game for two players, played on a square board consisting of 64 squares arranged in an 8×8 grid. The players, referred to as "White" and "Black", each control sixteen pieces: one king, one queen, two rooks, two bishops, two knights, and eight pawns, with each piece type having a different pattern of movement. An enemy piece may be captured (removed from the board) by moving one's own piece onto the square it occupies. The objective of the game is to checkmate (threaten with inescapable capture) the enemy king. There are also several ways a game can end in a draw.
+The recorded history of chess dates back to the emergence of chaturanga in 7th-century India. Chaturanga is also thought to be an ancestor of similar games like janggi, xiangqi, and shogi. After its introduction to Persia, it spread to the Arab world and then to Europe. The modern rules of chess emerged in Europe at the end of the 15th century, becoming standardized and gaining universal acceptance by the end of the 19th century. Today, chess is one of the world's most popular games, with millions of players worldwide.
+Organized chess arose in the 19th century. International chess competitions today are governed by FIDE (French: Fédération Internationale des Échecs, 'International Chess Federation'). The first universally recognized World Chess Champion, Wilhelm Steinitz, claimed his title in 1886; Gukesh Dommaraju is the current World Champion, having won the title in 2024.
+
+A large body of chess theory has developed since the game's inception. Aspects of art are found in chess composition, and chess has in turn influenced Western culture and the arts, and has relevance to other fields such as mathematics, computer science, and psychology. One of the goals of early computer scientists was to create a chess-playing machine. In 1997, Deep Blue became the first computer to win a match against a reigning World Champion when it defeated Garry Kasparov. Modern chess engines are significantly stronger than human players and have greatly influenced the development of chess theory. Chess, however, is not a solved game.
+
+
+== Rules ==
+
+The rules of chess are published by FIDE (French: Fédération Internationale des Échecs, 'International Chess Federation'), world governing body of chess, in its Handbook. Rules published by national governing bodies, or by unaffiliated chess organizations, commercial publishers, etc., may differ in some details. For example, the United States Chess Federation (USCF) diverged from FIDE in the 1980s over differences in time-keeping rules. 
+
+
+=== Setup ===
+
+Chess sets come in a wide variety of styles. The Staunton pattern is the most common, and is usually required for competition. Chess sets come with pieces in two colors, referred to as white and black, regardless of their actual color; the players controlling the color sets are referred to as White and Black, respectively. Each set comes with at least the following 16 pieces in both colors: one king, one queen, two rooks, two bishops, two knights, and eight pawns.
+The game is played on a square board of eight rows (called ranks) and eight columns (called files). Although it does not affect gameplay, by convention the 64 squares alternate in color and are referred to as light and dark squares.
+
+To start the game, White's pieces are placed on the first rank in the following order, from left to right: rook, knight, bishop, queen, king, bishop, knight, rook. Pawns are placed on each square of the second rank. Black's position mirrors White's, with equivalent pieces on every file. The board is oriented so that the right-hand corner nearest each player is a light square; as a result the white queen always starts on a light square, while the black queen starts on a dark square. This may be remembered by the phrases "white on the right" and "queen on her color".

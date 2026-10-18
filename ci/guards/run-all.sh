@@ -18,6 +18,7 @@ GUARDS=(
   app-claims-coverage.sh
   reachability.sh
   ledger-encryption.sh
+  clipper-no-network.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do
