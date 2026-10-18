@@ -23,7 +23,8 @@ CFPB complaints were planned for the Individual persona but the current bulk fil
 carries consumer narratives (coded fields only), so it cannot test reading documents; dropped.
 
 Target mix for ≥ 1,000,000 cases: NTSB all (~170k) + OSHA all (~150k) + court decisions
-(~700k, spread over federal and regional reporters).
+(~770k, spread over federal and regional reporters). Measured: NTSB yields 62,846 cases with
+full narratives and a probable cause, so court decisions make up the rest.
 
 ## How it runs
 
@@ -36,6 +37,12 @@ Target mix for ≥ 1,000,000 cases: NTSB all (~170k) + OSHA all (~150k) + court 
 - `scripts/casebench/run.sh` spreads shards over parallel test hosts; finished shards are
   skipped, so a stopped run resumes.
 - `scripts/casebench/score.py` compares results with the answer keys.
+- `scripts/casebench/full-run.sh ~/CaseBench 3 1000000` drives the whole run (NTSB → OSHA →
+  court-decision batches), deleting each batch's documents once scored. It lives in
+  `~/CaseBench`, not `/tmp`, because macOS clears `/tmp` files untouched for three days.
+  Questions are asked on every 50th case (`ASK_EVERY=50`, ≈ 20,000 cases / 100,000 answers).
+  Progress: `tail ~/CaseBench/full-run.log`; score so far:
+  `python3 scripts/casebench/score.py ~/CaseBench/cases ~/CaseBench/results --report out.md`.
 
 Two tiers, because of measured cost (§ Throughput):
 

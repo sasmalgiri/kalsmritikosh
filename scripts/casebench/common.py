@@ -46,13 +46,14 @@ def value_in(expect, text):
 class ShardWriter:
     """Writes case folders into shards of `size` cases with a truth.jsonl each, marking every
     question with whether its expected value is present in the case's own documents."""
-    def __init__(self, out, source, size):
+    def __init__(self, out, source, size, tag=""):
         self.out, self.source, self.size, self.n, self.truth = out, source, size, 0, None
+        self.tag = tag + "-" if tag else ""   # keeps shard names unique across conversion batches
 
     def add(self, case_id, docs, record):
         if self.n % self.size == 0:
             if self.truth: self.truth.close()
-            self.shard = os.path.join(self.out, self.source, f"shard-{self.n // self.size:05d}")
+            self.shard = os.path.join(self.out, self.source, f"{self.tag}shard-{self.n // self.size:05d}")
             os.makedirs(self.shard, exist_ok=True)
             self.truth = open(os.path.join(self.shard, "truth.jsonl"), "w")
         folder = os.path.join(self.shard, case_id); os.makedirs(folder, exist_ok=True)

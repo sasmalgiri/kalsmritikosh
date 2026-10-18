@@ -63,10 +63,11 @@ def main():
     ap.add_argument("--out", required=True); ap.add_argument("--reporters", required=True)
     ap.add_argument("--volumes-per-reporter", type=int, default=0); ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--shard-size", type=int, default=500); ap.add_argument("--skip-volumes", type=int, default=0)
+    ap.add_argument("--tag", default="")
     a = ap.parse_args()
     writers = {}
     def writer(persona):
-        if persona not in writers: writers[persona] = ShardWriter(a.out, f"cap-{persona}", a.shard_size)
+        if persona not in writers: writers[persona] = ShardWriter(a.out, f"cap-{persona}", a.shard_size, a.tag)
         return writers[persona]
     total = 0
     for slug in a.reporters.split(","):
