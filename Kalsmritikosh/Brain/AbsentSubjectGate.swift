@@ -94,10 +94,34 @@ public struct AbsentSubjectGate: Sendable {
             // An identifier's digits come in a RUN. "COVID-19" and "MP3-320"
             // are names with a couple of digits attached, not references, and
             // admitting them meant refusing any question that mentioned one.
-            guard longestDigitRun(clean) >= 4 else { continue }
+            // FOUND BY THE CASE BENCH, 2026-10-18. Agency case numbers interleave
+            // letters and digits — NTSB "MIA08MA051", "SEA08LA057" — so no digit run
+            // reaches four, and a question about a case that does not exist
+            // ("NTSB case ZZZ99ZZ999") went to retrieval and came back as a cited
+            // answer about other accidents (3 of 9 not-in-archive controls). Admit a
+            // token whose letters and digits alternate at least twice and carry three
+            // or more digits: that is a reference's shape, while "COVID-19" and
+            // "MP3-320" alternate once and "iPhone15Pro" has only two digits.
+            guard longestDigitRun(clean) >= 4 || isInterleavedReference(clean) else { continue }
             out.append(clean)
         }
         return out
+    }
+
+    nonisolated static func isInterleavedReference(_ s: String) -> Bool {
+        IdentifierShape.isInterleavedReference(s)
+    }
+
+    /// The two party words a case caption joins with "v." — "Great Oregon v. Babbitt" →
+    /// ("Oregon", "Babbitt"), "United States v. Brewster" → ("States", "Brewster").
+    public nonisolated static func captionCores(in question: String) -> [(left: String, right: String)] {
+        let pattern = #"([A-Z][A-Za-z'&\-]+)\.?,?\s+(?:v|vs)\.?\s+(?:[A-Z][a-z]?\.\s+)?([A-Z][A-Za-z'&\-]+)"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = question as NSString
+        return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            let l = ns.substring(with: m.range(at: 1)), r = ns.substring(with: m.range(at: 2))
+            return (l.count >= 2 && r.count >= 2) ? (l, r) : nil
+        }
     }
 
     /// yyyy-mm-dd, dd/mm/yyyy, dd-mm-yy, yyyy/mm/dd — the written forms.
@@ -132,11 +156,7 @@ public struct AbsentSubjectGate: Sendable {
     }
 
     nonisolated static func longestDigitRun(_ s: String) -> Int {
-        var best = 0, run = 0
-        for ch in s {
-            if ch.isNumber { run += 1; best = max(best, run) } else { run = 0 }
-        }
-        return best
+        IdentifierShape.longestDigitRun(s)
     }
 
     /// Check the question's identifiers against the ledger.
@@ -147,6 +167,22 @@ public struct AbsentSubjectGate: Sendable {
     public nonisolated static func absence(
         in question: String, database: Database
     ) async -> Absence? {
+        // A named CASE ("Zyxwv Holdings v. Qorvane Mutual") is a subject too. Case bench
+        // 2026-10-18: such a question carries no reference-shaped token, so it went to retrieval
+        // and came back as a cited answer about other decisions (3 of 5 court-case controls).
+        // Refuse only when a distinctive party word (five letters or more) appears NOWHERE in
+        // the archive — a common name like "Smith" or "United" never triggers it.
+        for caption in captionCores(in: question) {
+            for word in [caption.left, caption.right] where word.count >= 5 {
+                guard let rows = try? await database.query(
+                    "SELECT 1 FROM chunks WHERE LOWER(text) LIKE ? LIMIT 1;", [.text("%\(word.lowercased())%")]) else {
+                    return nil   // a failed probe never reads as "absent"
+                }
+                if rows.isEmpty {
+                    return Absence(token: "\(caption.left) v. \(caption.right)", nearestKnown: [])
+                }
+            }
+        }
         let tokens = candidateTokens(in: question)
         guard !tokens.isEmpty else { return nil }
 

@@ -141,6 +141,9 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         case taskAssigned
         case deliveryDelayed
         case deliveryCompleted
+        /// An accident, collision, explosion, injury, death or crime, dated from the text
+        /// that reports it (IncidentEventExtractor).
+        case incidentOccurred
         case other
     }
 }

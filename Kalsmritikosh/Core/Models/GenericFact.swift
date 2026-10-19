@@ -332,7 +332,7 @@ public enum FactSchemaRegistry {
         // constants in SlotAnswerComposer; dates use the precision canon;
         // money uses renderMoney; text renders its own atom.
         "accountnumber": .identifier, "idnumber": .identifier,
-        "visitdate": .date, "hearingdate": .date, "birthdate": .date,
+        "visitdate": .date, "hearingdate": .date, "decisiondate": .date, "birthdate": .date,
         "deathdate": .date, "marriagedate": .date, "deeddate": .date,
         "issuedate": .date, "expirydate": .date,
         "balance": .money, "consideration": .money,
@@ -350,7 +350,12 @@ public enum FactSchemaRegistry {
         return aliases[key] ?? key
     }
 
+    /// A declared field keeps its declared shape. An undeclared one (the open-field
+    /// extractor's "Inspection number(s)", "Event date") takes the shape its NAME implies —
+    /// see IdentifierShape — and is text otherwise.
     public nonisolated static func expectedShape(of field: String) -> ValueShape {
-        shapes[normalizeField(field)] ?? .text
+        let f = normalizeField(field)
+        if let declared = shapes[f] { return declared }
+        return IdentifierShape.shape(impliedByFieldName: f) ?? .text
     }
 }

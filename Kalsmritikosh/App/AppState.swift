@@ -1598,10 +1598,18 @@ public final class AppState {
             let priorityGate = QueryPriorityGate()
             // SHELL-003 — the one background-work gate, composing the shared priority gate + idle signal.
             self.backgroundWorkGate = BackgroundWorkGate(queryGate: priorityGate)
+            // Case bench 2026-10-18 — a question naming a reference that is in the archive
+            // (case, docket, complaint, inspection number) draws its evidence from the documents
+            // carrying it, through the same scoped-retrieval machinery as case-scoped Ask.
+            let anchoredRetriever = IdentifierAnchoredRetriever(
+                base: retriever, database: db, evidence: evidenceStoreRepo,
+                scopedRecall: SourceScopedRetriever.ScopedRecall(
+                    chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
+                    events: events, entities: entities, relationships: relationships))
             let brain = MasterBrain(
                 intentDetector: intentDetector,
                 router: router,
-                retriever: retriever,
+                retriever: anchoredRetriever,
                 executor: executor,
                 capabilities: capabilities,
                 verifier: verifier,

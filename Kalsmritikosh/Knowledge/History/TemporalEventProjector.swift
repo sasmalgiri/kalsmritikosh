@@ -189,7 +189,7 @@ public nonisolated struct TemporalEventProjector: Sendable {
         case .emailSent, .emailReceived:             return .communication
         case .contractSigned, .contractModified:     return .legalMilestone
         case .invoiceIssued, .invoicePaid:           return .financialTransaction
-        case .meetingHeld, .taskAssigned, .deliveryDelayed, .deliveryCompleted, .other:
+        case .meetingHeld, .taskAssigned, .deliveryDelayed, .deliveryCompleted, .incidentOccurred, .other:
             return .event
         }
     }

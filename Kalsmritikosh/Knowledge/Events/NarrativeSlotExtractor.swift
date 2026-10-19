@@ -398,6 +398,7 @@ public nonisolated struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         case .taskAssigned:        return "assignment"
         case .deliveryDelayed:     return "delivery (delayed)"
         case .deliveryCompleted:   return "delivery"
+        case .incidentOccurred:    return "incident"
         case .other:               return nil
         }
     }

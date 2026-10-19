@@ -291,6 +291,7 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
         case .taskAssigned:      return "took on a task"
         case .deliveryDelayed:   return "saw a delivery delay"
         case .deliveryCompleted: return "completed a delivery"
+        case .incidentOccurred:  return "was involved in an incident"
         case .other:             return "recorded an event"
         }
     }

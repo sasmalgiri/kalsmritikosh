@@ -22,6 +22,8 @@ public enum LegalCaseDomainPack {
     nonisolated static let markers: [String] = [
         "plaintiff", "defendant", "petitioner", "respondent",
         "case no", "suit no", "in the court of", "hon'ble",
+        // Case bench 2026-10-18 — US appellate captions ("Plaintiff-Appellant", "Appellee").
+        "appellant", "appellee",
     ]
 
     nonisolated static func isLegalCase(_ lower: String) -> Bool {
@@ -31,7 +33,7 @@ public enum LegalCaseDomainPack {
     /// caseNumber is an identifier (display constant "Case No."); the rest
     /// are text/date and render their own atom.
     public nonisolated static let emittedFields: [String] =
-        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate"]
+        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate"]
 
     public nonisolated static func extractFacts(
         fromText text: String,
@@ -42,7 +44,9 @@ public enum LegalCaseDomainPack {
         guard isLegalCase(lower) else { return [] }
         var facts: [GenericFact] = []
 
-        if let v = DomainPackText.labeledIdentifier(after: ["case no", "suit no", "case number", "c.a. no", "w.p. no"], in: text) {
+        if let v = DomainPackText.labeledIdentifier(after: ["case no", "suit no", "case number", "c.a. no", "w.p. no",
+                                                            "docket no", "docket number"], in: text)
+            ?? captionDocketNumber(in: text) ?? flowingDocketNumber(in: text) {
             facts.append(fact(subjectLabel, "caseNumber", v, blockID, 0.8))
         }
         if let v = DomainPackText.labeledValue(after: ["in the court of", "court of", "before the", "tribunal"], in: text) {
@@ -62,7 +66,52 @@ public enum LegalCaseDomainPack {
                                      status: .sourceAsserted, confidence: 0.65, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
         }
+        // The decision date: "Decided July 23, 1993", "Opinion filed August 3, 1971", or the
+        // caption's own date line ("August 8, 1924.)"). Case bench 2026-10-18: US decisions
+        // carried no decision-date fact at all, so "When was X decided?" had nothing to read.
+        if let raw = DomainPackText.labeledDate(after: ["decided", "opinion filed", "date of decision",
+                                                        "date of judgment", "judgment dated"], in: text)
+            ?? captionDateLine(in: text),
+           let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10 {
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "decisionDate", value: iso,
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
+        }
         return facts
+    }
+
+    /// A caption line that is ONLY a docket number: "No. 92-5255." / "Nos. 87-1234, 87-1235".
+    /// The whole-line requirement is what keeps "No. 5 of the agreement" out.
+    nonisolated static func captionDocketNumber(in text: String) -> String? {
+        for raw in text.components(separatedBy: .newlines).prefix(40) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard let r = line.range(of: #"^(?:Nos?\.|Docket)\s*([A-Za-z0-9][A-Za-z0-9/\-]*[0-9][A-Za-z0-9/\-]*)[.,]?(?:\s*(?:,|and)\s*[A-Za-z0-9/\-]+)*\.?$"#,
+                                     options: .regularExpression) else { continue }
+            let body = line[r].replacingOccurrences(of: #"^(?:Nos?\.|Docket)\s*"#, with: "", options: .regularExpression)
+            let first = body.prefix { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "/" }
+            if first.count >= 3, first.contains(where: \.isNumber) { return String(first) }
+        }
+        return nil
+    }
+
+    /// The docket number when the block's line breaks were normalized away: "No. 92-5255"
+    /// near the start of a legal block. A hyphenated court number ("92-5255", "3:06-cv-00862")
+    /// is what separates it from "No. 5 of the agreement".
+    nonisolated static func flowingDocketNumber(in text: String) -> String? {
+        let head = String(text.prefix(800))
+        let pattern = #"\bNos?\.\s+((?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6}(?:[-–][0-9A-Za-z]+)*)"#
+        guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
+        return head[r].replacingOccurrences(of: #"^Nos?\.\s+"#, with: "", options: .regularExpression)
+    }
+
+    /// A caption line that is ONLY a date ("August 8, 1924.)"), among the first lines.
+    nonisolated static func captionDateLine(in text: String) -> String? {
+        for raw in text.components(separatedBy: .newlines).prefix(25) {
+            let line = raw.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".()[]")))
+            guard line.count <= 22, let d = DomainPackText.firstDate(in: line), d.count >= line.count - 1 else { continue }
+            return d
+        }
+        return nil
     }
 
     nonisolated static func fact(_ subject: String, _ field: String, _ value: String,
