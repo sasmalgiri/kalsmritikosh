@@ -1,7 +1,7 @@
 # Case bench report — real cases through the real app
 
 Status: **interim** (2026-10-19). The full run toward 1,000,000 cases is running on the fixed
-build (main 94236056); this report is completed from its results. Method: `docs/CASE_BENCH_PLAN.md`.
+build (main 130eab3d; shard build notes in `~/CaseBench/results/BUILD-NOTES.txt`); this report is completed from its results. Method: `docs/CASE_BENCH_PLAN.md`.
 
 Every number below is measured, in the evidence-only answer mode ("Fully private (no AI)"),
 against each publisher's own coded record — never against the app's output.
@@ -33,7 +33,7 @@ fatalities). Baseline = the app before the case-bench fixes.
 | Lawyer | author of the opinion | 78–83% (72% before) |
 | Lawyer | decision date | 78% (11% before) |
 | Lawyer | docket number | 44–50% (0% before) |
-| Lawyer | outcome (affirmed / reversed …) | **0%** — open |
+| Lawyer | outcome (affirmed / reversed …) | 40% (0% before; 1 of the 5 expected values is a converter error) |
 | All | invented answers about a case not in the archive | 0 of 5 (3 of 5 before) |
 
 ## 3. Gaps found, root causes, fixes
@@ -51,8 +51,9 @@ fatalities). Baseline = the app before the case-bench fixes.
 | 9 | No-AI "what happened" said "No prose available" / "No history found" unrefused | History chapters without prose stated nothing | Fixed — chapters state their events with citations; empty history refuses |
 | 10 | Makers and airports typed as people ("person:Piper") | Name tagger's kind taken as is | Fixed — kinds corrected (never dropped) on strong signals |
 | 11 | Answer latency grows with the archive (1.25 s → 9 s) | Cross-encoder re-rank per answer; embedder availability re-read the tokenizer vocabulary on every question | Partly fixed — availability cached; re-rank cost open |
-| 12 | Outcome questions 0% | Disposition facts largely not persisted — the field overlaps other packs' `status` | **Open** |
-| 13 | Facts from different documents with the same file name collide ("conflicting case numbers") | A fact's subject is the file NAME | **Open — priority**: real archives are full of `scan.pdf` / `report.pdf` |
+| 12 | Outcome questions 0% | Normalization joined headings to the disposition sentence ("CONCLUSION The order … affirmed"); verb-less "Judgment affirmed."; a CITED caption pulled another decision's outcome | Fixed — 40%; caption anchoring prefers the document that opens with the caption |
+| 13 | Facts from different documents with the same file name collide ("conflicting case numbers") | A fact's subject is the file NAME | Fixed — a title-like first line names the document first (PR #160) |
+| 16 | Ingest slowed as the archive grew (180 s → 1,100 s per 500 cases) | Every ingest re-saved every claim of every subject it touched; hub subjects (an agency, the owner's own name) made it quadratic | Fixed — only the new file's claims are projected (PR #161); claim projection fell from ~75% of ingest samples to ~5% |
 | 14 | Answer text repeats document titles | Composer echoes block headings | Open |
 | 15 | Incident facts have no ontology type | FactType has no Incident | Open |
 
