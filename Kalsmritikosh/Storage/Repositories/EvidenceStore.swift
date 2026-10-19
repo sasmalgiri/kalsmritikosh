@@ -518,6 +518,11 @@ public actor EvidenceStore: EvidenceBlockResolving {
     /// L1 — the blocks a KnowledgeObject OWNS (via evidence_block_objects), in
     /// reading order. A mailbox thread owns only its own messages' blocks, where
     /// `blocks(forVersion:)` would return the whole file's.
+    /// The knowledge objects a file produced.
+    public func objectIDs(forFile fileID: UUID) async throws -> Set<KnowledgeObject.ID> {
+        Set(try await database.query("SELECT id FROM knowledge_objects WHERE file_id = ?;", [.uuid(fileID)]).compactMap { $0.uuid(0) })
+    }
+
     public func blocks(forObject koID: KnowledgeObject.ID) async throws -> [EvidenceBlock] {
         let rows = try await database.query("""
         SELECT b.id, b.document_id, b.source_version_id, b.parent_block_id, b.ordinal, b.kind, b.raw_text, b.normalized_text, b.locator, b.extraction_method, b.extraction_confidence, b.language, b.attributes
