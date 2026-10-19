@@ -381,9 +381,9 @@ public final class FeatureFlags {
         get { Self.generalKnowledgeLaneValue() }
         set { UserDefaults.standard.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
     }
-    public nonisolated static func generalKnowledgeLaneValue() -> Bool {
-        if UserDefaults.standard.object(forKey: kGeneralKnowledgeLane) == nil { return true }
-        return UserDefaults.standard.bool(forKey: kGeneralKnowledgeLane)
+    public nonisolated static func generalKnowledgeLaneValue(in defaults: UserDefaults = .standard) -> Bool {
+        if defaults.object(forKey: kGeneralKnowledgeLane) == nil { return true }
+        return defaults.bool(forKey: kGeneralKnowledgeLane)
     }
 
     /// SURFACE STYLE (owner request 2026-08-22). When ON, analytic jobs present

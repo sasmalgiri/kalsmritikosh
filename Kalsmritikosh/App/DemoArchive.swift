@@ -16,6 +16,7 @@
 //
 
 import Foundation
+import os
 
 public nonisolated enum DemoArchive {
 
@@ -58,12 +59,26 @@ public nonisolated enum DemoArchive {
             try fm.createDirectory(at: base, withIntermediateDirectories: true)
             for (name, src) in sources {
                 let dst = base.appendingPathComponent(name)
-                // Overwrite so the on-disk copy always matches THIS app version.
-                if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
-                try fm.copyItem(at: src, to: dst)
+                // Overwrite so the on-disk copy always matches THIS app version — via a unique
+                // temporary copy swapped in atomically. Removing then copying left a moment with
+                // the file missing, and two callers at once (CI runs suites in parallel) could
+                // see a half-built folder or collide on the copy.
+                let staged = base.appendingPathComponent(".\(name).\(UUID().uuidString)")
+                try fm.copyItem(at: src, to: staged)
+                if fm.fileExists(atPath: dst.path) {
+                    _ = try fm.replaceItemAt(dst, withItemAt: staged)
+                } else {
+                    do { try fm.moveItem(at: staged, to: dst) }
+                    catch {
+                        // Another caller placed it first; theirs is the same bundled file.
+                        try? fm.removeItem(at: staged)
+                        guard fm.fileExists(atPath: dst.path) else { throw error }
+                    }
+                }
             }
             return base
         } catch {
+            KalsmritikoshLog.app.error("Demo archive could not be prepared: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
