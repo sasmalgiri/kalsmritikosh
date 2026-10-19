@@ -54,7 +54,7 @@ public enum IncidentEventExtractor {
         var byDay: [Date: Event] = [:]
         for (i, sentence) in sentences.enumerated() {
             let lower = sentence.lowercased()
-            guard markers.contains(where: { containsWordStart($0, in: lower) }) else { continue }
+            guard markers.contains(where: { containsWordStart($0, in: Self.withoutAttributiveAccident(lower)) }) else { continue }
             // The date is often a neighbour, not a part, of the harm sentence: a narrative opens
             // "At 2:00 p.m. on December 3, 2004, Employee #1 was …" and the explosion follows; a
             // form puts "Event date: December 3, 2003" on the line after the event title. So the
@@ -80,6 +80,18 @@ public enum IncidentEventExtractor {
     }
 
     // MARK: - Pieces
+
+    /// Reports use "accident" as an adjective — "the accident airplane's engine was installed on
+    /// January 5, 2004", "the accident pilot held …" — about background, not the incident
+    /// (case bench: those dates were taken for the accident's). Such uses are removed before the
+    /// markers are tested; "the accident occurred …" still counts.
+    nonisolated static let attributiveAccident = try? NSRegularExpression(pattern:
+        #"\baccident (?:airplane|aircraft|helicopter|pilot|flight|engine|site|vehicle|car|truck|vessel|scene|investigat\w*|report\w*|history|records?)\b"#)
+
+    nonisolated static func withoutAttributiveAccident(_ lower: String) -> String {
+        guard let re = attributiveAccident else { return lower }
+        return re.stringByReplacingMatches(in: lower, range: NSRange(location: 0, length: (lower as NSString).length), withTemplate: "")
+    }
 
     /// Words that date a PROCEDURAL step, not the incident: a neighbour sentence carrying one
     /// ("The complaint was filed on May 1, 1990.") never lends its date.

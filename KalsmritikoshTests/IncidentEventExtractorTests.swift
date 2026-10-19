@@ -44,6 +44,7 @@ struct IncidentEventExtractorTests {
             "The accident happened on February 31, 2008.",
             "The court affirmed the judgment on May 2, 1999.",
             "The complaint was filed on May 1, 1990. The plaintiff alleges she was injured at work.",
+            "The accident airplane's engine was installed on January 5, 2004, and overhauled in 2006.",
           ])
     func silentWithoutFullDateOrHarm(text: String) {
         #expect(IncidentEventExtractor.extract(text: text, sourceObjectID: UUID(), entityIDs: []).isEmpty)
@@ -58,5 +59,43 @@ struct IncidentEventExtractorTests {
         """
         let events = IncidentEventExtractor.extract(text: text, sourceObjectID: UUID(), entityIDs: [])
         #expect(events.map(\.date) == [day(2010, 5, 1), day(2010, 5, 5), day(2010, 6, 2)])
+    }
+}
+
+@Suite("Incident answers — the date leads")
+struct IncidentAnswerComposerTests {
+    @Test("When-did-it-happen questions are recognised; others are not",
+          arguments: [("When did the accident in NTSB case SEA08LA057 happen?", true),
+                      ("When did the accident in OSHA investigation 200072106 happen?", true),
+                      ("When was the collision?", true),
+                      ("When was the contract signed?", false),
+                      ("What happened in OSHA investigation 200072106?", false)])
+    func shape(question: String, expected: Bool) {
+        #expect(IncidentAnswerComposer.asksWhenItHappened(question) == expected)
+    }
+
+    @Test("The answer opens with the incident date and cites the event")
+    func leadsWithDate() {
+        let e = Event(kind: .incidentOccurred, date: Date(timeIntervalSince1970: 1_199_145_600), // 2008-01-01 UTC
+                      title: "Two airplanes collided", summary: "On January 1, 2008, a Piper and a Glastar collided in flight.",
+                      sourceObjectID: UUID())
+        let c = IncidentAnswerComposer.compose(question: "When did the accident in NTSB case SEA08LA057 happen?", events: [e])
+        #expect(c?.text.hasPrefix("January 1, 2008.") == true, "\(c?.text ?? "nil")")
+        #expect(c?.events.count == 1)
+        #expect(IncidentAnswerComposer.compose(question: "When did it happen?", events: []) == nil)
+    }
+
+    @Test("The report's own labeled date picks the incident; a mismatch composes nothing")
+    func labeledDateDecides() {
+        let background = Event(kind: .incidentOccurred, date: Date(timeIntervalSince1970: 1_116_892_800), // 2005-05-24
+                               title: "Pilot injured his back", sourceObjectID: UUID())
+        let crash = Event(kind: .incidentOccurred, date: Date(timeIntervalSince1970: 1_200_528_000), // 2008-01-17
+                          title: "The airplane struck terrain", sourceObjectID: UUID())
+        let page = GenericFact(subjectLabel: "NTSB X", field: "dateandtime", value: "January 17, 2008, 1530 PST",
+                               status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [UUID()])
+        let q = "When did the accident in NTSB case X happen?"
+        #expect(IncidentAnswerComposer.compose(question: q, events: [background, crash], facts: [page])?.events.first?.title == "The airplane struck terrain")
+        #expect(IncidentAnswerComposer.compose(question: q, events: [background], facts: [page]) == nil,
+                "a background incident that contradicts the report's date must not be the answer")
     }
 }
