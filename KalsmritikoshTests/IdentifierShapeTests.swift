@@ -121,3 +121,30 @@ struct LegalFlowingDocketTests {
         #expect(LegalCaseDomainPack.flowingDocketNumber(in: "See No. 5 of the agreement signed by the plaintiff.") == nil)
     }
 }
+
+@Suite("Legal pack — US court names and dispositions")
+struct LegalCourtAndDispositionTests {
+    @Test("Caption court names", arguments: [
+        ("SWEET HOME, Appellants, v. BABBITT, Appellees. United States Court of Appeals, District of Columbia Circuit. Argued March 10, 1993.", "United States Court of Appeals, District of Columbia Circuit"),
+        ("UNITED STATES v. SOUTHERN RY. CO. (District Court, D. Tennessee. August 8, 1924.)", "District Court, D. Tennessee"),
+    ])
+    func court(text: String, expected: String) {
+        #expect(LegalCaseDomainPack.captionCourtName(in: text) == expected)
+    }
+
+    @Test("Closing dispositions", arguments: [
+        ("For the foregoing reasons the judgment is reversed. Reversed and remanded.", "reversed and remanded"),
+        ("We find no error. Affirmed.", "affirmed"),
+        ("The district court did not err. The judgment of the district court is AFFIRMED.", "affirmed"),
+        ("AFFIRMED in part, REVERSED in part.", "affirmed in part, reversed in part"),
+    ])
+    func disposition(text: String, expected: String) {
+        #expect(LegalCaseDomainPack.disposition(in: text) == expected)
+    }
+
+    @Test("Prose that mentions a disposition word is not a disposition")
+    func proseIgnored() {
+        #expect(LegalCaseDomainPack.disposition(in: "The board affirmed its commitment to safety and met again in May.") == nil)
+        #expect(LegalCaseDomainPack.disposition(in: "In Smith, the conviction was affirmed on appeal, which the defendant now disputes.") == nil)
+    }
+}

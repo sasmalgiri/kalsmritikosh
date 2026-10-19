@@ -56,6 +56,10 @@ public enum SlotFieldResolver {
         ("docket number", "casenumber", .identifier, "Docket number", "legal"),
         ("docket no", "casenumber", .identifier, "Docket number", "legal"),
         ("decision date", "decisiondate", .date, "Decision date", "legal"),
+        ("which court", "court", .identity, "Court", "legal"),
+        ("what court", "court", .identity, "Court", "legal"),
+        ("disposition", "disposition", .status, "Disposition", "legal"),
+        ("outcome of the case", "disposition", .status, "Disposition", "legal"),
         ("date of decision", "decisiondate", .date, "Decision date", "legal"),
         ("pan number", "pan", .identifier, "PAN", "identity"),
         ("pan", "pan", .identifier, "PAN", "identity"),
@@ -148,6 +152,8 @@ public enum SlotFieldResolver {
         (["patent", "filing"], ["date", "when"], "filingdate", .date, "Filing date", "patent"),
         // "When was <case> decided?" — the decision date (legal pack's decisionDate).
         (["decided"], ["date", "when"], "decisiondate", .date, "Decision date", "legal"),
+        // "What did the court decide in <case>?" — the disposition.
+        (["court", "decide"], ["what"], "disposition", .status, "Disposition", "legal"),
         // A1.1 — "who is the owner/holder of this patent" (no field bigram).
         (["patent"], ["owner", "owns", "proprietor", "holder", "belongs"], "applicant", .counterparty, "Applicant", "patent"),
     ]
@@ -161,6 +167,7 @@ public enum SlotFieldResolver {
         "patentnumber": "Patent number",
         "grantdate": "Grant date",
         "decisiondate": "Decision date",
+        "disposition": "Disposition",
         "filingdate": "Filing date",
         "invoicenumber": "Invoice number",
         "casenumber": "Case number",

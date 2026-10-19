@@ -74,10 +74,12 @@ public struct NLEntityExtractor: EntityExtractor {
             case .placeName: kind = .location
             default: kind = nil
             }
-            guard let kind else { return true }
+            guard let tagged = kind else { return true }
             let value = String(object.content[range])
+            // The tagger's kind, corrected when the name says otherwise (see NameKindCorrector).
+            let corrected = NameKindCorrector.kind(for: value, tagged: tagged, following: object.content[range.upperBound...])
             out.append(Entity(
-                kind: kind,
+                kind: corrected,
                 value: value,
                 normalizedValue: value.lowercased(),
                 sourceObjectID: object.id,

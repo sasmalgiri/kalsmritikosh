@@ -73,7 +73,9 @@ public struct CoreMLEmbedderProvider: ModelProvider {
     // MARK: - Availability
 
     public func isAvailable() async -> Bool {
-        locateModelURL() != nil && BERTWordPieceTokenizer(subdirectory: subdirectory) != nil
+        await CoreMLEmbedderAvailability.shared.isAvailable(key: "\(modelName)|\(subdirectory)") {
+            locateModelURL() != nil && BERTWordPieceTokenizer(subdirectory: subdirectory) != nil
+        }
     }
 
     // MARK: - Generation (not supported)
@@ -286,5 +288,23 @@ actor CoreMLEmbedderRuntime {
             }
         }
         return nil
+    }
+}
+
+/// Whether a bundled embedder is usable, worked out once per process.
+///
+/// Found by the case bench (2026-10-18): capability resolution asks `isAvailable()` on every
+/// question, and each call rebuilt the WordPiece tokenizer — reading and parsing the whole
+/// vocabulary file — about a tenth of answer time in a profile. A model bundled in the app
+/// cannot appear or disappear while the app runs, so the first answer stands.
+actor CoreMLEmbedderAvailability {
+    static let shared = CoreMLEmbedderAvailability()
+    private var known: [String: Bool] = [:]
+
+    func isAvailable(key: String, compute: @Sendable () -> Bool) -> Bool {
+        if let k = known[key] { return k }
+        let v = compute()
+        known[key] = v
+        return v
     }
 }

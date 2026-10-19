@@ -33,7 +33,7 @@ public enum LegalCaseDomainPack {
     /// caseNumber is an identifier (display constant "Case No."); the rest
     /// are text/date and render their own atom.
     public nonisolated static let emittedFields: [String] =
-        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate"]
+        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate", "disposition"]
 
     public nonisolated static func extractFacts(
         fromText text: String,
@@ -41,15 +41,22 @@ public enum LegalCaseDomainPack {
         blockID: UUID
     ) -> [GenericFact] {
         let lower = text.lowercased()
-        guard isLegalCase(lower) else { return [] }
+        // The decision's closing words ("Affirmed.", "Reversed and remanded.") sit in the last
+        // block, which rarely carries the caption markers; the end-of-text pattern is strict
+        // enough to run without them.
         var facts: [GenericFact] = []
+        if let d = disposition(in: text) {
+            facts.append(fact(subjectLabel, "disposition", d, blockID, 0.75))
+        }
+        guard isLegalCase(lower) else { return facts }
 
         if let v = DomainPackText.labeledIdentifier(after: ["case no", "suit no", "case number", "c.a. no", "w.p. no",
                                                             "docket no", "docket number"], in: text)
             ?? captionDocketNumber(in: text) ?? flowingDocketNumber(in: text) {
             facts.append(fact(subjectLabel, "caseNumber", v, blockID, 0.8))
         }
-        if let v = DomainPackText.labeledValue(after: ["in the court of", "court of", "before the", "tribunal"], in: text) {
+        if let v = DomainPackText.labeledValue(after: ["in the court of", "court of", "before the", "tribunal"], in: text)
+            ?? captionCourtName(in: text) {
             facts.append(fact(subjectLabel, "court", v, blockID, 0.7))
         }
         if let v = DomainPackText.labeledValue(after: ["plaintiff", "petitioner", "appellant", "complainant"], in: text),
@@ -102,6 +109,40 @@ public enum LegalCaseDomainPack {
         let pattern = #"\bNos?\.\s+((?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6}(?:[-–][0-9A-Za-z]+)*)"#
         guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
         return head[r].replacingOccurrences(of: #"^Nos?\.\s+"#, with: "", options: .regularExpression)
+    }
+
+    /// A US court as a caption names it: "United States Court of Appeals, District of Columbia
+    /// Circuit", "District Court, D. Tennessee", "Supreme Court of Pennsylvania". Case bench
+    /// 2026-10-18: the labeled rule above expects "In the Court of …", so US captions gave none.
+    nonisolated static func captionCourtName(in text: String) -> String? {
+        let head = String(text.prefix(1200))
+        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})?"#
+        guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
+        // A period after a full word ends the name ("… Circuit. Argued"); initials keep it
+        // ("District Court, D. Tennessee").
+        let v = String(head[r])
+            .replacingOccurrences(of: #"([A-Za-z]{3,})\..*$"#, with: "$1", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ,."))
+        return v.count >= 10 ? v : nil
+    }
+
+    /// The disposition in a decision's closing words: "Affirmed.", "Reversed and remanded.",
+    /// "The judgment of the district court is AFFIRMED." → "affirmed", "reversed and remanded".
+    /// Only the LAST sentence is read, and only a sentence made of disposition words (optionally
+    /// "The judgment … is"), so prose that merely mentions "affirmed" never matches.
+    nonisolated static func disposition(in text: String) -> String? {
+        let tail = text.suffix(400).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tail.isEmpty else { return nil }
+        var last = tail
+        if let cut = tail.dropLast().range(of: #"[.!?]\s+(?=[A-Z])"#, options: [.regularExpression, .backwards]) {
+            last = String(tail[cut.upperBound...])
+        }
+        let verbs = "affirmed|reversed|vacated|remanded|dismissed|modified"
+        let pattern = "^(?:(?:the )?(?:judgments?|orders?|decisions?|convictions?|sentences?)[^.]{0,120}? (?:is|are|be) )?((?:\(verbs))(?:(?: in part)?(?:,? and|,)(?: in part)? (?:\(verbs)))*(?: in part)?)\\.?$"
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let ns = last as NSString
+        guard let m = re.firstMatch(in: last, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(with: m.range(at: 1)).lowercased()
     }
 
     /// A caption line that is ONLY a date ("August 8, 1924.)"), among the first lines.
