@@ -138,9 +138,17 @@ public enum LegalCaseDomainPack {
             if let s { sentences.append(s.trimmingCharacters(in: .whitespacesAndNewlines)) }
         }
         let verbs = "affirmed|reversed|vacated|remanded|dismissed|modified"
-        let pattern = "^(?:(?:the )?(?:judgments?|orders?|decisions?|convictions?|sentences?)[^.]{0,120}? (?:is|are|be) )?((?:\(verbs))(?:(?: in part)?(?:,? and|,)(?: in part)? (?:\(verbs)))*(?: in part)?)\\.?$"
+        // "Judgment affirmed." carries no verb; "The order and judgment … are affirmed." does.
+        let pattern = "^(?:(?:the )?(?:judgments?|orders?|decisions?|convictions?|sentences?)(?:[^.]{0,120}? (?:is|are|be))? )?((?:\(verbs))(?:(?: in part)?(?:,? and|,)(?: in part)? (?:\(verbs)))*(?: in part)?)\\.?$"
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
-        for sentence in sentences.reversed() where sentence.count <= 160 {
+        for raw in sentences.reversed() where raw.count <= 200 {
+            // Normalization joins a heading to the sentence after it ("CONCLUSION The order …
+            // is affirmed."), and decisions often open the line with "For the foregoing
+            // reasons, …" — neither is part of the disposition.
+            let sentence = raw
+                .replacingOccurrences(of: #"^(?:(?!(?:AFFIRMED|REVERSED|VACATED|REMANDED|DISMISSED|MODIFIED)\b)[A-Z]{3,}[.:]?\s+)+"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"^(?i:for (?:the|these|all the) [^,]{0,60}, )"#, with: "", options: .regularExpression)
+            guard sentence.count <= 160 else { continue }
             let ns = sentence as NSString
             if let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)) {
                 return ns.substring(with: m.range(at: 1)).lowercased()
