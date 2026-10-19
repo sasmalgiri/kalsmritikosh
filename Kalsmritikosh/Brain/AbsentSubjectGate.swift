@@ -116,7 +116,9 @@ public struct AbsentSubjectGate: Sendable {
     /// ("Oregon", "Babbitt"), "United States v. Brewster" → ("States", "Brewster").
     public nonisolated static func captionCores(in question: String) -> [(left: String, right: String)] {
         // The right party may open with a number: "United States v. 27.09 Acres of Land".
-        let pattern = #"([A-Z][A-Za-z'&\-]+)\.?,?\s+(?:v|vs)\.?\s+(?:[A-Z][a-z]?\.\s+)?([A-Z0-9][A-Za-z0-9.'&\-]*[A-Za-z0-9])"#
+        // Either party may carry initials ("v. U.S. Small Business Administration") or open with a
+        // number ("Local 150-A v. National …").
+        let pattern = #"([A-Za-z0-9][A-Za-z0-9'&\-]*[A-Za-z0-9])\.?,?\s+(?:v|vs)\.?\s+(?:(?:[A-Z]\.){1,3}\s*)?([A-Z0-9][A-Za-z0-9.'&\-]*[A-Za-z0-9])"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = question as NSString
         return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in

@@ -80,7 +80,10 @@ public actor IdentifierAnchoredRetriever: Retriever {
         var tokens = AbsentSubjectGate.candidateTokens(in: question)
         var captions: [String] = []
         for c in AbsentSubjectGate.captionCores(in: question) {
-            captions += ["\(c.left) v. \(c.right)", "\(c.left) v \(c.right)", "\(c.left) vs. \(c.right)"]
+            // "Hertz Corp. v. City …" — an abbreviated party keeps its period before "v.".
+            for v in ["v.", "v", "vs."] {
+                captions += ["\(c.left) \(v) \(c.right)", "\(c.left). \(v) \(c.right)", "\(c.left), \(v) \(c.right)"]
+            }
         }
         // A caption is CITED by every later decision that relies on the case, so the documents
         // that OPEN with it — the decision itself — are preferred over those that merely cite

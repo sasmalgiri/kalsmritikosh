@@ -99,7 +99,9 @@ def main():
                 disp = disposition(c)
                 if disp: q.append({"id": "outcome", "q": f"What did the court decide in {key}?", "expect": {"any": disp}})
                 digits = re.sub(r"(?i)^(no\.|nos\.|docket|case)\s*", "", docket)
-                if digits: q.append({"id": "docket", "q": f"What is the docket number in {key}?", "expect": {"any": [digits]}})
+                # Any one of the hyphenated court numbers answers it ("No. 1497, Docket 93-1070").
+                numbers = re.findall(r"(?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6}", docket)
+                if digits: q.append({"id": "docket", "q": f"What is the docket number in {key}?", "expect": {"any": numbers or [digits]}})
                 ops = (c.get("casebody") or {}).get("opinions", [])
                 author = surname(next((o.get("author") for o in ops if o.get("type") == "majority"), None) or "")
                 if author: q.append({"id": "author", "q": f"Who wrote the majority opinion in {key}?", "expect": {"any": [author]}})

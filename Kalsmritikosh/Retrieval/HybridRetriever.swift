@@ -517,7 +517,17 @@ public actor HybridRetriever: Retriever {
     /// and those passages would otherwise carry no facts (case bench 2026-10-18: "none of the
     /// documents searched carries a decision date" about a scoped decision that states one).
     public func attachingFacts(to result: RetrievalResult) async -> RetrievalResult {
-        await attachGenericFacts(to: result)
+        // Start from NO facts: the incoming result may still carry facts attached before it was
+        // scoped (slot-aware retrieval injects field-bearing passages from the whole archive),
+        // and a scoped result whose own passages carry no fact must not keep them — that leaked
+        // other cases' docket numbers into "What is the docket number in <case>?" (case bench).
+        let cleared = RetrievalResult(
+            chunks: result.chunks, events: result.events, entities: result.entities,
+            relationships: result.relationships, summaries: result.summaries,
+            layersUsed: result.layersUsed, shortCircuitedAt: result.shortCircuitedAt,
+            walkSteps: result.walkSteps, genericFacts: [], claimEvaluations: [],
+            authorityObjectIDs: result.authorityObjectIDs)
+        return await attachGenericFacts(to: cleared)
     }
 
     private func attachGenericFacts(to surfaced: RetrievalResult) async -> RetrievalResult {
