@@ -691,11 +691,23 @@ public actor MasterBrain {
             authorityObjectIDs: retrieval.authorityObjectIDs,
             cap: 6   // mirrors EvidenceVerifier.reconstructCitationCap
         )
+        // Case bench 2026-10-18 — without the AI, chapters have no prose and so no citations,
+        // and the events the body states went out uncited. Each stated event cites its own
+        // source document, with the event's words as the snippet.
+        var answerCitations = refinedCitations
+        if answerCitations.isEmpty, !hasUsefulChapters {
+            let stated = Set(narrative.chapters.flatMap(\.eventIDs))
+            answerCitations = retrieval.events
+                .filter { stated.contains($0.id) }
+                .sorted { $0.date < $1.date }
+                .prefix(6)
+                .map { VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: $0.summary ?? $0.title) }
+        }
         return VerifiedAnswer(
             body: body,
             answerText: body,
             intentKind: intent.kind.rawValue,
-            citations: refinedCitations,
+            citations: answerCitations,
             confidence: Confidence(avgConf),
             contradictions: contradictions,
             refused: false,

@@ -512,8 +512,17 @@ public actor HybridRetriever: Retriever {
     /// `evidenceBlockID`, so a fact only rides an answer whose evidence actually
     /// backs it. Strict no-op when no repo is wired or no surfaced chunk carries
     /// a block id. Never throws into the retrieval path.
-    private func attachGenericFacts(to result: RetrievalResult) async -> RetrievalResult {
-        guard let genericFacts else { return result }
+    /// The same fact attachment for a result assembled OUTSIDE this retriever — the anchored and
+    /// case-scoped decorators recover their scope's passages after this retriever has ranked,
+    /// and those passages would otherwise carry no facts (case bench 2026-10-18: "none of the
+    /// documents searched carries a decision date" about a scoped decision that states one).
+    public func attachingFacts(to result: RetrievalResult) async -> RetrievalResult {
+        await attachGenericFacts(to: result)
+    }
+
+    private func attachGenericFacts(to surfaced: RetrievalResult) async -> RetrievalResult {
+        guard let genericFacts else { return surfaced }
+        let result = await withDocumentFactPassages(surfaced, facts: genericFacts)
         let blockIDs = result.chunks.flatMap { $0.chunk.allBlockIDs }   // L1: every block of a packed chunk
         guard !blockIDs.isEmpty else { return result }                 // zero work when no blocks
         let facts = (try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? []
@@ -546,6 +555,40 @@ public actor HybridRetriever: Retriever {
         )
     }
 
+
+    /// A surfaced DOCUMENT's facts ride with it, not only the facts of the passages that
+    /// happened to rank. Case bench 2026-10-18: asked "When was <case> decided?", retrieval
+    /// surfaced the decision's body passages but not its caption block, where the decision date
+    /// is stated — and the answer said "none of the documents searched carries a decision date"
+    /// about a document that does. For each of the top surfaced documents, the passages that
+    /// carry a fact (at most two per document, twenty in all) join the result at the lowest
+    /// score, so a fact is still cited to the very passage that states it.
+    private func withDocumentFactPassages(_ result: RetrievalResult, facts: GenericFactRepository) async -> RetrievalResult {
+        var seenObjects = Set<KnowledgeObject.ID>()
+        let documents = result.chunks.map(\.chunk.objectID).filter { seenObjects.insert($0).inserted }.prefix(10)
+        var have = Set(result.chunks.map(\.chunk.id))
+        var extra: [RetrievedChunk] = []
+        for document in documents where extra.count < 20 {
+            guard let docChunks = try? await chunks.findByObjectID(document) else { continue }
+            let missing = docChunks.filter { !have.contains($0.id) }
+            let blocks = missing.flatMap(\.allBlockIDs)
+            guard !blocks.isEmpty, let found = try? await facts.facts(forBlockIDs: blocks), !found.isEmpty else { continue }
+            let factBlocks = Set(found.flatMap(\.sourceBlockIDs))
+            var added = 0
+            for c in missing where added < 2 && extra.count < 20 && !factBlocks.isDisjoint(with: c.allBlockIDs) {
+                extra.append(RetrievedChunk(chunk: c, score: 0, viaLayer: .metadata))
+                have.insert(c.id)
+                added += 1
+            }
+        }
+        guard !extra.isEmpty else { return result }
+        return RetrievalResult(
+            chunks: result.chunks + extra, events: result.events, entities: result.entities,
+            relationships: result.relationships, summaries: result.summaries,
+            layersUsed: result.layersUsed, shortCircuitedAt: result.shortCircuitedAt,
+            walkSteps: result.walkSteps, genericFacts: result.genericFacts, claimEvaluations: result.claimEvaluations,
+            authorityObjectIDs: result.authorityObjectIDs)
+    }
 
     /// The set of privileged KnowledgeObject IDs. Guarded so it costs nothing
     /// when no objects repo is wired or nothing is privileged.

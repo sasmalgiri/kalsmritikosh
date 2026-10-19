@@ -19,7 +19,9 @@ def date_forms(iso):
     y, m, d = iso.split("-"); mi, di = int(m), int(d); name = MONTHS[mi - 1]
     return [iso, f"{name} {di}, {y}", f"{name[:3]} {di}, {y}", f"{name[:3]}. {di}, {y}",
             f"{di} {name} {y}", f"{mi}/{di}/{y}", f"{m}/{d}/{y}", f"{name} {di} {y}",
-            f"{name} {di},{y}", f"{mi}/{di}/{y[2:]}"]
+            f"{name} {di},{y}", f"{mi}/{di}/{y[2:]}",
+            # Day-first forms the app itself writes ("23/07/1993", "23 Jul 1993").
+            f"{d}/{m}/{y}", f"{di}/{mi}/{y}", f"{di} {name[:3]} {y}", f"{di} {name[:3]}, {y}"]
 
 def words(s):
     return [w for w in re.findall(r"[a-z][a-z'-]+", s.lower()) if len(w) > 3 and w not in STOP]
