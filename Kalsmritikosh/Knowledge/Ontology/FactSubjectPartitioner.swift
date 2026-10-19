@@ -44,7 +44,34 @@ public nonisolated enum FactSubjectPartitioner {
             if !trimmed.isEmpty, !isGenericHeading(trimmed) { return String(trimmed.prefix(120)) }
         }
         if let name = headlineName(blocks: blocks) { return name }
+        if let line = firstLineTitle(blocks: blocks) { return line }
         return fileURL.deletingPathExtension().lastPathComponent
+    }
+
+    /// The document's first line when it reads as a title — before the file name is used.
+    ///
+    /// FOUND BY THE CASE BENCH, 2026-10-18 (and earlier on the owner's own archive, where facts
+    /// were filed under "Sent"): plain-text documents rarely carry a title block, so every
+    /// `decision.txt`, `scan.pdf` or `report.pdf` was filed under its FILE NAME, and facts from
+    /// different matters that happen to share a file name collided — one answer listed four
+    /// "conflicting" docket numbers from four different cases. A first line of 3–120
+    /// characters, at most 16 words, carrying a letter, that is not a sentence (no closing
+    /// period), not a `Label:` line and not a generic heading, names the document better than
+    /// its file name does.
+    static func firstLineTitle(blocks: [EvidenceBlock]) -> String? {
+        guard let first = blocks.sorted(by: { $0.ordinal < $1.ordinal })
+            .first(where: { $0.kind == .paragraph || $0.kind == .documentTitle || $0.kind == .documentHeader
+                         || $0.kind == .sectionHeading }) else { return nil }
+        let raw = first.rawText.isEmpty ? first.normalizedText : first.rawText
+        guard let line = raw.split(whereSeparator: \.isNewline).first?
+            .trimmingCharacters(in: .whitespaces) else { return nil }
+        guard (3...120).contains(line.count), line.contains(where: \.isLetter),
+              line.split(separator: " ").count <= 16,
+              !line.hasSuffix("."), !line.hasSuffix(":"), !line.contains(": "),
+              // A contact line ("… +91-9951234567", "jane@…") is not a title.
+              !line.contains("@"), line.range(of: #"\+\d"#, options: .regularExpression) == nil,
+              !isGenericHeading(line) else { return nil }
+        return line
     }
 
     /// Headings that name the KIND of document, not its subject.

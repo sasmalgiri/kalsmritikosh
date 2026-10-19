@@ -139,6 +139,10 @@ struct LegalCourtAndDispositionTests {
         ("AFFIRMED in part, REVERSED in part.", "affirmed in part, reversed in part"),
         ("We find no error. Affirmed. SMITH, Circuit Judge, dissenting: I would reverse the conviction.", "affirmed"),
         ("For these reasons we see no error. The order and judgment of the district court are affirmed.", "affirmed"),
+        // Case bench: normalized text joins the heading to the sentence after it.
+        ("dismiss plaintiffs’ claims. CONCLUSION The order and judgment of the district court are affirmed. Costs to plaintiffs.", "affirmed"),
+        ("For the foregoing reasons, the judgment of the district court is reversed and remanded.", "reversed and remanded"),
+        ("We have considered the remaining contentions. Judgment affirmed.", "affirmed"),
     ])
     func disposition(text: String, expected: String) {
         #expect(LegalCaseDomainPack.disposition(in: text) == expected)

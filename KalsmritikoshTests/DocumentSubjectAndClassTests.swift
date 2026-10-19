@@ -82,6 +82,23 @@ struct DocumentSubjectTests {
         #expect(FactSubjectPartitioner.documentLabel(blocks: objective, fileURL: url) == "Resume_pm-14e7b929")
         #expect(FactSubjectPartitioner.nameShaped("Name: Jane Roe") == nil, "a label with a colon is not a name")
     }
+
+    @Test("Case bench: a title-like first line names the document before its file name")
+    func firstLineTitle() {
+        let txt = URL(fileURLWithPath: "/tmp/case-42/decision.txt")
+        let decision = [block(.paragraph, "Sweet Home Chapter of Communities for a Great Oregon v. Babbitt\n1 F.3d 1", ordinal: 0),
+                        block(.paragraph, "The Secretary appeals.", ordinal: 1)]
+        #expect(FactSubjectPartitioner.documentLabel(blocks: decision, fileURL: txt)
+                == "Sweet Home Chapter of Communities for a Great Oregon v. Babbitt")
+        let osha = [block(.paragraph, "OSHA accident investigation summary 200072106", ordinal: 0)]
+        #expect(FactSubjectPartitioner.documentLabel(blocks: osha, fileURL: txt) == "OSHA accident investigation summary 200072106")
+        // A sentence, a label line or a contact line still falls back to the file name.
+        for opening in ["The pilot reported that the engine lost power.", "From: jane@example.com",
+                        "Subject: Q3 numbers", "Jane Roe +1-555-0100"] {
+            #expect(FactSubjectPartitioner.documentLabel(blocks: [block(.paragraph, opening, ordinal: 0)], fileURL: txt) == "decision",
+                    "\(opening)")
+        }
+    }
 }
 
 @Suite("L3 — a history rebuild supersedes the previous build", .serialized)

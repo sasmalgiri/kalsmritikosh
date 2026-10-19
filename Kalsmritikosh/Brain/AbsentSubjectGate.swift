@@ -115,7 +115,8 @@ public struct AbsentSubjectGate: Sendable {
     /// The two party words a case caption joins with "v." — "Great Oregon v. Babbitt" →
     /// ("Oregon", "Babbitt"), "United States v. Brewster" → ("States", "Brewster").
     public nonisolated static func captionCores(in question: String) -> [(left: String, right: String)] {
-        let pattern = #"([A-Z][A-Za-z'&\-]+)\.?,?\s+(?:v|vs)\.?\s+(?:[A-Z][a-z]?\.\s+)?([A-Z][A-Za-z'&\-]+)"#
+        // The right party may open with a number: "United States v. 27.09 Acres of Land".
+        let pattern = #"([A-Z][A-Za-z'&\-]+)\.?,?\s+(?:v|vs)\.?\s+(?:[A-Z][a-z]?\.\s+)?([A-Z0-9][A-Za-z0-9.'&\-]*[A-Za-z0-9])"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = question as NSString
         return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in

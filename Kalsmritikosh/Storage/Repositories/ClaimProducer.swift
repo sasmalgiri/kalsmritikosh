@@ -140,6 +140,49 @@ public actor ClaimProducer {
         return produced
     }
 
+    /// The claims ONE FILE contributes to a subject — the incremental ingest path.
+    ///
+    /// Found by the case bench, 2026-10-18: ingest re-produced EVERY claim of every subject a new
+    /// file touched, archive-wide. A subject present in nearly every document (an agency, an
+    /// employer, the archive owner's own name) made each ingest re-save its whole history — the
+    /// profile put three quarters of ingest time there, and the cost grew with the archive.
+    /// Claims are written per source item and are idempotent, so the claims of OTHER files are
+    /// already current; only this file's facts, assertions and events need projecting. Temporal
+    /// claims carry no source anchor and are still projected in full (small, subject-scoped).
+    public func produce(forSubjectID subjectID: Entity.ID, at now: Date, fromFile fileID: UUID) async throws -> Int {
+        let objects = try await evidence.objectIDs(forFile: fileID)
+        var blocks = Set<UUID>()
+        for o in objects { blocks.formUnion(try await evidence.blocks(forObject: o).map(\.id)) }
+        var produced = 0
+        // A fact or assertion with no recorded blocks cannot be attributed to a file; it is
+        // projected as before rather than silently skipped.
+        for f in try await genericFacts.facts(subjectID: subjectID)
+        where f.sourceBlockIDs.isEmpty || !blocks.isDisjoint(with: f.sourceBlockIDs) {
+            produced += await persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
+        }
+        var off = 0
+        while true {
+            let batch = try await temporalClaims.claims(subjectID: subjectID, offset: off, pageSize: 500)
+            if batch.isEmpty { break }
+            for t in batch { produced += await persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) } }
+            if batch.count < 500 { break }; off += 500
+        }
+        off = 0
+        while true {
+            let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, offset: off, pageSize: 500)
+            if batch.isEmpty { break }
+            for a in batch where a.evidenceBlockIDs.isEmpty || !blocks.isDisjoint(with: a.evidenceBlockIDs) {
+                produced += await persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) }
+            }
+            if batch.count < 500 { break }; off += 500
+        }
+        for source in try await events.claimProjectionSources(forEntityID: subjectID, inObjects: objects) {
+            let built = (try? await self.claims(from: source, at: now)) ?? []
+            for c in built { produced += await persist(kind: "event", sourceID: source.event.id) { c } }
+        }
+        return produced
+    }
+
     // MARK: - Durable-projection boundary (one source → produced / skipped; infra errors THROW)
 
     public func project(genericFact f: GenericFact, at now: Date) async throws -> ClaimProjectionOutcome {

@@ -109,7 +109,9 @@ public actor ClaimProjectionBackfill {
     public func projectSourceForUserAction(fileID: UUID, at now: Date) async throws {
         if let active { await active.value }   // don't interleave a scan with a full pass
         let subjects = try await membership.subjects(inFiles: [fileID])
-        for subject in subjects { _ = try await producer.produce(forSubjectID: subject, at: now) }
+        // Only this source's contributions: other sources' claims are already projected
+        // (case bench 2026-10-18 — re-projecting hub subjects made every ingest slower).
+        for subject in subjects { _ = try await producer.produce(forSubjectID: subject, at: now, fromFile: fileID) }
         _ = try await membership.reconcileWorkspaces(forSource: fileID, at: now)
     }
 

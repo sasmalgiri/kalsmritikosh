@@ -78,8 +78,25 @@ public actor IdentifierAnchoredRetriever: Retriever {
         // References, and named cases written as their caption ("Great Oregon v. Babbitt" is
         // looked up as "oregon v. babbitt", "oregon v babbitt" and "oregon vs. babbitt").
         var tokens = AbsentSubjectGate.candidateTokens(in: question)
+        var captions: [String] = []
         for c in AbsentSubjectGate.captionCores(in: question) {
-            tokens += ["\(c.left) v. \(c.right)", "\(c.left) v \(c.right)", "\(c.left) vs. \(c.right)"]
+            captions += ["\(c.left) v. \(c.right)", "\(c.left) v \(c.right)", "\(c.left) vs. \(c.right)"]
+        }
+        // A caption is CITED by every later decision that relies on the case, so the documents
+        // that OPEN with it — the decision itself — are preferred over those that merely cite
+        // it (case bench 2026-10-18: a cited caption pulled another decision's "affirmed" into
+        // the answer). Citing documents are used only when no document opens with it.
+        if !captions.isEmpty {
+            var opening = Set<UUID>()
+            for caption in captions {
+                guard let found = await Self.sourceVersions(containing: caption, database: database, openingOnly: true) else { break }
+                opening.formUnion(found)
+            }
+            if !opening.isEmpty, opening.count <= Self.maximumAnchoredVersions, tokens.isEmpty {
+                KalsmritikoshLog.brain.info("IdentifierAnchoredRetriever: caption anchored to \(opening.count, privacy: .public) opening document(s)")
+                return .authorizing(opening)
+            }
+            tokens += captions
         }
         guard !tokens.isEmpty else { return nil }
         var versions = Set<UUID>()
@@ -95,12 +112,14 @@ public actor IdentifierAnchoredRetriever: Retriever {
 
     /// Current source versions whose text contains `token` (case-insensitive), at most
     /// maximumAnchoredVersions + 1; nil when the lookup fails.
-    static func sourceVersions(containing token: String, database: Database) async -> Set<UUID>? {
+    static func sourceVersions(containing token: String, database: Database, openingOnly: Bool = false) async -> Set<UUID>? {
         let needle = "%\(token.lowercased())%"
+        // openingOnly: the FIRST LINE of the document's first chunk — its title / caption line.
         let sql = """
         SELECT DISTINCT COALESCE(c.source_version_id, eb.source_version_id) AS v FROM chunks c
         LEFT JOIN evidence_blocks eb ON eb.id = c.evidence_block_id
-        WHERE LOWER(c.text) LIKE ? AND COALESCE(c.source_version_id, eb.source_version_id) IS NOT NULL
+        WHERE LOWER(\(openingOnly ? "substr(c.text, 1, CASE WHEN instr(c.text, char(10)) > 0 THEN instr(c.text, char(10)) ELSE 300 END)" : "c.text")) LIKE ? \(openingOnly ? "AND c.ordinal = 0" : "")
+          AND COALESCE(c.source_version_id, eb.source_version_id) IS NOT NULL
         LIMIT \(maximumAnchoredVersions + 1);
         """
         do {

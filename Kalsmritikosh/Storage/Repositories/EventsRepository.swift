@@ -453,6 +453,26 @@ public actor EventsRepository {
         return try await assembleClaimProjectionSources(from: rows)
     }
 
+    /// The projection sources of ONE subject's events that come from the given knowledge objects —
+    /// the incremental-ingest path (see ClaimProducer.produce(forSubjectID:at:fromFile:)), which
+    /// must not page through a hub subject's whole history for every new document.
+    public func claimProjectionSources(forEntityID entityID: Entity.ID, inObjects objectIDs: Set<UUID>) async throws -> [EventClaimProjectionSource] {
+        guard !objectIDs.isEmpty else { return [] }
+        let ids = objectIDs.sorted { $0.uuidString < $1.uuidString }
+        var out: [EventClaimProjectionSource] = []
+        for chunk in stride(from: 0, to: ids.count, by: 400).map({ Array(ids[$0..<min($0 + 400, ids.count)]) }) {
+            let rows = try await database.query("""
+            SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id, e.confidence, e.date_confidence, e.quality_tier, e.date_precision, e.status, e.attributes_json, e.narrative_slots_json
+            FROM events e
+            JOIN event_entities ee ON ee.event_id = e.id
+            WHERE ee.entity_id = ? AND e.source_object_id IN (\(chunk.map { _ in "?" }.joined(separator: ",")))
+            ORDER BY e.id ASC;
+            """, [.uuid(entityID)] + chunk.map { .uuid($0) })
+            out += try await assembleClaimProjectionSources(from: rows)
+        }
+        return out
+    }
+
     /// Hydrate decoded events into projection sources: batch participants, batch labels, assemble
     /// with a deterministic participant order (by label, then id).
     private func assembleClaimProjectionSources(from rows: [SQLRow]) async throws -> [EventClaimProjectionSource] {
