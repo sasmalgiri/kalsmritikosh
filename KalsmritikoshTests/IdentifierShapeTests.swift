@@ -137,9 +137,16 @@ struct LegalCourtAndDispositionTests {
         ("We find no error. Affirmed.", "affirmed"),
         ("The district court did not err. The judgment of the district court is AFFIRMED.", "affirmed"),
         ("AFFIRMED in part, REVERSED in part.", "affirmed in part, reversed in part"),
+        ("We find no error. Affirmed. SMITH, Circuit Judge, dissenting: I would reverse the conviction.", "affirmed"),
+        ("For these reasons we see no error. The order and judgment of the district court are affirmed.", "affirmed"),
     ])
     func disposition(text: String, expected: String) {
         #expect(LegalCaseDomainPack.disposition(in: text) == expected)
+    }
+
+    @Test("A bare court name in an opinion's body is not the deciding court")
+    func bareCourtIgnored() {
+        #expect(LegalCaseDomainPack.captionCourtName(in: "As the Supreme Court held, the statute is plain.") == nil)
     }
 
     @Test("Prose that mentions a disposition word is not a disposition")

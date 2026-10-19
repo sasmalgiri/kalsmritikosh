@@ -33,24 +33,29 @@ public actor IdentifierAnchoredRetriever: Retriever {
     private let database: Database
     private let evidence: EvidenceStore
     private let scopedRecall: SourceScopedRetriever.ScopedRecall?
+    /// Re-attaches facts to the final scoped result (see HybridRetriever.attachingFacts).
+    private let attachFacts: (@Sendable (RetrievalResult) async -> RetrievalResult)?
 
     /// Above this many matching documents a reference no longer singles out one matter.
     public static let maximumAnchoredVersions = 200
 
     public init(base: any Retriever, database: Database, evidence: EvidenceStore,
-                scopedRecall: SourceScopedRetriever.ScopedRecall?) {
+                scopedRecall: SourceScopedRetriever.ScopedRecall?,
+                attachFacts: (@Sendable (RetrievalResult) async -> RetrievalResult)? = nil) {
         self.base = base
         self.database = database
         self.evidence = evidence
         self.scopedRecall = scopedRecall
+        self.attachFacts = attachFacts
     }
 
     public func retrieve(for intent: UserIntent, layers: [RetrievalLayer]) async throws -> RetrievalResult {
         guard let scope = await anchorScope(for: intent.rawQuestion) else {
             return try await base.retrieve(for: intent, layers: layers)
         }
-        return try await SourceScopedRetriever(base: base, evidence: evidence, scope: scope, scopedRecall: scopedRecall)
+        let scoped = try await SourceScopedRetriever(base: base, evidence: evidence, scope: scope, scopedRecall: scopedRecall)
             .retrieve(for: intent, layers: layers)
+        return await attachFacts?(scoped) ?? scoped
     }
 
     public func retrieve(for intent: UserIntent, layers: [RetrievalLayer],
@@ -58,8 +63,14 @@ public actor IdentifierAnchoredRetriever: Retriever {
         guard let scope = await anchorScope(for: intent.rawQuestion) else {
             return try await base.retrieve(for: intent, layers: layers, access: access)
         }
-        return try await SourceScopedRetriever(base: base, evidence: evidence, scope: scope, scopedRecall: scopedRecall)
+        let scoped = try await SourceScopedRetriever(base: base, evidence: evidence, scope: scope, scopedRecall: scopedRecall)
             .retrieve(for: intent, layers: layers, access: access)
+        guard let attachFacts else { return scoped }
+        return AuthorizedRetrievalResult(
+            result: await attachFacts(scoped.result), accessContext: scoped.accessContext,
+            withheldChunkCount: scoped.withheldChunkCount, withheldEventCount: scoped.withheldEventCount,
+            withheldEntityCount: scoped.withheldEntityCount, withheldSummaryCount: scoped.withheldSummaryCount,
+            withheldRelationshipCount: scoped.withheldRelationshipCount)
     }
 
     /// The scope the question's references single out, or nil to retrieve unanchored.

@@ -512,6 +512,14 @@ public actor HybridRetriever: Retriever {
     /// `evidenceBlockID`, so a fact only rides an answer whose evidence actually
     /// backs it. Strict no-op when no repo is wired or no surfaced chunk carries
     /// a block id. Never throws into the retrieval path.
+    /// The same fact attachment for a result assembled OUTSIDE this retriever — the anchored and
+    /// case-scoped decorators recover their scope's passages after this retriever has ranked,
+    /// and those passages would otherwise carry no facts (case bench 2026-10-18: "none of the
+    /// documents searched carries a decision date" about a scoped decision that states one).
+    public func attachingFacts(to result: RetrievalResult) async -> RetrievalResult {
+        await attachGenericFacts(to: result)
+    }
+
     private func attachGenericFacts(to surfaced: RetrievalResult) async -> RetrievalResult {
         guard let genericFacts else { return surfaced }
         let result = await withDocumentFactPassages(surfaced, facts: genericFacts)

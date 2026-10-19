@@ -116,7 +116,7 @@ public enum LegalCaseDomainPack {
     /// 2026-10-18: the labeled rule above expects "In the Court of …", so US captions gave none.
     nonisolated static func captionCourtName(in text: String) -> String? {
         let head = String(text.prefix(1200))
-        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})?"#
+        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})"#
         guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
         // A period after a full word ends the name ("… Circuit. Argued"); initials keep it
         // ("District Court, D. Tennessee").
@@ -131,18 +131,22 @@ public enum LegalCaseDomainPack {
     /// Only the LAST sentence is read, and only a sentence made of disposition words (optionally
     /// "The judgment … is"), so prose that merely mentions "affirmed" never matches.
     nonisolated static func disposition(in text: String) -> String? {
-        let tail = text.suffix(400).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tail.isEmpty else { return nil }
-        var last = tail
-        if let cut = tail.dropLast().range(of: #"[.!?]\s+(?=[A-Z])"#, options: [.regularExpression, .backwards]) {
-            last = String(tail[cut.upperBound...])
+        // The LAST standalone disposition sentence in the block: a dissent or concurrence often
+        // follows the majority's "Affirmed.", so the text's final sentence is not enough.
+        var sentences: [String] = []
+        text.enumerateSubstrings(in: text.startIndex..., options: [.bySentences, .localized]) { s, _, _, _ in
+            if let s { sentences.append(s.trimmingCharacters(in: .whitespacesAndNewlines)) }
         }
         let verbs = "affirmed|reversed|vacated|remanded|dismissed|modified"
         let pattern = "^(?:(?:the )?(?:judgments?|orders?|decisions?|convictions?|sentences?)[^.]{0,120}? (?:is|are|be) )?((?:\(verbs))(?:(?: in part)?(?:,? and|,)(?: in part)? (?:\(verbs)))*(?: in part)?)\\.?$"
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
-        let ns = last as NSString
-        guard let m = re.firstMatch(in: last, range: NSRange(location: 0, length: ns.length)) else { return nil }
-        return ns.substring(with: m.range(at: 1)).lowercased()
+        for sentence in sentences.reversed() where sentence.count <= 160 {
+            let ns = sentence as NSString
+            if let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)) {
+                return ns.substring(with: m.range(at: 1)).lowercased()
+            }
+        }
+        return nil
     }
 
     /// A caption line that is ONLY a date ("August 8, 1924.)"), among the first lines.

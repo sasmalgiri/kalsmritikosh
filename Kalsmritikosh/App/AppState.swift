@@ -1605,7 +1605,8 @@ public final class AppState {
                 base: retriever, database: db, evidence: evidenceStoreRepo,
                 scopedRecall: SourceScopedRetriever.ScopedRecall(
                     chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
-                    events: events, entities: entities, relationships: relationships))
+                    events: events, entities: entities, relationships: relationships),
+                attachFacts: { [retriever] in await retriever.attachingFacts(to: $0) })
             let brain = MasterBrain(
                 intentDetector: intentDetector,
                 router: router,
