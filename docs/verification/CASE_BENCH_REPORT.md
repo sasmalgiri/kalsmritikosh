@@ -21,6 +21,25 @@ fatalities). Baseline = the app before the case-bench fixes.
 | Invented answer about a case not in the archive | 1 of 3 | **0** |
 | Accident date on the timeline (all 1,500) | 1.3% | 33% (55% on the latest build's probe) |
 
+## 1a. Full NTSB batch — 62,846 investigations (complete)
+
+All 62,846 NTSB aviation investigations with a final narrative and probable cause (1982–present),
+every 50th asked (1,257 cases), evidence-only mode, builds 94236056 → 130eab3d (before PR #162's
+date-first answers).
+
+| Question | n | Correct | Leads with the value (first 200 chars) |
+|---|---|---|---|
+| Aircraft involved | 1,257 | 100.0% | 75.5% |
+| When did it happen? | 1,257 | 100.0% | 34.4% |
+| Where? | 1,257 | 99.9% | 45.1% |
+| Probable cause | 1,257 | 98.8% | — |
+| How many killed? | 211 | 97.6% | 43.6% |
+| Case not in the archive (one per shard) | 126 | **126 refused, 0 invented** | |
+
+Extraction over all 62,846 cases: registrations 98.5%, accident date on the timeline 41.1%,
+case number as an entity 12.7% (case numbers are still found through the text, which is what
+anchoring uses). Zero ingest errors. 1.3 s per case end to end.
+
 ## 2. By persona (probe: 20 cases per source, every question asked, latest build)
 
 | Persona (source) | Question | Correct |
