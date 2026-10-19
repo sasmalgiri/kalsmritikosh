@@ -107,8 +107,13 @@ public enum LegalCaseDomainPack {
     nonisolated static func flowingDocketNumber(in text: String) -> String? {
         let head = String(text.prefix(800))
         let pattern = #"\bNos?\.\s+((?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6}(?:[-–][0-9A-Za-z]+)*)"#
-        guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
-        return head[r].replacingOccurrences(of: #"^Nos?\.\s+"#, with: "", options: .regularExpression)
+        if let r = head.range(of: pattern, options: .regularExpression) {
+            return head[r].replacingOccurrences(of: #"^Nos?\.\s+"#, with: "", options: .regularExpression)
+        }
+        // Second Circuit style: "No. 1497, Docket 93-1070" / "Dockets 92-9236, 92-9238".
+        let docket = #"\bDockets?\s+(?:No\.\s*)?((?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6})"#
+        guard let r = head.range(of: docket, options: .regularExpression) else { return nil }
+        return head[r].replacingOccurrences(of: #"^Dockets?\s+(?:No\.\s*)?"#, with: "", options: .regularExpression)
     }
 
     /// A US court as a caption names it: "United States Court of Appeals, District of Columbia
