@@ -808,6 +808,23 @@ public struct EvidenceVerifier: Verifier {
             }
         }
 
+        // Case bench 2026-10-18 — "when did it happen?" leads with the incident's date.
+        if slot == nil, let incident = IncidentAnswerComposer.compose(question: intent.rawQuestion, events: retrieval.events, facts: retrieval.genericFacts) {
+            var body = incident.text
+            if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+            return VerifiedAnswer(
+                body: body,
+                answerText: incident.text,
+                intentKind: intentKindRaw,
+                citations: incident.events.map {
+                    VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: String(($0.summary ?? $0.title).prefix(180)))
+                },
+                confidence: Confidence(0.8),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
+        }
+
         // P3-U4 — the QUOTE floor runs BEFORE the claims guard: a verbatim
         // quoted sentence needs no LLM claim to stand (the words are the
         // evidence). Genealogy's "when was Edith born" refused here because

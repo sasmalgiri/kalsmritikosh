@@ -55,7 +55,29 @@ public actor IdentifierAnchoredRetriever: Retriever {
         }
         let scoped = try await SourceScopedRetriever(base: base, evidence: evidence, scope: scope, scopedRecall: scopedRecall)
             .retrieve(for: intent, layers: layers)
-        return await attachFacts?(scoped) ?? scoped
+        let whole = await withWholeSmallScope(scoped, scope: scope)
+        return await attachFacts?(whole) ?? whole
+    }
+
+    /// A small anchored scope (one named matter) contributes ALL its documents' passages, at the
+    /// lowest score, so every document's facts can ride the answer. Case bench 2026-10-18: the
+    /// NTSB report page stating "Date & time: January 17, 2008" was in scope but never surfaced,
+    /// so its date fact never reached "When did the accident happen?".
+    static let wholeScopeLimit = 12
+
+    func withWholeSmallScope(_ result: RetrievalResult, scope: RetrievalSourceScope) async -> RetrievalResult {
+        let versions = scope.authorizedSourceVersionIDs
+        guard let chunksRepo = scopedRecall?.chunks, !versions.isEmpty, versions.count <= Self.wholeScopeLimit else { return result }
+        let have = Set(result.chunks.map(\.chunk.id))
+        guard let ids = try? await chunksRepo.chunkIDs(sourceVersionIDs: versions, limit: 120) else { return result }
+        let missing = ids.filter { !have.contains($0) }
+        guard !missing.isEmpty, let fetched = try? await chunksRepo.findByIDs(missing, sourceVersionIDs: versions) else { return result }
+        return RetrievalResult(
+            chunks: result.chunks + fetched.map { RetrievedChunk(chunk: $0, score: 0, viaLayer: .metadata) },
+            events: result.events, entities: result.entities, relationships: result.relationships,
+            summaries: result.summaries, layersUsed: result.layersUsed, shortCircuitedAt: result.shortCircuitedAt,
+            walkSteps: result.walkSteps, genericFacts: result.genericFacts, claimEvaluations: result.claimEvaluations,
+            authorityObjectIDs: result.authorityObjectIDs)
     }
 
     public func retrieve(for intent: UserIntent, layers: [RetrievalLayer],
@@ -65,9 +87,9 @@ public actor IdentifierAnchoredRetriever: Retriever {
         }
         let scoped = try await SourceScopedRetriever(base: base, evidence: evidence, scope: scope, scopedRecall: scopedRecall)
             .retrieve(for: intent, layers: layers, access: access)
-        guard let attachFacts else { return scoped }
+        let whole = await withWholeSmallScope(scoped.result, scope: scope)
         return AuthorizedRetrievalResult(
-            result: await attachFacts(scoped.result), accessContext: scoped.accessContext,
+            result: await attachFacts?(whole) ?? whole, accessContext: scoped.accessContext,
             withheldChunkCount: scoped.withheldChunkCount, withheldEventCount: scoped.withheldEventCount,
             withheldEntityCount: scoped.withheldEntityCount, withheldSummaryCount: scoped.withheldSummaryCount,
             withheldRelationshipCount: scoped.withheldRelationshipCount)
@@ -80,7 +102,10 @@ public actor IdentifierAnchoredRetriever: Retriever {
         var tokens = AbsentSubjectGate.candidateTokens(in: question)
         var captions: [String] = []
         for c in AbsentSubjectGate.captionCores(in: question) {
-            captions += ["\(c.left) v. \(c.right)", "\(c.left) v \(c.right)", "\(c.left) vs. \(c.right)"]
+            // "Hertz Corp. v. City …" — an abbreviated party keeps its period before "v.".
+            for v in ["v.", "v", "vs."] {
+                captions += ["\(c.left) \(v) \(c.right)", "\(c.left). \(v) \(c.right)", "\(c.left), \(v) \(c.right)"]
+            }
         }
         // A caption is CITED by every later decision that relies on the case, so the documents
         // that OPEN with it — the decision itself — are preferred over those that merely cite

@@ -47,6 +47,7 @@ def main():
         for line in open(t):
             r = json.loads(line); truth[r["case"]] = r
     by_q = collections.defaultdict(collections.Counter)
+    direct = collections.Counter()
     extract = collections.Counter(); controls = collections.Counter()
     examples = collections.defaultdict(list); timing = collections.Counter(); cases = 0
     for f in sorted(glob.glob(os.path.join(a.results, "*.jsonl"))):
@@ -80,14 +81,19 @@ def main():
                 if not q: continue
                 cls, note = classify(r["case"], q, ans)
                 by_q[f"{src}:{ans['id']}"][cls] += 1
+                # DIRECT: the answer LEADS with the value (first 200 characters), instead of the
+                # value appearing somewhere in a dump of passages.
+                if cls == "correct" and "overlap" not in q["expect"]:
+                    direct[f"{src}:{ans['id']}"] += value_present(q["expect"], (ans["body"] or "")[:200])[0]
                 if cls != "correct" and len(examples[(src, ans["id"], cls)]) < a.examples:
                     examples[(src, ans["id"], cls)].append({"case": r["case"], "q": ans["q"], "body": ans["body"][:400],
                                                             "cited": ans["cited"][:4], "note": note, "refusal": ans.get("refusal")})
     out = [f"# Case bench score\n\n{cases} cases scored.\n", "## Answers\n",
-           "| Source:question | n | correct | honest refusal | uncited | missed | unsupported | wrong |", "|---|---|---|---|---|---|---|---|"]
+           "| Source:question | n | correct | direct | honest refusal | uncited | missed | unsupported | wrong |", "|---|---|---|---|---|---|---|---|---|"]
     for k in sorted(by_q):
         c = by_q[k]; n = sum(c.values())
-        out.append(f"| {k} | {n} | " + " | ".join(f"{100*c[x]/n:.1f}%" for x in ["correct", "honest-refusal", "uncited", "missed", "unsupported", "wrong"]) + " |")
+        d = f"{100*direct[k]/n:.1f}%" if direct[k] or c["correct"] else "—"
+        out.append(f"| {k} | {n} | {100*c['correct']/n:.1f}% | {d} | " + " | ".join(f"{100*c[x]/n:.1f}%" for x in ["honest-refusal", "uncited", "missed", "unsupported", "wrong"]) + " |")
     out += ["\n## Extraction\n", "| Check | rate |", "|---|---|"]
     for key in sorted(k[:-len("-total")] for k in extract if k.endswith("-total")):
         src, what = key.split(":", 1)

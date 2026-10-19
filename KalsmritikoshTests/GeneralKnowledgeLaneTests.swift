@@ -67,12 +67,14 @@ struct GeneralKnowledgeLaneTests {
 
     @Test("Owner decision 2026-09-27: the lane is ON by default; an explicit OFF is honoured")
     func defaultOn() {
+        // A private defaults domain: the shared one is read by suites running in parallel,
+        // and rewriting it here raced them (an intermittent CI failure).
         let key = "kalsmritikosh.feature.generalKnowledgeLane"
-        let saved = UserDefaults.standard.object(forKey: key)
-        defer { UserDefaults.standard.set(saved, forKey: key) }
-        UserDefaults.standard.removeObject(forKey: key)
-        #expect(FeatureFlags.generalKnowledgeLaneValue(), "an unset preference means ON")
-        UserDefaults.standard.set(false, forKey: key)
-        #expect(!FeatureFlags.generalKnowledgeLaneValue(), "the user's OFF wins")
+        let suite = "gk-lane-test-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else { Issue.record("no defaults suite"); return }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(FeatureFlags.generalKnowledgeLaneValue(in: defaults), "an unset preference means ON")
+        defaults.set(false, forKey: key)
+        #expect(!FeatureFlags.generalKnowledgeLaneValue(in: defaults), "the user's OFF wins")
     }
 }

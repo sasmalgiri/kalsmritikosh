@@ -111,6 +111,7 @@ struct LegalFlowingDocketTests {
     @Test("Normalized captions still yield the docket", arguments: [
         ("SWEET HOME CHAPTER, Appellants, v. Bruce BABBITT, Appellees. No. 92-5255. Argued March 10, 1993.", "92-5255"),
         ("EEOC v. Autozone Stores, No. 3:06-cv-00862 (M.D. Fla.), plaintiff", "3:06-cv-00862"),
+        ("United States Court of Appeals, Second Circuit. No. 1497, Docket 93-1070. Argued March 1993.", "93-1070"),
     ])
     func flowing(text: String, expected: String) {
         #expect(LegalCaseDomainPack.flowingDocketNumber(in: text) == expected)
