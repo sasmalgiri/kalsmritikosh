@@ -40,6 +40,28 @@ Extraction over all 62,846 cases: registrations 98.5%, accident date on the time
 case number as an entity 12.7% (case numbers are still found through the text, which is what
 anchoring uses). Zero ingest errors. 1.3 s per case end to end.
 
+## 1b. Full OSHA batch — 146,483 workplace accident investigations (complete)
+
+Every OSHA accident investigation summary with a narrative of 200+ characters, every 50th asked
+(2,930 cases), evidence-only mode, builds 130eab3d → d4a24d2e (before PR #164).
+
+| Question | n | Correct | Leads with the value (first 200 chars) |
+|---|---|---|---|
+| When did the accident happen? | 2,930 | 100.0% | 41.1% |
+| Was anyone killed? | 1,186 | 100.0% | 99.5% |
+| How many employees were hurt? | 2,930 | 99.5% | 98.8% |
+| What happened? | 2,930 | 67.5% | — |
+| Case not in the archive (one per shard) | 293 | **293 refused, 0 invented** | |
+
+Gap found: "What happened?" was refused for 27.6% of cases ("no dated events … no history to
+tell") although the summary tells it in prose. Root cause: the history path refused when no
+incident event was extracted, and the incident extractor missed harm told sentences after the
+narrative's dated opener. Fixed in PR #164 — on the 24 refused cases re-run: "what happened"
+0% → 100% correct, date answers leading with the date 12.5% → 79%.
+
+Extraction over all 146,483 cases: inspection numbers 100%, accident date on the timeline
+71.9%, summary number as an entity 84.6%. Zero ingest errors.
+
 ## 2. By persona (probe: 20 cases per source, every question asked, latest build)
 
 | Persona (source) | Question | Correct |
