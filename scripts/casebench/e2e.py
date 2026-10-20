@@ -84,7 +84,13 @@ def doj_cases(raw, rng):
             except Exception: pass
             docs = {"press-release.txt": f"{title}\n\n{body}\n"}
             offices = [c for c in r["component"] if c]
-            short = [re.sub(r"(?i)^u\.?s\.? attorney'?s office,?\s*", "", o) for o in offices]
+            # "USAO - Texas, Southern" is how the API codes the office; the release itself says
+            # "the Southern District of Texas" / "the District of Maryland".
+            short = []
+            for o in offices:
+                m = re.match(r"USAO - ([^,]+)(?:, (\w+))?$", o)
+                if m:
+                    short.append(f"{m.group(2)} District of {m.group(1)}" if m.group(2) else f"District of {m.group(1)}")
             q = []
             if offices:
                 q.append({"id": "office", "q": f"Which Justice Department office announced the case \"{title}\"?",

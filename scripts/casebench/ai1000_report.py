@@ -82,11 +82,11 @@ def main():
 
     wf = [r for r in results if r.get("workflow")]
     if wf:
-        ok_scope = sum(1 for r in wf if not r["workflow"]["error"] and r["workflow"]["authorizedVersions"] > 0)
+        ok_scope = sum(1 for r in wf if not r["workflow"].get("error") and r["workflow"]["authorizedVersions"] > 0)
         hashed = sum(r["workflow"]["custodyHashed"] for r in wf); entries = sum(r["workflow"]["custodyEntries"] for r in wf)
         with_findings = sum(1 for r in wf if r["workflow"]["findingsClaims"] > 0)
         cites = sum(r["workflow"]["findingsCitations"] for r in wf); in_scope = sum(r["workflow"]["findingsCitationsInScope"] for r in wf)
-        errors = collections.Counter(r["workflow"]["error"] for r in wf if r["workflow"]["error"])
+        errors = collections.Counter(r["workflow"].get("error") for r in wf if r["workflow"].get("error"))
         case_right = case_n = fact_in_findings = fact_n = 0
         for r in wf:
             t = truth[r["case"]]; qs = {q["id"]: q for q in t["questions"]}
@@ -117,7 +117,7 @@ def main():
         for cat in sorted(cats):
             rs = cats[cat]; files = sum(len(r["docs"]) for r in rs)
             read = sum(1 for r in rs for d in r["docs"] if d.get("chunks", 0) > 0 and not d.get("error"))
-            opened = sum(1 for r in rs if not r["workflow"]["error"] and r["workflow"]["authorizedVersions"] >= len(r["docs"]))
+            opened = sum(1 for r in rs if not r["workflow"].get("error") and r["workflow"]["authorizedVersions"] >= len(r["docs"]))
             right = n = 0; dated = dn = 0; secs = []
             for r in rs:
                 t = truth[r["case"]]; qs = {q["id"]: q for q in t["questions"]}
