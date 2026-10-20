@@ -51,25 +51,37 @@ public enum SentenceQuoteComposer {
             || question.lowercased().contains("when ")
             || question.lowercased().contains("how much")
 
+        // Case bench 2026-10-21: "Why was FDA recall Z-2366-2021 issued?" quoted the report's
+        // title line ("FDA Enforcement Report — recall Z-2366-2021"), which repeats the
+        // question's reference word for word and says nothing about why. For a why-question
+        // the reference only names the matter; the answer is the sentence that gives a reason.
+        let asksWhy = Self.asksWhy(question)
+        let matchWords = asksWhy ? queryWords.filter { !$0.contains(where: \.isNumber) && $0 != "why" } : queryWords
+
         var best: (score: Int, tiebreak: String, sentence: String, chunk: Chunk)?
         for rc in chunks {
             // Chunk-level context: a record document ("Date of birth: 23 August
             // 1897") often splits the NAME and the VALUE across lines — the
             // chunk carrying both is the context that licenses the line quote.
             let chunkOverlap = queryWords.intersection(contentWords(rc.chunk.text)).count
+            var previous = ""
             for raw in sentences(of: rc.chunk.text) {
                 let sentence = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                defer { previous = sentence }
                 guard sentence.count >= 20, sentence.count <= maxSentenceLength else { continue }
                 let words = contentWords(sentence)
-                let overlap = queryWords.intersection(words).count
+                let overlap = matchWords.intersection(words).count
                 let hasValue = sentence.contains(where: \.isNumber)
                 if asksForValue && !hasValue { continue }
+                // A why-question's answer: the line under a "Reason …:" / "Cause:" label, or a
+                // sentence that states a reason.
+                let reason = asksWhy ? Self.reasonWeight(sentence, previous: previous) : 0
                 // Fire on: strong sentence overlap, OR one topical word in the
                 // sentence with the REST of the question's words in the chunk.
-                let strong = overlap >= minOverlap
-                let contextual = overlap >= 1 && chunkOverlap >= 3
+                let strong = overlap >= minOverlap || reason >= 4
+                let contextual = (overlap >= 1 || reason > 0) && chunkOverlap >= 3
                 guard strong || contextual else { continue }
-                let score = overlap * 2 + (hasValue ? 1 : 0) + (contextual && !strong ? 2 : 0)
+                let score = overlap * 2 + (hasValue ? 1 : 0) + (contextual && !strong ? 2 : 0) + reason
                 // Total order: score, then the sentence text (stable content key).
                 if best == nil || score > best!.score
                     || (score == best!.score && sentence < best!.tiebreak) {
@@ -83,6 +95,22 @@ public enum SentenceQuoteComposer {
             objectID: hit.chunk.objectID,
             chunkID: hit.chunk.id,
             receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+    }
+
+    nonisolated static func asksWhy(_ question: String) -> Bool {
+        let q = question.lowercased()
+        return q.hasPrefix("why ") || q.contains(" why ") || q.contains("what was the reason") || q.contains("what caused")
+    }
+
+    /// How strongly a sentence reads as the stated reason: the line under a reason label scores
+    /// highest; a sentence with a causal connective scores some.
+    nonisolated static func reasonWeight(_ sentence: String, previous: String) -> Int {
+        let prev = previous.lowercased().trimmingCharacters(in: .whitespaces)
+        if prev.hasSuffix(":"), prev.contains("reason") || prev.contains("cause") || prev.contains("basis") { return 6 }
+        let lower = sentence.lowercased()
+        if lower.hasPrefix("reason") || lower.hasPrefix("cause") { return 5 }
+        let connectives = ["because", "due to", "as a result", "resulted in", "caused", "failure to", "failed to", "could ", "may "]
+        return connectives.contains { lower.contains($0) } ? 3 : 0
     }
 
     /// Render: the document speaks in its own words, visibly quoted.
