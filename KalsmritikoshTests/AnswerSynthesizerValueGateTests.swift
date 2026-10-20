@@ -52,3 +52,23 @@ struct AnswerSynthesizerValueGateTests {
             findings: findings, prose: "An employee was overcome by fumes [1]."))
     }
 }
+
+@Suite("An absence is stated only when the passages show none either")
+struct AbsenceNeedsEmptyPassagesTests {
+    @Test("A written date, a docket number or the label's noun in the passages blocks the absence")
+    func passagesCarry() {
+        let caption = "WRIGHT v. MATHIAS. No. 1867. Municipal Court of Appeals for the District of Columbia. Argued Nov. 7, 1956. Decided Jan. 9, 1957."
+        #expect(EvidenceVerifier.passagesMayCarry(field: "decisionDate", label: "Decision date", texts: [caption]))
+        #expect(EvidenceVerifier.passagesMayCarry(field: "caseNumber", label: "Case number", texts: [caption]))
+        #expect(EvidenceVerifier.passagesMayCarry(field: "court", label: "Court", texts: [caption]))
+    }
+
+    @Test("Passages without such a value let the absence stand")
+    func passagesLack() {
+        let prose = "The parties met to discuss the roof repairs and agreed to meet again."
+        #expect(!EvidenceVerifier.passagesMayCarry(field: "decisionDate", label: "Decision date", texts: [prose]))
+        #expect(!EvidenceVerifier.passagesMayCarry(field: "caseNumber", label: "Case number", texts: [prose]))
+        #expect(!EvidenceVerifier.passagesMayCarry(field: "court", label: "Court", texts: [prose]))
+        #expect(!EvidenceVerifier.passagesMayCarry(field: "decisionDate", label: "Decision date", texts: []))
+    }
+}
