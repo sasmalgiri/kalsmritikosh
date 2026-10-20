@@ -34,7 +34,7 @@ def main():
     seconds = []
     for r in results:
         t = truth[r["case"]]; qs = {q["id"]: q for q in t["questions"]}
-        group = t["stratum"].split("/")[0] + "/" + t["stratum"].split("/")[1]
+        group = "/".join(t["stratum"].split("/")[:2])
         for ans in r["answers"]:
             q = qs.get(ans["id"])
             if not q: continue
@@ -106,6 +106,30 @@ def main():
         out.append(f"- Findings citations inside the case: {in_scope} of {cites}")
         out.append(f"- The case's key date appears in its findings report: {fact_in_findings} of {fact_n}")
         out.append(f"- Contradictions flagged: {sum(r['workflow']['contradictions'] for r in wf)}; gaps flagged: {sum(r['workflow']['gaps'] for r in wf)}")
+
+    # Per category: how far did the app carry each investigation on its own?
+    if wf:
+        out.append("\n## Investigation ease by category (cases worked end to end)\n")
+        out.append("| Category | cases | documents read (text found) | case opened with its documents | case questions right | findings report has findings | key date in findings | seconds per case (read + ask) |")
+        out.append("|---|---|---|---|---|---|---|---|")
+        cats = collections.defaultdict(list)
+        for r in wf: cats[truth[r["case"]]["stratum"].split("/")[0]].append(r)
+        for cat in sorted(cats):
+            rs = cats[cat]; files = sum(len(r["docs"]) for r in rs)
+            read = sum(1 for r in rs for d in r["docs"] if d.get("chunks", 0) > 0 and not d.get("error"))
+            opened = sum(1 for r in rs if not r["workflow"]["error"] and r["workflow"]["authorizedVersions"] >= len(r["docs"]))
+            right = n = 0; dated = dn = 0; secs = []
+            for r in rs:
+                t = truth[r["case"]]; qs = {q["id"]: q for q in t["questions"]}
+                for ans in r["workflow"]["answers"]:
+                    q = qs.get(ans["id"])
+                    if q: n += 1; right += classify(r["case"], q, ans)[0] in ("correct", "honest-refusal")
+                dq = next((q for q in t["questions"] if "date" in q["expect"] and q.get("in_docs", True)), None)
+                if dq: dn += 1; dated += value_in(dq["expect"], r["workflow"]["findingsText"])[0]
+                secs.append(sum(d["seconds"] for d in r["docs"]) + sum(a["seconds"] for a in r["workflow"]["answers"]))
+            secs.sort()
+            out.append(f"| {cat} | {len(rs)} | {pct(read, files)} | {pct(opened, len(rs))} | {pct(right, n)} | "
+                       f"{pct(sum(1 for r in rs if r['workflow']['findingsClaims'] > 0), len(rs))} | {pct(dated, dn)} | {secs[len(secs) // 2]:.0f} |")
 
     refused = sum(1 for c in controls if c["refused"] or not c["cited"])
     out.append(f"\n## Not-in-archive control\n\n{refused} of {len(controls)} refused (0 would be invented).")
