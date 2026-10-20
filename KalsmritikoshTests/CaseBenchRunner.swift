@@ -257,11 +257,12 @@ struct CaseBenchRunner {
                 workspaceID: ws, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .retrieval))
             let exportAccess = SensitiveAccessContext(scope: SensitiveScope(
                 workspaceID: ws, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .export))
-            var c = try await cases.createCase(workspaceID: ws, title: line.key ?? line.case, actor: "case-bench", at: now)
-            for v in versions {
-                c = try await cases.includeSource(caseID: c.id, expectedRevision: c.revision, sourceRef: v.uuidString,
-                                                  sourceKind: .sourceVersion, actor: "case-bench", at: now)
+            // The app's own case intake: the workspace's documents and their attachments come in.
+            let c = try await cases.createCase(workspaceID: ws, title: line.key ?? line.case, actor: "case-bench", at: now)
+            guard let intake = await state.investigationWorkspaceIntake else {
+                return failed(NSError(domain: "CaseBench", code: 3, userInfo: [NSLocalizedDescriptionKey: "case intake not wired"]))
             }
+            _ = try await intake.includeWorkspaceSources(caseID: c.id, actor: "case-bench", at: now)
             let context = try await answersService.scopeContext(caseID: c.id)
             let authorized = context.scope.authorizedSourceVersionIDs
             var asked: [AnswerResult] = []
