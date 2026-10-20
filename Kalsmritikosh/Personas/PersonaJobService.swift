@@ -33,6 +33,7 @@ public actor PersonaJobService {
     private let causal: InvestigationCausalService?
     private let linkage: InvestigationLinkageService?
     private let capa: InvestigationCAPAService?
+    private let workspaceIntake: InvestigationWorkspaceIntake?
 
     public init(catalog: PersonaJobCatalog,
                 cases: InvestigationCaseRepository?,
@@ -49,13 +50,15 @@ public actor PersonaJobService {
                 methods: InvestigationMethodService? = nil,
                 causal: InvestigationCausalService? = nil,
                 linkage: InvestigationLinkageService? = nil,
-                capa: InvestigationCAPAService? = nil) {
+                capa: InvestigationCAPAService? = nil,
+                workspaceIntake: InvestigationWorkspaceIntake? = nil) {
         self.catalog = catalog
         self.cases = cases; self.answers = answers; self.subjectDossier = subjectDossier
         self.identityResolution = identityResolution; self.analysis = analysis; self.reliability = reliability
         self.contradictionGap = contradictionGap; self.custody = custody; self.closure = closure
         self.findings = findings; self.dataLab = dataLab
         self.methods = methods; self.causal = causal; self.linkage = linkage; self.capa = capa
+        self.workspaceIntake = workspaceIntake
     }
 
     // MARK: - Discovery
@@ -86,8 +89,14 @@ public actor PersonaJobService {
         case .caseIntake:
             guard let cases else { throw PersonaJobError.serviceUnavailable(.caseIntake) }
             if let ws = context.workspaceID, let title = context.title {
-                let c = try await cases.createCase(workspaceID: ws, title: title, actor: context.actor, at: context.at)
-                return PersonaJobLaunch(job: job, summary: "Created case \"\(title)\" (rev \(c.revision))", producedID: c.id)
+                var c = try await cases.createCase(workspaceID: ws, title: title, actor: context.actor, at: context.at)
+                // The workspace's documents (and their attachments) come into the case's scope, each
+                // inclusion recorded — without this the new case had nothing to answer from.
+                var included = 0
+                if let workspaceIntake {
+                    (c, included) = try await workspaceIntake.includeWorkspaceSources(caseID: c.id, actor: context.actor, at: context.at)
+                }
+                return PersonaJobLaunch(job: job, summary: "Created case \"\(title)\" (rev \(c.revision)) with \(included) source(s) in scope", producedID: c.id)
             }
             let caseID = try requireCase(context)
             guard let record = try await cases.fetch(caseID: caseID) else { throw PersonaJobError.missingContext("case not found") }
