@@ -111,7 +111,14 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
                 if modelURL.pathExtension == "mlmodelc" { return modelURL }
                 return try MLModel.compileModel(at: modelURL)
             }()
-            let model = try MLModel(contentsOf: compiledURL)
+            // CPU + Neural Engine, not the GPU: case bench 2026-10-20 had the GPU path abort
+            // the whole process inside MPSGraph ("failed assertion `shape.count = 0 !=
+            // strides.count = 3`") on the first prediction while other processes held the GPU.
+            // An assertion in the framework can't be caught, so the path that raises it is
+            // not taken.
+            let configuration = MLModelConfiguration()
+            configuration.computeUnits = .cpuAndNeuralEngine
+            let model = try MLModel(contentsOf: compiledURL, configuration: configuration)
             let runtime = Runtime(model: model, tokenizer: tokenizer)
             runtimes[key] = runtime
             KalsmritikoshLog.brain.info("CoreMLCrossEncoderTier: runtime cached for \(modelName, privacy: .public) (compile+vocab paid once per process)")
