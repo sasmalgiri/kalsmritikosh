@@ -28,6 +28,9 @@ struct IncidentEventExtractorTests {
             ("Two employees sustained burns when an LP gas tank exploded on 2003-12-03.", 2003, 12, 3),
             // Case bench: OSHA forms put the date on the line after the event title.
             ("Event: Two employees sustain burns when LP gas tank explodes\nEvent date: December 3, 2003\n", 2003, 12, 3),
+            // Case bench 2026-10-20: the harm comes sentences after the narrative's opener.
+            ("Abstract:\nAt 3:15 p.m. on August 19, 2017, an employee had taken apart a resin line and was going to test a valve.  The employee actuated the solenoid and stuck his finger into the valve.  The employee lost his balance.  The employee let go of the solenoid and the valve closed, amputating the employees fingertip.  The employee was hospitalized.", 2017, 8, 19),
+            ("On January 11, 2017, an employee was pressing truss plates on the roller press and got his hand caught into the press track.", 2017, 1, 11),
           ])
     func incidentsAreDated(text: String, y: Int, m: Int, d: Int) {
         let events = IncidentEventExtractor.extract(text: text, sourceObjectID: UUID(), entityIDs: [])
@@ -45,6 +48,10 @@ struct IncidentEventExtractorTests {
             "The court affirmed the judgment on May 2, 1999.",
             "The complaint was filed on May 1, 1990. The plaintiff alleges she was injured at work.",
             "The accident airplane's engine was installed on January 5, 2004, and overhauled in 2006.",
+            // An opener's date does not reach a sentence that moves the story in time, or one
+            // too far away.
+            "On March 2, 2015, the employee started work at the plant. Two years later he was injured.",
+            "On March 2, 2015, the crew met. They reviewed plans. They ordered parts. They checked tools. They painted. The worker was injured.",
           ])
     func silentWithoutFullDateOrHarm(text: String) {
         #expect(IncidentEventExtractor.extract(text: text, sourceObjectID: UUID(), entityIDs: []).isEmpty)
