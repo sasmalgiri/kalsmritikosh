@@ -275,6 +275,13 @@ public struct AnswerSynthesizer: Sendable {
             }
             return has(findings) && !has(bare)
         }
+        // "Was anyone killed …?" — an existence question needs its yes/no, or the harm itself
+        // ("The document states that an OSHA accident investigation summary exists" is neither).
+        if q.range(of: #"^(?:was|were|did|has|have|is|are) (?:anyone|anybody|any|there|someone|somebody|no one|nobody)\b"#,
+                   options: .regularExpression) != nil {
+            let stance = #"\b(?:yes|no|not|none|nobody|no one|killed|died|dies|dead|death|deaths|fatal|fatally|fatality|injured|hurt|survived)\b"#
+            return bare.range(of: stance, options: [.regularExpression, .caseInsensitive]) == nil
+        }
         if q.hasPrefix("when ") || q.hasPrefix("what date") || q.hasPrefix("on what date") {
             let year = #"\b(?:1[6-9]|20)\d{2}\b"#
             return findings.range(of: year, options: .regularExpression) != nil

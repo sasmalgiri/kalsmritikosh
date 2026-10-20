@@ -534,6 +534,15 @@ public actor MasterBrain {
 
         let retrieval = (try? await retriever.retrieve(for: intent, layers: decision.retrievalLayers, access: access))?.result ?? RetrievalResult()
 
+        // Case bench 2026-10-20: fewer than two dated events is not a history. With no model
+        // it printed one line under a history header; with Apple's on-device model it wrote
+        // one paraphrased sentence plus filler ("The incident occurred at document [E1]"),
+        // where the evidence pipeline gives the passage that tells it. Hand it over before
+        // spending a model call.
+        if retrieval.events.count < 2 {
+            return nil
+        }
+
         // Hydrate 5W+H slot bundles for the composer's input.
         let slotBundles = (try? await eventsRepo.narrativeSlots(
             forEventIDs: retrieval.events.map(\.id)
@@ -606,13 +615,6 @@ public actor MasterBrain {
             // nothing to add, so hand the question to the evidence pipeline (which refuses on
             // its own when the archive doesn't answer).
             if narrative.chapters.isEmpty {
-                return nil
-            }
-            // Same bench, same question: one dated event without prose is a single line ("Aug
-            // 19, 2017: the valve closed, amputating …") under a history header — less than the
-            // evidence pipeline gives (the passage that tells it). A history needs at least two
-            // events to say anything a passage doesn't.
-            if retrieval.events.count < 2 {
                 return nil
             }
         }

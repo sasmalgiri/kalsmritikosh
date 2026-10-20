@@ -35,6 +35,17 @@ struct AnswerSynthesizerValueGateTests {
         #expect(!AnswerSynthesizer.dropsAskedValue(question: q, findings: f, prose: "It happened on June 8, 2017 [1]."))
     }
 
+    @Test("An existence question needs its yes/no or the harm itself")
+    func existenceKept() {
+        let q = "Was anyone killed in OSHA investigation 200041994?"
+        #expect(AnswerSynthesizer.dropsAskedValue(question: q, findings: "Employee #1: fatality, age 55",
+            prose: "The document states that an OSHA accident investigation summary exists for 200041994 [1]."))
+        #expect(!AnswerSynthesizer.dropsAskedValue(question: q, findings: "Employee #1: fatality, age 55",
+            prose: "Yes. One employee died [1]."))
+        #expect(!AnswerSynthesizer.dropsAskedValue(question: q, findings: "Employee #1: fatality, age 55",
+            prose: "The employee was fatally injured [1]."))
+    }
+
     @Test("Other questions are not gated")
     func otherQuestions() {
         #expect(!AnswerSynthesizer.dropsAskedValue(question: "What happened in OSHA investigation 220962021?",
