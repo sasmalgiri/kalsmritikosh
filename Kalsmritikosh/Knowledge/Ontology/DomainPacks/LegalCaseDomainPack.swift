@@ -33,7 +33,7 @@ public enum LegalCaseDomainPack {
     /// caseNumber is an identifier (display constant "Case No."); the rest
     /// are text/date and render their own atom.
     public nonisolated static let emittedFields: [String] =
-        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate", "disposition"]
+        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate", "disposition", "opinionAuthor"]
 
     public nonisolated static func extractFacts(
         fromText text: String,
@@ -47,6 +47,12 @@ public enum LegalCaseDomainPack {
         var facts: [GenericFact] = []
         if let d = disposition(in: text) {
             facts.append(fact(subjectLabel, "disposition", d, blockID, 0.75))
+        }
+        // Who wrote the opinion: "SELYA, Circuit Judge:" / "Mr. JUSTICE MORAN delivered the opinion of
+        // the court" / "PER CURIAM". Case bench 2026-10-20: "Who wrote the majority opinion in …?" had
+        // no fact to answer from, so the answer was a list of passages.
+        if let author = opinionAuthor(in: text) {
+            facts.append(fact(subjectLabel, "opinionAuthor", author, blockID, 0.75))
         }
         guard isLegalCase(lower) else { return facts }
 
@@ -159,6 +165,27 @@ public enum LegalCaseDomainPack {
                 return ns.substring(with: m.range(at: 1)).lowercased()
             }
         }
+        return nil
+    }
+
+    /// The judge who delivered the opinion, as the opinion's own header line names them.
+    nonisolated static func opinionAuthor(in text: String) -> String? {
+        let head = String(text.prefix(20_000))
+        let patterns = [
+            // "SELYA, Circuit Judge." / "KEARSE, Circuit Judge:" / "RUTH BADER GINSBURG, Circuit Judge:"
+            #"(?m)^\s*((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?Judge\s*[:.]"#,
+            // "Mr. JUSTICE MORAN delivered the opinion of the court" / "Justice Moran delivered …"
+            #"(?:Mr\.\s+|Mrs\.\s+|Ms\.\s+)?(?:Chief\s+)?(?:JUSTICE|Justice)\s+([A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+)?)\s+delivered the opinion"#,
+        ]
+        for p in patterns {
+            guard let re = try? NSRegularExpression(pattern: p) else { continue }
+            let ns = head as NSString
+            if let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) {
+                let name = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
+                return name.capitalized
+            }
+        }
+        if head.range(of: #"(?m)^\s*PER CURIAM[.:]?\s*$"#, options: .regularExpression) != nil { return "Per curiam" }
         return nil
     }
 

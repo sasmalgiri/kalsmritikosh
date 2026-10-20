@@ -149,6 +149,22 @@ struct LegalCourtAndDispositionTests {
         #expect(LegalCaseDomainPack.disposition(in: text) == expected)
     }
 
+    @Test("The opinion's author, as its header names them", arguments: [
+        ("Before MIKVA, Chief Judge.\nSELYA, Circuit Judge.\nAfter selling drugs and a gun …", "Selya"),
+        ("KEARSE, Circuit Judge:\nDefendants City of New York appeal …", "Kearse"),
+        ("RUTH BADER GINSBURG, Circuit Judge:\nThe petition …", "Ruth Bader Ginsburg"),
+        ("Mr. JUSTICE MORAN\ndelivered the opinion of the court:\nFred L. Agnew …", "Moran"),
+        ("PER CURIAM.\nThe judgment is affirmed.", "Per curiam"),
+    ])
+    func author(text: String, expected: String) {
+        #expect(LegalCaseDomainPack.opinionAuthor(in: text) == expected)
+    }
+
+    @Test("A judge mentioned in the body is not the author")
+    func bodyMentionIgnored() {
+        #expect(LegalCaseDomainPack.opinionAuthor(in: "As Judge Smith explained in an earlier case, the rule applies.") == nil)
+    }
+
     @Test("A bare court name in an opinion's body is not the deciding court")
     func bareCourtIgnored() {
         #expect(LegalCaseDomainPack.captionCourtName(in: "As the Supreme Court held, the statute is plain.") == nil)
