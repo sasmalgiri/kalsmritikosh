@@ -136,6 +136,9 @@ struct CaseBenchRunner {
         var versionsByCase: [String: [UUID]] = [:]
         var filesByCase: [String: [UUID]] = [:]
         let t0 = Date()
+        // Objects the archive already holds — whatever a case's ingest adds beyond them (an
+        // email's attachments, a ZIP's files, a mailbox's messages) belongs to that case.
+        var knownObjects = Set<UUID>()
         for line in truth {
             let folder = shard.appendingPathComponent(line.case, isDirectory: true)
             let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
@@ -155,6 +158,12 @@ struct CaseBenchRunner {
                         events: 0, seconds: Date().timeIntervalSince(s), error: String(describing: error)))
                 }
             }
+            let all = Set(((try? await db.query("SELECT id FROM knowledge_objects;", [])) ?? []).compactMap { $0.uuid(0) })
+            for o in all.subtracting(knownObjects) where caseOfObject[o] == nil {
+                caseOfObject[o] = line.case + "/(inside a case document)"
+                objectsByCase[line.case, default: []].append(o)
+            }
+            knownObjects = all
         }
         let ingestSeconds = Date().timeIntervalSince(t0)
         let t1 = Date()
