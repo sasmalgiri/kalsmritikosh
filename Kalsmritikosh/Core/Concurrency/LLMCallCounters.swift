@@ -25,6 +25,11 @@ public actor LLMCallCounters {
         public var embedCacheHits: Int = 0
         public var embedCacheMisses: Int = 0
         public var byPurpose: [String: Int] = [:]
+        /// Calls per provider ID — which model actually answered (case bench 2026-10-20: a run
+        /// must show it used the on-device model, not just that AI was switched on).
+        public var byProvider: [String: Int] = [:]
+        /// Calls per provider ID that returned text (attempts that threw are in byProvider only).
+        public var completedByProvider: [String: Int] = [:]
 
         /// Fraction of would-be LLM work that was skipped by policy.
         public var skipRate: Double {
@@ -60,6 +65,7 @@ public actor LLMCallCounters {
     public func recordCall(purpose: String, requestID: UUID? = nil, providerID: String? = nil) {
         snap.callsRun += 1
         snap.byPurpose[purpose, default: 0] += 1
+        snap.byProvider[providerID ?? "unattributed", default: 0] += 1
         records.append(CallRecord(requestID: requestID, providerID: providerID, purpose: purpose, timestamp: Date()))
         if records.count > maxRecords { records.removeFirst(records.count - maxRecords) }
 
@@ -85,6 +91,7 @@ public actor LLMCallCounters {
 
     public func recordTimeout() { snap.timeouts += 1 }
     public func recordEmbedCacheHit(_ n: Int = 1) { snap.embedCacheHits += n }
+    public func recordCompletion(providerID: String) { snap.completedByProvider[providerID, default: 0] += 1 }
     public func recordEmbedCacheMiss(_ n: Int = 1) { snap.embedCacheMisses += n }
 
     public func snapshot() -> Snapshot { snap }

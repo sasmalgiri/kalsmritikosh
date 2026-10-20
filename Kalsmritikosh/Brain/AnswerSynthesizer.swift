@@ -66,9 +66,13 @@ public struct AnswerSynthesizer: Sendable {
               await provider.isAvailable() else { return nil }
 
         // Budget the shared context so DRAFT + a later pass that ALSO carries
-        // the draft still fit the 4,096-token window with room for output.
-        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500)
-        let evidence = Self.evidenceBlock(citations, maxTokens: 800)
+        // the draft still fit the window with room for output. The budgets were
+        // sized for a 4,096-token window; the installed model reports its own
+        // (8,192 for the macOS 27 model), and a larger window carries more
+        // findings and evidence in the same proportion.
+        let scale = max(1, min(4, provider.manifest.contextWindow / 4_096))
+        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500 * scale)
+        let evidence = Self.evidenceBlock(citations, maxTokens: 800 * scale)
         // Topic-first (owner request 2026-09-20): when a distilled topic matches,
         // give it to the model as the PRIMARY orientation so the answer is drawn
         // from the deduped/minimized knowledge — while every stated fact must still
@@ -196,6 +200,15 @@ public struct AnswerSynthesizer: Sendable {
         let final = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard final.count >= 2 else { return nil }
 
+        // Case bench 2026-10-20 (first run with the on-device model): "How many employees
+        // were hurt?" came back as "The document states that injured employees were
+        // involved" — fluent, cited, and without the number the findings carried. Prose
+        // that drops the value the question asks for is worse than the findings it replaces.
+        if Self.dropsAskedValue(question: question, findings: findings, prose: final) {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: synthesis dropped the asked-for value; keeping the grounded body")
+            return nil
+        }
+
         // §17 — sentence-level citation validation. Reject prose whose factual
         // sentences are largely UNcited rather than ship ungrounded text; the
         // caller then keeps the verifier's claim-cited deterministic body. We
@@ -239,6 +252,35 @@ public struct AnswerSynthesizer: Sendable {
         }
         let fraction = substantive == 0 ? 1.0 : Double(cited) / Double(substantive)
         return (substantive, fraction)
+    }
+
+    /// True when the question asks for a count or a date, the findings carry one, and the
+    /// prose does not.
+    static func dropsAskedValue(question: String, findings: String, prose: String) -> Bool {
+        let q = question.lowercased()
+        // The question's own references ("OSHA investigation 220962021") are not the value.
+        let references = (try? NSRegularExpression(pattern: #"[A-Za-z0-9\-]*\d[A-Za-z0-9\-]*"#))?
+            .matches(in: question, range: NSRange(location: 0, length: (question as NSString).length))
+            .map { (question as NSString).substring(with: $0.range) } ?? []
+        func withoutReferences(_ t: String) -> String {
+            references.reduce(t) { $0.replacingOccurrences(of: $1, with: " ") }
+        }
+        let findings = withoutReferences(findings)
+        let bare = withoutReferences(prose.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression))
+        let numberWords = #"\b(?:no|none|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|single|nobody)\b"#
+        if q.hasPrefix("how many") || q.contains(" how many ") || q.hasPrefix("how much") {
+            let has = { (t: String) in
+                t.range(of: #"\d"#, options: .regularExpression) != nil
+                    || t.range(of: numberWords, options: [.regularExpression, .caseInsensitive]) != nil
+            }
+            return has(findings) && !has(bare)
+        }
+        if q.hasPrefix("when ") || q.hasPrefix("what date") || q.hasPrefix("on what date") {
+            let year = #"\b(?:1[6-9]|20)\d{2}\b"#
+            return findings.range(of: year, options: .regularExpression) != nil
+                && bare.range(of: year, options: .regularExpression) == nil
+        }
+        return false
     }
 
     // MARK: - Helpers

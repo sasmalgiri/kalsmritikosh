@@ -31,6 +31,9 @@ struct CaseBenchRunner {
     struct AnswerResult: Encodable {
         let id: String; let q: String; let body: String; let refused: Bool; let refusal: String?
         let cited: [String]; let snippets: [String]; let confidence: String; let seconds: Double
+        /// Generations that returned text while this question was answered, per provider ID —
+        /// the proof of which model (if any) wrote the answer.
+        let aiCalls: [String: Int]
     }
     struct CaseResult: Encodable {
         let `case`: String; let source: String
@@ -44,6 +47,8 @@ struct CaseBenchRunner {
     struct ShardSummary: Encodable {
         let shard: String; let cases: Int; let ingestSeconds: Double; let embedSeconds: Double
         let askSeconds: Double; let control: AnswerResult?
+        /// The on-device model the run used ("AFM 3 Core Advanced"), nil in evidence-only mode.
+        let aiModel: String?
     }
 
     static var env: [String: String] { ProcessInfo.processInfo.environment }
@@ -59,17 +64,26 @@ struct CaseBenchRunner {
         // Tier A runs the evidence-only answer path ("Fully private (no AI)"). The switch goes
         // into the argument domain, which lives in memory for this process only, so the owner's
         // saved preference is never written.
-        if Self.env["CASEBENCH_NOAI"] == "1" {
-            UserDefaults.standard.setVolatileDomain(["kalsmritikosh.privacy.offlineNoLLM": true],
-                                                    forName: UserDefaults.argumentDomain)
+        // Tier B (CASEBENCH_NOAI=0) answers with Apple's on-device model. The switch is forced
+        // off the same way, so an owner preference of "Fully private" cannot silently turn the
+        // run into an evidence-only one, and the run stops unless the model is really there.
+        let noAI = Self.env["CASEBENCH_NOAI"] == "1"
+        UserDefaults.standard.setVolatileDomain(["kalsmritikosh.privacy.offlineNoLLM": noAI],
+                                                forName: UserDefaults.argumentDomain)
+        if !noAI {
+            guard await FoundationModelsProvider().isAvailable() else {
+                Issue.record("AI run requested but Apple's on-device model is unavailable: \(FoundationModelsProvider.unavailabilityHint() ?? "unknown")")
+                return
+            }
         }
+        let aiModel = noAI ? nil : FoundationModelsProvider.installedModelName()
         var done = 0
         for shard in Self.shards(under: URL(fileURLWithPath: root, isDirectory: true)) {
             guard done < maxShards else { break }
             let name = shard.deletingLastPathComponent().lastPathComponent + "-" + shard.lastPathComponent
             let target = out.appendingPathComponent(name + ".jsonl")
             if FileManager.default.fileExists(atPath: target.path) { continue }
-            try await run(shard: shard, name: name, into: target, embed: embed, askEvery: askEvery)
+            try await run(shard: shard, name: name, into: target, embed: embed, askEvery: askEvery, aiModel: aiModel)
             done += 1
         }
     }
@@ -86,7 +100,7 @@ struct CaseBenchRunner {
             .sorted { $0.path < $1.path }
     }
 
-    private func run(shard: URL, name: String, into target: URL, embed: Bool, askEvery: Int) async throws {
+    private func run(shard: URL, name: String, into target: URL, embed: Bool, askEvery: Int, aiModel: String?) async throws {
         let truth = try String(contentsOf: shard.appendingPathComponent("truth.jsonl"), encoding: .utf8)
             .split(separator: "\n").map { try JSONDecoder().decode(TruthLine.self, from: Data($0.utf8)) }
 
@@ -134,11 +148,18 @@ struct CaseBenchRunner {
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         func ask(_ id: String, _ q: String) async -> AnswerResult {
             let s = Date()
+            let before = await LLMCallCounters.shared.snapshot().completedByProvider
             let a = await brain.answer(question: q, access: access)
+            let after = await LLMCallCounters.shared.snapshot().completedByProvider
+            let calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
+                let d = kv.value - (before[kv.key] ?? 0)
+                if d > 0 { out[kv.key] = d }
+            }
             return AnswerResult(id: id, q: q, body: a.body, refused: a.refused, refusal: a.refusalReason,
                                 cited: a.citations.map { caseOfObject[$0.objectID] ?? "?" },
                                 snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
-                                confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s))
+                                confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s),
+                                aiCalls: calls)
         }
         var lines: [String] = []
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -178,7 +199,7 @@ struct CaseBenchRunner {
         // A case that is not in the archive: the honest answer is a refusal.
         let control: AnswerResult? = if let q = truth.first?.control { await ask("control", q) } else { nil }
         let summary = ShardSummary(shard: name, cases: truth.count, ingestSeconds: ingestSeconds, embedSeconds: embedSeconds,
-                                   askSeconds: Date().timeIntervalSince(t2), control: control)
+                                   askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel)
         lines.append(String(decoding: try enc.encode(["summary": summary]), as: UTF8.self))
         try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
     }

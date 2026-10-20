@@ -79,7 +79,9 @@ extension ModelProvider {
         // and background calls stay separate); then run.
         guard let context else {
             await LLMCallCounters.shared.recordCall(purpose: purpose, requestID: nil, providerID: id)
-            return try await generate(prompt: prompt, options: options)
+            let result = try await generate(prompt: prompt, options: options)
+            await LLMCallCounters.shared.recordCompletion(providerID: id)
+            return result
         }
         let reservation = try await context.budget.reserve(purpose: purpose, providerID: id)
         await LLMCallCounters.shared.recordCall(
@@ -87,6 +89,7 @@ extension ModelProvider {
         )
         do {
             let result = try await generate(prompt: prompt, options: options)
+            await LLMCallCounters.shared.recordCompletion(providerID: id)
             await context.budget.finish(sequence: reservation, status: .completed)
             return result
         } catch is CancellationError {
