@@ -58,9 +58,13 @@ public struct FoundationModelsProvider: ModelProvider {
     /// produced it.
     public nonisolated static func installedModelName() -> String? {
         #if canImport(FoundationModels)
+        // `variant` is in the macOS 27 SDK (Xcode 27, Swift 6.4); CI still builds with the
+        // macOS 26 SDK, where the symbol does not exist.
+        #if compiler(>=6.4)
         if #available(macOS 27.0, iOS 27.0, *), case .available = SystemLanguageModel.default.availability {
             return SystemLanguageModel.default.variant.displayName
         }
+        #endif
         if #available(macOS 26.0, iOS 26.0, *), case .available = SystemLanguageModel.default.availability {
             return "Apple on-device model (macOS 26)"
         }
