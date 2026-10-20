@@ -21,17 +21,16 @@ import Foundation
 public struct InvestigationWorkspaceIntake: Sendable {
     private let cases: InvestigationCaseRepository
     private let workspaces: WorkspaceRepository
-    private let evidence: EvidenceStore
-    private let relations: SourceRelationsRepository
+    private let coverage: CaseCoverageRepository
 
-    public init(cases: InvestigationCaseRepository, workspaces: WorkspaceRepository,
-                evidence: EvidenceStore, relations: SourceRelationsRepository) {
-        self.cases = cases; self.workspaces = workspaces; self.evidence = evidence; self.relations = relations
+    public init(cases: InvestigationCaseRepository, workspaces: WorkspaceRepository, coverage: CaseCoverageRepository) {
+        self.cases = cases; self.workspaces = workspaces; self.coverage = coverage
     }
 
     /// Include every current source version of the case's workspace — the files added to it and,
-    /// recursively, their attachments and archive members. Returns the updated case and how many
-    /// sources were newly included.
+    /// through the source-version graph, everything inside them (archive members, attachments,
+    /// mailbox messages, embedded files; the same closure the case coverage manifest uses).
+    /// Returns the updated case and how many sources were newly included.
     @discardableResult
     public func includeWorkspaceSources(caseID: UUID, actor: String, at date: Date) async throws -> (case: InvestigationCase, included: Int) {
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationCaseError.caseNotFound(caseID) }
@@ -39,24 +38,25 @@ public struct InvestigationWorkspaceIntake: Sendable {
         // Already decided either way (included, or deliberately excluded): left as it is.
         let decided = Set(record.sources.map(\.sourceRef))
 
-        var queue: [(file: UUID, via: UUID?)] = try await workspaces.sourceIDs(in: current.workspaceID).map { ($0, nil) }
-        var seenFiles = Set<UUID>()
+        var queue: [(version: UUID, root: Bool)] = []
+        for file in try await workspaces.sourceIDs(in: current.workspaceID) {
+            if let meta = try await coverage.currentVersion(forFileID: file) { queue.append((meta.sourceVersionID, true)) }
+        }
+        var seen = Set<UUID>()
         var included = 0
         while !queue.isEmpty {
-            let (file, via) = queue.removeFirst()
-            guard seenFiles.insert(file).inserted else { continue }
-            for object in try await evidence.objectIDs(forFile: file).sorted(by: { $0.uuidString < $1.uuidString }) {
-                guard let version = try await evidence.currentVersionID(forObject: object),
-                      !decided.contains(version.uuidString) else { continue }
+            let (version, root) = queue.removeFirst()
+            guard seen.insert(version).inserted else { continue }
+            if !decided.contains(version.uuidString) {
                 current = try await cases.includeSource(
                     caseID: caseID, expectedRevision: current.revision, sourceRef: version.uuidString,
                     sourceKind: .sourceVersion,
-                    note: via == nil ? "In the case's workspace" : "Attachment or member of a workspace document",
+                    note: root ? "In the case's workspace" : "Inside a workspace document (attachment, archive member or message)",
                     actor: actor, at: date)
                 included += 1
             }
-            for child in await relations.children(of: file) {
-                queue.append((child.childFileID, file))
+            for child in try await coverage.descendants(of: version, relations: CaseCoverageScopeResolver.coverageRelations) {
+                queue.append((child.child, false))
             }
         }
         return (current, included)

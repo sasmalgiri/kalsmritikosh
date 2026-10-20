@@ -96,4 +96,28 @@ struct InvestigationWorkspaceIntakeTests {
         let (_, again) = try await intake.includeWorkspaceSources(caseID: c.id, actor: "test", at: now)
         #expect(again == 0)
     }
+
+    @Test("A ZIP in the workspace brings its files into the case")
+    func zipMembers() async throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("intake-zip-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let zip = try ZIPTestFixture.writeZIP([
+            ZIPTestFixture.stored("decision.txt", "SMITH v. JONES. No. 4781. Supreme Court of Texas. Dec. 16, 1927. Affirmed."),
+            ZIPTestFixture.stored("notes.txt", "Investigator notes: the deed was recorded on May 2, 1925."),
+        ], named: "case-bundle.zip")
+        let state = await AppState(bookmarks: BookmarkStore())
+        await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
+        let ingest = try #require(await state.ingest)
+        let db = try #require(await state.database)
+        let ingested = try await ingest.ingest(fileAt: zip)
+        let ws = UUID(), now = Date()
+        try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);",
+                          [.uuid(ws), .text("Smith v. Jones"), .real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
+        try await #require(await state.workspaceSourceCoordinator).addSources([ingested.fileRecord.id], to: ws, at: now)
+        let cases = try #require(await state.investigationCases)
+        let c = try await cases.createCase(workspaceID: ws, title: "Smith v. Jones", actor: "test", at: now)
+        let (_, included) = try await #require(await state.investigationWorkspaceIntake).includeWorkspaceSources(caseID: c.id, actor: "test", at: now)
+        #expect(included == 3, "the ZIP and its two files")
+    }
 }

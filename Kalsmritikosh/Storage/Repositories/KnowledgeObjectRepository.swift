@@ -288,6 +288,22 @@ public actor KnowledgeObjectRepository {
     /// workspace's evidence-SOURCE boundary set, resolved from the same identity chain membership
     /// uses:  workspace_sources.file_id → knowledge_objects.file_id → knowledge_objects.id.
     /// Chunked ≤500 ids so a large workspace never exceeds SQLite's bind-variable limit; deduped.
+    /// The KnowledgeObject ids of the files the given source versions belong to (a version's
+    /// logical source is its file). Chunked like `objectIDs(inFileIDs:)`.
+    public func objectIDs(inSourceVersionIDs versionIDs: Set<UUID>) async throws -> Set<KnowledgeObject.ID> {
+        let unique = Array(versionIDs)
+        guard !unique.isEmpty else { return [] }
+        var out: Set<KnowledgeObject.ID> = []
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT ko.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let id = r.uuid(0) { out.insert(id) } }
+        }
+        return out
+    }
+
     public func objectIDs(inFileIDs fileIDs: [UUID]) async throws -> Set<KnowledgeObject.ID> {
         let unique = Array(Set(fileIDs))
         guard !unique.isEmpty else { return [] }

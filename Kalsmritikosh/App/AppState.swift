@@ -2337,7 +2337,7 @@ public final class AppState {
             self.investigationCases = investigationCasesRepo
             let workspaceIntake = InvestigationWorkspaceIntake(
                 cases: investigationCasesRepo, workspaces: workspacesRepo,
-                evidence: evidenceStoreRepo, relations: sourceRelationsRepo)
+                coverage: CaseCoverageRepository(database: db))
             self.investigationWorkspaceIntake = workspaceIntake
             // INV-01-C1 — the Investigator Ask entry point: composes the active case's authorized scope
             // over the SHARED retriever + SHARED MasterBrain (no persona engine). The brain is built per
