@@ -160,9 +160,8 @@ public actor TableOCR {
         if #available(macOS 13.0, *) { request.automaticallyDetectsLanguage = false }
 
         let w = CGFloat(cg.width), h = CGFloat(cg.height)
-        let handler = VNImageRequestHandler(cgImage: cg, orientation: orientation, options: [:])
+        guard VisionPerform.perform(request, cgImage: cg, orientation: orientation) else { return ([], 0) }
         do {
-            try handler.perform([request])
             var boxes: [WordBox] = []
             for obs in request.results ?? [] {
                 guard let top = obs.topCandidates(1).first else { continue }

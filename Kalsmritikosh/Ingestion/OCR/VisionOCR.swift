@@ -123,13 +123,8 @@ public actor VisionOCR: OCREngine {
         if #available(macOS 13.0, *) {
             request.automaticallyDetectsLanguage = false
         }
-        let handler = VNImageRequestHandler(
-            cgImage: cgImage,
-            orientation: orientation,
-            options: [:]
-        )
+        guard VisionPerform.perform(request, cgImage: cgImage, orientation: orientation) else { return ([], 0) }
         do {
-            try handler.perform([request])
             let observations = request.results ?? []
             var strings: [String] = []
             var totalConfidence: Float = 0
@@ -209,9 +204,8 @@ public actor VisionOCR: OCREngine {
         request.usesLanguageCorrection = correct
         if !customWords.isEmpty { request.customWords = customWords }
         if #available(macOS 13.0, *) { request.automaticallyDetectsLanguage = false }
-        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
+        guard VisionPerform.perform(request, cgImage: cgImage, orientation: orientation) else { return [] }
         do {
-            try handler.perform([request])
             let observations = request.results ?? []
             return observations.compactMap { obs in
                 guard let top = obs.topCandidates(1).first else { return nil }
