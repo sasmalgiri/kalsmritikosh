@@ -138,4 +138,28 @@ struct CaptionOpeningTests {
         let r = IdentifierAnchoredRetriever(base: Stub(), database: db, evidence: EvidenceStore(database: db), scopedRecall: nil)
         #expect(await r.anchorScope(for: "Who wrote the majority opinion in In re Kehl, 101 F.2d 193?")?.authorizedSourceVersionIDs == [own])
     }
+
+    @Test("A matter named by its quoted title anchors to the document titled so")
+    func quotedTitle() async throws {
+        #expect(IdentifierAnchoredRetriever.quotedTitles(in: "What happened in the case \"Patriot Coal to Pay $6.5 Million to Settle Clean Water Act Violations\"?")
+                == ["patriot coal to pay $6.5 million to settle clean water act violations"])
+        #expect(IdentifierAnchoredRetriever.quotedTitles(in: "Did he say \"yes\"?").isEmpty)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let own = UUID(), other = UUID()
+        for (i, (text, v)) in [("Patriot Coal to Pay $6.5 Million to Settle\nClean Water Act Violations\nWASHINGTON — Patriot Coal Corporation has agreed …", own),
+                               ("Coal Company Sentenced\nA different coal company was sentenced today.", other)].enumerated() {
+            let fileID = UUID(), koID = UUID()
+            try await db.exec("INSERT INTO files (id, url, source_type, size_bytes, modified_at, ingested_at, content_hash) VALUES (?, ?, 'text', 9, 0, 0, ?);",
+                              [.uuid(fileID), .text("/tmp/t\(i).txt"), .text("t\(i)")])
+            try await db.exec("INSERT INTO knowledge_objects (id, file_id, source_type, content, metadata_json, confidence, created_at, updated_at) VALUES (?, ?, 'text', ?, '{}', 0.9, 0, 0);",
+                              [.uuid(koID), .uuid(fileID), .text(text)])
+            try await db.exec("INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, created_at, source_version_id) VALUES (?, ?, 0, ?, 0, 40, 0, ?);",
+                              [.uuid(UUID()), .uuid(koID), .text(text), .uuid(v)])
+        }
+        struct Stub: Retriever { func retrieve(for intent: UserIntent, layers: [RetrievalLayer]) async throws -> RetrievalResult { RetrievalResult() } }
+        let r = IdentifierAnchoredRetriever(base: Stub(), database: db, evidence: EvidenceStore(database: db), scopedRecall: nil)
+        // The title wraps onto a second line in the document; it still anchors.
+        let scope = await r.anchorScope(for: "What happened in the case \"Patriot Coal to Pay $6.5 Million to Settle Clean Water Act Violations\"?")
+        #expect(scope?.authorizedSourceVersionIDs == [own])
+    }
 }
