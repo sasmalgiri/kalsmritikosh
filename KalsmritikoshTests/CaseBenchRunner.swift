@@ -22,7 +22,10 @@ import Testing
 struct CaseBenchRunner {
 
     struct Question: Decodable { let id: String; let q: String }
-    struct TruthLine: Decodable { let `case`: String; let source: String; let questions: [Question]; let control: String? }
+    struct TruthLine: Decodable {
+        let `case`: String; let source: String; let questions: [Question]; let control: String?
+        let profile: String?; let stratum: String?; let key: String?
+    }
 
     struct DocResult: Encodable {
         let doc: String; let chunks: Int; let entities: Int; let events: Int; let seconds: Double
@@ -43,6 +46,18 @@ struct CaseBenchRunner {
         /// open-field and domain-pack extractors write facts, not entities).
         let facts: [String]
         let answers: [AnswerResult]
+        let profile: String?; let stratum: String?
+        /// The case worked as an investigation (CASEBENCH_WORKFLOW=1): opened as a case over its
+        /// own documents, questions asked inside the case, findings built.
+        let workflow: WorkflowResult?
+    }
+    struct WorkflowResult: Encodable {
+        let authorizedVersions: Int; let custodyEntries: Int; let custodyHashed: Int
+        let contradictions: Int; let gaps: Int
+        let answers: [AnswerResult]
+        let findingsSections: Int; let findingsClaims: Int; let findingsCitations: Int
+        let findingsCitationsInScope: Int; let findingsText: String
+        let error: String?
     }
     struct ShardSummary: Encodable {
         let shard: String; let cases: Int; let ingestSeconds: Double; let embedSeconds: Double
@@ -61,6 +76,7 @@ struct CaseBenchRunner {
         let maxShards = Int(Self.env["CASEBENCH_MAX_SHARDS"] ?? "") ?? .max
         let embed = Self.env["CASEBENCH_EMBED"] != "0"
         let askEvery = max(1, Int(Self.env["CASEBENCH_ASK_EVERY"] ?? "") ?? 1)
+        let workflowEvery = Int(Self.env["CASEBENCH_WORKFLOW_EVERY"] ?? "") ?? 0   // 0 = off
         // Tier A runs the evidence-only answer path ("Fully private (no AI)"). The switch goes
         // into the argument domain, which lives in memory for this process only, so the owner's
         // saved preference is never written.
@@ -83,7 +99,7 @@ struct CaseBenchRunner {
             let name = shard.deletingLastPathComponent().lastPathComponent + "-" + shard.lastPathComponent
             let target = out.appendingPathComponent(name + ".jsonl")
             if FileManager.default.fileExists(atPath: target.path) { continue }
-            try await run(shard: shard, name: name, into: target, embed: embed, askEvery: askEvery, aiModel: aiModel)
+            try await run(shard: shard, name: name, into: target, embed: embed, askEvery: askEvery, workflowEvery: workflowEvery, aiModel: aiModel)
             done += 1
         }
     }
@@ -100,7 +116,7 @@ struct CaseBenchRunner {
             .sorted { $0.path < $1.path }
     }
 
-    private func run(shard: URL, name: String, into target: URL, embed: Bool, askEvery: Int, aiModel: String?) async throws {
+    private func run(shard: URL, name: String, into target: URL, embed: Bool, askEvery: Int, workflowEvery: Int, aiModel: String?) async throws {
         let truth = try String(contentsOf: shard.appendingPathComponent("truth.jsonl"), encoding: .utf8)
             .split(separator: "\n").map { try JSONDecoder().decode(TruthLine.self, from: Data($0.utf8)) }
 
@@ -118,6 +134,7 @@ struct CaseBenchRunner {
         var objectsByCase: [String: [UUID]] = [:]
         var caseOfObject: [UUID: String] = [:]
         var versionsByCase: [String: [UUID]] = [:]
+        var filesByCase: [String: [UUID]] = [:]
         let t0 = Date()
         for line in truth {
             let folder = shard.appendingPathComponent(line.case, isDirectory: true)
@@ -130,6 +147,7 @@ struct CaseBenchRunner {
                     objectsByCase[line.case, default: []].append(r.object.id)
                     caseOfObject[r.object.id] = line.case + "/" + file.lastPathComponent
                     if let v = r.sourceVersionID { versionsByCase[line.case, default: []].append(v) }
+                    filesByCase[line.case, default: []].append(r.fileRecord.id)
                     docsByCase[line.case, default: []].append(.init(doc: file.lastPathComponent, chunks: r.chunkCount,
                         entities: r.entityCount, events: r.eventCount, seconds: Date().timeIntervalSince(s), error: nil))
                 } catch {
@@ -190,9 +208,14 @@ struct CaseBenchRunner {
             var answers: [AnswerResult] = []
             // Every case is checked for extraction; questions go to every askEvery-th case.
             if index % askEvery == 0 { for q in line.questions { answers.append(await ask(q.id, q.q)) } }
+            var workflow: WorkflowResult?
+            if workflowEvery > 0, index % workflowEvery == 0 {
+                workflow = await investigate(line: line, versions: versions, files: filesByCase[line.case] ?? [], state: state, db: db, caseOf: caseOfObject)
+            }
             let r = CaseResult(case: line.case, source: line.source, docs: docsByCase[line.case] ?? [],
                                eventDates: Array(Set(dates)).sorted(), entities: names.sorted(),
-                               facts: facts.sorted(), answers: answers)
+                               facts: facts.sorted(), answers: answers,
+                               profile: line.profile, stratum: line.stratum, workflow: workflow)
             lines.append(String(decoding: try enc.encode(r), as: UTF8.self))
             try progressHandle.write(contentsOf: Data((lines.last! + "\n").utf8))   // visible while the shard runs
         }
@@ -202,5 +225,74 @@ struct CaseBenchRunner {
                                    askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel)
         lines.append(String(decoding: try enc.encode(["summary": summary]), as: UTF8.self))
         try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
+    }
+
+    /// Work one case the way an investigator would: open a case over exactly the documents that
+    /// arrived for it, ask its questions inside the case, look at custody, contradictions and
+    /// gaps, and build the findings. Everything is recorded; nothing is judged here.
+    private func investigate(line: TruthLine, versions: [UUID], files: [UUID], state: AppState, db: Database,
+                             caseOf: [UUID: String]) async -> WorkflowResult {
+        let now = Date()
+        func failed(_ e: Error) -> WorkflowResult {
+            WorkflowResult(authorizedVersions: 0, custodyEntries: 0, custodyHashed: 0, contradictions: 0, gaps: 0,
+                           answers: [], findingsSections: 0, findingsClaims: 0, findingsCitations: 0,
+                           findingsCitationsInScope: 0, findingsText: "", error: String(describing: e))
+        }
+        guard let cases = await state.investigationCases, let answersService = await state.investigationAnswers,
+              let custody = await state.investigationCustody, let cg = await state.investigationContradictionGap,
+              let findingsService = await state.investigationFindings else {
+            return failed(NSError(domain: "CaseBench", code: 1, userInfo: [NSLocalizedDescriptionKey: "investigation services not wired"]))
+        }
+        do {
+            let ws = UUID()
+            try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);",
+                              [.uuid(ws), .text(line.key ?? line.case), .real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
+            // The app's own "add sources to workspace" path (it also derives the workspace's members).
+            guard let sources = await state.workspaceSourceCoordinator else {
+                return failed(NSError(domain: "CaseBench", code: 2, userInfo: [NSLocalizedDescriptionKey: "workspace sources not wired"]))
+            }
+            try await sources.addSources(Set(files), to: ws, at: now)
+            // The access the app's case screens use: this case's workspace, for retrieval and for export.
+            let access = SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: ws, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .retrieval))
+            let exportAccess = SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: ws, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .export))
+            var c = try await cases.createCase(workspaceID: ws, title: line.key ?? line.case, actor: "case-bench", at: now)
+            for v in versions {
+                c = try await cases.includeSource(caseID: c.id, expectedRevision: c.revision, sourceRef: v.uuidString,
+                                                  sourceKind: .sourceVersion, actor: "case-bench", at: now)
+            }
+            let context = try await answersService.scopeContext(caseID: c.id)
+            let authorized = context.scope.authorizedSourceVersionIDs
+            var asked: [AnswerResult] = []
+            for q in line.questions {
+                let s = Date()
+                let a = try await answersService.answer(caseID: c.id, question: q.q, access: access).verified
+                asked.append(AnswerResult(id: q.id, q: q.q, body: a.body, refused: a.refused, refusal: a.refusalReason,
+                                          cited: a.citations.map { caseOf[$0.objectID] ?? "?" },
+                                          snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
+                                          confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s), aiCalls: [:]))
+            }
+            let manifest = try await custody.manifest(caseID: c.id)
+            let contradictions = try await cg.contradictions(caseID: c.id).count
+            let gaps = try await cg.gaps(caseID: c.id).count
+            let findings = try await findingsService.buildFindings(caseID: c.id, access: exportAccess, actor: "case-bench", at: now)
+            let product = findings.assembled.workProduct
+            let claims = product.sections.flatMap(\.claims)
+            let citations = product.allCitations
+            let text = product.sections.map { s in
+                ([s.title] + s.preamble + s.claims.map(\.text)).joined(separator: "\n")
+            }.joined(separator: "\n\n")
+            return WorkflowResult(
+                authorizedVersions: authorized.count, custodyEntries: manifest.count,
+                custodyHashed: manifest.filter { ($0.contentHash ?? "").isEmpty == false }.count,
+                contradictions: contradictions, gaps: gaps, answers: asked,
+                findingsSections: product.sections.count, findingsClaims: claims.count,
+                findingsCitations: citations.count,
+                findingsCitationsInScope: citations.filter { $0.sourceVersionID.map(authorized.contains) ?? false }.count,
+                findingsText: String(text.prefix(4000)), error: nil)
+        } catch {
+            return failed(error)
+        }
     }
 }
