@@ -599,15 +599,21 @@ public actor MasterBrain {
                 return rag
             }
             // Case bench 2026-10-18: with no chapters and no fallback, the header-only "No
-            // history found for …" went out as an ordinary, unrefused answer. Nothing was
-            // reconstructed, so say so as a refusal.
+            // history found for …" went out as an ordinary, unrefused answer. Case bench
+            // 2026-10-20: refusing here was wrong too — "What happened in OSHA investigation
+            // N?" refused for 27% of cases whose summary answers it in plain prose, just
+            // because no dated event was extracted. No events means the history path has
+            // nothing to add, so hand the question to the evidence pipeline (which refuses on
+            // its own when the archive doesn't answer).
             if narrative.chapters.isEmpty {
-                return VerifiedAnswer(
-                    body: "No dated events about this were found in your archive, so there is no history to tell.",
-                    citations: [],
-                    confidence: .zero,
-                    refused: true,
-                    refusalReason: "Reconstruction found no events in scope.")
+                return nil
+            }
+            // Same bench, same question: one dated event without prose is a single line ("Aug
+            // 19, 2017: the valve closed, amputating …") under a history header — less than the
+            // evidence pipeline gives (the passage that tells it). A history needs at least two
+            // events to say anything a passage doesn't.
+            if retrieval.events.count < 2 {
+                return nil
             }
         }
 
