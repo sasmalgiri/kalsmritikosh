@@ -63,6 +63,9 @@ public actor TableOCR {
     private let recognitionLanguages: [String]
     /// Below this estimated skew (degrees) the page is left as-is.
     private static let minSkewToCorrect: Double = 0.75
+    /// An upright read this dense and this confident ends the orientation search.
+    static let uprightMinimumWords = 20
+    static let uprightMinimumConfidence: Float = 0.8
     /// Skew search is clamped to ±this (a page more tilted than this is a
     /// 90°-orientation problem, handled by the orientation pass, not fine skew).
     private static let maxFineSkew: Double = 20.0
@@ -133,6 +136,13 @@ public actor TableOCR {
         for o in orientations {
             let r = recognize(cgImage: cg, orientation: o)
             let mean = r.boxes.isEmpty ? 0 : r.boxes.map(\.confidence).reduce(0, +) / Float(r.boxes.count)
+            // Case bench 2026-10-20: every scanned page paid four full "accurate" passes here
+            // (plus the printed-text pass), so a 20-page scanned decision took minutes. A page
+            // that already reads densely and confidently upright is upright — a sideways page
+            // read as `.up` yields few, low-confidence words — so the other three are skipped.
+            if o == .up, r.boxes.count >= Self.uprightMinimumWords, mean >= Self.uprightMinimumConfidence {
+                return (r.boxes, o, mean)
+            }
             // Prefer the orientation that both reads more text and reads it
             // confidently (count × mean), matching the original's OSD intent.
             let score = mean * Float(r.boxes.count)
