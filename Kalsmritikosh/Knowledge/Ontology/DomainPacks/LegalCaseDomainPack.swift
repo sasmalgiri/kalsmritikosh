@@ -54,7 +54,10 @@ public enum LegalCaseDomainPack {
         if let author = opinionAuthor(in: text) {
             facts.append(fact(subjectLabel, "opinionAuthor", author, blockID, 0.75))
         }
-        guard isLegalCase(lower) else { return facts }
+        // A case number printed beside the court's name ("No. 4781. Special Supreme Court of
+        // Texas.") or the court's name followed by a bare date ("District Court, E. D. Illinois.
+        // March 13, 1935.") is a caption by itself, even when no party is labeled by role.
+        guard isLegalCase(lower) || numberedBesideCourt(text) || courtLineDate(in: text) != nil else { return facts }
 
         if let v = DomainPackText.labeledIdentifier(after: ["case no", "suit no", "case number", "c.a. no", "w.p. no",
                                                             "docket no", "docket number"], in: text)
@@ -84,7 +87,7 @@ public enum LegalCaseDomainPack {
         // carried no decision-date fact at all, so "When was X decided?" had nothing to read.
         if let raw = DomainPackText.labeledDate(after: ["decided", "opinion filed", "date of decision",
                                                         "date of judgment", "judgment dated"], in: text)
-            ?? captionDateLine(in: text),
+            ?? captionDateLine(in: text) ?? courtLineDate(in: text),
            let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10 {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "decisionDate", value: iso,
                                      status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
@@ -118,8 +121,53 @@ public enum LegalCaseDomainPack {
         }
         // Second Circuit style: "No. 1497, Docket 93-1070" / "Dockets 92-9236, 92-9238".
         let docket = #"\bDockets?\s+(?:No\.\s*)?((?:\d{1,2}:)?\d{1,4}[-–](?:[A-Za-z]{2}[-–])?\d{2,6})"#
-        guard let r = head.range(of: docket, options: .regularExpression) else { return nil }
-        return head[r].replacingOccurrences(of: #"^Dockets?\s+(?:No\.\s*)?"#, with: "", options: .regularExpression)
+        if let r = head.range(of: docket, options: .regularExpression) {
+            return head[r].replacingOccurrences(of: #"^Dockets?\s+(?:No\.\s*)?"#, with: "", options: .regularExpression)
+        }
+        // Case bench 2026-10-20: most state and older federal reporters number a case plainly —
+        // "No. 7861. Supreme Court of North Dakota.", "(No. 4781.) Special Supreme Court of
+        // Texas.", "[Civ. No. 33558. Second Dist., Div. Five." — and older F.2d volumes put it
+        // after the court-and-date parenthesis: "(Circuit Court of Appeals, Eighth Circuit.
+        // August 28, 1924.) No. 6602." An unhyphenated number counts only next to the court.
+        for pattern in Self.plainDocketPatterns {
+            guard let re = try? NSRegularExpression(pattern: pattern),
+                  let m = re.firstMatch(in: head, range: NSRange(location: 0, length: (head as NSString).length)) else { continue }
+            return (head as NSString).substring(with: m.range(at: 1))
+        }
+        return nil
+    }
+
+    nonisolated static func numberedBesideCourt(_ text: String) -> Bool {
+        let head = String(text.prefix(800))
+        return plainDocketPatterns.contains { head.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    /// The court's name within the next few words.
+    nonisolated static let courtAhead = #"\.?[\])]?\s+(?=(?:[A-Z][A-Za-z.,'’]*\s+){0,8}?(?:Court|Circuit|Dist\.))"#
+
+    nonisolated static let plainDocketPatterns = [
+        // A designated number keeps its designation — "Civ. A. No. 9870", "Civ. No. 3730",
+        // "Patent Appeals No. 4043": a civil and a criminal number 3730 are different cases.
+        #"\b((?:Civ\.|Crim\.|Cr\.|Misc\.|C\.\s?A\.|Patent Appeals?)(?:\s+A\.)?(?:\s+No\.)?\s*[A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z])"# + courtAhead,
+        // The number, or the whole list ("Nos. 1658, 1662-1664." — one decision, four cases),
+        // then the court.
+        #"\bNos?\.\s*([A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z](?:,\s*(?:and\s+)?[0-9A-Z\-]+)*)"# + courtAhead,
+        // The court-and-date parenthesis, then the number.
+        #"(?:Court|Circuit)[^()]{0,80}?\d{4}\.?\)\s*Nos?\.\s*(\d{2,6})\b"#,
+    ]
+
+    /// The bare date sentence right after the court's name, when line breaks are gone: "Supreme
+    /// Court of Indiana. Jan. 5, 1979.", "(Circuit Court of Appeals, Eighth Circuit. August 28,
+    /// 1924.)", "Second Dist., Div. Five. Nov. 18, 1969.]". A labeled date ("Decided …") is read
+    /// first; this is the caption's own date for reporters that print no label.
+    nonisolated static func courtLineDate(in text: String) -> String? {
+        let head = String(text.prefix(1200))
+        // The court's name may carry initials ("District Court, E. D. Illinois."): a period after a
+        // single capital does not end it.
+        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20})(?:[^.]|(?<=[\s,][A-Z])\.){0,100}?\.\]?\)?\s+[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let m = re.firstMatch(in: head, range: NSRange(location: 0, length: (head as NSString).length)) else { return nil }
+        return (head as NSString).substring(with: m.range(at: 1))
     }
 
     /// A US court as a caption names it: "United States Court of Appeals, District of Columbia
@@ -163,6 +211,42 @@ public enum LegalCaseDomainPack {
             let ns = sentence as NSString
             if let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)) {
                 return ns.substring(with: m.range(at: 1)).lowercased()
+            }
+        }
+        return ruling(inClosing: sentences)
+    }
+
+    /// Case bench 2026-10-20: most decisions close with the ruling in a full sentence, not a
+    /// bare "Affirmed." — "The decree is reversed, and the bill dismissed.", "Defendants' motion
+    /// must be, and is hereby, sustained.", "The petition is denied and the judgment of the Board
+    /// is affirmed.", "Appeal dismissed." (63% of outcomes were missed). Read only the closing
+    /// sentences (boilerplate such as "An order will be entered accordingly." or "X, J., concur."
+    /// skipped), and only a present-tense ruling on the decision's own subject — "the motion was
+    /// denied" is the case's history, not its outcome.
+    nonisolated static let rulingVerbs = "affirmed|reversed|vacated|remanded|dismissed|modified|denied|granted|sustained|overruled|set aside"
+
+    nonisolated static func ruling(inClosing sentences: [String]) -> String? {
+        let subject = "judgments?|decrees?|orders?|decisions?|petitions?|motions?|writs?|appeals?|applications?|cases?|convictions?|sentences?|demurrers?|bill|complaint|libel|cause"
+        let clause = "^.{0,70}?\\b(?:the|these|this|its|his|her|their|[a-z]+['’]s?)\\s+(?:[a-z]+\\s+){0,3}?(?:\(subject))\\b[^.;]{0,160}?\\b(?:is|are|be)\\b(?:,? and (?:it )?(?:is )?hereby,?)?(?:,? (?:therefore|hereby|severally|accordingly|in all respects))*,? (\(rulingVerbs))\\b"
+        let short = "^(?:the )?(?:\(subject)) (\(rulingVerbs))\\.?$"
+        let boilerplate = ["concur", "entered accordingly", "so ordered", "order accordingly", "costs", "mandate"]
+        guard let clauseRE = try? NSRegularExpression(pattern: clause, options: [.caseInsensitive]),
+              let shortRE = try? NSRegularExpression(pattern: short, options: [.caseInsensitive]) else { return nil }
+        let closing = sentences.reversed().filter { s in
+            !boilerplate.contains { s.lowercased().contains($0) } || s.count > 80
+        }.prefix(3)
+        for sentence in closing where sentence.count <= 400 {
+            let ns = sentence as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let m = shortRE.firstMatch(in: sentence, range: range) ?? clauseRE.firstMatch(in: sentence, range: range) {
+                var verbs = [ns.substring(with: m.range(at: 1)).lowercased()]
+                // A second ruling in the same sentence: "… is reversed, and the bill dismissed".
+                let rest = ns.substring(from: m.range.location + m.range.length)
+                if let r = rest.range(of: "^[^.;]{0,80}?\\band\\b[^.;]{0,60}?\\b(\(rulingVerbs))\\b", options: [.regularExpression, .caseInsensitive]),
+                   let v = rest[r].range(of: "(\(rulingVerbs))$", options: [.regularExpression, .caseInsensitive]) {
+                    verbs.append(rest[v].lowercased())
+                }
+                return verbs.joined(separator: " and ")
             }
         }
         return nil

@@ -120,6 +120,36 @@ struct LegalFlowingDocketTests {
     @Test("A numbered clause is not a docket")
     func clause() {
         #expect(LegalCaseDomainPack.flowingDocketNumber(in: "See No. 5 of the agreement signed by the plaintiff.") == nil)
+        #expect(LegalCaseDomainPack.flowingDocketNumber(in: "The court read No. 12 of the exhibits. 1. Contracts — held binding.") == nil)
+    }
+
+    // Case bench 2026-10-20: state reporters and older F.2d volumes number a case plainly, next
+    // to the court, and print the decision date with no label.
+    static let plainCaptions: [(String, String, String)] = [
+        ("WEISMAN v. UNITED STATES (Circuit Court of Appeals, Eighth Circuit. August 28, 1924.) No. 6602. 1. Indictment and information — Must state directly every essential element.", "6602", "1924-08-28"),
+        ("UNITED ACCOUNTS, INCORPORATED, Plaintiff and Appellant, v. George DACHTLER, Defendant and Respondent. No. 7861. Supreme Court of North Dakota. Dec. 16, 1959. Joseph Coghlan, Bismarck, for plaintiff.", "7861", "1959-12-16"),
+        ("STATE of Indiana, Appellant, v. Joseph H. NIXON, Appellee. No. 378S44. Supreme Court of Indiana. Jan. 5, 1979. Theodore L. Sendak, Atty. Gen.", "378S44", "1979-01-05"),
+        ("SOVEREIGN CAMP W. O. W. v. BODEN. (No. 4781.) Special Supreme Court of Texas. Dec. 16, 1927. 1. Statutes — Law's province.", "4781", "1927-12-16"),
+        ("[Civ. No. 33558. Second Dist., Div. Five. Nov. 18, 1969.] STATE COMPENSATION INSURANCE FUND, Petitioner, v. WORKMEN'S COMPENSATION APPEALS BOARD, Respondents.", "Civ. No. 33558", "1969-11-18"),
+        ("LAWSON et al. v. GLOVER et al. No. 279. District Court, S. D. Texas, Corpus Christi Division. Nov. 15, 1932. Perkins & Floyd, of Alice, Tex., for plaintiffs.", "279", "1932-11-15"),
+        ("UNITED STATES v. FOSTER et al. Civ. A. No. 9870. United States District Court W. D. Pennsylvania. Oct. 24, 1952. Albert C. Osofsky, for plaintiff.", "Civ. A. No. 9870", "1952-10-24"),
+        ("FISCHER & PORTER CO. v. BROOKS ROTAMETER CO. Civ. A. 8710. United States District Court E. D. Pennsylvania. Sept. 8, 1952. Leonard L. Kalish, for plaintiff.", "Civ. A. 8710", "1952-09-08"),
+        ("In re KEHL. Patent Appeals No. 4043. Court of Customs and Patent Appeals. Jan. 23, 1939. Charles C. Scheffler, of New York City.", "Patent Appeals No. 4043", "1939-01-23"),
+        ("SAUNDERS v. COMMISSIONER OF INTERNAL REVENUE and three other cases. Nos. 1658, 1662-1664. Circuit Court of Appeals, Tenth Circuit. Jan. 9, 1939. A. W. McHendrie, of Trinidad.", "1658, 1662-1664", "1939-01-09"),
+    ]
+
+    @Test("The court's initials do not end the court's name before the date")
+    func initialsInCourt() {
+        #expect(LegalCaseDomainPack.courtLineDate(in: "UNITED STATES v. MORGAN et al. District Court, E. D. Illinois. March 13, 1935. Paul F. Jones, U. S. Atty.") == "March 13, 1935")
+        #expect(LegalCaseDomainPack.courtLineDate(in: "The Court held a hearing. On March 13, 1935, the defendant appeared.") == nil)
+    }
+
+    @Test("Plain docket and unlabeled date beside the court", arguments: plainCaptions)
+    func plain(text: String, docket: String, date: String) {
+        let facts = LegalCaseDomainPack.extractFacts(fromText: text, subjectLabel: "case", blockID: UUID())
+        let shown = facts.map { "\($0.field)=\($0.value)" }
+        #expect(facts.contains { $0.field.lowercased() == "casenumber" && $0.value == docket }, "\(shown)")
+        #expect(facts.contains { $0.field.lowercased() == "decisiondate" && $0.value == date }, "\(shown)")
     }
 }
 
@@ -144,6 +174,14 @@ struct LegalCourtAndDispositionTests {
         ("dismiss plaintiffs’ claims. CONCLUSION The order and judgment of the district court are affirmed. Costs to plaintiffs.", "affirmed"),
         ("For the foregoing reasons, the judgment of the district court is reversed and remanded.", "reversed and remanded"),
         ("We have considered the remaining contentions. Judgment affirmed.", "affirmed"),
+        // Case bench 2026-10-20: the ruling as a full closing sentence.
+        ("They should stand as written. The decree is reversed, and the bill dismissed.", "reversed and dismissed"),
+        ("I find it unnecessary to consider the other questions. Defendants’ motion must be, and is hereby, sustained. Order may be entered accordingly.", "sustained"),
+        ("Despite the fact that they made restoration. The decision of the Board of Tax Appeals and the judgments of the court are severally affirmed.", "affirmed"),
+        ("A question not urged before the Board. The petition is denied and the judgment of the Board is affirmed.", "denied and affirmed"),
+        ("The order appealed from is purely interlocutory. Appeal dismissed.", "dismissed"),
+        ("We relegate him to his legal remedies by way of appeal. The writ is denied. GIVAN, C. J., and HUNTER, PRENTICE and PIVARNIK, JJ., concur.", "denied"),
+        ("It was not a compliance. The order of the District Court is therefore reversed and the case remanded with directions that a new order be entered.", "reversed and remanded"),
     ])
     func disposition(text: String, expected: String) {
         #expect(LegalCaseDomainPack.disposition(in: text) == expected)
@@ -174,5 +212,8 @@ struct LegalCourtAndDispositionTests {
     func proseIgnored() {
         #expect(LegalCaseDomainPack.disposition(in: "The board affirmed its commitment to safety and met again in May.") == nil)
         #expect(LegalCaseDomainPack.disposition(in: "In Smith, the conviction was affirmed on appeal, which the defendant now disputes.") == nil)
+        // The case's history, in the past tense, is not its outcome.
+        #expect(LegalCaseDomainPack.disposition(in: "The trial began in May. The defendant's motion to suppress was denied. The jury convicted him.") == nil)
+        #expect(LegalCaseDomainPack.disposition(in: "We turn to the merits. The question is whether the order was granted in time.") == nil)
     }
 }

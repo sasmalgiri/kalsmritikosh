@@ -117,4 +117,25 @@ struct CaptionOpeningTests {
         let r = IdentifierAnchoredRetriever(base: Stub(), database: db, evidence: EvidenceStore(database: db), scopedRecall: nil)
         #expect(await r.anchorScope(for: "What is the docket number in Hertz Corp. v. City of New York, 1 F.3d 121?")?.authorizedSourceVersionIDs == [v])
     }
+
+    @Test("A one-party caption ('In re Kehl') anchors to the decision that opens with it")
+    func inReCaption() async throws {
+        #expect(IdentifierAnchoredRetriever.oneSidedCaptions(in: "Who wrote the majority opinion in In re Kehl, 101 F.2d 193?") == ["in re kehl"])
+        #expect(IdentifierAnchoredRetriever.oneSidedCaptions(in: "What did we decide in the meeting?").isEmpty)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let own = UUID(), citing = UUID()
+        for (i, (text, v)) in [("In re Kehl\n101 F.2d 193\nGARRETT, Associate Judge.", own),
+                               ("Doe v. Roe\nAs held in In re Kehl, the rule applies.", citing)].enumerated() {
+            let fileID = UUID(), koID = UUID()
+            try await db.exec("INSERT INTO files (id, url, source_type, size_bytes, modified_at, ingested_at, content_hash) VALUES (?, ?, 'text', 9, 0, 0, ?);",
+                              [.uuid(fileID), .text("/tmp/k\(i).txt"), .text("k\(i)")])
+            try await db.exec("INSERT INTO knowledge_objects (id, file_id, source_type, content, metadata_json, confidence, created_at, updated_at) VALUES (?, ?, 'text', ?, '{}', 0.9, 0, 0);",
+                              [.uuid(koID), .uuid(fileID), .text(text)])
+            try await db.exec("INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, created_at, source_version_id) VALUES (?, ?, 0, ?, 0, 40, 0, ?);",
+                              [.uuid(UUID()), .uuid(koID), .text(text), .uuid(v)])
+        }
+        struct Stub: Retriever { func retrieve(for intent: UserIntent, layers: [RetrievalLayer]) async throws -> RetrievalResult { RetrievalResult() } }
+        let r = IdentifierAnchoredRetriever(base: Stub(), database: db, evidence: EvidenceStore(database: db), scopedRecall: nil)
+        #expect(await r.anchorScope(for: "Who wrote the majority opinion in In re Kehl, 101 F.2d 193?")?.authorizedSourceVersionIDs == [own])
+    }
 }

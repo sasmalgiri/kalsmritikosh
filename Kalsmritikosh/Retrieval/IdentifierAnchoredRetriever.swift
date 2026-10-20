@@ -107,6 +107,9 @@ public actor IdentifierAnchoredRetriever: Retriever {
                 captions += ["\(c.left) \(v) \(c.right)", "\(c.left). \(v) \(c.right)", "\(c.left), \(v) \(c.right)"]
             }
         }
+        // "In re Kehl" / "Matter of Smith" name a one-party case (case bench 2026-10-20: these
+        // went unanchored, so the answer listed every opinion author in the archive).
+        captions += Self.oneSidedCaptions(in: question)
         // A caption is CITED by every later decision that relies on the case, so the documents
         // that OPEN with it — the decision itself — are preferred over those that merely cite
         // it (case bench 2026-10-18: a cited caption pulled another decision's "affirmed" into
@@ -133,6 +136,18 @@ public actor IdentifierAnchoredRetriever: Retriever {
         guard !versions.isEmpty else { return nil }
         KalsmritikoshLog.brain.info("IdentifierAnchoredRetriever: question anchored to \(versions.count, privacy: .public) source version(s)")
         return .authorizing(versions)
+    }
+
+    /// "In re Kehl", "In the Matter of Smith", "Ex parte Jones" → the caption's opening words,
+    /// with the first party name ("in re kehl"). Matched only against a document's first line.
+    nonisolated static func oneSidedCaptions(in question: String) -> [String] {
+        let pattern = #"\b(In re|In the Matter of|Matter of|Ex parte|Estate of)\s+([A-Z][A-Za-z'&\-]*[A-Za-z])"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = question as NSString
+        return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            let name = ns.substring(with: m.range(at: 2))
+            return name.count >= 2 ? "\(ns.substring(with: m.range(at: 1))) \(name)".lowercased() : nil
+        }
     }
 
     /// Current source versions whose text contains `token` (case-insensitive), at most

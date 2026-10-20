@@ -297,7 +297,10 @@ public enum SlotAnswerComposer {
             return renderCanonicalDate(iso: fact.value) + unit
         }
         let display: String
-        if isV1, let dl = Self.displayLabel(forFieldID: fact.field) {
+        // A value that carries its own designation ("Civ. No. 3730", "Patent Appeals No. 4043")
+        // is shown as written — "Case No. Civ. No. 3730" says the label twice.
+        if isV1, let dl = Self.displayLabel(forFieldID: fact.field),
+           fact.value.range(of: #"\b(?:No|Nos)\.|^[A-Za-z]+\.\s"#, options: .regularExpression) == nil {
             display = "\(dl) \(fact.value)"
         } else {
             display = fact.value
