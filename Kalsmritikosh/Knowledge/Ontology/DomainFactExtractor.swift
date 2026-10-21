@@ -199,6 +199,11 @@ public struct DomainFactExtractor: Sendable {
                blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel) {
             facts.append(voted)
         }
+        if !facts.contains(where: { $0.field == "decisionDate" }),
+           let dated = LegalCaseDomainPack.documentLevelDecisionDate(
+               blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel) {
+            facts.append(dated)
+        }
         // The document-level merge the call sites already performed on the
         // accumulated per-block output, kept here so this entry point's
         // contract matches `extract(fromText:)`: callers receive merged facts.

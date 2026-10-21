@@ -161,13 +161,35 @@ public enum LegalCaseDomainPack {
     /// 1924.)", "Second Dist., Div. Five. Nov. 18, 1969.]". A labeled date ("Decided …") is read
     /// first; this is the caption's own date for reporters that print no label.
     nonisolated static func courtLineDate(in text: String) -> String? {
-        let head = String(text.prefix(1200))
-        // The court's name may carry initials ("District Court, E. D. Illinois."): a period after a
-        // single capital does not end it.
-        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20})(?:[^.]|(?<=[\s,][A-Z])\.){0,100}?\.\]?\)?\s+[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
+        // A long caption (many parties) can push the court line past 1,400 characters.
+        let head = String(text.prefix(2500))
+        // The court's name may carry initials ("District Court, E. D. Illinois.", "E.D. New
+        // York."): a period after a single capital does not end it.
+        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20})(?:[^.]|(?<=[\s,.][A-Z])\.){0,100}?\.\]?\)?\s+[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
         guard let re = try? NSRegularExpression(pattern: pattern),
               let m = re.firstMatch(in: head, range: NSRange(location: 0, length: (head as NSString).length)) else { return nil }
         return (head as NSString).substring(with: m.range(at: 1))
+    }
+
+    /// The decision date when the caption is split across blocks — HTML and PDF captions put
+    /// "Supreme Court of Oklahoma." and "March 27, 1956." in blocks of their own, and a block
+    /// holding only a date passes no legal-case gate. Read over the document's first blocks
+    /// joined; cites the blocks that carry the court line and the date. Nil when any block
+    /// already filed a decision date.
+    nonisolated static func documentLevelDecisionDate(blocks: [(id: UUID, text: String)], subjectLabel: String) -> GenericFact? {
+        let head = Array(blocks.prefix(20))
+        let joined = head.map(\.text).joined(separator: " ")
+        guard let raw = courtLineDate(in: joined), let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10,
+              let at = head.firstIndex(where: { $0.text.contains(raw) }) else { return nil }
+        var cited = [head[at].id]
+        // The court line is the nearest earlier block naming a court (none when both share one).
+        if let court = head[..<at].last(where: { $0.text.range(of: #"\b(?:Court|Circuit)\b"#, options: .regularExpression) != nil }),
+           head[at].text.range(of: #"\b(?:Court|Circuit)\b"#, options: .regularExpression) == nil {
+            cited.insert(court.id, at: 0)
+        }
+        return GenericFact(subjectLabel: subjectLabel, field: "decisionDate", value: iso,
+                           status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: cited,
+                           producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: cited.count)
     }
 
     /// A US court as a caption names it: "United States Court of Appeals, District of Columbia
@@ -257,7 +279,10 @@ public enum LegalCaseDomainPack {
         let head = String(text.prefix(20_000))
         let patterns = [
             // "SELYA, Circuit Judge." / "KEARSE, Circuit Judge:" / "RUTH BADER GINSBURG, Circuit Judge:"
-            #"(?m)^\s*((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?Judge\s*[:.]"#,
+            // — at a line start, or after a sentence end: packs read the block's normalized
+            // text, whose line breaks are gone (case bench 2026-10-21: "… for defendants-
+            // appellants. CALABRIA, Judge. CALABRIA, Judge. Assurance …" filed no author).
+            #"(?m)(?:^\s*|(?<=[.:;]\s))((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?Judge\s*[:.]"#,
             // "Mr. JUSTICE MORAN delivered the opinion of the court" / "Justice Moran delivered …"
             #"(?:Mr\.\s+|Mrs\.\s+|Ms\.\s+)?(?:Chief\s+)?(?:JUSTICE|Justice)\s+([A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+)?)\s+delivered the opinion"#,
         ]

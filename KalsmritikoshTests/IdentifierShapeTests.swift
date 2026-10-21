@@ -193,9 +193,34 @@ struct LegalCourtAndDispositionTests {
         ("RUTH BADER GINSBURG, Circuit Judge:\nThe petition …", "Ruth Bader Ginsburg"),
         ("Mr. JUSTICE MORAN\ndelivered the opinion of the court:\nFred L. Agnew …", "Moran"),
         ("PER CURIAM.\nThe judgment is affirmed.", "Per curiam"),
+        // Normalized block text: the line breaks are gone.
+        ("Cozen O'Connor, P.C., by Kimberly Sullivan, Charlotte, for defendants-appellants. CALABRIA, Judge. CALABRIA, Judge. Assurance Company of America appeals.", "Calabria"),
+        ("Jose M. Tous-Rodriguez, San Juan, PR, for plaintiff. CASELLAS, District Judge. OPINION AND ORDER", "Casellas"),
     ])
     func author(text: String, expected: String) {
         #expect(LegalCaseDomainPack.opinionAuthor(in: text) == expected)
+    }
+
+    @Test("A court line with initials, and a long caption, still give the decision date")
+    func courtLineDateInitialsAndLongCaption() {
+        #expect(LegalCaseDomainPack.courtLineDate(in: "No. 99-CV-5688 (NGG). United States District Court, E.D. New York. Feb. 14, 2001. A. Kathleen Tomlinson") == "Feb. 14, 2001")
+        let parties = String(repeating: "Assurance Company of America, Zurich American Insurance Company, ", count: 22)
+        #expect(LegalCaseDomainPack.courtLineDate(in: "WACHOVIA BANK v. " + parties + "Defendants. No. COA05-1112. Court of Appeals of North Carolina. July 18, 2006. Appeal by defendants") == "July 18, 2006")
+    }
+
+    @Test("A caption split across blocks gives the decision date, citing the court and date blocks")
+    func splitCaptionDate() {
+        let court = UUID(), date = UUID()
+        let blocks: [(id: UUID, text: String)] = [
+            (UUID(), "Keltch ex rel. Outhier v. Strunk"), (UUID(), "No. 36959."),
+            (court, "Supreme Court of Oklahoma."), (date, "March 27, 1956."),
+            (UUID(), "This was an unfortunate accident in which the plaintiff was injured."),
+        ]
+        let fact = LegalCaseDomainPack.documentLevelDecisionDate(blocks: blocks, subjectLabel: "Keltch")
+        #expect(fact?.value == "1956-03-27")
+        #expect(fact?.sourceBlockIDs == [court, date])
+        #expect(LegalCaseDomainPack.documentLevelDecisionDate(
+            blocks: [(UUID(), "The meeting is on March 27, 1956."), (UUID(), "Bring the minutes.")], subjectLabel: "x") == nil)
     }
 
     @Test("A judge mentioned in the body is not the author")
