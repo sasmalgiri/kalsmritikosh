@@ -64,6 +64,8 @@ struct CaseBenchRunner {
         let askSeconds: Double; let control: AnswerResult?
         /// The on-device model the run used ("AFM 3 Core Advanced"), nil in evidence-only mode.
         let aiModel: String?
+        /// Knowledge and product modules switched on for this run (CASEBENCH_FULL).
+        let modulesOn: Int
     }
 
     static var env: [String: String] { ProcessInfo.processInfo.environment }
@@ -84,8 +86,16 @@ struct CaseBenchRunner {
         // off the same way, so an owner preference of "Fully private" cannot silently turn the
         // run into an evidence-only one, and the run stops unless the model is really there.
         let noAI = Self.env["CASEBENCH_NOAI"] == "1"
-        UserDefaults.standard.setVolatileDomain(["kalsmritikosh.privacy.offlineNoLLM": noAI],
-                                                forName: UserDefaults.argumentDomain)
+        var settings: [String: Any] = ["kalsmritikosh.privacy.offlineNoLLM": noAI]
+        // CASEBENCH_FULL=1 — the app at full power: every implemented knowledge module and every
+        // product module on (preview features shown), in this process's argument domain only.
+        // Online-only modules still need Online mode, which a private bench never turns on.
+        if Self.env["CASEBENCH_FULL"] == "1" {
+            for m in KnowledgeModule.allCases { settings[KnowledgeModuleFlags.storageKey(m)] = true }
+            for m in ProductModule.allCases { settings["kalsmritikosh.product.\(m.rawValue)"] = true }
+            settings[ProductModuleFlags.showPreviewKey] = true
+        }
+        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
         if !noAI {
             guard await FoundationModelsProvider().isAvailable() else {
                 Issue.record("AI run requested but Apple's on-device model is unavailable: \(FoundationModelsProvider.unavailabilityHint() ?? "unknown")")
@@ -231,7 +241,8 @@ struct CaseBenchRunner {
         // A case that is not in the archive: the honest answer is a refusal.
         let control: AnswerResult? = if let q = truth.first?.control { await ask("control", q) } else { nil }
         let summary = ShardSummary(shard: name, cases: truth.count, ingestSeconds: ingestSeconds, embedSeconds: embedSeconds,
-                                   askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel)
+                                   askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel,
+                                   modulesOn: KnowledgeModule.allCases.filter { KnowledgeModuleFlags.isEnabled($0) }.count + ProductModule.allCases.filter { ProductModuleFlags.isEnabled($0) }.count)
         lines.append(String(decoding: try enc.encode(["summary": summary]), as: UTF8.self))
         try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
     }
