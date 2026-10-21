@@ -46,6 +46,24 @@ struct AnswerSynthesizerValueGateTests {
             prose: "The employee was fatally injured [1]."))
     }
 
+    @Test("A labelled value from the ledger survives the rewrite")
+    func leadValueKept() {
+        let court = "Court: United States District Court E.D. Pennsylvania.\n\n---\nAlso on file: Status granted"
+        #expect(AnswerSynthesizer.dropsLeadValue(findings: court,
+            prose: "The Supreme Court of Pennsylvania decided Securities & Exchange Commission v. Morgan [1]."))
+        #expect(!AnswerSynthesizer.dropsLeadValue(findings: court,
+            prose: "The case was decided by the United States District Court for the E.D. of Pennsylvania [1]."))
+        let docket = "Docket: 00-1083."
+        #expect(AnswerSynthesizer.dropsLeadValue(findings: docket, prose: "The docket number is 2d 15, 18-19 (1st Cir) [1]."))
+        #expect(!AnswerSynthesizer.dropsLeadValue(findings: docket, prose: "The docket number is 00-1083 [1]."))
+        let date = "Decision date: 10/06/1955."
+        #expect(AnswerSynthesizer.dropsLeadValue(findings: date, prose: "It was decided on Wed, 21 Oct 2026 [1]."))
+        #expect(!AnswerSynthesizer.dropsLeadValue(findings: date, prose: "It was decided on June 10, 1955 [1]."))
+        // Prose findings and unlabelled dumps are not gated.
+        #expect(!AnswerSynthesizer.dropsLeadValue(findings: "## Extracted facts\n- **Court:** X", prose: "Anything [1]."))
+        #expect(!AnswerSynthesizer.dropsLeadValue(findings: "An employee was overcome by fumes.", prose: "Fumes [1]."))
+    }
+
     @Test("Other questions are not gated")
     func otherQuestions() {
         #expect(!AnswerSynthesizer.dropsAskedValue(question: "What happened in OSHA investigation 220962021?",

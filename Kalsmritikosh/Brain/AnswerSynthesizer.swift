@@ -209,6 +209,15 @@ public struct AnswerSynthesizer: Sendable {
             return nil
         }
 
+        // Case bench 2026-10-21 (every answer composed by the on-device model): the grounded
+        // answer "Court: United States District Court E.D. Pa." came back as "The Supreme
+        // Court of Pennsylvania decided …", and "Docket: 00-1083." as "The docket number is
+        // 2d 15, 18-19". A labelled value the ledger already holds must survive the rewrite.
+        if Self.dropsLeadValue(findings: findings, prose: final) {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: synthesis changed the answer's labelled value; keeping the grounded body")
+            return nil
+        }
+
         // §17 — sentence-level citation validation. Reject prose whose factual
         // sentences are largely UNcited rather than ship ungrounded text; the
         // caller then keeps the verifier's claim-cited deterministic body. We
@@ -288,6 +297,32 @@ public struct AnswerSynthesizer: Sendable {
                 && bare.range(of: year, options: .regularExpression) == nil
         }
         return false
+    }
+
+    /// True when the findings open with a labelled value ("Court: X." / "Decision date: Y.")
+    /// and the prose does not carry it: a date's year must appear; otherwise at least two
+    /// thirds of the value's words (numbers always) must.
+    static func dropsLeadValue(findings: String, prose: String) -> Bool {
+        guard let first = findings.split(separator: "\n", omittingEmptySubsequences: true).first,
+              let m = try? NSRegularExpression(pattern: #"^([A-Z][A-Za-z ()/&\-]{1,40}):\s+(.+?)(?:\.\s|\.?$)"#)
+                .firstMatch(in: String(first), range: NSRange(location: 0, length: (String(first) as NSString).length))
+        else { return false }
+        let value = (String(first) as NSString).substring(with: m.range(at: 2))
+        let words = value.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { $0.lowercased() }
+        guard !words.isEmpty, words.count <= 12 else { return false }
+        let bare = prose.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression).lowercased()
+        let year = #"\b(?:1[6-9]|20)\d{2}\b"#
+        if let r = value.range(of: year, options: .regularExpression),
+           value.range(of: #"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|[A-Za-z]{3,9}\.? \d{1,2},? \d{4}|\d{4}-\d{2}-\d{2}"#, options: .regularExpression) != nil {
+            return !bare.contains(value[r].lowercased())
+        }
+        let minor: Set<String> = ["the", "of", "and", "for", "in", "on", "at", "to", "a", "an"]
+        let content = words.filter { !minor.contains($0) && ($0.count >= 3 || $0.contains(where: \.isNumber)) }
+        guard !content.isEmpty else { return false }
+        let bareWords = Set(bare.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+        if content.contains(where: { $0.contains(where: \.isNumber) && !bareWords.contains($0) }) { return true }
+        let kept = content.filter { bareWords.contains($0) }.count
+        return kept * 3 < content.count * 2
     }
 
     // MARK: - Helpers
