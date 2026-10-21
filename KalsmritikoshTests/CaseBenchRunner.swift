@@ -66,6 +66,9 @@ struct CaseBenchRunner {
         let aiModel: String?
         /// Knowledge and product modules switched on for this run (CASEBENCH_FULL).
         let modulesOn: Int
+        /// Model calls by purpose over the whole shard (ingest and asking) — which features spend
+        /// the on-device model.
+        let modelCallsByPurpose: [String: Int]
     }
 
     static var env: [String: String] { ProcessInfo.processInfo.environment }
@@ -130,6 +133,7 @@ struct CaseBenchRunner {
         let truth = try String(contentsOf: shard.appendingPathComponent("truth.jsonl"), encoding: .utf8)
             .split(separator: "\n").map { try JSONDecoder().decode(TruthLine.self, from: Data($0.utf8)) }
 
+        await LLMCallCounters.shared.reset()   // per-shard model-call accounting
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
@@ -242,7 +246,8 @@ struct CaseBenchRunner {
         let control: AnswerResult? = if let q = truth.first?.control { await ask("control", q) } else { nil }
         let summary = ShardSummary(shard: name, cases: truth.count, ingestSeconds: ingestSeconds, embedSeconds: embedSeconds,
                                    askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel,
-                                   modulesOn: KnowledgeModule.allCases.filter { KnowledgeModuleFlags.isEnabled($0) }.count + ProductModule.allCases.filter { ProductModuleFlags.isEnabled($0) }.count)
+                                   modulesOn: KnowledgeModule.allCases.filter { KnowledgeModuleFlags.isEnabled($0) }.count + ProductModule.allCases.filter { ProductModuleFlags.isEnabled($0) }.count,
+                                   modelCallsByPurpose: await LLMCallCounters.shared.snapshot().byPurpose)
         lines.append(String(decoding: try enc.encode(["summary": summary]), as: UTF8.self))
         try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
     }

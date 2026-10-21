@@ -55,6 +55,9 @@ public actor MemoryDistiller {
     /// only the memory_object summary is skipped. User-directed
     /// distillation (e.g. a future "promote this subject" action)
     /// bypasses this guard.
+    /// Narratives just written, by subject name + event set (bounded; see distill).
+    private var recentNarratives: [String: String] = [:]
+
     @discardableResult
     public func distill(_ subject: Subject, triggeredBy: KnowledgeObject.ID? = nil) async throws -> MemoryObject? {
         if Self.isLowSignalSubject(subject.identifier) {
@@ -73,16 +76,37 @@ public actor MemoryDistiller {
         }
         let entityMatches = try await entities.search(value: subject.identifier, limit: 20)
 
+        // Case bench 2026-10-21 (full-power run): every ingested document re-distilled every
+        // subject it touched, and the model wrote the same summary again — the same "Southmark
+        // Corp." and "Who" narratives 17–30 times in 25 seconds, 157 model requests, so the
+        // documents waited behind them. Nothing to distill (no events, no prior) or nothing
+        // new (the same events the current memory was written from) needs no model call.
+        let prior = try await memory.current(forSubject: subject.kind, identifier: subject.identifier)
+        if let prior {
+            if Set(prior.keyEventIDs) == Set(recentEvents.map(\.id)) { return prior }
+        } else if recentEvents.isEmpty {
+            return nil
+        }
+
         // M6.5 will swap this stitched narrative for a real LLM call via
         // CapabilitySpec.reasoning(...). The contract stays the same: the
         // distiller asks for capabilities, not for a specific model.
-        let narrative = try await synthesizeNarrative(
-            subject: subject,
-            events: recentEvents,
-            entityMatches: entityMatches
-        )
+        // One name is distilled once per subject kind (distillSubjects); the events — and so the
+        // narrative — are the same for each, so the model writes it once.
+        let narrativeKey = subject.identifier.lowercased() + "|" + recentEvents.map(\.id.uuidString).sorted().joined(separator: ",")
+        let narrative: String
+        if let cached = recentNarratives[narrativeKey] {
+            narrative = cached
+        } else {
+            narrative = try await synthesizeNarrative(
+                subject: subject,
+                events: recentEvents,
+                entityMatches: entityMatches
+            )
+            if recentNarratives.count >= 256 { recentNarratives.removeAll(keepingCapacity: true) }
+            recentNarratives[narrativeKey] = narrative
+        }
 
-        let prior = try await memory.current(forSubject: subject.kind, identifier: subject.identifier)
         let nextVersion = (prior?.version ?? 0) + 1
 
         // HISTORY Phase A.7 — memory inherits the BEST (highest-trust)
