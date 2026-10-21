@@ -27,6 +27,34 @@ enum VisionPerform {
     nonisolated static let failures = OSAllocatedUnfairLock(initialState: 0)
     nonisolated static func failureCount() -> Int { failures.withLock { $0 } }
 
+    private nonisolated static let cacheCleared = OSAllocatedUnfairLock(initialState: false)
+
+    /// Remove this app's compiled-model cache (Library/Caches/<bundle>/com.apple.e5rt.e5bundlecache)
+    /// the first time recognition keeps failing in this process; true when it was removed now.
+    nonisolated static func clearCompiledModelCacheOnce() -> Bool {
+        let first = cacheCleared.withLock { done -> Bool in
+            if done { return false }
+            done = true
+            return true
+        }
+        guard first, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return false }
+        let bundleCaches = Bundle.main.bundleIdentifier.map { caches.appendingPathComponent($0, isDirectory: true) } ?? caches
+        var removed = false
+        for dir in [bundleCaches, caches] {
+            let e5 = dir.appendingPathComponent("com.apple.e5rt.e5bundlecache", isDirectory: true)
+            if FileManager.default.fileExists(atPath: e5.path) {
+                do {
+                    try FileManager.default.removeItem(at: e5)
+                    removed = true
+                    KalsmritikoshLog.ingestion.notice("VisionPerform: removed the compiled-model cache at \(e5.path, privacy: .public); it is rebuilt on the next load")
+                } catch {
+                    KalsmritikoshLog.ingestion.error("VisionPerform: could not remove the compiled-model cache: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+        return removed
+    }
+
     /// Perform `request` on `cgImage`; true when it ran. The request's results are read by the caller.
     nonisolated static func perform(_ request: VNRequest, cgImage: CGImage, orientation: CGImagePropertyOrientation) -> Bool {
         func attempt() throws {
@@ -38,6 +66,15 @@ enum VisionPerform {
         Thread.sleep(forTimeInterval: 1.0)
         do { try attempt(); return true } catch {
             KalsmritikoshLog.ingestion.error("VisionPerform: retry failed (\(String(describing: error), privacy: .public)); trying the CPU")
+        }
+        // A compiled-model cache entry left incomplete (case bench 2026-10-21: written while the
+        // disk was full — "Missing E5 bundle resource … Must re-compile the E5") fails every
+        // later load in every process of this app until the cache is rebuilt. The cache is the
+        // app's own and rebuildable: clear it once per process and try again.
+        if Self.clearCompiledModelCacheOnce() {
+            do { try attempt(); return true } catch {
+                KalsmritikoshLog.ingestion.error("VisionPerform: failed after rebuilding the model cache (\(String(describing: error), privacy: .public)); trying the CPU")
+            }
         }
         if let devices = try? request.supportedComputeStageDevices {
             for (stage, list) in devices {
