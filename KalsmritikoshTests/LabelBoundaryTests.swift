@@ -51,6 +51,9 @@ struct LabelBoundaryTests {
 
         // Other plurals and embeddings that were equally exposed.
         #expect(TypedFieldExtractor.labeledValue(in: "The panel met on Tuesday", labels: ["pan"]) == nil)
+        // Lower-casing "İ" lengthens it; the label must still be found in the line itself
+        // (case bench 2026-10-21: this shape crashed ingest).
+        #expect(TypedFieldExtractor.labeledValue(in: "İSTANBUL İŞ name: Ayşe Yılmaz", labels: ["name"]) == "Ayşe Yılmaz")
         #expect(TypedFieldExtractor.labeledValue(in: "Their names are listed below", labels: ["name"]) == nil)
         #expect(TypedFieldExtractor.labeledValue(in: "Two addresses were found", labels: ["address"]) == nil)
         #expect(TypedFieldExtractor.labeledValue(in: "a tinted window", labels: ["tin"]) == nil)

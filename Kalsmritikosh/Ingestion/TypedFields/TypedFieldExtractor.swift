@@ -121,12 +121,15 @@ public nonisolated struct TypedFieldExtractor: Sendable {
     static func labeledValue(in text: String, labels: [String]) -> String? {
         let lines = text.components(separatedBy: .newlines)
         for (i, line) in lines.enumerated() {
-            let lower = line.lowercased()
+            // Searched in the line itself: indices of `line.lowercased()` are not indices of
+            // `line` when lower-casing changes a character's length (case bench 2026-10-21: a
+            // court opinion crashed ingest slicing `line` with a range found in its lower-cased
+            // copy).
             for label in labels {
-                guard let r = lower.range(of: label) else { continue }
+                guard let r = line.range(of: label, options: .caseInsensitive) else { continue }
                 // The label must be a word-boundary hit (avoid "name" inside "surname"? allow, but
                 // require the label to start the token or follow whitespace/':').
-                let before = r.lowerBound == lower.startIndex ? " " : String(lower[lower.index(before: r.lowerBound)])
+                let before = r.lowerBound == line.startIndex ? " " : String(line[line.index(before: r.lowerBound)])
                 guard before == " " || before == "\t" || before == ":" || before == "-" else { continue }
                 // AND a trailing boundary. The leading check alone let a label
                 // match the PREFIX OF A LONGER WORD and then keep the rest of
@@ -145,8 +148,8 @@ public nonisolated struct TypedFieldExtractor: Sendable {
                 // "addresses", "tin" inside "tinted", "reference" inside
                 // "references". A label must be a whole word.
                 let afterIdx = r.upperBound
-                if afterIdx < lower.endIndex {
-                    let after = lower[afterIdx]
+                if afterIdx < line.endIndex {
+                    let after = line[afterIdx]
                     guard !after.isLetter && !after.isNumber else { continue }
                 }
                 var rest = String(line[r.upperBound...])
