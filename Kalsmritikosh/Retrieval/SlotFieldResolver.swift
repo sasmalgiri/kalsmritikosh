@@ -347,6 +347,14 @@ public enum SlotFieldResolver {
         in question: String, knownFields: Set<String>
     ) -> [Resolution] {
         let curated = resolve(in: question)
+        // Case bench 2026-10-21: "When was FDA recall D-0227-2026 initiated?" resolved to the bare
+        // "date" field and answered "2026" (a stray year) while the document states "Recall
+        // initiation date: 2025-11-05". A date question whose verb names a dated field on file
+        // ("initiated" → recallinitiationdate, "opened" → dateopened) asks for that field.
+        if curated.allSatisfy({ $0.fieldID == "date" }),
+           let specific = namedDateField(in: question, knownFields: knownFields) {
+            return [specific]
+        }
         // Only reach for the inventory when nothing curated matched AND the F8
         // fallback produced nothing either. A curated mapping always wins.
         if !curated.isEmpty { return curated }
@@ -354,6 +362,30 @@ public enum SlotFieldResolver {
             return [discovered]
         }
         return []
+    }
+
+    /// A known date-shaped field whose name carries the stem of one of the question's words
+    /// ("initiated" → "initiat" ⊂ "recallinitiationdate"). Only for when-questions; the longest
+    /// stem wins, ties go to the shorter (more specific) field name.
+    nonisolated static func namedDateField(in question: String, knownFields: Set<String>) -> Resolution? {
+        let q = question.lowercased()
+        guard q.hasPrefix("when ") || q.contains(" when ") || q.hasPrefix("on what date") || q.hasPrefix("what date") else { return nil }
+        let dateFields = knownFields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }
+        guard !dateFields.isEmpty else { return nil }
+        let words = q.components(separatedBy: CharacterSet.letters.inverted)
+            .filter { $0.count >= 5 && !ungrammaticalAlone.contains($0) && !FTSQuerySanitizer.stopwords.contains($0) }
+        var best: (field: String, stem: Int)?
+        for w in words {
+            let stem = String(w.prefix(max(5, w.count - 3)))
+            for f in dateFields where f.contains(stem) {
+                if best == nil || stem.count > best!.stem || (stem.count == best!.stem && f.count < best!.field.count) {
+                    best = (f, stem.count)
+                }
+            }
+        }
+        guard let hit = best else { return nil }
+        return Resolution(fieldID: hit.field, requestedField: .date,
+                          humanLabel: humanLabel(forFieldID: hit.field), domainGroup: "discovered")
     }
 
     /// The F8 fallback recognizer. Deterministic; first match wins.

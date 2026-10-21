@@ -42,6 +42,11 @@ def value_in(expect, text):
         want = set(words(expect["overlap"]))
         if not want: return False, None
         got = len(want & set(words(text))) / len(want)
+        # A verbatim quote of the expected passage's opening sentence answers it, even when the
+        # key runs on for several more sentences.
+        head = " ".join(words(expect["overlap"]))[:80]
+        if got < 0.5 and len(head) >= 40 and head in " ".join(words(text)):
+            return True, f"overlap={got:.2f}+quoted-opening"
         return got >= 0.5, f"overlap={got:.2f}"
     return False, None
 

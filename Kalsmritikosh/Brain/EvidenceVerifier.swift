@@ -64,7 +64,14 @@ public struct EvidenceVerifier: Verifier {
             return has(#"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2},?\s+\d{4}\b"#)
                 || has(#"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{4}\b"#)
         case .identifier:
-            return has(#"\b(?:no|nos|number|#)\.?\s*[a-z]{0,5}[-:]?\d[\d\-:a-z]{1,}"#)
+            // A number after "No." is any document's reference; it answers only the identifier the
+            // label names — the label's own word must be in the passages too ("trademark number"
+            // asked of a patent letter is still absent). A case or docket number is the "No." of
+            // a caption.
+            let qualifier = label.lowercased().split(separator: " ").first.map(String.init) ?? ""
+            guard has(#"\b(?:no|nos|number|#)\.?\s*[a-z]{0,5}[-:]?\d[\d\-:a-z]{1,}"#) else { return false }
+            if ["case", "docket"].contains(qualifier) { return true }
+            return qualifier.count >= 4 && has("\\b" + NSRegularExpression.escapedPattern(for: qualifier) + "\\b")
         case .money:
             return has(#"[$€£₹]\s?\d"#)
         default:
@@ -674,7 +681,12 @@ public struct EvidenceVerifier: Verifier {
         // D-11/D-12 — compile the plan ONCE; when the question names a
         // registered fact field, compose the slot answer from the surfaced
         // facts (their carried evaluations decide surfaceability).
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // The fields the retrieved facts carry, so a when-question can name a specific dated field
+        // ("initiated" → recall initiation date) instead of the bare "date".
+        let retrievedFields = Set(retrieval.genericFacts.map { FactSchemaRegistry.normalizeField($0.field) })
+        let namesDatedField = SlotFieldResolver.namedDateField(in: intent.rawQuestion, knownFields: retrievedFields) != nil
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
+                                               knownFields: namesDatedField ? retrievedFields : [])
         // A1.2 — the receipt speaks for the WHOLE archive.
         let totals = await archiveTotals?()
         let searchedScope = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count

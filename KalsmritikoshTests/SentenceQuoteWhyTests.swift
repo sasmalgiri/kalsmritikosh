@@ -39,3 +39,15 @@ struct SentenceQuoteWhyTests {
         #expect(SentenceQuoteComposer.asksWhy("Why was the recall issued?"))
     }
 }
+
+@Suite("A when-question names the dated field its verb points to")
+struct NamedDateFieldTests {
+    @Test("initiated → recall initiation date; opened → date opened; no match → nil")
+    func named() {
+        let fields: Set<String> = ["date", "recallinitiationdate", "dateopened", "recallingfirm"]
+        #expect(SlotFieldResolver.namedDateField(in: "When was FDA recall D-0227-2026 initiated?", knownFields: fields)?.fieldID == "recallinitiationdate")
+        #expect(SlotFieldResolver.namedDateField(in: "When did NHTSA open investigation PE08001?", knownFields: ["dateopened"]) == nil)
+        #expect(SlotFieldResolver.namedDateField(in: "When was it opened?", knownFields: fields)?.fieldID == "dateopened")
+        #expect(SlotFieldResolver.namedDateField(in: "Which firm initiated recall D-1?", knownFields: fields) == nil)
+    }
+}

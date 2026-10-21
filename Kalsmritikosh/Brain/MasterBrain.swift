@@ -507,6 +507,10 @@ public actor MasterBrain {
         default:
             return nil
         }
+        // A why-question asks for a stated reason, not a history (case bench 2026-10-21: "Why
+        // was FDA recall D-0132-2023 issued?" came back as a two-event history of the emails
+        // that carried the recall report).
+        if SentenceQuoteComposer.asksWhy(question) { return nil }
 
         await sessionProfile?.recordTurn(
             question: question,
