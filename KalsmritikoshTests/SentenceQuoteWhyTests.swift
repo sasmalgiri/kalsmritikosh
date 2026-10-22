@@ -46,6 +46,22 @@ struct SentenceQuoteWhyTests {
         #expect(q.sentence.contains("Navarro"), "\(q.sentence)")
     }
 
+    @Test("What an investigation found: the finding, not the line that names the investigation")
+    func whatFoundSkipsReferenceLine() throws {
+        let report = """
+        NHTSA defect investigation PE86068
+
+        Subject: STEER AXLE HUB FAILURE
+        Manufacturer: PACCAR Incorporated
+        Component: STEERING
+
+        Summary:
+        SUMMARY OF INFORMATION FROM MANUFACTURER:IN THEIR RESPONSE TO THIS OFFICE, PACCAR STATED THAT TESTING INDICATED A PROJECTED LIFE OF OVER ONE MILLION MILES.ANALYSIS:THE HUB APPEARS TO BE SUSCEPTIBLE TO FATIGUE FAILURE
+        """
+        let q = try #require(SentenceQuoteComposer.compose(question: "What did NHTSA find in investigation PE86068?", chunks: [chunk(report)]))
+        #expect(q.sentence.contains("FATIGUE FAILURE"), "\(q.sentence)")
+    }
+
     @Test("A non-why question is unchanged")
     func notWhy() {
         #expect(!SentenceQuoteComposer.asksWhy("When was FDA recall Z-2366-2021 initiated?"))
@@ -61,6 +77,11 @@ struct InventoryFieldTests {
     func wholeNameOrLastWord() {
         #expect(SlotFieldResolver.resolve(in: "what is the classification of fda recall d-1381-2019?", knownFields: fields).first?.fieldID == "classification")
         #expect(SlotFieldResolver.resolve(in: "which firm initiated fda recall d-1381-2019?", knownFields: fields).first?.fieldID == "recallingfirm")
+    }
+
+    @Test("A four-letter verb names its dated field")
+    func fourLetterVerb() {
+        #expect(SlotFieldResolver.resolve(in: "when did nhtsa open investigation pe86068?", knownFields: ["dateopened", "date", "component"]).first?.fieldID == "dateopened")
     }
 
     @Test("A last word shared by two fields, or a generic word, names none")

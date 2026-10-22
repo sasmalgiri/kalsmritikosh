@@ -385,10 +385,11 @@ public enum SlotFieldResolver {
         let dateFields = knownFields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }
         guard !dateFields.isEmpty else { return nil }
         let words = q.components(separatedBy: CharacterSet.letters.inverted)
-            .filter { $0.count >= 5 && !ungrammaticalAlone.contains($0) && !FTSQuerySanitizer.stopwords.contains($0) }
+            // Four letters: "When did NHTSA open investigation PE86068?" → dateopened.
+            .filter { $0.count >= 4 && !ungrammaticalAlone.contains($0) && !FTSQuerySanitizer.stopwords.contains($0) }
         var best: (field: String, stem: Int)?
         for w in words {
-            let stem = String(w.prefix(max(5, w.count - 3)))
+            let stem = String(w.prefix(max(4, w.count - 3)))
             for f in dateFields where f.contains(stem) {
                 if best == nil || stem.count > best!.stem || (stem.count == best!.stem && f.count < best!.field.count) {
                     best = (f, stem.count)

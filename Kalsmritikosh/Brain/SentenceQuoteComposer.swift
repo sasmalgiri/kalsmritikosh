@@ -62,9 +62,20 @@ public enum SentenceQuoteComposer {
         // matter, it does not tell what happened. When the question names its matter by a
         // quoted title, a sentence that is the title (or carries it whole, as a cover note
         // does) is skipped; the account is the sentence that adds to it, often the long lead.
-        let titles = Self.asksWhatHappened(question) ? IdentifierAnchoredRetriever.quotedTitles(in: question) : []
+        // "What did NHTSA find in investigation PE86068?" names its matter by a reference, not a
+        // title: there the sentence that only repeats the question ("NHTSA defect investigation
+        // PE86068") is the title.
+        let asksAccount = Self.asksWhatHappened(question)
+        var titles = asksAccount ? IdentifierAnchoredRetriever.quotedTitles(in: question) : []
+        if asksAccount, titles.isEmpty { titles = [question] }
         let titleWords = titles.reduce(into: Set<String>()) { $0.formUnion(contentWords($1)) }
         let sentenceLimit = titles.isEmpty ? maxSentenceLength : 600
+
+        if asksAccount, let lead = Self.leadSentence(question: question, chunks: chunks, titles: titles, titleWords: titleWords) {
+            return QuotedAnswer(
+                sentence: lead.sentence, objectID: lead.chunk.objectID, chunkID: lead.chunk.id,
+                receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+        }
 
         var best: (score: Int, tiebreak: String, sentence: String, chunk: Chunk)?
         for rc in chunks {
@@ -106,10 +117,41 @@ public enum SentenceQuoteComposer {
             receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
     }
 
+    /// The account of a matter: the first substantive sentence of the matter's own document —
+    /// the document whose passages share the most of the question's words — read in order,
+    /// skipping the title, label lines ("Make: KENWORTH") and short lines. A sentence longer
+    /// than 600 characters is quoted up to a word boundary, marked with an ellipsis.
+    nonisolated static func leadSentence(question: String, chunks: [RetrievedChunk], titles: [String],
+                                         titleWords: Set<String>) -> (sentence: String, chunk: Chunk)? {
+        let asked = contentWords(question)
+        guard let anchor = chunks.max(by: { asked.intersection(contentWords($0.chunk.text)).count
+                                            < asked.intersection(contentWords($1.chunk.text)).count }),
+              asked.intersection(contentWords(anchor.chunk.text)).count >= 2 else { return nil }
+        let own = chunks.filter { $0.chunk.objectID == anchor.chunk.objectID }.sorted { $0.chunk.ordinal < $1.chunk.ordinal }
+        let label = #"^[A-Z][A-Za-z /&()\-]{0,40}:\s*\S.{0,80}$"#
+        for rc in own {
+            for raw in sentences(of: rc.chunk.text) {
+                var sentence = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard sentence.split(separator: " ").count >= 12 else { continue }
+                if sentence.range(of: label, options: .regularExpression) != nil { continue }
+                let words = contentWords(sentence)
+                if restatesTitle(sentence, words: words, titles: titles, titleWords: titleWords) { continue }
+                if sentence.count > 600 {
+                    let cut = sentence.prefix(600)
+                    sentence = String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
+                }
+                return (sentence, rc.chunk)
+            }
+        }
+        return nil
+    }
+
     nonisolated static func asksWhatHappened(_ question: String) -> Bool {
         let q = question.lowercased()
         return q.hasPrefix("what happened") || q.contains(" what happened") || q.hasPrefix("what was the case")
             || q.hasPrefix("describe ") || q.hasPrefix("summarize ") || q.hasPrefix("summarise ")
+            || q.range(of: #"^what (?:did|does|do) .{1,60}\b(?:find|found|conclude|determine|report)\b"#, options: .regularExpression) != nil
+            || q.hasPrefix("what was found")
     }
 
     /// A sentence that is the title: it carries a title whole, or at least 80% of its content
