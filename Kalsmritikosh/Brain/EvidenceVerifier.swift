@@ -684,9 +684,13 @@ public struct EvidenceVerifier: Verifier {
         // The fields the retrieved facts carry, so a when-question can name a specific dated field
         // ("initiated" → recall initiation date) instead of the bare "date".
         let retrievedFields = Set(retrieval.genericFacts.map { FactSchemaRegistry.normalizeField($0.field) })
-        let namesDatedField = SlotFieldResolver.namedDateField(in: intent.rawQuestion, knownFields: retrievedFields) != nil
+        // The fields on file also let a question that asks for ONE value reach a field nobody
+        // curated ("classification", "recallingfirm"); a curated mapping still wins
+        // (SlotFieldResolver.resolve). Timeline, list, count, yes/no and the other composed
+        // shapes are not value questions ("timeline of the patent" is not the patent field).
+        let asksForValue = [.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
-                                               knownFields: namesDatedField ? retrievedFields : [])
+                                               knownFields: asksForValue ? retrievedFields : [])
         // A1.2 — the receipt speaks for the WHOLE archive.
         let totals = await archiveTotals?()
         let searchedScope = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count

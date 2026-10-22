@@ -317,6 +317,18 @@ public enum SlotFieldResolver {
             // Longest wins; once a length matches there is no better one below.
             if best != nil { break }
         }
+        // Case bench 2026-10-22: "Which firm initiated FDA recall D-1381-2019?" — the ledger
+        // holds `recallingfirm`, and "firm" is its last word, not its whole name, so the
+        // question got the report's text instead of the firm. A content word of four letters
+        // or more that ENDS exactly one field on file names that field.
+        if best == nil {
+            var ends: Set<String> = []
+            for w in words where w.count >= 4 && !ungrammaticalAlone.contains(w) && !FTSQuerySanitizer.stopwords.contains(w) {
+                let matches = knownFields.filter { $0 != w && $0.hasSuffix(w) }
+                if matches.count == 1, let f = matches.first { ends.insert(f) }
+            }
+            if ends.count == 1, let f = ends.first { best = (fieldID: f, length: 1) }
+        }
         guard let hit = best else { return nil }
         return Resolution(
             fieldID: hit.fieldID,

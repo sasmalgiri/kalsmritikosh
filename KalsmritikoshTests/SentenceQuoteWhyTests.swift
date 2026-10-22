@@ -53,6 +53,23 @@ struct SentenceQuoteWhyTests {
     }
 }
 
+@Suite("A question reaches the field on file it names")
+struct InventoryFieldTests {
+    let fields: Set<String> = ["recallingfirm", "classification", "recallinitiationdate", "productquantity", "distributionpattern"]
+
+    @Test("A field's whole name, or its last word when only one field ends so")
+    func wholeNameOrLastWord() {
+        #expect(SlotFieldResolver.resolve(in: "what is the classification of fda recall d-1381-2019?", knownFields: fields).first?.fieldID == "classification")
+        #expect(SlotFieldResolver.resolve(in: "which firm initiated fda recall d-1381-2019?", knownFields: fields).first?.fieldID == "recallingfirm")
+    }
+
+    @Test("A last word shared by two fields, or a generic word, names none")
+    func ambiguousOrGeneric() {
+        #expect(SlotFieldResolver.resolveAgainstInventory("which firm was it?", knownFields: ["recallingfirm", "manufacturingfirm"]) == nil)
+        #expect(SlotFieldResolver.resolveAgainstInventory("what is the date?", knownFields: ["recallinitiationdate"]) == nil)
+    }
+}
+
 @Suite("A when-question names the dated field its verb points to")
 struct NamedDateFieldTests {
     @Test("initiated → recall initiation date; opened → date opened; no match → nil")

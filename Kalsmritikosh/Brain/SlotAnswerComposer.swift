@@ -197,7 +197,9 @@ public enum SlotAnswerComposer {
             // suppress the label when the value already carries it, so the
             // sentence reads "Patent No. 900123." not "Patent number:
             // Patent No. 900123."
-            let sentence = "\(labeledValue(best.fact, label: label))."
+            // A value that ends a sentence itself ("Cardinal Health Inc.") takes no second period.
+            let stated = labeledValue(best.fact, label: label)
+            let sentence = stated.hasSuffix(".") ? stated : stated + "."
             var single = SlotAnswerComposition(
                 primaryText: sentence,
                 supportingObjectIDs: [best.objectID],
