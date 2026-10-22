@@ -101,6 +101,10 @@ public enum LegalCaseDomainPack {
     nonisolated static func captionDocketNumber(in text: String) -> String? {
         for raw in text.components(separatedBy: .newlines).prefix(40) {
             let line = raw.trimmingCharacters(in: .whitespaces)
+            // Northern District of Illinois style: "No. 50 C 684." — year, letter, number.
+            if let r = line.range(of: #"^Nos?\.\s*\d{1,2} [A-Z]{1,3} \d{1,6}\.?$"#, options: .regularExpression) {
+                return line[r].replacingOccurrences(of: #"^Nos?\.\s*|\.$"#, with: "", options: .regularExpression)
+            }
             guard let r = line.range(of: #"^(?:Nos?\.|Docket)\s*([A-Za-z0-9][A-Za-z0-9/\-]*[0-9][A-Za-z0-9/\-]*)[.,]?(?:\s*(?:,|and)\s*[A-Za-z0-9/\-]+)*\.?$"#,
                                      options: .regularExpression) else { continue }
             let body = line[r].replacingOccurrences(of: #"^(?:Nos?\.|Docket)\s*"#, with: "", options: .regularExpression)
@@ -192,12 +196,40 @@ public enum LegalCaseDomainPack {
                            producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: cited.count)
     }
 
+    /// The caption's docket and court when the caption is split across blocks (HTML and PDF
+    /// put "No. 9941." and "Circuit Court of Appeals, Fifth Circuit." in blocks of their own,
+    /// and neither passes the per-block legal gate alone). Read over the first blocks joined
+    /// line by line, only when the joined head is a caption (a number beside the court, or the
+    /// court's line followed by a date). Fields any block already filed are left alone.
+    nonisolated static func documentLevelCaption(blocks: [(id: UUID, text: String)], subjectLabel: String,
+                                                 have: Set<String>) -> [GenericFact] {
+        let head = Array(blocks.prefix(20))
+        let joined = head.map(\.text).joined(separator: "\n")
+        guard numberedBesideCourt(joined) || courtLineDate(in: joined) != nil else { return [] }
+        func block(containing value: String) -> UUID? { head.first(where: { $0.text.contains(value) })?.id }
+        // Field names are compared normalized ("decisionDate" is stored as "decisiondate").
+        let filed = Set(have.map(FactSchemaRegistry.normalizeField))
+        func missing(_ field: String) -> Bool { !filed.contains(FactSchemaRegistry.normalizeField(field)) }
+        var out: [GenericFact] = []
+        if missing("caseNumber"), let v = captionDocketNumber(in: joined) ?? flowingDocketNumber(in: joined),
+           let b = block(containing: v) {
+            out.append(fact(subjectLabel, "caseNumber", v, b, 0.8))
+        }
+        if missing("court"), let v = captionCourtName(in: joined), let b = block(containing: v) {
+            out.append(fact(subjectLabel, "court", v, b, 0.7))
+        }
+        if missing("decisionDate"), let d = documentLevelDecisionDate(blocks: blocks, subjectLabel: subjectLabel) {
+            out.append(d)
+        }
+        return out
+    }
+
     /// A US court as a caption names it: "United States Court of Appeals, District of Columbia
     /// Circuit", "District Court, D. Tennessee", "Supreme Court of Pennsylvania". Case bench
     /// 2026-10-18: the labeled rule above expects "In the Court of …", so US captions gave none.
     nonisolated static func captionCourtName(in text: String) -> String? {
         let head = String(text.prefix(1200))
-        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})"#
+        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Civil Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})"#
         guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
         // A period after a full word ends the name ("… Circuit. Argued"); initials keep it
         // ("District Court, D. Tennessee").

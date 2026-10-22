@@ -223,6 +223,27 @@ struct LegalCourtAndDispositionTests {
             blocks: [(UUID(), "The meeting is on March 27, 1956."), (UUID(), "Bring the minutes.")], subjectLabel: "x") == nil)
     }
 
+    @Test("A caption split across blocks gives the docket and the court")
+    func splitCaptionDocketCourt() {
+        let blocks: [(id: UUID, text: String)] = [
+            (UUID(), "Goudeau v. Daigle"), (UUID(), "GOUDEAU v. DAIGLE et al."), (UUID(), "No. 9941."),
+            (UUID(), "Circuit Court of Appeals, Fifth Circuit."), (UUID(), "Jan. 6, 1942."),
+            (UUID(), "This appeal is from a judgment dismissing appellant's suit to enforce specific performance."),
+        ]
+        let facts = LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: [])
+        #expect(facts.first(where: { $0.field == "caseNumber" })?.value == "9941")
+        #expect(facts.first(where: { $0.field == "court" })?.value.contains("Fifth Circuit") == true)
+        #expect(facts.first(where: { $0.field == "decisionDate" })?.value == "1942-01-06")
+        // Already filed by a block: left alone. Not a caption: nothing.
+        #expect(LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: ["caseNumber", "court", "decisionDate"]).isEmpty)
+        #expect(LegalCaseDomainPack.documentLevelCaption(blocks: [(UUID(), "Minutes of the meeting."), (UUID(), "No. 5 on the agenda.")], subjectLabel: "x", have: []).isEmpty)
+    }
+
+    @Test("A Northern District of Illinois docket keeps its letter")
+    func ndIllDocket() {
+        #expect(LegalCaseDomainPack.captionDocketNumber(in: "MISSOURI-KANSAS-TEXAS RAILROAD v. BOARD\nNo. 50 C 684.\nUnited States District Court, N. D. Illinois, E. D.") == "50 C 684")
+    }
+
     @Test("A judge mentioned in the body is not the author")
     func bodyMentionIgnored() {
         #expect(LegalCaseDomainPack.opinionAuthor(in: "As Judge Smith explained in an earlier case, the rule applies.") == nil)
