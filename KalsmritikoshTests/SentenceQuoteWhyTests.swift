@@ -106,7 +106,8 @@ struct NamedDateFieldTests {
     func named() {
         let fields: Set<String> = ["date", "recallinitiationdate", "dateopened", "recallingfirm"]
         #expect(SlotFieldResolver.namedDateField(in: "When was FDA recall D-0227-2026 initiated?", knownFields: fields)?.fieldID == "recallinitiationdate")
-        #expect(SlotFieldResolver.namedDateField(in: "When did NHTSA open investigation PE08001?", knownFields: ["dateopened"]) == nil)
+        // Four-letter verbs name their field too (case bench 2026-10-22: "open" → dateopened).
+        #expect(SlotFieldResolver.namedDateField(in: "When did NHTSA open investigation PE08001?", knownFields: ["dateopened"])?.fieldID == "dateopened")
         #expect(SlotFieldResolver.namedDateField(in: "When was it opened?", knownFields: fields)?.fieldID == "dateopened")
         #expect(SlotFieldResolver.namedDateField(in: "Which firm initiated recall D-1?", knownFields: fields) == nil)
     }

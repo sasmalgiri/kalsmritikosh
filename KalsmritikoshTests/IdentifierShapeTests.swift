@@ -231,9 +231,10 @@ struct LegalCourtAndDispositionTests {
             (UUID(), "This appeal is from a judgment dismissing appellant's suit to enforce specific performance."),
         ]
         let facts = LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: [])
-        #expect(facts.first(where: { $0.field == "caseNumber" })?.value == "9941")
+        // Stored field names are normalized ("casenumber", "decisiondate").
+        #expect(facts.first(where: { $0.field == "casenumber" })?.value == "9941")
         #expect(facts.first(where: { $0.field == "court" })?.value.contains("Fifth Circuit") == true)
-        #expect(facts.first(where: { $0.field == "decisionDate" })?.value == "1942-01-06")
+        #expect(facts.first(where: { $0.field == "decisiondate" })?.value == "1942-01-06")
         // Already filed by a block: left alone. Not a caption: nothing.
         #expect(LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: ["caseNumber", "court", "decisionDate"]).isEmpty)
         #expect(LegalCaseDomainPack.documentLevelCaption(blocks: [(UUID(), "Minutes of the meeting."), (UUID(), "No. 5 on the agenda.")], subjectLabel: "x", have: []).isEmpty)
