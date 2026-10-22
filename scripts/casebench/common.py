@@ -28,6 +28,15 @@ def date_forms(iso):
 def words(s):
     return [w for w in re.findall(r"[a-z][a-z'-]+", s.lower()) if len(w) > 3 and w not in STOP]
 
+def name_forms(v):
+    """A court named either way round: "oklahoma supreme court" ~ "supreme court of oklahoma"."""
+    forms = [v]
+    m = re.match(r"^(.+?) (supreme court|court of appeals|court of civil appeals|court of criminal appeals|appellate court)$", v)
+    if m: forms.append(f"{m.group(2)} of {m.group(1)}")
+    m = re.match(r"^(supreme court|court of appeals|court of civil appeals|court of criminal appeals|appellate court) of (.+)$", v)
+    if m: forms.append(f"{m.group(2)} {m.group(1)}")
+    return forms
+
 def value_in(expect, text):
     """(present, note) — is the expected value in `text`?"""
     b = text.lower()
@@ -36,7 +45,7 @@ def value_in(expect, text):
         other = FULL_DATE.findall(text)
         return False, ("other-date:" + other[0]) if other else None
     if "any" in expect:
-        return any(v and v.lower() in b for v in expect["any"]), None
+        return any(v and any(f in b for f in name_forms(v.lower())) for v in expect["any"]), None
     if "number" in expect:
         n = expect["number"]
         return bool(re.search(rf"\b{n}\b", b) or (n in WORDS and re.search(rf"\b{WORDS[n]}\b", b))), None
