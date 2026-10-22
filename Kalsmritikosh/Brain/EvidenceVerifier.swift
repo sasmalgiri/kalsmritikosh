@@ -914,6 +914,23 @@ public struct EvidenceVerifier: Verifier {
                     report: effectiveReport)
             }
         }
+        // A count over numbered entries ("Employee #1:", "Employee #2:") counts them.
+        if slot == nil, let counted = NumberedEntryCount.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            var body = counted.render()
+            if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+            body += "\n\n(Counted from the numbered entries in the cited document; no model was consulted.)"
+            KalsmritikoshLog.brain.info("NumberedEntryCount: \(counted.count, privacy: .public) \(counted.noun, privacy: .public) entr(ies)")
+            return VerifiedAnswer(
+                body: body,
+                answerText: counted.render(),
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: counted.objectID, chunkID: counted.chunkID,
+                                                    snippet: String(counted.entries.joined(separator: "; ").prefix(180)))],
+                confidence: Confidence(0.8),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
+        }
         if slot == nil, claimsAreDumpOnly,
            let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
             var body = SentenceQuoteComposer.render(quoted)

@@ -102,3 +102,58 @@ struct NamedDateFieldTests {
         #expect(SlotFieldResolver.namedDateField(in: "Which firm initiated recall D-1?", knownFields: fields) == nil)
     }
 }
+
+@Suite("A count over numbered entries counts them")
+struct NumberedEntryCountTests {
+    private func chunk(_ text: String) -> RetrievedChunk {
+        RetrievedChunk(chunk: Chunk(objectID: UUID(), ordinal: 0, text: text, characterRange: 0..<text.count),
+                       score: 1, viaLayer: .metadata)
+    }
+
+    @Test("Employee #1 and #2 are two employees; a repeated entry counts once")
+    func counts() throws {
+        let record = "OSHA accident 220850044 — injured employees\n\nEmployee #1: fatality, age 31\nEmployee #2: hospitalized injury, age 40\nEmployee #1: fatality, age 31"
+        let c = try #require(NumberedEntryCount.compose(question: "How many employees were hurt in OSHA investigation 220850044?", chunks: [chunk(record)]))
+        #expect(c.count == 2)
+        #expect(c.render().hasPrefix("2 employees are listed"))
+    }
+
+    @Test("Nothing numbered, or a unit question, counts nothing")
+    func none() {
+        #expect(NumberedEntryCount.compose(question: "How many employees were hurt?", chunks: [chunk("Two employees were hurt.")]) == nil)
+        #expect(NumberedEntryCount.countedNoun(in: "How many days did it take?") == nil)
+    }
+
+    @Test("A title that only repeats the question's number is not a value")
+    func referenceIsNotValue() {
+        #expect(SentenceQuoteComposer.numbersOnlyFromQuestion("OSHA accident 220850044 — injured employees", question: "How many employees were hurt in OSHA investigation 220850044?"))
+        #expect(!SentenceQuoteComposer.numbersOnlyFromQuestion("Employee #1: fatality, age 31", question: "How many employees were hurt in OSHA investigation 220850044?"))
+    }
+}
+
+@Suite("Headings and places")
+struct HeadingAndPlaceTests {
+    private func chunk(_ text: String) -> RetrievedChunk {
+        RetrievedChunk(chunk: Chunk(objectID: UUID(), ordinal: 0, text: text, characterRange: 0..<text.count),
+                       score: 1, viaLayer: .metadata)
+    }
+
+    @Test("A heading that only repeats the question gives way to what it heads")
+    func headingBody() throws {
+        let doc = "NTSB SEA03LA084 — probable cause\nThe pilot did not attain the proper touchdown point during landing."
+        let q = try #require(SentenceQuoteComposer.compose(question: "What was the probable cause of NTSB case SEA03LA084?", chunks: [chunk(doc)]))
+        #expect(q.sentence.hasPrefix("The pilot did not attain"), "\(q.sentence)")
+    }
+
+    @Test("A where-question reaches a place field on file, and only a where-question")
+    func whereToLocation() {
+        #expect(SlotFieldResolver.resolve(in: "where did the ntsb era25la118 accident happen?", knownFields: ["location", "dateandtime"]).first?.fieldID == "location")
+        #expect(SlotFieldResolver.resolve(in: "where did the ntsb era25la118 accident happen?", knownFields: ["dateandtime"]).isEmpty)
+        #expect(SlotFieldResolver.placeField(in: "what happened at the site?", knownFields: ["location"]) == nil)
+    }
+
+    @Test("A Location label is read as a field")
+    func locationNotReserved() {
+        #expect(!OpenFieldExtractor.reservedFields.contains("location"))
+    }
+}

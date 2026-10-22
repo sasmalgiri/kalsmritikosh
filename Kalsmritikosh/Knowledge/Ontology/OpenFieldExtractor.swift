@@ -129,8 +129,10 @@ public enum OpenFieldExtractor {
         // ResearchDomainPack declares no emittedFields; these are what it writes.
         raw += ["doi", "date"]
         // Structural fields the ledger owns for its own purposes.
+        // "location" is NOT reserved: no pack writes it, so reserving it only dropped every
+        // "Location: Kennesaw, GA" a report prints (case bench 2026-10-22, NTSB reports).
         raw += ["status", "applicant", "inventor", "counterparty", "employer",
-                "role", "amount", "location", "email", "phone"]
+                "role", "amount", "email", "phone"]
         return Set(raw.map { FactSchemaRegistry.normalizeField($0) })
     }()
 

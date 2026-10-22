@@ -91,7 +91,9 @@ public enum SentenceQuoteComposer {
                 let words = contentWords(sentence)
                 if !titles.isEmpty, Self.restatesTitle(sentence, words: words, titles: titles, titleWords: titleWords) { continue }
                 let overlap = matchWords.intersection(words).count
+                // The question's own reference numbers ("OSHA accident 220850044") are not a value.
                 let hasValue = sentence.contains(where: \.isNumber)
+                    && !Self.numbersOnlyFromQuestion(sentence, question: question)
                 if asksForValue && !hasValue { continue }
                 // A why-question's answer: the line under a "Reason …:" / "Cause:" label, or a
                 // sentence that states a reason.
@@ -110,6 +112,14 @@ public enum SentenceQuoteComposer {
             }
         }
         guard let hit = best, hit.score >= minOverlap * 2 + 1 else { return nil }
+        // Case bench 2026-10-22: "What was the probable cause of NTSB case SEA03LA084?" quoted
+        // the heading "NTSB SEA03LA084 — probable cause" — every word of it is the question's.
+        // A heading answers nothing; what it heads does: the next substantive sentence.
+        if Self.restatesTitle(hit.sentence, words: contentWords(hit.sentence), titles: [question], titleWords: queryWords),
+           let body = Self.sentence(after: hit.sentence, in: hit.chunk.text) {
+            return QuotedAnswer(sentence: body, objectID: hit.chunk.objectID, chunkID: hit.chunk.id,
+                                receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+        }
         return QuotedAnswer(
             sentence: hit.sentence,
             objectID: hit.chunk.objectID,
@@ -144,6 +154,25 @@ public enum SentenceQuoteComposer {
             }
         }
         return nil
+    }
+
+    /// The first sentence of at least five words after `heading` in `text`, cut to 600 characters.
+    nonisolated static func sentence(after heading: String, in text: String) -> String? {
+        let all = sentences(of: text).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard let i = all.firstIndex(of: heading) else { return nil }
+        for s in all[(i + 1)...] where s.split(separator: " ").count >= 5 {
+            guard s.count > 600 else { return s }
+            let cut = s.prefix(600)
+            return String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
+        }
+        return nil
+    }
+
+    nonisolated static func numbersOnlyFromQuestion(_ sentence: String, question: String) -> Bool {
+        func numbers(_ t: String) -> Set<String> {
+            Set(t.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty })
+        }
+        return numbers(sentence).isSubset(of: numbers(question))
     }
 
     nonisolated static func asksWhatHappened(_ question: String) -> Bool {
@@ -247,5 +276,63 @@ public enum SentenceQuoteComposer {
         let word = String(chars[(k + 1)..<i]).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "\"“‘,"))
         if word.count == 1, word.first?.isLetter == true { return false }
         return !abbreviations.contains(word)
+    }
+}
+
+/// "How many employees were hurt?" when the record lists them one per entry ("Employee #1:
+/// fatality, age 31", "Victim 2 –", "Defendant #3:"). Case bench 2026-10-22: OSHA injury
+/// records numbered each employee and the count question quoted the record's title instead.
+/// Counts the DISTINCT entry numbers for the question's noun in the one document that lists the
+/// most of them, and quotes the entries. Deterministic; nil when nothing is numbered.
+public struct NumberedEntryCount: Sendable, Equatable {
+    public let count: Int
+    public let noun: String
+    public let entries: [String]
+    public let objectID: KnowledgeObject.ID
+    public let chunkID: Chunk.ID
+
+    public nonisolated static func compose(question: String, chunks: [RetrievedChunk]) -> NumberedEntryCount? {
+        guard let noun = countedNoun(in: question) else { return nil }
+        let pattern = "(?im)^\\s*(" + NSRegularExpression.escapedPattern(for: noun) + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n]*"
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        var best: NumberedEntryCount?
+        let byObject = Dictionary(grouping: chunks, by: { $0.chunk.objectID })
+        for (object, rcs) in byObject {
+            var seen: [String: String] = [:]
+            var first: Chunk?
+            for rc in rcs.sorted(by: { $0.chunk.ordinal < $1.chunk.ordinal }) {
+                let ns = rc.chunk.text as NSString
+                for m in re.matches(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) {
+                    let n = ns.substring(with: m.range(at: 2))
+                    if seen[n] == nil {
+                        seen[n] = ns.substring(with: m.range).trimmingCharacters(in: .whitespacesAndNewlines)
+                        if first == nil { first = rc.chunk }
+                    }
+                }
+            }
+            guard let chunk = first, !seen.isEmpty else { continue }
+            if best == nil || seen.count > best!.count {
+                let entries = seen.sorted { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }.map(\.value)
+                best = NumberedEntryCount(count: seen.count, noun: noun, entries: entries, objectID: object, chunkID: chunk.id)
+            }
+        }
+        return best
+    }
+
+    /// The noun after "how many" ("how many employees were hurt" → "employee"), singular.
+    nonisolated static func countedNoun(in question: String) -> String? {
+        let q = question.lowercased()
+        guard let r = q.range(of: #"how many ([a-z]+)"#, options: .regularExpression) else { return nil }
+        var word = String(q[r].dropFirst("how many ".count))
+        guard word.count >= 3, !["times", "days", "years", "months", "hours", "dollars"].contains(word) else { return nil }
+        if word.hasSuffix("ies") { word = String(word.dropLast(3)) + "y" }
+        else if word.hasSuffix("s") { word = String(word.dropLast()) }
+        return word
+    }
+
+    public nonisolated func render() -> String {
+        let label = count == 1 ? noun : noun + "s"
+        let listed = entries.prefix(12).map { "\u{201C}\($0)\u{201D}" }.joined(separator: "; ")
+        return "\(count) \(label) \(count == 1 ? "is" : "are") listed: \(listed)."
     }
 }

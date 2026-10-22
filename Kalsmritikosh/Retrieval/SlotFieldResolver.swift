@@ -370,10 +370,22 @@ public enum SlotFieldResolver {
         // Only reach for the inventory when nothing curated matched AND the F8
         // fallback produced nothing either. A curated mapping always wins.
         if !curated.isEmpty { return curated }
+        // "Where did the NTSB ERA25LA118 accident happen?" names no field; a place-shaped field
+        // on file for the matter ("Location: Kennesaw, GA") is what it asks for.
+        if let place = placeField(in: question, knownFields: knownFields) { return [place] }
         if let discovered = resolveAgainstInventory(question, knownFields: knownFields) {
             return [discovered]
         }
         return []
+    }
+
+    nonisolated static let placeFields = ["location", "accidentlocation", "incidentlocation", "place", "site", "venue", "address"]
+
+    nonisolated static func placeField(in question: String, knownFields: Set<String>) -> Resolution? {
+        let q = question.lowercased()
+        guard q.hasPrefix("where ") || q.hasPrefix("in which city") || q.hasPrefix("in what city") || q.hasPrefix("in which state"),
+              let f = placeFields.first(where: { knownFields.contains($0) }) else { return nil }
+        return Resolution(fieldID: f, requestedField: .identifier, humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
     }
 
     /// A known date-shaped field whose name carries the stem of one of the question's words
