@@ -218,6 +218,15 @@ public struct AnswerSynthesizer: Sendable {
             return nil
         }
 
+        // Case bench 2026-10-21: "What happened in the case "New Jersey Man Charged With
+        // Identity Theft …"?" came back as the title in a sentence, while the grounded body
+        // named the man, his age and the counts. Prose that only says the question back is no
+        // answer when the findings say more.
+        if Self.echoesQuestion(question: question, findings: findings, prose: final) {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: synthesis only restated the question; keeping the grounded body")
+            return nil
+        }
+
         // §17 — sentence-level citation validation. Reject prose whose factual
         // sentences are largely UNcited rather than ship ungrounded text; the
         // caller then keeps the verifier's claim-cited deterministic body. We
@@ -323,6 +332,24 @@ public struct AnswerSynthesizer: Sendable {
         if content.contains(where: { $0.contains(where: \.isNumber) && !bareWords.contains($0) }) { return true }
         let kept = content.filter { bareWords.contains($0) }.count
         return kept * 3 < content.count * 2
+    }
+
+    /// True when at least 85% of the prose's content words already appear in the question
+    /// and the findings carry at least three content words the question does not. Words are
+    /// compared by their first five letters ("charged" ~ "charges").
+    static func echoesQuestion(question: String, findings: String, prose: String) -> Bool {
+        let minor: Set<String> = ["the", "and", "for", "was", "were", "with", "that", "this", "from", "into",
+                                  "has", "have", "had", "are", "his", "her", "their", "its", "who", "what",
+                                  "case", "document", "documents", "states", "says", "source"]
+        func stems(_ t: String) -> Set<String> {
+            Set(t.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init).filter { $0.count >= 3 && !minor.contains($0) }.map { String($0.prefix(5)) })
+        }
+        let bare = prose.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression)
+        let said = stems(bare), asked = stems(question)
+        guard said.count >= 3 else { return false }
+        let echoed = Double(said.intersection(asked).count) / Double(said.count)
+        return echoed >= 0.85 && stems(findings).subtracting(asked).count >= 3
     }
 
     // MARK: - Helpers

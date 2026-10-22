@@ -64,6 +64,19 @@ struct AnswerSynthesizerValueGateTests {
         #expect(!AnswerSynthesizer.dropsLeadValue(findings: "An employee was overcome by fumes.", prose: "Fumes [1]."))
     }
 
+    @Test("Prose that only restates the question gives way to the findings")
+    func echoRejected() {
+        let q = "What happened in the case \"NEW JERSEY MAN CHARGED WITH IDENTITY THEFT AND BANK FRAUD FOR FRAUDULENT TRANSACTIONS THROUGHOUT FLORIDA AND SOUTH CAROLINA\"?"
+        let f = "TALLAHASSEE, FLORIDA – Michael Scott Hillwig, 58, of Camden, New Jersey, was indicted by a federal grand jury and charged with two counts of bank fraud."
+        #expect(AnswerSynthesizer.echoesQuestion(question: q, findings: f,
+            prose: "A NEW JERSEY man was charged with identity theft and bank fraud for fraudulent transactions throughout Florida and South Carolina [1]."))
+        #expect(!AnswerSynthesizer.echoesQuestion(question: q, findings: f,
+            prose: "Michael Scott Hillwig, 58, of Camden was indicted by a federal grand jury on two counts of bank fraud [1]."))
+        // Nothing more in the findings than the question: the restatement is all there is.
+        #expect(!AnswerSynthesizer.echoesQuestion(question: q, findings: "New Jersey man charged with bank fraud.",
+            prose: "A New Jersey man was charged with bank fraud [1]."))
+    }
+
     @Test("Other questions are not gated")
     func otherQuestions() {
         #expect(!AnswerSynthesizer.dropsAskedValue(question: "What happened in OSHA investigation 220962021?",

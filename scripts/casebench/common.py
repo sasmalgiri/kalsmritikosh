@@ -13,7 +13,9 @@ WORDS = {0: "no", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"
 FULL_DATE = re.compile(r"\b(\d{4}-\d\d-\d\d|(?:%s)\.? \d{1,2},? \d{4})\b" % "|".join(m[:3] + "[a-z]*" for m in MONTHS))
 
 REFUSAL_RE = re.compile(r"can.?t (ground|answer)|couldn.?t|no (evidence|documents?)|not (find|found)|"
-                        r"don.?t have|isn.?t in your|nothing in your|unable", re.I)
+                        r"don.?t have|isn.?t in your|nothing in your|unable|"
+                        r"(?:does|do) not (?:state|specify|say|mention|provide|indicate|include|contain|show)|"
+                        r"not (?:stated|specified|mentioned|provided|given)", re.I)
 
 def date_forms(iso):
     y, m, d = iso.split("-"); mi, di = int(m), int(d); name = MONTHS[mi - 1]
