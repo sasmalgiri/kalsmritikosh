@@ -511,6 +511,11 @@ public actor MasterBrain {
         // was FDA recall D-0132-2023 issued?" came back as a two-event history of the emails
         // that carried the recall report).
         if SentenceQuoteComposer.asksWhy(question) { return nil }
+        // A question that names a ledger field asks for its value, not a history (case bench
+        // 2026-10-22: "What did the court decide in Pinching v. Wurdeman?" — disposition
+        // "affirmed" on file — came back as a model-written account of the opinion's reasoning,
+        // and one for "reversed and remanded" as "the court affirmed").
+        if !SlotFieldResolver.resolve(in: question.lowercased()).isEmpty { return nil }
 
         await sessionProfile?.recordTurn(
             question: question,
