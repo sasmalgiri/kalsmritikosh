@@ -62,6 +62,15 @@ struct SentenceQuoteWhyTests {
         #expect(q.sentence.contains("FATIGUE FAILURE"), "\(q.sentence)")
     }
 
+    @Test("A headline that runs into the lead comes off; the lead stands")
+    func headlineRunsIntoLead() throws {
+        let release = "Leader of meth trafficking ring operating in Houston sentenced to 30 years in prison HOUSTON – A 37-year-old Mexican citizen has been ordered to federal prison following his involvement in a conspiracy to possess meth. Today, U.S. District Judge David Hittner handed Carrasco-Garcia a 360-month term of imprisonment."
+        let q = try #require(SentenceQuoteComposer.compose(
+            question: "What happened in the case \"Leader of meth trafficking ring operating in Houston sentenced to 30 years in prison\"?",
+            chunks: [chunk(release)]))
+        #expect(q.sentence.hasPrefix("HOUSTON – A 37-year-old Mexican citizen"), "\(q.sentence)")
+    }
+
     @Test("A non-why question is unchanged")
     func notWhy() {
         #expect(!SentenceQuoteComposer.asksWhy("When was FDA recall Z-2366-2021 initiated?"))

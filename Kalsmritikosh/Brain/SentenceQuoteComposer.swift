@@ -142,6 +142,15 @@ public enum SentenceQuoteComposer {
         for rc in own {
             for raw in sentences(of: rc.chunk.text) {
                 var sentence = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                // A headline with no period after it runs into the lead ("… Sentenced to 30
+                // Years in Prison HOUSTON – A 37-year-old Mexican citizen has been …"): the
+                // title comes off and the lead stands.
+                for t in titles where t.count >= 12 {
+                    if let r = sentence.range(of: t, options: [.caseInsensitive]) {
+                        let rest = sentence[r.upperBound...].trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"”’:–—-")))
+                        if rest.split(separator: " ").count >= 12 { sentence = rest }
+                    }
+                }
                 guard sentence.split(separator: " ").count >= 12 else { continue }
                 if sentence.range(of: label, options: .regularExpression) != nil { continue }
                 let words = contentWords(sentence)
