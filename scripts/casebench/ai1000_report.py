@@ -52,10 +52,10 @@ def main():
     out.append(f"- Answers with at least one completed generation by the model: {ai_used} of {total} ({pct(ai_used, total)})")
     if seconds: out.append(f"- Seconds per answer: median {seconds[len(seconds) // 2]:.0f}, 90th percentile {seconds[int(len(seconds) * .9)]:.0f}\n")
 
-    out.append("## Answers by question\n\n| Source:question | n | correct | honest refusal | missed | uncited | unsupported | wrong |\n|---|---|---|---|---|---|---|---|")
+    out.append("## Answers by question\n\n| Source:question | n | correct | honest refusal | dump | missed | uncited | unsupported | wrong |\n|---|---|---|---|---|---|---|---|---|")
     for k in sorted(by_q):
         c = by_q[k]; n = sum(c.values())
-        out.append(f"| {k} | {n} | {pct(c['correct'], n)} | {pct(c['honest-refusal'], n)} | {pct(c['missed'], n)} | {pct(c['uncited'], n)} | {pct(c['unsupported'], n)} | {pct(c['wrong'], n)} |")
+        out.append(f"| {k} | {n} | {pct(c['correct'], n)} | {pct(c['honest-refusal'], n)} | {pct(c['dump'], n)} | {pct(c['missed'], n)} | {pct(c['uncited'], n)} | {pct(c['unsupported'], n)} | {pct(c['wrong'], n)} |")
 
     out.append("\n## By document type (all questions)\n\n| Type | cases | answers | right (correct or honest refusal) |\n|---|---|---|---|")
     cases_per_type = collections.Counter(truth[r["case"]]["profile"] for r in results)

@@ -32,6 +32,10 @@ def classify(case, q, a):
         if refused: return "honest-refusal", note
         return ("correct", note) if present and own else ("unsupported", note)
     if refused: return "missed", note
+    # A short value (a name, a class, a number, a date) answered by a long passage that merely
+    # contains it is a dump, not an answer: the reader still has to find the value.
+    if present and own and "overlap" not in q["expect"] and len(body) > 600 and "\n---\n" not in body[:400]:
+        return "dump", note
     if present and own: return "correct", note
     if present: return "uncited", note
     if others and not own: return "wrong", "cites-other-cases"
