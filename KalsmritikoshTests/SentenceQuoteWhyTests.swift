@@ -33,6 +33,19 @@ struct SentenceQuoteWhyTests {
         #expect(q.sentence.contains("sterile barrier"), "\(q.sentence)")
     }
 
+    @Test("What happened in a matter named by its title: the account, not the headline")
+    func whatHappenedSkipsTitle() throws {
+        let release = """
+        Former White House Advisor Convicted of Contempt of Congress
+        Former White House advisor Peter K. Navarro, 72, of Washington, D.C., was found guilty today by a U.S. District Court jury of two counts of contempt of Congress stemming from his failure to comply with a subpoena issued by the House Select Committee.
+        """
+        let cover = "Please find attached the records for Former White House Advisor Convicted of Contempt of Congress."
+        let q = try #require(SentenceQuoteComposer.compose(
+            question: "What happened in the case \"Former White House Advisor Convicted of Contempt of Congress\"?",
+            chunks: [chunk(cover), chunk(release)]))
+        #expect(q.sentence.contains("Navarro"), "\(q.sentence)")
+    }
+
     @Test("A non-why question is unchanged")
     func notWhy() {
         #expect(!SentenceQuoteComposer.asksWhy("When was FDA recall Z-2366-2021 initiated?"))
