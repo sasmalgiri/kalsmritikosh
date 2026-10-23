@@ -124,6 +124,8 @@ enum GuideContent {
 
     /// Per-screen one-paragraph explainers (the Guide screen + info popovers).
     static let screenGuides: [(dest: Destination, title: String, body: String)] = [
+        (.cases, "Cases — every investigation, intake to closure",
+         "Your caseload: what needs you next is at the top (overdue tasks, untriaged cases, holds not acknowledged). Open a case for its file: intake and triage, the plan and allegations with the evidence for and against each, tasks with due dates, people and interviews with confirmed statements, exhibits, holds, redactions, your chronology and notes, and a log of everything done. You record each finding; the app keeps the record."),
         (.ask, "Ask — cited answers from your evidence",
          "Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed. With \u{201C}Answer general questions too\u{201D} on (Settings), questions outside your documents get a separate block marked \u{201C}Not from your documents\u{201D} \u{2014} general knowledge from the on-device AI, no sources, may be wrong, and never part of your evidence or exports."),
         (.findings, "Findings — every fact by status",

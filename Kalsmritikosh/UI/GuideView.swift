@@ -20,6 +20,7 @@ public struct GuideView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                walkthroughSection
                 screensSection
                 glossarySection
                 ForEach(GuideContent.termGroups, id: \.title) { group in
@@ -70,6 +71,35 @@ public struct GuideView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    /// U-3 — how to run each kind of investigation in the app, from the same templates a new case uses.
+    private var walkthroughSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Running an investigation", "folder.badge.person.crop")
+            Text("1. Cases → New case: record how it came in and pick the kind of investigation. 2. Triage it: rate it and accept, decline or refer. 3. Work the plan and the tasks; add sources and register exhibits. 4. Hold the interviews and record statements. 5. Link evidence to each allegation, then record your finding and why. 6. Close the case with your reasons. The app organises, finds and documents — the decisions are yours.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(CaseTemplate.all) { t in
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let m = t.plan.method { Text("How: \(m)") }
+                        if let e = t.plan.evidenceToCollect { Text("Evidence: \(e)") }
+                        if let i = t.plan.interviewsToHold { Text("Interviews: \(i)") }
+                        Text("Usual tasks:").fontWeight(.semibold)
+                        ForEach(t.tasks, id: \.title) { task in
+                            Text("• \(task.title)" + (task.dueInDays.map { " — day \($0)" } ?? ""))
+                        }
+                        Text("Retention: \(t.retentionPolicy)").foregroundStyle(.secondary)
+                    }
+                    .font(.caption).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+                } label: {
+                    Text(t.title).font(.callout.weight(.semibold))
+                }
+                .padding(12)
+                .cardSurface(cornerRadius: 12)
+            }
+            Button { onNavigate(.cases) } label: { Label("Open Cases", systemImage: "arrow.right.circle") }
         }
     }
 

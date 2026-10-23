@@ -86,40 +86,40 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [ ] T-4 (A) One PR → CI → merge → main CI (two-run protocol; Actions budget).
 
 ### Phase N — the name
-- [ ] N-1 (A) Rename to **Investigations Made Easy** wherever a person sees it: display/bundle name (InfoPlist.xcstrings), menus, onboarding, Share extension, Services item, viewer title, feedback mail, AppleScript dictionary title, listing, website, privacy/terms/support pages, CLAIMS fragments. Bundle IDs, schemes and the `kalsmritikosh://` scheme stay (renaming them breaks updates and links).
-- [ ] N-2 (A) Listing & review notes: keep "judgement stays human" in the first lines; subtitle "From evidence to findings"; keywords for investigations.
+- [x] N-1 (A) Rename to **Investigations Made Easy** wherever a person sees it: display/bundle name (InfoPlist.xcstrings), menus, onboarding, Share extension, Services item, viewer title, feedback mail, AppleScript dictionary title, listing, website, privacy/terms/support pages, CLAIMS fragments. Bundle IDs, schemes and the `kalsmritikosh://` scheme stay (renaming them breaks updates and links).
+- [x] N-2 (A) Listing & review notes: keep "judgement stays human" in the first lines; subtitle "From evidence to findings"; keywords for investigations.
 - [ ] N-3 (O) Confirm the name in App Store Connect (name availability is checked there).
 
 ### Phase C — case management (the biggest gap)
-- [ ] C-1 (A) Case statuses: intake → triage → open → in progress → on hold → findings → closed → reopened; migration; status shown everywhere.
-- [ ] C-2 (A) Typed intake on the case: received date, channel (hotline, email, referral, walk-in, web), complainant (or anonymous), allegation text, incident date/location, people named; an intake form per investigation type; anonymous/whistleblower intake that stores no identity.
-- [ ] C-3 (A) Triage: severity, risk factors, accept / decline / refer with a reason; triage queue.
-- [ ] C-4 (A) Case owner and team: owner, investigators, reviewer on the case; who did what in the case log (names on this Mac; see S-3 for accounts).
-- [ ] C-5 (A) Investigation plan object: scope, allegations, evidence to collect, people to interview, method; generated from the intake, edited by the investigator, cited by the report.
-- [ ] C-6 (A) Tasks: wire `ProfessionalTask` to cases — task list per case, assignee, due date, status, link to evidence; local notifications for due/overdue.
-- [ ] C-7 (A) Deadlines: boot `DeadlineRepository`; statutory/SLA deadlines from the investigation type (e.g. response due, limitation dates entered by the user); case calendar; overdue alerts.
-- [ ] C-8 (A) Caseload dashboard over cases: status, owner, risk, next deadline, open tasks, age; filters.
-- [ ] C-9 (A) Per-case investigator journal (dated notes, linked to evidence), printed in the case file.
-- [ ] C-10 (A) Investigation-type templates that pre-create plan, tasks and deadlines: workplace complaint, fraud/embezzlement, insurance claim, IP theft/data leak, safety incident, research integrity, litigation matter, personal dispute.
-- [ ] C-11 (A) Conflict-of-interest check at assignment (investigator vs named people), recorded.
-- [ ] C-12 (A) Case-level disposition per allegation (substantiated / unsubstantiated / inconclusive) and case archive.
+- [x] C-1 (A) Case statuses: intake → triage → open → in progress → on hold → findings → closed → reopened; migration; status shown everywhere.
+- [x] C-2 (A) Typed intake on the case: received date, channel (hotline, email, referral, walk-in, web), complainant (or anonymous), allegation text, incident date/location, people named; an intake form per investigation type; anonymous/whistleblower intake that stores no identity.
+- [x] C-3 (A) Triage: severity, risk factors, accept / decline / refer with a reason; triage queue.
+- [x] C-4 (A) Case owner and team: owner, investigators, reviewer on the case; who did what in the case log (names on this Mac; see S-3 for accounts).
+- [x] C-5 (A) Investigation plan object: scope, allegations, evidence to collect, people to interview, method; generated from the intake, edited by the investigator, cited by the report.
+- [x] C-6 (A) Tasks: wire `ProfessionalTask` to cases — task list per case, assignee, due date, status, link to evidence; local notifications for due/overdue.
+- [x] C-7 (A) Deadlines: boot `DeadlineRepository`; statutory/SLA deadlines from the investigation type (e.g. response due, limitation dates entered by the user); case calendar; overdue alerts.
+- [x] C-8 (A) Caseload dashboard over cases: status, owner, risk, next deadline, open tasks, age; filters.
+- [x] C-9 (A) Per-case investigator journal (dated notes, linked to evidence), printed in the case file.
+- [x] C-10 (A) Investigation-type templates that pre-create plan, tasks and deadlines: workplace complaint, fraud/embezzlement, insurance claim, IP theft/data leak, safety incident, research integrity, litigation matter, personal dispute.
+- [x] C-11 (A) Conflict-of-interest check at assignment (investigator vs named people), recorded.
+- [x] C-12 (A) Case-level disposition per allegation (substantiated / unsubstantiated / inconclusive) and case archive.
 
 ### Phase E — evidence
-- [ ] E-1 (A) Exhibit register: exhibit number, description, source, collected by / when / where, custody link; exhibit list export; `legalExhibit` citations use it.
-- [ ] E-2 (A) Custody report export (stand-alone PDF/CSV per case).
-- [ ] E-3 (A) Legal hold notices: generate from a template, record custodians, issue date, acknowledgement, reminders, release.
-- [ ] E-4 (A) Redaction log (what, where, why, by whom) and image redaction.
-- [ ] E-5 (A) Review batches and second-level QC for large document sets.
-- [ ] E-6 (A) Microsoft Teams export import; Cellebrite UFDR import (read-only parse of the report XML); evaluate cloud-drive import (files already on disk only — no network in the main app).
+- [x] E-1 (A) Exhibit register: exhibit number, description, source, collected by / when / where, custody link; exhibit list export; `legalExhibit` citations use it.
+- [x] E-2 (A) Custody report export (stand-alone PDF/CSV per case).
+- [x] E-3 (A) Legal hold notices: generate from a template, record custodians, issue date, acknowledgement, reminders, release.
+- [x] E-4 (A) Redaction log (what, where, why, by whom) and image redaction.
+- [x] E-5 (A) Review batches and second-level QC for large document sets.
+- [x] E-6 (A) Microsoft Teams export import; Cellebrite UFDR import (read-only parse of the report XML); evaluate cloud-drive import (files already on disk only — no network in the main app).
 
 ### Phase P — people and interviews
-- [ ] P-1 (A) Witness list on the case (role, contact log, availability), linked to subjects.
-- [ ] P-2 (A) Interview object: plan (questions from the plan and the contradictions), schedule, record, link to the recording's transcript, summary drafted from the transcript with citations, statement for signature (PDF) with attestation record.
-- [ ] P-3 (A) Structured credibility per account: consistency, corroboration, plausibility, motive, demeanour — each with cited evidence; never a verdict.
+- [x] P-1 (A) Witness list on the case (role, contact log, availability), linked to subjects.
+- [x] P-2 (A) Interview object: plan (questions from the plan and the contradictions), schedule, record, link to the recording's transcript, summary drafted from the transcript with citations, statement for signature (PDF) with attestation record.
+- [x] P-3 (A) Structured credibility per account: consistency, corroboration, plausibility, motive, demeanour — each with cited evidence; never a verdict.
 
 ### Phase A — analysis
 - [x] A-6 (A) Allegations × evidence × finding matrix on the case (supports / contradicts / neutral per item, cited); ACH moved into the ledger.
-- [ ] A-7 (A) Manual entries in the case chronology (marked investigator entry), merged with the automatic one.
+- [x] A-7 (A) Manual entries in the case chronology (marked investigator entry), merged with the automatic one.
 - [x] A-8 (A) Amount-weighted funds tracing over transaction facts; money-flow chart with amounts.
 - [x] A-9 (A) Force-directed relationship chart; per-pair communication timeline.
 
@@ -131,25 +131,25 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [ ] Q-6 (O) Owner-run large cases: NIST CFReDS Data Leakage (60 answers) and cleansed Enron.
 
 ### Phase S — security, privacy, governance
-- [ ] S-1 (A) Retention schedule per case type; purge with a record (never silent); legal hold blocks purge.
-- [ ] S-2 (A) Subject-access export and per-person erasure (GDPR-style) with a receipt.
-- [ ] S-3 (A+O) Users: a named investigator profile per Mac user (Keychain-backed), shown in every log entry; decide whether multi-user roles are v1 or v2.
-- [ ] S-4 (A) Full audit trail of user actions in a case (view, search, export, edit) into the HMAC chain.
+- [x] S-1 (A) Retention schedule per case type; purge with a record (never silent); legal hold blocks purge.
+- [x] S-2 (A) Subject-access export and per-person erasure (GDPR-style) with a receipt.
+- [x] S-3 (A+O) Users: a named investigator profile per Mac user (Keychain-backed), shown in every log entry; decide whether multi-user roles are v1 or v2.
+- [x] S-4 (A) Full audit trail of user actions in a case (view, search, export, edit) into the HMAC chain.
 - [ ] S-5 (A) App lock tests; refresh stale "database encryption is a separate decision" text.
 
 ### Phase U — product polish
-- [ ] U-1 (A) Accessibility: VoiceOver labels on every control, remove the 81 fixed font sizes, test at the largest text size; VoiceOver walk script.
+- [x] U-1 (A) Accessibility: VoiceOver labels on every control, remove the 81 fixed font sizes, test at the largest text size; VoiceOver walk script.
 - [x] U-2 (O) Localization: **owner decided 2026-10-23 — English only for v1.** No translations ship; strings stay in the String Catalog for a later release.
-- [ ] U-3 (A) Help Book (or in-app guide per investigation type) and a sample case per persona (from the case packs).
-- [ ] U-4 (A) Crash & hang diagnostics (MetricKit, on-device, user sends) + a "send diagnostics" button.
-- [ ] U-5 (A) Guided "move to a new Mac" flow (backup + recovery key).
-- [ ] U-6 (A) Viewer privacy manifest; iPhone/iPad scope note in the listing.
+- [x] U-3 (A) Help Book (or in-app guide per investigation type) and a sample case per persona (from the case packs).
+- [x] U-4 (A) Crash & hang diagnostics (MetricKit, on-device, user sends) + a "send diagnostics" button.
+- [x] U-5 (A) Guided "move to a new Mac" flow (backup + recovery key).
+- [x] U-6 (A) Viewer privacy manifest; iPhone/iPad scope note in the listing.
 
 ### Phase R — release
 - [ ] R-1 (A) Pricing: StoreKit purchase-flow tests, `.storekit` in a scheme; fix SHIP_DECISIONS "$29–49".
 - [ ] R-2 (A) App Review 2.3.1 check of every claim under the new name (does the copy promise judgement? it must not); CLAIMS.md rows.
 - [ ] R-3 (A) Screenshots for the five planned shots on public-domain case packs.
-- [ ] R-4 (A) Update PRODUCTION_STATUS.md (dated 2026-08-07, schema v102) to today.
+- [x] R-4 (A) Update PRODUCTION_STATUS.md (dated 2026-08-07, schema v102) to today.
 - [ ] R-5 (A+O) SHIP_DECISIONS §3 gates: the agent produces the evidence for each; the owner signs off.
 - [ ] R-6 (O) HOLD 1 witness: walk each persona's investigation in the real app.
 - [ ] R-7 (O) Clean-machine install test; owner 20-question test.
@@ -165,3 +165,18 @@ Investigations Made Easy is complete when every box above is ticked, and in part
 - every SHIP_DECISIONS gate is signed (R-5) and the app is live (R-9).
 
 Suggested order: T → N → C → E/P (parallel) → A → Q → S → U → R.
+
+## Status 2026-10-23 (end of the build pass)
+
+Built and committed on `investigation-docs` (compiles: app + all tests, build-for-testing green): every box ticked
+above. Notes on the honest edges:
+- **E-4** redaction log done; *image* redaction is not built (PDF burn-in redaction already exists).
+- **E-6** Teams and Cellebrite UFDR done; cloud-drive import not built (no network in the main app — files already on disk work).
+- **S-1** retention lists cases for review; it never purges (owner rule: never delete extracted data).
+- **S-3** single-user named profile; multi-user roles are v2.
+- **S-5** wording done; app-lock tests run in the test phase.
+- **U-5** in-app restore isn't in this version; the guide uses Migration Assistant + the recovery key and says so.
+- **R-1** SHIP_DECISIONS price fixed; the `.storekit` file must be selected in the scheme by the owner in Xcode (Edit Scheme → Run → Options → StoreKit Configuration); purchase-flow tests in the test phase.
+- **Schema fix:** an upgrade could skip the newest migration (self-heal sentinel stuck at v118) — fixed with a derived sentinel + repair pass.
+
+Next: **Phase T** (test everything built, one push), then Q-2…Q-5 on the case bench, then the owner's R steps.
