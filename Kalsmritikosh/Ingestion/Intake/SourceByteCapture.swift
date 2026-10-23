@@ -163,6 +163,15 @@ public enum SourceByteCapture {
         // 3. declared extension.
         let byExtension = SourceType.detect(from: url)
         if byExtension != .unknown {
+            // E-6 — a Teams `messages.json` or a Cellebrite `report.xml` outside any
+            // export tree: the extension says JSON/XML, the content fingerprint says
+            // which export. Only those two fingerprints are consulted (see
+            // DiscussionExportRegistry.contentRoutedType); every other file keeps
+            // its extension type.
+            if let routed = DiscussionExportRegistry.contentRoutedType(
+                filename: url.lastPathComponent, extensionType: byExtension, head: head) {
+                return (routed, .structuralProbe, declaredExtension)
+            }
             return (byExtension, .declaredExtension, declaredExtension)
         }
         // 3.2. L2 — text-format sniff for a file with no usable extension (an e-mail

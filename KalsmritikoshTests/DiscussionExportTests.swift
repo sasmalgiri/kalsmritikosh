@@ -260,8 +260,8 @@ struct DiscussionExportTests {
         // tells you WHICH platforms the product can honestly claim. This is the
         // only test that pins the roster, so adding a mapper updates one place.
         #expect(DiscussionExportRegistry.standard.platforms
-                == ["YouTube", "Discord", "Reddit", "X", "Meta", "Telegram", "Twitch",
-                 "Chat export", "Forum"])
+                == ["YouTube", "Discord", "Reddit", "X", "Meta", "Telegram",
+                    "Microsoft Teams", "Cellebrite UFDR", "Twitch", "Chat export", "Forum"])
     }
 
     @Test("The universal registry gives .discussionExport a real immediate plugin")

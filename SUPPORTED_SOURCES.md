@@ -167,7 +167,10 @@ derives this table from it so the matrix cannot drift from what actually runs.
   evidence is routinely renamed. Currently mapped: **YouTube** (Takeout comments, live chat,
   watch/search history), **Discord** (package messages.json and messages.csv), **Reddit**
   (comments, posts, private messages), **X** (tweets.js, direct-messages.js), **Meta**
-  (Messenger and Instagram threads) **Telegram** (Desktop result.json, full or single-chat) and
+  (Messenger and Instagram threads) **Telegram** (Desktop result.json, full or single-chat),
+  **Microsoft Teams** (personal/consumer "Export your data" messages.json — Skype's export shares
+  the schema and is read the same way, labelled Teams), **Cellebrite UFDR** (the `report.xml`
+  of a UFED Reader report — see below) and
   **WhatsApp / Signal / Slack** text exports, **Twitch** (VOD chat) and saved **forum threads**
   (phpBB, vBulletin, XenForo, Discourse). That last one is behind the "Chat exports"
   opt-in flag: with the flag off the type stays PRESERVED-ONLY, and no path — including the
@@ -201,6 +204,22 @@ derives this table from it so the matrix cannot drift from what actually runs.
   heuristic would attribute text to people on pages that are not forums. Such a file stays an
   HTML document, which is a working parse rather than a gap. Script and style contents are
   dropped rather than joining post text.
+- **Microsoft Teams export (E-6)** — one thread per conversation (title from the topic, else
+  the display name), one record per text message with the sender's display name, the stable
+  account id from `from`, and `originalarrivaltime`. Message HTML is reduced to plain text
+  (tags stripped, entities decoded). Calls, membership changes, cards and media are NOT messages:
+  they are skipped and COUNTED per `messagetype` in a warning. A time with no zone is left undated.
+- **Cellebrite UFDR / UFED Reader report (E-6)** — read-only analysis of a report an examiner
+  already produced: no device acquisition, no decryption. A `.ufdr` is a ZIP, so it expands as an
+  ordinary container (its media become their own sources) and its `report.xml` — recognised by
+  the `http://pa.cellebrite.com/report/2.0` namespace — is parsed with a streaming XMLParser: one
+  thread per chat (sender Party, `TimeStamp`, `Body`, attachments by filename), top-level SMS /
+  instant messages threaded by app and counterpart, ONE call-log thread and ONE contacts thread.
+  `deleted_state="Deleted"` rides into the record text, so a recovered message never reads as live.
+  Other model types (locations, web history …) are counted in a warning, not yet mapped. An
+  unzipped report folder works the same way. Limits: the ZIP reader does not read ZIP64, so a
+  `.ufdr` over 4 GiB (or with more than 65 535 entries) does not expand, and a `report.xml` larger
+  than the 1 GiB per-member cap is blocked visibly; the report is held in memory while parsed.
 - **Routing limit worth knowing (DISC-\*)** — a discussion export reaches this lane by its path
   (inside a recognizable export tree such as `/twitch/`, `/discord/`, `/takeout/`) or by an
   unambiguous filename. A LOOSE export renamed and left outside any tree still routes by its
@@ -208,7 +227,10 @@ derives this table from it so the matrix cannot drift from what actually runs.
   searchable, but per-message authors and dates are not extracted. Making content-based mapper
   claims override the extension for `.json` and `.html` would change the single authoritative
   type detector's contract for two very common types, which is its own unit and an owner call,
-  not something to slip in here.
+  not something to slip in here. The ONE narrow exception (E-6): a file named exactly
+  `messages.json` carrying the Teams schema's own keys, and an `.xml` file declaring the
+  Cellebrite report namespace, are routed to this lane by content; every other JSON/XML file
+  keeps its extension type.
 
 - **Host artifacts (HOST-\*)** are machine/OS evidence rather than documents a person wrote, so
   they carry their own `hostArtifact` category. Processing is the same (immediate, text +
