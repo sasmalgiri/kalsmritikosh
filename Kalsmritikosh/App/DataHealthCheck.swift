@@ -316,7 +316,7 @@ public enum DataHealthCheck {
         }
 
         // ── Render report ────────────────────────────────────────────
-        var md = "# Investigation Docs Made Easy — Data Health Report\n\n"
+        var md = "# Investigations Made Easy — Data Health Report\n\n"
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n"
         md += "Database: `\(database.url.path)`\n"
         md += "Audit runtime: \(String(format: "%.1f", Date().timeIntervalSince(started)))s\n\n"

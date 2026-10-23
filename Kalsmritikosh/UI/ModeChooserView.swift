@@ -52,7 +52,7 @@ public struct ModeChooserView: View {
             Image(systemName: "square.stack.3d.up.fill")
                 .font(.system(size: 30, weight: .semibold))
                 .foregroundStyle(Theme.brandGradient())
-            Text("How should Investigation Docs Made Easy process your files?")
+            Text("How should Investigations Made Easy process your files?")
                 .font(Theme.display(23, .bold))
                 .foregroundStyle(Theme.brandGradient())
                 .multilineTextAlignment(.center)

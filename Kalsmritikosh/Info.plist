@@ -25,7 +25,7 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Save to Investigation Docs Made Easy</string>
+				<string>Save to Investigations Made Easy</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>saveToKalsmritikosh</string>

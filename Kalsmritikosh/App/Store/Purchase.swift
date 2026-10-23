@@ -131,7 +131,7 @@ final class PurchaseCenter {
     }
 
     func startTrial() async { await buy(trialProduct, what: "the free trial") }
-    func buyUnlock() async { await buy(unlockProduct, what: "Investigation Docs Made Easy") }
+    func buyUnlock() async { await buy(unlockProduct, what: "Investigations Made Easy") }
 
     private func buy(_ product: Product?, what: String) async {
         guard let product else {

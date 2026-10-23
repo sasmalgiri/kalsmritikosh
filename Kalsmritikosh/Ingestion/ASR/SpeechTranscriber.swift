@@ -93,7 +93,7 @@ public actor SpeechTranscriber: AudioTranscribing {
     /// they name the real remedy (System Settings), and never reference cloud
     /// routing or Apple Intelligence (Speech uses neither).
     public nonisolated static let recognizerUnavailableMessage =
-        "Speech recognition isn't available right now. Check that English is installed under System Settings → Keyboard → Dictation, and that Investigation Docs Made Easy is allowed under Privacy & Security → Speech Recognition."
+        "Speech recognition isn't available right now. Check that English is installed under System Settings → Keyboard → Dictation, and that Investigations Made Easy is allowed under Privacy & Security → Speech Recognition."
     public nonisolated static let languageAssetsMissingMessage =
         "On-device English (en-US) transcription needs macOS's Dictation language assets, which aren't installed yet. Turn on Dictation in System Settings → Keyboard → Dictation (English), wait for the download, then try again. Nothing is sent off your Mac."
 

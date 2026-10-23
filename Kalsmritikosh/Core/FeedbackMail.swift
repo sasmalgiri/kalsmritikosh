@@ -26,7 +26,7 @@ public enum FeedbackMail {
     ///   - appVersion: e.g. "1.0 (42)" — shown to the user in the draft, deletable.
     ///   - osVersion: e.g. "macOS 15.6" — same.
     public static func reportProblemURL(appVersion: String, osVersion: String) -> URL? {
-        let subject = "Investigation Docs Made Easy — problem report"
+        let subject = "Investigations Made Easy — problem report"
         let body = """
         What happened:
 

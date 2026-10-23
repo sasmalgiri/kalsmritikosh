@@ -19,7 +19,7 @@ struct MenuBarAskView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Investigation Docs Made Easy").font(.headline)
+            Text("Investigations Made Easy").font(.headline)
             TextField("Ask or search your archive", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 300)
@@ -72,7 +72,7 @@ final class MenuBarAskController {
         let on = ProductModuleFlags.isEnabled(.menuBarAsk)
         if on, item == nil {
             let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-            status.button?.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: "Ask Investigation Docs Made Easy")
+            status.button?.image = NSImage(systemSymbolName: "text.magnifyingglass", accessibilityDescription: "Ask Investigations Made Easy")
             status.button?.target = self
             status.button?.action = #selector(toggle(_:))
             popover.behavior = .transient

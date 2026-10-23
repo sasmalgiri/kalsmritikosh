@@ -34,7 +34,7 @@ public enum LedgerRelocationError: Error, LocalizedError {
     case destinationHasLedger(URL), integrityFailed(String), hashMismatch(String), notBooted
     public var errorDescription: String? {
         switch self {
-        case .destinationHasLedger(let u): return "\(u.lastPathComponent) already contains an Investigation Docs Made Easy ledger. Choose an empty folder."
+        case .destinationHasLedger(let u): return "\(u.lastPathComponent) already contains an Investigations Made Easy ledger. Choose an empty folder."
         case .integrityFailed(let m):      return "The copied database failed its integrity check (\(m)). Nothing was switched."
         case .hashMismatch(let f):         return "\(f) did not copy exactly. Nothing was switched."
         case .notBooted:                   return "The ledger is not open yet."
@@ -44,7 +44,7 @@ public enum LedgerRelocationError: Error, LocalizedError {
 
 public enum LedgerRelocation {
 
-    static let folderName = "Investigation Docs Made Easy Ledger"
+    static let folderName = "Investigations Made Easy Ledger"
     private static let bookmarkKey = "kalsmritikosh.ledger.relocatedBookmark"
     private static let pathKey = "kalsmritikosh.ledger.relocatedPath"
 
@@ -115,20 +115,20 @@ public enum LedgerRelocation {
         var stale = false
         guard let parent = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
                                     relativeTo: nil, bookmarkDataIsStale: &stale) else {
-            return (local, "Investigation Docs Made Easy could not find the disk that holds your ledger, so it opened the copy on this Mac. Changes made now are on this Mac only.")
+            return (local, "Investigations Made Easy could not find the disk that holds your ledger, so it opened the copy on this Mac. Changes made now are on this Mac only.")
         }
         // Kept open for the life of the app: the ledger is used continuously.
         _ = parent.startAccessingSecurityScopedResource()
         let remote = parent.appendingPathComponent(folderName, isDirectory: true).appendingPathComponent("knowledge.sqlite")
         let fm = FileManager.default
         guard fm.fileExists(atPath: remote.path) else {
-            return (local, "The disk that holds your ledger is not connected, so Investigation Docs Made Easy opened the copy on this Mac. Changes made now are on this Mac only.")
+            return (local, "The disk that holds your ledger is not connected, so Investigations Made Easy opened the copy on this Mac. Changes made now are on this Mac only.")
         }
         // Never open a disk copy that is behind this Mac's copy.
         let localDate = (try? local.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         let remoteDate = (try? remote.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         if localDate.timeIntervalSince(remoteDate) > 60, remoteDate < localDate {
-            return (local, "This Mac's copy of the ledger has changes the disk copy does not, so Investigation Docs Made Easy opened this Mac's copy. Copy the ledger to the disk again in Settings to bring it up to date.")
+            return (local, "This Mac's copy of the ledger has changes the disk copy does not, so Investigations Made Easy opened this Mac's copy. Copy the ledger to the disk again in Settings to bring it up to date.")
         }
         return (remote, nil)
     }

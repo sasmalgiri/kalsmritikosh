@@ -346,7 +346,7 @@ public actor MasterBrain {
                 if LLMQueryClassifier.isConversational(question) {
                     let refused = VerifiedAnswer(
                         body: "", citations: [], confidence: .zero, refused: true,
-                        refusalReason: "That looks like a message to the app, not a question about your archive. Investigation Docs Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
+                        refusalReason: "That looks like a message to the app, not a question about your archive. Investigations Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: refused, mission: nil,
                         originScopeID: originScopeID) {
@@ -596,7 +596,7 @@ public actor MasterBrain {
                 return rag
             }
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't reconstruct that history.",
+                body: "Investigations Made Easy couldn't reconstruct that history.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1604,7 +1604,7 @@ public actor MasterBrain {
         await askSnapshotEnd?()
         // Stream finished without a terminal event — defensive.
         return VerifiedAnswer(
-            body: "Investigation Docs Made Easy produced no terminal answer.",
+            body: "Investigations Made Easy produced no terminal answer.",
             citations: [],
             confidence: .zero,
             refused: true,
@@ -1695,7 +1695,7 @@ public actor MasterBrain {
             let verifier
         else {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy hasn't finished booting yet.",
+                body: "Investigations Made Easy hasn't finished booting yet.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1709,7 +1709,7 @@ public actor MasterBrain {
             intent = try await intentDetector.detect(question: question)
         } catch {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't parse that question.",
+                body: "Investigations Made Easy couldn't parse that question.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1816,7 +1816,7 @@ public actor MasterBrain {
             decision = try await router.route(intent: intent)
         } catch {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't route that question.",
+                body: "Investigations Made Easy couldn't route that question.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1918,7 +1918,7 @@ public actor MasterBrain {
                 return rag
             }
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't verify a response.",
+                body: "Investigations Made Easy couldn't verify a response.",
                 citations: [],
                 confidence: .zero,
                 refused: true,

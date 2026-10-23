@@ -74,7 +74,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationTitle("Investigation Docs Made Easy")
+                .navigationTitle("Investigations Made Easy")
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Open Snapshot", systemImage: "folder") { importing = true }
@@ -85,7 +85,7 @@ struct ContentView: View {
                 DocumentView(document: doc, ledger: ledger, focus: focusPassage)
             } else {
                 ContentUnavailableView("No document selected", systemImage: "doc.text",
-                                       description: Text(model.ledger == nil ? "Open a signed snapshot exported from Investigation Docs Made Easy on your Mac." : "Choose a document or search."))
+                                       description: Text(model.ledger == nil ? "Open a signed snapshot exported from Investigations Made Easy on your Mac." : "Choose a document or search."))
             }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in

@@ -38,8 +38,8 @@ struct ClipRequest: Equatable {
             case .notAClip: return "That was not a clip request."
             case .empty: return "There was nothing to clip — select some text, or clip the whole page."
             case .tooLarge(let mb): return "This page is \(mb) MB, more than the 25 MB a clip can be. Save it as PDF and add that instead."
-            case .switchedOff: return "Clipping is off. Turn on \u{201C}Share and capture\u{201D} in Investigation Docs Made Easy \u{25B8} Settings \u{25B8} Modules."
-            case .noInbox: return "Investigation Docs Made Easy's shared folder could not be opened."
+            case .switchedOff: return "Clipping is off. Turn on \u{201C}Share and capture\u{201D} in Investigations Made Easy \u{25B8} Settings \u{25B8} Modules."
+            case .noInbox: return "Investigations Made Easy's shared folder could not be opened."
             }
         }
     }
@@ -85,7 +85,7 @@ struct ClipRequest: Equatable {
     /// meta tag) so the archive knows where it came from.
     func payload(clippedAt date: Date = Date()) throws -> Payload {
         let stamp = ISO8601DateFormatter().string(from: date)
-        let header = "<!-- Clipped by Investigation Docs Made Easy from \(Self.escaped(url)) at \(stamp) -->\n"
+        let header = "<!-- Clipped by Investigations Made Easy from \(Self.escaped(url)) at \(stamp) -->\n"
         let meta = "<meta name=\"kalsmritikosh-source\" content=\"\(Self.escaped(url))\">"
         let stem = Self.fileStem(title: title, url: url)
         let body: String

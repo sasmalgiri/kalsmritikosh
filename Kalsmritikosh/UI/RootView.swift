@@ -516,7 +516,7 @@ public struct RootView: View {
                 .symbolEffect(.pulse)
             ProgressView()
                 .controlSize(.small)
-            Text(appState.bootNote ?? "Starting Investigation Docs Made Easy…")
+            Text(appState.bootNote ?? "Starting Investigations Made Easy…")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -528,7 +528,7 @@ public struct RootView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 42))
                 .foregroundStyle(.orange)
-            Text("Investigation Docs Made Easy couldn't start.")
+            Text("Investigations Made Easy couldn't start.")
                 .font(.title2.weight(.semibold))
             Text(message)
                 .font(.callout)
@@ -633,7 +633,7 @@ public struct RootView: View {
                     Divider()
                     detail
                 }
-                .navigationTitle(selection?.title ?? "Investigation Docs Made Easy")
+                .navigationTitle(selection?.title ?? "Investigations Made Easy")
                 .toolbar {
                     // SHELL-001 — browser-style location Back/Forward, deliberately
                     // distinct from any workflow's Prev/Next stepping.
@@ -1089,7 +1089,7 @@ public struct RootView: View {
                 .frame(width: 30, height: 30)
                 .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .shadow(color: Theme.brand.opacity(0.35), radius: 5, y: 2)
-            Text("Investigation Docs Made Easy")
+            Text("Investigations Made Easy")
                 .font(Theme.display(17, .bold))
                 .foregroundStyle(Theme.brandGradient())
         }

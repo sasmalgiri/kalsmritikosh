@@ -1,4 +1,4 @@
-# Investigation Docs Made Easy — App Store Listing (draft)
+# Investigations Made Easy — App Store Listing (draft)
 
 _Draft copy + review notes for App Store Connect (REL-005). Owner fills the bracketed items,
 adds screenshots, and submits. Every claim below is deliberately kept within the "Do NOT claim"
@@ -8,12 +8,12 @@ viewer added)._
 
 ## Metadata
 
-- **Name:** Investigation Docs Made Easy
+- **Name:** Investigations Made Easy
 - **Subtitle (≤30 chars):** `From evidence to report`
-- **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigation Docs Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
+- **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigations Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
 - **Category:** Productivity (secondary: Reference)
 - **Age rating:** 4+ (no objectionable content; user supplies their own files)
-- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigation Docs Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
+- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigations Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
   `investigation,evidence,case file,chronology,timeline,custody,report,citations,private,on-device,pdf`
@@ -27,7 +27,7 @@ viewer added)._
 
 > **Investigation documentation made easy.**
 >
-> **Investigation Docs Made Easy is a private, on-device workspace for your own archive.**
+> **Investigations Made Easy is a private, on-device workspace for your own archive.**
 >
 > Point it at your folders of documents and email. It builds a structured record — people,
 > dates, events, facts — and lets you ask questions and get answers that **cite the exact source
@@ -46,7 +46,7 @@ viewer added)._
 > • Organize evidence into workspaces and export cited work products.
 > • See exactly what's been processed, and what couldn't be, with honest per-source coverage.
 > • Works beside DEVONthink: import a DEVONthink database in place, send items back to it.
-> • Save to Investigation Docs Made Easy from the Share and Services menus in Safari, Mail, Finder and more.
+> • Save to Investigations Made Easy from the Share and Services menus in Safari, Mail, Finder and more.
 > • Scan a document or take a photo with your iPhone or iPad straight into your archive (Continuity Camera).
 > • Write your own notes in Markdown — searchable, with every earlier version kept.
 > • Automate with Shortcuts and AppleScript.
@@ -68,7 +68,7 @@ viewer added)._
 > honestly in-app; audio and video are catalogued and preserved at ingest (never auto-transcribed) — transcribe individual files on demand in Transcripts, fully on-device (Apple Speech, English).
 > Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
 >
-> _Investigation Docs Made Easy is an informational aid. Verify important answers against the cited originals; it
+> _Investigations Made Easy is an informational aid. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
 
 ## Privacy nutrition labels
@@ -94,7 +94,7 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 
 ## Review notes (paste into App Review Notes)
 
-> Investigation Docs Made Easy is **investigation documentation software**: it keeps every source of an
+> Investigations Made Easy is **investigation documentation software**: it keeps every source of an
 > investigation with custody, builds the chronology, finds contradictions and gaps, and produces the
 > report where every sentence points at its source. **Judgement stays human** — the app never decides
 > guilt, privilege, credibility or root cause, and its studios never fill those fields; it documents the

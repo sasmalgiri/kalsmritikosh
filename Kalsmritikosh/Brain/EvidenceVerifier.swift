@@ -410,7 +410,7 @@ public struct EvidenceVerifier: Verifier {
         if maxRetrievalScore < answerabilityMinRetrievalScore {
             let intentKindRaw = intent.kind.rawValue
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy can't ground an answer to that yet.",
+                body: "Investigations Made Easy can't ground an answer to that yet.",
                 answerText: nil,
                 intentKind: intentKindRaw,
                 citations: [],
@@ -958,7 +958,7 @@ public struct EvidenceVerifier: Verifier {
            QuestionShapeRouter.seeksSpecificValue(intent.rawQuestion) {
             KalsmritikoshLog.brain.info("EvidenceVerifier: value question with dump-only claims — honest not-found outranks the dump")
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy can't ground an answer to that yet.",
+                body: "Investigations Made Easy can't ground an answer to that yet.",
                 answerText: nil,
                 intentKind: intentKindRaw,
                 citations: [],
@@ -995,7 +995,7 @@ public struct EvidenceVerifier: Verifier {
               citations.count >= minimumCitations
         else {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy can't ground an answer to that yet.",
+                body: "Investigations Made Easy can't ground an answer to that yet.",
                 answerText: nil,
                 intentKind: intentKindRaw,
                 citations: [],

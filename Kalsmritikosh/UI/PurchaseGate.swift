@@ -47,10 +47,10 @@ struct PurchaseScreen: View {
         VStack(spacing: 14) {
             Image(systemName: store.entitlement == .trialEnded ? "hourglass.bottomhalf.filled" : "sparkles")
                 .font(.system(size: 40)).foregroundStyle(.secondary)
-            Text(store.entitlement == .trialEnded ? "Your free trial has ended" : "Try Investigation Docs Made Easy free for 14 days")
+            Text(store.entitlement == .trialEnded ? "Your free trial has ended" : "Try Investigations Made Easy free for 14 days")
                 .font(.title2.bold())
             Text(store.entitlement == .trialEnded
-                 ? "Buy Investigation Docs Made Easy once to keep using everything — no subscription and no yearly fee, on every Mac signed in with your Apple account. Your archive is untouched, and Settings ▸ Your data still backs it up and exports it."
+                 ? "Buy Investigations Made Easy once to keep using everything — no subscription and no yearly fee, on every Mac signed in with your Apple account. Your archive is untouched, and Settings ▸ Your data still backs it up and exports it."
                  : "Everything is included in the trial. After 14 days, buy it once to keep it — no subscription and no yearly fee. Starting the trial costs nothing and nothing is charged afterwards.")
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)
@@ -70,7 +70,7 @@ struct PurchaseScreen: View {
                 .buttonStyle(.link).disabled(store.busy)
             if store.busy { ProgressView().controlSize(.small) }
             if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary).frame(maxWidth: 420) }
-            Text("Payment and restore are handled by Apple through the App Store; Investigation Docs Made Easy itself opens no connection.")
+            Text("Payment and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection.")
                 .font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center).frame(maxWidth: 420)
         }
         .padding(36)

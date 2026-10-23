@@ -253,7 +253,7 @@ public struct QualityStrip: View {
             Label(
                 planExpanded
                     ? "Hide reasoning plan"
-                    : "How did Investigation Docs Made Easy answer this?",
+                    : "How did Investigations Made Easy answer this?",
                 systemImage: planExpanded ? "chevron.up" : "chevron.down"
             )
             .font(.caption)

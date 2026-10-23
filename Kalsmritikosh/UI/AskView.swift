@@ -319,7 +319,7 @@ public struct AskView: View {
                 Text("What do you want to know?")
                     .font(Theme.display(30, .bold))
                     .multilineTextAlignment(.center)
-                Text("Investigation Docs Made Easy reconstructs answers only from your ingested files — every claim carries its evidence.")
+                Text("Investigations Made Easy reconstructs answers only from your ingested files — every claim carries its evidence.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -345,7 +345,7 @@ public struct AskView: View {
     /// secondary glyph actions, and a filled circular send. Enter sends; Shift+Enter inserts a newline.
     private var input: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            TextField("Message Investigation Docs Made Easy…", text: $question, axis: .vertical)
+            TextField("Message Investigations Made Easy…", text: $question, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .lineLimit(1...6)
@@ -788,7 +788,7 @@ public struct AskView: View {
             var drafts: [ReceiptDraft] = [
                 ReceiptDraft(
                     claim: question.isEmpty ? "Answer" : "Answer to: \(question)",
-                    source: "Investigation Docs Made Easy (on-device, evidence-gated)",
+                    source: "Investigations Made Easy (on-device, evidence-gated)",
                     passage: answer.answerText ?? answer.body
                 )
             ]
@@ -1060,7 +1060,7 @@ public struct AskView: View {
     private func renderAnswer(_ answer: VerifiedAnswer) -> String {
         var lines: [String] = []
         if answer.refused {
-            lines.append("Investigation Docs Made Easy can't ground an answer to that yet.")
+            lines.append("Investigations Made Easy can't ground an answer to that yet.")
             if let reason = answer.refusalReason { lines.append("Reason: \(reason)") }
         } else {
             lines.append(answer.body)

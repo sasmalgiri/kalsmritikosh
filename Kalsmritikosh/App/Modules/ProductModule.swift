@@ -298,7 +298,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Share and capture",
-                        detail: "“Save to Investigation Docs Made Easy” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that. File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad.",
+                        detail: "“Save to Investigations Made Easy” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that. File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad.",
                         whenOff: "Add files from inside the app only.",
                         implemented: true)
         case .spotlightIndex:

@@ -917,7 +917,7 @@ public enum Gate1Baseline {
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("diagnostics-summary.md", isDirectory: false)
 
-        var md = "# Investigation Docs Made Easy — Full Diagnostics Run\n\n"
+        var md = "# Investigations Made Easy — Full Diagnostics Run\n\n"
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n"
         md += "Total runtime: \(String(format: "%.1f", totalSeconds))s\n\n"
 

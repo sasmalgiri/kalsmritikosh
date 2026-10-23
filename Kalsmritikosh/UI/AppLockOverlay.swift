@@ -18,7 +18,7 @@ struct AppLockOverlay: ViewModifier {
             if lock.locked {
                 VStack(spacing: 14) {
                     Image(systemName: "lock.fill").font(.system(size: 40)).foregroundStyle(.secondary)
-                    Text("Investigation Docs Made Easy is locked").font(.title2.bold())
+                    Text("Investigations Made Easy is locked").font(.title2.bold())
                     Button("Unlock") { Task { await lock.unlock() } }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)

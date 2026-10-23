@@ -100,7 +100,7 @@ public struct SavedQueriesView: View {
                 .foregroundStyle(.tint)
             Text("No saved questions yet.")
                 .font(.title3.weight(.medium))
-            Text("Type a question in Ask Investigation Docs Made Easy and tap the bookmark icon next to the input field to save it here.")
+            Text("Type a question in Ask Investigations Made Easy and tap the bookmark icon next to the input field to save it here.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -157,7 +157,7 @@ public struct SavedQueriesView: View {
                     copyToClipboard(item)
                 } label: {
                     Label(
-                        copiedID == item.id ? "Copied" : "Copy to Ask Investigation Docs Made Easy",
+                        copiedID == item.id ? "Copied" : "Copy to Ask Investigations Made Easy",
                         systemImage: copiedID == item.id ? "checkmark" : "doc.on.doc"
                     )
                 }

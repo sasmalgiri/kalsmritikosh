@@ -89,7 +89,7 @@ public struct OnboardingView: View {
             Image(systemName: "books.vertical.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(.tint)
-            Text("Welcome to Investigation Docs Made Easy")
+            Text("Welcome to Investigations Made Easy")
                 .font(.title.bold())
             Text("Your private knowledge operating system")
                 .font(.subheadline)
@@ -240,7 +240,7 @@ public struct OnboardingView: View {
     private var welcomeStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             bullet("Everything stays on your Mac. No cloud unless you opt in.")
-            bullet("Investigation Docs Made Easy ingests documents, emails, spreadsheets, presentations, images, audio, and video.")
+            bullet("Investigations Made Easy ingests documents, emails, spreadsheets, presentations, images, audio, and video.")
             bullet("It extracts entities, events, timelines, summaries, and a memory layer per project / person / company.")
             bullet("Ask any question — answers come back with cited evidence and a confidence score.")
         }
@@ -269,7 +269,7 @@ public struct OnboardingView: View {
                     .font(.callout.monospaced())
             }
             Divider().padding(.vertical, 8)
-            Text("Investigation Docs Made Easy will dynamically pick a model that fits your hardware. You can override in Settings later.")
+            Text("Investigations Made Easy will dynamically pick a model that fits your hardware. You can override in Settings later.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             // RC-2 — requirements honesty, stated up front: what on-device AI
@@ -277,7 +277,7 @@ public struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("On-device AI — what it needs", systemImage: "cpu")
                     .font(.callout.weight(.semibold))
-                Text("AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Investigation Docs Made Easy still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes.")
+                Text("AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Investigations Made Easy still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)
@@ -294,7 +294,7 @@ public struct OnboardingView: View {
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Pick your first folder").font(.headline)
-            Text("Choose a folder Investigation Docs Made Easy should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from the Sources tab.")
+            Text("Choose a folder Investigations Made Easy should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from the Sources tab.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520, alignment: .leading)
@@ -324,7 +324,7 @@ public struct OnboardingView: View {
                         .padding(.vertical, 4)
                 }
                 .controlSize(.small)
-                Text("Opens the bundled ProjectDelta sample (8 emails and contracts) in its own separate ledger, so you can see Investigation Docs Made Easy reconstruct a project without adding your data \u{2014} nothing is ever mixed with your own documents. The app relaunches; \u{201C}Back to my archive\u{201D} returns you.")
+                Text("Opens the bundled ProjectDelta sample (8 emails and contracts) in its own separate ledger, so you can see Investigations Made Easy reconstruct a project without adding your data \u{2014} nothing is ever mixed with your own documents. The app relaunches; \u{201C}Back to my archive\u{201D} returns you.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)

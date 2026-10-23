@@ -168,7 +168,7 @@ public struct HomeView: View {
                     .frame(width: 44, height: 44)
                     .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Investigation Docs Made Easy")
+                    Text("Investigations Made Easy")
                         .font(Theme.display(26, .bold))
                         .foregroundStyle(Theme.brandGradient())
                     Text("Your documents, worked by the professional's own SOP — cited, evidence-gated, to the real deliverable.")

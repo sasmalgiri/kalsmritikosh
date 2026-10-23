@@ -3,14 +3,14 @@
 > (matching `LegalNotice.termsVersion` 1.5, 2026-08-27). This draft is
 > retained for history only; do not link or submit it.
 
-# Investigation Docs Made Easy — Terms of Use (EULA)
+# Investigations Made Easy — Terms of Use (EULA)
 
 _Draft for the owner to review with counsel and host at the App Store "Terms/EULA" field. Last
 reviewed 2026-07-22. Not legal advice; have a qualified lawyer confirm for your jurisdiction._
 
 ## 1. Agreement
 
-By downloading or using Investigation Docs Made Easy ("the App") you agree to these Terms. The App is licensed,
+By downloading or using Investigations Made Easy ("the App") you agree to these Terms. The App is licensed,
 not sold, to you for use on Apple-branded devices you own or control, consistent with the Apple
 Media Services Terms and the standard Apple Licensed Application End User License Agreement
 (LEULA), which apply in addition to these Terms.
