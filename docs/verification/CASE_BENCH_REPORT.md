@@ -62,6 +62,58 @@ narrative's dated opener. Fixed in PR #164 — on the 24 refused cases re-run: "
 Extraction over all 146,483 cases: inspection numbers 100%, accident date on the timeline
 71.9%, summary number as an entity 84.6%. Zero ingest errors.
 
+## 1c. Full-power AI sample — 190 cases, 19 investigation categories (2026-10-21 → 23)
+
+Apple's on-device model ("AFM 3 Core Advanced") answering, every knowledge and product module on,
+every question asked, every second case worked as an investigation. 10 fresh cases per category
+(the cases used to diagnose were not in the measured set); 621 answers; the model completed a
+generation for 96% of them; median 25 s per answer (78 s at the 90th percentile).
+
+Round 1 was the build before this program; rounds 2 and 3 after the fixes listed below.
+
+| Category | Round 1 | Round 2 | Round 3 |
+|---|---|---|---|
+| court-civil | 48.2% | 44.6% | 42.9% |
+| court-criminal | 66.7% | 68.5% | 75.9% |
+| doj-cybercrime | 44.4% | 48.1% | 48.1% |
+| doj-drug-trafficking | 42.3% | 38.5% | 50.0% |
+| doj-environmental-crime | 25.9% | 40.7% | 48.1% |
+| doj-financial-fraud | 20.0% | 28.0% | 28.0% |
+| doj-health-care-and-pharma-fraud | 32.0% | 32.0% | 52.0% |
+| doj-immigration-crime | 27.3% | 36.4% | 50.0% |
+| doj-other-federal-crime | 38.5% | 42.3% | 38.5% |
+| doj-police-misconduct | 12.0% | 16.0% | 16.0% |
+| doj-public-corruption | 44.0% | 52.0% | 52.0% |
+| doj-tax-crime | 14.8% | 14.8% | 37.0% |
+| doj-violent-crime | 28.0% | 28.0% | 32.0% |
+| fda-device-recall | 60.0% | 95.0% | 95.0% |
+| fda-drug-recall | 47.5% | 90.0% | 92.5% |
+| fda-food-recall | 60.0% | 97.5% | 100.0% |
+| nhtsa-defect | 5.0% | 55.0% | 85.0% |
+| ntsb-aviation | 65.0% | 72.5% | 87.5% |
+| osha-workplace | 58.1% | 54.8% | 83.9% |
+| **All 621 answers** | **41.9%** | **54.6%** | **62.8%** |
+
+**Investigation workflow (round 3, 95 cases):** case opened over its own documents 95/95; every
+source version hashed in custody (142/142); findings report built 94/95, all 1,389 citations inside
+the case; the case's key date in its findings 35/39; questions asked inside the case 64.7% right.
+
+**What the AI got wrong, and what was fixed.** With every answer composed by the model, round 1
+answered *worse* than the evidence-only path: it rewrote exact ledger values ("E.D. Pa." →
+"Supreme Court of Pennsylvania"), restated the question as the answer, and re-summarised the same
+subjects on every ingest (157 model calls in 25 s). Fixes: the AI rewrite may not change a labelled
+value, drop the asked value, or say the question back; value questions reach the field on file
+(classification, recalling firm, component, manufacturer, date opened, Location) and take the
+slot-law door before the experts; account questions quote the matter's lead; numbered entries are
+counted; headings give way to their text; split court captions give docket, court and date; a
+crash on case-changing lower-casing; memory distillation only when events change.
+
+**Known limits of this benchmark.** DOJ press releases mostly do not print the announcing office or
+the date ("today"), so the honest answer is a refusal; vague answers there are scored unsupported.
+"What happened" is scored by word overlap with the release's lead and undercounts correct
+paraphrases. Civil court dockets and outcomes remain the weakest questions (docket answers in a
+shared multi-case ledger were dumps under the model — fixed in f824e864 after round 3).
+
 ## 2. By persona (probe: 20 cases per source, every question asked, latest build)
 
 | Persona (source) | Question | Correct |
