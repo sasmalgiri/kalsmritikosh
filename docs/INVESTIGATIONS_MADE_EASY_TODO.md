@@ -80,9 +80,9 @@ A person opens the app, says what they are investigating, and can run the whole 
 IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(A+O)** = agent prepares, owner confirms.
 
 ### Phase T — finish what is built (test and prove) — first
-- [ ] T-1 (A) Test phase for the A1–D4 work: every suite touching the changed types, `InvestigationCaseSimulationTests` (9 personas, wrong facts = 0), `PersonaJobCoverageMeasuredTests`; fix every failure at its root.
-- [ ] T-2 (A) Update pinned tests that change on purpose (Compliance has 17 jobs; module count; persona list hides Content creator).
-- [ ] T-3 (A) One 190-case full-AI round on the final build; record per-category results in the case-bench report.
+- [x] T-1 (A) Test phase for the A1–D4 work: every suite touching the changed types, `InvestigationCaseSimulationTests` (9 personas, wrong facts = 0), `PersonaJobCoverageMeasuredTests`; fix every failure at its root.
+- [x] T-2 (A) Update pinned tests that change on purpose (Compliance has 17 jobs; module count; persona list hides Content creator).
+- [x] T-3 (A) One 190-case full-AI round on the final build; record per-category results in the case-bench report.
 - [ ] T-4 (A) One PR → CI → merge → main CI (two-run protocol; Actions budget).
 
 ### Phase N — the name
@@ -124,8 +124,8 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [x] A-9 (A) Force-directed relationship chart; per-pair communication timeline.
 
 ### Phase Q — answer and extraction quality (from the case bench)
-- [ ] Q-2 (A) Civil court outcome and docket to ≥80% correct-or-refused; the outcome question reads the disposition field first.
-- [ ] Q-3 (A) DOJ / press-release questions: office from the release's office line or signature; honest "not stated" otherwise.
+- [ ] Q-2 (A) Civil court outcome and docket to ≥80% correct-or-refused; the outcome question reads the disposition field first. — **55.4% now (from 42.9%)**: named-document focus landed; authors/outcomes remain (docs/CASE_BENCH_AI_ROUNDS.md).
+- [x] Q-3 (A) DOJ / press-release questions: office from the release's office line or signature; honest "not stated" otherwise.
 - [ ] Q-4 (A) "What happened" answers keep names, ages and counts of the lead.
 - [ ] Q-5 (A) A 10k-case-per-category evidence-only run (scale), plus a 1,000-case AI sample; publish results.
 - [ ] Q-6 (O) Owner-run large cases: NIST CFReDS Data Leakage (60 answers) and cleansed Enron.
@@ -180,3 +180,15 @@ above. Notes on the honest edges:
 - **Schema fix:** an upgrade could skip the newest migration (self-heal sentinel stuck at v118) — fixed with a derived sentinel + repair pass.
 
 Next: **Phase T** (test everything built, one push), then Q-2…Q-5 on the case bench, then the owner's R steps.
+
+## Status 2026-10-24 (test phase)
+
+- **T-1/T-2 done:** every suite touching the changed types — 1,401 tests, 0 failures on the final build; the 9 persona
+  case simulations are green (wrong facts 0, recall 50–100%); intended pins updated; MODULE_MATRIX regenerated.
+  Fixed on the way: a made-up "Case documents" label in the GPS log; names and amounts never reaching deliverables
+  with AI off (now listed with their sentences); truncated "$2.75" amounts; one-word names; pack expectations taken
+  from API metadata; the schema self-heal sentinel stuck at v118.
+- **T-3 done:** full-AI rounds 4–6 — overall 62.8% → 80.4% (docs/CASE_BENCH_AI_ROUNDS.md).
+- **Q-3 done:** when-questions get a date or an honest "no date given"; which-office questions get the office the
+  release names (from the cited documents) or "not named".
+- Next: **T-4** (one PR → CI → merge → main CI), then Q-2 civil authors/outcomes, then the owner's R steps.
