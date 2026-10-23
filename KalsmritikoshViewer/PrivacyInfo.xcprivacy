@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      U-6 — privacy manifest for the iPhone/iPad viewer (KalsmritikoshViewer).
+
+      The viewer opens a signed snapshot or a sync folder the person chooses
+      and reads it on the device. It makes no network call of its own, does
+      no tracking, and collects nothing (nothing leaves the device).
+
+      Required-reason APIs, measured by grepping this target's sources
+      (KalsmritikoshViewer/ and the shared SyncCore/ folder):
+        * UserDefaults — SyncLibrary.swift keeps the chosen sync folder's
+          bookmark and the viewer's own sync bookkeeping in
+          UserDefaults.standard (this app's own defaults only).
+          Reason CA92.1 — read/write information only accessible to the app itself.
+      Not used by this target (nothing to declare): file timestamp APIs,
+      system boot time, disk space, active keyboards.
+      Re-run that grep whenever viewer code changes.
+    -->
+
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

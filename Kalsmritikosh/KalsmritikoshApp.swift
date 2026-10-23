@@ -34,6 +34,7 @@ struct KalsmritikoshApp: App {
             ])
         }
         #endif
+        DiagnosticsReporter.shared.start()   // U-4 — MetricKit crash/hang reports, saved on this Mac only
     }
 
     var body: some Scene {

@@ -1765,6 +1765,7 @@ public struct SettingsView: View {
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                MoveToNewMacButton()
                 // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
                 if ProductModuleFlags.showPreviewFeatures {
                 Toggle("Include original files in snapshots (so citations open on the device)", isOn: $snapshotIncludeOriginals)
@@ -2127,6 +2128,7 @@ public struct SettingsView: View {
             .buttonStyle(.borderedProminent)
             .guidance(GuidanceTip("Report a problem",
                                   what: "Opens a pre-filled draft in your own Mail app addressed to support. The app makes no network call and attaches none of your documents — only the visible text you choose to send."))
+            DiagnosticsSendButton()
             Text("Or email \(FeedbackMail.supportAddress) directly. Never include privileged or confidential case material in a report.")
                 .font(.caption2).foregroundStyle(.tertiary)
                 .textSelection(.enabled)
