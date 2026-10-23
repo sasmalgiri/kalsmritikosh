@@ -31,6 +31,22 @@ public protocol StudioDeliverable: Codable, Identifiable where ID == UUID {
     var completionFraction: Double { get }
 }
 
+/// A2/A3 — a studio that can be filled from a case and whose export is gated on provenance:
+/// every filled field rests on a case document or is marked as the investigator's entry.
+public protocol CaseBackedStudio {
+    var history: [StudioAuditEntry]? { get set }
+    var provenance: StudioProvenance? { get set }
+    /// Every filled field by path, for the export gate.
+    var gateValues: [String: String] { get }
+    mutating func prefill(from facts: StudioCaseFacts)
+    /// A privilege log needs the privileged sources (it describes them; it never prints them).
+    static var needsPrivilegedSources: Bool { get }
+}
+
+extension CaseBackedStudio {
+    public static var needsPrivilegedSources: Bool { false }
+}
+
 // MARK: - Configuration
 
 public struct StudioConfig<M: StudioDeliverable> {
@@ -61,6 +77,13 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     @State private var stage: M.Stage?
     @State private var showExporter = false
     @State private var showHistory = false
+    @Environment(AppState.self) private var appState
+    @State private var caseChoices: [StudioCaseChoice] = []
+    @State private var filling = false
+    @State private var fillMessage: String?
+    /// The report action waiting on the provenance gate, and the fields that stopped it.
+    @State private var gatedAction: String?
+    @State private var gatedFields: [String] = []
 
     public init(config: StudioConfig<M>,
                 @ViewBuilder stageContent: @escaping (Binding<M>, M.Stage, @escaping (M.Stage) -> Void) -> StageContent) {
@@ -77,6 +100,12 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .alert("Some entries have no source", isPresented: Binding(get: { gatedAction != nil }, set: { if !$0 { gatedAction = nil } })) {
+            Button("Mark as my entries and continue") { releaseGate() }
+            Button("Cancel", role: .cancel) { gatedAction = nil }
+        } message: {
+            Text("\(gatedFields.count) filled field(s) are neither taken from the case's documents nor marked as your own entry: \(gatedFields.prefix(6).joined(separator: ", "))\(gatedFields.count > 6 ? " …" : ""). A report that leaves the app must say, for every line, which it is.")
+        }
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
@@ -185,15 +214,20 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 Button { showHistory.toggle() } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                     .controlSize(.small)
                     .popover(isPresented: $showHistory) { historyPanel(m.wrappedValue) }
-                Button { recordAndShare(m, "Report copied to clipboard"); copyReport(m.wrappedValue) }
+                if m.wrappedValue is any CaseBackedStudio { fillFromCaseMenu(m) }
+                Button { gate(m, "copy") }
                     label: { Label("Copy", systemImage: "doc.on.doc") }.controlSize(.small)
-                Button { showExporter = true } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                Button { gate(m, "export") } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { recordAndShare(m, "Report printed / saved as PDF"); printReport(m.wrappedValue) }
+                Button { gate(m, "print") }
                     label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
+            if let fillMessage {
+                Text(fillMessage).font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 20).padding(.bottom, 6).frame(maxWidth: .infinity, alignment: .leading)
+            }
             Divider()
             stepper(m.wrappedValue)
             Divider()
@@ -237,7 +271,7 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                             Circle().fill(currentStage == s ? AnyShapeStyle(.tint) : (m.isComplete(s) ? AnyShapeStyle(.green.opacity(0.9)) : AnyShapeStyle(.quaternary)))
                                 .frame(width: 30, height: 30)
                             Image(systemName: m.isComplete(s) && currentStage != s ? "checkmark" : s.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold, relativeTo: .body)
                                 .foregroundStyle(currentStage == s || m.isComplete(s) ? Color.white : Color.secondary)
                         }
                         Text(s.title).font(.caption2.weight(currentStage == s ? .bold : .regular))
@@ -271,10 +305,91 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     /// the one shell seals all ten studios.
     private func sealedReport(_ m: M) -> String {
         let complete = stages.filter { m.isComplete($0) }.count
+        let report = config.render(m, Date())
         return StudioDeliverableSeal.sealedReport(
             studio: config.name, title: m.title,
-            report: config.render(m, Date()),
+            report: report,
             stagesComplete: complete, stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Case fill + provenance gate (A2/A3)
+
+    private func fillFromCaseMenu(_ m: Binding<M>) -> some View {
+        Menu {
+            if caseChoices.isEmpty {
+                Text("No open cases")
+            } else {
+                ForEach(caseChoices) { c in
+                    Button(c.title) { fill(m, from: c) }
+                }
+            }
+        } label: {
+            Label(filling ? "Filling…" : "Fill from case", systemImage: "tray.and.arrow.down")
+        }
+        .controlSize(.small)
+        .disabled(filling)
+        .task { caseChoices = await appState.studioCaseChoices() }
+        .guidance(GuidanceTip("Fill from case",
+                              what: "Fills the empty fields from the case's own documents. Each filled field keeps the source it came from; anything you type or change is marked as your entry."))
+    }
+
+    private func fill(_ m: Binding<M>, from choice: StudioCaseChoice) {
+        guard let current = m.wrappedValue as? any CaseBackedStudio else { return }
+        let privileged = type(of: current).needsPrivilegedSources
+        filling = true
+        Task {
+            defer { filling = false }
+            guard let facts = await appState.studioCaseFacts(choice, includePrivileged: privileged),
+                  var cb = m.wrappedValue as? any CaseBackedStudio else {
+                fillMessage = "The case could not be read."
+                return
+            }
+            let before = cb.provenance?.count ?? 0
+            cb.prefill(from: facts)
+            let filled = (cb.provenance?.count ?? 0) - before
+            if var updated = cb as? M {
+                StudioAudit.record(&updated.history, "Filled \(filled) field(s) from case \u{201C}\(choice.title)\u{201D}")
+                m.wrappedValue = updated
+            }
+            fillMessage = filled > 0
+                ? "Filled \(filled) field(s) from \u{201C}\(choice.title)\u{201D}; each keeps its source."
+                : "Nothing new to fill from \u{201C}\(choice.title)\u{201D} — the case states none of the empty fields."
+        }
+    }
+
+    /// Run a report action, or hold it until the unsupported fields are resolved.
+    private func gate(_ m: Binding<M>, _ action: String) {
+        if let cb = m.wrappedValue as? any CaseBackedStudio {
+            let missing = StudioExportGate.unsupportedFields(cb.gateValues, provenance: cb.provenance)
+            if !missing.isEmpty { gatedFields = missing; gatedAction = action; return }
+        }
+        perform(m, action)
+    }
+
+    private func releaseGate() {
+        guard let action = gatedAction, let m = activeBinding else { return }
+        gatedAction = nil
+        if var cb = m.wrappedValue as? any CaseBackedStudio {
+            var p = cb.provenance
+            let marked = StudioExportGate.markUnsupportedAsInvestigatorEntries(cb.gateValues, provenance: &p)
+            cb.provenance = p
+            if var updated = cb as? M {
+                StudioAudit.record(&updated.history, "Marked \(marked.count) field(s) as investigator entries")
+                m.wrappedValue = updated
+            }
+        }
+        perform(m, action)
+    }
+
+    private func perform(_ m: Binding<M>, _ action: String) {
+        switch action {
+        case "copy": recordAndShare(m, "Report copied to clipboard"); copyReport(m.wrappedValue)
+        case "export": showExporter = true
+        #if os(macOS)
+        case "print": recordAndShare(m, "Report printed / saved as PDF"); printReport(m.wrappedValue)
+        #endif
+        default: break
+        }
     }
 
     private var exportFilename: String {

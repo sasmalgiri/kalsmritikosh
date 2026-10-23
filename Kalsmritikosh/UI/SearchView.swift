@@ -196,7 +196,7 @@ public struct SearchView: View {
                     .fill(Theme.brandGradient(0.16))
                     .frame(width: 84, height: 84)
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 34, weight: .light))
+                    .scaledFont(34, weight: .light, relativeTo: .largeTitle)
                     .foregroundStyle(Theme.brandGradient())
             }
             Text("Search your knowledge base")

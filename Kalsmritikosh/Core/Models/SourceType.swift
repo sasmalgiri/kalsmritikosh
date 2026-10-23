@@ -83,8 +83,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// pattern and by the "regf" signature.
     case registryHive
     /// DISC-1 — a discussion-platform data export (YouTube Takeout comments,
-    /// Discord package, Reddit CSVs, X archive, Telegram JSON, Twitch chat,
-    /// saved forum threads). One type for all of them: the platform is decided by
+    /// Discord package, Reddit CSVs, X archive, Telegram JSON, Microsoft Teams
+    /// messages.json, Cellebrite UFDR report.xml, Twitch chat, saved forum threads). One type for all of them: the platform is decided by
     /// a mapper reading the CONTENT, because export filenames like `comments.csv`
     /// are not unique to any platform.
     case discussionExport
@@ -303,6 +303,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "mp4": return .mp4
         case "mov": return .mov
         case "zip": return .zip
+        // E-6 — a Cellebrite UFDR is a plain ZIP (report.xml + extracted media), so
+        // it expands as a container and its report.xml routes to the discussion
+        // lane by content. No decryption, no acquisition — the report as produced.
+        case "ufdr": return .zip
         case "rar": return .rar
         case "7z": return .sevenZip
         default: return .unknown
@@ -488,8 +492,8 @@ public extension SourceType {
         "mp3", "wav", "m4a", "aac", "aiff", "aif", "aifc", "caf", "flac", "3gp", "3gpp",
         // Video
         "mp4", "mov",
-        // Archives
-        "zip",
+        // Archives (incl. a Cellebrite .ufdr report, which is a ZIP)
+        "zip", "ufdr",
     ]
 
     /// The attachable set as `UTType`s for SwiftUI `.fileImporter` /
@@ -500,5 +504,5 @@ public extension SourceType {
 
     /// One-line, human-readable summary of the supported formats for tooltips.
     nonisolated static let attachableSummary =
-        "PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video."
+        "PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports."
 }

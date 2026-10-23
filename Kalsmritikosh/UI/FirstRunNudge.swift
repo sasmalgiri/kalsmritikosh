@@ -52,7 +52,7 @@ public struct FirstRunNudge: View {
     public var body: some View {
         VStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text(title)
                 .font(.title3.weight(.medium))

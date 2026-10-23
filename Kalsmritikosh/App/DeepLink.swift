@@ -58,7 +58,7 @@ extension AppState {
             return
         }
         guard let link = DeepLink(url: url) else {
-            deepLinkMessage = "This link is not an Investigation Docs Made Easy link this version understands."
+            deepLinkMessage = "This link is not an Investigations Made Easy link this version understands."
             return
         }
         switch link {

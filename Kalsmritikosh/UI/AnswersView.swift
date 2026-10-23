@@ -55,7 +55,7 @@ public struct AnswersView: View {
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "text.bubble")
-                .font(.system(size: 34, weight: .light))
+                .scaledFont(34, weight: .light, relativeTo: .largeTitle)
                 .foregroundStyle(.secondary)
             Text("No answers recorded yet")
                 .font(.headline)

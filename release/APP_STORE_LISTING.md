@@ -1,33 +1,42 @@
-# Investigation Docs Made Easy — App Store Listing (draft)
+# Investigations Made Easy — App Store Listing (draft)
 
 _Draft copy + review notes for App Store Connect (REL-005). Owner fills the bracketed items,
 adds screenshots, and submits. Every claim below is deliberately kept within the "Do NOT claim"
 list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. Last reviewed
-2026-10-17 (Online mode, ledger encryption, Share/Services capture, DEVONthink bridge, iPhone/iPad
-viewer added)._
+2026-10-23 (investigation app: Cases from intake to closure; English only for v1)._
 
 ## Metadata
 
-- **Name:** Investigation Docs Made Easy
-- **Subtitle (≤30 chars):** `From evidence to report`
-- **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigation Docs Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
+- **Name:** Investigations Made Easy
+- **Subtitle (≤30 chars):** `From evidence to findings`
+- **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigations Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
 - **Category:** Productivity (secondary: Reference)
 - **Age rating:** 4+ (no objectionable content; user supplies their own files)
-- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigation Docs Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
+- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigations Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
-  `documents,email,search,evidence,timeline,on-device,private,archive,pdf,notes,offline,citations`
+  `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private`
 
 ## Promotional text (≤170 chars)
 
-> Turn your own documents and email into a private, searchable knowledge base — with answers that
-> cite their sources. Private by default: everything runs on your Mac, encrypted.
+> Run every investigation from intake to findings — evidence, interviews, exhibits and a cited
+> report — privately on your Mac. The app keeps the record; you make the call.
 
 ## Description
 
 > **Investigation documentation made easy.**
 >
-> **Investigation Docs Made Easy is a private, on-device workspace for your own archive.**
+> **Investigations Made Easy is a private, on-device case file for investigators** — HR and
+> compliance teams, fraud and insurance investigators, lawyers, journalists, researchers, and
+> anyone putting a personal dispute in order. It organises, finds and documents; **every finding
+> is yours to make.**
+>
+> **Run the whole case.** Record how a matter came in (anonymously if needed), triage it, and pick
+> the kind of investigation — the plan and the usual tasks with due dates are set up for you. Add
+> the evidence, register exhibits, send preservation notices, plan and hold interviews and record
+> the statement the person confirms. For each allegation, link the evidence for and against it,
+> then record your finding and why. Close the case with your reasons; everything done is in the
+> case log.
 >
 > Point it at your folders of documents and email. It builds a structured record — people,
 > dates, events, facts — and lets you ask questions and get answers that **cite the exact source
@@ -40,13 +49,17 @@ viewer added)._
 > what would be sent before anything leaves your Mac.
 >
 > **What you can do**
+> • Cases: intake, triage, plan, tasks and reminders, people and interviews, exhibits, holds, redaction log, review batches with a second-person check, chronology, journal and an append-only case log.
+> • Evidence from documents, email (including PST), chat exports (WhatsApp, Slack, Teams and more), Cellebrite phone reports, scans and recordings.
+> • Follow the money: totals per currency and where each flow stops — every figure lists its sources.
+> • Export the case file report, exhibit list, custody report, statements for signature and a personal-data export.
 > • Search and ask questions across everything you've added — answers come with clickable citations.
 > • Build timelines and see how events connect across sources.
 > • Surface contradictions and gaps between documents.
 > • Organize evidence into workspaces and export cited work products.
 > • See exactly what's been processed, and what couldn't be, with honest per-source coverage.
 > • Works beside DEVONthink: import a DEVONthink database in place, send items back to it.
-> • Save to Investigation Docs Made Easy from the Share and Services menus in Safari, Mail, Finder and more.
+> • Save to Investigations Made Easy from the Share and Services menus in Safari, Mail, Finder and more.
 > • Scan a document or take a photo with your iPhone or iPad straight into your archive (Continuity Camera).
 > • Write your own notes in Markdown — searchable, with every earlier version kept.
 > • Automate with Shortcuts and AppleScript.
@@ -68,7 +81,7 @@ viewer added)._
 > honestly in-app; audio and video are catalogued and preserved at ingest (never auto-transcribed) — transcribe individual files on demand in Transcripts, fully on-device (Apple Speech, English).
 > Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
 >
-> _Investigation Docs Made Easy is an informational aid. Verify important answers against the cited originals; it
+> _Investigations Made Easy is an informational aid. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
 
 ## Privacy nutrition labels
@@ -83,17 +96,22 @@ viewer added)._
 
 ## Screenshots (plan — capture on a demo corpus with NO real PII)
 
-1. **Ask** — a question with a cited answer + quality strip (confidence/sources).
-2. **Sources** — folders added, with the multi-dimensional readiness strip (parsed/embedded).
-3. **Timeline** — dated events reconstructed from evidence.
-4. **A work product / report** — sections with claims and citations.
-5. **Cross-document matrix or contradictions** — evidence compared across sources.
+1. **"What are you investigating?"** — the first-run question that opens the right persona with a case ready.
+2. **Case file** — the case's documents in scope, with custody hashes and the chronology.
+3. **Contradictions & gaps** — two sources that disagree, both shown with their citations.
+4. **A persona studio filled from the case** — e.g. the SIU referral or privilege log, each filled line marked with its source document, typed lines marked "investigator entry".
+5. **Findings report** — sections with claims, every sentence linked to its source, and the sealed receipt.
 
-Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic — safe for screenshots).
+Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the public-domain case packs in
+`KalsmritikoshTests/Fixtures/InvestigationCases` (DOJ releases, court opinions, an NTSB docket — no private data).
 
 ## Review notes (paste into App Review Notes)
 
-> Investigation Docs Made Easy is a **local evidence/archive workspace**. It processes only files the user
+> Investigations Made Easy is **investigation documentation software**: it keeps every source of an
+> investigation with custody, builds the chronology, finds contradictions and gaps, and produces the
+> report where every sentence points at its source. **Judgement stays human** — the app never decides
+> guilt, privilege, credibility or root cause, and its studios never fill those fields; it documents the
+> investigation a person runs. It is a **local evidence workspace**. It processes only files the user
 > explicitly selects via macOS security-scoped folder access. **No account is required** and
 > **core processing is on-device**. The app starts in **Private mode**, in which it makes no network
 > connections at all; its knowledge base is encrypted at rest with a key kept in the Keychain.

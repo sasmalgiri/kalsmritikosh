@@ -60,11 +60,11 @@ public enum KnowledgeInventory {
             if page.count < pageSize { break }
         }
 
-        var md = "# Investigation Docs Made Easy — Knowledge Inventory\n\n"
+        var md = "# Investigations Made Easy — Knowledge Inventory\n\n"
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n"
         md += "Database: `\(database.url.path)`\n"
         md += "KOs audited: \(allKOIDs.count)\n\n"
-        md += "_This file pairs each ingested source against what Investigation Docs Made Easy extracted from it. Use it to compare against your original files and spot ingest gaps._\n\n"
+        md += "_This file pairs each ingested source against what Investigations Made Easy extracted from it. Use it to compare against your original files and spot ingest gaps._\n\n"
 
         // ── Per-file sections ────────────────────────────────────────
         var totalEnts = 0

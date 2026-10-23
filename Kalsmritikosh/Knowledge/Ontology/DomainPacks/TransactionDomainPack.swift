@@ -58,7 +58,9 @@ public enum TransactionDomainPack {
     ) -> [GenericFact] {
         var facts: [GenericFact] = []
 
-        if let amount = firstMatch(#"(?:₹|rs\.?|inr|\$)\s?[\d,]+(?:\.\d{1,2})?"#, in: text) {
+        // "Rs"/"INR" only as a word of its own: "years 1932" and "others 1932" are not rupees
+        // (case bench 2026-10-22: court opinions carried "Amount rs1932 INR").
+        if let amount = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?[\d,]+(?:\.\d{1,2})?"#, in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: normalize(amount),
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],

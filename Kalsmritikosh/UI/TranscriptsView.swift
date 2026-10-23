@@ -59,7 +59,7 @@ public struct TranscriptsView: View {
             Divider()
             if sources.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "waveform.slash").font(.system(size: 28)).foregroundStyle(.secondary)
+                    Image(systemName: "waveform.slash").scaledFont(28, relativeTo: .largeTitle).foregroundStyle(.secondary)
                     Text("No audio or video sources").font(.callout).foregroundStyle(.secondary)
                     Text("Ingest an audio/video file, then transcribe it here.")
                         .font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center)
@@ -121,7 +121,7 @@ public struct TranscriptsView: View {
             .padding(16)
         } else {
             VStack(spacing: 8) {
-                Image(systemName: "waveform").font(.system(size: 30)).foregroundStyle(.secondary)
+                Image(systemName: "waveform").scaledFont(30, relativeTo: .largeTitle).foregroundStyle(.secondary)
                 Text("Select a source").font(.title3.weight(.medium)).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -162,7 +162,7 @@ public struct TranscriptsView: View {
 
     private func emptyTranscript(_ file: FileRecord) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: "waveform.badge.mic").font(.system(size: 30)).foregroundStyle(.tint)
+            Image(systemName: "waveform.badge.mic").scaledFont(30, relativeTo: .largeTitle).foregroundStyle(.tint)
             Text("Not transcribed yet").font(.callout.weight(.medium))
             Text("Transcription runs on-device and produces timecoded lines you can search, play, and quote. It does not run during ingest.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
@@ -232,6 +232,7 @@ public struct TranscriptsView: View {
             }
             .buttonStyle(.borderless)
             .help(seg.markedQuote ? "Unmark quote" : "Mark as quote")
+            .accessibilityLabel(seg.markedQuote ? "Unmark quote" : "Mark as quote")
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(seg.markedQuote ? AnyShapeStyle(.tint.opacity(0.06)) : AnyShapeStyle(Color.clear),

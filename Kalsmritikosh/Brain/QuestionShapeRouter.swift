@@ -188,7 +188,7 @@ public enum QuestionShapeRouter {
 
     /// The fixed Q0 refusal — one sentence, plain language, zero model.
     public nonisolated static let outOfScopeRefusal =
-        "That looks like general knowledge, not a question about your archive. Investigation Docs Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them."
+        "That looks like general knowledge, not a question about your archive. Investigations Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them."
 
     // MARK: - pieces
 

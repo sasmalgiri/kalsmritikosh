@@ -46,7 +46,7 @@ public nonisolated enum LegalNotice {
 
     // MARK: - Settings "Legal & Privacy" copy
 
-    public static let disclaimerHeadline = "Investigation Docs Made Easy is an evidence aid, not an authority."
+    public static let disclaimerHeadline = "Investigations Made Easy is an evidence aid, not an authority."
 
     public static let accuracyStatement = """
     Kalsmritikosh reconstructs the most evidence-supported version of events from the \

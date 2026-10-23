@@ -139,11 +139,12 @@ public struct SettingsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Settings").font(Theme.display(28, .bold))
-                    Text("Investigation Docs Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced.")
+                    Text("Investigations Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     selfCheckChip
                 }
+                InvestigatorProfileSection()
 
                 // ── Everyday settings — each category collapsed behind its
                 //    header so Settings opens minimal. Click a header to expand.
@@ -327,7 +328,7 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
-            Text("Generate the Gate 1 baseline. Boots an isolated copy of Investigation Docs Made Easy into a temp directory, ingests the bundled ProjectDelta fixture, runs the EvalKit harness through the freshly-booted brain, and writes `eval-report.md` to the app container's Documents folder. Your real database is untouched.")
+            Text("Generate the Gate 1 baseline. Boots an isolated copy of Investigations Made Easy into a temp directory, ingests the bundled ProjectDelta fixture, runs the EvalKit harness through the freshly-booted brain, and writes `eval-report.md` to the app container's Documents folder. Your real database is untouched.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -392,7 +393,7 @@ public struct SettingsView: View {
             Divider().padding(.vertical, 4)
             #endif
 
-            Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Investigation Docs Made Easy extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
+            Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Investigations Made Easy extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -1318,7 +1319,7 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.managedEvidenceMode },
                 set: { FeatureFlags.shared.managedEvidenceMode = $0 }
             ))
-            Text("EV-005. Default OFF (**reference mode**): Investigation Docs Made Easy keeps a bookmark + hash + the derived evidence, and your files stay where they are — but if a file is later moved or replaced, its exact original bytes may no longer reopen. Turn ON (**managed mode**) to also keep a local, read-only, content-addressed copy of each ingested file, so every version can always be reopened byte-for-byte — recommended for investigations and legal matters. Costs disk (identical files are stored once). Applies to newly-ingested files.")
+            Text("EV-005. Default OFF (**reference mode**): Investigations Made Easy keeps a bookmark + hash + the derived evidence, and your files stay where they are — but if a file is later moved or replaced, its exact original bytes may no longer reopen. Turn ON (**managed mode**) to also keep a local, read-only, content-addressed copy of each ingested file, so every version can always be reopened byte-for-byte — recommended for investigations and legal matters. Costs disk (identical files are stored once). Applies to newly-ingested files.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
@@ -1326,7 +1327,7 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.iMessageLoaderEnabled },
                 set: { FeatureFlags.shared.iMessageLoaderEnabled = $0 }
             ))
-            Text("Reads ~/Library/Messages/chat.db when it appears in a watched folder. Requires Full Disk Access for the original path; in the App Store build, copy chat.db to an Investigation Docs Made Easy-watched folder first. Takes effect on next app launch.")
+            Text("Reads ~/Library/Messages/chat.db when it appears in a watched folder. Requires Full Disk Access for the original path; in the App Store build, copy chat.db to an Investigations Made Easy-watched folder first. Takes effect on next app launch.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
@@ -1334,7 +1335,7 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.browserHistoryLoaderEnabled },
                 set: { FeatureFlags.shared.browserHistoryLoaderEnabled = $0 }
             ))
-            Text("Reads Safari History.db or Chromium History when copied into a watched folder. Both browsers lock the file while running — Investigation Docs Made Easy reads a copy. Takes effect on next app launch.")
+            Text("Reads Safari History.db or Chromium History when copied into a watched folder. Both browsers lock the file while running — Investigations Made Easy reads a copy. Takes effect on next app launch.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
@@ -1635,14 +1636,14 @@ public struct SettingsView: View {
             if !overlap.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Also in DEVONthink — off until you turn them on").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text("Investigation Docs Made Easy works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
+                    Text("Investigations Made Easy works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
                         .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Button("Use on its own: turn all of these on") {
                         ModulePreset.applyStandalone(); moduleFlagsVersion &+= 1
                         if ProductModuleFlags.isEnabled(.spotlightIndex) { Task { await appState.syncSpotlight() } }
                     }
                     .controlSize(.small)
-                    .help("For using Investigation Docs Made Easy without DEVONthink. Switches on every feature in this list; nothing else changes, and you can turn any of them off again.")
+                    .help("For using Investigations Made Easy without DEVONthink. Switches on every feature in this list; nothing else changes, and you can turn any of them off again.")
                     ForEach(overlap) { module in
                         let reason = ProductModuleFlags.disabledReason(module)
                         Toggle(isOn: Binding(
@@ -1764,6 +1765,7 @@ public struct SettingsView: View {
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                MoveToNewMacButton()
                 // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
                 if ProductModuleFlags.showPreviewFeatures {
                 Toggle("Include original files in snapshots (so citations open on the device)", isOn: $snapshotIncludeOriginals)
@@ -1800,14 +1802,14 @@ public struct SettingsView: View {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Back Up Here"
-        panel.message = "Choose a folder to save your Investigation Docs Made Easy backup into."
+        panel.message = "Choose a folder to save your Investigations Made Easy backup into."
         guard panel.runModal() == .OK, let dir = panel.url else { return }
         backingUp = true
         backupStatus = nil
         Task {
             let dbURL = DatabaseLocations.defaultDatabaseURL
             let stamp = Int(Date().timeIntervalSince1970)
-            let dest = dir.appendingPathComponent("Investigation Docs Made Easy-Backup-\(stamp)")
+            let dest = dir.appendingPathComponent("Investigations Made Easy-Backup-\(stamp)")
             // F18 — a CONSISTENT live snapshot via SQLite's Online Backup API, taken inside the
             // Database actor, instead of "checkpoint, then copy the files": nothing stopped writes
             // between those copies, so a busy ledger could be captured torn. The snapshot is one
@@ -2041,7 +2043,7 @@ public struct SettingsView: View {
                 Image(systemName: "trash").foregroundStyle(.red)
                 Text("Your data").font(.title3.bold())
             }
-            Text("Erase everything Investigation Docs Made Easy has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone.")
+            Text("Erase everything Investigations Made Easy has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
@@ -2112,7 +2114,7 @@ public struct SettingsView: View {
                     .foregroundStyle(Theme.brand)
                 Text("Help & feedback").font(.title3.bold())
             }
-            Text("Found a problem or have an idea? Tell us — early feedback shapes what gets built next. The button below opens a draft in your own Mail app: Investigation Docs Made Easy itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send.")
+            Text("Found a problem or have an idea? Tell us — early feedback shapes what gets built next. The button below opens a draft in your own Mail app: Investigations Made Easy itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
@@ -2126,6 +2128,7 @@ public struct SettingsView: View {
             .buttonStyle(.borderedProminent)
             .guidance(GuidanceTip("Report a problem",
                                   what: "Opens a pre-filled draft in your own Mail app addressed to support. The app makes no network call and attaches none of your documents — only the visible text you choose to send."))
+            DiagnosticsSendButton()
             Text("Or email \(FeedbackMail.supportAddress) directly. Never include privileged or confidential case material in a report.")
                 .font(.caption2).foregroundStyle(.tertiary)
                 .textSelection(.enabled)
@@ -2272,7 +2275,7 @@ public struct SettingsView: View {
     private var maintenanceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Background maintenance").font(.title3.bold())
-            Text("Investigation Docs Made Easy keeps your knowledge base tidy (summaries + distilled memories) while your Mac is idle, and stops the moment you come back. Choose how it behaves.")
+            Text("Investigations Made Easy keeps your knowledge base tidy (summaries + distilled memories) while your Mac is idle, and stops the moment you come back. Choose how it behaves.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -2435,7 +2438,7 @@ public struct SettingsView: View {
                     Divider().padding(.vertical, 4)
                     Text("Step 2 — pull \(model.displayName)")
                         .font(.callout.weight(.medium))
-                    Text("After Ollama is running, return to Investigation Docs Made Easy and Settings will offer a one-tap download.")
+                    Text("After Ollama is running, return to Investigations Made Easy and Settings will offer a one-tap download.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2512,7 +2515,7 @@ public struct SettingsView: View {
                 ollamaPullStatus = progress.status
                 ollamaPullFraction = progress.fractionComplete
                 if progress.isComplete {
-                    ollamaPullStatus = "Downloaded \(modelTag). Relaunch Investigation Docs Made Easy to start using it."
+                    ollamaPullStatus = "Downloaded \(modelTag). Relaunch Investigations Made Easy to start using it."
                 }
             case .failure(let err):
                 ollamaPullStatus = "Download failed: \(err)"
@@ -2612,7 +2615,7 @@ public struct SettingsView: View {
     private var userModelsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your models").font(.title3.bold())
-            Text("Investigation Docs Made Easy auto-detects models you've already installed (Ollama, MLX). You can also add `.gguf` files or your own cloud endpoint below.")
+            Text("Investigations Made Easy auto-detects models you've already installed (Ollama, MLX). You can also add `.gguf` files or your own cloud endpoint below.")
                 .font(.caption).foregroundStyle(.secondary)
 
             mlxSubsection
@@ -2634,7 +2637,7 @@ public struct SettingsView: View {
                 Spacer()
                 Text("\(mlxModels.count) detected").font(.caption).foregroundStyle(.secondary)
             }
-            Text("Drop an MLX model directory into the folder below; Investigation Docs Made Easy reads its `config.json` and registers it at the next launch.")
+            Text("Drop an MLX model directory into the folder below; Investigations Made Easy reads its `config.json` and registers it at the next launch.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Button {
@@ -2682,7 +2685,7 @@ public struct SettingsView: View {
                 Spacer()
                 Text("\(ggufEntries.count) added").font(.caption).foregroundStyle(.secondary)
             }
-            Text("Add any `.gguf` file (Hugging Face, TheBloke, custom builds). Investigation Docs Made Easy parses its header for context-length + family.")
+            Text("Add any `.gguf` file (Hugging Face, TheBloke, custom builds). Investigations Made Easy parses its header for context-length + family.")
                 .font(.caption).foregroundStyle(.secondary)
             Button {
                 ggufImporterPresented = true
@@ -3151,7 +3154,7 @@ private struct LedgerEncryptionSubsection: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if encrypted {
-                Text("Write down the recovery key and keep it somewhere safe. It is the only way to open this ledger on another Mac (for example, from a backup) or if this Mac's Keychain is reset. Investigation Docs Made Easy cannot recover it for you.")
+                Text("Write down the recovery key and keep it somewhere safe. It is the only way to open this ledger on another Mac (for example, from a backup) or if this Mac's Keychain is reset. Investigations Made Easy cannot recover it for you.")
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Button(revealed == nil ? "Show recovery key…" : "Hide recovery key") {
@@ -3179,3 +3182,23 @@ private struct LedgerEncryptionSubsection: View {
         }
     }
 }
+
+/// S-3 — the investigator on this Mac: the name written on every case action, task, note, decision
+/// and export. v1 is single-user; there are no accounts or roles.
+struct InvestigatorProfileSection: View {
+    @AppStorage(InvestigatorProfile.nameKey) private var name = ""
+    @AppStorage(InvestigatorProfile.organisationKey) private var organisation = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("You").font(.headline)
+            HStack {
+                TextField("Your name", text: $name, prompt: Text(NSFullUserName().isEmpty ? NSUserName() : NSFullUserName()))
+                TextField("Organisation (optional)", text: $organisation)
+            }
+            .textFieldStyle(.roundedBorder)
+            Text("Recorded on every change, decision and export in your cases, and printed on notices and reports.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+

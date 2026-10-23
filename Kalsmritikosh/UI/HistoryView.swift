@@ -135,11 +135,11 @@ public struct HistoryView: View {
     private var placeholder: some View {
         VStack(spacing: 12) {
             Image(systemName: "book.pages")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("Reconstruct your history.")
                 .font(.title3.weight(.medium))
-            Text("Ask Investigation Docs Made Easy to tell you the story of a project, person, or topic. Each chapter is grounded in the source events that produced it.")
+            Text("Ask Investigations Made Easy to tell you the story of a project, person, or topic. Each chapter is grounded in the source events that produced it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -732,7 +732,7 @@ public struct HistoryView: View {
 
     private var input: some View {
         HStack(spacing: 8) {
-            TextField("Ask Investigation Docs Made Easy to reconstruct a history…", text: $question)
+            TextField("Ask Investigations Made Easy to reconstruct a history…", text: $question)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { Task { await start() } }
                 .disabled(streaming)
@@ -779,7 +779,7 @@ public struct HistoryView: View {
             }
         }
         if chapters.isEmpty && (finalAnswer?.refused ?? false) {
-            error = finalAnswer?.refusalReason ?? "Investigation Docs Made Easy couldn't reconstruct that history."
+            error = finalAnswer?.refusalReason ?? "Investigations Made Easy couldn't reconstruct that history."
         }
     }
 }

@@ -144,7 +144,7 @@ struct ClipperTests {
                                    html: "<html><head><title>t</title></head><body><p>Body</p></body></html>", text: "").payload()
         let html = String(decoding: page.data, as: UTF8.self)
         #expect(page.name == "Rent- A-B guide.html")
-        #expect(html.hasPrefix("<!-- Clipped by Investigation Docs Made Easy from https://e.org/x?a=1&amp;b=2"))
+        #expect(html.hasPrefix("<!-- Clipped by Investigations Made Easy from https://e.org/x?a=1&amp;b=2"))
         #expect(html.contains("<head><meta name=\"kalsmritikosh-source\" content=\"https://e.org/x?a=1&amp;b=2\">"))
         let sel = try ClipRequest(kind: .selection, title: "", url: "https://e.org/y", html: "", text: "a < b").payload()
         #expect(sel.name == "e.org (selection).html")

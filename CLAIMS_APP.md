@@ -21,14 +21,14 @@ change — copy and registry move together or not at all.
 | app.evidence-only-state | `still answers every question from your evidence` | Kalsmritikosh/UI/OnboardingView.swift |
 | app.private-mode | `Fully private (no AI)` | Kalsmritikosh/UI/SettingsView.swift |
 | app.twin-badge | `Independent AI reading agreed.` | Kalsmritikosh/Brain/ComposeTwin.swift |
-| app.q0-refusal | `Investigation Docs Made Easy answers only from your ingested documents` | Kalsmritikosh/Brain/QuestionShapeRouter.swift |
+| app.q0-refusal | `Investigations Made Easy answers only from your ingested documents` | Kalsmritikosh/Brain/QuestionShapeRouter.swift |
 | app.gk-banner | `Not from your documents — general knowledge from the on-device AI` | Kalsmritikosh/Brain/GeneralKnowledgeLane.swift |
 
 ## App Store description sentences
 
 | Claim ID | Verbatim fragment in the listing | Source |
 |---|---|---|
-| asc.private-on-device | `private, on-device workspace` | release/APP_STORE_LISTING.md |
+| asc.private-on-device | `private, on-device case file` | release/APP_STORE_LISTING.md |
 | asc.honest-refusal | `it tells you honestly` | release/APP_STORE_LISTING.md |
 | asc.cited-answers | `answers come with clickable citations` | release/APP_STORE_LISTING.md |
 | asc.on-device-ai | `Apple's on-device intelligence` | release/APP_STORE_LISTING.md |

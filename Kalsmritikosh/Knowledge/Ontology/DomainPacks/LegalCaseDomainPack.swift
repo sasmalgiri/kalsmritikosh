@@ -64,8 +64,12 @@ public enum LegalCaseDomainPack {
             ?? captionDocketNumber(in: text) ?? flowingDocketNumber(in: text) {
             facts.append(fact(subjectLabel, "caseNumber", v, blockID, 0.8))
         }
+        // The caption names the deciding court beside its number or date, or in a short caption
+        // block; a long body paragraph naming a court is citing another decision (case bench
+        // 2026-10-22: "the Supreme Court of Tennessee held …" became a federal case's court).
+        let captionLike = text.count < 400 || numberedBesideCourt(text) || courtLineDate(in: text) != nil
         if let v = DomainPackText.labeledValue(after: ["in the court of", "court of", "before the", "tribunal"], in: text)
-            ?? captionCourtName(in: text) {
+            ?? (captionLike ? captionCourtName(in: text) : nil) {
             facts.append(fact(subjectLabel, "court", v, blockID, 0.7))
         }
         if let v = DomainPackText.labeledValue(after: ["plaintiff", "petitioner", "appellant", "complainant"], in: text),

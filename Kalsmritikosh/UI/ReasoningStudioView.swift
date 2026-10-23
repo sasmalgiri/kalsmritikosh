@@ -228,7 +228,7 @@ public struct ReasoningStudioView: View {
                                 .fill(stage == s ? AnyShapeStyle(.tint) : (rca.isComplete(s) ? AnyShapeStyle(.green.opacity(0.9)) : AnyShapeStyle(.quaternary)))
                                 .frame(width: 30, height: 30)
                             Image(systemName: rca.isComplete(s) && stage != s ? "checkmark" : s.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold, relativeTo: .body)
                                 .foregroundStyle(stage == s || rca.isComplete(s) ? Color.white : Color.secondary)
                         }
                         Text(s.title).font(.caption2.weight(stage == s ? .bold : .regular))
@@ -330,6 +330,7 @@ public struct ReasoningStudioView: View {
                 Image(systemName: idea.wrappedValue.parked ? "arrow.uturn.up" : "moon.zzz")
             }.buttonStyle(.plain).foregroundStyle(.secondary)
                 .help(idea.wrappedValue.parked ? "Un-park" : "Park — keep but set aside")
+                .accessibilityLabel(idea.wrappedValue.parked ? "Un-park idea" : "Park idea")
             Button { rca.wrappedValue.brainstorm.removeAll { $0.id == idea.wrappedValue.id } } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
         }
         .padding(8)
@@ -423,6 +424,7 @@ public struct ReasoningStudioView: View {
                         Image(systemName: cause.likely ? "star.fill" : "star")
                             .foregroundStyle(cause.likely ? Color.yellow : Color.secondary)
                     }.buttonStyle(.plain).help("Mark as a probable cause")
+                    .accessibilityLabel(cause.likely ? "Unmark probable cause" : "Mark as probable cause")
                     TextField("Cause", text: $cause.text).textFieldStyle(.plain)
                     Button { cat.wrappedValue.causes.removeAll { $0.id == cause.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
                 }
@@ -803,7 +805,7 @@ struct FishboneDiagram: View {
                 Text(cat.name).font(.caption2.weight(.bold))
                 if !cat.causes.isEmpty {
                     Text("\(cat.causes.count) cause\(cat.causes.count == 1 ? "" : "s")\(likely > 0 ? " · \(likely)★" : "")")
-                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 6).padding(.vertical, 3)

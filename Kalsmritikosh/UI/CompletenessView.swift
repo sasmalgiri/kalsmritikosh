@@ -58,6 +58,7 @@ public struct CompletenessView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(loading)
+                .accessibilityLabel("Refresh")
                 .guidance(GuidanceTip("Refresh",
                                       what: "Recomputes how fully your archive has been processed — parsed, structured, embedded.",
                                       enabledWhen: "Wait for the current check to finish."),

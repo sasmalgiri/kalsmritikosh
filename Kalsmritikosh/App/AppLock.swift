@@ -5,9 +5,13 @@
 //  W2-7 — lock the app with Touch ID or the Mac password (ported in spirit from
 //  mailin's BiometricLockManager). Locks when the Mac sleeps or the screen
 //  locks, and when the user comes back after more than the idle limit. While
-//  locked, the window shows only the unlock screen. Data at rest is protected by
-//  FileVault and the sandbox; whole-database encryption would need SQLCipher, a
-//  third-party dependency that is an owner decision (SHIP_DECISIONS).
+//  locked, the window shows only the unlock screen.
+//
+//  App lock decides WHO CAN OPEN THE APP; it does not encrypt anything. Data at
+//  rest is protected separately: the ledger database file is encrypted with
+//  SQLCipher (AES-256) using a key kept in this Mac's Keychain (see
+//  AppState+LedgerEncryption.swift), and the copies of original files in the
+//  evidence vault rely on FileVault and the app sandbox.
 //
 
 import Foundation

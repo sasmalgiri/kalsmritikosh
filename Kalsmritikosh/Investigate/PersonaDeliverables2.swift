@@ -35,6 +35,8 @@ public struct ResearchReview: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var history: [StudioAuditEntry]?
+    /// A2 — where each filled field came from (case evidence or investigator entry).
+    public var provenance: StudioProvenance?
 
     public var question: String = ""            // fixed BEFORE screening (protocol)
     public var reviewer: String = ""
@@ -112,6 +114,7 @@ public enum ResearchReviewRenderer {
         out += "**Certainty of evidence: \(r.certainty?.label ?? "—")** — \(r.certainty?.detail ?? "")\n\n"
         if !r.limitations.trimmed.isEmpty { out += "**Limitations:** \(r.limitations)\n\n" }
         out += "---\n\nPrepared by **\(r.reviewer.dash)**\n"
+        out += StudioExportGate.provenanceAppendix(r.gateValues, provenance: r.provenance)
         out += StudioAudit.appendix(r.history)
         return out
     }
@@ -135,6 +138,8 @@ public struct ProofArgument: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var history: [StudioAuditEntry]?
+    /// A2 — where each filled field came from (case evidence or investigator entry).
+    public var provenance: StudioProvenance?
 
     public var question: String = ""            // the genealogical question
     public var researcher: String = ""
@@ -208,6 +213,7 @@ public enum ProofArgumentRenderer {
         out += "## 5. Conclusion (written, soundly reasoned)\n\n\(p.conclusion.dashText)\n\n"
         out += "Citations complete — every fact reopens its source: **\(p.citationsComplete ? "Yes" : "No")**\n\n"
         out += "_\(GenealogicalProofStandard.disciplineNote)_\n\n---\n\nPrepared by **\(p.researcher.dash)**\n"
+        out += StudioExportGate.provenanceAppendix(p.gateValues, provenance: p.provenance)
         out += StudioAudit.appendix(p.history)
         return out
     }

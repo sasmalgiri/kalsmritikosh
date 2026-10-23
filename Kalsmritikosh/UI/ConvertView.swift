@@ -100,7 +100,7 @@ public struct ConvertView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.right.doc.on.clipboard")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(20, weight: .semibold, relativeTo: .title2)
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -135,7 +135,7 @@ public struct ConvertView: View {
     private var dropZone: some View {
         VStack(spacing: 12) {
             Image(systemName: dropTargeted ? "tray.and.arrow.down.fill" : "tray.and.arrow.down")
-                .font(.system(size: 34, weight: .light))
+                .scaledFont(34, weight: .light, relativeTo: .largeTitle)
                 .foregroundStyle(dropTargeted ? Theme.brand : .secondary)
                 .symbolEffect(.bounce, value: dropTargeted)
             Text("Drop files here")
@@ -470,7 +470,7 @@ public struct ConvertView: View {
             }
             return "[]"
         case .html:
-            var out = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Investigation Docs Made Easy conversion</title>\n"
+            var out = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Investigations Made Easy conversion</title>\n"
             out += "<style>body{font:14px -apple-system,system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1c1c1e}"
             out += "h2{border-bottom:1px solid #ddd;padding-bottom:.25rem} .meta{color:#8a8a8e;font-size:12px} pre{white-space:pre-wrap;word-wrap:break-word} .fail{color:#c0392b}</style>\n</head>\n<body>\n"
             for (url, ko) in pieces {

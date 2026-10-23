@@ -57,7 +57,11 @@ public nonisolated enum CompliancePersonaPackage {
             job("findings-memo",    "Findings memo",             "Findings on the balance of probabilities, with a sealed receipt.", .findings),
             job("corrective-actions","Corrective actions",       "Track corrective and preventive actions to closure.", .capaRegister),
             job("action-review",    "Action effectiveness",      "Verify a completed action actually fixed the issue.", .effectivenessReview),
-            job("closure",          "Close the case",            "Close or reopen the case by an explicit human decision.", .closure)
+            job("closure",          "Close the case",            "Close or reopen the case by an explicit human decision.", .closure),
+            // A5 — moved here from the Content creator persona: checking marketing, posts and sponsored
+            // material for undisclosed material connections is a compliance review.
+            job("disclosure-review", "Endorsement & disclosure review (FTC)",
+                "Check posts, ads and sponsored material for undisclosed material connections — sponsorships, affiliate links, gifts, AI-generated content — against the FTC Endorsement Guides; every finding cited to the material.", .ask)
         ]
     }
 

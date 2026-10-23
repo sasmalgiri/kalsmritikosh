@@ -1,6 +1,39 @@
 # PRODUCTION_STATUS
 
 ```
+Audit date:            2026-10-23 (Investigations Made Easy — main-app program)
+Current branch:        investigation-docs (from main af956108, PR #165 merged; NOT yet pushed)
+Latest schema version: 152 (SchemaMigrations.latestVersion; v151 case file, v152 ACH in the ledger)
+Product name:          Investigations Made Easy (display); bundle ids / schemes / kalsmritikosh:// unchanged
+Languages:             English only for v1 (owner 2026-10-23)
+Whole-suite floor:     ci/test-baseline.json is the LIVE authority (hosted count; see memory ci-hosted-test-floor)
+Verification state:    everything on investigation-docs COMPILES (app + all test targets, build-for-testing
+                       green 2026-10-23); the test phase (T-1…T-4 in docs/INVESTIGATIONS_MADE_EASY_TODO.md)
+                       has NOT run yet — owner rule "implement all, then test". Nothing here is release-verified.
+```
+
+## Current status (2026-10-23)
+
+- **Governing todo:** `docs/INVESTIGATIONS_MADE_EASY_TODO.md` (phases T N C E P A Q S U R). Built and committed on
+  `investigation-docs`: N-1 rename; C-1…C-12 case file (v151) + Cases screen; E-1…E-6 exhibits, custody report,
+  hold notices, redaction log, review batches with QC, Teams + Cellebrite UFDR import; P-1…P-3 people, contact log,
+  interviews to confirmed statements, credibility factors; A-6…A-9 hypotheses in the ledger (v152), manual
+  chronology, amount-weighted money tracing, pair timelines; S-1/S-2/S-3/S-4/S-5 retention review (never a purge),
+  personal-data export, investigator profile, case action log, encryption wording; U-1 scaling text + labels,
+  U-3 walkthroughs, U-4 on-device diagnostics, U-5 move-to-new-Mac guide, U-6 viewer privacy manifest.
+- **Schema self-heal fix (2026-10-23):** the stale-counter check stopped tracking new migrations after v118, so an
+  upgrade could skip the newest migration. The check now derives its sentinel from the newest migration and a
+  repair pass re-runs create-if-missing migrations from v119. Owner ledgers upgraded before this may lack objects
+  from the non-idempotent v119–v141 migrations — to be checked in the test phase.
+- **Open:** the whole test phase; answer-quality work Q-2…Q-5 (civil court, press-release office, lead details,
+  scale runs); owner steps (name in App Store Connect, HOLD 1 walk-through, clean-machine install, lawyer review,
+  archive/sign/submit). SHIP_DECISIONS §3 gates are all still unchecked.
+
+> The 2026-08-07 snapshot below is historical and kept as-is.
+
+## Snapshot 2026-08-07 (historical)
+
+```
 Audit date:            2026-08-07 (release-closure program refresh)
 Current audited HEAD:  main after PRs #70-#73 (macros B-E merged; macro F on PR #74)
 Latest schema version: 102 (SchemaMigrations.latestVersion)

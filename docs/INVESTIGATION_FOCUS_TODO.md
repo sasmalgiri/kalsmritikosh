@@ -3,8 +3,16 @@
 Owner question: make the app investigation-only, with every listed persona able to run a case
 start to end on its own documents, and prove it on real open-source cases.
 
-This file is the research (what is true today), the todo list, and a plan check. Nothing here
-is built yet.
+This file is the research (what was true on 2026-10-18), the todo list, and a plan check.
+
+**Status 2026-10-23:** A1–A5, B1–B2, C1–C2 and D1–D4 are built (branch `investigation-docs`); they are
+verified in the final test phase. C3 is owner-run (large cases); C4 follows from the C1–C3 runs.
+Where it landed: `Personas/PersonaJobService.swift` (work items), `Investigate/StudioDraft.swift` +
+`StudioCasePrefill.swift` + `DisputeFile.swift` (case-filled studios, provenance, export gate),
+`UI/StudioCaseControls.swift` + `PersonaStudioShell.swift` (Fill from case, gate), `UI/OnboardingView.swift`
+("What are you investigating?"), `ProductModule.contentCreatorPersona`, the Compliance FTC job,
+`scripts/casebench/persona_packs.py` → `KalsmritikoshTests/Fixtures/InvestigationCases`,
+`InvestigationCaseSimulationTests`, `PersonaJobCoverageMeasuredTests` → `PERSONA_JOB_COVERAGE_MEASURED.csv`.
 
 ## 1. What is true today (code audit)
 
@@ -74,27 +82,27 @@ images, full Enron) are owner-run, not CI.
 ## 5. Todo list
 
 ### Phase A — make each persona's deliverable evidence-backed (the real gap)
-- [ ] A1 `PersonaJobService`: every kind returns a work product (rows produced, IDs), not a count. Kinds still count-only: dataLab, subjectDossier, identityResolution, analysis, sourceReliability, contradictionGap, evidenceCustody, closure, methods, causal, linkage, capa, effectiveness.
-- [ ] A2 One `StudioDraft` bridge: a studio form is pre-filled from the case (parties, dates, amounts, documents) and every filled field carries the evidence IDs it came from; hand edits are marked as "investigator entry".
-- [ ] A3 Report export refuses a studio field with neither evidence nor an "investigator entry" mark (same gate as findings).
-- [ ] A4 Wire each studio through A2: Privilege log (Lawyer), Workplace report (Compliance), Net-worth + funds tracing (Forensic), SIU referral (SIU), Fact-check memo (Journalist), Research appraisal (Researcher), GPS proof argument (Genealogist), Dispute file (Individual).
-- [ ] A5 Hide Content creator (module off by default) and move FTC-disclosure checks into Compliance.
+- [x] A1 `PersonaJobService`: every kind returns a work product (rows produced, IDs), not a count. Kinds still count-only: dataLab, subjectDossier, identityResolution, analysis, sourceReliability, contradictionGap, evidenceCustody, closure, methods, causal, linkage, capa, effectiveness.
+- [x] A2 One `StudioDraft` bridge: a studio form is pre-filled from the case (parties, dates, amounts, documents) and every filled field carries the evidence IDs it came from; hand edits are marked as "investigator entry".
+- [x] A3 Report export refuses a studio field with neither evidence nor an "investigator entry" mark (same gate as findings).
+- [x] A4 Wire each studio through A2: Privilege log (Lawyer), Workplace report (Compliance), Net-worth + funds tracing (Forensic), SIU referral (SIU), Fact-check memo (Journalist), Research appraisal (Researcher), GPS proof argument (Genealogist), Dispute file (Individual).
+- [x] A5 Hide Content creator (module off by default) and move FTC-disclosure checks into Compliance.
 
 ### Phase B — case packs (fixtures from §4)
-- [ ] B1 Fetch, trim and licence-note one pack per persona; add `SOURCES.md` and an `expected.json` (facts, dates, parties, amounts, conclusions from the published record).
-- [ ] B2 Claims gate: each pack's licence row in `CLAIMS.md`.
+- [x] B1 Fetch, trim and licence-note one pack per persona; add `SOURCES.md` and an `expected.json` (facts, dates, parties, amounts, conclusions from the published record).
+- [x] B2 Claims gate: each pack's licence row in `CLAIMS.md`.
 
 ### Phase C — start-to-end simulations
-- [ ] C1 `InvestigationCaseSimulationTests`, parameterised over the 9 packs: intake → ingest → subjects → chronology → contradictions/gaps → studio draft → report.
-- [ ] C2 Score against `expected.json`: recall of facts/dates/parties, wrong-fact count must be 0, every report sentence cites a source in the pack.
+- [x] C1 `InvestigationCaseSimulationTests`, parameterised over the 9 packs: intake → ingest → subjects → chronology → contradictions/gaps → studio draft → report.
+- [x] C2 Score against `expected.json`: recall of facts/dates/parties, wrong-fact count must be 0, every report sentence cites a source in the pack.
 - [ ] C3 Owner-run large cases: CFReDS Data Leakage (score against NIST's 60 answers) and full cleansed Enron; results recorded in `docs/verification/`.
 - [ ] C4 Fix every miss found by C1–C3 at the layer it comes from (parser → extraction → case engine → studio), never by tuning the fixture.
 
 ### Phase D — product and listing
-- [ ] D1 Onboarding asks "What are you investigating?" and opens the matching persona with a case already created.
-- [ ] D2 Regenerate `PERSONA_JOB_COVERAGE_MATRIX.csv` from code (measured, not hand-written).
-- [ ] D3 Listing, website and screenshots use "Investigation documentation made easy"; review notes say judgement stays human.
-- [ ] D4 SHIP_DECISIONS entry for investigation-only + the persona list.
+- [x] D1 Onboarding asks "What are you investigating?" and opens the matching persona with a case already created.
+- [x] D2 Regenerate `PERSONA_JOB_COVERAGE_MATRIX.csv` from code (measured, not hand-written).
+- [x] D3 Listing, website and screenshots use "Investigation documentation made easy"; review notes say judgement stays human.
+- [x] D4 SHIP_DECISIONS entry for investigation-only + the persona list.
 
 ## 6. Plan check — does this list reach "each persona start to end"?
 

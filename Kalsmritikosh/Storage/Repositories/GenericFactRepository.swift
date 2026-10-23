@@ -318,6 +318,41 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// The facts read from the given source versions' evidence blocks — a case's facts, for the
+    /// studio drafts that are pre-filled from the case (deterministic order, capped).
+    public func facts(inSourceVersionIDs versionIDs: Set<UUID>, limit: Int = 2_000) async throws -> [GenericFact] {
+        guard !versionIDs.isEmpty else { return [] }
+        let wanted = (try? String(data: JSONEncoder().encode(versionIDs.map(\.uuidString).sorted()), encoding: .utf8)) ?? "[]"
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count, reassigned_from, derivation
+        FROM generic_facts
+        WHERE id IN (
+            SELECT DISTINCT f.id FROM generic_facts f,
+                   json_each(CASE WHEN json_valid(f.source_blocks_json) THEN f.source_blocks_json ELSE '[]' END) j
+            JOIN evidence_blocks b ON upper(b.id) = upper(j.value)
+            WHERE upper(b.source_version_id) IN (SELECT upper(value) FROM json_each(?))
+        )
+        ORDER BY confidence DESC, id LIMIT ?;
+        """, [.text(wanted), .integer(Int64(limit))])
+        return rows.compactMap(Self.decode)
+    }
+
+    /// The source version each block belongs to (blocks with none are omitted).
+    public func sourceVersions(forBlockIDs blockIDs: [UUID]) async throws -> [UUID: UUID] {
+        let unique = Array(Set(blockIDs.map(\.uuidString)))
+        guard !unique.isEmpty else { return [:] }
+        let wanted = (try? String(data: JSONEncoder().encode(unique), encoding: .utf8)) ?? "[]"
+        let rows = try await database.query("""
+        SELECT id, source_version_id FROM evidence_blocks
+        WHERE upper(id) IN (SELECT upper(value) FROM json_each(?)) AND source_version_id IS NOT NULL;
+        """, [.text(wanted)])
+        var out: [UUID: UUID] = [:]
+        for r in rows { if let b = r.uuid(0), let v = r.uuid(1) { out[b] = v } }
+        return out
+    }
+
     /// V5 DRAIN ONLY — remove stale derived fact rows so the drain can replace
     /// them with the current-era derivation. Facts are derived projections; the
     /// no-delete law protects sources/evidence, not stale derivations. Never

@@ -52,13 +52,31 @@ public nonisolated struct PersonaJobLaunchContext: Sendable {
 /// The outcome of routing a selected job into its real implementation. `summary` is an audit-facing
 /// description of the REAL action performed; `producedID` is the durable id the real service created or
 /// resolved (e.g. a new case id, a findings run id), when one applies.
+/// One row of a persona job's work product — a subject, a contradiction, a custody entry, a
+/// method — with the source versions and documents it rests on, so the row can be cited.
+public nonisolated struct PersonaWorkItem: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let title: String
+    public let detail: String?
+    public let sourceVersionIDs: [UUID]
+    public let objectIDs: [UUID]
+
+    public nonisolated init(id: String, title: String, detail: String? = nil,
+                            sourceVersionIDs: [UUID] = [], objectIDs: [UUID] = []) {
+        self.id = id; self.title = title; self.detail = detail
+        self.sourceVersionIDs = sourceVersionIDs; self.objectIDs = objectIDs
+    }
+}
+
 public nonisolated struct PersonaJobLaunch: Sendable {
     public let job: PersonaJob
     public let summary: String
     public let producedID: UUID?
+    /// The rows the job produced (empty only when the case genuinely has none of them).
+    public let items: [PersonaWorkItem]
 
-    public nonisolated init(job: PersonaJob, summary: String, producedID: UUID? = nil) {
-        self.job = job; self.summary = summary; self.producedID = producedID
+    public nonisolated init(job: PersonaJob, summary: String, producedID: UUID? = nil, items: [PersonaWorkItem] = []) {
+        self.job = job; self.summary = summary; self.producedID = producedID; self.items = items
     }
 }
 

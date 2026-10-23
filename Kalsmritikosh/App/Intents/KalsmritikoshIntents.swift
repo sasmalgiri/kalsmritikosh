@@ -54,10 +54,10 @@ enum KalsmritikoshIntentError: Error, CustomLocalizedStringResourceConvertible {
     case switchedOff, notReady, nothingToAdd, notPurchased
     var localizedStringResource: LocalizedStringResource {
         switch self {
-        case .switchedOff:  return "Shortcuts actions are switched off. Turn on “Shortcuts actions” in Investigation Docs Made Easy ▸ Settings ▸ Modules."
-        case .notReady:     return "Investigation Docs Made Easy is still opening its ledger. Try again in a moment."
+        case .switchedOff:  return "Shortcuts actions are switched off. Turn on “Shortcuts actions” in Investigations Made Easy ▸ Settings ▸ Modules."
+        case .notReady:     return "Investigations Made Easy is still opening its ledger. Try again in a moment."
         case .nothingToAdd: return "No files were given to add."
-        case .notPurchased: return "The free trial has ended. Buy Investigation Docs Made Easy once in the app to keep using it."
+        case .notPurchased: return "The free trial has ended. Buy Investigations Made Easy once in the app to keep using it."
         }
     }
 }
@@ -65,13 +65,13 @@ enum KalsmritikoshIntentError: Error, CustomLocalizedStringResourceConvertible {
 // MARK: - Ask
 
 struct AskKalsmritikoshIntent: AppIntent {
-    static let title: LocalizedStringResource = "Ask Investigation Docs Made Easy"
+    static let title: LocalizedStringResource = "Ask Investigations Made Easy"
     static let description = IntentDescription("Ask a question about your archive. The answer comes only from your documents, with its sources; if the evidence is not there, it says so.")
 
     @Parameter(title: "Question")
     var question: String
 
-    static var parameterSummary: some ParameterSummary { Summary("Ask Investigation Docs Made Easy \(\.$question)") }
+    static var parameterSummary: some ParameterSummary { Summary("Ask Investigations Made Easy \(\.$question)") }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
@@ -85,13 +85,13 @@ extension AskKalsmritikoshIntent { static var openAppWhenRun: Bool { true } }
 // MARK: - Ask with receipt
 
 struct AskWithReceiptIntent: AppIntent {
-    static let title: LocalizedStringResource = "Ask Investigation Docs Made Easy with a receipt"
+    static let title: LocalizedStringResource = "Ask Investigations Made Easy with a receipt"
     static let description = IntentDescription("Ask a question and get a sealed receipt file listing the answer and every quoted source passage, signed when signed receipts are on.")
 
     @Parameter(title: "Question")
     var question: String
 
-    static var parameterSummary: some ParameterSummary { Summary("Ask Investigation Docs Made Easy \(\.$question) with a receipt") }
+    static var parameterSummary: some ParameterSummary { Summary("Ask Investigations Made Easy \(\.$question) with a receipt") }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
@@ -100,7 +100,7 @@ struct AskWithReceiptIntent: AppIntent {
             question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
         let names = (try? await state.objects?.sourceFilenames(for: Set(answer.citations.map(\.objectID)))) ?? [:]
         var drafts = [ReceiptDraft(claim: answer.refused ? "No answer: the evidence is not in the archive" : "Answer",
-                                   source: "Kalsmritikosh", passage: answer.answerText ?? answer.body)]
+                                   source: "Investigations Made Easy", passage: answer.answerText ?? answer.body)]
         for (i, c) in answer.citations.enumerated() {
             drafts.append(ReceiptDraft(claim: "Supporting evidence \(i + 1)",
                                        source: names[c.objectID] ?? c.objectID.uuidString, passage: c.snippet))
@@ -117,7 +117,7 @@ extension AskWithReceiptIntent { static var openAppWhenRun: Bool { true } }
 // MARK: - Search
 
 struct SearchKalsmritikoshIntent: AppIntent {
-    static let title: LocalizedStringResource = "Search Investigation Docs Made Easy"
+    static let title: LocalizedStringResource = "Search Investigations Made Easy"
     static let description = IntentDescription("Search your archive and get the best-matching passages with their file names. Advanced syntax works when it is switched on.")
 
     @Parameter(title: "Search")
@@ -126,7 +126,7 @@ struct SearchKalsmritikoshIntent: AppIntent {
     @Parameter(title: "Maximum results", default: 10)
     var limit: Int
 
-    static var parameterSummary: some ParameterSummary { Summary("Search Investigation Docs Made Easy for \(\.$query)") }
+    static var parameterSummary: some ParameterSummary { Summary("Search Investigations Made Easy for \(\.$query)") }
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<[String]> {
@@ -140,7 +140,7 @@ extension SearchKalsmritikoshIntent { static var openAppWhenRun: Bool { true } }
 // MARK: - Add files
 
 struct AddFilesIntent: AppIntent {
-    static let title: LocalizedStringResource = "Add files to Investigation Docs Made Easy"
+    static let title: LocalizedStringResource = "Add files to Investigations Made Easy"
     static let description = IntentDescription("Add files to your archive. They are read on this Mac and an import receipt is written when receipts are on.")
 
     @Parameter(title: "Files", supportedContentTypes: [.item])
@@ -162,7 +162,7 @@ extension AddFilesIntent { static var openAppWhenRun: Bool { true } }
 // MARK: - Open a passage link
 
 struct OpenPassageLinkIntent: AppIntent {
-    static let title: LocalizedStringResource = "Open an Investigation Docs Made Easy link"
+    static let title: LocalizedStringResource = "Open an Investigations Made Easy link"
     static let description = IntentDescription("Open a kalsmritikosh:// link at its passage.")
 
     @Parameter(title: "Link")

@@ -124,7 +124,7 @@ private struct AnswerCard: View {
             HStack {
                 Image(systemName: answer.refused ? "questionmark.circle" : "checkmark.seal")
                     .foregroundStyle(answer.refused ? .orange : .green)
-                Text(answer.refused ? "Investigation Docs Made Easy can't answer yet" : "Answer")
+                Text(answer.refused ? "Investigations Made Easy can't answer yet" : "Answer")
                     .font(.headline)
                 Spacer()
                 ConfidenceBadge(answer.confidence)

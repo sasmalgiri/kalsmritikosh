@@ -28,7 +28,7 @@ struct SimpleModeSidebarTests {
         #expect(Set(primaries).count == primaries.count, "Simple primaries must be distinct")
         // The locked survivors (owner: one simple option per group).
         #expect(Destination.Group.converse.simplePrimary == .ask)
-        #expect(Destination.Group.reconstruct.simplePrimary == .workspaces)
+        #expect(Destination.Group.reconstruct.simplePrimary == .cases)   // Investigations Made Easy: Cases is the main screen (2026-10-23)
         #expect(Destination.Group.knowledge.simplePrimary == .knowledge)
         #expect(Destination.Group.workspace.simplePrimary == .sources)
         #expect(Destination.Group.system.simplePrimary == .settings)

@@ -222,7 +222,7 @@ public struct LiveDashboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(12, weight: .semibold, relativeTo: .caption)
                     .foregroundStyle(.white)
                     .frame(width: 22, height: 22)
                     .background(

@@ -129,6 +129,11 @@ public struct DiscussionExportRegistry: Sendable {
         XArchiveMapper(),
         MetaDownloadMapper(),
         TelegramExportMapper(),
+        // E-6. Teams claims on its own JSON keys (MessageList /
+        // originalarrivaltime); Cellebrite on its report namespace. Neither
+        // fingerprint appears in any other export in this lane.
+        TeamsExportMapper(),
+        CellebriteReportMapper(),
         // DISC-7. Twitch precedes the text-chat mapper because its export is
         // JSON and unmistakable; the forum mapper is LAST because its input is
         // HTML, which every other mapper would decline anyway, and because a
@@ -152,4 +157,30 @@ public struct DiscussionExportRegistry: Sendable {
     }
 
     public nonisolated var platforms: [String] { mappers.map(\.platform) }
+
+    /// E-6 — the NARROW content route for two exports whose file names are generic
+    /// and that live outside any recognizable export tree: a Teams `messages.json`
+    /// (otherwise plain JSON) and a Cellebrite `report.xml` (otherwise plain XML).
+    /// Returns `.discussionExport` only when BOTH the extension the file already
+    /// resolved to AND the mapper's content fingerprint agree; everything else
+    /// keeps its extension type. This is deliberately not a general "content
+    /// overrides .json/.xml" rule — only these two fingerprints are consulted.
+    public nonisolated static func contentRoutedType(filename: String, extensionType: SourceType,
+                                                     head: Data) -> SourceType? {
+        let name = (filename as NSString).lastPathComponent.lowercased()
+        let sample = head.prefix(sampleSize)
+        switch extensionType {
+        case .json:
+            guard name == TeamsExportMapper.exportFileName,
+                  TeamsExportMapper().claims(filename: name, sample: sample) else { return nil }
+            return .discussionExport
+        case .xml:
+            // The namespace URI is unique to Cellebrite's report schema, so a
+            // renamed report is still routed; the name alone never is.
+            guard CellebriteReportMapper().claims(filename: name, sample: sample) else { return nil }
+            return .discussionExport
+        default:
+            return nil
+        }
+    }
 }

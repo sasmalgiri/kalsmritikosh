@@ -52,8 +52,23 @@ public enum Theme {
 
     /// Rounded display font for hero titles / big numbers. Rounded gives
     /// the app a distinct, modern (non-generic) personality.
+    ///
+    /// `size` picks the nearest semantic text style so the title scales
+    /// with the user's text-size setting (U-1); it is no longer a fixed
+    /// point size.
     public static func display(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        .system(displayStyle(for: size), design: .rounded, weight: weight)
+    }
+
+    /// Nearest text style for a legacy display point size.
+    static func displayStyle(for size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case 26...: return .largeTitle
+        case 20..<26: return .title
+        case 16..<20: return .title2
+        case 14..<16: return .title3
+        default: return .headline
+        }
     }
 
     /// Brand gradient — violet → blue. Used on hero glyphs, prominent
@@ -296,6 +311,36 @@ public struct CountUpText: View {
             .onChange(of: value) { _, newValue in
                 withAnimation(.easeOut(duration: 0.6)) { shown = Double(newValue) }
             }
+    }
+}
+
+// MARK: - Scaled fixed-size font (U-1)
+
+/// A system font whose point size matters visually (icons, hero glyphs,
+/// emoji, tiny badges) but still follows the user's text-size setting:
+/// the size is a `@ScaledMetric` relative to a text style.
+struct ScaledSystemFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+    private let design: Font.Design
+
+    init(size: CGFloat, weight: Font.Weight, design: Font.Design, relativeTo style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+        self.design = design
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight, design: design))
+    }
+}
+
+extension View {
+    /// Fixed-size system font that scales with the user's text size.
+    func scaledFont(_ size: CGFloat, weight: Font.Weight = .regular,
+                    design: Font.Design = .default,
+                    relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(ScaledSystemFont(size: size, weight: weight, design: design, relativeTo: style))
     }
 }
 

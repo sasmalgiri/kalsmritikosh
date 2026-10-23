@@ -90,7 +90,7 @@ public struct CrossDocumentMatrixView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "square.grid.3x3.topleft.filled")
-                .font(.system(size: 34)).foregroundStyle(.secondary)
+                .scaledFont(34, relativeTo: .largeTitle).foregroundStyle(.secondary)
             Text(didRun ? "No document mentions that." : "Enter a topic to see what each document says.")
                 .foregroundStyle(.secondary)
             Text(didRun

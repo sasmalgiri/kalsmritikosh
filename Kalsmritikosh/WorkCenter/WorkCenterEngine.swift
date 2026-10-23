@@ -611,7 +611,7 @@ public nonisolated enum WCJobWorkflowFactory {
             postsDocType: nil, launchesSurface: nil,
             fields: [WCField(key: "decision0", label: decisionLabel, kind: .bool,
                              help: "A human-in-the-loop decision — turn on once you've made this call.",
-                             required: true)],
+                             required: true, mustEqual: "Yes")],
             gates: afterPrevious(decideSeq)))
         let produceSeq = 3
         let code = docCode(forKind: job.kind)

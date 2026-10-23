@@ -346,7 +346,7 @@ public actor MasterBrain {
                 if LLMQueryClassifier.isConversational(question) {
                     let refused = VerifiedAnswer(
                         body: "", citations: [], confidence: .zero, refused: true,
-                        refusalReason: "That looks like a message to the app, not a question about your archive. Investigation Docs Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
+                        refusalReason: "That looks like a message to the app, not a question about your archive. Investigations Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: refused, mission: nil,
                         originScopeID: originScopeID) {
@@ -596,7 +596,7 @@ public actor MasterBrain {
                 return rag
             }
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't reconstruct that history.",
+                body: "Investigations Made Easy couldn't reconstruct that history.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1148,7 +1148,7 @@ public actor MasterBrain {
             guard let eval = evalByID[f.id], let presentation = eval.presentation,
                   let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
             else { continue }
-            let unit = f.unit.map { " \($0)" } ?? ""
+            let unit = f.displayUnit.map { " \($0)" } ?? ""
             byPresentation[presentation, default: []].append("- \(f.field): \(f.value)\(unit) [\(label)]")
         }
         // Fixed group order + headers. Verified-strength first; attributed/user next; then
@@ -1604,7 +1604,7 @@ public actor MasterBrain {
         await askSnapshotEnd?()
         // Stream finished without a terminal event — defensive.
         return VerifiedAnswer(
-            body: "Investigation Docs Made Easy produced no terminal answer.",
+            body: "Investigations Made Easy produced no terminal answer.",
             citations: [],
             confidence: .zero,
             refused: true,
@@ -1621,6 +1621,17 @@ public actor MasterBrain {
         question: String, verified: VerifiedAnswer, mission: QueryMission?,
         originScopeID: UUID? = nil
     ) async -> [AnswerUpdate] {
+        // Q-3 — a when-question is answered with a date or an honest "no date given"; a which-office
+        // question with the office the release names, or an honest "not named".
+        var officeSources: [String] = []
+        if IssuingOfficeGate.asksIssuingOffice(question), let objects {
+            // The office line is often outside the cited snippet — read the cited documents themselves.
+            for id in Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3) {
+                if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
+            }
+        }
+        let verified = IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
+                                               sourceTexts: officeSources)
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
             // Degraded (no ledger wired — tests/boot): the terminal state is
@@ -1695,7 +1706,7 @@ public actor MasterBrain {
             let verifier
         else {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy hasn't finished booting yet.",
+                body: "Investigations Made Easy hasn't finished booting yet.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1709,7 +1720,7 @@ public actor MasterBrain {
             intent = try await intentDetector.detect(question: question)
         } catch {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't parse that question.",
+                body: "Investigations Made Easy couldn't parse that question.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1816,7 +1827,7 @@ public actor MasterBrain {
             decision = try await router.route(intent: intent)
         } catch {
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't route that question.",
+                body: "Investigations Made Easy couldn't route that question.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1855,7 +1866,7 @@ public actor MasterBrain {
         // missing / no budget / nothing specific to target, this is a no-op and the
         // first result is used verbatim.
         // OPS-003B: corrective pass also goes through the scoped path.
-        let sharedRetrieval = await Self.applyCorrectiveRetrieval(
+        let correctedRetrieval = await Self.applyCorrectiveRetrieval(
             first: firstRetrieval, intent: intent, layers: decision.retrievalLayers,
             plan: mission.queryPlan,
             retrieve: { focused in
@@ -1865,6 +1876,16 @@ public actor MasterBrain {
         )
 
         stageClock.mark("corrective")
+        // Named-document focus. When the question names ONE document (a caption "A v. B", a quoted
+        // title, a file name, a reference number) and exactly one candidate's head carries that
+        // naming, the experts, the slot law and the verifier read only that document — a sibling
+        // of the same kind must not lend its value or a false "conflict". Zero or several matches
+        // → unchanged. Runs on the already access-filtered (and, for a case, case-scoped) result.
+        let documentFocus = await namedDocumentFocus(question: question, retrieval: correctedRetrieval)
+        let sharedRetrieval = documentFocus?.result ?? correctedRetrieval
+        if let documentFocus {
+            KalsmritikoshLog.brain.info("named-document focus: \(documentFocus.naming.rawValue, privacy: .public) → \(documentFocus.focusedObjectIDs.count) object(s); chunks \(correctedRetrieval.chunks.count)→\(sharedRetrieval.chunks.count), facts \(correctedRetrieval.genericFacts.count)→\(sharedRetrieval.genericFacts.count)")
+        }
         let context = ExpertContext(
             retriever: retriever,
             capabilities: capabilities,
@@ -1918,7 +1939,7 @@ public actor MasterBrain {
                 return rag
             }
             return VerifiedAnswer(
-                body: "Investigation Docs Made Easy couldn't verify a response.",
+                body: "Investigations Made Easy couldn't verify a response.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -1985,7 +2006,7 @@ public actor MasterBrain {
                 walkSteps: sharedRetrieval.walkSteps.count,
                 genericFacts: sharedRetrieval.genericFacts.count
             ),
-            assumptions: Self.assumptionsFromExpertReport(verified),
+            assumptions: (documentFocus.map { [$0.note] } ?? []) + Self.assumptionsFromExpertReport(verified),
             uncertainties: verified.contradictions.map(\.description),
             missionLane: mission.primaryLane.rawValue,
             missionObjective: mission.objective.rawValue,
@@ -2105,6 +2126,38 @@ public actor MasterBrain {
     /// Pull free-text assumptions / downgrades from the verifier's
     /// ConfidenceReport when present. Mirrors `assumptionsFromNarrative`
     /// for the expert-pipeline path.
+    /// Named-document focus (see NamedDocumentFocus). Reads each candidate document's head from the
+    /// ledger (file name, title/subject, opening text, attachment family); a candidate the ledger
+    /// cannot describe falls back to its own opening passages in the retrieval. Nil = unchanged.
+    private func namedDocumentFocus(question: String, retrieval: RetrievalResult) async -> NamedDocumentFocusOutcome? {
+        // Cheap gate first: no naming in the question → no ledger read at all.
+        guard !NamedDocumentFocus.namings(in: question).isEmpty else { return nil }
+        let candidates = NamedDocumentFocus.candidateObjectIDs(in: retrieval)
+        guard !candidates.isEmpty else { return nil }
+        var heads: [UUID: NamedDocumentHead] = [:]
+        if let objects {
+            do {
+                for row in try await objects.documentHeads(for: Set(candidates), headCharacters: NamedDocumentFocus.headWindow) {
+                    let family = NamedDocumentFocus.familyKey(
+                        objectID: row.objectID, fileID: row.fileID, fileObjectCount: row.fileObjectCount,
+                        parentFileID: row.parentFileID, parentFileObjectCount: row.parentFileObjectCount)
+                    heads[row.objectID] = NamedDocumentHead(objectID: row.objectID, familyKey: family, title: row.title,
+                                                            fileName: row.fileName, headText: row.head)
+                }
+            } catch {
+                KalsmritikoshLog.brain.error("named-document focus: head read failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        // Fallback for candidates the ledger did not describe: their opening passages in the retrieval.
+        for id in candidates where heads[id] == nil {
+            let opening = retrieval.chunks.map(\.chunk).filter { $0.objectID == id && $0.ordinal <= 1 }
+                .sorted { $0.ordinal < $1.ordinal }.map(\.text).joined(separator: "\n")
+            if !opening.isEmpty { heads[id] = NamedDocumentHead(objectID: id, headText: opening) }
+        }
+        return NamedDocumentFocus.focus(question: question, result: retrieval,
+                                        heads: candidates.compactMap { heads[$0] })
+    }
+
     nonisolated private static func assumptionsFromExpertReport(_ a: VerifiedAnswer) -> [String] {
         var out: [String] = []
         if let report = a.report {

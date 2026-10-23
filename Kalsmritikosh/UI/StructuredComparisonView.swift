@@ -108,7 +108,7 @@ public struct StructuredComparisonView: View {
         } else {
             VStack(spacing: 10) {
                 Image(systemName: "square.split.2x1")
-                    .font(.system(size: 34)).foregroundStyle(.secondary)
+                    .scaledFont(34, relativeTo: .largeTitle).foregroundStyle(.secondary)
                 Text(note ?? "Select documents on the left, then Compare.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

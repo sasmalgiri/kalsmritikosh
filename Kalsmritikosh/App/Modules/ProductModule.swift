@@ -50,6 +50,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
     case writtenNotes
     // Wave X — the last DEVONthink gaps, offline (docs/PARITY_SIX_TODO.md)
     case userGroups, filingSuggestions, richDocuments, folderSync
+    // Investigation focus (docs/INVESTIGATION_FOCUS_TODO.md A5)
+    case contentCreatorPersona
 
     public var id: String { rawValue }
 
@@ -212,6 +214,11 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         detail: "Write notes in rich text as well as Markdown, and highlight, underline, strike out or comment on PDFs. Marks are kept beside the PDF — the original file is never changed — and you can export an annotated copy.",
                         whenOff: "Rich notes and PDF marks are hidden but kept.",
                         implemented: true)
+        case .contentCreatorPersona:
+            return Spec(planID: "IF-A5", group: "Personas", title: "Content creator persona",
+                        detail: "The Content creator persona and its Publish Package studio. The app is for investigation documentation; the creator's pre-publish disclosure check now lives in Compliance (Endorsement & disclosure review).",
+                        whenOff: "The persona and its studio are hidden; saved publish packages are kept and return when this is turned on.",
+                        implemented: true)
         case .folderSync:
             return Spec(planID: "X-5", group: "Storage", title: "Sync through a folder",
                         detail: "Keep your notes, tags, groups, highlights, PDF marks and the files you added inside the app in step between your Macs and your iPhone or iPad, through a folder you choose (iCloud Drive, Dropbox, a shared or USB disk). Everything in the folder is encrypted with a passphrase you set; the app itself makes no connection — the folder's own service moves the files.",
@@ -254,7 +261,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .appLock:
             return Spec(planID: "W2-7", group: "Storage", title: "Lock with Touch ID",
-                        detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. Whole-database encryption is a separate decision.",
+                        detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. This controls who can open the app; separately, the ledger database is always encrypted on disk (AES-256, key in this Mac's Keychain), and copies of original files in the evidence vault are protected by FileVault.",
                         whenOff: "No app lock; the Mac's own login protects the data.",
                         implemented: true)
         case .byteRangeItems:
@@ -291,7 +298,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Share and capture",
-                        detail: "“Save to Investigation Docs Made Easy” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that. File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad.",
+                        detail: "“Save to Investigations Made Easy” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that. File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad.",
                         whenOff: "Add files from inside the app only.",
                         implemented: true)
         case .spotlightIndex:

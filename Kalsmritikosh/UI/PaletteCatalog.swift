@@ -151,7 +151,7 @@ public enum PaletteCatalog {
                          subtitle: "Transcripts — on-demand, on-device", icon: "waveform",
                          keywords: ["speech", "audio", "subtitles", "dictation"], target: .screen(.transcripts)),
             PaletteEntry(id: "act.openGuide", title: "Open the guide",
-                         subtitle: "How Investigation Docs Made Easy works, term by term", icon: "book",
+                         subtitle: "How Investigations Made Easy works, term by term", icon: "book",
                          keywords: ["manual", "docs", "glossary"], target: .screen(.guide)),
             PaletteEntry(id: "act.openSOPRegister", title: "Open the SOP register",
                          subtitle: "Sūtra — every standing procedure the app binds itself to", icon: "list.bullet.rectangle",

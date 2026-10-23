@@ -189,7 +189,7 @@ public struct WorkspacesView: View {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 160)
             } else if candidates.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: "tray").font(.system(size: 26)).foregroundStyle(.secondary)
+                    Image(systemName: "tray").scaledFont(26, relativeTo: .largeTitle).foregroundStyle(.secondary)
                     Text("No eligible files").font(.callout.weight(.medium))
                     Text("Every ingested file is already in this workspace, or nothing has been ingested yet. Add files to your archive from the Sources tab first.")
                         .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -306,7 +306,7 @@ public struct WorkspacesView: View {
     private var emptyList: some View {
         VStack(spacing: 10) {
             Image(systemName: "folder.badge.plus")
-                .font(.system(size: 30)).foregroundStyle(.tint)
+                .scaledFont(30, relativeTo: .largeTitle).foregroundStyle(.tint)
             Text("No workspaces yet")
                 .font(.callout.weight(.medium))
             Text("Create one to organize a case, investigation, project, or personal matter as a focused view over your archive.")
@@ -377,7 +377,7 @@ public struct WorkspacesView: View {
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "sidebar.left")
-                    .font(.system(size: 28)).foregroundStyle(.secondary)
+                    .scaledFont(28, relativeTo: .largeTitle).foregroundStyle(.secondary)
                 Text("Select a workspace")
                     .font(.title3.weight(.medium)).foregroundStyle(.secondary)
             }
@@ -934,7 +934,7 @@ private struct FlowTags: View {
             ForEach(tags) { tag in
                 HStack(spacing: 4) {
                     Text(tag.name).font(.caption)
-                    Button { onDelete(tag) } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly).font(.system(size: 8, weight: .bold)) }
+                    Button { onDelete(tag) } label: { Label("Close", systemImage: "xmark").labelStyle(.iconOnly).scaledFont(8, weight: .bold, relativeTo: .caption) }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                 }

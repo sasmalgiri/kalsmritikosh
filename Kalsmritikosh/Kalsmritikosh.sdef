@@ -4,10 +4,10 @@
   P-4 — Kalsmritikosh's AppleScript dictionary. The commands do what the Shortcuts actions
   do and are governed by the same "Shortcuts actions" switch (Settings ▸ Modules).
 -->
-<dictionary title="Kalsmritikosh Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
+<dictionary title="Investigations Made Easy Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
     <xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
 
-    <suite name="Kalsmritikosh Suite" code="Kals" description="Ask and search your archive.">
+    <suite name="Investigations Made Easy Suite" code="Kals" description="Ask and search your archive.">
         <command name="ask" code="KalsAsk " description="Ask a question about your archive. The answer comes only from your documents, with its sources; if the evidence is not there, it says so.">
             <cocoa class="KalsAskCommand"/>
             <direct-parameter type="text" description="The question."/>

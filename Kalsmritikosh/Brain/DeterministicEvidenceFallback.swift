@@ -162,7 +162,7 @@ public enum DeterministicEvidenceFallback {
             guard seenFacts.insert(dedupKey).inserted else { continue }
             guard factLines.count < 12 else { break }
             let field = fact.field.prefix(1).uppercased() + fact.field.dropFirst()
-            let unit = fact.unit.map { " \($0)" } ?? ""
+            let unit = fact.displayUnit.map { " \($0)" } ?? ""
             factLines.append("- **\(field):** \(fact.value)\(unit)")
             if seen.insert(backing.chunk.objectID).inserted {
                 citations.append(VerifiedAnswer.Citation(

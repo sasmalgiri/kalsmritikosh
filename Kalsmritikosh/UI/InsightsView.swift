@@ -181,7 +181,7 @@ public struct InsightsView: View {
     private func gapRow(_ gap: GapNode) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: gap.kind.systemImage)
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(15, weight: .semibold, relativeTo: .body)
                 .foregroundStyle(Theme.brand)
                 .frame(width: 34, height: 34)
                 .background(Theme.brand.opacity(0.12), in: .rect(cornerRadius: 9))
@@ -268,7 +268,7 @@ public struct InsightsView: View {
     private func contradictionRow(_ c: Contradiction) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(15, weight: .semibold, relativeTo: .body)
                 .foregroundStyle(Theme.brandAlt)
                 .frame(width: 34, height: 34)
                 .background(Theme.brandAlt.opacity(0.12), in: .rect(cornerRadius: 9))

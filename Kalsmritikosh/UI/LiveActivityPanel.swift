@@ -88,7 +88,7 @@ struct LiveActivityPanel: View {
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .scaledFont(9, weight: .semibold, relativeTo: .caption)
                     .foregroundStyle(.tertiary)
             }
             if stage == .reading, progress.filesTotal > 0 {
@@ -102,7 +102,7 @@ struct LiveActivityPanel: View {
                 if let current = appState.ingestCurrentFile {
                     HStack(spacing: 4) {
                         Image(systemName: "doc.text.magnifyingglass")
-                            .font(.system(size: 8))
+                            .scaledFont(8, relativeTo: .caption)
                             .foregroundStyle(Theme.brand)
                         Text("now: \(current)")
                             .font(.caption2)
@@ -167,7 +167,7 @@ struct LiveActivityPanel: View {
                         .foregroundStyle(n > 0 ? Theme.brand : .secondary)
                         .monospacedDigit()
                 }
-                .font(.system(size: 9, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(n > 0 ? 1 : 0.4)
             }
@@ -204,7 +204,7 @@ struct LiveActivityPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10)).foregroundStyle(.orange)
+                    .scaledFont(10, relativeTo: .caption).foregroundStyle(.orange)
                 Text("Model too heavy for this Mac")
                     .font(.caption2.weight(.bold)).foregroundStyle(.primary)
             }
@@ -250,7 +250,7 @@ struct LiveActivityPanel: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "gearshape.2")
-                    .font(.system(size: 9))
+                    .scaledFont(9, relativeTo: .caption)
                     .foregroundStyle(Theme.brand)
                     .symbolEffect(.pulse)
                 Text(a.title)

@@ -311,7 +311,7 @@ public struct AskView: View {
                     )
                     .frame(width: 76, height: 76)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 32, weight: .light))
+                    .scaledFont(32, weight: .light, relativeTo: .largeTitle)
                     .foregroundStyle(Theme.brandGradient())
                     .symbolEffect(.pulse)
             }
@@ -319,7 +319,7 @@ public struct AskView: View {
                 Text("What do you want to know?")
                     .font(Theme.display(30, .bold))
                     .multilineTextAlignment(.center)
-                Text("Investigation Docs Made Easy reconstructs answers only from your ingested files — every claim carries its evidence.")
+                Text("Investigations Made Easy reconstructs answers only from your ingested files — every claim carries its evidence.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -345,7 +345,7 @@ public struct AskView: View {
     /// secondary glyph actions, and a filled circular send. Enter sends; Shift+Enter inserts a newline.
     private var input: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            TextField("Message Investigation Docs Made Easy…", text: $question, axis: .vertical)
+            TextField("Message Investigations Made Easy…", text: $question, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .lineLimit(1...6)
@@ -359,10 +359,11 @@ public struct AskView: View {
                     if wasEmpty, !isEmpty { AppState.prewarmOnDeviceModel() }
                 }
             Button(action: attachFiles) {
-                Image(systemName: "paperclip").font(.system(size: 15)).frame(width: 32, height: 32)
+                Image(systemName: "paperclip").scaledFont(15, relativeTo: .body).frame(width: 32, height: 32)
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
+            .accessibilityLabel("Attach files")
             .help("Attach files — they're ingested into your archive and become searchable, citable evidence for this and every future question.")
             .disabled(appState.ingest == nil)
             .guidance(GuidanceTip("Attach files",
@@ -371,7 +372,7 @@ public struct AskView: View {
                       enabled: appState.ingest != nil)
             Button {
                 Task { await saveCurrentQuestion() }
-            } label: { Label("Bookmark", systemImage: "bookmark").labelStyle(.iconOnly).font(.system(size: 15)).frame(width: 32, height: 32) }
+            } label: { Label("Bookmark", systemImage: "bookmark").labelStyle(.iconOnly).scaledFont(15, relativeTo: .body).frame(width: 32, height: 32) }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
             .help("Save this question for later (visible in the Saved surface).")
@@ -386,11 +387,12 @@ public struct AskView: View {
                 if investigationInFlight {
                     ProgressView().controlSize(.small).frame(width: 32, height: 32)
                 } else {
-                    Image(systemName: "magnifyingglass.circle").font(.system(size: 15)).frame(width: 32, height: 32)
+                    Image(systemName: "magnifyingglass.circle").scaledFont(15, relativeTo: .body).frame(width: 32, height: 32)
                 }
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
+            .accessibilityLabel("Investigate question")
             .help("Decompose this question into focused sub-questions and synthesize an answer.")
             .disabled(appState.investigationRunner == nil || investigationInFlight || isBlank)
             .guidance(GuidanceTip("Investigate",
@@ -404,7 +406,7 @@ public struct AskView: View {
                     if asking {
                         ProgressView().controlSize(.small).tint(.white)
                     } else {
-                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold))
+                        Image(systemName: "arrow.up").scaledFont(14, weight: .bold, relativeTo: .body)
                             .foregroundStyle(isBlank ? AnyShapeStyle(.secondary) : AnyShapeStyle(.white))
                     }
                 }
@@ -412,6 +414,7 @@ public struct AskView: View {
             .buttonStyle(.pressable)
             .keyboardShortcut(.return, modifiers: [])
             .disabled(asking || isBlank)
+            .accessibilityLabel("Send question")
             .guidance(GuidanceTip("Send",
                                   what: "Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.",
                                   enabledWhen: "Type a question first."),
@@ -788,7 +791,7 @@ public struct AskView: View {
             var drafts: [ReceiptDraft] = [
                 ReceiptDraft(
                     claim: question.isEmpty ? "Answer" : "Answer to: \(question)",
-                    source: "Investigation Docs Made Easy (on-device, evidence-gated)",
+                    source: "Investigations Made Easy (on-device, evidence-gated)",
                     passage: answer.answerText ?? answer.body
                 )
             ]
@@ -1060,7 +1063,7 @@ public struct AskView: View {
     private func renderAnswer(_ answer: VerifiedAnswer) -> String {
         var lines: [String] = []
         if answer.refused {
-            lines.append("Investigation Docs Made Easy can't ground an answer to that yet.")
+            lines.append("Investigations Made Easy can't ground an answer to that yet.")
             if let reason = answer.refusalReason { lines.append("Reason: \(reason)") }
         } else {
             lines.append(answer.body)
@@ -1158,7 +1161,7 @@ private struct ConversationHistorySheet: View {
             if conversations.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 32, weight: .light))
+                        .scaledFont(32, weight: .light, relativeTo: .largeTitle)
                         .foregroundStyle(.secondary)
                     Text("No past conversations yet.")
                         .foregroundStyle(.secondary)

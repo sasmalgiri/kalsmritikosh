@@ -1,0 +1,252 @@
+[
+  {
+    "persona": "compliance",
+    "investigation": "Workplace harassment / discrimination complaint",
+    "caseTitle": "United States Obtains Fraud Judgment In Discrimination Class Action Case",
+    "files": [
+      "compliance-press-release.txt"
+    ],
+    "expected": {
+      "title": "United States Obtains Fraud Judgment In Discrimination Class Action Case",
+      "parties": [
+        "Patrick Charles Thomas"
+      ],
+      "amounts": [
+        "$944,690.73",
+        "$710 million",
+        "$50,000",
+        "$314,896.91"
+      ],
+      "facts": [
+        "GREAT FALLS \u2013 The United States Attorney\u2019s Office announced today that it has obtained a summary judgment for fraud in the filing of a fraudulent claim in a nationwide class-action lawsuit in which Native American producers claimed discrimination in the handling of their agriculture loans by the Farm Services Agency (FSA) of the U.S.",
+        "In a civil False Claims Act suit against Patrick Charles Thomas, 56, of Cut Bank, the government alleged that Thomas had made fraudulent representations as to his eligibility for a share of the proceeds from the Keepseagle class action settlement."
+      ]
+    }
+  },
+  {
+    "persona": "forensic",
+    "investigation": "Embezzlement \u2014 funds tracing",
+    "caseTitle": "West Point Employee Charged in Nearly $3 Million Embezzlement Scheme",
+    "files": [
+      "forensic-press-release.txt"
+    ],
+    "expected": {
+      "title": "West Point Employee Charged in Nearly $3 Million Embezzlement Scheme",
+      "office": "Criminal Division",
+      "parties": [
+        "Bobbie Cyana Ryan"
+      ],
+      "amounts": [
+        "$3 million",
+        "$2.9 million",
+        "$30,000"
+      ],
+      "facts": [
+        "WASHINGTON \u2013 A Highland Falls, N.Y., woman was arrested today and charged in a criminal complaint for her role in a scheme to defraud the U.S. government by authorizing nearly $3 million in payments to a non-existent corporation for staff training that she knew never occurred at the U.S.",
+        "Military Academy in West Point, N.Y. (West Point), Acting Assistant Attorney General Matthew Friedrich of the Criminal Division and Brig."
+      ]
+    }
+  },
+  {
+    "persona": "investigator",
+    "investigation": "Theft of trade secrets \u2014 the IP-leakage investigation",
+    "caseTitle": "Two Indicted for Conspiring to Steal Trade Secrets from Goodyear Tire and Rubber Company",
+    "files": [
+      "investigator-press-release.txt"
+    ],
+    "expected": {
+      "title": "Two Indicted for Conspiring to Steal Trade Secrets from Goodyear Tire and Rubber Company",
+      "office": "Criminal Division",
+      "parties": [
+        "Clark Alan Roberts",
+        "Sean Edward Howley"
+      ],
+      "amounts": [
+        "$2.75 million"
+      ],
+      "facts": [
+        "WASHINGTON \u2013 An indictment was unsealed today charging Clark Alan Roberts, 46, and Sean Edward Howley, 38, both engineers with Wyko Tire Technology Inc., located in Greenback, Tenn., with conspiring to steal trade secrets from the Goodyear Tire and Rubber Company and scheming to defraud Goodyear of confidential and proprietary information, announced Acting Assistant Attorney General of the Criminal Division Rita M.",
+        "Attorney for the Eastern District of Tennessee James R."
+      ]
+    }
+  },
+  {
+    "persona": "journalist",
+    "investigation": "Deceptive public claims \u2014 fact-check",
+    "caseTitle": "State Department Employee Pleads Guilty to Making False Statements About Accessing Confidential Passport Files",
+    "files": [
+      "journalist-press-release.txt"
+    ],
+    "expected": {
+      "title": "State Department Employee Pleads Guilty to Making False Statements About Accessing Confidential Passport Files",
+      "office": "Criminal Division",
+      "parties": [
+        "Brooke E. Reyna"
+      ],
+      "amounts": [],
+      "facts": [
+        "WASHINGTON A State Department employee pleaded guilty today to lying to State Department officials in connection with an investigation into her alleged illegal access of hundreds of confidential passport application files, announced Assistant Attorney General Lanny A."
+      ]
+    }
+  },
+  {
+    "persona": "researcher",
+    "investigation": "Research-funding fraud / misconduct",
+    "caseTitle": "Four Charged in Grant Fraud Scheme",
+    "files": [
+      "researcher-press-release.txt"
+    ],
+    "expected": {
+      "title": "Four Charged in Grant Fraud Scheme",
+      "parties": [
+        "Jason Demko",
+        "Lorraine Riddiough",
+        "Lissette Alvarez",
+        "Mark Jones"
+      ],
+      "amounts": [
+        "$2,500",
+        "$5,000",
+        "$10,000",
+        "$15,000,",
+        "$250,000"
+      ],
+      "facts": [
+        "LAS VEGAS , Nev . \u2013 Four persons have been charged with conspiracy and fraud for obtaining money from small business owners for grant funding and services that they never provided or intended to provide, announced U.S.",
+        "Bogden for the District of Nevada and Laura A."
+      ]
+    }
+  },
+  {
+    "persona": "siu",
+    "investigation": "Staged-accident insurance fraud",
+    "caseTitle": "Eleven More Defendants Plead Guilty In Staged Automobile Accident Scheme",
+    "files": [
+      "siu-press-release.txt"
+    ],
+    "expected": {
+      "title": "Eleven More Defendants Plead Guilty In Staged Automobile Accident Scheme",
+      "parties": [
+        "Yanet Hernandez"
+      ],
+      "amounts": [
+        "$5 million"
+      ],
+      "facts": [
+        "92 defendants have been charged to date in Operation Sledgehammer I-VI \n Wifredo A.",
+        "Ferrer, United States Attorney for the Southern District of Florida, Michael B.",
+        "Steinbach, Special Agent in Charge, Federal Bureau of Investigation (FBI), Miami Field Office, Michael J."
+      ]
+    }
+  },
+  {
+    "persona": "lawyer",
+    "investigation": "Court decision \u2014 matter fact-finding",
+    "caseTitle": "Corp. of America v. McLaughlin, 100 F.2d 72",
+    "files": [
+      "lawyer-decision.txt"
+    ],
+    "expected": {
+      "date": {
+        "date": "1938-11-22"
+      },
+      "court": {
+        "any": [
+          "United States Court of Appeals for the Ninth Circuit",
+          "9th Cir.",
+          "Ninth Circuit"
+        ]
+      },
+      "parties": {
+        "any": [
+          "Corp. of America",
+          "McLaughlin"
+        ]
+      },
+      "outcome": {
+        "any": [
+          "affirmed",
+          "reversed"
+        ]
+      },
+      "docket": {
+        "any": [
+          "8649"
+        ]
+      },
+      "author": {
+        "any": [
+          "DENMAN"
+        ]
+      }
+    }
+  },
+  {
+    "persona": "genealogist",
+    "investigation": "Estate / heirship decision \u2014 identity and lineage proof",
+    "caseTitle": "Estate of Cervin v. Commissioner, 111 F.3d 1252",
+    "files": [
+      "genealogist-decision.txt"
+    ],
+    "expected": {
+      "date": {
+        "date": "1997-05-09"
+      },
+      "court": {
+        "any": [
+          "United States Court of Appeals for the Fifth Circuit",
+          "5th Cir.",
+          "Fifth Circuit"
+        ]
+      },
+      "parties": {
+        "any": [
+          "Estate of Cervin",
+          "Commissioner"
+        ]
+      },
+      "docket": {
+        "any": [
+          "95-60541"
+        ]
+      },
+      "author": {
+        "any": [
+          "DUH"
+        ]
+      }
+    }
+  },
+  {
+    "persona": "individual",
+    "investigation": "Accident docket as a personal claim file",
+    "caseTitle": "NTSB SEA08LA057",
+    "files": [
+      "individual-analysis.txt",
+      "individual-factual.txt",
+      "individual-probable-cause.txt",
+      "individual-report-page-1.txt"
+    ],
+    "expected": {
+      "date": {
+        "date": "2008-01-01"
+      },
+      "cause": {
+        "overlap": "The departing pilot's inadequate visual lookout."
+      },
+      "place": {
+        "any": [
+          "Sonoma"
+        ]
+      },
+      "aircraft": {
+        "any": [
+          "N15EX",
+          "N8037W",
+          "Barnard/Stancil",
+          "Piper"
+        ]
+      }
+    }
+  }
+]

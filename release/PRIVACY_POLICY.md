@@ -3,7 +3,7 @@
 > (matching `LegalNotice.termsVersion` 1.5, 2026-08-27). This draft is
 > retained for history only; do not link or submit it.
 
-# Investigation Docs Made Easy — Privacy Policy
+# Investigations Made Easy — Privacy Policy
 
 _Draft for the owner to review and host at the App Store "Privacy URL". Last reviewed 2026-07-22.
 Copy is written to match the locked product contract in `SHIP_DECISIONS.md`; if any product
@@ -11,7 +11,7 @@ claim changes, update this document in the same change (GOV rule)._
 
 ## Summary (plain language)
 
-Investigation Docs Made Easy is a **local, on-device** knowledge workspace for your own documents and email.
+Investigations Made Easy is a **local, on-device** knowledge workspace for your own documents and email.
 **We do not collect, transmit, sell, or share any of your data.** Your files, the text extracted
 from them, the questions you ask, and the answers you receive **never leave your Mac** in the
 release build. There is **no account, no sign-in, no analytics, and no telemetry.**

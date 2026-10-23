@@ -148,7 +148,7 @@ public struct ExplorerView: View {
     private var placeholder: some View {
         VStack(spacing: 12) {
             Image(systemName: "point.3.filled.connected.trianglepath.dotted")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("Explore your knowledge graph")
                 .font(.title3.weight(.medium))

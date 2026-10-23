@@ -158,6 +158,8 @@ struct PlacesView: View {
 struct PlacesPlot: View {
     let points: [PhotoPlace]
     @State private var hovered: PhotoPlace?
+    /// Grid-label size; scales with the user's text size (U-1).
+    @ScaledMetric(relativeTo: .caption2) private var gridLabelSize: CGFloat = 8
 
     var body: some View {
         let lats = points.map(\.latitude), lons = points.map(\.longitude)
@@ -176,14 +178,14 @@ struct PlacesPlot: View {
                     while lon <= maxLon {
                         let x = (lon - minLon) * sx
                         ctx.stroke(Path { $0.move(to: CGPoint(x: x, y: 0)); $0.addLine(to: CGPoint(x: x, y: size.height)) }, with: .color(.secondary.opacity(0.2)))
-                        ctx.draw(Text(String(format: "%.0f°", lon)).font(.system(size: 8)).foregroundColor(.secondary), at: CGPoint(x: x + 10, y: size.height - 6))
+                        ctx.draw(Text(String(format: "%.0f°", lon)).font(.system(size: gridLabelSize)).foregroundColor(.secondary), at: CGPoint(x: x + 10, y: size.height - 6))
                         lon += step
                     }
                     var lat = (minLat / step).rounded(.up) * step
                     while lat <= maxLat {
                         let y = (maxLat - lat) * sy
                         ctx.stroke(Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: size.width, y: y)) }, with: .color(.secondary.opacity(0.2)))
-                        ctx.draw(Text(String(format: "%.0f°", lat)).font(.system(size: 8)).foregroundColor(.secondary), at: CGPoint(x: 12, y: y - 6))
+                        ctx.draw(Text(String(format: "%.0f°", lat)).font(.system(size: gridLabelSize)).foregroundColor(.secondary), at: CGPoint(x: 12, y: y - 6))
                         lat += step
                     }
                     for p in points {

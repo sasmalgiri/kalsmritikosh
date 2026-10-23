@@ -35,7 +35,7 @@ public struct InfoPopoverButton: View {
         Button {
             showing.toggle()
         } label: { Label("More information", systemImage: "info.circle").labelStyle(.iconOnly)
-                .font(.system(size: 15, weight: .regular))
+                .scaledFont(15, weight: .regular, relativeTo: .body)
                 .foregroundStyle(.secondary)
                 .contentShape(Circle()) }
         .buttonStyle(.plain)
