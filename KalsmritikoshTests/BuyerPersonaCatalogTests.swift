@@ -24,7 +24,7 @@ struct BuyerPersonaCatalogTests {
         (ContentCreatorPersonaPackage.applicationID, "Content Creator", ContentCreatorPersonaPackage.jobs),
     ]
 
-    @Test("All register, resolve, and cover every capability kind with 16 unique jobs")
+    @Test("All register, resolve, and cover every capability kind with 16 unique jobs (Compliance 17: + FTC disclosure review, A5)")
     func catalogContract() throws {
         let catalog = try PersonaJobCatalogComposer.composeProduction()
         for persona in Self.expected {
@@ -34,7 +34,9 @@ struct BuyerPersonaCatalogTests {
             #expect(catalog.resolvedPackage(applicationID: persona.id) != nil, "\(persona.label) not resolvable")
 
             let jobs = PersonaJobCatalogComposer.jobs(forPersona: persona.id)
-            #expect(jobs.count == 16, "\(persona.label): \(jobs.count) jobs")
+            // A5 (2026-10-23): Compliance gains hr.disclosure-review (the creator's FTC checks) — 17.
+            let wanted = persona.id == CompliancePersonaPackage.applicationID ? 17 : 16
+            #expect(jobs.count == wanted, "\(persona.label): \(jobs.count) jobs")
             #expect(Set(jobs.map(\.id)).count == jobs.count, "\(persona.label): duplicate job ids")
             #expect(jobs.map(\.id) == persona.jobs.map(\.id), "\(persona.label): composer/package drift")
             #expect(jobs.allSatisfy { $0.persona == persona.id.rawValue })

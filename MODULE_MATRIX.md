@@ -68,8 +68,9 @@ New modules default OFF until the owner promotes them. Off is never destructive.
 | X-1 | See Also and filing suggestions | Search & organise | yes | off | needs X-2 | No suggestions; groups and tags work as before. |
 | X-3 | Rich text notes and PDF marks | Writing | yes | off | — | Rich notes and PDF marks are hidden but kept. |
 | X-5 | Sync through a folder | Storage | yes | off | — | Nothing is written to or read from the sync folder; everything stays on this Mac. |
+| IF-A5 | Content creator persona | Personas | yes | off | — | The persona and its studio are hidden; saved publish packages are kept and return when this is turned on. |
 
-_59 of 59 product modules built._
+_60 of 60 product modules built._
 
 ## Knowledge modules (ledger and answer internals)
 

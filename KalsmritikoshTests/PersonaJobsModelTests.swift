@@ -37,13 +37,14 @@ struct PersonaJobsModelTests {
     func discoversAndEnumerates() async throws {
         let (model, _) = try await makeModel()
         await model.load()
-        // Five core personas + four buyer-research personas (2026-08-19) + the
-        // Content Creator (2026-08-20).
-        #expect(model.personas.count == 10)
+        // Five core personas + four buyer-research personas (2026-08-19). The Content Creator
+        // (2026-08-20) is hidden unless its module is on (A5, 2026-10-23).
+        #expect(model.personas.count == (ProductModuleFlags.isEnabled(.contentCreatorPersona) ? 10 : 9))
         #expect(model.personas.contains { $0.id == InvestigatorPersonaPackage.applicationID })
         #expect(model.personas.contains { $0.id == SIUPersonaPackage.applicationID })
         #expect(model.personas.contains { $0.id == GenealogistPersonaPackage.applicationID })
-        #expect(model.personas.contains { $0.id == ContentCreatorPersonaPackage.applicationID })
+        #expect(model.personas.contains { $0.id == ContentCreatorPersonaPackage.applicationID }
+                == ProductModuleFlags.isEnabled(.contentCreatorPersona))
         // Default selection enumerates a real, non-empty job set with an intake job.
         #expect(!model.jobs.isEmpty)
         // Switching persona re-enumerates. (PJOB-MAX: Researcher now covers
