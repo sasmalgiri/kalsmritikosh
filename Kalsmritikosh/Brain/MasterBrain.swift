@@ -1621,6 +1621,8 @@ public actor MasterBrain {
         question: String, verified: VerifiedAnswer, mission: QueryMission?,
         originScopeID: UUID? = nil
     ) async -> [AnswerUpdate] {
+        // Q-3 — a when-question is answered with a date or an honest "no date given".
+        let verified = DateQuestionGate.apply(question: question, verified)
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
             // Degraded (no ledger wired — tests/boot): the terminal state is
