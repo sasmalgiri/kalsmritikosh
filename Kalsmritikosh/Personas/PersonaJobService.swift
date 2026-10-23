@@ -116,57 +116,88 @@ public actor PersonaJobService {
             let caseID = try requireCase(context)
             guard let access = context.access else { throw PersonaJobError.missingContext("dataLab requires an access context") }
             let (included, withheld) = try await dataLab.eligibleSourceVersions(caseID: caseID, access: access)
-            return PersonaJobLaunch(job: job, summary: "Eligible sources: \(included.count) included, \(withheld) withheld by sensitivity", producedID: caseID)
+            let items = included.map { PersonaWorkItem(id: $0.uuidString, title: "Eligible source", sourceVersionIDs: [$0]) }
+            return PersonaJobLaunch(job: job, summary: "Eligible sources: \(included.count) included, \(withheld) withheld by sensitivity", producedID: caseID, items: items)
 
         case .subjectDossier:
             guard let subjectDossier else { throw PersonaJobError.serviceUnavailable(.subjectDossier) }
             let caseID = try requireCase(context)
             let subjects = try await subjectDossier.subjects(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(subjects.count) subject(s) in scope", producedID: caseID)
+            let items = subjects.map { PersonaWorkItem(id: $0.id.uuidString, title: $0.label, detail: "Identity \($0.identityStatus.rawValue)") }
+            return PersonaJobLaunch(job: job, summary: "\(subjects.count) subject(s) in scope", producedID: caseID, items: items)
 
         case .identityResolution:
             guard let identityResolution else { throw PersonaJobError.serviceUnavailable(.identityResolution) }
             let caseID = try requireCase(context)
             let log = try await identityResolution.decisionLog(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(log.count) identity decision(s) recorded", producedID: caseID)
+            let items = log.map { PersonaWorkItem(id: $0.id.uuidString, title: "Identity decision #\($0.sequence): \($0.kind.rawValue)",
+                                                  detail: $0.rationale ?? "by \($0.actor)") }
+            return PersonaJobLaunch(job: job, summary: "\(log.count) identity decision(s) recorded", producedID: caseID, items: items)
 
         case .analysis:
             guard let analysis else { throw PersonaJobError.serviceUnavailable(.analysis) }
             let caseID = try requireCase(context)
             let hypotheses = try await analysis.hypotheses(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(hypotheses.count) lead/hypothesis item(s)", producedID: caseID)
+            let items = hypotheses.map { PersonaWorkItem(id: $0.id.uuidString, title: $0.statement,
+                                                         detail: "\($0.kind.rawValue), \($0.status.rawValue)") }
+            return PersonaJobLaunch(job: job, summary: "\(hypotheses.count) lead/hypothesis item(s)", producedID: caseID, items: items)
 
         case .sourceReliability:
             guard let reliability else { throw PersonaJobError.serviceUnavailable(.sourceReliability) }
             let caseID = try requireCase(context)
             let schedule = try await reliability.schedule(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(schedule.count) source(s) on the reliability schedule", producedID: caseID)
+            let items = schedule.map { e in
+                PersonaWorkItem(id: e.sourceVersionID.uuidString,
+                                title: e.assessment.map { "Reliability \($0.reliability.rawValue), independence \($0.independence.rawValue)" } ?? "Not yet assessed",
+                                detail: e.isSingleSource ? "Single source — corroboration needed" : e.assessment?.rationale,
+                                sourceVersionIDs: [e.sourceVersionID])
+            }
+            return PersonaJobLaunch(job: job, summary: "\(schedule.count) source(s) on the reliability schedule", producedID: caseID, items: items)
 
         case .contradictionGap:
             guard let contradictionGap else { throw PersonaJobError.serviceUnavailable(.contradictionGap) }
             let caseID = try requireCase(context)
             let contradictions = try await contradictionGap.contradictions(caseID: caseID)
             let gaps = try await contradictionGap.gaps(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(contradictions.count) contradiction(s), \(gaps.count) gap(s) in scope", producedID: caseID)
+            let items = contradictions.map { c in
+                PersonaWorkItem(id: c.contradiction.id.uuidString, title: "Contradiction: \(c.contradiction.description)",
+                                detail: "\u{201C}\(c.contradiction.claimA)\u{201D} vs \u{201C}\(c.contradiction.claimB)\u{201D}",
+                                objectIDs: [c.contradiction.evidenceA, c.contradiction.evidenceB].compactMap { $0 })
+            } + gaps.map { g in
+                PersonaWorkItem(id: g.gap.id.uuidString, title: "Gap: \(g.gap.description)", detail: g.gap.reason,
+                                objectIDs: [g.gap.evidenceObjectID].compactMap { $0 })
+            }
+            return PersonaJobLaunch(job: job, summary: "\(contradictions.count) contradiction(s), \(gaps.count) gap(s) in scope", producedID: caseID, items: items)
 
         case .evidenceCustody:
             guard let custody else { throw PersonaJobError.serviceUnavailable(.evidenceCustody) }
             let caseID = try requireCase(context)
             let manifest = try await custody.manifest(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(manifest.count) custody manifest entr(y/ies)", producedID: caseID)
+            let items = manifest.map { m in
+                PersonaWorkItem(id: m.sourceVersionID.uuidString,
+                                title: m.contentHash.map { "SHA-256 \($0.prefix(16))…" } ?? "No content hash",
+                                detail: m.custodyEvents.map(\.kind.rawValue).joined(separator: " → "),
+                                sourceVersionIDs: [m.sourceVersionID])
+            }
+            return PersonaJobLaunch(job: job, summary: "\(manifest.count) custody manifest entr(y/ies)", producedID: caseID, items: items)
 
         case .findings:
             guard let findings else { throw PersonaJobError.serviceUnavailable(.findings) }
             let caseID = try requireCase(context)
             guard let access = context.access else { throw PersonaJobError.missingContext("findings requires an access context") }
             let f = try await findings.buildFindings(caseID: caseID, access: access, actor: context.actor, at: context.at)
-            return PersonaJobLaunch(job: job, summary: "Built findings over \(f.authorizedSourceVersionIDs.count) authorized source version(s)", producedID: f.run.id)
+            let items = f.authorizedSourceVersionIDs.map { PersonaWorkItem(id: $0.uuidString, title: "Source in the findings", sourceVersionIDs: [$0]) }
+            return PersonaJobLaunch(job: job, summary: "Built findings over \(f.authorizedSourceVersionIDs.count) authorized source version(s)", producedID: f.run.id, items: items)
 
         case .closure:
             guard let closure else { throw PersonaJobError.serviceUnavailable(.closure) }
             let caseID = try requireCase(context)
             let latest = try await closure.latestClosure(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: latest.map { "Latest closure decision: \($0.decision.rawValue)" } ?? "No closure decision yet", producedID: caseID)
+            let items = latest.map { d in
+                [PersonaWorkItem(id: d.id.uuidString, title: "Closure #\(d.sequence): \(d.decision.rawValue)", detail: d.rationale)]
+                    + d.unresolvedItems.enumerated().map { PersonaWorkItem(id: "\(d.id.uuidString)-open-\($0.offset)", title: "Unresolved: \($0.element)") }
+            } ?? []
+            return PersonaJobLaunch(job: job, summary: latest.map { "Latest closure decision: \($0.decision.rawValue)" } ?? "No closure decision yet", producedID: caseID, items: items)
 
         // Method-engine-backed jobs — route into the SHARED ProfessionalMethod engine (booted in production).
         // Each launch resolves the case-scoped recommended methods, proving the real engine is reachable; the
@@ -175,35 +206,44 @@ public actor PersonaJobService {
             guard let methods else { throw PersonaJobError.serviceUnavailable(.methods) }
             let caseID = try requireCase(context)
             let recs = try await methods.recommendedMethods(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(recs.count) professional method(s) available for this case", producedID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) professional method(s) available for this case", producedID: caseID, items: Self.methodItems(recs))
 
         case .causalAnalysis:
             guard let causal else { throw PersonaJobError.serviceUnavailable(.causalAnalysis) }
             let caseID = try requireCase(context)
             let recs = try await causal.recommendedCausalMethods(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(recs.count) causal method(s) available (Five Whys / Fishbone / Root-cause)", producedID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) causal method(s) available (Five Whys / Fishbone / Root-cause)", producedID: caseID, items: Self.methodItems(recs))
 
         case .linkage:
             guard let linkage else { throw PersonaJobError.serviceUnavailable(.linkage) }
             let caseID = try requireCase(context)
             let recs = try await linkage.recommendedLinkageMethods(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(recs.count) linkage method(s) available (Timeline / Relationship / Transaction)", producedID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) linkage method(s) available (Timeline / Relationship / Transaction)", producedID: caseID, items: Self.methodItems(recs))
 
         case .capaRegister:
             guard let capa else { throw PersonaJobError.serviceUnavailable(.capaRegister) }
             let caseID = try requireCase(context)
             let recs = try await capa.recommendedCAPAMethods(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "\(recs.count) CAPA / effectiveness method(s) available", producedID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) CAPA / effectiveness method(s) available", producedID: caseID, items: Self.methodItems(recs))
 
         case .effectivenessReview:
             guard let capa else { throw PersonaJobError.serviceUnavailable(.effectivenessReview) }
             let caseID = try requireCase(context)
             let recs = try await capa.recommendedCAPAMethods(caseID: caseID)
-            return PersonaJobLaunch(job: job, summary: "Effectiveness review available among \(recs.count) CAPA method(s)", producedID: caseID)
+            return PersonaJobLaunch(job: job, summary: "Effectiveness review available among \(recs.count) CAPA method(s)", producedID: caseID, items: Self.methodItems(recs))
         }
     }
 
     // MARK: - Internals
+
+    /// Methods as rows: what each needs from the case and must be reviewed by, so the investigator
+    /// can start one from the list.
+    nonisolated static func methodItems(_ methods: [ProfessionalMethodDefinition]) -> [PersonaWorkItem] {
+        methods.map { m in
+            PersonaWorkItem(id: "\(m.id.rawValue)@\(m.version)", title: m.label,
+                            detail: "Needs: " + m.requiredInputRoles.map { String(describing: $0) }.joined(separator: ", "))
+        }
+    }
 
     private func requireCase(_ context: PersonaJobLaunchContext) throws -> UUID {
         guard let caseID = context.caseID else { throw PersonaJobError.missingContext("this job requires a caseID") }
