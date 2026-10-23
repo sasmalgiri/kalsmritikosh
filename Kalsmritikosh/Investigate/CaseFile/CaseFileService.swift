@@ -32,7 +32,7 @@ public nonisolated struct CaseloadRow: Identifiable, Sendable, Equatable {
 }
 
 public actor CaseFileService {
-    public let file: CaseFileRepository
+    public nonisolated let file: CaseFileRepository
     private let tasks: ProfessionalTaskRepository
     private let deadlines: DeadlineRepository
     private let cases: InvestigationCaseRepository
