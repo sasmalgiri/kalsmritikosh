@@ -260,6 +260,64 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// The identifying head of one object — what named-document focus reads to decide whether the
+    /// question names this document: the file name, a recorded title/subject, the opening text,
+    /// and the file/attachment family it belongs to.
+    public struct DocumentHeadRow: Sendable, Hashable {
+        public let objectID: KnowledgeObject.ID
+        public let fileID: UUID?
+        public let fileName: String?
+        public let title: String?
+        public let head: String
+        /// Objects stored for the same file (1 for an ordinary document; many for a mailbox).
+        public let fileObjectCount: Int
+        /// The file this one was attached to / embedded in / converted from, when recorded.
+        public let parentFileID: UUID?
+        public let parentFileObjectCount: Int
+    }
+
+    /// Batch-read the heads (first `headCharacters` characters of content) of `ids`, chunked ≤500
+    /// so a large candidate set never exceeds SQLite's bind limit. Missing ids map to nothing.
+    public func documentHeads(
+        for ids: Set<KnowledgeObject.ID>, headCharacters: Int = 800
+    ) async throws -> [DocumentHeadRow] {
+        let unique = Array(ids)
+        guard !unique.isEmpty else { return [] }
+        var out: [DocumentHeadRow] = []
+        for batch in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = batch.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT k.id, k.file_id, f.url, substr(k.content, 1, ?), k.metadata_json,
+                   (SELECT COUNT(*) FROM knowledge_objects k2 WHERE k2.file_id = k.file_id),
+                   p.parent_id,
+                   (SELECT COUNT(*) FROM knowledge_objects k3 WHERE k3.file_id = p.parent_id)
+            FROM knowledge_objects k
+            LEFT JOIN files f ON f.id = k.file_id
+            LEFT JOIN (SELECT child_file_id, MIN(parent_file_id) AS parent_id FROM source_relations
+                       WHERE relation IN ('attachment', 'embedded', 'derivedConversion')
+                       GROUP BY child_file_id) p ON p.child_file_id = k.file_id
+            WHERE k.id IN (\(placeholders));
+            """, [.integer(Int64(max(1, headCharacters)))] + batch.map { SQLValue.uuid($0) })
+            for row in rows {
+                guard let id = row.uuid(0) else { continue }
+                let fileName = row.string(2).map { url -> String in
+                    let name = URL(fileURLWithPath: url).lastPathComponent
+                    return name.isEmpty ? (URL(string: url)?.lastPathComponent ?? url) : name
+                }
+                let meta = row.string(4).map(parseMetadataBag) ?? [:]
+                let title = [meta["title"], meta["subject"]].compactMap { $0 }
+                    .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                out.append(DocumentHeadRow(
+                    objectID: id, fileID: row.uuid(1), fileName: fileName, title: title,
+                    head: row.string(3) ?? "",
+                    fileObjectCount: Int(row.int(5) ?? 0),
+                    parentFileID: row.uuid(6),
+                    parentFileObjectCount: Int(row.int(7) ?? 0)))
+            }
+        }
+        return out
+    }
+
     /// Map each object id to its source file's custody content hash
     /// (files.content_hash). Used by verifiable receipts to pin a claim to the
     /// immutable source-file hash, not just the quoted passage — the difference

@@ -1858,7 +1858,7 @@ public actor MasterBrain {
         // missing / no budget / nothing specific to target, this is a no-op and the
         // first result is used verbatim.
         // OPS-003B: corrective pass also goes through the scoped path.
-        let sharedRetrieval = await Self.applyCorrectiveRetrieval(
+        let correctedRetrieval = await Self.applyCorrectiveRetrieval(
             first: firstRetrieval, intent: intent, layers: decision.retrievalLayers,
             plan: mission.queryPlan,
             retrieve: { focused in
@@ -1868,6 +1868,16 @@ public actor MasterBrain {
         )
 
         stageClock.mark("corrective")
+        // Named-document focus. When the question names ONE document (a caption "A v. B", a quoted
+        // title, a file name, a reference number) and exactly one candidate's head carries that
+        // naming, the experts, the slot law and the verifier read only that document — a sibling
+        // of the same kind must not lend its value or a false "conflict". Zero or several matches
+        // → unchanged. Runs on the already access-filtered (and, for a case, case-scoped) result.
+        let documentFocus = await namedDocumentFocus(question: question, retrieval: correctedRetrieval)
+        let sharedRetrieval = documentFocus?.result ?? correctedRetrieval
+        if let documentFocus {
+            KalsmritikoshLog.brain.info("named-document focus: \(documentFocus.naming.rawValue, privacy: .public) → \(documentFocus.focusedObjectIDs.count) object(s); chunks \(correctedRetrieval.chunks.count)→\(sharedRetrieval.chunks.count), facts \(correctedRetrieval.genericFacts.count)→\(sharedRetrieval.genericFacts.count)")
+        }
         let context = ExpertContext(
             retriever: retriever,
             capabilities: capabilities,
@@ -1988,7 +1998,7 @@ public actor MasterBrain {
                 walkSteps: sharedRetrieval.walkSteps.count,
                 genericFacts: sharedRetrieval.genericFacts.count
             ),
-            assumptions: Self.assumptionsFromExpertReport(verified),
+            assumptions: (documentFocus.map { [$0.note] } ?? []) + Self.assumptionsFromExpertReport(verified),
             uncertainties: verified.contradictions.map(\.description),
             missionLane: mission.primaryLane.rawValue,
             missionObjective: mission.objective.rawValue,
@@ -2108,6 +2118,38 @@ public actor MasterBrain {
     /// Pull free-text assumptions / downgrades from the verifier's
     /// ConfidenceReport when present. Mirrors `assumptionsFromNarrative`
     /// for the expert-pipeline path.
+    /// Named-document focus (see NamedDocumentFocus). Reads each candidate document's head from the
+    /// ledger (file name, title/subject, opening text, attachment family); a candidate the ledger
+    /// cannot describe falls back to its own opening passages in the retrieval. Nil = unchanged.
+    private func namedDocumentFocus(question: String, retrieval: RetrievalResult) async -> NamedDocumentFocusOutcome? {
+        // Cheap gate first: no naming in the question → no ledger read at all.
+        guard !NamedDocumentFocus.namings(in: question).isEmpty else { return nil }
+        let candidates = NamedDocumentFocus.candidateObjectIDs(in: retrieval)
+        guard !candidates.isEmpty else { return nil }
+        var heads: [UUID: NamedDocumentHead] = [:]
+        if let objects {
+            do {
+                for row in try await objects.documentHeads(for: Set(candidates), headCharacters: NamedDocumentFocus.headWindow) {
+                    let family = NamedDocumentFocus.familyKey(
+                        objectID: row.objectID, fileID: row.fileID, fileObjectCount: row.fileObjectCount,
+                        parentFileID: row.parentFileID, parentFileObjectCount: row.parentFileObjectCount)
+                    heads[row.objectID] = NamedDocumentHead(objectID: row.objectID, familyKey: family, title: row.title,
+                                                            fileName: row.fileName, headText: row.head)
+                }
+            } catch {
+                KalsmritikoshLog.brain.error("named-document focus: head read failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        // Fallback for candidates the ledger did not describe: their opening passages in the retrieval.
+        for id in candidates where heads[id] == nil {
+            let opening = retrieval.chunks.map(\.chunk).filter { $0.objectID == id && $0.ordinal <= 1 }
+                .sorted { $0.ordinal < $1.ordinal }.map(\.text).joined(separator: "\n")
+            if !opening.isEmpty { heads[id] = NamedDocumentHead(objectID: id, headText: opening) }
+        }
+        return NamedDocumentFocus.focus(question: question, result: retrieval,
+                                        heads: candidates.compactMap { heads[$0] })
+    }
+
     nonisolated private static func assumptionsFromExpertReport(_ a: VerifiedAnswer) -> [String] {
         var out: [String] = []
         if let report = a.report {
