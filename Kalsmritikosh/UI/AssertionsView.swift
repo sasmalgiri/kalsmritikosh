@@ -104,7 +104,7 @@ public struct AssertionsView: View {
     private var empty: some View {
         VStack(spacing: 12) {
             Image(systemName: "scroll")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("No assertions yet")
                 .font(.title3.weight(.medium))

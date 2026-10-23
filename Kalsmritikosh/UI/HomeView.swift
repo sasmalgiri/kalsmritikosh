@@ -128,7 +128,7 @@ public struct HomeView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: w.icon)
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(16, weight: .semibold, relativeTo: .body)
                         .foregroundStyle(.white)
                         .frame(width: 34, height: 34)
                         .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -163,7 +163,7 @@ public struct HomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 22, weight: .bold))
+                    .scaledFont(22, weight: .bold, relativeTo: .title2)
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -242,7 +242,7 @@ public struct HomeView: View {
                 withAnimation(Theme.springFast) { personaID = p.id }; ModulePreset.apply(persona: p.id)
             } label: {
                 HStack(spacing: 10) {
-                    Text(p.emoji).font(.system(size: 26))
+                    Text(p.emoji).scaledFont(26, relativeTo: .largeTitle)
                     Text(p.title).font(.title3.weight(.semibold))
                     Spacer(minLength: 0)
                     Image(systemName: "checkmark.circle")
@@ -260,7 +260,7 @@ public struct HomeView: View {
             // Example questions — click to open Ask.
             VStack(alignment: .leading, spacing: 6) {
                 Text("TRY ASKING")
-                    .font(.system(size: 9, weight: .heavy)).tracking(0.5)
+                    .font(.caption2.weight(.heavy)).tracking(0.5)
                     .foregroundStyle(.tertiary)
                 ForEach(p.examples.prefix(3), id: \.self) { q in
                     Button {

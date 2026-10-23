@@ -91,7 +91,7 @@ public struct LibraryView: View {
         } else if topics.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "book.pages")
-                    .font(.system(size: 36))
+                    .scaledFont(36, relativeTo: .largeTitle)
                     .foregroundStyle(.tint)
                 Text(emptyReason?.emptyButCorrect == true
                      ? "No topics — and nothing is wrong."

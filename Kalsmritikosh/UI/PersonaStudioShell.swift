@@ -271,7 +271,7 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                             Circle().fill(currentStage == s ? AnyShapeStyle(.tint) : (m.isComplete(s) ? AnyShapeStyle(.green.opacity(0.9)) : AnyShapeStyle(.quaternary)))
                                 .frame(width: 30, height: 30)
                             Image(systemName: m.isComplete(s) && currentStage != s ? "checkmark" : s.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold, relativeTo: .body)
                                 .foregroundStyle(currentStage == s || m.isComplete(s) ? Color.white : Color.secondary)
                         }
                         Text(s.title).font(.caption2.weight(currentStage == s ? .bold : .regular))

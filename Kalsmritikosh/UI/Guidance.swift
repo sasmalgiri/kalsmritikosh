@@ -67,7 +67,7 @@ private struct GuidanceModifier: ViewModifier {
                     showPopover.toggle()
                 } label: {
                     Image(systemName: enabled ? "info.circle.fill" : "questionmark.circle.fill")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(12, weight: .semibold, relativeTo: .caption)
                         .foregroundStyle(enabled ? Color.accentColor : Color.orange)
                         .background(Circle().fill(.background))
                 }

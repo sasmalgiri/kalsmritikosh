@@ -53,7 +53,7 @@ public struct ChangesView: View {
         // Summary banner.
         HStack(spacing: 12) {
             Image(systemName: r.hasChanges ? "bell.badge.fill" : "checkmark.circle.fill")
-                .font(.system(size: 26))
+                .scaledFont(26, relativeTo: .largeTitle)
                 .foregroundStyle(r.hasChanges ? Color.orange : .green)
             VStack(alignment: .leading, spacing: 2) {
                 if !r.hasBaseline {

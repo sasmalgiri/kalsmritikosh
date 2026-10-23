@@ -250,6 +250,7 @@ public struct QueryView: View {
                 Button { sortDescending.toggle() } label: {
                     Image(systemName: sortDescending ? "arrow.down" : "arrow.up")
                 }.buttonStyle(.bordered).controlSize(.small)
+                .accessibilityLabel(sortDescending ? "Sort descending" : "Sort ascending")
             }
             HStack(spacing: 6) {
                 Text("Rows").font(.caption).foregroundStyle(.secondary)

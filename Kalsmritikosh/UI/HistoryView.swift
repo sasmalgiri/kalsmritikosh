@@ -135,7 +135,7 @@ public struct HistoryView: View {
     private var placeholder: some View {
         VStack(spacing: 12) {
             Image(systemName: "book.pages")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("Reconstruct your history.")
                 .font(.title3.weight(.medium))

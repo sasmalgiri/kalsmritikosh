@@ -87,7 +87,7 @@ public struct OnboardingView: View {
     private var header: some View {
         VStack(spacing: 6) {
             Image(systemName: "books.vertical.fill")
-                .font(.system(size: 32))
+                .scaledFont(32, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("Welcome to Investigations Made Easy")
                 .font(.title.bold())
@@ -357,7 +357,7 @@ public struct OnboardingView: View {
     private var doneStep: some View {
         VStack(spacing: 14) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.green)
             Text("You're ready.").font(.title3.bold())
             Text("Open the Sources tab to ingest your folder, then ask a question on the Ask tab.")

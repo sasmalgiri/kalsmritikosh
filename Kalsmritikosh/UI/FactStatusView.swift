@@ -198,7 +198,7 @@ public struct FactStatusView: View {
     private func row(_ item: FactStatusItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: item.status.systemImage)
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(15, weight: .semibold, relativeTo: .body)
                 .foregroundStyle(color(for: item.status))
                 .frame(width: 30, height: 30)
                 .background(color(for: item.status).opacity(0.12),
@@ -326,7 +326,7 @@ public struct FactStatusView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "square.stack.3d.up.slash")
-                .font(.system(size: 40, weight: .light))
+                .scaledFont(40, weight: .light, relativeTo: .largeTitle)
                 .foregroundStyle(.secondary)
             Text("Nothing to reconstruct yet")
                 .font(.title3.weight(.semibold))

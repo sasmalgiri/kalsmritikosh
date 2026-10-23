@@ -76,7 +76,7 @@ public struct EvalDashboardView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "tray")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("No eval runs persisted yet.")
                 .font(.title3.weight(.medium))

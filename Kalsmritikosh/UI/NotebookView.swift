@@ -90,7 +90,7 @@ public struct NotebookView: View {
     private var placeholder: some View {
         VStack(spacing: 10) {
             Image(systemName: "notebook")
-                .font(.system(size: 36))
+                .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.tint)
             Text("No investigations yet.")
                 .font(.callout.weight(.medium))

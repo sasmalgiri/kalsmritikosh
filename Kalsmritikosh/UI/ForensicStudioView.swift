@@ -167,7 +167,7 @@ public struct ForensicStudioView: View {
                             Circle().fill(stage == s ? AnyShapeStyle(.tint) : (e.isComplete(s) ? AnyShapeStyle(.green.opacity(0.9)) : AnyShapeStyle(.quaternary)))
                                 .frame(width: 30, height: 30)
                             Image(systemName: e.isComplete(s) && stage != s ? "checkmark" : s.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold, relativeTo: .body)
                                 .foregroundStyle(stage == s || e.isComplete(s) ? Color.white : Color.secondary)
                         }
                         Text(s.title).font(.caption2.weight(stage == s ? .bold : .regular))
@@ -309,7 +309,7 @@ public struct ForensicStudioView: View {
             Text("Limitations").font(.callout.weight(.semibold))
             ForEach(Array(f.wrappedValue.limitations.enumerated()), id: \.offset) { idx, _ in
                 HStack(spacing: 8) {
-                    Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(.secondary)
+                    Image(systemName: "circle.fill").scaledFont(5, relativeTo: .caption).foregroundStyle(.secondary)
                     TextField("", text: Binding(get: { f.wrappedValue.limitations[idx] },
                                                 set: { var a = f.wrappedValue.limitations; a[idx] = $0; f.wrappedValue.limitations = a }))
                         .textFieldStyle(.plain)

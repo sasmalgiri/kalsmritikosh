@@ -68,7 +68,7 @@ public struct ReceiptVerifierView: View {
     private func resultBanner(isValid: Bool, receipt: SealedReceipt) -> some View {
         HStack(spacing: 12) {
             Image(systemName: isValid ? "checkmark.seal.fill" : "xmark.seal.fill")
-                .font(.system(size: 30))
+                .scaledFont(30, relativeTo: .largeTitle)
                 .foregroundStyle(isValid ? .green : .red)
             VStack(alignment: .leading, spacing: 2) {
                 Text(isValid ? "Integrity check passed — hash chain is internally consistent"

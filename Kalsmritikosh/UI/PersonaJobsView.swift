@@ -445,7 +445,7 @@ public struct PersonaJobsView: View {
                 .fill(done ? Color.green : (active ? Theme.brand : Color.primary.opacity(0.15)))
                 .frame(width: 22, height: 22)
             if done {
-                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                Image(systemName: "checkmark").scaledFont(11, weight: .bold, relativeTo: .caption).foregroundStyle(.white)
             } else {
                 Text("\(n)").font(.caption.weight(.bold)).foregroundStyle(active ? .white : .secondary)
             }

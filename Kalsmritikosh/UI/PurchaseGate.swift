@@ -46,7 +46,7 @@ struct PurchaseScreen: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: store.entitlement == .trialEnded ? "hourglass.bottomhalf.filled" : "sparkles")
-                .font(.system(size: 40)).foregroundStyle(.secondary)
+                .scaledFont(40, relativeTo: .largeTitle).foregroundStyle(.secondary)
             Text(store.entitlement == .trialEnded ? "Your free trial has ended" : "Try Investigations Made Easy free for 14 days")
                 .font(.title2.bold())
             Text(store.entitlement == .trialEnded

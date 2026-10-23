@@ -50,7 +50,7 @@ public struct ModeChooserView: View {
     private var header: some View {
         VStack(spacing: 6) {
             Image(systemName: "square.stack.3d.up.fill")
-                .font(.system(size: 30, weight: .semibold))
+                .scaledFont(30, weight: .semibold, relativeTo: .largeTitle)
                 .foregroundStyle(Theme.brandGradient())
             Text("How should Investigations Made Easy process your files?")
                 .font(Theme.display(23, .bold))
@@ -72,7 +72,7 @@ public struct ModeChooserView: View {
         } label: {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: mode.symbolName)
-                    .font(.system(size: 22, weight: .semibold))
+                    .scaledFont(22, weight: .semibold, relativeTo: .title2)
                     .foregroundStyle(Theme.brand)
                     .frame(width: 46, height: 46)
                     .background(Theme.brand.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))

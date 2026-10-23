@@ -138,7 +138,7 @@ struct RelationshipGraphView: View {
     private var timeline: some View {
         Chart(events) { e in
             PointMark(x: .value("Date", e.date), y: .value("Kind", e.source))
-                .annotation(position: .top, alignment: .leading) { Text(e.title).font(.system(size: 8)).lineLimit(1) }
+                .annotation(position: .top, alignment: .leading) { Text(e.title).scaledFont(8, relativeTo: .caption).lineLimit(1) }
         }
         .frame(minHeight: 460)
     }

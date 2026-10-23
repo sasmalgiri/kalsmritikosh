@@ -163,13 +163,13 @@ public struct FundFlowView: View {
         for node in payers {
             guard let r = payerRects[node.label] else { continue }
             ctx.fill(Path(roundedRect: r, cornerRadius: 3), with: .color(.blue))
-            ctx.draw(Text(node.label).font(.system(size: 10)).foregroundColor(.primary),
+            ctx.draw(Text(node.label).font(.caption2).foregroundColor(.primary),
                      at: CGPoint(x: r.minX - 6, y: r.midY), anchor: .trailing)
         }
         for node in payees {
             guard let r = payeeRects[node.label] else { continue }
             ctx.fill(Path(roundedRect: r, cornerRadius: 3), with: .color(.green))
-            ctx.draw(Text(node.label).font(.system(size: 10)).foregroundColor(.primary),
+            ctx.draw(Text(node.label).font(.caption2).foregroundColor(.primary),
                      at: CGPoint(x: r.maxX + 6, y: r.midY), anchor: .leading)
         }
     }

@@ -258,7 +258,7 @@ public struct ReviewView: View {
 
     private func empty(_ text: String, _ symbol: String) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 34)).foregroundStyle(.green)
+            Image(systemName: symbol).scaledFont(34, relativeTo: .largeTitle).foregroundStyle(.green)
             Text(text).font(.title3.weight(.medium)).foregroundStyle(.secondary)
             // A green tick on an EMPTY archive would be a false all-clear —
             // say what has to happen before this screen means anything.

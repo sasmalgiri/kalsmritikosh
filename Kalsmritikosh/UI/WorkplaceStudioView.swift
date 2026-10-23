@@ -170,7 +170,7 @@ public struct WorkplaceStudioView: View {
                             Circle().fill(stage == s ? AnyShapeStyle(.tint) : (c.isComplete(s) ? AnyShapeStyle(.green.opacity(0.9)) : AnyShapeStyle(.quaternary)))
                                 .frame(width: 30, height: 30)
                             Image(systemName: c.isComplete(s) && stage != s ? "checkmark" : s.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold, relativeTo: .body)
                                 .foregroundStyle(stage == s || c.isComplete(s) ? Color.white : Color.secondary)
                         }
                         Text(s.title).font(.caption2.weight(stage == s ? .bold : .regular))

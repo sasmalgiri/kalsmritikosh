@@ -165,7 +165,7 @@ public struct SIUStudioView: View {
                             Circle().fill(stage == s ? AnyShapeStyle(.tint) : (r.isComplete(s) ? AnyShapeStyle(.green.opacity(0.9)) : AnyShapeStyle(.quaternary)))
                                 .frame(width: 30, height: 30)
                             Image(systemName: r.isComplete(s) && stage != s ? "checkmark" : s.systemImage)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(13, weight: .semibold, relativeTo: .body)
                                 .foregroundStyle(stage == s || r.isComplete(s) ? Color.white : Color.secondary)
                         }
                         Text(s.title).font(.caption2.weight(stage == s ? .bold : .regular))

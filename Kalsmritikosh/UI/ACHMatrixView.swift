@@ -330,7 +330,7 @@ public struct ACHMatrixView: View {
             Text(title).font(.callout.weight(.semibold))
             ForEach(Array(items.wrappedValue.enumerated()), id: \.offset) { idx, _ in
                 HStack(spacing: 8) {
-                    Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(.secondary)
+                    Image(systemName: "circle.fill").scaledFont(5, relativeTo: .caption).foregroundStyle(.secondary)
                     TextField("", text: Binding(get: { items.wrappedValue[idx] },
                                                 set: { var x = items.wrappedValue; x[idx] = $0; items.wrappedValue = x }))
                         .textFieldStyle(.plain)

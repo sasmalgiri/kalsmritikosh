@@ -100,7 +100,7 @@ public struct ConvertView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.right.doc.on.clipboard")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(20, weight: .semibold, relativeTo: .title2)
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -135,7 +135,7 @@ public struct ConvertView: View {
     private var dropZone: some View {
         VStack(spacing: 12) {
             Image(systemName: dropTargeted ? "tray.and.arrow.down.fill" : "tray.and.arrow.down")
-                .font(.system(size: 34, weight: .light))
+                .scaledFont(34, weight: .light, relativeTo: .largeTitle)
                 .foregroundStyle(dropTargeted ? Theme.brand : .secondary)
                 .symbolEffect(.bounce, value: dropTargeted)
             Text("Drop files here")

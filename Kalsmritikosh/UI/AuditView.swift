@@ -145,7 +145,7 @@ public struct AuditView: View {
     private func row(for e: AuditEntry) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: e.icon)
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(14, weight: .semibold, relativeTo: .body)
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(e.tint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

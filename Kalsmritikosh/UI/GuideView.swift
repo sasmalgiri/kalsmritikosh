@@ -53,7 +53,7 @@ public struct GuideView: View {
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: g.dest.icon)
-                            .font(.system(size: 15, weight: .semibold))
+                            .scaledFont(15, weight: .semibold, relativeTo: .body)
                             .foregroundStyle(.white)
                             .frame(width: 30, height: 30)
                             .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
