@@ -18,6 +18,8 @@ final class CaseFileModel {
     let workspaceID: UUID
     var snapshot: CaseFileSnapshot?
     var labels: [UUID: String] = [:]
+    /// What the case documents name and the amounts they state (each with its sentence).
+    var named: StudioCaseFacts?
     var error: String?
     var busy = false
 
@@ -31,6 +33,9 @@ final class CaseFileModel {
             let custody = (try? await app.investigationCustody?.manifest(caseID: caseID)) ?? []
             snapshot = try await svc.snapshot(caseID: caseID, custody: custody)
             labels = try await svc.file.sourceLabels(custody.map(\.sourceVersionID))
+            if named == nil, let title = snapshot?.caseHeader.title {   // read once: it scans every case document
+                named = await app.studioCaseFacts(StudioCaseChoice(id: caseID, workspaceID: workspaceID, title: title), includePrivileged: false)
+            }
         } catch {
             report(error)
         }
@@ -612,6 +617,32 @@ struct CasePeopleTab: View {
                     }
                 }
             }
+            if let named = model.named?.named, !named.isEmpty {
+                CaseSection(title: "Named in the case documents", subtitle: "People and organisations the documents name. Add the ones who matter, in the role you decide.") {
+                    let have = Set(s.people.map { $0.name.lowercased() })
+                    ForEach(named, id: \.value) { n in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(n.value)
+                                if let q = n.refs.first?.quote { Text("\u{201C}\(q.prefix(160))\u{201D}").font(.caption).foregroundStyle(.secondary) }
+                            }
+                            Spacer()
+                            if have.contains(n.value.lowercased()) {
+                                Text("In the case").font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Menu("Add as…") {
+                                    ForEach(CasePersonRole.allCases) { r in
+                                        Button(r.label) {
+                                            let name = n.value
+                                            model.run(appState) { _ = try await $0.file.addPerson(caseID: model.caseID, name: name, role: r, entityID: nil, contact: nil, notes: nil, actor: model.actor) }
+                                        }
+                                    }
+                                }.fixedSize()
+                            }
+                        }
+                    }
+                }
+            }
             CaseSection(title: "Contact log", subtitle: "Every attempt to reach a person, with when and how.") {
                 HStack {
                     Picker("Person", selection: $contactPerson) {
@@ -971,7 +1002,7 @@ struct CaseLogTab: View {
         VStack(alignment: .leading, spacing: 0) {
             CaseSection(title: "Export", subtitle: "Each export is recorded in the case log.") {
                 HStack {
-                    Button("Case file report…") { export(CaseFileDocuments.caseFileReport(s, by: model.actor), "Case file - \(s.caseHeader.title)", "md", "caseFileReport") }
+                    Button("Case file report…") { export(CaseFileDocuments.caseFileReport(s, named: model.named, by: model.actor), "Case file - \(s.caseHeader.title)", "md", "caseFileReport") }
                     Button("Case log…") { export(CaseFileDocuments.actionLogCSV(s), "Case log - \(s.caseHeader.title)", "csv", "caseLog") }
                     Button("Exhibit list…") { export(CaseFileDocuments.exhibitListCSV(s), "Exhibits - \(s.caseHeader.title)", "csv", "exhibitList") }
                     Button("Custody report…") { export(CaseFileDocuments.custodyReport(s, by: model.actor), "Custody - \(s.caseHeader.title)", "md", "custodyReport") }

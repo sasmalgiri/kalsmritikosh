@@ -197,7 +197,8 @@ struct InvestigationCaseSimulationTests {
         // 4. The persona's studio, filled from the case.
         let reader = StudioCaseFactsReader(facts: try #require(await state.genericFacts),
                                            events: try #require(await state.events),
-                                           objects: try #require(await state.objects))
+                                           objects: try #require(await state.objects),
+                                           entities: await state.entities)
         let facts = try await reader.read(caseTitle: pack.caseTitle, sourceVersionIDs: Set(authorized))
         let studio = PersonaStudioDraft.draft(persona: persona, from: facts, now: now)
 
@@ -210,8 +211,19 @@ struct InvestigationCaseSimulationTests {
         let findingsText = product.sections.map { ([$0.title] + $0.preamble + $0.claims.map(\.text)).joined(separator: "\n") }
             .joined(separator: "\n")
 
+        // Diagnostic: what the ledger extracted as names and money for the case documents.
+        if let ents = await state.entities {
+            var lines: [String] = []
+            for d in facts.documents { for e in (try? await ents.findByMentionSource(d.objectID)) ?? [] { lines.append("\(e.kind.rawValue)|\(e.qualityTier)|\(e.value)") } }
+            Attachment.record((["named: " + facts.named.map(\.value).joined(separator: "; "),
+                                "amounts: " + facts.statedAmounts.map(\.value).joined(separator: "; ")] + lines.sorted()).joined(separator: "\n"),
+                              named: "\(persona)-entities.txt")
+        }
+
         // ── Score ─────────────────────────────────────────────────────────────
-        let produced = ([findingsText, studio?.report ?? ""] + facts.allFacts.map(\.value)
+        // The investigator's deliverable is the case file (findings + what the documents name).
+        let caseFileDigest = studio == nil ? CaseFileDocuments.namedInDocuments(facts) : ""
+        let produced = ([findingsText, studio?.report ?? "", caseFileDigest] + facts.allFacts.map(\.value)
                         + facts.events.map { "\($0.title) \(StudioPrefill.isoDay($0.date))" } + subjects.map(\.label))
             .joined(separator: "\n").lowercased()
         let checks = InvestigationCasePacks.checks(pack)
@@ -225,7 +237,10 @@ struct InvestigationCaseSimulationTests {
             for (path, value) in studio.gate where StudioExportGate.status(of: value, provenance: studio.provenance?[path]) == .evidenced {
                 let v = value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 let quotes = (studio.provenance?[path]?.evidence ?? []).compactMap { $0.quote?.lowercased() }
-                let stated = corpus.contains(v) || quotes.contains { corpus.contains($0) }
+                // A document's type is read from its own file name — check that derivation exactly.
+                let derivedType = path.hasSuffix(".docType") && pack.files.contains {
+                    PrivilegeLog.documentType(String($0.dropFirst(persona.count + 1))).lowercased() == v }
+                let stated = corpus.contains(v) || quotes.contains { corpus.contains($0) } || derivedType
                     || pack.files.contains { $0.lowercased().hasSuffix(v) || v.hasSuffix(String($0.dropFirst(persona.count + 1)).lowercased()) }
                 if !stated { wrong.append("\(path) = \(value)") }
             }

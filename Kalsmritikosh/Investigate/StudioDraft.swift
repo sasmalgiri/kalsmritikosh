@@ -89,6 +89,27 @@ public nonisolated enum StudioExportGate {
 
     /// The appendix printed with an exported studio report: how many lines rest on documents and
     /// how many on the investigator's word, and the sources cited.
+    /// Key prefixes of the source digest a prefill records (named people/organisations, stated amounts).
+    public static let namedPrefix = "sources.named.", amountPrefix = "sources.amount."
+
+    /// "Named in the case documents" and "Amounts stated" — each line with the sentence it comes from.
+    /// Listed for the investigator; nothing here assigns a role or a finding.
+    public static func sourceDigest(_ provenance: StudioProvenance?) -> String {
+        guard let provenance else { return "" }
+        func lines(_ prefix: String) -> [String] {
+            provenance.keys.filter { $0.hasPrefix(prefix) }.sorted { (Int($0.dropFirst(prefix.count)) ?? 0) < (Int($1.dropFirst(prefix.count)) ?? 0) }
+                .compactMap { k in
+                    guard let f = provenance[k], let v = f.prefilledValue else { return nil }
+                    return "- \(v)" + (f.evidence.first?.quote.map { " — \u{201C}\($0.prefix(200))\u{201D}" } ?? "")
+                }
+        }
+        let n = lines(namedPrefix), a = lines(amountPrefix)
+        var out = ""
+        if !n.isEmpty { out += "\n## Named in the case documents\n\n" + n.joined(separator: "\n") + "\n" }
+        if !a.isEmpty { out += "\n## Amounts stated in the case documents\n\n" + a.joined(separator: "\n") + "\n" }
+        return out
+    }
+
     public static func provenanceAppendix(_ values: [String: String], provenance: StudioProvenance?) -> String {
         var evidenced = 0, entered = 0
         var sources: [String] = []
@@ -103,8 +124,11 @@ public nonisolated enum StudioExportGate {
             default: break
             }
         }
-        guard evidenced + entered > 0 else { return "" }
-        var out = "\n## Appendix — Sources of the entries above\n\n"
+        let digest = sourceDigest(provenance)
+        guard evidenced + entered > 0 || !digest.isEmpty else { return "" }
+        var out = digest
+        guard evidenced + entered > 0 else { return out }
+        out += "\n## Appendix — Sources of the entries above\n\n"
         out += "\(evidenced) entr\(evidenced == 1 ? "y" : "ies") taken from the case's documents; "
         out += "\(entered) entered by the investigator.\n\n"
         if !sources.isEmpty { out += sources.prefix(60).joined(separator: "\n") + "\n" }
@@ -160,12 +184,17 @@ public nonisolated struct StudioCaseFacts: Sendable {
     public let documents: [StudioCaseDocument]
     public let events: [StudioCaseEvent]
     public let allFacts: [StudioCaseValue]      // every fact, field label → value
+    /// People and organisations the documents name (no role — the role is the investigator's call).
+    public let named: [StudioCaseValue]
+    /// Amounts the documents state, each with the sentence it appears in.
+    public let statedAmounts: [StudioCaseValue]
 
     public init(caseTitle: String, parties: [StudioCaseValue], dates: [StudioCaseValue], amounts: [StudioCaseValue],
                 identifiers: [StudioCaseValue], documents: [StudioCaseDocument], events: [StudioCaseEvent],
-                allFacts: [StudioCaseValue]) {
+                allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = []) {
         self.caseTitle = caseTitle; self.parties = parties; self.dates = dates; self.amounts = amounts
         self.identifiers = identifiers; self.documents = documents; self.events = events; self.allFacts = allFacts
+        self.named = named; self.statedAmounts = statedAmounts
     }
 
     public static let empty = StudioCaseFacts(caseTitle: "", parties: [], dates: [], amounts: [], identifiers: [],
@@ -193,9 +222,78 @@ public actor StudioCaseFactsReader {
     private let facts: GenericFactRepository
     private let events: EventsRepository
     private let objects: KnowledgeObjectRepository
+    private let entities: EntitiesRepository?
 
-    public init(facts: GenericFactRepository, events: EventsRepository, objects: KnowledgeObjectRepository) {
-        self.facts = facts; self.events = events; self.objects = objects
+    public init(facts: GenericFactRepository, events: EventsRepository, objects: KnowledgeObjectRepository,
+                entities: EntitiesRepository? = nil) {
+        self.facts = facts; self.events = events; self.objects = objects; self.entities = entities
+    }
+
+    /// The sentence of `content` that contains `value` (for the quote a reader can check).
+    nonisolated static func sentence(containing value: String, in content: String) -> String? {
+        guard let r = content.range(of: value) else { return nil }
+        let enders: Set<Character> = [".", "!", "?", "\n"]
+        var start = r.lowerBound, end = r.upperBound
+        while start > content.startIndex, !enders.contains(content[content.index(before: start)]) { start = content.index(before: start) }
+        while end < content.endIndex, !enders.contains(content[end]) { end = content.index(after: end) }
+        if end < content.endIndex { end = content.index(after: end) }
+        let s = content[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : String(s.prefix(300))
+    }
+
+    /// An amount as the text writes it: "$2.75" followed by "million" in the document is "$2.75 million".
+    nonisolated static func amountAsWritten(_ value: String, in content: String) -> String {
+        guard let r = content.range(of: value) else { return value }
+        let rest = content[r.upperBound...].prefix(16)
+        for scale in [" million", " billion", " thousand", " trillion", " crore", " lakh"] where rest.lowercased().hasPrefix(scale) {
+            return value + scale
+        }
+        return value
+    }
+
+    /// A one-word person name ("Reyna") expanded to the fullest form the same document spells out
+    /// ("Brooke E. Reyna") — first names and initials directly before it. Verbatim from the text.
+    nonisolated static func fullName(_ surname: String, in content: String) -> String? {
+        let pattern = #"(?:(?:[A-Z][a-z]+|[A-Z]\.)\s+){1,3}"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = content as NSString
+        let stop: Set<String> = ["The", "A", "An", "According", "Judge", "Attorney", "General", "Mr", "Mrs", "Ms", "Dr", "Assistant", "Acting", "U.S.", "In", "On"]
+        let candidates = re.matches(in: content, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range) }
+            .map { c -> String in
+                var words = c.split(separator: " ").map(String.init)
+                while let f = words.first, stop.contains(f.trimmingCharacters(in: .punctuationCharacters)) || stop.contains(f) { words.removeFirst() }
+                return words.joined(separator: " ")
+            }
+            .filter { $0.contains(" ") && $0 != surname }
+        return candidates.max { $0.count < $1.count }
+    }
+
+    /// Names and amounts from the ledger's entities for each case document, kept only when the
+    /// document's text states them verbatim (so every line can be checked against its quote).
+    func namesAndAmounts(objectIDs: Set<UUID>) async throws -> (named: [StudioCaseValue], amounts: [StudioCaseValue]) {
+        guard let entities else { return ([], []) }
+        var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = []
+        var seenNames = Set<String>(), seenAmounts = Set<String>()
+        for id in objectIDs.sorted(by: { $0.uuidString < $1.uuidString }).prefix(60) {
+            guard let content = try await objects.fetchContent(id: id) else { continue }
+            for e in try await entities.findByMentionSource(id) where e.qualityTier != .t3 {
+                var v = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if e.kind == .money { v = Self.amountAsWritten(v, in: content) }
+                if e.kind == .person, !v.contains(" "), let full = Self.fullName(v, in: content) { v = full }
+                guard v.count >= 2, let quote = Self.sentence(containing: v, in: content) else { continue }
+                let ref = StudioEvidenceRef(objectID: id, quote: quote)
+                switch e.kind {
+                case .person, .organization:
+                    guard v.contains(" "), seenNames.insert(v.lowercased()).inserted else { continue }
+                    named.append(StudioCaseValue(value: v, label: e.kind == .person ? "person" : "organisation", refs: [ref]))
+                case .money:
+                    guard v.rangeOfCharacter(from: .decimalDigits) != nil, seenAmounts.insert(v.lowercased()).inserted else { continue }
+                    amounts.append(StudioCaseValue(value: v, label: "amount", refs: [ref]))
+                default: continue
+                }
+            }
+        }
+        return (Array(named.prefix(40)), Array(amounts.prefix(40)))
     }
 
     nonisolated static let partyFields: Set<String> = ["plaintiff", "defendant", "petitioner", "respondent", "appellant",
@@ -232,14 +330,26 @@ public actor StudioCaseFactsReader {
         let documents = objectIDs.sorted { (names[$0] ?? "") < (names[$1] ?? "") }
             .map { StudioCaseDocument(objectID: $0, sourceVersionID: nil, name: names[$0] ?? "Document", date: nil) }
 
+        let (named, stated) = try await namesAndAmounts(objectIDs: objectIDs)
         return StudioCaseFacts(caseTitle: caseTitle, parties: parties, dates: dates, amounts: amounts,
-                               identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all)
+                               identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all,
+                               named: named, statedAmounts: stated)
     }
 }
 
 // MARK: - Pre-fill helpers shared by every studio
 
 public nonisolated enum StudioPrefill {
+    /// Record who the documents name and the amounts they state (StudioExportGate.sourceDigest
+    /// prints them). Replaces any earlier digest so a re-fill reflects the case as it is now.
+    public static func recordSourceDigest(from c: StudioCaseFacts, into provenance: inout StudioProvenance) {
+        for k in provenance.keys where k.hasPrefix(StudioExportGate.namedPrefix) || k.hasPrefix(StudioExportGate.amountPrefix) {
+            provenance[k] = nil
+        }
+        for (i, v) in c.named.enumerated() { provenance["\(StudioExportGate.namedPrefix)\(i)"] = .fromCase(v.value, v.refs) }
+        for (i, v) in c.statedAmounts.enumerated() { provenance["\(StudioExportGate.amountPrefix)\(i)"] = .fromCase(v.value, v.refs) }
+    }
+
     /// Set a field from the case when the case states it: writes the value and its provenance.
     public static func set(_ field: inout String, path: String, from value: StudioCaseValue?, into provenance: inout StudioProvenance) {
         guard let value, field.trimmingCharacters(in: .whitespaces).isEmpty else { return }

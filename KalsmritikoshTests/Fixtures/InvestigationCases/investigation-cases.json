@@ -8,8 +8,6 @@
     ],
     "expected": {
       "title": "United States Obtains Fraud Judgment In Discrimination Class Action Case",
-      "date": "2014-12-04",
-      "office": "USAO - Montana",
       "parties": [
         "Patrick Charles Thomas"
       ],
@@ -34,7 +32,6 @@
     ],
     "expected": {
       "title": "West Point Employee Charged in Nearly $3 Million Embezzlement Scheme",
-      "date": "2009-01-14",
       "office": "Criminal Division",
       "parties": [
         "Bobbie Cyana Ryan"
@@ -59,7 +56,6 @@
     ],
     "expected": {
       "title": "Two Indicted for Conspiring to Steal Trade Secrets from Goodyear Tire and Rubber Company",
-      "date": "2009-03-06",
       "office": "Criminal Division",
       "parties": [
         "Clark Alan Roberts",
@@ -83,7 +79,6 @@
     ],
     "expected": {
       "title": "State Department Employee Pleads Guilty to Making False Statements About Accessing Confidential Passport Files",
-      "date": "2010-11-05",
       "office": "Criminal Division",
       "parties": [
         "Brooke E. Reyna"
@@ -103,8 +98,6 @@
     ],
     "expected": {
       "title": "Four Charged in Grant Fraud Scheme",
-      "date": "2015-01-28",
-      "office": "USAO - Nevada",
       "parties": [
         "Jason Demko",
         "Lorraine Riddiough",
@@ -133,8 +126,6 @@
     ],
     "expected": {
       "title": "Eleven More Defendants Plead Guilty In Staged Automobile Accident Scheme",
-      "date": "2013-07-26",
-      "office": "USAO - Florida, Southern",
       "parties": [
         "Yanet Hernandez"
       ],

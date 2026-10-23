@@ -28,6 +28,7 @@ extension PrivilegeLog: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         let plaintiff = c.first(["plaintiff", "petitioner", "appellant", "claimant", "complainant"])
         let defendant = c.first(["defendant", "respondent", "appellee", "accused"])
         if let pl = plaintiff, let df = defendant {
@@ -81,6 +82,7 @@ extension WorkplaceInvestigation: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         let named = Set(parties.map { $0.name.lowercased() })
         let roles: [(fields: [String], role: WIPartyRole)] = [
             (["complainant", "claimant", "plaintiff", "victim"], .complainant),
@@ -122,6 +124,7 @@ extension SIUReferral: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         StudioPrefill.set(&claimNumber, path: "claimNumber", from: c.first(["claimnumber", "claimno", "casenumber", "referencenumber"]), into: &p)
         StudioPrefill.set(&insured, path: "insured", from: c.first(["insured", "policyholder", "claimant"]), into: &p)
         StudioPrefill.set(&policyNumber, path: "policyNumber", from: c.first(["policynumber", "policyno"]), into: &p)
@@ -161,6 +164,7 @@ extension ForensicEngagement: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         // Materials relied on: the case's documents.
         let listed = Set(materials.map(\.source))
         for d in c.documents where !listed.contains(d.name) {
@@ -205,6 +209,7 @@ extension FactCheckMemo: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         // Claims to check: the case's dated events, each with the document it rests on. Whether a
         // claim is verified stays the journalist's call.
         let have = Set(claims.map(\.text))
@@ -241,6 +246,7 @@ extension ResearchReview: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         let have = Set(studies.map(\.source))
         for d in c.documents where !have.contains(d.name) {
             var s = RSStudy(); s.study = d.name; s.source = d.name
@@ -268,13 +274,14 @@ extension ProofArgument: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
-        // GPS 1 — the record searches: each case document is a source consulted. The result of
-        // each search (including a nil) is the researcher's to state.
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
+        // GPS 1 — the record searches: each case document is a source consulted. Where it was found
+        // (the repository) and the result of each search (including a nil) are the researcher's to
+        // state — the case doesn't say, so the field stays empty rather than carrying a made-up label.
         let have = Set(searches.map(\.source))
         for d in c.documents where !have.contains(d.name) {
-            var s = GNSearch(); s.repository = "Case documents"; s.source = d.name
+            var s = GNSearch(); s.source = d.name
             let ref = StudioEvidenceRef(sourceVersionID: d.sourceVersionID, objectID: d.objectID, quote: d.name)
-            p["searches.\(s.id.uuidString).repository"] = .fromCase(s.repository, [ref])
             p["searches.\(s.id.uuidString).source"] = .fromCase(s.source, [ref])
             searches.append(s)
         }

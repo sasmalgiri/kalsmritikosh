@@ -165,6 +165,7 @@ extension DisputeFile: CaseBackedStudio {
 
     public mutating func prefill(from c: StudioCaseFacts) {
         var p = provenance ?? [:]
+        StudioPrefill.recordSourceDigest(from: c, into: &p)
         StudioPrefill.set(&counterparty, path: "counterparty",
                           from: c.first(["insurer", "landlord", "employer", "seller", "counterparty", "recallingfirm", "defendant", "respondent"]), into: &p)
         StudioPrefill.set(&reference, path: "reference",

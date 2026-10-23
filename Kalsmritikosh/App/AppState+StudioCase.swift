@@ -35,12 +35,13 @@ extension AppState {
     /// privilege log lists them by description; it never prints their content).
     public func studioCaseFacts(_ choice: StudioCaseChoice, includePrivileged: Bool) async -> StudioCaseFacts? {
         guard let dataLab = investigationDataLab, let genericFacts, let events, let objects else { return nil }
+        let entityRepo = entities
         let access = SensitiveAccessContext(scope: SensitiveScope(
             workspaceID: choice.workspaceID, maximumSensitivity: .restricted,
             permitsPrivilegedMaterial: includePrivileged, purpose: .export))
         do {
             let (included, _) = try await dataLab.eligibleSourceVersions(caseID: choice.id, access: access)
-            let reader = StudioCaseFactsReader(facts: genericFacts, events: events, objects: objects)
+            let reader = StudioCaseFactsReader(facts: genericFacts, events: events, objects: objects, entities: entityRepo)
             return try await reader.read(caseTitle: choice.title, sourceVersionIDs: Set(included))
         } catch {
             KalsmritikoshLog.app.error("Studio fill from case failed: \(error.localizedDescription, privacy: .public)")

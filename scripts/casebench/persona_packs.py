@@ -53,6 +53,25 @@ def iso_day(epoch):
 NAME_AGE = re.compile(r"\b([A-Z][a-z]+(?: [A-Z]\.)?(?: [A-Z][a-zA-Z'\-]+){1,2}), (\d{2}),")
 MONEY = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?(?: (?:million|billion|thousand))?")
 
+MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+
+def date_forms(iso):
+    try: y, m, d = (int(x) for x in iso.split("-"))
+    except (AttributeError, ValueError): return [iso or ""]
+    mo = MONTHS[m - 1]
+    return [iso, f"{mo} {d}, {y}", f"{mo[:3]} {d}, {y}", f"{mo[:3]}. {d}, {y}", f"{d} {mo} {y}", f"{d:02d}/{m:02d}/{y:04d}"]
+
+def in_docs_only(e, text):
+    """Expect only what the document states (the case bench's in_docs rule): API metadata such as
+    the release date or the issuing office is kept only when the text itself carries it."""
+    low = text.lower()
+    out = dict(e)
+    if e.get("date") and not any(f.lower() in low for f in date_forms(e["date"])): out.pop("date")
+    if e.get("office") and e["office"].lower() not in low: out.pop("office")
+    out["parties"] = [p for p in e.get("parties", []) if p.lower() in low]
+    out["amounts"] = [a for a in e.get("amounts", []) if a.lower() in low]
+    return out
+
 def expected_from_release(r, text):
     parties = list(dict.fromkeys(m.group(1) for m in NAME_AGE.finditer(text)))[:8]
     amounts = list(dict.fromkeys(m.group(0).replace("$ ", "$") for m in MONEY.finditer(text)))[:8]
@@ -75,7 +94,7 @@ def pick_doj(raw):
         for persona, (pats, why) in want.items():
             if persona in got: continue
             if any(re.search(pt, title, re.I) for pt in pats):
-                e = expected_from_release(r, text)
+                e = in_docs_only(expected_from_release(r, text), text)
                 if e["parties"] and e["date"]:
                     got[persona] = (r, text, e, why)
         if len(got) == len(want): break

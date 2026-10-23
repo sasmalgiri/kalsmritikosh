@@ -182,7 +182,7 @@ public nonisolated enum CaseFileDocuments {
 
     // MARK: The whole case file
 
-    public static func caseFileReport(_ s: CaseFileSnapshot, by: String, at: Date = Date()) -> String {
+    public static func caseFileReport(_ s: CaseFileSnapshot, named: StudioCaseFacts? = nil, by: String, at: Date = Date()) -> String {
         let p = s.profile, c = s.caseHeader
         var o = "# \(c.title)\n\n"
         o += "Stage: **\(c.status == .closed ? CaseStage.closed.label : p.stage.label)**"
@@ -232,6 +232,7 @@ public nonisolated enum CaseFileDocuments {
             o += "\n## Chronology (investigator entries)\n" + chron.map { "- \(d($0.eventDate)): \($0.text)" + ($0.evidenceRef.map { " [\($0)]" } ?? "") }.joined(separator: "\n") + "\n"
         }
 
+        if let named { o += namedInDocuments(named) }
         if !s.people.isEmpty {
             o += "\n## People\n" + s.people.map { "- \($0.name) — \($0.role.label)" }.joined(separator: "\n") + "\n"
         }
@@ -263,6 +264,16 @@ public nonisolated enum CaseFileDocuments {
         if let r = p.retentionPolicy { o += "\n## Retention\n- \(r)" + (p.retainUntil.map { " · review on \(d($0))" } ?? "") + "\n" }
         o += "\n## Case log\n\(s.actions.count) recorded action(s); first \(t(s.actions.first?.at)), last \(t(s.actions.last?.at)).\n"
         return o + footer(by, at)
+    }
+
+    // MARK: Named in the documents
+
+    /// Who the case documents name and the amounts they state, each with its sentence — the same
+    /// digest the studios print. Listed for the investigator; no role or finding is assigned.
+    public static func namedInDocuments(_ facts: StudioCaseFacts) -> String {
+        var p: StudioProvenance = [:]
+        StudioPrefill.recordSourceDigest(from: facts, into: &p)
+        return StudioExportGate.sourceDigest(p)
     }
 
     // MARK: S-4 action log
