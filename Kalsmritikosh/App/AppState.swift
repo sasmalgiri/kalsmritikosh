@@ -618,6 +618,9 @@ public final class AppState {
     /// LENS over the one engine: it references canonical workspaces / sources / deadlines by id and forks
     /// no canonical evidence, task, deadline or SensitiveScope authority. Live from boot.
     public private(set) var investigationCases: InvestigationCaseRepository?
+    /// Investigations Made Easy (v151) — the case file around each case: intake, triage, stage, plan,
+    /// allegations, people, interviews, exhibits, holds, tasks and deadlines (over the one task engine).
+    public private(set) var caseFiles: CaseFileService?
     /// Case bench 2026-10-20 — a case opened over a workspace takes in its documents (and their
     /// attachments / archive members) as recorded in-scope sources.
     public private(set) var investigationWorkspaceIntake: InvestigationWorkspaceIntake?
@@ -2335,6 +2338,7 @@ public final class AppState {
             // INV-01-A — the Investigator case-intake & scope authority, live from boot over the shared ledger.
             let investigationCasesRepo = InvestigationCaseRepository(database: db)
             self.investigationCases = investigationCasesRepo
+            self.caseFiles = CaseFileService(database: db, cases: investigationCasesRepo, workspaces: workspacesRepo)
             let workspaceIntake = InvestigationWorkspaceIntake(
                 cases: investigationCasesRepo, workspaces: workspacesRepo,
                 coverage: CaseCoverageRepository(database: db))

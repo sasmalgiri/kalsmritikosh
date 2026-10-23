@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 150
+    public static let latestVersion = 151
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -681,7 +681,8 @@ public enum SchemaMigrations {
         (147, v147),
         (148, v148),
         (149, v149),
-        (150, v150)
+        (150, v150),
+        (151, v151)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7218,6 +7219,108 @@ public enum SchemaMigrations {
     WHEN (SELECT value FROM sync_state WHERE key = 'applying') IS NULL
     BEGIN INSERT INTO sync_dirty (tbl, row_key, changed_at) VALUES ('case_issue_links', NEW.issue_id || '|' || NEW.subject_kind || '|' || NEW.subject_id, (julianday('now') - 2440587.5) * 86400.0)
           ON CONFLICT (tbl, row_key) DO UPDATE SET changed_at = excluded.changed_at; END;
+    """
+
+
+    // MARK: - v151 — Investigations Made Easy: the case file around an InvestigationCase. Everything an
+    // investigation needs from intake to closure that is the INVESTIGATOR'S record (not evidence):
+    // intake + triage + stage + owner/team + plan + retention on case_profiles; allegations with their
+    // evidence grid and dispositions; links to the ONE task engine (professional_tasks) — tasks and their
+    // deadlines are never forked here; the journal and manual chronology entries; people (subjects,
+    // witnesses, complainants, custodians) with a contact log; interviews from plan to attested statement
+    // with structured credibility factors; the exhibit register; legal-hold notices per custodian; the
+    // redaction log; review batches with QC; conflict-of-interest checks; and an append-only action log.
+    // Evidence is referenced by id (source_ref / evidence_ref), never copied. Nothing here deletes
+    // anything: retention marks a case for review; erasure stays the existing, confirmed path.
+    private static let v151: String = """
+    CREATE TABLE IF NOT EXISTS case_profiles (
+        case_id TEXT PRIMARY KEY NOT NULL, kind TEXT,
+        stage TEXT NOT NULL DEFAULT 'intake' CHECK (stage IN ('intake','triage','open','inProgress','onHold','findings','closed','declined','referred')),
+        severity TEXT CHECK (severity IS NULL OR severity IN ('low','medium','high','critical')),
+        risk_note TEXT, triage_decision TEXT CHECK (triage_decision IS NULL OR triage_decision IN ('accept','decline','refer')),
+        triage_reason TEXT, triage_by TEXT, triage_at REAL,
+        owner TEXT, team_json TEXT NOT NULL DEFAULT '[]', reviewer TEXT,
+        received_at REAL, channel TEXT, anonymous INTEGER NOT NULL DEFAULT 0, complainant TEXT, complainant_contact TEXT,
+        allegation_summary TEXT, incident_date TEXT, incident_location TEXT, people_named TEXT,
+        plan_method TEXT, plan_evidence TEXT, plan_interviews TEXT, plan_notes TEXT,
+        retention_policy TEXT, retain_until REAL, archived_at REAL,
+        updated_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_allegations (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, sequence INTEGER NOT NULL, text TEXT NOT NULL,
+        disposition TEXT NOT NULL DEFAULT 'pending' CHECK (disposition IN ('pending','substantiated','unsubstantiated','inconclusive','withdrawn')),
+        rationale TEXT, decided_by TEXT, decided_at REAL, created_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_allegations_case ON case_allegations(case_id, sequence);
+    CREATE TABLE IF NOT EXISTS case_allegation_evidence (
+        id TEXT PRIMARY KEY NOT NULL, allegation_id TEXT NOT NULL, evidence_ref TEXT NOT NULL, label TEXT,
+        stance TEXT NOT NULL CHECK (stance IN ('supports','contradicts','neutral')), note TEXT,
+        added_by TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_allegation_evidence ON case_allegation_evidence(allegation_id);
+    CREATE TABLE IF NOT EXISTS case_task_links (
+        case_id TEXT NOT NULL, task_id TEXT NOT NULL, created_at REAL NOT NULL, PRIMARY KEY (case_id, task_id)
+    );
+    CREATE TABLE IF NOT EXISTS case_journal (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL,
+        entry_kind TEXT NOT NULL CHECK (entry_kind IN ('note','chronology')),
+        event_date REAL, text TEXT NOT NULL, evidence_ref TEXT, author TEXT NOT NULL, created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_journal_case ON case_journal(case_id, created_at);
+    CREATE TABLE IF NOT EXISTS case_people (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('subject','witness','complainant','custodian','other')),
+        entity_id TEXT, contact TEXT, notes TEXT, created_at REAL NOT NULL, removed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_people_case ON case_people(case_id);
+    CREATE TABLE IF NOT EXISTS case_contacts (
+        id TEXT PRIMARY KEY NOT NULL, person_id TEXT NOT NULL, at REAL NOT NULL, mode TEXT NOT NULL, note TEXT,
+        by TEXT NOT NULL, created_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_interviews (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, person_id TEXT,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','scheduled','held','summarised','attested','cancelled')),
+        scheduled_at REAL, mode TEXT, location TEXT, questions TEXT, recording_ref TEXT, transcript_ref TEXT,
+        summary TEXT, statement_text TEXT, attested_by TEXT, attested_at REAL, statement_sha256 TEXT,
+        created_at REAL NOT NULL, updated_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_interviews_case ON case_interviews(case_id);
+    CREATE TABLE IF NOT EXISTS case_credibility (
+        id TEXT PRIMARY KEY NOT NULL, interview_id TEXT NOT NULL,
+        factor TEXT NOT NULL CHECK (factor IN ('consistency','corroboration','plausibility','motive','demeanour')),
+        assessment TEXT NOT NULL CHECK (assessment IN ('supports','neutral','undermines')),
+        note TEXT, evidence_ref TEXT, by TEXT NOT NULL, created_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_exhibits (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, number TEXT NOT NULL, description TEXT NOT NULL,
+        source_ref TEXT, sha256 TEXT, collected_by TEXT, collected_at REAL, collected_where TEXT,
+        created_at REAL NOT NULL, withdrawn_at REAL, UNIQUE (case_id, number)
+    );
+    CREATE TABLE IF NOT EXISTS case_hold_notices (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, custodian TEXT NOT NULL, person_id TEXT,
+        notice_text TEXT NOT NULL, issued_at REAL NOT NULL, issued_by TEXT NOT NULL,
+        acknowledged_at REAL, reminder_due REAL, released_at REAL, release_reason TEXT
+    );
+    CREATE TABLE IF NOT EXISTS case_redaction_log (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, source_ref TEXT NOT NULL, location TEXT NOT NULL,
+        reason TEXT NOT NULL, redacted_by TEXT NOT NULL, at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_review_batches (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, name TEXT NOT NULL, reviewer TEXT,
+        source_refs_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','firstPassDone','qcDone')),
+        qc_reviewer TEXT, qc_note TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_conflict_checks (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, investigator TEXT NOT NULL,
+        result TEXT NOT NULL CHECK (result IN ('clear','conflict','waived')), matched TEXT, note TEXT,
+        checked_by TEXT NOT NULL, checked_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_actions (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, sequence INTEGER NOT NULL, actor TEXT NOT NULL,
+        action TEXT NOT NULL, detail TEXT, at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_actions_case ON case_actions(case_id, sequence);
     """
 
 }
