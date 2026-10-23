@@ -359,3 +359,15 @@ public enum FactSchemaRegistry {
         return IdentifierShape.shape(impliedByFieldName: f) ?? .text
     }
 }
+
+extension GenericFact {
+    /// The unit as shown to a person: a currency or measure ("INR", "kg"), never a precision
+    /// qualifier ("year", "month", "day") — "1938" reads as a year without it (case bench
+    /// 2026-10-22: findings said "date: 1938 year").
+    public nonisolated var displayUnit: String? {
+        guard let u = unit?.trimmingCharacters(in: .whitespaces), !u.isEmpty,
+              !["year", "month", "day", "approx", "approximate"].contains(u.lowercased()) else { return nil }
+        return u
+    }
+}
+

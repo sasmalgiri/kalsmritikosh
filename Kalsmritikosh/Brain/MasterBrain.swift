@@ -1148,7 +1148,7 @@ public actor MasterBrain {
             guard let eval = evalByID[f.id], let presentation = eval.presentation,
                   let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
             else { continue }
-            let unit = f.unit.map { " \($0)" } ?? ""
+            let unit = f.displayUnit.map { " \($0)" } ?? ""
             byPresentation[presentation, default: []].append("- \(f.field): \(f.value)\(unit) [\(label)]")
         }
         // Fixed group order + headers. Verified-strength first; attributed/user next; then

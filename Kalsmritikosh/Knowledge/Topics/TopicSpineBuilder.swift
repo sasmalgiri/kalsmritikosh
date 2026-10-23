@@ -33,7 +33,7 @@ public enum TopicSpineBuilder {
         var byField: [String: [String]] = [:]
         for f in facts.sorted(by: { $0.field != $1.field ? $0.field < $1.field : $0.value < $1.value }) {
             let field = humanize(f.field)
-            let value = (f.unit?.isEmpty == false) ? "\(f.value) \(f.unit!)" : f.value
+            let value = f.displayUnit.map { "\(f.value) \($0)" } ?? f.value
             if byField[field] == nil { order.append(field) }
             if byField[field]?.contains(value) != true { byField[field, default: []].append(value) }
         }

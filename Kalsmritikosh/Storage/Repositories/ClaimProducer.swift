@@ -348,7 +348,7 @@ public actor ClaimProducer {
             effectiveSubjectID = await subjectResolver(fact.subjectLabel)
         }
         guard let scope = Self.scope(subjectID: effectiveSubjectID, evidence: refs) else { return nil }
-        let statement = fact.unit.map { "\(fact.field): \(fact.value) \($0)" } ?? "\(fact.field): \(fact.value)"
+        let statement = fact.displayUnit.map { "\(fact.field): \(fact.value) \($0)" } ?? "\(fact.field): \(fact.value)"
         return Claim(id: Self.claimID(kind: "genericFact", sourceID: fact.id, subjectID: effectiveSubjectID),
                      subjectID: effectiveSubjectID, subjectLabel: fact.subjectLabel, statement: statement,
                      assessment: fact.assessment, confidence: fact.confidence, evidence: refs,

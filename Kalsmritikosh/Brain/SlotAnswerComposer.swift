@@ -244,13 +244,27 @@ public enum SlotAnswerComposer {
     /// "⟨Label⟩ ⟨value⟩" unless the value already opens with the label's
     /// leading word ("Patent No. 900123" needs no "Patent number" prefix).
     nonisolated static func labeledValue(_ fact: GenericFact, label: String? = nil) -> String {
-        let l = label ?? SlotFieldResolver.humanLabel(forFieldID: fact.field)
+        var l = label ?? SlotFieldResolver.humanLabel(forFieldID: fact.field)
+        // A field read from a labelled line keeps the document's own label ("Recalling firm"),
+        // not the joined field id ("Recallingfirm") — case bench 2026-10-22.
+        if let documentLabel = Self.documentLabel(fact), l.replacingOccurrences(of: " ", with: "").lowercased() == fact.field {
+            l = documentLabel
+        }
         let rendered = renderValue(fact)
         if let first = l.split(separator: " ").first,
            rendered.lowercased().hasPrefix(first.lowercased()) {
             return rendered
         }
         return label != nil ? "\(l): \(rendered)" : "\(l) \(rendered)"
+    }
+
+    /// The label as the document writes it, when the fact was read from a "Label: value" line and
+    /// that label is this field (normalized), and it reads as words.
+    nonisolated static func documentLabel(_ fact: GenericFact) -> String? {
+        guard let raw = fact.rawMatch, let colon = raw.firstIndex(of: ":") else { return nil }
+        let label = raw[..<colon].trimmingCharacters(in: .whitespaces)
+        guard label.contains(" "), label.count <= 40, FactSchemaRegistry.normalizeField(label) == fact.field else { return nil }
+        return label.prefix(1).uppercased() + label.dropFirst()
     }
 
     /// Higher = stronger. An authoritative structural document (DocumentFitness
@@ -295,7 +309,7 @@ public enum SlotAnswerComposer {
         // per seal #3c, month = "November 2024", year = "2024"), NEVER the
         // source form. A v0 date row keeps its raw text (renders as-is below).
         if isV1, FactSchemaRegistry.expectedShape(of: fact.field) == .date {
-            let unit = fact.unit.map { " \($0)" } ?? ""
+            let unit = fact.displayUnit.map { " \($0)" } ?? ""
             return renderCanonicalDate(iso: fact.value) + unit
         }
         let display: String
@@ -307,7 +321,7 @@ public enum SlotAnswerComposer {
         } else {
             display = fact.value
         }
-        let unit = fact.unit.map { " \($0)" } ?? ""
+        let unit = fact.displayUnit.map { " \($0)" } ?? ""
         return display + unit
     }
 
