@@ -258,14 +258,44 @@ public enum SlotAnswerComposer {
         return label != nil ? "\(l): \(rendered)" : "\(l) \(rendered)"
     }
 
-    /// The label as the document writes it, when the fact was read from a "Label: value" line and
-    /// that label is this field (normalized), and it reads as words.
+    /// A readable label for a joined field id ("recallingfirm" → "Recalling firm", "decisiondate" →
+    /// "Decision date"), split into known field words. Built from the field id alone — never from
+    /// the extraction's raw match (RawMatchBoundaryTests) — and nil unless every part is a known word.
     nonisolated static func documentLabel(_ fact: GenericFact) -> String? {
-        guard let raw = fact.rawMatch, let colon = raw.firstIndex(of: ":") else { return nil }
-        let label = raw[..<colon].trimmingCharacters(in: .whitespaces)
-        guard label.contains(" "), label.count <= 40, FactSchemaRegistry.normalizeField(label) == fact.field else { return nil }
-        return label.prefix(1).uppercased() + label.dropFirst()
+        let id = fact.field.lowercased()
+        guard id.count >= 6, id.allSatisfy({ $0.isLetter }) else { return nil }
+        let chars = Array(id)
+        // best[i] = the fewest-words split of chars[0..<i]
+        var best: [[String]?] = Array(repeating: nil, count: chars.count + 1)
+        best[0] = []
+        for i in 0..<chars.count where best[i] != nil {
+            for j in (i + 2)...min(chars.count, i + 14) {
+                let w = String(chars[i..<j])
+                guard Self.fieldWords.contains(w), let prev = best[i] else { continue }
+                if best[j] == nil || (best[j]?.count ?? .max) > prev.count + 1 { best[j] = prev + [w] }
+            }
+        }
+        guard let words = best[chars.count], words.count >= 2 else { return nil }
+        let joined = words.joined(separator: " ")
+        return joined.prefix(1).uppercased() + joined.dropFirst()
     }
+
+    /// Words that make up field names on forms, filings, recalls, reports and records.
+    nonisolated static let fieldWords: Set<String> = [
+        "account", "action", "address", "agency", "amount", "applicant", "application", "approval", "approved",
+        "arrival", "arrest", "author", "award", "balance", "bank", "birth", "brand", "case", "cause", "charge",
+        "city", "claim", "claimant", "class", "code", "company", "complaint", "contact", "contract", "country",
+        "county", "court", "date", "death", "decision", "defect", "defendant", "department", "description",
+        "device", "disposition", "distribution", "district", "docket", "due", "effective", "email", "employee",
+        "employer", "end", "entry", "event", "expiry", "expiration", "file", "filing", "firm", "first", "grant",
+        "hearing", "id", "incident", "initiation", "injury", "inspection", "insured", "invoice", "issue", "judge",
+        "last", "license", "location", "loss", "lot", "make", "manufacturer", "model", "name", "notice", "number",
+        "office", "officer", "opinion", "order", "owner", "party", "patent", "payment", "phone", "place", "plaintiff",
+        "policy", "posting", "product", "publication", "quantity", "reason", "recall", "recalling", "received",
+        "recipient", "reference", "registration", "release", "report", "reported", "respondent", "review", "serial",
+        "sentence", "severity", "start", "state", "status", "street", "subject", "submission", "supplier", "tax",
+        "termination", "title", "total", "type", "unit", "value", "vehicle", "vendor", "victim", "witness", "year", "zip",
+    ]
 
     /// Higher = stronger. An authoritative structural document (DocumentFitness
     /// RET-009) outranks email prose; presentation strength then confidence
