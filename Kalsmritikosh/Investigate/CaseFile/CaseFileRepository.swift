@@ -555,6 +555,24 @@ public actor CaseFileRepository {
         try await write("cf_act", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: action, detail: detail, at: date) { _ in }
     }
 
+    /// A readable name for each source version (the file name it was read from).
+    public func sourceLabels(_ ids: [UUID]) async throws -> [UUID: String] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [UUID: String] = [:]
+        for chunk in stride(from: 0, to: ids.count, by: 400).map({ Array(ids[$0..<min($0 + 400, ids.count)]) }) {
+            let rows = try await database.query(
+                "SELECT id, original_url FROM source_versions WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));",
+                chunk.map { .uuid($0) })
+            for r in rows {
+                guard let id = r.uuid(0) else { continue }
+                let url = r.string(1).flatMap { URL(string: $0) ?? URL(fileURLWithPath: $0) }
+                let name = url.map { $0.lastPathComponent.removingPercentEncoding ?? $0.lastPathComponent } ?? ""
+                out[id] = name.isEmpty ? "Source \(id.uuidString.prefix(8))" : name
+            }
+        }
+        return out
+    }
+
     // MARK: - Internals
 
     /// One savepoint: the change and its action-log row.

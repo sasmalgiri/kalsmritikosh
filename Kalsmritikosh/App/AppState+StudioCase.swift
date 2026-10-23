@@ -63,6 +63,10 @@ public struct InvestigationKindChoice: Identifiable, Hashable, Sendable {
     public static let all: [InvestigationKindChoice] = [
         .init(id: "internal", title: "Internal misconduct, an IP leak or an incident", detail: "Who did what, when — with custody of every source.",
               guidePersona: "investigation", applicationID: InvestigatorPersonaPackage.applicationID),
+        .init(id: "ipTheft", title: "IP theft or a data leak", detail: "What data left, how, when and by whom — devices and accounts first.",
+              guidePersona: "investigation", applicationID: InvestigatorPersonaPackage.applicationID),
+        .init(id: "safety", title: "A safety incident", detail: "The sequence of events, the causes and corrective actions.",
+              guidePersona: "investigation", applicationID: InvestigatorPersonaPackage.applicationID),
         .init(id: "litigation", title: "A litigation matter", detail: "Fact-finding, chronology, privilege log and production.",
               guidePersona: "legal", applicationID: LawyerPersonaPackage.applicationID),
         .init(id: "workplace", title: "A workplace complaint", detail: "Harassment, discrimination or a policy breach — a fair, documented process.",
@@ -104,8 +108,16 @@ extension AppState {
               let intake = await service.jobs(forPersona: kind.applicationID).first(where: { $0.kind == .caseIntake }) else { return nil }
         do {
             let out = try await service.launch(intake, context: PersonaJobLaunchContext(
-                workspaceID: ws.id, title: trimmed, actor: NSUserName(), at: Date()))
+                workspaceID: ws.id, title: trimmed, actor: InvestigatorProfile.name, at: Date()))
             UserDefaults.standard.set(kind.applicationID.rawValue, forKey: Self.investigationPersonaKey)
+            // The case file: owner, the investigation-type template (plan, tasks, starter allegations), triage.
+            if let caseID = out.producedID, let files = caseFiles {
+                let actor = InvestigatorProfile.name
+                if let template = CaseTemplate.template(id: kind.id) {
+                    try await files.applyTemplate(template, caseID: caseID, workspaceID: ws.id, actor: actor, at: Date())
+                }
+                try await files.file.recordTriage(caseID: caseID, CaseTriage(), actor: actor, at: Date())
+            }
             return out.producedID
         } catch {
             KalsmritikoshLog.app.error("Starter case failed: \(error.localizedDescription, privacy: .public)")

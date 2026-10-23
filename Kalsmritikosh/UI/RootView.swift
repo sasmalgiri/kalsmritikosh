@@ -44,6 +44,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case authenticity, citations, freshness, trends, query
     case sources, convert, completeness, live
     case redaction, caseload
+    case cases
     case guide, settings, sutra
 
     public var id: String { rawValue }
@@ -101,6 +102,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .trends:       return "Trends"
         case .query:        return "Query"
         case .caseload:     return "Caseload"
+        case .cases:        return "Cases"
         case .sources:      return "Sources"
         case .convert:      return "Convert"
         case .completeness: return "Completeness"
@@ -165,6 +167,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .trends:       return "chart.xyaxis.line"
         case .query:        return "line.3.horizontal.decrease.circle"
         case .caseload:     return "square.stack.3d.up"
+        case .cases:        return "folder.badge.person.crop"
         case .sources:      return "folder"
         case .convert:      return "arrow.right.doc.on.clipboard"
         case .completeness: return "checklist"
@@ -245,6 +248,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .trends:       return "Patterns across everything — activity over time, event types, entity makeup"
         case .query:        return "Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want"
         case .caseload:     return "Every matter triaged by how much attention it needs"
+        case .cases:        return "Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings"
         case .sources:      return "Folders being watched and ingested"
         case .convert:      return "Turn files between formats, back and forth"
         case .completeness: return "How fully your archive has been processed"
@@ -270,7 +274,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
             case .reconstruct:
                 // A5 — the creator's Publish Package studio only with its persona module on.
-                return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes].filter { $0 != .ccStudio || ProductModuleFlags.isEnabled(.contentCreatorPersona) }
+                return [.cases, .workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes].filter { $0 != .ccStudio || ProductModuleFlags.isEnabled(.contentCreatorPersona) }
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .sutra, .sopBoard, .settings]
@@ -283,7 +287,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var simplePrimary: Destination {
             switch self {
             case .converse:    return .ask
-            case .reconstruct: return .workspaces
+            case .reconstruct: return .cases
             case .knowledge:   return .knowledge
             case .workspace:   return .sources
             case .system:      return .settings
@@ -320,7 +324,7 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .ask
+    @State private var selection: Destination? = .cases
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
@@ -456,6 +460,7 @@ public struct RootView: View {
         case .work, .workCenter, .registers:                          return .jobs
         case .sources, .convert, .live, .completeness, .workspaces,
              .redaction, .caseload:                                   return .sources
+        case .cases:                                                  return .jobs
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
              .transcripts, .authenticity, .citations,
@@ -511,7 +516,7 @@ public struct RootView: View {
     private var loadingView: some View {
         VStack(spacing: 16) {
             Image(systemName: "sparkles")
-                .font(.system(size: 40, weight: .light))
+                .scaledFont(40, weight: .light)
                 .foregroundStyle(.tint)
                 .symbolEffect(.pulse)
             ProgressView()
@@ -526,7 +531,7 @@ public struct RootView: View {
     private func failedView(_ message: String) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 42))
+                .scaledFont(42)
                 .foregroundStyle(.orange)
             Text("Investigations Made Easy couldn't start.")
                 .font(.title2.weight(.semibold))
@@ -980,7 +985,7 @@ public struct RootView: View {
                     .tracking(0.5)
                 Spacer(minLength: 0)
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .scaledFont(9, weight: .semibold)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
@@ -1084,7 +1089,7 @@ public struct RootView: View {
     private var brandHeader: some View {
         HStack(spacing: 10) {
             Image(systemName: "sparkles")
-                .font(.system(size: 15, weight: .bold))
+                .scaledFont(15, weight: .bold)
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1162,7 +1167,7 @@ public struct RootView: View {
                 }
             }
             Text(group.shortTitle)
-                .font(.system(size: 8, weight: .bold))
+                .scaledFont(8, weight: .bold)
                 .tracking(0.5)
                 .foregroundStyle(.tertiary)
                 .help(group.blurb)
@@ -1177,7 +1182,7 @@ public struct RootView: View {
             navigate(to: dest)
         } label: {
             Image(systemName: dest.icon)
-                .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                .scaledFont(13, weight: isSelected ? .bold : .regular)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(Theme.brand))
                 .frame(width: 30, height: 26)
                 .background(
@@ -1432,6 +1437,7 @@ public struct RootView: View {
         case .trends:       TrendsView()
         case .query:        QueryView()
         case .caseload:     CaseloadView()
+        case .cases:        CasesView()
         case .sources:      SourcesView()
         case .convert:      ConvertView()
         case .completeness: CompletenessView()
@@ -1508,7 +1514,7 @@ private struct SidebarRow: View {
         Button(action: onTap) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(12, weight: .semibold)
                     .foregroundStyle(isSelected ? .white : Theme.brand)
                     .frame(width: 26, height: 26)
                     .background(iconChip)
@@ -1729,7 +1735,7 @@ private struct PersonaPickerView: View {
                             onPick(p.id)
                         } label: {
                             HStack(spacing: 12) {
-                                Text(p.emoji).font(.system(size: 26))
+                                Text(p.emoji).scaledFont(26)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(p.title).font(.headline)
                                     Text(p.tagline).font(.caption).foregroundStyle(.secondary)
@@ -1797,7 +1803,7 @@ struct RecoveryKeyView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: "lock.shield").font(.system(size: 40, weight: .light)).foregroundStyle(.tint)
+            Image(systemName: "lock.shield").scaledFont(40, weight: .light).foregroundStyle(.tint)
             Text("Enter your ledger's recovery key").font(.title2.bold())
             Text(message).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 .frame(maxWidth: 520).fixedSize(horizontal: false, vertical: true)

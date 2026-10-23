@@ -46,6 +46,8 @@ public actor CaseFileService {
         self.workspaces = workspaces
     }
 
+    public func caseHeader(_ id: UUID) async throws -> InvestigationCase? { try await cases.fetch(caseID: id)?.caseHeader }
+
     // MARK: - Tasks + deadlines
 
     /// Add a case task; with `due`, a confirmed deadline the person sets.

@@ -144,6 +144,7 @@ public struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     selfCheckChip
                 }
+                InvestigatorProfileSection()
 
                 // ── Everyday settings — each category collapsed behind its
                 //    header so Settings opens minimal. Click a header to expand.
@@ -3179,3 +3180,23 @@ private struct LedgerEncryptionSubsection: View {
         }
     }
 }
+
+/// S-3 — the investigator on this Mac: the name written on every case action, task, note, decision
+/// and export. v1 is single-user; there are no accounts or roles.
+struct InvestigatorProfileSection: View {
+    @AppStorage(InvestigatorProfile.nameKey) private var name = ""
+    @AppStorage(InvestigatorProfile.organisationKey) private var organisation = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("You").font(.headline)
+            HStack {
+                TextField("Your name", text: $name, prompt: Text(NSFullUserName().isEmpty ? NSUserName() : NSFullUserName()))
+                TextField("Organisation (optional)", text: $organisation)
+            }
+            .textFieldStyle(.roundedBorder)
+            Text("Recorded on every change, decision and export in your cases, and printed on notices and reports.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
