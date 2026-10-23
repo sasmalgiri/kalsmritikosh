@@ -48,15 +48,21 @@ drift between copy and registry, on any surface.
 | site | privacy.no-cloud-model | never sent to a cloud model | ci:sensitive-export |
 | site | privacy.no-cloud | no cloud | ci:sensitive-export |
 | site | privacy.exports-local | never uploaded | ci:sensitive-export |
+| site | privacy.online-opt-in | Online mode is off unless you turn it on | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
+| site | privacy.consent-before-send | nothing is sent until you agree | grep:OutboundConsentSheet:Kalsmritikosh |
+| site | privacy.encrypted-at-rest | encrypted on your Mac | test:aKeyedLedgerIsEncryptedOnDisk |
 | site | privacy.diagnostics-manual | never sent automatically | ci:sensitive-export |
+| site | privacy.purchase-by-apple | handled by Apple through the App Store | grep:Transaction.currentEntitlements:Kalsmritikosh/App/Store/Purchase.swift |
+| site | privacy.sync-encrypted | encrypted with your passphrase | test:blobs |
+| site | privacy.clipper-no-fetch | The Safari clipper downloads nothing | grep:clipper-no-network.sh:ci/guards/run-all.sh |
 | in-app | app.unreadable-honest | recorded honestly — never faked | app-claims-coverage.sh → Kalsmritikosh/UI/GuideContent.swift |
 | in-app | app.ocr-incomplete | extraction may be incomplete | app-claims-coverage.sh → Kalsmritikosh/UI/CompletenessView.swift |
 | in-app | app.evidence-only-state | still answers every question from your evidence | app-claims-coverage.sh → Kalsmritikosh/UI/OnboardingView.swift |
 | in-app | app.private-mode | Fully private (no AI) | app-claims-coverage.sh → Kalsmritikosh/UI/SettingsView.swift |
 | in-app | app.twin-badge | Independent AI reading agreed. | app-claims-coverage.sh → Kalsmritikosh/Brain/ComposeTwin.swift |
-| in-app | app.q0-refusal | Kalsmritikosh answers only from your ingested documents | app-claims-coverage.sh → Kalsmritikosh/Brain/QuestionShapeRouter.swift |
+| in-app | app.q0-refusal | Investigations Made Easy answers only from your ingested documents | app-claims-coverage.sh → Kalsmritikosh/Brain/QuestionShapeRouter.swift |
 | in-app | app.gk-banner | Not from your documents — general knowledge from the on-device AI | app-claims-coverage.sh → Kalsmritikosh/Brain/GeneralKnowledgeLane.swift |
-| App Store | asc.private-on-device | private, on-device workspace | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
+| App Store | asc.private-on-device | private, on-device case file | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
 | App Store | asc.honest-refusal | it tells you honestly | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
 | App Store | asc.cited-answers | answers come with clickable citations | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
 | App Store | asc.on-device-ai | Apple's on-device intelligence | app-claims-coverage.sh → release/APP_STORE_LISTING.md |

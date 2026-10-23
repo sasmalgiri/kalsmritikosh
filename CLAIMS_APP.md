@@ -28,7 +28,7 @@ change — copy and registry move together or not at all.
 
 | Claim ID | Verbatim fragment in the listing | Source |
 |---|---|---|
-| asc.private-on-device | `private, on-device workspace` | release/APP_STORE_LISTING.md |
+| asc.private-on-device | `private, on-device case file` | release/APP_STORE_LISTING.md |
 | asc.honest-refusal | `it tells you honestly` | release/APP_STORE_LISTING.md |
 | asc.cited-answers | `answers come with clickable citations` | release/APP_STORE_LISTING.md |
 | asc.on-device-ai | `Apple's on-device intelligence` | release/APP_STORE_LISTING.md |
