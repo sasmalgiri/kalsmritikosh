@@ -16,7 +16,7 @@ viewer added)._
 - **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigation Docs Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
-  `documents,email,search,evidence,timeline,on-device,private,archive,pdf,notes,offline,citations`
+  `investigation,evidence,case file,chronology,timeline,custody,report,citations,private,on-device,pdf`
 
 ## Promotional text (≤170 chars)
 
@@ -83,17 +83,22 @@ viewer added)._
 
 ## Screenshots (plan — capture on a demo corpus with NO real PII)
 
-1. **Ask** — a question with a cited answer + quality strip (confidence/sources).
-2. **Sources** — folders added, with the multi-dimensional readiness strip (parsed/embedded).
-3. **Timeline** — dated events reconstructed from evidence.
-4. **A work product / report** — sections with claims and citations.
-5. **Cross-document matrix or contradictions** — evidence compared across sources.
+1. **"What are you investigating?"** — the first-run question that opens the right persona with a case ready.
+2. **Case file** — the case's documents in scope, with custody hashes and the chronology.
+3. **Contradictions & gaps** — two sources that disagree, both shown with their citations.
+4. **A persona studio filled from the case** — e.g. the SIU referral or privilege log, each filled line marked with its source document, typed lines marked "investigator entry".
+5. **Findings report** — sections with claims, every sentence linked to its source, and the sealed receipt.
 
-Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic — safe for screenshots).
+Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the public-domain case packs in
+`KalsmritikoshTests/Fixtures/InvestigationCases` (DOJ releases, court opinions, an NTSB docket — no private data).
 
 ## Review notes (paste into App Review Notes)
 
-> Investigation Docs Made Easy is a **local evidence/archive workspace**. It processes only files the user
+> Investigation Docs Made Easy is **investigation documentation software**: it keeps every source of an
+> investigation with custody, builds the chronology, finds contradictions and gaps, and produces the
+> report where every sentence points at its source. **Judgement stays human** — the app never decides
+> guilt, privilege, credibility or root cause, and its studios never fill those fields; it documents the
+> investigation a person runs. It is a **local evidence workspace**. It processes only files the user
 > explicitly selects via macOS security-scoped folder access. **No account is required** and
 > **core processing is on-device**. The app starts in **Private mode**, in which it makes no network
 > connections at all; its knowledge base is encrypted at rest with a key kept in the Keychain.
