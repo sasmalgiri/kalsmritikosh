@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import os
 
 /// A test-only injection point inside the migration transaction. Production migration ALWAYS
 /// passes a nil hook, so these points have no effect on shipping behaviour; the migration
@@ -28,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 151
+    public static let latestVersion = 152
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -65,6 +66,7 @@ public enum SchemaMigrations {
         if targetVersion == latestVersion, current < latestVersion,
            try await isSchemaFullyApplied(database) {
             try await database.setUserVersion(latestVersion)
+            try await repairIdempotentMigrations(database)
             return
         }
         let pending = all.filter { $0.0 > current && $0.0 <= targetVersion }
@@ -110,6 +112,54 @@ public enum SchemaMigrations {
         if targetVersion == latestVersion,
            try await database.currentUserVersion() < Self.latestVersion {
             try await database.setUserVersion(Self.latestVersion)
+        }
+        if targetVersion == latestVersion { try await repairIdempotentMigrations(database) }
+    }
+
+    /// Names of the tables a migration creates (`CREATE TABLE [IF NOT EXISTS] name`).
+    static func createdTables(inMigration version: Int) -> [String] {
+        guard let sql = migrationSQL(for: version),
+              let re = try? NSRegularExpression(pattern: #"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)"#,
+                                                options: [.caseInsensitive]) else { return [] }
+        let ns = sql as NSString
+        return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
+            .map { ns.substring(with: $0.range(at: 1)) }
+            .filter { !$0.hasSuffix("__new") && !$0.contains("__v") }
+    }
+
+    /// A migration is safe to re-run when every top-level statement is a `CREATE … IF NOT EXISTS`
+    /// (tables, indexes, triggers) — no ALTER, DROP, rename or data change outside a trigger body.
+    static func isIdempotent(_ sql: String) -> Bool {
+        // Remove trigger bodies: their INSERT/UPDATE only run on future writes.
+        let withoutBodies = sql.replacingOccurrences(of: #"(?is)\bBEGIN\b.*?\bEND\s*;"#, with: "END;",
+                                                     options: .regularExpression)
+        let statements = withoutBodies.components(separatedBy: ";")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != "END" && !$0.hasPrefix("--") }
+        guard !statements.isEmpty else { return false }
+        return statements.allSatisfy { st in
+            let lines = st.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.hasPrefix("--") }
+            let head = lines.joined(separator: " ").uppercased()
+            return head.range(of: #"^CREATE\s+(UNIQUE\s+)?(TABLE|INDEX|TRIGGER|VIEW)\s+IF\s+NOT\s+EXISTS\b"#, options: .regularExpression) != nil
+        }
+    }
+
+    /// Repair pass (2026-10-23): ledgers stamped past a migration by the old self-heal check may be
+    /// missing that migration's tables. Re-running every IDEMPOTENT migration from v119 on is a
+    /// no-op on a correct ledger and creates whatever is missing on a mis-stamped one. Nothing is
+    /// altered or dropped. Non-idempotent migrations are not touched (they can't be re-run safely).
+    static func repairIdempotentMigrations(_ database: Database) async throws {
+        for (version, sql) in all where version >= 119 && isIdempotent(sql) {
+            let sp = "kalsmritikosh_repair_v\(version)"
+            do {
+                try await database.exec("SAVEPOINT \(sp);")
+                try await database.exec(sql)
+                try await database.exec("RELEASE SAVEPOINT \(sp);")
+            } catch {
+                try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
+                try? await database.exec("RELEASE SAVEPOINT \(sp);")
+                KalsmritikoshLog.storage.error("Schema repair v\(version) failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -482,8 +532,20 @@ public enum SchemaMigrations {
             "case_method_runs": ["case_id", "method_run_id", "phase_kind", "created_at"],
             // v117/v118 case-bound phase artifacts (rebuilt shape).
             "case_phase_artifacts": ["id", "case_id", "case_revision", "scope_fingerprint",
-                                     "phase_kind", "artifact_id", "detail", "created_at"]
+                                     "phase_kind", "artifact_id", "detail", "created_at"],
+            // v152 A-6 ACH in the ledger — the NEWEST marker. Without it a v151 ledger would be
+            // self-healed straight to 152 and the ACH tables would never be created.
+            "ach_analyses": ["id", "case_id", "workspace_id", "title", "origin", "created_by", "updated_by", "retracted_at"],
+            "ach_cells": ["analysis_id", "evidence_id", "hypothesis_id", "consistency", "updated_by", "updated_at"],
+            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"]
         ]
+        // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
+        // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
+        // v150 be stamped v151 without running v151 (2026-10-23). This keeps the sentinel current.
+        for table in createdTables(inMigration: latestVersion) {
+            let rows = try await database.query("PRAGMA table_info(\(table));", [])
+            guard !rows.isEmpty else { return false }
+        }
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
             let actual = Set(rows.compactMap { $0.string(1) })
@@ -682,7 +744,8 @@ public enum SchemaMigrations {
         (148, v148),
         (149, v149),
         (150, v150),
-        (151, v151)
+        (151, v151),
+        (152, v152)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7321,6 +7384,55 @@ public enum SchemaMigrations {
         action TEXT NOT NULL, detail TEXT, at REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_case_actions_case ON case_actions(case_id, sequence);
+    """
+
+    // MARK: - v152 — A-6 Competing hypotheses (ACH) in the ledger. The matrix used to live in one
+    // @AppStorage JSON blob; it is now four tables: the analysis (question, assumptions, indicators,
+    // the analyst's written conclusion), its hypotheses (columns), its evidence rows, and the
+    // consistency cells. Scoped by an optional case (investigation_cases.id) or workspace. Every row
+    // carries who/when; nothing is deleted — removing a hypothesis, an evidence row or a whole
+    // analysis sets retracted_at/retracted_by and the row stays in the record. Cells are keyed by
+    // (evidence, hypothesis) and updated in place (a rating is the analyst's current judgement).
+    // ach_legacy_imports records the one-time import of the old AppStorage blob (the blob itself
+    // is left untouched in UserDefaults).
+    private static let v152: String = """
+    CREATE TABLE IF NOT EXISTS ach_analyses (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT, workspace_id TEXT,
+        title TEXT NOT NULL, question TEXT NOT NULL DEFAULT '',
+        assumptions_json TEXT NOT NULL DEFAULT '[]', indicators_json TEXT NOT NULL DEFAULT '[]',
+        leading_hypothesis_id TEXT,
+        confidence TEXT NOT NULL DEFAULT 'moderate' CHECK (confidence IN ('low','moderate','high')),
+        conclusion_summary TEXT NOT NULL DEFAULT '', history_json TEXT NOT NULL DEFAULT '[]',
+        origin TEXT NOT NULL DEFAULT 'ledger' CHECK (origin IN ('ledger','appStorageImport')),
+        created_by TEXT NOT NULL, created_at REAL NOT NULL, updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        retracted_by TEXT, retracted_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ach_analyses_case ON ach_analyses(case_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_ach_analyses_workspace ON ach_analyses(workspace_id, updated_at);
+    CREATE TABLE IF NOT EXISTS ach_hypotheses (
+        id TEXT PRIMARY KEY NOT NULL, analysis_id TEXT NOT NULL, position INTEGER NOT NULL, text TEXT NOT NULL,
+        created_by TEXT NOT NULL, created_at REAL NOT NULL, updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        retracted_by TEXT, retracted_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ach_hypotheses_analysis ON ach_hypotheses(analysis_id, position);
+    CREATE TABLE IF NOT EXISTS ach_evidence (
+        id TEXT PRIMARY KEY NOT NULL, analysis_id TEXT NOT NULL, position INTEGER NOT NULL, text TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT '',
+        created_by TEXT NOT NULL, created_at REAL NOT NULL, updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        retracted_by TEXT, retracted_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ach_evidence_analysis ON ach_evidence(analysis_id, position);
+    CREATE TABLE IF NOT EXISTS ach_cells (
+        analysis_id TEXT NOT NULL, evidence_id TEXT NOT NULL, hypothesis_id TEXT NOT NULL,
+        consistency TEXT NOT NULL CHECK (consistency IN ('veryConsistent','consistent','neutral','inconsistent','veryInconsistent')),
+        updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        PRIMARY KEY (evidence_id, hypothesis_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ach_cells_analysis ON ach_cells(analysis_id);
+    CREATE TABLE IF NOT EXISTS ach_legacy_imports (
+        source_key TEXT PRIMARY KEY NOT NULL, analysis_count INTEGER NOT NULL,
+        imported_by TEXT NOT NULL, imported_at REAL NOT NULL
+    );
     """
 
 }

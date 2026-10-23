@@ -621,6 +621,8 @@ public final class AppState {
     /// Investigations Made Easy (v151) — the case file around each case: intake, triage, stage, plan,
     /// allegations, people, interviews, exhibits, holds, tasks and deadlines (over the one task engine).
     public private(set) var caseFiles: CaseFileService?
+    /// A-6 — Competing-hypotheses (ACH) matrices in the ledger (v152).
+    public private(set) var achMatrices: ACHRepository?
     /// Case bench 2026-10-20 — a case opened over a workspace takes in its documents (and their
     /// attachments / archive members) as recorded in-scope sources.
     public private(set) var investigationWorkspaceIntake: InvestigationWorkspaceIntake?
@@ -2339,6 +2341,7 @@ public final class AppState {
             let investigationCasesRepo = InvestigationCaseRepository(database: db)
             self.investigationCases = investigationCasesRepo
             self.caseFiles = CaseFileService(database: db, cases: investigationCasesRepo, workspaces: workspacesRepo)
+            self.achMatrices = ACHRepository(database: db)
             let workspaceIntake = InvestigationWorkspaceIntake(
                 cases: investigationCasesRepo, workspaces: workspacesRepo,
                 coverage: CaseCoverageRepository(database: db))

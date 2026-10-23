@@ -6,11 +6,17 @@
 //  Hypotheses are columns, evidence are rows; rate each cell CC/C/N/I/II. The
 //  panel ranks hypotheses by fewest inconsistencies (ACH), flags which evidence
 //  is diagnostic, and captures assumptions, indicators, and a written conclusion
-//  with a confidence — never a computed verdict. Persists on-device as JSON.
+//  with a confidence — never a computed verdict.
+//
+//  A-6 — the matrix lives in the ledger (schema v152, ACHRepository): hypotheses, evidence rows and
+//  cells, scoped by an optional case, with who/when. An older on-device (AppStorage) store is imported
+//  once on first load and then no longer read; the old key is left untouched. Removing an analysis,
+//  hypothesis or evidence row retracts it — it stays in the record.
 //
 
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 #if os(macOS)
 import AppKit
 #endif
@@ -18,10 +24,16 @@ import AppKit
 public struct ACHMatrixView: View {
     @Environment(AppState.self) private var appState
 
-    @AppStorage("kalsmritikosh.ach.store") private var storeBlob = ""
+    /// The old on-device store — read ONCE for the import into the ledger, never written.
+    @AppStorage(ACHRepository.legacyAppStorageKey) private var legacyStoreBlob = ""
     @State private var analyses: [ACHAnalysis] = []
+    @State private var scopes: [UUID: UUID] = [:]          // analysis id → case id (when scoped to a case)
     @State private var loaded = false
     @State private var activeID: UUID?
+    @State private var ledgerMissing = false
+    @State private var notice: String?
+    @State private var pendingSave: Task<Void, Never>?
+    @State private var pendingSaveFor: UUID?
 
     @State private var newHypothesis = ""
     @State private var newEvidence = ""
@@ -29,35 +41,103 @@ public struct ACHMatrixView: View {
     @State private var newIndicator = ""
     @State private var showExporter = false
 
-    public init() {}
+    /// When set, the list shows only this case's analyses and new ones are filed under it.
+    private let caseID: UUID?
+
+    public init(caseID: UUID? = nil) { self.caseID = caseID }
 
     public var body: some View {
         Group {
-            if let binding = activeBinding { studio(binding) } else { listScreen }
+            if ledgerMissing {
+                ContentUnavailableView("The ledger isn't open yet", systemImage: "tablecells",
+                                       description: Text("Competing-hypotheses analyses are kept in the ledger. Open or create a library, then come back."))
+            } else if let binding = activeBinding { studio(binding) } else { listScreen }
         }
-        .onAppear(perform: load)
+        .task(id: appState.achMatrices != nil) { await load() }
+        .onDisappear { flushSave() }
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { _ in }
     }
 
-    // MARK: Persistence
+    // MARK: Persistence (the ledger)
 
-    private func load() {
+    private var actor: String { InvestigatorProfile.name }
+
+    private func load() async {
         guard !loaded else { return }
-        loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode([ACHAnalysis].self, from: data) { analyses = decoded }
+        guard let repo = appState.achMatrices else { ledgerMissing = true; return }
+        ledgerMissing = false
+        await importLegacyIfNeeded(repo)
+        do {
+            let stored = try await repo.analyses(caseID: caseID)
+            analyses = stored.map(\.analysis)
+            scopes = Dictionary(uniqueKeysWithValues: stored.compactMap { s in s.caseID.map { (s.id, $0) } })
+            loaded = true
+        } catch {
+            KalsmritikoshLog.ui.error("ACH load failed: \(error.localizedDescription, privacy: .public)")
+            notice = "Couldn't read the analyses from the ledger: \(error.localizedDescription)"
+        }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(analyses),
-           let s = String(data: data, encoding: .utf8) { storeBlob = s }
+
+    /// One-time import of the old AppStorage blob. The blob is never modified or removed; a blob that
+    /// can't be decoded is left as it is, reported, and the import is not marked done.
+    private func importLegacyIfNeeded(_ repo: ACHRepository) async {
+        do {
+            guard try await !repo.hasImportedLegacy() else { return }
+            let blob = legacyStoreBlob
+            var decoded: [ACHAnalysis] = []
+            if !blob.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                guard let data = blob.data(using: .utf8) else { return }
+                do { decoded = try JSONDecoder().decode([ACHAnalysis].self, from: data) } catch {
+                    KalsmritikoshLog.ui.error("ACH legacy store unreadable: \(error.localizedDescription, privacy: .public)")
+                    notice = "An older on-device ACH store couldn't be read, so it was not imported. It is left untouched."
+                    return
+                }
+            }
+            let n = try await repo.importLegacy(decoded, actor: actor)
+            if n > 0 { notice = "Moved \(n) analysis\(n == 1 ? "" : "es") from this Mac's old store into the ledger." }
+        } catch {
+            KalsmritikoshLog.ui.error("ACH legacy import failed: \(error.localizedDescription, privacy: .public)")
+            notice = "Couldn't move the older on-device analyses into the ledger: \(error.localizedDescription)"
+        }
     }
+
+    /// Debounced save of one analysis: the latest edit wins; the repository refuses an older write.
+    private func scheduleSave(_ a: ACHAnalysis) {
+        if pendingSaveFor != a.id { flushSave() } else { pendingSave?.cancel() }
+        let scope = scopes[a.id] ?? caseID
+        pendingSaveFor = a.id
+        pendingSave = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(400)) } catch { return }   // cancelled: a newer edit follows
+            await save(a, caseID: scope)
+        }
+    }
+
+    /// Write the pending edit now (leaving the screen, or switching to another analysis).
+    private func flushSave() {
+        guard let pending = pendingSave, let id = pendingSaveFor else { return }
+        pending.cancel(); pendingSave = nil; pendingSaveFor = nil
+        guard let a = analyses.first(where: { $0.id == id }) else { return }
+        let scope = scopes[a.id] ?? caseID
+        Task { @MainActor in await save(a, caseID: scope) }
+    }
+
+    private func save(_ a: ACHAnalysis, caseID scope: UUID?) async {
+        guard let repo = appState.achMatrices else { ledgerMissing = true; return }
+        do {
+            try await repo.save(a, caseID: scope, actor: actor)
+        } catch {
+            KalsmritikoshLog.ui.error("ACH save failed: \(error.localizedDescription, privacy: .public)")
+            notice = "Couldn't save to the ledger: \(error.localizedDescription)"
+        }
+    }
+
     private var activeBinding: Binding<ACHAnalysis>? {
         guard let id = activeID, let idx = analyses.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { analyses[idx] },
-                       set: { analyses[idx] = $0; analyses[idx].updatedAt = Date(); persist() })
+                       set: { analyses[idx] = $0; analyses[idx].updatedAt = Date(); scheduleSave(analyses[idx]) })
     }
 
     // MARK: List
@@ -77,6 +157,16 @@ public struct ACHMatrixView: View {
                         .guidance(GuidanceTip("New analysis",
                                               what: "Starts a fresh Analysis of Competing Hypotheses: frame the question, list rival hypotheses, add evidence, and rate the matrix."))
                     Button { loadSample() } label: { Label("Load a worked example", systemImage: "wand.and.stars") }
+                }
+                if let notice {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "info.circle").foregroundStyle(.secondary)
+                        Text(notice).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button { self.notice = nil } label: { Label("Dismiss", systemImage: "xmark").labelStyle(.iconOnly) }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                    }
+                    .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                 }
                 if analyses.isEmpty {
                     ContentUnavailableView("No analyses yet", systemImage: "tablecells",
@@ -103,8 +193,12 @@ public struct ACHMatrixView: View {
                 Text("\(a.hypotheses.count) hypotheses · \(a.evidence.count) evidence")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { delete(a) } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Delete")
+                if scopes[a.id] != nil, caseID == nil {
+                    Label("Case", systemImage: "folder").font(.caption2).foregroundStyle(.secondary)
+                        .help("Filed under a case")
+                }
+                Button(role: .destructive) { delete(a) } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Remove from the list (kept in the ledger's record)")
                 Button("Open") { activeID = a.id }.buttonStyle(.bordered).controlSize(.small)
             }
         }
@@ -114,13 +208,31 @@ public struct ACHMatrixView: View {
     private func newAnalysis() {
         var a = ACHAnalysis(title: "New analysis", now: Date())
         StudioAudit.record(&a.history, "Created")
-        analyses.append(a); persist(); activeID = a.id
+        add(a)
     }
     private func loadSample() {
-        let a = ACHAnalysis.sample(now: Date()); analyses.append(a); persist(); activeID = a.id
+        add(ACHAnalysis.sample(now: Date()))
     }
+    private func add(_ a: ACHAnalysis) {
+        analyses.append(a)
+        if let caseID { scopes[a.id] = caseID }
+        activeID = a.id
+        let scope = caseID
+        Task { @MainActor in await save(a, caseID: scope) }
+    }
+    /// Retract — the analysis leaves the list but every row stays in the ledger.
     private func delete(_ a: ACHAnalysis) {
-        analyses.removeAll { $0.id == a.id }; persist(); if activeID == a.id { activeID = nil }
+        if pendingSaveFor == a.id { pendingSave?.cancel(); pendingSave = nil; pendingSaveFor = nil }
+        analyses.removeAll { $0.id == a.id }
+        if activeID == a.id { activeID = nil }
+        guard let repo = appState.achMatrices else { ledgerMissing = true; return }
+        let who = actor
+        Task { @MainActor in
+            do { try await repo.retract(analysisID: a.id, actor: who) } catch {
+                KalsmritikoshLog.ui.error("ACH retract failed: \(error.localizedDescription, privacy: .public)")
+                notice = "Couldn't remove the analysis: \(error.localizedDescription)"
+            }
+        }
     }
 
     // MARK: Studio

@@ -118,10 +118,10 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [ ] P-3 (A) Structured credibility per account: consistency, corroboration, plausibility, motive, demeanour — each with cited evidence; never a verdict.
 
 ### Phase A — analysis
-- [ ] A-6 (A) Allegations × evidence × finding matrix on the case (supports / contradicts / neutral per item, cited); ACH moved into the ledger.
+- [x] A-6 (A) Allegations × evidence × finding matrix on the case (supports / contradicts / neutral per item, cited); ACH moved into the ledger.
 - [ ] A-7 (A) Manual entries in the case chronology (marked investigator entry), merged with the automatic one.
-- [ ] A-8 (A) Amount-weighted funds tracing over transaction facts; money-flow chart with amounts.
-- [ ] A-9 (A) Force-directed relationship chart; per-pair communication timeline.
+- [x] A-8 (A) Amount-weighted funds tracing over transaction facts; money-flow chart with amounts.
+- [x] A-9 (A) Force-directed relationship chart; per-pair communication timeline.
 
 ### Phase Q — answer and extraction quality (from the case bench)
 - [ ] Q-2 (A) Civil court outcome and docket to ≥80% correct-or-refused; the outcome question reads the disposition field first.
