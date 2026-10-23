@@ -50,6 +50,8 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var history: [StudioAuditEntry]?
+    /// A2 — where each filled field came from (case evidence or investigator entry).
+    public var provenance: StudioProvenance?
 
     // Stage 1 — Engagement.
     public var scope: String = ""              // what the expert was asked to determine
@@ -200,6 +202,7 @@ public enum FAReportRenderer {
         }
 
         out += "---\n\nSigned: **\(f.expert.orDashFA)**\n"
+        out += StudioExportGate.provenanceAppendix(f.gateValues, provenance: f.provenance)
         out += StudioAudit.appendix(f.history)
         return out
     }

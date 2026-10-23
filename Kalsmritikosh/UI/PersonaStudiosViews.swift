@@ -21,6 +21,8 @@ extension PublishPackage.Stage: StudioStageProtocol {}
 extension PublishPackage: StudioDeliverable {}
 extension EmergencyBinder.Stage: StudioStageProtocol {}
 extension EmergencyBinder: StudioDeliverable {}
+extension DisputeFile.Stage: StudioStageProtocol {}
+extension DisputeFile: StudioDeliverable {}
 
 // MARK: - #6 Researcher
 
@@ -347,6 +349,81 @@ public struct BinderStudioView: View {
 }
 
 // MARK: - Shared next button
+
+// MARK: - #10 Individual — Dispute file
+
+public struct DisputeFileStudioView: View {
+    public init() {}
+    public var body: some View {
+        PersonaStudioShell(config: StudioConfig<DisputeFile>(
+            name: "Dispute File",
+            icon: "doc.plaintext",
+            blurb: "Put a personal dispute on paper the way an insurer, landlord, employer or ombudsman expects it: who it is with and their reference, what is disputed, a timeline with the document behind every line, and what you ask for. Fill it from your case and every line keeps its source.",
+            storeKey: "kalsmritikosh.ds.store",
+            filenamePrefix: "dispute-file",
+            newItem: { DisputeFile(title: "New dispute", now: $0) },
+            sampleItem: { DisputeFile.sample(now: $0) },
+            subtitle: { d in d.counterparty.trimmed.isEmpty ? d.kind.label : "\(d.kind.label) — \(d.counterparty)" },
+            render: { DisputeFileRenderer.markdown($0, generatedAt: $1) }
+        )) { m, s, goTo in
+            switch s {
+            case .dispute:
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioStageHeader("The dispute", "Who it is with, and the reference number they use — the first thing anyone handling it will ask for.")
+                    Picker("Type", selection: m.kind) {
+                        ForEach(DisputeKind.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }.frame(maxWidth: 360)
+                    StudioField("With (insurer, landlord, employer, seller)", m.counterparty)
+                    StudioField("Their reference (claim, policy, account, case number)", m.reference)
+                    StudioField("Your name", m.myName)
+                    studioNext("What is disputed") { goTo(.disputed) }
+                }
+            case .disputed:
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioStageHeader("What is disputed", "In plain words: what happened, and what you disagree with.")
+                    StudioField("Amount in dispute", m.disputedAmount)
+                    TextEditor(text: m.summary).font(.body).frame(minHeight: 100)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                    studioNext("Timeline & documents") { goTo(.evidence) }
+                }
+            case .evidence:
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioStageHeader("Timeline & documents", "Every line of the timeline names the document that shows it.")
+                    ForEach(m.timeline) { $t in
+                        HStack(spacing: 8) {
+                            TextField("yyyy-MM-dd", text: $t.date).textFieldStyle(.roundedBorder).frame(width: 110)
+                            TextField("What happened", text: $t.event).textFieldStyle(.roundedBorder)
+                            TextField("Shown by (document)", text: $t.source).textFieldStyle(.roundedBorder).frame(width: 220)
+                            Button { m.wrappedValue.timeline.removeAll { $0.id == t.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
+                                .buttonStyle(.plain).foregroundStyle(.secondary)
+                        }
+                    }
+                    Button { m.wrappedValue.timeline.append(DisputeTimelineEntry()) } label: { Label("Add timeline entry", systemImage: "plus") }
+                    Text("Documents enclosed").font(.callout.weight(.semibold))
+                    ForEach(m.documents) { $d in
+                        HStack(spacing: 8) {
+                            TextField("Document", text: $d.name).textFieldStyle(.roundedBorder)
+                            TextField("What it proves", text: $d.why).textFieldStyle(.roundedBorder)
+                            Button { m.wrappedValue.documents.removeAll { $0.id == d.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
+                                .buttonStyle(.plain).foregroundStyle(.secondary)
+                        }
+                    }
+                    Button { m.wrappedValue.documents.append(DisputeDocument()) } label: { Label("Add document", systemImage: "plus") }
+                    studioNext("What I ask for") { goTo(.request) }
+                }
+            case .request:
+                VStack(alignment: .leading, spacing: 12) {
+                    StudioStageHeader("What I ask for", "The outcome you want, the date you want a reply by, and where it goes if refused.")
+                    StudioField("What you ask for", m.remedy)
+                    StudioField("Reply by (yyyy-MM-dd)", m.deadline)
+                    StudioField("If refused, refer to", m.escalation)
+                    Text("Report preview").font(.callout.weight(.semibold))
+                    StudioReportPreview(text: DisputeFileRenderer.markdown(m.wrappedValue, generatedAt: Date()))
+                }
+            }
+        }
+    }
+}
 
 private func studioNext(_ title: String, _ go: @escaping () -> Void) -> some View {
     HStack { Spacer(); Button(action: go) { Label("Next: \(title)", systemImage: "arrow.right") }.buttonStyle(.borderedProminent) }

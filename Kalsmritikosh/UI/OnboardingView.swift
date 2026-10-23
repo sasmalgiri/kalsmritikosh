@@ -28,6 +28,9 @@ public struct OnboardingView: View {
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
     @AppStorage("kalsmritikosh.fromDevonthink") private var fromDevonthink = false
     @AppStorage("kalsmritikosh.standalone") private var standalone = false
+    /// D1 — what the person is investigating, and the name of their first case.
+    @State private var investigationKindID: String = ""
+    @State private var firstCaseTitle: String = ""
 
     enum Step: Int { case welcome, persona, hardware, folder, scope, done }
 
@@ -178,28 +181,28 @@ public struct OnboardingView: View {
     /// answers themselves never depend on it.
     private var personaStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("What will you use Investigation Docs Made Easy for?").font(.headline)
-            Text("This tailors the sidebar to the screens you\u{2019}ll use most. You can change it any time; answers and evidence are the same for everyone.")
+            Text("What are you investigating?").font(.headline)
+            Text("Pick the closest — it opens the right tools and, if you name it, your first case. You can change it any time; answers and evidence are the same for everyone. The judgement stays yours: the app documents the investigation, it does not decide it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 VStack(spacing: 8) {
-                    ForEach(GuideContent.personas) { p in
+                    ForEach(InvestigationKindChoice.all) { k in
                         Button {
-                            personaID = p.id
-                            ModulePreset.apply(persona: p.id)   // switches ON this role's tools; never off
+                            investigationKindID = k.id
+                            personaID = k.guidePersona
+                            ModulePreset.apply(persona: k.guidePersona)   // switches ON this role's tools; never off
                         } label: {
                             HStack(spacing: 10) {
-                                Text(p.emoji).font(.system(size: 22))
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(p.title).font(.callout.weight(.semibold))
-                                    Text(p.tagline).font(.caption).foregroundStyle(.secondary)
+                                    Text(k.title).font(.callout.weight(.semibold))
+                                    Text(k.detail).font(.caption).foregroundStyle(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                         .multilineTextAlignment(.leading)
                                 }
                                 Spacer(minLength: 0)
-                                if p.id == personaID {
+                                if k.id == investigationKindID {
                                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint)
                                 }
                             }
@@ -207,15 +210,19 @@ public struct OnboardingView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(p.id == personaID ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.08), lineWidth: 1))
+                                .stroke(k.id == investigationKindID ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.08), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(p.title). \(p.tagline)")
-                        .accessibilityAddTraits(p.id == personaID ? .isSelected : [])
+                        .accessibilityLabel("\(k.title). \(k.detail)")
+                        .accessibilityAddTraits(k.id == investigationKindID ? .isSelected : [])
                     }
                 }
             }
             .frame(maxHeight: 260)
+            if !investigationKindID.isEmpty {
+                TextField("Name your first case (optional) — e.g. \u{201C}Acme expense complaint\u{201D}", text: $firstCaseTitle)
+                    .textFieldStyle(.roundedBorder)
+            }
             Toggle("I\u{2019}m coming from DEVONthink (switch on the import and smart-collection tools)", isOn: Binding(
                 get: { fromDevonthink },
                 set: { on in fromDevonthink = on; if on { ModulePreset.apply(persona: "devonthink") } }))
@@ -371,6 +378,12 @@ public struct OnboardingView: View {
             Spacer()
             Button(step == .done ? "Finish" : "Continue") {
                 if step == .done {
+                    // D1 — open the first case for the persona chosen, when the person named it.
+                    if let kind = InvestigationKindChoice.all.first(where: { $0.id == investigationKindID }),
+                       !firstCaseTitle.trimmingCharacters(in: .whitespaces).isEmpty {
+                        let title = firstCaseTitle
+                        Task { await appState.createStarterCase(title: title, kind: kind) }
+                    }
                     dismiss()
                 } else {
                     step = Step(rawValue: step.rawValue + 1) ?? .done

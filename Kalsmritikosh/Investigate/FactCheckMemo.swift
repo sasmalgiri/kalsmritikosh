@@ -59,6 +59,8 @@ public struct FactCheckMemo: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var history: [StudioAuditEntry]?
+    /// A2 — where each filled field came from (case evidence or investigator entry).
+    public var provenance: StudioProvenance?
 
     // Stage 1 — Story.
     public var premise: String = ""          // what the story alleges, in one paragraph
@@ -198,6 +200,7 @@ public enum FactCheckMemoRenderer {
         out += "- A corrections path exists post-publication: **\(m.correctionsPathConfirmed ? "Yes" : "No")**\n\n"
 
         out += "---\n\nPrepared by **\(m.reporter.orDashJ)** · Reviewed by **\(m.editor.orDashJ)**\n"
+        out += StudioExportGate.provenanceAppendix(m.gateValues, provenance: m.provenance)
         out += StudioAudit.appendix(m.history)
         return out
     }

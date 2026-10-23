@@ -21,6 +21,8 @@ public struct PrivilegeLogStudioView: View {
     @State private var activeID: UUID?
     @State private var stage: PrivilegeLog.Stage = .matter
     @State private var showExporter = false
+    @State private var gate = StudioProvenanceGate()
+    @State private var fillMessage: String?
 
     public init() {}
 
@@ -29,6 +31,7 @@ public struct PrivilegeLogStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
@@ -129,12 +132,17 @@ public struct PrivilegeLogStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Log title", text: p.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                Button { showExporter = true } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                StudioFillFromCaseMenu(model: p, message: $fillMessage)
+                Button { gate.run(p) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { printLog(p.wrappedValue) } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(p) { printLog(p.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
+            if let fillMessage {
+                Text(fillMessage).font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 20).padding(.bottom, 6).frame(maxWidth: .infinity, alignment: .leading)
+            }
             Divider()
             stepper(p.wrappedValue)
             Divider()
@@ -263,10 +271,10 @@ public struct PrivilegeLogStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { copyLog(p.wrappedValue) } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { showExporter = true } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(p) { copyLog(p.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(p) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { printLog(p.wrappedValue) } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(p) { printLog(p.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }

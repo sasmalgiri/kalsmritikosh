@@ -115,8 +115,15 @@ public final class PersonaJobsModel {
     public var runnableJobs: [PersonaJob] { jobs.filter { $0.kind != .caseIntake } }
 
     public func load() async {
-        personas = await service.personas()
-        if selectedPersona == nil { selectedPersona = personas.first?.id }
+        // A5 — the Content creator persona stays hidden unless its module is on.
+        personas = await service.personas().filter {
+            ProductModuleFlags.isEnabled(.contentCreatorPersona) || $0.id != ContentCreatorPersonaPackage.applicationID
+        }
+        if selectedPersona == nil {
+            // D1 — open with the persona onboarding chose for the first case.
+            let chosen = UserDefaults.standard.string(forKey: AppState.investigationPersonaKey)
+            selectedPersona = personas.first { $0.id.rawValue == chosen }?.id ?? personas.first?.id
+        }
         workspaceList = (try? await workspaces.all(includeArchived: false)) ?? []
         if selectedWorkspace == nil { selectedWorkspace = workspaceList.first?.id }
         await reloadJobs()

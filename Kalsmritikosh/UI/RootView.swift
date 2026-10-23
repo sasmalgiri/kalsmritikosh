@@ -33,7 +33,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case dataLab
     case timeline, history, findings, notebook, dossier, explore, matrix, compareDocs, connections, story
     case reasoning, hypotheses, hrStudio, privilegeStudio, siuStudio, faStudio, jnStudio
-    case rsStudio, gnStudio, ccStudio, inStudio
+    case rsStudio, gnStudio, ccStudio, inStudio, dsStudio
     case sopBoard
     case fundFlow, emailThreads
     case review
@@ -82,6 +82,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .gnStudio:     return "Proof Argument"
         case .ccStudio:     return "Publish Package"
         case .inStudio:     return "Emergency Binder"
+        case .dsStudio:     return "Dispute File"
         case .sopBoard:     return "Compliance Board"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
@@ -145,6 +146,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .gnStudio:     return "person.text.rectangle"
         case .ccStudio:     return "shippingbox"
         case .inStudio:     return "book.closed"
+        case .dsStudio:     return "doc.plaintext"
         case .sopBoard:     return "checklist.checked"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
@@ -224,6 +226,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .gnStudio:     return "Answer a genealogical question to the Genealogical Proof Standard — research log with nil results, conflicts resolved, written proof argument"
         case .ccStudio:     return "Ship a piece professionally — claims checked to sources, rights cleared, disclosures confirmed, corrections path in place"
         case .inStudio:     return "Build the family emergency binder — key people, where every document and account lives, your instructions, printable"
+        case .dsStudio:     return "Put a personal dispute on paper — insurance claim, deposit, employment or refund — with the timeline and the document behind each line, filled from your case"
         case .sopBoard:     return "Every external SOP the app implements, at the edition verified, with periodic re-checks so compliance is maintained over time"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
@@ -265,7 +268,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct:
+                // A5 — the creator's Publish Package studio only with its persona module on.
+                return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes].filter { $0 != .ccStudio || ProductModuleFlags.isEnabled(.contentCreatorPersona) }
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .sutra, .sopBoard, .settings]
@@ -460,7 +465,7 @@ public struct RootView: View {
         case .findings, .notebook, .dossier, .story, .review,
              .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses,
              .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
-             .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio:    return .reports
+             .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio: return .reports
         case .guide, .settings, .sutra, .sopBoard:                    return .settings
         }
     }
@@ -1408,6 +1413,7 @@ public struct RootView: View {
         case .gnStudio:     GenealogistStudioView()
         case .ccStudio:     CreatorStudioView()
         case .inStudio:     BinderStudioView()
+        case .dsStudio:     DisputeFileStudioView()
         case .sopBoard:     ComplianceBoardView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()

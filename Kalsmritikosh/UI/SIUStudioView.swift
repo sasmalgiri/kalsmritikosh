@@ -23,6 +23,8 @@ public struct SIUStudioView: View {
     @State private var activeID: UUID?
     @State private var stage: SIUReferral.Stage = .claim
     @State private var showExporter = false
+    @State private var gate = StudioProvenanceGate()
+    @State private var fillMessage: String?
 
     public init() {}
 
@@ -31,6 +33,7 @@ public struct SIUStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
@@ -132,12 +135,17 @@ public struct SIUStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("File title", text: r.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                Button { showExporter = true } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                StudioFillFromCaseMenu(model: r, message: $fillMessage)
+                Button { gate.run(r) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { printReport(r.wrappedValue) } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(r) { printReport(r.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
+            if let fillMessage {
+                Text(fillMessage).font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 20).padding(.bottom, 6).frame(maxWidth: .infinity, alignment: .leading)
+            }
             Divider()
             stepper(r.wrappedValue)
             Divider()
@@ -320,10 +328,10 @@ public struct SIUStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { copyReport(r.wrappedValue) } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { showExporter = true } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(r) { copyReport(r.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(r) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { printReport(r.wrappedValue) } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(r) { printReport(r.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }

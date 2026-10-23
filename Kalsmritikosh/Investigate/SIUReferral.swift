@@ -79,6 +79,8 @@ public struct SIUReferral: Codable, Identifiable, Hashable, Sendable {
     public var createdAt: Date
     public var updatedAt: Date
     public var history: [StudioAuditEntry]?
+    /// A2 — where each filled field came from (case evidence or investigator entry).
+    public var provenance: StudioProvenance?
 
     // Stage 1 — Claim identification.
     public var claimNumber: String = ""
@@ -241,6 +243,7 @@ public enum SIUReportRenderer {
             out += "_This referral is made in good faith under the applicable insurance-fraud reporting statute._\n\n"
         }
         out += "---\n\nPrepared by **\(s.investigator.orDashSIU)**. The file documents what triggered the referral, what was done, what was found, and the action that followed.\n"
+        out += StudioExportGate.provenanceAppendix(s.gateValues, provenance: s.provenance)
         out += StudioAudit.appendix(s.history)
         return out
     }

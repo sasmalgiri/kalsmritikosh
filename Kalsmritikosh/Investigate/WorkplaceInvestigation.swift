@@ -79,6 +79,8 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
     public var createdAt: Date
     public var updatedAt: Date
     public var history: [StudioAuditEntry]?
+    /// A2 — where each filled field came from (case evidence or investigator entry).
+    public var provenance: StudioProvenance?
 
     // Stage 1 — Mandate (terms of reference).
     public var mandate: String = ""                     // who commissioned it, to determine what
@@ -281,6 +283,7 @@ public enum WIReportRenderer {
         out += "---\n\nPrepared by **\(w.investigator.orDashWI)**"
         if !w.submittedTo.trimmed.isEmpty { out += " · Submitted to **\(w.submittedTo)**" }
         out += "\n"
+        out += StudioExportGate.provenanceAppendix(w.gateValues, provenance: w.provenance)
         out += StudioAudit.appendix(w.history)
         return out
     }

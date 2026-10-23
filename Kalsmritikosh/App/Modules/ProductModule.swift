@@ -50,6 +50,8 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
     case writtenNotes
     // Wave X — the last DEVONthink gaps, offline (docs/PARITY_SIX_TODO.md)
     case userGroups, filingSuggestions, richDocuments, folderSync
+    // Investigation focus (docs/INVESTIGATION_FOCUS_TODO.md A5)
+    case contentCreatorPersona
 
     public var id: String { rawValue }
 
@@ -211,6 +213,11 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "X-3", group: "Writing", title: "Rich text notes and PDF marks",
                         detail: "Write notes in rich text as well as Markdown, and highlight, underline, strike out or comment on PDFs. Marks are kept beside the PDF — the original file is never changed — and you can export an annotated copy.",
                         whenOff: "Rich notes and PDF marks are hidden but kept.",
+                        implemented: true)
+        case .contentCreatorPersona:
+            return Spec(planID: "IF-A5", group: "Personas", title: "Content creator persona",
+                        detail: "The Content creator persona and its Publish Package studio. The app is for investigation documentation; the creator's pre-publish disclosure check now lives in Compliance (Endorsement & disclosure review).",
+                        whenOff: "The persona and its studio are hidden; saved publish packages are kept and return when this is turned on.",
                         implemented: true)
         case .folderSync:
             return Spec(planID: "X-5", group: "Storage", title: "Sync through a folder",
