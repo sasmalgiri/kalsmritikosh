@@ -13,7 +13,9 @@ WORDS = {0: "no", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"
 FULL_DATE = re.compile(r"\b(\d{4}-\d\d-\d\d|(?:%s)\.? \d{1,2},? \d{4})\b" % "|".join(m[:3] + "[a-z]*" for m in MONTHS))
 
 REFUSAL_RE = re.compile(r"can.?t (ground|answer)|couldn.?t|no (evidence|documents?)|not (find|found)|"
-                        r"don.?t have|isn.?t in your|nothing in your|unable", re.I)
+                        r"don.?t have|isn.?t in your|nothing in your|unable|"
+                        r"(?:does|do) not (?:state|specify|say|mention|provide|indicate|include|contain|show)|"
+                        r"not (?:stated|specified|mentioned|provided|given)", re.I)
 
 def date_forms(iso):
     y, m, d = iso.split("-"); mi, di = int(m), int(d); name = MONTHS[mi - 1]
@@ -26,6 +28,15 @@ def date_forms(iso):
 def words(s):
     return [w for w in re.findall(r"[a-z][a-z'-]+", s.lower()) if len(w) > 3 and w not in STOP]
 
+def name_forms(v):
+    """A court named either way round: "oklahoma supreme court" ~ "supreme court of oklahoma"."""
+    forms = [v]
+    m = re.match(r"^(.+?) (supreme court|court of appeals|court of civil appeals|court of criminal appeals|appellate court)$", v)
+    if m: forms.append(f"{m.group(2)} of {m.group(1)}")
+    m = re.match(r"^(supreme court|court of appeals|court of civil appeals|court of criminal appeals|appellate court) of (.+)$", v)
+    if m: forms.append(f"{m.group(2)} {m.group(1)}")
+    return forms
+
 def value_in(expect, text):
     """(present, note) — is the expected value in `text`?"""
     b = text.lower()
@@ -34,7 +45,7 @@ def value_in(expect, text):
         other = FULL_DATE.findall(text)
         return False, ("other-date:" + other[0]) if other else None
     if "any" in expect:
-        return any(v and v.lower() in b for v in expect["any"]), None
+        return any(v and any(f in b for f in name_forms(v.lower())) for v in expect["any"]), None
     if "number" in expect:
         n = expect["number"]
         return bool(re.search(rf"\b{n}\b", b) or (n in WORDS and re.search(rf"\b{WORDS[n]}\b", b))), None
@@ -42,6 +53,11 @@ def value_in(expect, text):
         want = set(words(expect["overlap"]))
         if not want: return False, None
         got = len(want & set(words(text))) / len(want)
+        # A verbatim quote of the expected passage's opening sentence answers it, even when the
+        # key runs on for several more sentences.
+        head = " ".join(words(expect["overlap"]))[:80]
+        if got < 0.5 and len(head) >= 40 and head in " ".join(words(text)):
+            return True, f"overlap={got:.2f}+quoted-opening"
         return got >= 0.5, f"overlap={got:.2f}"
     return False, None
 

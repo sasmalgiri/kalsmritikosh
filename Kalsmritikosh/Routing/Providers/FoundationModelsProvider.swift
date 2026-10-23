@@ -31,14 +31,45 @@ public struct FoundationModelsProvider: ModelProvider {
             ],
             minRAMBytes: 0,
             diskBytes: 0,
-            // Apple on-device SystemLanguageModel is a fixed 4,096-token window
-            // (instructions + prompt + @Generable schema + output all count).
-            // Not enlargeable — callers chunk to fit; see TokenBudget.
-            contextWindow: 4096,
+            // The window the installed model reports (instructions + prompt +
+            // @Generable schema + output all count). 2026-10-20: this Mac's model
+            // ("AFM 3 Core Advanced") reports 8,192; the first release had 4,096,
+            // which stays the floor when the model can't be asked.
+            contextWindow: Self.installedContextSize(),
             privacyLevel: .onDevice,
             requiresDownload: false,
             tier: .medium
         )
+    }
+
+    /// The installed on-device model's context window in tokens; 4,096 when unknown.
+    public nonisolated static func installedContextSize() -> Int {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, iOS 26.0, *), case .available = SystemLanguageModel.default.availability {
+            let size = SystemLanguageModel.default.contextSize
+            if size > 0 { return size }
+        }
+        #endif
+        return 4096
+    }
+
+    /// The installed on-device model's name as Apple shows it ("AFM 3 Core Advanced"), or nil
+    /// when the model isn't available. Recorded with test runs so a result says which model
+    /// produced it.
+    public nonisolated static func installedModelName() -> String? {
+        #if canImport(FoundationModels)
+        // `variant` is in the macOS 27 SDK (Xcode 27, Swift 6.4); CI still builds with the
+        // macOS 26 SDK, where the symbol does not exist.
+        #if compiler(>=6.4)
+        if #available(macOS 27.0, iOS 27.0, *), case .available = SystemLanguageModel.default.availability {
+            return SystemLanguageModel.default.variant.displayName
+        }
+        #endif
+        if #available(macOS 26.0, iOS 26.0, *), case .available = SystemLanguageModel.default.availability {
+            return "Apple on-device model (macOS 26)"
+        }
+        #endif
+        return nil
     }
 
     public func isAvailable() async -> Bool {

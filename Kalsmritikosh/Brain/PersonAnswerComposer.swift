@@ -209,7 +209,7 @@ public enum PaymentAnswerComposer {
         let original = question.trimmingCharacters(in: .whitespacesAndNewlines)
         var phrase = String(original.dropFirst(opener.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "?!. "))
-        if let stop = payeeStops.lazy.compactMap({ phrase.lowercased().range(of: " \($0) ") }).first {
+        if let stop = payeeStops.lazy.compactMap({ phrase.range(of: " \($0) ", options: .caseInsensitive) }).first {
             phrase = String(phrase[..<stop.lowerBound])
         }
         return (phrase, Array(NSOrderedSet(array: tokens).compactMap { $0 as? String }))

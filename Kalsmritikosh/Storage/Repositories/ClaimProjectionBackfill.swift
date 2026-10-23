@@ -112,6 +112,8 @@ public actor ClaimProjectionBackfill {
         // Only this source's contributions: other sources' claims are already projected
         // (case bench 2026-10-18 — re-projecting hub subjects made every ingest slower).
         for subject in subjects { _ = try await producer.produce(forSubjectID: subject, at: now, fromFile: fileID) }
+        // And the file's subject-less facts, as claims anchored to the document itself.
+        _ = try await producer.produceSourceScoped(fromFile: fileID, at: now)
         _ = try await membership.reconcileWorkspaces(forSource: fileID, at: now)
     }
 

@@ -185,7 +185,15 @@ public actor WorkProductAssemblyService {
         // inside this set, so a member's claim backed only by an out-of-workspace source can never
         // leak into the export.
         let sourceFileIDs = try await workspaces.sourceIDs(in: workspace.id)
-        let allowedObjectIDs = try await knowledgeObjects.objectIDs(inFileIDs: sourceFileIDs)
+        var allowedObjectIDs = try await knowledgeObjects.objectIDs(inFileIDs: sourceFileIDs)
+        // A case authorizes exact source versions, including what sits inside a workspace
+        // document (an email's attached report, a ZIP's files). Those are inside the case's
+        // evidence boundary too — case bench 2026-10-20: a case over an email reported only the
+        // email's own header facts, never the attached decision. The case-scope filter below
+        // still keeps only claims whose every citation is a case-authorized version.
+        if let caseAuthorizedVersionIDs {
+            allowedObjectIDs.formUnion(try await knowledgeObjects.objectIDs(inSourceVersionIDs: caseAuthorizedVersionIDs))
+        }
         var context = try await selection.buildContext(
             scope: .workspace(id: workspace.id, memberSubjectIDs: members, allowedObjectIDs: allowedObjectIDs),
             subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)

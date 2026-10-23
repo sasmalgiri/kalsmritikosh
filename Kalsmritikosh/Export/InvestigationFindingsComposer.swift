@@ -28,31 +28,26 @@ public struct InvestigationFindingsComposer: WorkProductSectionComposer {
             return (sel, r.workProductClaim)
         }
 
-        // Findings rows: prefix each with its precision-honest date (undated / conflicting are
-        // stated explicitly), preserving status / decision / review / sourceClaimID / citations.
-        let findings = rendered.map { pair -> WorkProductClaim in
-            var c = pair.claim
-            c.text = "\(SelectedClaimDatePhrase.phrase(for: pair.selected)) — \(c.text)"
-            return c
-        }
+        let findings = Self.distinctFindings(rendered)
 
         // Materials-reviewed counts — SELECTED CONTEXT ONLY (no global event/contradiction/gap reads).
         var objects = Set<KnowledgeObject.ID>()
         var versions = Set<UUID>()
-        var dated = 0, undated = 0
         for pair in rendered {
             for ev in pair.selected.resolved.claim.evidence {
                 objects.insert(ev.objectID)
                 if let v = ev.sourceVersionID { versions.insert(v) }
             }
-            if pair.selected.temporalAnchor != nil { dated += 1 } else { undated += 1 }
         }
+        // Counted over the rows shown (an "Undated…" phrase marks an undated row).
+        let undated = findings.filter { $0.text.hasPrefix("Undated") }.count
+        let dated = findings.count - undated
 
         let mandate = WorkProductSection(title: "Mandate / scope", preamble: [
             "This report concerns the \"\(context.subjectLabel)\" workspace. It presents only findings supported by the sources added to that workspace, and reaches no conclusion beyond them."])
 
         let materials = WorkProductSection(title: "Materials reviewed", preamble: [
-            "\(rendered.count) surfaceable finding(s) drawn from \(objects.count) source document(s) across \(versions.count) source version(s).",
+            "\(findings.count) surfaceable finding(s) drawn from \(objects.count) source document(s) across \(versions.count) source version(s).",
             "\(dated) dated and \(undated) undated finding(s); \(context.selectedConflicts.count) conflict(s) and \(context.selectedGaps.count) evidence gap(s) in scope."])
 
         let methods = WorkProductSection(title: "Methods", preamble: [
@@ -67,6 +62,43 @@ public struct InvestigationFindingsComposer: WorkProductSectionComposer {
 
         return [mandate, materials, methods, findingsSection]
     }
+
+    /// Findings rows: each prefixed with its precision-honest date (undated / conflicting are
+    /// stated explicitly), preserving status / decision / review / sourceClaimID / citations.
+    ///
+    /// Case bench 2026-10-20: one fact reaches the ledger through several producers (the incident
+    /// event, the labeled "Event date" field, the story spine), so the report listed "On
+    /// 2017-01-11 — Event: Employee crushes hand in press track" three times. A row that reads
+    /// exactly like an earlier one is the same finding: it is shown once, carrying every
+    /// citation that supports it (none is dropped).
+    static func distinctFindings(_ rendered: [(selected: SelectedClaim, claim: WorkProductClaim)]) -> [WorkProductClaim] {
+        var out: [WorkProductClaim] = []
+        var index: [String: Int] = [:]
+        for pair in rendered {
+            var c = pair.claim
+            c.text = "\(SelectedClaimDatePhrase.phrase(for: pair.selected)) — \(c.text)"
+            let key = c.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if let i = index[key] {
+                for citation in c.supporting where !out[i].supporting.contains(citation) {
+                    out[i].supporting.append(citation)
+                }
+                for citation in c.contradicting where !out[i].contradicting.contains(citation) {
+                    out[i].contradicting.append(citation)
+                }
+            } else {
+                index[key] = out.count
+                out.append(c)
+            }
+        }
+        return out
+    }
+
+    /// The number of distinct findings the report shows — what the executive summary counts.
+    static func distinctFindingCount(_ context: WorkProductContext) -> Int {
+        distinctFindings(context.selectedClaims.compactMap { sel in
+            ResolvedClaimRenderer.render(sel).map { (sel, $0.workProductClaim) }
+        }).count
+    }
 }
 
 /// Executive-summary composer → one prose section placed FIRST, so a non-technical reader
@@ -80,7 +112,7 @@ public struct InvestigationExecutiveSummaryComposer: WorkProductSectionComposer 
     public var sectionKind: BlueprintSection.Kind { .narrative }
 
     public func compose(_ context: WorkProductContext) -> [WorkProductSection] {
-        let findings = context.selectedClaims.count
+        let findings = InvestigationFindingsComposer.distinctFindingCount(context)
         let conflicts = context.selectedConflicts.count
         let gaps = context.selectedGaps.count
         let line1 = findings == 0

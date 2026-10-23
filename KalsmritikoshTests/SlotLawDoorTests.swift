@@ -50,6 +50,16 @@ struct SlotLawDoorTests {
                 "only the role shape takes the door")
     }
 
+    @Test("A question asking for a value takes the door too; an open request does not")
+    func valueQuestionDoor() {
+        let decision = UUID()
+        let docket = fact("casenumber", "9941")
+        let clean = RetrievalResult(genericFacts: [docket], claimEvaluations: [evalFor(docket, objectID: decision)],
+                                    authorityObjectIDs: [decision])
+        #expect(MasterBrain.isSlotLawQuestion(intent: intent("What is the docket number in Goudeau v. Daigle?"), retrieval: clean))
+        #expect(!MasterBrain.isSlotLawQuestion(intent: intent("Tell me about the docket number in Goudeau v. Daigle"), retrieval: clean))
+    }
+
     @Test("With no expert claims the verifier answers a clean slot, cited to the value as written; a conflict still refuses")
     func verifierSlotLaw() async throws {
         let form = UUID(), letter = UUID()

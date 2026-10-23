@@ -83,7 +83,9 @@ public struct PDFStructuralParser: StructuralParser {
 
             // Native layer missing or garbled → render + OCR this page.
             #if canImport(AppKit)
+            let failedBefore = VisionPerform.failureCount()
             let (ocrText, ocrGrid) = await Self.renderAndOCR(page: page, ocr: ocr)
+            let recognitionFailed = VisionPerform.failureCount() > failedBefore
             if !ocrText.isEmpty || !ocrGrid.isEmpty {
                 ocrPages += 1
                 for (p, para) in Self.paragraphize(ocrText).enumerated() {
@@ -138,6 +140,12 @@ public struct PDFStructuralParser: StructuralParser {
                     extractionMethod: .native, extractionConfidence: 0.2
                 ))
                 ordinal += 1
+            } else if recognitionFailed {
+                // Case bench 2026-10-20: text recognition itself failed (a full disk, a busy
+                // Neural Engine) and the page was recorded as blank — a scanned decision
+                // came out with no text and nothing said so. A failed read is lost content.
+                warnings.append(ParserWarning(severity: .error, code: "pdf.ocr_failed",
+                                              message: "Page \(pageNumber): text recognition failed; re-extract this document to read it."))
             } else {
                 // A page with no native text and nothing from OCR is (almost
                 // always) genuinely blank — an informational note, NOT lost
@@ -155,8 +163,9 @@ public struct PDFStructuralParser: StructuralParser {
         // faithful, and flagging the whole document "partial" would make the
         // confidence layer under-trust a complete extraction.
         let degraded = warnings.contains { $0.severity == .warning || $0.severity == .error }
+        let ocrFailed = warnings.contains { $0.code == "pdf.ocr_failed" }
         let status: ExtractionStatus = blocks.isEmpty
-            ? .empty
+            ? (ocrFailed ? .failed : .empty)
             : (degraded ? .partial : .complete)
         return ParsedDocument(
             id: documentID, logicalSourceID: logicalSourceID, sourceVersionID: sourceVersionID,

@@ -66,9 +66,13 @@ public struct AnswerSynthesizer: Sendable {
               await provider.isAvailable() else { return nil }
 
         // Budget the shared context so DRAFT + a later pass that ALSO carries
-        // the draft still fit the 4,096-token window with room for output.
-        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500)
-        let evidence = Self.evidenceBlock(citations, maxTokens: 800)
+        // the draft still fit the window with room for output. The budgets were
+        // sized for a 4,096-token window; the installed model reports its own
+        // (8,192 for the macOS 27 model), and a larger window carries more
+        // findings and evidence in the same proportion.
+        let scale = max(1, min(4, provider.manifest.contextWindow / 4_096))
+        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500 * scale)
+        let evidence = Self.evidenceBlock(citations, maxTokens: 800 * scale)
         // Topic-first (owner request 2026-09-20): when a distilled topic matches,
         // give it to the model as the PRIMARY orientation so the answer is drawn
         // from the deduped/minimized knowledge — while every stated fact must still
@@ -196,6 +200,33 @@ public struct AnswerSynthesizer: Sendable {
         let final = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard final.count >= 2 else { return nil }
 
+        // Case bench 2026-10-20 (first run with the on-device model): "How many employees
+        // were hurt?" came back as "The document states that injured employees were
+        // involved" — fluent, cited, and without the number the findings carried. Prose
+        // that drops the value the question asks for is worse than the findings it replaces.
+        if Self.dropsAskedValue(question: question, findings: findings, prose: final) {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: synthesis dropped the asked-for value; keeping the grounded body")
+            return nil
+        }
+
+        // Case bench 2026-10-21 (every answer composed by the on-device model): the grounded
+        // answer "Court: United States District Court E.D. Pa." came back as "The Supreme
+        // Court of Pennsylvania decided …", and "Docket: 00-1083." as "The docket number is
+        // 2d 15, 18-19". A labelled value the ledger already holds must survive the rewrite.
+        if Self.dropsLeadValue(findings: findings, prose: final) {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: synthesis changed the answer's labelled value; keeping the grounded body")
+            return nil
+        }
+
+        // Case bench 2026-10-21: "What happened in the case "New Jersey Man Charged With
+        // Identity Theft …"?" came back as the title in a sentence, while the grounded body
+        // named the man, his age and the counts. Prose that only says the question back is no
+        // answer when the findings say more.
+        if Self.echoesQuestion(question: question, findings: findings, prose: final) {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: synthesis only restated the question; keeping the grounded body")
+            return nil
+        }
+
         // §17 — sentence-level citation validation. Reject prose whose factual
         // sentences are largely UNcited rather than ship ungrounded text; the
         // caller then keeps the verifier's claim-cited deterministic body. We
@@ -239,6 +270,86 @@ public struct AnswerSynthesizer: Sendable {
         }
         let fraction = substantive == 0 ? 1.0 : Double(cited) / Double(substantive)
         return (substantive, fraction)
+    }
+
+    /// True when the question asks for a count or a date, the findings carry one, and the
+    /// prose does not.
+    static func dropsAskedValue(question: String, findings: String, prose: String) -> Bool {
+        let q = question.lowercased()
+        // The question's own references ("OSHA investigation 220962021") are not the value.
+        let references = (try? NSRegularExpression(pattern: #"[A-Za-z0-9\-]*\d[A-Za-z0-9\-]*"#))?
+            .matches(in: question, range: NSRange(location: 0, length: (question as NSString).length))
+            .map { (question as NSString).substring(with: $0.range) } ?? []
+        func withoutReferences(_ t: String) -> String {
+            references.reduce(t) { $0.replacingOccurrences(of: $1, with: " ") }
+        }
+        let findings = withoutReferences(findings)
+        let bare = withoutReferences(prose.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression))
+        let numberWords = #"\b(?:no|none|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|single|nobody)\b"#
+        if q.hasPrefix("how many") || q.contains(" how many ") || q.hasPrefix("how much") {
+            let has = { (t: String) in
+                t.range(of: #"\d"#, options: .regularExpression) != nil
+                    || t.range(of: numberWords, options: [.regularExpression, .caseInsensitive]) != nil
+            }
+            return has(findings) && !has(bare)
+        }
+        // "Was anyone killed …?" — an existence question needs its yes/no, or the harm itself
+        // ("The document states that an OSHA accident investigation summary exists" is neither).
+        if q.range(of: #"^(?:was|were|did|has|have|is|are) (?:anyone|anybody|any|there|someone|somebody|no one|nobody)\b"#,
+                   options: .regularExpression) != nil {
+            let stance = #"\b(?:yes|no|not|none|nobody|no one|killed|died|dies|dead|death|deaths|fatal|fatally|fatality|injured|hurt|survived)\b"#
+            return bare.range(of: stance, options: [.regularExpression, .caseInsensitive]) == nil
+        }
+        if q.hasPrefix("when ") || q.hasPrefix("what date") || q.hasPrefix("on what date") {
+            let year = #"\b(?:1[6-9]|20)\d{2}\b"#
+            return findings.range(of: year, options: .regularExpression) != nil
+                && bare.range(of: year, options: .regularExpression) == nil
+        }
+        return false
+    }
+
+    /// True when the findings open with a labelled value ("Court: X." / "Decision date: Y.")
+    /// and the prose does not carry it: a date's year must appear; otherwise at least two
+    /// thirds of the value's words (numbers always) must.
+    static func dropsLeadValue(findings: String, prose: String) -> Bool {
+        guard let first = findings.split(separator: "\n", omittingEmptySubsequences: true).first,
+              let m = try? NSRegularExpression(pattern: #"^([A-Z][A-Za-z ()/&\-]{1,40}):\s+(.+?)(?:\.\s|\.?$)"#)
+                .firstMatch(in: String(first), range: NSRange(location: 0, length: (String(first) as NSString).length))
+        else { return false }
+        let value = (String(first) as NSString).substring(with: m.range(at: 2))
+        let words = value.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { $0.lowercased() }
+        guard !words.isEmpty, words.count <= 12 else { return false }
+        let bare = prose.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression).lowercased()
+        let year = #"\b(?:1[6-9]|20)\d{2}\b"#
+        if let r = value.range(of: year, options: .regularExpression),
+           value.range(of: #"\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|[A-Za-z]{3,9}\.? \d{1,2},? \d{4}|\d{4}-\d{2}-\d{2}"#, options: .regularExpression) != nil {
+            return !bare.contains(value[r].lowercased())
+        }
+        let minor: Set<String> = ["the", "of", "and", "for", "in", "on", "at", "to", "a", "an"]
+        let content = words.filter { !minor.contains($0) && ($0.count >= 3 || $0.contains(where: \.isNumber)) }
+        guard !content.isEmpty else { return false }
+        let bareWords = Set(bare.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+        if content.contains(where: { $0.contains(where: \.isNumber) && !bareWords.contains($0) }) { return true }
+        let kept = content.filter { bareWords.contains($0) }.count
+        return kept * 3 < content.count * 2
+    }
+
+    /// True when at least 85% of the prose's content words already appear in the question
+    /// and the findings carry at least three content words the question does not. Words are
+    /// compared by their first five letters ("charged" ~ "charges").
+    static func echoesQuestion(question: String, findings: String, prose: String) -> Bool {
+        let minor: Set<String> = ["the", "and", "for", "was", "were", "with", "that", "this", "from", "into",
+                                  "has", "have", "had", "are", "his", "her", "their", "its", "who", "what",
+                                  "case", "document", "documents", "states", "says", "source"]
+        func stems(_ t: String) -> Set<String> {
+            Set(t.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init).filter { $0.count >= 3 && !minor.contains($0) }.map { String($0.prefix(5)) })
+        }
+        let bare = prose.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression)
+        let said = stems(bare), asked = stems(question)
+        guard said.count >= 3 else { return false }
+        let echoed = Double(said.intersection(asked).count) / Double(said.count)
+        return echoed >= 0.85 && stems(findings).subtracting(asked).count >= 3
     }
 
     // MARK: - Helpers

@@ -120,6 +120,36 @@ struct LegalFlowingDocketTests {
     @Test("A numbered clause is not a docket")
     func clause() {
         #expect(LegalCaseDomainPack.flowingDocketNumber(in: "See No. 5 of the agreement signed by the plaintiff.") == nil)
+        #expect(LegalCaseDomainPack.flowingDocketNumber(in: "The court read No. 12 of the exhibits. 1. Contracts — held binding.") == nil)
+    }
+
+    // Case bench 2026-10-20: state reporters and older F.2d volumes number a case plainly, next
+    // to the court, and print the decision date with no label.
+    static let plainCaptions: [(String, String, String)] = [
+        ("WEISMAN v. UNITED STATES (Circuit Court of Appeals, Eighth Circuit. August 28, 1924.) No. 6602. 1. Indictment and information — Must state directly every essential element.", "6602", "1924-08-28"),
+        ("UNITED ACCOUNTS, INCORPORATED, Plaintiff and Appellant, v. George DACHTLER, Defendant and Respondent. No. 7861. Supreme Court of North Dakota. Dec. 16, 1959. Joseph Coghlan, Bismarck, for plaintiff.", "7861", "1959-12-16"),
+        ("STATE of Indiana, Appellant, v. Joseph H. NIXON, Appellee. No. 378S44. Supreme Court of Indiana. Jan. 5, 1979. Theodore L. Sendak, Atty. Gen.", "378S44", "1979-01-05"),
+        ("SOVEREIGN CAMP W. O. W. v. BODEN. (No. 4781.) Special Supreme Court of Texas. Dec. 16, 1927. 1. Statutes — Law's province.", "4781", "1927-12-16"),
+        ("[Civ. No. 33558. Second Dist., Div. Five. Nov. 18, 1969.] STATE COMPENSATION INSURANCE FUND, Petitioner, v. WORKMEN'S COMPENSATION APPEALS BOARD, Respondents.", "Civ. No. 33558", "1969-11-18"),
+        ("LAWSON et al. v. GLOVER et al. No. 279. District Court, S. D. Texas, Corpus Christi Division. Nov. 15, 1932. Perkins & Floyd, of Alice, Tex., for plaintiffs.", "279", "1932-11-15"),
+        ("UNITED STATES v. FOSTER et al. Civ. A. No. 9870. United States District Court W. D. Pennsylvania. Oct. 24, 1952. Albert C. Osofsky, for plaintiff.", "Civ. A. No. 9870", "1952-10-24"),
+        ("FISCHER & PORTER CO. v. BROOKS ROTAMETER CO. Civ. A. 8710. United States District Court E. D. Pennsylvania. Sept. 8, 1952. Leonard L. Kalish, for plaintiff.", "Civ. A. 8710", "1952-09-08"),
+        ("In re KEHL. Patent Appeals No. 4043. Court of Customs and Patent Appeals. Jan. 23, 1939. Charles C. Scheffler, of New York City.", "Patent Appeals No. 4043", "1939-01-23"),
+        ("SAUNDERS v. COMMISSIONER OF INTERNAL REVENUE and three other cases. Nos. 1658, 1662-1664. Circuit Court of Appeals, Tenth Circuit. Jan. 9, 1939. A. W. McHendrie, of Trinidad.", "1658, 1662-1664", "1939-01-09"),
+    ]
+
+    @Test("The court's initials do not end the court's name before the date")
+    func initialsInCourt() {
+        #expect(LegalCaseDomainPack.courtLineDate(in: "UNITED STATES v. MORGAN et al. District Court, E. D. Illinois. March 13, 1935. Paul F. Jones, U. S. Atty.") == "March 13, 1935")
+        #expect(LegalCaseDomainPack.courtLineDate(in: "The Court held a hearing. On March 13, 1935, the defendant appeared.") == nil)
+    }
+
+    @Test("Plain docket and unlabeled date beside the court", arguments: plainCaptions)
+    func plain(text: String, docket: String, date: String) {
+        let facts = LegalCaseDomainPack.extractFacts(fromText: text, subjectLabel: "case", blockID: UUID())
+        let shown = facts.map { "\($0.field)=\($0.value)" }
+        #expect(facts.contains { $0.field.lowercased() == "casenumber" && $0.value == docket }, "\(shown)")
+        #expect(facts.contains { $0.field.lowercased() == "decisiondate" && $0.value == date }, "\(shown)")
     }
 }
 
@@ -144,6 +174,14 @@ struct LegalCourtAndDispositionTests {
         ("dismiss plaintiffs’ claims. CONCLUSION The order and judgment of the district court are affirmed. Costs to plaintiffs.", "affirmed"),
         ("For the foregoing reasons, the judgment of the district court is reversed and remanded.", "reversed and remanded"),
         ("We have considered the remaining contentions. Judgment affirmed.", "affirmed"),
+        // Case bench 2026-10-20: the ruling as a full closing sentence.
+        ("They should stand as written. The decree is reversed, and the bill dismissed.", "reversed and dismissed"),
+        ("I find it unnecessary to consider the other questions. Defendants’ motion must be, and is hereby, sustained. Order may be entered accordingly.", "sustained"),
+        ("Despite the fact that they made restoration. The decision of the Board of Tax Appeals and the judgments of the court are severally affirmed.", "affirmed"),
+        ("A question not urged before the Board. The petition is denied and the judgment of the Board is affirmed.", "denied and affirmed"),
+        ("The order appealed from is purely interlocutory. Appeal dismissed.", "dismissed"),
+        ("We relegate him to his legal remedies by way of appeal. The writ is denied. GIVAN, C. J., and HUNTER, PRENTICE and PIVARNIK, JJ., concur.", "denied"),
+        ("It was not a compliance. The order of the District Court is therefore reversed and the case remanded with directions that a new order be entered.", "reversed and remanded"),
     ])
     func disposition(text: String, expected: String) {
         #expect(LegalCaseDomainPack.disposition(in: text) == expected)
@@ -155,9 +193,56 @@ struct LegalCourtAndDispositionTests {
         ("RUTH BADER GINSBURG, Circuit Judge:\nThe petition …", "Ruth Bader Ginsburg"),
         ("Mr. JUSTICE MORAN\ndelivered the opinion of the court:\nFred L. Agnew …", "Moran"),
         ("PER CURIAM.\nThe judgment is affirmed.", "Per curiam"),
+        // Normalized block text: the line breaks are gone.
+        ("Cozen O'Connor, P.C., by Kimberly Sullivan, Charlotte, for defendants-appellants. CALABRIA, Judge. CALABRIA, Judge. Assurance Company of America appeals.", "Calabria"),
+        ("Jose M. Tous-Rodriguez, San Juan, PR, for plaintiff. CASELLAS, District Judge. OPINION AND ORDER", "Casellas"),
     ])
     func author(text: String, expected: String) {
         #expect(LegalCaseDomainPack.opinionAuthor(in: text) == expected)
+    }
+
+    @Test("A court line with initials, and a long caption, still give the decision date")
+    func courtLineDateInitialsAndLongCaption() {
+        #expect(LegalCaseDomainPack.courtLineDate(in: "No. 99-CV-5688 (NGG). United States District Court, E.D. New York. Feb. 14, 2001. A. Kathleen Tomlinson") == "Feb. 14, 2001")
+        let parties = String(repeating: "Assurance Company of America, Zurich American Insurance Company, ", count: 22)
+        #expect(LegalCaseDomainPack.courtLineDate(in: "WACHOVIA BANK v. " + parties + "Defendants. No. COA05-1112. Court of Appeals of North Carolina. July 18, 2006. Appeal by defendants") == "July 18, 2006")
+    }
+
+    @Test("A caption split across blocks gives the decision date, citing the court and date blocks")
+    func splitCaptionDate() {
+        let court = UUID(), date = UUID()
+        let blocks: [(id: UUID, text: String)] = [
+            (UUID(), "Keltch ex rel. Outhier v. Strunk"), (UUID(), "No. 36959."),
+            (court, "Supreme Court of Oklahoma."), (date, "March 27, 1956."),
+            (UUID(), "This was an unfortunate accident in which the plaintiff was injured."),
+        ]
+        let fact = LegalCaseDomainPack.documentLevelDecisionDate(blocks: blocks, subjectLabel: "Keltch")
+        #expect(fact?.value == "1956-03-27")
+        #expect(fact?.sourceBlockIDs == [court, date])
+        #expect(LegalCaseDomainPack.documentLevelDecisionDate(
+            blocks: [(UUID(), "The meeting is on March 27, 1956."), (UUID(), "Bring the minutes.")], subjectLabel: "x") == nil)
+    }
+
+    @Test("A caption split across blocks gives the docket and the court")
+    func splitCaptionDocketCourt() {
+        let blocks: [(id: UUID, text: String)] = [
+            (UUID(), "Goudeau v. Daigle"), (UUID(), "GOUDEAU v. DAIGLE et al."), (UUID(), "No. 9941."),
+            (UUID(), "Circuit Court of Appeals, Fifth Circuit."), (UUID(), "Jan. 6, 1942."),
+            (UUID(), "This appeal is from a judgment dismissing appellant's suit to enforce specific performance."),
+        ]
+        let facts = LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: [])
+        // Stored field names are normalized ("casenumber", "decisiondate").
+        #expect(facts.first(where: { $0.field == "casenumber" })?.value == "9941")
+        #expect(facts.first(where: { $0.field == "court" })?.value.contains("Fifth Circuit") == true)
+        #expect(facts.first(where: { $0.field == "decisiondate" })?.value == "1942-01-06")
+        // Already filed by a block: left alone. Not a caption: nothing.
+        #expect(LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: ["caseNumber", "court", "decisionDate"]).isEmpty)
+        #expect(LegalCaseDomainPack.documentLevelCaption(blocks: [(UUID(), "Minutes of the meeting."), (UUID(), "No. 5 on the agenda.")], subjectLabel: "x", have: []).isEmpty)
+    }
+
+    @Test("A Northern District of Illinois docket keeps its letter")
+    func ndIllDocket() {
+        #expect(LegalCaseDomainPack.captionDocketNumber(in: "MISSOURI-KANSAS-TEXAS RAILROAD v. BOARD\nNo. 50 C 684.\nUnited States District Court, N. D. Illinois, E. D.") == "50 C 684")
     }
 
     @Test("A judge mentioned in the body is not the author")
@@ -174,5 +259,8 @@ struct LegalCourtAndDispositionTests {
     func proseIgnored() {
         #expect(LegalCaseDomainPack.disposition(in: "The board affirmed its commitment to safety and met again in May.") == nil)
         #expect(LegalCaseDomainPack.disposition(in: "In Smith, the conviction was affirmed on appeal, which the defendant now disputes.") == nil)
+        // The case's history, in the past tense, is not its outcome.
+        #expect(LegalCaseDomainPack.disposition(in: "The trial began in May. The defendant's motion to suppress was denied. The jury convicted him.") == nil)
+        #expect(LegalCaseDomainPack.disposition(in: "We turn to the merits. The question is whether the order was granted in time.") == nil)
     }
 }

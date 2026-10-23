@@ -197,7 +197,9 @@ public enum SlotAnswerComposer {
             // suppress the label when the value already carries it, so the
             // sentence reads "Patent No. 900123." not "Patent number:
             // Patent No. 900123."
-            let sentence = "\(labeledValue(best.fact, label: label))."
+            // A value that ends a sentence itself ("Cardinal Health Inc.") takes no second period.
+            let stated = labeledValue(best.fact, label: label)
+            let sentence = stated.hasSuffix(".") ? stated : stated + "."
             var single = SlotAnswerComposition(
                 primaryText: sentence,
                 supportingObjectIDs: [best.objectID],
@@ -297,7 +299,10 @@ public enum SlotAnswerComposer {
             return renderCanonicalDate(iso: fact.value) + unit
         }
         let display: String
-        if isV1, let dl = Self.displayLabel(forFieldID: fact.field) {
+        // A value that carries its own designation ("Civ. No. 3730", "Patent Appeals No. 4043")
+        // is shown as written — "Case No. Civ. No. 3730" says the label twice.
+        if isV1, let dl = Self.displayLabel(forFieldID: fact.field),
+           fact.value.range(of: #"\b(?:No|Nos)\.|^[A-Za-z]+\.\s"#, options: .regularExpression) == nil {
             display = "\(dl) \(fact.value)"
         } else {
             display = fact.value

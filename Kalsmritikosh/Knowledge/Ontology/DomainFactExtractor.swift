@@ -199,6 +199,9 @@ public struct DomainFactExtractor: Sendable {
                blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel) {
             facts.append(voted)
         }
+        facts += LegalCaseDomainPack.documentLevelCaption(
+            blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel,
+            have: Set(facts.map(\.field)))
         // The document-level merge the call sites already performed on the
         // accumulated per-block output, kept here so this entry point's
         // contract matches `extract(fromText:)`: callers receive merged facts.

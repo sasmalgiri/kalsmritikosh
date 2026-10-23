@@ -507,6 +507,15 @@ public actor MasterBrain {
         default:
             return nil
         }
+        // A why-question asks for a stated reason, not a history (case bench 2026-10-21: "Why
+        // was FDA recall D-0132-2023 issued?" came back as a two-event history of the emails
+        // that carried the recall report).
+        if SentenceQuoteComposer.asksWhy(question) { return nil }
+        // A question that names a ledger field asks for its value, not a history (case bench
+        // 2026-10-22: "What did the court decide in Pinching v. Wurdeman?" — disposition
+        // "affirmed" on file — came back as a model-written account of the opinion's reasoning,
+        // and one for "reversed and remanded" as "the court affirmed").
+        if !SlotFieldResolver.resolve(in: question.lowercased()).isEmpty { return nil }
 
         await sessionProfile?.recordTurn(
             question: question,
@@ -533,6 +542,15 @@ public actor MasterBrain {
         )
 
         let retrieval = (try? await retriever.retrieve(for: intent, layers: decision.retrievalLayers, access: access))?.result ?? RetrievalResult()
+
+        // Case bench 2026-10-20: fewer than two dated events is not a history. With no model
+        // it printed one line under a history header; with Apple's on-device model it wrote
+        // one paraphrased sentence plus filler ("The incident occurred at document [E1]"),
+        // where the evidence pipeline gives the passage that tells it. Hand it over before
+        // spending a model call.
+        if retrieval.events.count < 2 {
+            return nil
+        }
 
         // Hydrate 5W+H slot bundles for the composer's input.
         let slotBundles = (try? await eventsRepo.narrativeSlots(
@@ -606,13 +624,6 @@ public actor MasterBrain {
             // nothing to add, so hand the question to the evidence pipeline (which refuses on
             // its own when the archive doesn't answer).
             if narrative.chapters.isEmpty {
-                return nil
-            }
-            // Same bench, same question: one dated event without prose is a single line ("Aug
-            // 19, 2017: the valve closed, amputating …") under a history header — less than the
-            // evidence pipeline gives (the passage that tells it). A history needs at least two
-            // events to say anything a passage doesn't.
-            if retrieval.events.count < 2 {
                 return nil
             }
         }
@@ -1467,7 +1478,13 @@ public actor MasterBrain {
     /// P2.3 — a `.role` question whose retrieved facts give the slot composer
     /// one canonical, structured, conflict-free value.
     nonisolated static func isSlotLawQuestion(intent: UserIntent, retrieval: RetrievalResult) -> Bool {
-        guard QuestionShapeRouter.route(intent.rawQuestion).shape == .role else { return false }
+        // Case bench 2026-10-23: "What is the docket number in Goudeau v. Daigle?" — "No. 9941"
+        // on file — came back as a fact dump whenever the on-device model ran, because the
+        // experts' claims kept the verifier from shipping the clean slot. A question that ASKS
+        // FOR a value (what/which/when/where/who …) takes the same door as a role question;
+        // "tell me about …" does not.
+        let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
+        guard shape == .role || (shape == .unresolved && asksForOneValue(intent.rawQuestion)) else { return false }
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
         guard !plan.slotFieldIDs.isEmpty,
               let slot = SlotAnswerComposer.compose(
@@ -1478,6 +1495,10 @@ public actor MasterBrain {
                 documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count))
         else { return false }
         return !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
+    }
+
+    nonisolated static func asksForOneValue(_ question: String) -> Bool {
+        question.lowercased().range(of: #"^\s*(?:what|which|when|where|who)\b"#, options: .regularExpression) != nil
     }
 
     public func answerWithDiagnostics(

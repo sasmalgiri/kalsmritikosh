@@ -618,6 +618,9 @@ public final class AppState {
     /// LENS over the one engine: it references canonical workspaces / sources / deadlines by id and forks
     /// no canonical evidence, task, deadline or SensitiveScope authority. Live from boot.
     public private(set) var investigationCases: InvestigationCaseRepository?
+    /// Case bench 2026-10-20 — a case opened over a workspace takes in its documents (and their
+    /// attachments / archive members) as recorded in-scope sources.
+    public private(set) var investigationWorkspaceIntake: InvestigationWorkspaceIntake?
     /// INV-01-C1 — the Investigator "Ask" entry point. Orchestration only: it resolves the active case's
     /// authorized source scope and runs the SHARED MasterBrain over a SourceScopedRetriever so no
     /// unauthorized source can enter the evidence packet or citations. No persona engine. Live from boot.
@@ -2332,6 +2335,10 @@ public final class AppState {
             // INV-01-A — the Investigator case-intake & scope authority, live from boot over the shared ledger.
             let investigationCasesRepo = InvestigationCaseRepository(database: db)
             self.investigationCases = investigationCasesRepo
+            let workspaceIntake = InvestigationWorkspaceIntake(
+                cases: investigationCasesRepo, workspaces: workspacesRepo,
+                coverage: CaseCoverageRepository(database: db))
+            self.investigationWorkspaceIntake = workspaceIntake
             // INV-01-C1 — the Investigator Ask entry point: composes the active case's authorized scope
             // over the SHARED retriever + SHARED MasterBrain (no persona engine). The brain is built per
             // request via this factory so the case-scoped retriever governs every retrieval pass while the
@@ -2509,7 +2516,8 @@ public final class AppState {
                 methods: investigationMethodsService,
                 causal: investigationCausalService,
                 linkage: investigationLinkageService,
-                capa: investigationCAPAService)
+                capa: investigationCAPAService,
+                workspaceIntake: workspaceIntake)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind

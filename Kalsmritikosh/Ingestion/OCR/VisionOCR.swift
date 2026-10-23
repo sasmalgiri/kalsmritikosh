@@ -60,6 +60,12 @@ public actor VisionOCR: OCREngine {
         self.customWords = customWords
     }
 
+    /// An upright read with at least this many lines at this mean confidence ends the
+    /// orientation search.
+    nonisolated static func readsUpright(lines: Int, confidence: Float) -> Bool {
+        lines >= 10 && confidence >= 0.85
+    }
+
     public func recognizePrinted(at url: URL) async -> [String] {
         #if canImport(Vision) && canImport(AppKit)
         guard let image = NSImage(contentsOf: url),
@@ -86,6 +92,10 @@ public actor VisionOCR: OCREngine {
                 bestConfidence = confidence
                 bestText = text
             }
+            // Case bench 2026-10-20: a page that reads densely and confidently upright is
+            // upright; the three other full passes only cost time (a scanned page took eight
+            // "accurate" passes across this and the table reader).
+            if orientation == .up, Self.readsUpright(lines: text.count, confidence: confidence) { break }
         }
         return bestText
         #else
@@ -113,13 +123,8 @@ public actor VisionOCR: OCREngine {
         if #available(macOS 13.0, *) {
             request.automaticallyDetectsLanguage = false
         }
-        let handler = VNImageRequestHandler(
-            cgImage: cgImage,
-            orientation: orientation,
-            options: [:]
-        )
+        guard VisionPerform.perform(request, cgImage: cgImage, orientation: orientation) else { return ([], 0) }
         do {
-            try handler.perform([request])
             let observations = request.results ?? []
             var strings: [String] = []
             var totalConfidence: Float = 0
@@ -157,6 +162,7 @@ public actor VisionOCR: OCREngine {
             let corrected = recognizeObservations(cgImage: cgImage, orientation: orientation, correct: true)
             let mean = corrected.isEmpty ? 0 : corrected.map(\.confidence).reduce(0, +) / Float(corrected.count)
             if mean > best.confidence { best = (corrected, mean) }
+            if orientation == .up, Self.readsUpright(lines: corrected.count, confidence: mean) { break }
         }
         var lines = best.lines
         guard lines.contains(where: { OCRTextPolicy.isIdentifierShaped($0.text) }) else { return lines }
@@ -198,9 +204,8 @@ public actor VisionOCR: OCREngine {
         request.usesLanguageCorrection = correct
         if !customWords.isEmpty { request.customWords = customWords }
         if #available(macOS 13.0, *) { request.automaticallyDetectsLanguage = false }
-        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
+        guard VisionPerform.perform(request, cgImage: cgImage, orientation: orientation) else { return [] }
         do {
-            try handler.perform([request])
             let observations = request.results ?? []
             return observations.compactMap { obs in
                 guard let top = obs.topCandidates(1).first else { return nil }

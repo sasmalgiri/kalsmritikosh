@@ -107,6 +107,13 @@ public actor IdentifierAnchoredRetriever: Retriever {
                 captions += ["\(c.left) \(v) \(c.right)", "\(c.left). \(v) \(c.right)", "\(c.left), \(v) \(c.right)"]
             }
         }
+        // "In re Kehl" / "Matter of Smith" name a one-party case (case bench 2026-10-20: these
+        // went unanchored, so the answer listed every opinion author in the archive).
+        captions += Self.oneSidedCaptions(in: question)
+        // A matter named by its quoted title — "What happened in the case "Patriot Coal to Pay
+        // $6.5 Million …"?" (case bench 2026-10-21: unanchored, so the answer was a history of
+        // three other cases in the archive).
+        captions += Self.quotedTitles(in: question)
         // A caption is CITED by every later decision that relies on the case, so the documents
         // that OPEN with it — the decision itself — are preferred over those that merely cite
         // it (case bench 2026-10-18: a cited caption pulled another decision's "affirmed" into
@@ -135,6 +142,30 @@ public actor IdentifierAnchoredRetriever: Retriever {
         return .authorizing(versions)
     }
 
+    /// "In re Kehl", "In the Matter of Smith", "Ex parte Jones" → the caption's opening words,
+    /// with the first party name ("in re kehl"). Matched only against a document's first line.
+    nonisolated static func oneSidedCaptions(in question: String) -> [String] {
+        let pattern = #"\b(In re|In the Matter of|Matter of|Ex parte|Estate of)\s+([A-Z][A-Za-z'&\-]*[A-Za-z])"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = question as NSString
+        return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            let name = ns.substring(with: m.range(at: 2))
+            return name.count >= 2 ? "\(ns.substring(with: m.range(at: 1))) \(name)".lowercased() : nil
+        }
+    }
+
+    /// Quoted phrases of at least four words — a document named by its title. Lower-cased,
+    /// straight and curly quotes alike.
+    nonisolated static func quotedTitles(in question: String) -> [String] {
+        let pattern = #"["“”]([^"“”]{12,220})["“”]"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = question as NSString
+        return re.matches(in: question, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            let t = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.split(separator: " ").count >= 4 ? t.lowercased() : nil
+        }
+    }
+
     /// Current source versions whose text contains `token` (case-insensitive), at most
     /// maximumAnchoredVersions + 1; nil when the lookup fails.
     static func sourceVersions(containing token: String, database: Database, openingOnly: Bool = false) async -> Set<UUID>? {
@@ -143,7 +174,7 @@ public actor IdentifierAnchoredRetriever: Retriever {
         let sql = """
         SELECT DISTINCT COALESCE(c.source_version_id, eb.source_version_id) AS v FROM chunks c
         LEFT JOIN evidence_blocks eb ON eb.id = c.evidence_block_id
-        WHERE LOWER(\(openingOnly ? "substr(c.text, 1, CASE WHEN instr(c.text, char(10)) > 0 THEN instr(c.text, char(10)) ELSE 300 END)" : "c.text")) LIKE ? \(openingOnly ? "AND c.ordinal = 0" : "")
+        WHERE LOWER(\(openingOnly ? "substr(c.text, 1, CASE WHEN instr(c.text, char(10)) > 0 THEN instr(c.text, char(10)) ELSE 300 END)" : "REPLACE(c.text, char(10), ' ')")) LIKE ? \(openingOnly ? "AND c.ordinal = 0" : "")
           AND COALESCE(c.source_version_id, eb.source_version_id) IS NOT NULL
         LIMIT \(maximumAnchoredVersions + 1);
         """

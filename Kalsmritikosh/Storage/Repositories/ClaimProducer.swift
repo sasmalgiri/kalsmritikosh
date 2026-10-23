@@ -183,6 +183,27 @@ public actor ClaimProducer {
         return produced
     }
 
+    /// The claims ONE FILE contributes that belong to no subject — facts read from a document
+    /// without a resolved subject (a court decision's date, docket and disposition; an accident
+    /// report's labeled fields). They are source-scoped claims, anchored to the document.
+    ///
+    /// Found by the case bench, 2026-10-20: the ingest hook projected claims only for the file's
+    /// SUBJECTS, so a subject-less fact became a claim only at the next full backfill — in the
+    /// same session, an investigation's findings report over a court decision was empty.
+    @discardableResult
+    public func produceSourceScoped(fromFile fileID: UUID, at now: Date) async throws -> Int {
+        var blocks: [UUID] = []
+        for o in try await evidence.objectIDs(forFile: fileID) {
+            blocks += try await evidence.blocks(forObject: o).map(\.id)
+        }
+        guard !blocks.isEmpty else { return 0 }
+        var produced = 0
+        for f in try await genericFacts.facts(forBlockIDs: blocks) where f.subjectID == nil {
+            produced += await persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
+        }
+        return produced
+    }
+
     // MARK: - Durable-projection boundary (one source → produced / skipped; infra errors THROW)
 
     public func project(genericFact f: GenericFact, at now: Date) async throws -> ClaimProjectionOutcome {

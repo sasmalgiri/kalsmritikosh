@@ -28,10 +28,16 @@ pids=()
 for d in "$WORK"/w*; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
-  TEST_RUNNER_CASEBENCH_NOAI=$NOAI TEST_RUNNER_CASEBENCH_DIR="$d" TEST_RUNNER_CASEBENCH_OUT="$OUT" \
-    xcodebuild test-without-building -scheme Kalsmritikosh -destination 'platform=macOS,arch=arm64' \
-      -derivedDataPath "${DD:-build/dd}" -resultBundlePath "$WORK/$n.xcresult" \
-      -only-testing:KalsmritikoshTests/CaseBenchRunner > "$WORK/$n.log" 2>&1 &
+  # A host can crash at launch when several start together; finished shards are skipped, so a
+  # failed worker is simply started again (up to 3 tries).
+  ( for try in 1 2 3; do
+      rm -rf "$WORK/$n.xcresult"
+      TEST_RUNNER_CASEBENCH_NOAI=$NOAI TEST_RUNNER_CASEBENCH_DIR="$d" TEST_RUNNER_CASEBENCH_OUT="$OUT" \
+        xcodebuild test-without-building -scheme Kalsmritikosh -destination 'platform=macOS,arch=arm64' \
+          -derivedDataPath "${DD:-build/dd}" -resultBundlePath "$WORK/$n.xcresult" \
+          -only-testing:KalsmritikoshTests/CaseBenchRunner >> "$WORK/$n.log" 2>&1 && exit 0
+      sleep 20
+    done; exit 1 ) &
   pids+=($!)
   sleep 5
 done

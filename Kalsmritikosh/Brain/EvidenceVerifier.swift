@@ -50,6 +50,36 @@ public struct EvidenceVerifier: Verifier {
     /// via the TEST_RUNNER_ prefix), that instant is the answer path's
     /// "now", making sealed artifacts byte-comparable across days — the
     /// zero-epsilon seal. Never set in the shipped app.
+    /// Do the passages show a value of the requested field's kind — a written date for a date
+    /// field, a number after "No." for an identifier, an amount for money, the label's own noun
+    /// for a text field ("court")?
+    nonisolated static func passagesMayCarry(field: String, label: String, texts: [String]) -> Bool {
+        let joined = texts.joined(separator: "\n")
+        guard !joined.isEmpty else { return false }
+        func has(_ pattern: String) -> Bool {
+            joined.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        switch FactSchemaRegistry.expectedShape(of: field) {
+        case .date:
+            return has(#"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2},?\s+\d{4}\b"#)
+                || has(#"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{4}\b"#)
+        case .identifier:
+            // A number after "No." is any document's reference; it answers only the identifier the
+            // label names — the label's own word must be in the passages too ("trademark number"
+            // asked of a patent letter is still absent). A case or docket number is the "No." of
+            // a caption.
+            let qualifier = label.lowercased().split(separator: " ").first.map(String.init) ?? ""
+            guard has(#"\b(?:no|nos|number|#)\.?\s*[a-z]{0,5}[-:]?\d[\d\-:a-z]{1,}"#) else { return false }
+            if ["case", "docket"].contains(qualifier) { return true }
+            return qualifier.count >= 4 && has("\\b" + NSRegularExpression.escapedPattern(for: qualifier) + "\\b")
+        case .money:
+            return has(#"[$€£₹]\s?\d"#)
+        default:
+            let noun = label.lowercased().split(separator: " ").last.map(String.init) ?? ""
+            return noun.count >= 4 && has("\\b" + NSRegularExpression.escapedPattern(for: noun) + "\\b")
+        }
+    }
+
     nonisolated static func referenceNow() -> Date {
         guard let raw = ProcessInfo.processInfo.environment["KALSMRITIKOSH_REFERENCE_NOW"],
               let secs = TimeInterval(raw) else { return Date() }
@@ -651,7 +681,16 @@ public struct EvidenceVerifier: Verifier {
         // D-11/D-12 — compile the plan ONCE; when the question names a
         // registered fact field, compose the slot answer from the surfaced
         // facts (their carried evaluations decide surfaceability).
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // The fields the retrieved facts carry, so a when-question can name a specific dated field
+        // ("initiated" → recall initiation date) instead of the bare "date".
+        let retrievedFields = Set(retrieval.genericFacts.map { FactSchemaRegistry.normalizeField($0.field) })
+        // The fields on file also let a question that asks for ONE value reach a field nobody
+        // curated ("classification", "recallingfirm"); a curated mapping still wins
+        // (SlotFieldResolver.resolve). Timeline, list, count, yes/no and the other composed
+        // shapes are not value questions ("timeline of the patent" is not the patent field).
+        let asksForValue = [.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
+                                               knownFields: asksForValue ? retrievedFields : [])
         // A1.2 — the receipt speaks for the WHOLE archive.
         let totals = await archiveTotals?()
         let searchedScope = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count
@@ -684,7 +723,7 @@ public struct EvidenceVerifier: Verifier {
             }
         }
 
-        let slot = SlotAnswerComposer.compose(
+        var slot = SlotAnswerComposer.compose(
             slotFieldIDs: plan.slotFieldIDs,
             facts: retrieval.genericFacts,
             evaluations: retrieval.claimEvaluations,
@@ -693,6 +732,17 @@ public struct EvidenceVerifier: Verifier {
             archivePassages: totals?.passages,
             scoreByObject: scoreByObject,
             salienceByObject: meanSalienceByObject)
+        // Case bench 2026-10-20: "none of the 53 documents searched carries a decision date"
+        // was said about a decision whose first lines state its date — no extractor had filed
+        // it as a field, and the absence sentence pre-empted the passages that show it. An
+        // absence is only stated when the retrieved passages carry no value of that kind
+        // either; otherwise the passages answer.
+        if let s = slot, s.isNotFound, let field = plan.slotFieldIDs.first,
+           Self.passagesMayCarry(field: field, label: s.requestedLabel,
+                                 texts: retrieval.chunks.prefix(12).map(\.chunk.text)) {
+            KalsmritikoshLog.brain.info("EvidenceVerifier: field \(field, privacy: .public) not on file, but the passages carry a value of its kind; answering from them")
+            slot = nil
+        }
 
         // D-14 — the slot-question confidence profile: a uniquely-attested
         // value from a structured source with no conflict on the requested
@@ -863,6 +913,23 @@ public struct EvidenceVerifier: Verifier {
                     refused: false,
                     report: effectiveReport)
             }
+        }
+        // A count over numbered entries ("Employee #1:", "Employee #2:") counts them.
+        if slot == nil, let counted = NumberedEntryCount.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            var body = counted.render()
+            if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+            body += "\n\n(Counted from the numbered entries in the cited document; no model was consulted.)"
+            KalsmritikoshLog.brain.info("NumberedEntryCount: \(counted.count, privacy: .public) \(counted.noun, privacy: .public) entr(ies)")
+            return VerifiedAnswer(
+                body: body,
+                answerText: counted.render(),
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: counted.objectID, chunkID: counted.chunkID,
+                                                    snippet: String(counted.entries.joined(separator: "; ").prefix(180)))],
+                confidence: Confidence(0.8),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
         }
         if slot == nil, claimsAreDumpOnly,
            let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {

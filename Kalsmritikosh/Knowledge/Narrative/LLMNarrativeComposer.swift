@@ -389,8 +389,12 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         slots: EventNarrativeSlots
     ) -> String {
         var lines: [String] = ["\(label) \(event.title) (\(event.kind.rawValue))"]
-        let date = ISO8601DateFormatter().string(from: event.date)
-        lines.append("  WHEN: \(date)")
+        // Written as a reader writes it ("June 8, 2017"): the model copies this text into its
+        // prose, and the case bench's first on-device run showed "On 2017-06-08T00:00:00Z, an
+        // employee …" when it was an ISO timestamp. Event dates are midnight UTC.
+        var format = Date.FormatStyle(date: .long, time: .omitted).locale(Locale(identifier: "en_US_POSIX"))
+        format.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        lines.append("  WHEN: \(event.date.formatted(format))")
         if !slots.who.isEmpty {
             lines.append("  WHO: \(slots.who.map(\.text).joined(separator: ", "))")
         }
