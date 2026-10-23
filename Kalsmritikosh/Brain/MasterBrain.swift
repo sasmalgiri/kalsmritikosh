@@ -1478,7 +1478,13 @@ public actor MasterBrain {
     /// P2.3 — a `.role` question whose retrieved facts give the slot composer
     /// one canonical, structured, conflict-free value.
     nonisolated static func isSlotLawQuestion(intent: UserIntent, retrieval: RetrievalResult) -> Bool {
-        guard QuestionShapeRouter.route(intent.rawQuestion).shape == .role else { return false }
+        // Case bench 2026-10-23: "What is the docket number in Goudeau v. Daigle?" — "No. 9941"
+        // on file — came back as a fact dump whenever the on-device model ran, because the
+        // experts' claims kept the verifier from shipping the clean slot. A question that ASKS
+        // FOR a value (what/which/when/where/who …) takes the same door as a role question;
+        // "tell me about …" does not.
+        let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
+        guard shape == .role || (shape == .unresolved && asksForOneValue(intent.rawQuestion)) else { return false }
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
         guard !plan.slotFieldIDs.isEmpty,
               let slot = SlotAnswerComposer.compose(
@@ -1489,6 +1495,10 @@ public actor MasterBrain {
                 documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count))
         else { return false }
         return !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
+    }
+
+    nonisolated static func asksForOneValue(_ question: String) -> Bool {
+        question.lowercased().range(of: #"^\s*(?:what|which|when|where|who)\b"#, options: .regularExpression) != nil
     }
 
     public func answerWithDiagnostics(
