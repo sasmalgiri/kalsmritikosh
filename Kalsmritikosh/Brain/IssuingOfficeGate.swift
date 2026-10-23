@@ -43,9 +43,11 @@ public nonisolated enum IssuingOfficeGate {
     /// True when the answer already names a specific office (a district office or a division).
     static func namesOffice(_ text: String) -> Bool { office(in: text) != nil }
 
-    public static func apply(question: String, _ answer: VerifiedAnswer) -> VerifiedAnswer {
+    /// `sourceTexts` — the full text of the cited documents (the office line is often outside the
+    /// cited snippet). Without it, a "not named" refusal is only given when the snippets are all there is.
+    public static func apply(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
         guard asksIssuingOffice(question), !answer.refused, !namesOffice(answer.answerText ?? answer.body) else { return answer }
-        let pool = ([answer.body] + answer.citations.map(\.snippet)).joined(separator: "\n")
+        let pool = ([answer.body] + answer.citations.map(\.snippet) + sourceTexts).joined(separator: "\n")
         let text: String
         let refused: Bool
         if let found = office(in: pool) {

@@ -1623,7 +1623,15 @@ public actor MasterBrain {
     ) async -> [AnswerUpdate] {
         // Q-3 — a when-question is answered with a date or an honest "no date given"; a which-office
         // question with the office the release names, or an honest "not named".
-        let verified = IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified))
+        var officeSources: [String] = []
+        if IssuingOfficeGate.asksIssuingOffice(question), let objects {
+            // The office line is often outside the cited snippet — read the cited documents themselves.
+            for id in Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3) {
+                if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
+            }
+        }
+        let verified = IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
+                                               sourceTexts: officeSources)
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
             // Degraded (no ledger wired — tests/boot): the terminal state is

@@ -37,6 +37,14 @@ struct IssuingOfficeGateTests {
         #expect(IssuingOfficeGate.office(in: "U.S. Attorney Kenneth A. Polite announced") == nil)
     }
 
+    @Test("The office line outside the cited snippet is found in the cited document's own text")
+    func fromDocumentText() {
+        let a = Self.answer("Paul Castellon pled guilty today to corruption charges [1].", snippets: ["Castellon pled guilty today."])
+        let doc = "HIALEAH – Paul Castellon pled guilty today.\n\nBenjamin G. Greenberg, Acting United States Attorney for the Southern District of Florida, announced the plea."
+        let out = IssuingOfficeGate.apply(question: Self.q, a, sourceTexts: [doc])
+        #expect(out.body == "The U.S. Attorney's Office for the Southern District of Florida announced it.")
+    }
+
     @Test("Nothing named → an honest refusal; an answer that names an office is kept")
     func refusalAndKeep() {
         let none = IssuingOfficeGate.apply(question: Self.q, Self.answer("U.S. Attorney Kenneth A. Polite announced that the defendant pled guilty."))
