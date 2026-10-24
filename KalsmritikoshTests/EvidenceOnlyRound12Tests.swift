@@ -115,6 +115,9 @@ struct EvidenceOnlyRound12Tests {
         #expect(within.first?.fieldID == "reasonforrecall")
         #expect(within.first?.value == "cGMP Deviations: Potential product contamination.")
         #expect(OpenFieldExtractor.danglingLabel("Reason for recall:") == "Reason for recall")
+        let long = "Lack of Assurance of Sterility: A recall of all compounded sterile preparations within expiry is being initiated due to observations associated with poor sterile production practices."
+        #expect(OpenFieldExtractor.fields(in: "Reason for recall:\n" + long, kind: .paragraph).first?.value == long)
+        #expect(OpenFieldExtractor.fields(in: "Note: " + long, kind: .paragraph).isEmpty)
         #expect(OpenFieldExtractor.danglingLabel("He said: ") == nil)
     }
 
