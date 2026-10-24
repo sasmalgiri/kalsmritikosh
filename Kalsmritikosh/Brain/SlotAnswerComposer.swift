@@ -269,7 +269,11 @@ public enum SlotAnswerComposer {
         var best: [[String]?] = Array(repeating: nil, count: chars.count + 1)
         best[0] = []
         for i in 0..<chars.count where best[i] != nil {
-            for j in (i + 2)...min(chars.count, i + 14) {
+            // Words are 2–14 letters; near the end of the id the range can be empty — never form a
+            // closed range whose lower bound exceeds its upper (that traps).
+            let upper = min(chars.count, i + 14)
+            guard i + 2 <= upper else { continue }
+            for j in (i + 2)...upper {
                 let w = String(chars[i..<j])
                 guard Self.fieldWords.contains(w), let prev = best[i] else { continue }
                 if best[j] == nil || (best[j]?.count ?? .max) > prev.count + 1 { best[j] = prev + [w] }
