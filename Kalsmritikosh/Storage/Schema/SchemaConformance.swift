@@ -113,14 +113,12 @@ public nonisolated enum SchemaConformance {
     /// One statement in its own savepoint; a failure is rolled back and reported, never thrown.
     static func apply(_ db: Database, _ sql: String, name: String) async -> Bool {
         let sp = "schema_conformance_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        let statement = sql.hasSuffix(";") ? sql : sql + ";"
         do {
-            try await db.exec("SAVEPOINT \(sp);")
-            try await db.exec(sql.hasSuffix(";") ? sql : sql + ";")
-            try await db.exec("RELEASE SAVEPOINT \(sp);")
+            // The Database's own savepoint owner: synchronous and isolated, rolled back on throw.
+            try await db.withSavepoint(sp) { isolatedDB in try isolatedDB.execRaw(statement) }
             return true
         } catch {
-            try? await db.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await db.exec("RELEASE SAVEPOINT \(sp);")
             KalsmritikoshLog.storage.error("Schema conformance: \(name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             return false
         }
