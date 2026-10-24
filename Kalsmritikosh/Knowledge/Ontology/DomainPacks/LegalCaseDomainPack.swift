@@ -160,7 +160,8 @@ public enum LegalCaseDomainPack {
     nonisolated static let plainDocketPatterns = [
         // A designated number keeps its designation — "Civ. A. No. 9870", "Civ. No. 3730",
         // "Patent Appeals No. 4043": a civil and a criminal number 3730 are different cases.
-        #"\b((?:Civ\.|Crim\.|Cr\.|Misc\.|C\.\s?A\.|Patent Appeals?)(?:\s+A\.)?(?:\s+No\.)?\s*[A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z])"# + courtAhead,
+        // "Crim. Nos. 13662 and 13665." — one decision, two numbers (case bench 2026-10-24).
+        #"\b((?:Civ\.|Crim\.|Cr\.|Misc\.|C\.\s?A\.|Patent Appeals?)(?:\s+A\.)?(?:\s+Nos?\.)?\s*[A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z](?:(?:,|\s+and)\s+\d[0-9A-Z\-]{0,12})*)"# + courtAhead,
         // The number, or the whole list ("Nos. 1658, 1662-1664." — one decision, four cases),
         // then the court.
         #"\bNos?\.\s*([A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z](?:,\s*(?:and\s+)?[0-9A-Z\-]+)*)"# + courtAhead,
@@ -179,7 +180,7 @@ public enum LegalCaseDomainPack {
         // York."): a period after a single capital does not end it.
         // "Fifth Dist. Mar. 20, 1981." (California) names the district, not the court; "Court of
         // Civil Appeals of Texas. Waco. March 16, 1939." puts the seat's name before the date.
-        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20}|\bDist(?=\.))(?:[^.]|(?<=[\s,.][A-Z])\.){0,100}?\.\]?\)?\s+(?:[A-Z][a-z]+(?: [A-Z][a-z]+)?\.\s+)?[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
+        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20}|\bDist(?=\.))(?:[^.]|(?<=[\s,.][A-Z])\.){0,100}?\.-?\]?\)?\s+(?:[A-Z][a-z]+(?: [A-Z][a-z]+)?\.\s+)?[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
         let ns = head as NSString
         if let re = try? NSRegularExpression(pattern: pattern),
            let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) {

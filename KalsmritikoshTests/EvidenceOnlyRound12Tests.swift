@@ -40,6 +40,9 @@ struct EvidenceOnlyRound12Tests {
     func courtLineDates() {
         #expect(LegalCaseDomainPack.courtLineDate(in: "[Crim. No. 5335. Fifth Dist. Mar. 20, 1981.] In re") == "Mar. 20, 1981")
         #expect(LegalCaseDomainPack.courtLineDate(in: "No. 2042. Court of Civil Appeals of Texas. Waco. March 16, 1939.") == "March 16, 1939")
+        let nystrom = "UNITED STATES v. NYSTROM et al.\nCrim. Nos. 13662 and 13665.\nUnited States District Court, W. D. Pennsylvania.-\nDec. 1, 1953.\nOliver O. Dibble, for plaintiff."
+        #expect(LegalCaseDomainPack.courtLineDate(in: nystrom) == "Dec. 1, 1953")
+        #expect(LegalCaseDomainPack.flowingDocketNumber(in: nystrom) == "Crim. Nos. 13662 and 13665")
         #expect(LegalCaseDomainPack.courtLineDate(in: "EDENFIELD v. UNITED STATES. No. 9417. Circuit Court of Appeals, Fifth Circuit June 24, 1940. R. Earl Camp") == "June 24, 1940")
     }
 
