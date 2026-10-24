@@ -1630,8 +1630,9 @@ public actor MasterBrain {
                 if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
             }
         }
-        let verified = IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
-                                               sourceTexts: officeSources)
+        let verified = CountQuestionGate.apply(question: question,
+                                               IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
+                                                                       sourceTexts: officeSources))
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
             // Degraded (no ledger wired — tests/boot): the terminal state is

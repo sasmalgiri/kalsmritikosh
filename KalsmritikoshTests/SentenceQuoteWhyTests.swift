@@ -145,8 +145,13 @@ struct NumberedEntryCountTests {
     }
 
     @Test("Nothing numbered, or a unit question, counts nothing")
-    func none() {
+    func none() throws {
         #expect(NumberedEntryCount.compose(question: "How many employees were hurt?", chunks: [chunk("Two employees were hurt.")]) == nil)
+        // Normalized text runs the entries into the record's header line.
+        let inline = "OSHA accident 170052617 — injured employees Employee #1: hospitalized injury, age 35 OSHA accident investigation summary 170052617 Event: Employee injured while dismantling pressurized inflater"
+        let one = try #require(NumberedEntryCount.compose(question: "How many employees were hurt in OSHA investigation 170052617?", chunks: [chunk(inline)]))
+        #expect(one.count == 1)
+        #expect(one.entries == ["Employee #1: hospitalized injury, age 35"])
         #expect(NumberedEntryCount.countedNoun(in: "How many days did it take?") == nil)
     }
 

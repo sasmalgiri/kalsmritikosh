@@ -364,8 +364,13 @@ public struct NumberedEntryCount: Sendable, Equatable {
 
     public nonisolated static func compose(question: String, chunks: [RetrievedChunk]) -> NumberedEntryCount? {
         guard let noun = countedNoun(in: question) else { return nil }
-        let pattern = "(?im)^\\s*(" + NSRegularExpression.escapedPattern(for: noun) + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n]*"
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        // An entry starts a line or follows a space / separator (normalized text runs entries
+        // together: "… injured employees Employee #1: hospitalized injury, age 35 OSHA …").
+        let n0 = NSRegularExpression.escapedPattern(for: noun)
+        let patterns = ["(?im)^\\s*(" + n0 + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*",   // a line of its own
+                        "(?i)(?<=[\\s|])(" + n0 + ")s?\\s*#\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*"]  // mid-line: needs the #
+        let regexes = patterns.compactMap { try? NSRegularExpression(pattern: $0) }
+        guard !regexes.isEmpty else { return nil }
         var best: NumberedEntryCount?
         let byObject = Dictionary(grouping: chunks, by: { $0.chunk.objectID })
         for (object, rcs) in byObject {
@@ -373,10 +378,10 @@ public struct NumberedEntryCount: Sendable, Equatable {
             var first: Chunk?
             for rc in rcs.sorted(by: { $0.chunk.ordinal < $1.chunk.ordinal }) {
                 let ns = rc.chunk.text as NSString
-                for m in re.matches(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) {
+                for m in regexes.flatMap({ $0.matches(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) }) {
                     let n = ns.substring(with: m.range(at: 2))
                     if seen[n] == nil {
-                        seen[n] = ns.substring(with: m.range).trimmingCharacters(in: .whitespacesAndNewlines)
+                        seen[n] = Self.trimEntry(ns.substring(with: m.range), noun: noun)
                         if first == nil { first = rc.chunk }
                     }
                 }
@@ -388,6 +393,22 @@ public struct NumberedEntryCount: Sendable, Equatable {
             }
         }
         return best
+    }
+
+    /// One entry, cut where the next entry or the next label begins ("Employee #1: hospitalized
+    /// injury, age 35 OSHA accident investigation summary …" → "Employee #1: hospitalized injury, age 35").
+    nonisolated static func trimEntry(_ raw: String, noun: String) -> String {
+        var e = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stops = [#"\s+"# + NSRegularExpression.escapedPattern(for: noun) + #"s?\s*#\s*\d"#,   // the next entry
+                     #"(?<=\d)\s+[A-Z]{2,}\b"#,                                                 // "… age 35 OSHA …"
+                     #"\s+[A-Z][A-Za-z]{1,20}(?: [a-z][A-Za-z]{0,20}){0,2}\s*(?:\([a-z]\))?:\s"#]   // the next label
+        for stop in stops {
+            if let r = e.range(of: stop, options: [.regularExpression, .caseInsensitive], range: e.index(e.startIndex, offsetBy: min(4, e.count))..<e.endIndex) {
+                e = String(e[..<r.lowerBound])
+            }
+        }
+        if e.count > 100 { e = String(e.prefix(100)) + "…" }
+        return e.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",;")))
     }
 
     /// The noun after "how many" ("how many employees were hurt" → "employee"), singular.
