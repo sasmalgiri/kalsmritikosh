@@ -3,7 +3,7 @@
 _Draft copy + review notes for App Store Connect (REL-005). Owner fills the bracketed items,
 adds screenshots, and submits. Every claim below is deliberately kept within the "Do NOT claim"
 list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. Last reviewed
-2026-10-23 (investigation app: Cases from intake to closure; English only for v1)._
+2026-10-24 (R-2 App Review 2.3.1 pass: evidence-only answers by default, English only, no judgement promised)._
 
 ## Metadata
 
@@ -33,7 +33,7 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 >
 > **Run the whole case.** Record how a matter came in (anonymously if needed), triage it, and pick
 > the kind of investigation — the plan and the usual tasks with due dates are set up for you. Add
-> the evidence, register exhibits, send preservation notices, plan and hold interviews and record
+> the evidence, register exhibits, issue preservation notices, plan and hold interviews and record
 > the statement the person confirms. For each allegation, link the evidence for and against it,
 > then record your finding and why. Close the case with your reasons; everything done is in the
 > case log.
@@ -74,16 +74,21 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 >
 > **Try it free for 14 days, then buy it once — no subscription, no yearly fee.**
 >
-> **Rich answers use Apple's on-device intelligence** where your Mac supports it; everywhere else
-> the app still works fully in a deterministic mode (search, timelines, matrices, contradictions,
-> gaps, and cited reports).
+> **No AI writes your answers unless you turn it on.** Out of the box, answers, search, timelines,
+> matrices, contradictions, gaps and cited reports all come from your evidence alone. Turn on
+> "Use AI to write answers" in Settings to use Apple's on-device intelligence where your Mac
+> supports it, or your own cloud AI key in Online mode.
+>
+> **English only in this version.** The app's screens are in English. Documents in other languages
+> are kept and searchable by keyword, but names and dates in them may be missed.
 >
 > **Supported files** include common document, spreadsheet, presentation, email, image (with text
 > recognition), and structured-data formats. Some formats are supported with limits and are shown
 > honestly in-app; audio and video are catalogued and preserved at ingest (never auto-transcribed) — transcribe individual files on demand in Transcripts, fully on-device (Apple Speech, English).
 > Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
 >
-> _Investigations Made Easy is an informational aid. Verify important answers against the cited originals; it
+> _Investigations Made Easy is an informational aid. It organises and cites your evidence; it does not
+> decide findings, guilt or outcomes — you do. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
 
 ## Privacy nutrition labels
@@ -124,8 +129,8 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > the user presses Send. Network access is confined to the bundled, sandboxed extension
 > KalsmritikoshNetworkHelper, which may only make HTTPS requests to those three hosts; the main
 > app has no network entitlement. To test: switch to Online, enter a key, ask a question, and
-> observe the consent screen. Rich answers use Apple's on-device Foundation Models on supported macOS 26+
-> hardware; on macOS 15.6–25 the app runs in a deterministic, no-model mode.
+> observe the consent screen. (Cloud AI is used only when "Use AI to write answers" is also on —
+> see below.)
 >
 > **To demo:** launch → Sources → add the included demo folder (or any folder of documents) →
 > "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
@@ -150,5 +155,9 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 - [x] Does not claim full video understanding (says audio/video are preserved at ingest; transcription is on-demand, on-device, English-only in this version).
 - [x] Does not claim 1 TB / unlimited scale (no scale number in copy; store page uses tested figure).
 - [x] Does not claim a bundled reasoning model (says Apple on-device where supported, else deterministic).
+- [x] Does not imply AI writes answers by default (says no AI writes answers unless "Use AI to write answers" is on; SHIP_DECISIONS 2026-10-24).
+- [x] Does not promise judgement (no "proves", "determines guilt", "finds the truth", "solves"); says every finding is the investigator's (App Review 2.3.1, R-2 2026-10-24).
+- [x] States English only for this version (SHIP_DECISIONS 2026-10-23).
+- [x] Quotes no accuracy figures (measured figures live in docs/CASE_BENCH_AI_ROUNDS.md only).
 - [x] Does not claim "no network" falsely (accurate: Private mode — the default — makes no connections; Online mode is opt-in, user-keyed and consented per send; no downloader).
 - [x] Zero-data-collection claim is accurate (no telemetry/analytics/account exist).

@@ -34,21 +34,23 @@
    - Privacy label: **Data Not Collected** (truthful — no network at all).
    - `ITSAppUsesNonExemptEncryption = NO` (no network traffic to encrypt).
    - Age rating questionnaire; category: Productivity or Business.
-   - Price: **one-time purchase, $29–$49 tier** (SHIP_DECISIONS §1; owner
-     sets the exact tier). Terms hold across tiers as of LegalNotice v1.5.
+   - Price: **free download, 14-day free trial, then one $79 in-app
+     purchase**, no subscription, Family Sharing on (SHIP_DECISIONS
+     2026-10-18; supersedes the earlier $29–$49 one-time tier).
    - Third-party notices: bundled BGE MIT notice ships inside the app
      (Resources/THIRD_PARTY_NOTICES.txt); NO Llama licence applies to v1
      (no Llama model ships — see MODEL_ATTRIBUTIONS.md).
-   - Description: own the ~600 MB size — "a larger download because your AI
-     never phones home"; lead with the SOP system + zero-network claims
-     (mirrors docs/index.html, already aligned with in-app notices).
+   - Description: paste from `release/APP_STORE_LISTING.md` (name
+     Investigations Made Easy; R-2 checked 2026-10-24: evidence-only answers
+     by default, English only, judgement stays with the investigator, no
+     accuracy figures).
    - Support URL: the docs site; contact: the in-app mailto feedback address.
 5. **Submit for review.**
 
 ## In parallel (not blocking)
 - Counsel review of LegalNotice v1.5 + governing-law/disputes clause
   (required before charging money — v1 is a paid one-time purchase).
-- Trademark clearance for "Kalsmritikosh".
+- Trademark clearance for "Investigations Made Easy" (the customer-facing name).
 
 ## After approval
 - Tag the release commit; the SOP Compliance Board's periodic re-checks and
