@@ -148,13 +148,15 @@ public struct EvidenceVerifier: Verifier {
         // dropped to suppress stop-word noise; lowercasing makes the
         // Jaccard case-insensitive.
         let tokensByID: [KnowledgeObject.ID: Set<String>] = Dictionary(
-            uniqueKeysWithValues: citations.map { c in
+            citations.map { c in
                 let toks = c.snippet
                     .lowercased()
                     .components(separatedBy: CharacterSet.alphanumerics.inverted)
                     .filter { $0.count >= 3 }
                 return (c.objectID, Set(toks))
-            }
+            },
+            // Two citations into one document (two passages) share its tokens.
+            uniquingKeysWith: { $0.union($1) }
         )
 
         func relevance(_ c: VerifiedAnswer.Citation) -> Double {
@@ -913,6 +915,25 @@ public struct EvidenceVerifier: Verifier {
                     refused: false,
                     report: effectiveReport)
             }
+        }
+        // An account question ("What did NHTSA find in …?") answered by the document's own account
+        // under its Summary/Findings heading — the document's words outrank restated claims
+        // (evidence-only round 2026-10-24: the record's label block was dumped instead).
+        if slot == nil, let account = SentenceQuoteComposer.headedAccount(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            var body = SentenceQuoteComposer.render(account)
+            if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+            body += "\n\n(\(account.receiptLine))"
+            KalsmritikoshLog.brain.info("SentenceQuoteComposer: headed account from chunk \(account.chunkID.uuidString.prefix(8), privacy: .public)")
+            return VerifiedAnswer(
+                body: body,
+                answerText: SentenceQuoteComposer.render(account),
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: account.objectID, chunkID: account.chunkID,
+                                                    snippet: String(account.sentence.prefix(180)))],
+                confidence: Confidence(0.8),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
         }
         // A count over numbered entries ("Employee #1:", "Employee #2:") counts them.
         if slot == nil, let counted = NumberedEntryCount.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {

@@ -921,14 +921,19 @@ public actor HybridRetriever: Retriever {
                 let existingChunkIDs = Set(collected.map(\.chunk.id))
                 // Hydrate chunks for synthetic-question hits not already
                 // present in the chunk-text path.
+                // Several synthetic questions name the same chunk: hydrate it once, keep its best
+                // hit once (case bench 2026-10-24 — once the FTS query stopped failing, duplicate
+                // ids crashed `Dictionary(uniqueKeysWithValues:)`).
+                var seenMissing = Set<Chunk.ID>()
                 let missingChunkIDs = synthHits
                     .map(\.chunkID)
-                    .filter { !existingChunkIDs.contains($0) }
+                    .filter { !existingChunkIDs.contains($0) && seenMissing.insert($0).inserted }
                 let hydrated = (try? await chunks.findByIDs(missingChunkIDs)) ?? []
                 let hydratedByID: [Chunk.ID: Chunk] = Dictionary(
-                    uniqueKeysWithValues: hydrated.map { ($0.id, $0) }
+                    hydrated.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
                 )
-                for hit in synthHits {
+                var appended = Set<Chunk.ID>()
+                for hit in synthHits where appended.insert(hit.chunkID).inserted {
                     if let chunk = hydratedByID[hit.chunkID] {
                         collected.append(RetrievedChunk(
                             chunk: chunk,
@@ -950,8 +955,9 @@ public actor HybridRetriever: Retriever {
             let qaHits = (try? await qaRepo.search(q, limit: 15)) ?? []
             if !qaHits.isEmpty {
                 let existingObjectIDs = Set(collected.map(\.chunk.objectID))
+                var seenAnswers = Set<UUID>()
                 let novelHits = qaHits.filter {
-                    !existingObjectIDs.contains($0.answerObjectID)
+                    !existingObjectIDs.contains($0.answerObjectID) && seenAnswers.insert($0.answerObjectID).inserted
                 }
                 for hit in novelHits {
                     if let chunk = try? await chunks.firstChunk(forObjectID: hit.answerObjectID) {
@@ -1149,7 +1155,7 @@ public actor HybridRetriever: Retriever {
             }
         }
         let hydrated = try await chunks.findByIDs(hits.map(\.chunkID))
-        let byID = Dictionary(uniqueKeysWithValues: hydrated.map { ($0.id, $0) })
+        let byID = Dictionary(hydrated.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return hits.compactMap { hit in
             guard let chunk = byID[hit.chunkID] else { return nil }
             return RetrievedChunk(chunk: chunk, score: hit.score, viaLayer: .vector)

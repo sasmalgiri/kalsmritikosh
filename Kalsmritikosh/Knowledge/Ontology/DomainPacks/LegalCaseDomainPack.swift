@@ -33,7 +33,7 @@ public enum LegalCaseDomainPack {
     /// caseNumber is an identifier (display constant "Case No."); the rest
     /// are text/date and render their own atom.
     public nonisolated static let emittedFields: [String] =
-        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate", "disposition", "opinionAuthor"]
+        ["caseNumber", "court", "plaintiff", "defendant", "hearingDate", "decisionDate", "disposition", "opinionAuthor", "parties"]
 
     public nonisolated static func extractFacts(
         fromText text: String,
@@ -68,7 +68,11 @@ public enum LegalCaseDomainPack {
         // block; a long body paragraph naming a court is citing another decision (case bench
         // 2026-10-22: "the Supreme Court of Tennessee held …" became a federal case's court).
         let captionLike = text.count < 400 || numberedBesideCourt(text) || courtLineDate(in: text) != nil
-        if let v = DomainPackText.labeledValue(after: ["in the court of", "court of", "before the", "tribunal"], in: text)
+        // "In the Court of …" names the deciding court wherever it stands; a bare "court of" in a
+        // long paragraph is usually the court below ("This suit was filed in the District Court of
+        // Grayson County" — case bench 2026-10-24 answered that for a Court of Civil Appeals case).
+        if let v = DomainPackText.labeledValue(after: ["in the court of"], in: text)
+            ?? (captionLike ? DomainPackText.labeledValue(after: ["court of", "before the", "tribunal"], in: text) : nil)
             ?? (captionLike ? captionCourtName(in: text) : nil) {
             facts.append(fact(subjectLabel, "court", v, blockID, 0.7))
         }
@@ -156,7 +160,8 @@ public enum LegalCaseDomainPack {
     nonisolated static let plainDocketPatterns = [
         // A designated number keeps its designation — "Civ. A. No. 9870", "Civ. No. 3730",
         // "Patent Appeals No. 4043": a civil and a criminal number 3730 are different cases.
-        #"\b((?:Civ\.|Crim\.|Cr\.|Misc\.|C\.\s?A\.|Patent Appeals?)(?:\s+A\.)?(?:\s+No\.)?\s*[A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z])"# + courtAhead,
+        // "Crim. Nos. 13662 and 13665." — one decision, two numbers (case bench 2026-10-24).
+        #"\b((?:Civ\.|Crim\.|Cr\.|Misc\.|C\.\s?A\.|Patent Appeals?)(?:\s+A\.)?(?:\s+Nos?\.)?\s*[A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z](?:(?:,|\s+and)\s+\d[0-9A-Z\-]{0,12})*)"# + courtAhead,
         // The number, or the whole list ("Nos. 1658, 1662-1664." — one decision, four cases),
         // then the court.
         #"\bNos?\.\s*([A-Z]{0,5}\d[0-9A-Z\-]{0,12}[0-9A-Z](?:,\s*(?:and\s+)?[0-9A-Z\-]+)*)"# + courtAhead,
@@ -173,10 +178,20 @@ public enum LegalCaseDomainPack {
         let head = String(text.prefix(2500))
         // The court's name may carry initials ("District Court, E. D. Illinois.", "E.D. New
         // York."): a period after a single capital does not end it.
-        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20})(?:[^.]|(?<=[\s,.][A-Z])\.){0,100}?\.\]?\)?\s+[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
-        guard let re = try? NSRegularExpression(pattern: pattern),
-              let m = re.firstMatch(in: head, range: NSRange(location: 0, length: (head as NSString).length)) else { return nil }
-        return (head as NSString).substring(with: m.range(at: 1))
+        // "Fifth Dist. Mar. 20, 1981." (California) names the district, not the court; "Court of
+        // Civil Appeals of Texas. Waco. March 16, 1939." puts the seat's name before the date.
+        let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20}|\bDist(?=\.))(?:[^.]|(?<=[\s,.][A-Z])\.){0,100}?\.-?\]?\)?\s+(?:[A-Z][a-z]+(?: [A-Z][a-z]+)?\.\s+)?[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
+        let ns = head as NSString
+        if let re = try? NSRegularExpression(pattern: pattern),
+           let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) {
+            return ns.substring(with: m.range(at: 1))
+        }
+        // "Circuit Court of Appeals, Fifth Circuit June 24, 1940." — a numbered circuit runs straight
+        // into the date with no period (case bench 2026-10-24).
+        let circuit = #"\b(?:First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Federal|District of Columbia)\s+Circuit,?\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})"#
+        guard let re = try? NSRegularExpression(pattern: circuit),
+              let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(with: m.range(at: 1))
     }
 
     /// The decision date when the caption is split across blocks — HTML and PDF captions put
@@ -187,7 +202,10 @@ public enum LegalCaseDomainPack {
     nonisolated static func documentLevelDecisionDate(blocks: [(id: UUID, text: String)], subjectLabel: String) -> GenericFact? {
         let head = Array(blocks.prefix(20))
         let joined = head.map(\.text).joined(separator: " ")
-        guard let raw = courtLineDate(in: joined), let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10,
+        // A caption line that is only the date ("March 16, 1939.") when the court line does not
+        // run straight into it.
+        guard let raw = courtLineDate(in: joined) ?? captionDateLine(in: head.map(\.text).joined(separator: "\n")),
+              let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10,
               let at = head.firstIndex(where: { $0.text.contains(raw) }) else { return nil }
         var cited = [head[at].id]
         // The court line is the nearest earlier block naming a court (none when both share one).
@@ -225,7 +243,35 @@ public enum LegalCaseDomainPack {
         if missing("decisionDate"), let d = documentLevelDecisionDate(blocks: blocks, subjectLabel: subjectLabel) {
             out.append(d)
         }
+        if missing("parties"), let v = captionParties(in: joined), let b = block(containing: v) {
+            out.append(fact(subjectLabel, "parties", v, b, 0.75))
+        }
         return out
+    }
+
+    /// The parties as the caption's case name gives them: "Sims v. Dallas Ry. & Terminal Co.",
+    /// "In re Kindred", "Ex parte Smith". Case bench 2026-10-24: "Who were the parties in X v. Y?"
+    /// had no fact to answer from, so the answer was a page of passages. Read only from the first
+    /// lines of a document already known to be a caption (the caller's gate); a reporter citation
+    /// running on after the name ("In re Kindred 117 Cal. App. 3d 165 [Crim. No. …") is cut off.
+    nonisolated static func captionParties(in text: String) -> String? {
+        let citation = #"\s+\d{1,4}\s+(?:[A-Z][A-Za-z]*\.?\s?(?:\d[a-z]{1,2}\s)?){1,4}\d{1,5}\b.*$"#
+        for raw in text.components(separatedBy: .newlines).prefix(12) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            guard let first = line.first, first.isUppercase else { continue }
+            line = line.replacingOccurrences(of: citation, with: "", options: .regularExpression)
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ,;"))
+            guard line.count >= 6, line.count <= 200 else { continue }
+            // A sentence citing another decision ("See Smith v. Jones …") is not this case's name.
+            if line.range(of: #"^(?:See|Cf\.|But|Accord|Compare|The|This|As|Under|Following)\s"#, options: .regularExpression) != nil { continue }
+            if line.range(of: #"^(?:In re|In the Matter of|Ex parte|Matter of)\s+[A-Z]"#, options: .regularExpression) != nil
+                || line.range(of: #"^[A-Z].{0,120}?\S\s+(?:v\.|vs\.|versus)\s+[A-Z(]"#, options: .regularExpression) != nil {
+                // The caption's closing period goes; an abbreviation's ("Co.", "Ry.", "Inc.") stays.
+                let lastWord = line.split(separator: " ").last.map { $0.dropLast() } ?? ""
+                return line.hasSuffix(".") && lastWord.count >= 4 ? String(line.dropLast()) : line
+            }
+        }
+        return nil
     }
 
     /// A US court as a caption names it: "United States Court of Appeals, District of Columbia
@@ -318,7 +364,10 @@ public enum LegalCaseDomainPack {
             // — at a line start, or after a sentence end: packs read the block's normalized
             // text, whose line breaks are gone (case bench 2026-10-21: "… for defendants-
             // appellants. CALABRIA, Judge. CALABRIA, Judge. Assurance …" filed no author).
-            #"(?m)(?:^\s*|(?<=[.:;]\s))((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?Judge\s*[:.]"#,
+            // Also "VAN ORSDEL, Associate Justice." / "ALEXANDER, Justice." / "YOUNG, 'Justice." (stray
+            // mark from the source) / "BROWN, J." — never "SMITH, J., concurring" and never a list
+            // ("Before MARTIN, Chief Justice, VAN ORSDEL, …": no terminator after the title).
+            #"(?m)(?:^\s*|(?<=[.:;]\s))((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+['‘’]?(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?(?:(?:Judge|Justice)\s*[:.]|(?:C\.\s?|P\.\s?)?J\.(?!,)(?=\s|$))"#,
             // "Mr. JUSTICE MORAN delivered the opinion of the court" / "Justice Moran delivered …"
             #"(?:Mr\.\s+|Mrs\.\s+|Ms\.\s+)?(?:Chief\s+)?(?:JUSTICE|Justice)\s+([A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+)?)\s+delivered the opinion"#,
         ]

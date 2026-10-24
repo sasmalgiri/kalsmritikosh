@@ -240,7 +240,10 @@ public actor ChunksRepository {
                 """, [.uuid(id)] + vs.map { .uuid($0) })
             if let row = rows.first, let chunk = decode(row) { out.append(chunk) }
         }
-        return out
+        // Case bench 2026-10-24: without the lineage a packed chunk exposed only its first block,
+        // so the facts stated in its later blocks ("Location: Center Island, WA") never rode the
+        // retrieval and "Where did the accident happen?" was answered with passages.
+        return try await hydrateLineage(out)
     }
 
     public func findByIDs(_ ids: [Chunk.ID]) async throws -> [Chunk] {
@@ -257,7 +260,7 @@ public actor ChunksRepository {
                 chunks.append(chunk)
             }
         }
-        return chunks
+        return try await hydrateLineage(chunks)
     }
 
     /// F08 — keyword search restricted to `sourceVersionIDs` INSIDE the query (before ranking/LIMIT),

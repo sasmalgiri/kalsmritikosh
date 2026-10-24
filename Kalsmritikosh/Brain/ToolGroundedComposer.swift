@@ -106,7 +106,7 @@ public enum ToolGroundedComposer {
         question: String,
         results: [ToolResult]
     ) -> [(text: String, citedID: String)] {
-        let byID = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
+        let byID = Dictionary(results.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var kept: [(String, String)] = []
         // Sentences end with "[id]" — anything else is uncited and dies.
         let pieces = candidate.components(separatedBy: CharacterSet(charactersIn: ".\n"))
@@ -206,7 +206,7 @@ public enum ToolGroundedComposer {
             logger.info("ledger.compose: SWEEP kept nothing — falling through")
             return nil
         }
-        let byID = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
+        let byID = Dictionary(results.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var seen = Set<UUID>()
         let objects = kept.flatMap { byID[$0.citedID]?.objectIDs ?? [] }.filter { seen.insert($0).inserted }
         let receipt = [

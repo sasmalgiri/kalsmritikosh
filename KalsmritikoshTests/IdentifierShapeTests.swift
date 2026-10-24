@@ -236,7 +236,8 @@ struct LegalCourtAndDispositionTests {
         #expect(facts.first(where: { $0.field == "court" })?.value.contains("Fifth Circuit") == true)
         #expect(facts.first(where: { $0.field == "decisiondate" })?.value == "1942-01-06")
         // Already filed by a block: left alone. Not a caption: nothing.
-        #expect(LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: ["caseNumber", "court", "decisionDate"]).isEmpty)
+        #expect(LegalCaseDomainPack.documentLevelCaption(blocks: blocks, subjectLabel: "Goudeau", have: ["caseNumber", "court", "decisionDate", "parties"]).isEmpty)
+        #expect(facts.first(where: { $0.field == "parties" })?.value == "Goudeau v. Daigle")
         #expect(LegalCaseDomainPack.documentLevelCaption(blocks: [(UUID(), "Minutes of the meeting."), (UUID(), "No. 5 on the agenda.")], subjectLabel: "x", have: []).isEmpty)
     }
 

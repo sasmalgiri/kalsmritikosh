@@ -59,6 +59,27 @@ nonisolated enum Entitlement: Equatable, Sendable {
         return now < ends ? .trial(endsAt: ends) : .trialEnded
     }
 
+    /// One verified StoreKit transaction, as the rules need it.
+    struct Record: Equatable, Sendable {
+        let productID: String
+        let purchaseDate: Date
+        let originalPurchaseDate: Date
+        let revoked: Bool
+    }
+
+    /// The entitlement from this account's verified current transactions. `storeAnswered` is
+    /// false when neither a transaction nor a product came back (offline first launch, or a build
+    /// with no store): then nothing is known and the app stays usable.
+    static func evaluate(records: [Record], storeAnswered: Bool, now: Date) -> Entitlement {
+        if records.isEmpty && !storeAnswered { return .unknown }
+        // Any standing unlock counts; a refunded one does not hide another that stands.
+        let unlocks = records.filter { $0.productID == PurchaseProducts.unlock }
+        let standing = unlocks.first { !$0.revoked }
+        let trialStart = records.filter { $0.productID == PurchaseProducts.trial }.map(\.originalPurchaseDate).min()
+        return evaluate(unlockedAt: (standing ?? unlocks.first)?.purchaseDate, revokedUnlock: standing == nil && !unlocks.isEmpty,
+                        trialStartedAt: trialStart, now: now)
+    }
+
     /// Whole days left in the trial (at least 1 while any time is left).
     func daysLeft(now: Date = Date()) -> Int? {
         guard case .trial(let ends) = self else { return nil }
@@ -108,26 +129,14 @@ final class PurchaseCenter {
     /// Read the signed transactions StoreKit holds for this Apple account.
     func refresh() async {
         if Self.isTestHost { entitlement = .unlocked; return }
-        var unlockedAt: Date?, revoked = false, trialStart: Date?
-        var sawAny = false
+        var records: [Entitlement.Record] = []
         for await result in Transaction.currentEntitlements {
             guard case .verified(let t) = result else { continue }   // an unverified transaction counts for nothing
-            sawAny = true
-            switch t.productID {
-            case PurchaseProducts.unlock:
-                unlockedAt = t.purchaseDate
-                revoked = t.revocationDate != nil
-            case PurchaseProducts.trial:
-                trialStart = t.originalPurchaseDate
-            default: break
-            }
+            records.append(.init(productID: t.productID, purchaseDate: t.purchaseDate,
+                                 originalPurchaseDate: t.originalPurchaseDate, revoked: t.revocationDate != nil))
         }
-        if !sawAny && unlockProduct == nil && trialProduct == nil {
-            entitlement = .unknown          // no store answered (offline first launch, or a development build)
-            return
-        }
-        entitlement = Entitlement.evaluate(unlockedAt: unlockedAt, revokedUnlock: revoked,
-                                           trialStartedAt: trialStart, now: Date())
+        entitlement = Entitlement.evaluate(records: records, storeAnswered: unlockProduct != nil || trialProduct != nil,
+                                           now: Date())
     }
 
     func startTrial() async { await buy(trialProduct, what: "the free trial") }
@@ -144,13 +153,13 @@ final class PurchaseCenter {
             switch try await product.purchase() {
             case .success(let verification):
                 guard case .verified(let t) = verification else {
-                    message = "The App Store could not confirm \(what). Nothing was charged twice; try Restore."
+                    message = Self.message(for: .unverified, what: what)
                     return
                 }
                 await t.finish()
-                message = nil
-            case .userCancelled: break
-            case .pending: message = "Waiting for approval (for example Ask to Buy). It will unlock by itself once approved."
+                message = Self.message(for: .verified, what: what)
+            case .userCancelled: message = Self.message(for: .cancelled, what: what)
+            case .pending: message = Self.message(for: .pending, what: what)
             @unknown default: break
             }
         } catch {
@@ -158,6 +167,17 @@ final class PurchaseCenter {
             message = error.localizedDescription
         }
         await refresh()
+    }
+
+    /// What a purchase attempt ended in, as the person is told.
+    enum Outcome { case verified, unverified, cancelled, pending }
+
+    nonisolated static func message(for outcome: Outcome, what: String) -> String? {
+        switch outcome {
+        case .verified, .cancelled: return nil
+        case .unverified: return "The App Store could not confirm \(what). Nothing was charged twice; try Restore."
+        case .pending: return "Waiting for approval (for example Ask to Buy). It will unlock by itself once approved."
+        }
     }
 
     /// Ask the App Store for this account's purchases again.

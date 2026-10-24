@@ -181,8 +181,17 @@ public enum OpenFieldExtractor {
         var out: [OpenField] = []
         var seenFieldIDs = Set<String>()
 
+        var dangling: String?
         for rawLine in text.components(separatedBy: .newlines) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            // "Reason for recall:" on a line of its own, the value on the next line (case bench
+            // 2026-10-24: FDA reports print it so, and the reason was never filed).
+            if let label = danglingLabel(line) { dangling = label; continue }
+            if let label = dangling {
+                dangling = nil
+                line = label + ": " + line
+            }
             guard line.count >= minimumLabelCharacters + 2 else { continue }
             guard let pair = split(line) else { continue }
             guard isLabelLike(pair.label), isValueLike(pair.value) else { continue }
@@ -201,6 +210,15 @@ public enum OpenFieldExtractor {
         return out
     }
 
+    /// The label of a line that is ONLY a label ("Reason for recall:"), whose value follows on
+    /// the next line.
+    nonisolated static func danglingLabel(_ line: String) -> String? {
+        guard line.hasSuffix(":") else { return nil }
+        let label = String(line.dropLast()).trimmingCharacters(in: .whitespaces)
+        guard !label.contains(where: { separators.contains($0) }), isLabelLike(label) else { return nil }
+        return label
+    }
+
     /// Split at the FIRST separator only. A line like
     /// "Address: 12 Main St, Pune: 411001" has one label and one value; taking
     /// the last separator would make "411001" the value of a label containing a
@@ -208,6 +226,11 @@ public enum OpenFieldExtractor {
     nonisolated static func split(_ line: String) -> (label: String, value: String)? {
         guard let idx = line.firstIndex(where: { separators.contains($0) }) else { return nil }
         let label = String(line[line.startIndex..<idx]).trimmingCharacters(in: .whitespaces)
+        // A dateline is not a label: "SAN FRANCISCO – Jose Alvarado … was sentenced" (case bench
+        // 2026-10-24 minted the field "sanfrancisco"). A capitalised place before a dash opens a
+        // news story.
+        if line[idx] == "–" || line[idx] == "—",
+           label == label.uppercased(), label.contains(where: \.isLetter) { return nil }
         let value = String(line[line.index(after: idx)...])
             .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ":=—–")))
         guard !label.isEmpty, !value.isEmpty else { return nil }
@@ -321,8 +344,12 @@ public enum OpenFieldExtractor {
         var seen = Set<String>()
         var capped: Int?
 
+        var carried: String?
         for block in blocks {
-            for field in fields(in: block.text, kind: block.kind) {
+            var text = block.text
+            if let label = carried { text = label + ":\n" + text }
+            carried = danglingLabel(block.text.trimmingCharacters(in: .whitespacesAndNewlines))
+            for field in fields(in: text, kind: block.kind) {
                 guard facts.count < maximumFieldsPerDocument else {
                     capped = maximumFieldsPerDocument
                     return (facts, capped)

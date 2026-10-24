@@ -35,6 +35,20 @@ struct DateQuestionGateTests {
         #expect(!out.refused && out.body == body)
     }
 
+    @Test("An announcement date must be tied to the announcement, not another event")
+    func publicationDate() {
+        let q = "When did the Justice Department announce \"Man Sentenced for Fraud\"?"
+        let other = Self.answer("The defendant pleaded guilty on March 3, 2014, and was sentenced on June 9, 2014 [1].")
+        let out = DateQuestionGate.apply(question: q, other)
+        #expect(out.refused && out.body.hasPrefix("The documents don't say when it was announced"))
+        let anchored = Self.answer("The U.S. Attorney's Office announced the sentence on June 10, 2014 [1].")
+        #expect(!DateQuestionGate.apply(question: q, anchored).refused)
+        let dateline = Self.answer("WASHINGTON, June 10, 2014 — A man was sentenced today [1].")
+        #expect(!DateQuestionGate.apply(question: q, dateline).refused)
+        // Not a publication question: any date stands.
+        #expect(!DateQuestionGate.apply(question: "When was he sentenced?", other).refused)
+    }
+
     @Test("Only when-questions are checked; refusals stay as they are")
     func scope() {
         let paragraph = Self.answer("The office announced the plea today.")
