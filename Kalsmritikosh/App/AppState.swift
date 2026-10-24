@@ -1013,6 +1013,8 @@ public final class AppState {
             }
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
+            // Add anything an older upgrade left out (only adds; once per schema version).
+            await SchemaConformance.checkAtBoot(db)
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
 
             // HNSW ANN index — built lazily after boot. Pass it to
