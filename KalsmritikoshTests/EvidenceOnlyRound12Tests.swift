@@ -54,6 +54,13 @@ struct EvidenceOnlyRound12Tests {
         #expect(!facts.contains { $0.field == "court" })
     }
 
+    @Test("A national court with no place after it is still a court; a bare court type is not")
+    func nationalCourts() {
+        #expect(LegalCaseDomainPack.captionCourtName(in: "No. 487-53.\nUnited States Court of Claims.\nMay 3, 1955.") == "United States Court of Claims")
+        #expect(LegalCaseDomainPack.captionCourtName(in: "the Supreme Court held that") == nil)
+        #expect(LegalCaseDomainPack.captionCourtName(in: "Circuit Court of Appeals, Fifth Circuit.") == "Circuit Court of Appeals, Fifth Circuit")
+    }
+
     @Test("A California byline and a narrated lower court")
     func bylinesAndCourtBelow() {
         #expect(LegalCaseDomainPack.opinionAuthor(in: "Deputy Attorneys General, for Respondent. BROWN (G. A.), P. J. Opinion") == "Brown")

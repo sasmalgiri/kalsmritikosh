@@ -283,8 +283,14 @@ public enum LegalCaseDomainPack {
     /// 2026-10-18: the labeled rule above expects "In the Court of …", so US captions gave none.
     nonisolated static func captionCourtName(in text: String) -> String? {
         let head = String(text.prefix(1200))
-        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Civil Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})"#
+        let pattern = #"(?:United States |U\.\s?S\. )?(?:Circuit Court of Appeals|Court of Civil Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)(?:,? (?:for the |of the |of )?[A-Z][A-Za-z.]*(?: (?:of )?[A-Z][A-Za-z.]*){0,5})?"#
         guard let r = head.range(of: pattern, options: .regularExpression) else { return nil }
+        // A bare court type names a court only when it is a national one ("United States Court of
+        // Claims", "Tax Court") — "Supreme Court" alone could be anyone's (case bench 2026-10-24).
+        let bare = String(head[r])
+        let typeOnly = bare.range(of: #"^(?:Circuit Court of Appeals|Court of Civil Appeals|Court of Appeals|District Court|Supreme Court|Court of Claims|Tax Court|Court of Criminal Appeals|Appellate Court|Superior Court|Bankruptcy Court)$"#,
+                                  options: .regularExpression) != nil
+        if typeOnly, !bare.hasSuffix("Claims"), !bare.hasSuffix("Tax Court") { return nil }
         // A period after a full word ends the name ("… Circuit. Argued"); initials keep it
         // ("District Court, D. Tennessee").
         let v = String(head[r])
