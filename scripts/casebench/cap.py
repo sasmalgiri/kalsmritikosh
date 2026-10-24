@@ -56,6 +56,9 @@ def court_names(court):
     if m: out.append(f"{m.group(1)} Circuit")
     elif "District Court" in name: out.append("District Court")
     elif " of " in name: out.append(name.split(" of ")[0] if name.startswith(("Supreme", "Court", "Appellate")) else name)
+    # "Texas Courts of Civil Appeals" is printed "Court of Civil Appeals of Texas" in the report.
+    m = re.match(r"^(?:[A-Z][a-z]+ ){1,2}(Courts? of [A-Z][A-Za-z ]+?)(?: of the State of .+)?$", name)
+    if m: out.append(re.sub(r"^Courts", "Court", m.group(1)))
     return [x for x in out if x]
 
 def main():

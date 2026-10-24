@@ -23,21 +23,40 @@ public nonisolated enum IssuingOfficeGate {
     /// "the Middle District of Pennsylvania", "the Southern District of New York", "the District of Columbia".
     static let district = #"(?:Northern|Southern|Eastern|Western|Middle|Central)?\s?District of [A-Z][a-z]+(?:\s[A-Z][a-z]+)?"#
 
-    /// The office as a release names it, normalised to one form.
+    static let forms: [(String, (String) -> String)] = [
+        (#"(?:United States|U\.S\.)\s+Attorney[’']s\s+Office\s+(?:for|in)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
+        (#"Office\s+of\s+the\s+(?:United States|U\.S\.)\s+Attorney\s+(?:for|in)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
+        // "United States Attorney Gregory J. Haanstad of the Eastern District of Wisconsin announced".
+        (#"(?:United States|U\.S\.)\s+Attorney\s+(?:[A-Z][A-Za-z.'’\-]*\s+){0,4}(?:for|of)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
+        (#"\b(Criminal|Civil|Tax|Antitrust|Civil Rights|National Security|Environment and Natural Resources)\s+Division\b"#, { "the Justice Department's \($0) Division" }),
+    ]
+
+    /// The office as a release names it, normalised to one form. The sentence that says who
+    /// announced comes first (case bench 2026-10-24: a release naming the Tax Division as the
+    /// announcer and a district office as a partner answered with the district); within a
+    /// stretch of text the earliest-named office wins, whichever form names it.
     public static func office(in text: String) -> String? {
-        let forms: [(String, (String) -> String)] = [
-            (#"(?:United States|U\.S\.)\s+Attorney[’']s\s+Office\s+(?:for|in)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
-            (#"(?:United States|U\.S\.)\s+Attorney\s+(?:for|of)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
-            (#"\b(Criminal|Civil|Tax|Antitrust|Civil Rights|National Security|Environment and Natural Resources)\s+Division\b"#, { "the Justice Department's \($0) Division" }),
-        ]
+        var announcing: [String] = []
+        text.enumerateSubstrings(in: text.startIndex..., options: [.bySentences, .localized]) { s, _, _, _ in
+            if let s, s.lowercased().contains("announc") { announcing.append(s) }
+        }
+        for stretch in announcing + [text] {
+            if let found = earliestOffice(in: stretch) { return found }
+        }
+        return nil
+    }
+
+    static func earliestOffice(in text: String) -> String? {
         let ns = text as NSString
+        var best: (location: Int, value: String)?
         for (pattern, render) in forms {
             guard let re = try? NSRegularExpression(pattern: pattern),
                   let m = re.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { continue }
-            let captured = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
-            return render(captured)
+            if best == nil || m.range.location < best!.location {
+                best = (m.range.location, render(ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)))
+            }
         }
-        return nil
+        return best?.value
     }
 
     /// True when the answer already names a specific office (a district office or a division).

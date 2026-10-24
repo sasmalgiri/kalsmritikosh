@@ -142,7 +142,7 @@ public actor SourceScopedRetriever: Retriever {
                 let candidates = try await recall.chunks.chunkIDs(sourceVersionIDs: versions, limit: recall.vectorCandidateCap)
                 if !candidates.isEmpty {
                     let hits = try await vectors.nearest(to: query, limit: recall.limit, candidateChunkIDs: candidates)
-                    let byID = Dictionary(uniqueKeysWithValues: hits.map { ($0.chunkID, $0.score) })
+                    let byID = Dictionary(hits.map { ($0.chunkID, $0.score) }, uniquingKeysWith: { max($0, $1) })
                     for c in try await recall.chunks.findByIDs(hits.map(\.chunkID), sourceVersionIDs: versions) {
                         addChunk(c, score: byID[c.id] ?? 0.5, via: .vector)
                     }

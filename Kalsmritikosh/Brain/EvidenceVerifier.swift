@@ -148,13 +148,15 @@ public struct EvidenceVerifier: Verifier {
         // dropped to suppress stop-word noise; lowercasing makes the
         // Jaccard case-insensitive.
         let tokensByID: [KnowledgeObject.ID: Set<String>] = Dictionary(
-            uniqueKeysWithValues: citations.map { c in
+            citations.map { c in
                 let toks = c.snippet
                     .lowercased()
                     .components(separatedBy: CharacterSet.alphanumerics.inverted)
                     .filter { $0.count >= 3 }
                 return (c.objectID, Set(toks))
-            }
+            },
+            // Two citations into one document (two passages) share its tokens.
+            uniquingKeysWith: { $0.union($1) }
         )
 
         func relevance(_ c: VerifiedAnswer.Citation) -> Double {

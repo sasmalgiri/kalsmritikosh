@@ -1485,7 +1485,13 @@ public actor MasterBrain {
         // "tell me about …" does not.
         let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
         guard shape == .role || (shape == .unresolved && asksForOneValue(intent.rawQuestion)) else { return false }
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // The fields the retrieved facts carry are the ones a field-less question can reach
+        // ("Where did the accident happen?" → location); case bench 2026-10-24: compiled without
+        // them, such questions never took this door and answered with the report's text. The
+        // same field set the verifier compiles its plan with (EvidenceVerifier).
+        let knownFields = Set(retrieval.genericFacts.map { FactSchemaRegistry.normalizeField($0.field) })
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
+                                               knownFields: knownFields)
         guard !plan.slotFieldIDs.isEmpty,
               let slot = SlotAnswerComposer.compose(
                 slotFieldIDs: plan.slotFieldIDs,
@@ -1494,7 +1500,11 @@ public actor MasterBrain {
                 authorityObjectIDs: retrieval.authorityObjectIDs,
                 documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count))
         else { return false }
-        return !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
+        let clean = !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
+        if !clean {
+            KalsmritikoshLog.brain.info("slot law: \(plan.slotFieldIDs.joined(separator: ","), privacy: .public) not taken (notFound=\(slot.isNotFound, privacy: .public) conflict=\(slot.isConflict, privacy: .public) single=\(slot.singleCanonicalValue, privacy: .public) structured=\(slot.structuredSource, privacy: .public))")
+        }
+        return clean
     }
 
     nonisolated static func asksForOneValue(_ question: String) -> Bool {

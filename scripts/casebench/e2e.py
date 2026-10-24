@@ -91,6 +91,10 @@ def doj_cases(raw, rng):
                 m = re.match(r"USAO - ([^,]+)(?:, (\w+))?$", o)
                 if m:
                     short.append(f"{m.group(2)} District of {m.group(1)}" if m.group(2) else f"District of {m.group(1)}")
+                # The API files ENRD as "Energy and Natural Resources Division"; releases print its
+                # real name.
+                if o.startswith("ENRD") or "Natural Resources Division" in o:
+                    short.append("Environment and Natural Resources Division")
             q = []
             if offices:
                 q.append({"id": "office", "q": f"Which Justice Department office announced the case \"{title}\"?",

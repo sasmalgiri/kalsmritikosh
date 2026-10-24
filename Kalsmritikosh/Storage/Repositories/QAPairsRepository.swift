@@ -84,9 +84,10 @@ public actor QAPairsRepository {
     public func search(_ query: String, limit: Int = 15) async throws -> [MatchRow] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        let sanitized = trimmed
-            .replacingOccurrences(of: "\"", with: "")
-            .replacingOccurrences(of: "'", with: "")
+        // A question's own punctuation ("?", "-", ":") is FTS5 syntax; raw text failed with
+        // "fts5: syntax error near "?"" on every question (case bench 2026-10-24).
+        let sanitized = FTSQuerySanitizer.sanitize(trimmed)
+        guard !sanitized.isEmpty else { return [] }
         let rows = try await database.query(
             """
             SELECT qa.id, qa.answer_object_id, qa.answer_text, bm25(qa_pairs_fts)
