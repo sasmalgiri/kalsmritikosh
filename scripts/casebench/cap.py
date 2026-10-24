@@ -40,6 +40,10 @@ def disposition(case):
     major = next((o for o in ops if o.get("type") == "majority"), ops[0] if ops else None)
     if not major: return []
     tail = (major.get("text") or "")[-400:]
+    # A sentence carrying a reporter citation describes ANOTHER case ("vacated on other grounds,
+    # 91 F.3d 1210") — not this decision's outcome (audited 2026-10-24, United States v. Regans).
+    tail = re.sub(r"[^.]*\b\d+\s+(?:F\.|U\.\s?S\.|S\.\s?Ct\.|N\.\s?E\.|N\.\s?W\.|S\.\s?E\.|S\.\s?W\.|P\.|A\.|So\.)[^.]*", " ", tail)
+    tail = re.sub(r"(?i)\b\w+ed on other grounds", " ", tail)
     return sorted({m.lower() for m in DISPOSITION.findall(tail)})
 
 def surname(author):
