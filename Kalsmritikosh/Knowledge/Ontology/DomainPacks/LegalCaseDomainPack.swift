@@ -318,7 +318,10 @@ public enum LegalCaseDomainPack {
             // — at a line start, or after a sentence end: packs read the block's normalized
             // text, whose line breaks are gone (case bench 2026-10-21: "… for defendants-
             // appellants. CALABRIA, Judge. CALABRIA, Judge. Assurance …" filed no author).
-            #"(?m)(?:^\s*|(?<=[.:;]\s))((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?Judge\s*[:.]"#,
+            // Also "VAN ORSDEL, Associate Justice." / "ALEXANDER, Justice." / "YOUNG, 'Justice." (stray
+            // mark from the source) / "BROWN, J." — never "SMITH, J., concurring" and never a list
+            // ("Before MARTIN, Chief Justice, VAN ORSDEL, …": no terminator after the title).
+            #"(?m)(?:^\s*|(?<=[.:;]\s))((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+['‘’]?(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?(?:(?:Judge|Justice)\s*[:.]|(?:C\.\s?|P\.\s?)?J\.(?!,)(?=\s|$))"#,
             // "Mr. JUSTICE MORAN delivered the opinion of the court" / "Justice Moran delivered …"
             #"(?:Mr\.\s+|Mrs\.\s+|Ms\.\s+)?(?:Chief\s+)?(?:JUSTICE|Justice)\s+([A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+)?)\s+delivered the opinion"#,
         ]
