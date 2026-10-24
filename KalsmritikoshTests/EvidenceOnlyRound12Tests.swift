@@ -54,6 +54,13 @@ struct EvidenceOnlyRound12Tests {
         #expect(!facts.contains { $0.field == "court" })
     }
 
+    @Test("A California byline and a narrated lower court")
+    func bylinesAndCourtBelow() {
+        #expect(LegalCaseDomainPack.opinionAuthor(in: "Deputy Attorneys General, for Respondent. BROWN (G. A.), P. J. Opinion") == "Brown")
+        let short = "This suit was filed in the District Court of Grayson County, Texas, by the appellee."
+        #expect(!LegalCaseDomainPack.extractFacts(fromText: short, subjectLabel: "x", blockID: UUID()).contains { $0.field == "court" })
+    }
+
     // MARK: Question routing
 
     @Test("Who were the parties in a case resolves to the parties; a contract's parties do not")
@@ -158,6 +165,23 @@ struct EvidenceOnlyRound12Tests {
         #expect(!DateQuestionGate.hasPublicationAnchoredDate("NEW ORLEANS, LOUISIANA – DARVIN MORADEL-VELASQUEZ, age 40, plead guilty on April 9, 2026, to illegal reentry."))
         #expect(DateQuestionGate.hasPublicationAnchoredDate("WASHINGTON, June 10, 2014 — A man was sentenced today."))
         #expect(DateQuestionGate.hasPublicationAnchoredDate("The release was issued on March 3, 2009."))
+    }
+
+    // MARK: Engine split
+
+    @Test("Value questions are answered by the evidence engine; account questions may use the model")
+    func engineSplit() {
+        for q in ["When was Edenfield v. United States decided?", "Who wrote the majority opinion in In re Kindred?",
+                  "Which firm initiated FDA recall F-3176-2017?", "How many employees were hurt in OSHA investigation 891770?",
+                  "Which Justice Department office announced the case \"X\"?", "What is the docket number in Goudeau v. Daigle?",
+                  "Where did the NTSB SEA03LA084 accident happen?"] {
+            #expect(MasterBrain.answersFromEvidenceOnly(q), "\(q)")
+        }
+        for q in ["What happened in the case \"Patriot Coal to Pay $6.5 Million\"?", "Why was FDA recall D-0775-2020 issued?",
+                  "What did NHTSA find in investigation PE10025?", "Explain the timeline of the dispute",
+                  "Tell me about the contract with Acme"] {
+            #expect(!MasterBrain.answersFromEvidenceOnly(q), "\(q)")
+        }
     }
 }
 

@@ -68,12 +68,16 @@ public enum LegalCaseDomainPack {
         // block; a long body paragraph naming a court is citing another decision (case bench
         // 2026-10-22: "the Supreme Court of Tennessee held …" became a federal case's court).
         let captionLike = text.count < 400 || numberedBesideCourt(text) || courtLineDate(in: text) != nil
+        // A short block that only TELLS of a court ("This suit was filed in the District Court of
+        // Grayson County") is narrative; the caption names the court as a heading line.
+        let narratesCourt = text.range(of: #"(?i)\b(?:filed|brought|tried|heard|pending|instituted)\s+in\s+the\s+[A-Za-z ]{0,30}Court\b"#,
+                                       options: .regularExpression) != nil
         // "In the Court of …" names the deciding court wherever it stands; a bare "court of" in a
         // long paragraph is usually the court below ("This suit was filed in the District Court of
         // Grayson County" — case bench 2026-10-24 answered that for a Court of Civil Appeals case).
         if let v = DomainPackText.labeledValue(after: ["in the court of"], in: text)
-            ?? (captionLike ? DomainPackText.labeledValue(after: ["court of", "before the", "tribunal"], in: text) : nil)
-            ?? (captionLike ? captionCourtName(in: text) : nil) {
+            ?? (captionLike && !narratesCourt ? DomainPackText.labeledValue(after: ["court of", "before the", "tribunal"], in: text) : nil)
+            ?? (captionLike && !narratesCourt ? captionCourtName(in: text) : nil) {
             facts.append(fact(subjectLabel, "court", v, blockID, 0.7))
         }
         if let v = DomainPackText.labeledValue(after: ["plaintiff", "petitioner", "appellant", "complainant"], in: text),
@@ -368,6 +372,9 @@ public enum LegalCaseDomainPack {
             // mark from the source) / "BROWN, J." — never "SMITH, J., concurring" and never a list
             // ("Before MARTIN, Chief Justice, VAN ORSDEL, …": no terminator after the title).
             #"(?m)(?:^\s*|(?<=[.:;]\s))((?:[A-Z][A-Z.'\-]+ ){0,3}[A-Z][A-Z'\-]{2,}),\s+['‘’]?(?:Chief |Senior |Associate |Circuit |District |Presiding )*(?:Circuit |District )?(?:(?:Judge|Justice)\s*[:.]|(?:C\.\s?|P\.\s?)?J\.(?!,)(?=\s|$))"#,
+            // California: "BROWN (G. A.), P. J." — the surname, the initials in parentheses, the title
+            // (case bench 2026-10-24).
+            #"(?m)(?:^\s*|(?<=[.:;]\s))([A-Z][A-Z'\-]{2,})\s+\([A-Z][A-Z.\s]{0,10}\),\s+(?:(?:C\.\s?|P\.\s?)?J\.|Acting P\.\s?J\.)(?=\s|$)"#,
             // "Mr. JUSTICE MORAN delivered the opinion of the court" / "Justice Moran delivered …"
             #"(?:Mr\.\s+|Mrs\.\s+|Ms\.\s+)?(?:Chief\s+)?(?:JUSTICE|Justice)\s+([A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+)?)\s+delivered the opinion"#,
         ]
