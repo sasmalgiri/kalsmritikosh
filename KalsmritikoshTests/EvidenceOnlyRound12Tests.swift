@@ -40,6 +40,7 @@ struct EvidenceOnlyRound12Tests {
     func courtLineDates() {
         #expect(LegalCaseDomainPack.courtLineDate(in: "[Crim. No. 5335. Fifth Dist. Mar. 20, 1981.] In re") == "Mar. 20, 1981")
         #expect(LegalCaseDomainPack.courtLineDate(in: "No. 2042. Court of Civil Appeals of Texas. Waco. March 16, 1939.") == "March 16, 1939")
+        #expect(LegalCaseDomainPack.courtLineDate(in: "EDENFIELD v. UNITED STATES. No. 9417. Circuit Court of Appeals, Fifth Circuit June 24, 1940. R. Earl Camp") == "June 24, 1940")
     }
 
     @Test("A long paragraph naming the court below does not become the deciding court")
@@ -64,6 +65,9 @@ struct EvidenceOnlyRound12Tests {
         #expect(SlotFieldResolver.resolve(in: "When did the accident in NTSB case ERA13CA130 happen?", knownFields: known).map(\.fieldID) == ["dateandtime"])
         #expect(SlotFieldResolver.resolve(in: "Why was FDA recall D-0775-2020 issued?", knownFields: known).map(\.fieldID) == ["reasonforrecall"])
         #expect(SlotFieldResolver.resolve(in: "Where did the NTSB SEA03LA084 accident happen?", knownFields: known).map(\.fieldID) == ["location"])
+        if KnowledgeModuleFlags.isEnabled(.openFieldAsking) {
+            #expect(SlotFieldResolver.resolveAgainstInventory("Which firm initiated FDA recall F-3176-2017?", knownFields: ["recall", "recallingfirm"])?.fieldID == "recallingfirm")
+        }
         // A why about something else never lands on a recall's reason.
         #expect(SlotFieldResolver.reasonField(in: "Why did the plane crash?", knownFields: known) == nil)
     }

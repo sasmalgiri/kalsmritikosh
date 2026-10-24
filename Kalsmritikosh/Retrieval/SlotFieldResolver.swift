@@ -178,6 +178,11 @@ public enum SlotFieldResolver {
         "disposition": "Disposition",
         "opinionauthor": "Opinion by",
         "parties": "Parties",
+        // Discovered fields the case bench meets most (FDA, NTSB, NHTSA reports).
+        "reasonforrecall": "Reason for recall", "recallingfirm": "Recalling firm",
+        "voluntarymandated": "Voluntary / mandated", "distributionpattern": "Distribution pattern",
+        "productquantity": "Product quantity", "recallinitiationdate": "Recall initiation date",
+        "dateandtime": "Date and time", "probablecause": "Probable cause",
         "filingdate": "Filing date",
         "invoicenumber": "Invoice number",
         "casenumber": "Case number",
@@ -304,7 +309,20 @@ public enum SlotFieldResolver {
         guard !words.isEmpty else { return nil }
 
         var best: (fieldID: String, length: Int)?
-        for n in stride(from: min(maximumFieldNGram, words.count), through: 1, by: -1) {
+        // "Which firm initiated FDA recall F-3176-2017?" asks for the firm: the noun right after
+        // which/what names the field, before any other word of the question that happens to be a
+        // field on file ("recall") — case bench 2026-10-24.
+        if words.count >= 2, ["which", "what"].contains(words[0]) {
+            let head = words[1]
+            if head.count >= 4, !ungrammaticalAlone.contains(head) {
+                if knownFields.contains(head) { best = (fieldID: head, length: 1) }
+                else {
+                    let ends = knownFields.filter { $0 != head && $0.hasSuffix(head) }
+                    if ends.count == 1, let f = ends.first { best = (fieldID: f, length: 1) }
+                }
+            }
+        }
+        for n in stride(from: min(maximumFieldNGram, words.count), through: 1, by: -1) where best == nil {
             for start in 0...(words.count - n) {
                 let gram = Array(words[start..<(start + n)])
                 // A single word that is a question word or a bare generic

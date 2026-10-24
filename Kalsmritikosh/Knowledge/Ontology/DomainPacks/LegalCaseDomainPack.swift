@@ -180,9 +180,17 @@ public enum LegalCaseDomainPack {
         // "Fifth Dist. Mar. 20, 1981." (California) names the district, not the court; "Court of
         // Civil Appeals of Texas. Waco. March 16, 1939." puts the seat's name before the date.
         let pattern = #"(?:Court|Circuit|Division|Div\.[^.]{0,20}|\bDist(?=\.))(?:[^.]|(?<=[\s,.][A-Z])\.){0,100}?\.\]?\)?\s+(?:[A-Z][a-z]+(?: [A-Z][a-z]+)?\.\s+)?[(\[]?((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})\.?[\])]?(?:\s|$)"#
-        guard let re = try? NSRegularExpression(pattern: pattern),
-              let m = re.firstMatch(in: head, range: NSRange(location: 0, length: (head as NSString).length)) else { return nil }
-        return (head as NSString).substring(with: m.range(at: 1))
+        let ns = head as NSString
+        if let re = try? NSRegularExpression(pattern: pattern),
+           let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) {
+            return ns.substring(with: m.range(at: 1))
+        }
+        // "Circuit Court of Appeals, Fifth Circuit June 24, 1940." — a numbered circuit runs straight
+        // into the date with no period (case bench 2026-10-24).
+        let circuit = #"\b(?:First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Federal|District of Columbia)\s+Circuit,?\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s+\d{4})"#
+        guard let re = try? NSRegularExpression(pattern: circuit),
+              let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return ns.substring(with: m.range(at: 1))
     }
 
     /// The decision date when the caption is split across blocks — HTML and PDF captions put
