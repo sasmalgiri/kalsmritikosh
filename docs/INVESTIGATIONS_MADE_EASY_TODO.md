@@ -124,9 +124,9 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [x] A-9 (A) Force-directed relationship chart; per-pair communication timeline.
 
 ### Phase Q — answer and extraction quality (from the case bench)
-- [ ] Q-2 (A) Civil court outcome and docket to ≥80% correct-or-refused; the outcome question reads the disposition field first. — **55.4% now (from 42.9%)**: named-document focus landed; authors/outcomes remain (docs/CASE_BENCH_AI_ROUNDS.md).
+- [x] Q-2 (A) Civil court outcome and docket to ≥80% correct-or-refused. — **85.7% evidence-only** (round 13, 2026-10-24; was 55.4% with AI, 64.3% evidence-only in round 11). PR #167.
 - [x] Q-3 (A) DOJ / press-release questions: office from the release's office line or signature; honest "not stated" otherwise.
-- [ ] Q-4 (A) "What happened" answers keep names, ages and counts of the lead.
+- [x] Q-4 (A) "What happened" answers keep names, ages and counts of the lead. — a lead that hides the person takes the sentence naming them; an announcer roll is not the account (PR #167).
 - [ ] Q-5 (A) A 10k-case-per-category evidence-only run (scale), plus a 1,000-case AI sample; publish results.
 - [ ] Q-6 (O) Owner-run large cases: NIST CFReDS Data Leakage (60 answers) and cleansed Enron.
 
@@ -135,7 +135,7 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [x] S-2 (A) Subject-access export and per-person erasure (GDPR-style) with a receipt.
 - [x] S-3 (A+O) Users: a named investigator profile per Mac user (Keychain-backed), shown in every log entry; decide whether multi-user roles are v1 or v2.
 - [x] S-4 (A) Full audit trail of user actions in a case (view, search, export, edit) into the HMAC chain.
-- [ ] S-5 (A) App lock tests; refresh stale "database encryption is a separate decision" text.
+- [x] S-5 (A) App lock tests (AppLockTests); the encryption text was already current (SQLCipher). PR #167.
 
 ### Phase U — product polish
 - [x] U-1 (A) Accessibility: VoiceOver labels on every control, remove the 81 fixed font sizes, test at the largest text size; VoiceOver walk script.
@@ -146,9 +146,9 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [x] U-6 (A) Viewer privacy manifest; iPhone/iPad scope note in the listing.
 
 ### Phase R — release
-- [ ] R-1 (A) Pricing: StoreKit purchase-flow tests, `.storekit` in a scheme; fix SHIP_DECISIONS "$29–49".
-- [ ] R-2 (A) App Review 2.3.1 check of every claim under the new name (does the copy promise judgement? it must not); CLAIMS.md rows.
-- [ ] R-3 (A) Screenshots for the five planned shots on public-domain case packs.
+- [x] R-1 (A) Pricing: purchase-flow rules and the StoreKit configuration are tested (PurchaseTests); SHIP_DECISIONS price is $79. Selecting the `.storekit` file in the scheme stays an owner step in Xcode.
+- [x] R-2 (A) App Review 2.3.1 check of every claim under the new name; store-copy claims registered in CLAIMS_APP.md (PR #167). Open for the owner: PST line in SHIP_DECISIONS §4, copyright holder name.
+- [ ] R-3 (A→O) Screenshots for the five planned shots on public-domain case packs. **Blocked for the agent:** there is no UI-test target (adding one is a project-file edit, owner-only) and launching the app here would open the owner's real ledger. Owner: capture in the sample/case-pack archive.
 - [x] R-4 (A) Update PRODUCTION_STATUS.md (dated 2026-08-07, schema v102) to today.
 - [ ] R-5 (A+O) SHIP_DECISIONS §3 gates: the agent produces the evidence for each; the owner signs off.
 - [ ] R-6 (O) HOLD 1 witness: walk each persona's investigation in the real app.
@@ -206,4 +206,14 @@ Next: **Phase T** (test everything built, one push), then Q-2…Q-5 on the case 
 - **Schema conformance at boot** (3b8d6cdd): the app adds any table/index/trigger/column an older upgrade left out of the
   owner's ledger (only adds; once per schema version).
 - Open (agent): drive evidence-only wrong answers to 0; court outcomes; one push + CI. Open (owner): R-6…R-9.
+
+## Status 2026-10-24 (evening)
+
+- Evidence-only accuracy, 190 real public cases, 19 categories: wrong/missed/dumped answers 98 → 45 of 621
+  (92.8% right; questions inside a case 91.6%; 19/19 not-in-archive controls refused). Root causes fixed:
+  chunks fetched by id lost their block lineage; synthetic-question/QA keyword search failed on every "?";
+  HTML knowledge objects held raw markup. PR #167 merged (b9a51353).
+- Q-5: the 10,000-case-per-category run is in progress (`~/CaseBench/e2e10k`, every 10th case asked, every
+  10th worked as a case); about ten hours per category on this Mac. Data limits: NHTSA has about 2,000
+  investigations in all; court cases come from the converted CAP set.
 
