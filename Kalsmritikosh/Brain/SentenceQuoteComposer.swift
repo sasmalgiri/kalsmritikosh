@@ -24,6 +24,18 @@ public struct QuotedAnswer: Sendable, Equatable {
     public let objectID: KnowledgeObject.ID
     public let chunkID: Chunk.ID
     public let receiptLine: String
+    /// True when the sentence is the document's own account under a heading ("Summary:",
+    /// "Findings:"…) — the document answering the account question in its own words.
+    public var underAccountHeading: Bool = false
+}
+
+extension SentenceQuoteComposer {
+    /// The document's own account (text under its Summary/Findings heading), for an account
+    /// question — nil when the question isn't one or no matching document has such a heading.
+    public nonisolated static func headedAccount(question: String, chunks: [RetrievedChunk]) -> QuotedAnswer? {
+        guard asksWhatHappened(question), let q = compose(question: question, chunks: chunks), q.underAccountHeading else { return nil }
+        return q
+    }
 }
 
 public enum SentenceQuoteComposer {
@@ -74,7 +86,8 @@ public enum SentenceQuoteComposer {
         if asksAccount, let lead = Self.leadSentence(question: question, chunks: chunks, titles: titles, titleWords: titleWords) {
             return QuotedAnswer(
                 sentence: lead.sentence, objectID: lead.chunk.objectID, chunkID: lead.chunk.id,
-                receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+                receiptLine: "Quoted verbatim from the cited document; no model was consulted.",
+                underAccountHeading: lead.headed)
         }
 
         var best: (score: Int, tiebreak: String, sentence: String, chunk: Chunk)?
@@ -132,7 +145,7 @@ public enum SentenceQuoteComposer {
     /// skipping the title, label lines ("Make: KENWORTH") and short lines. A sentence longer
     /// than 600 characters is quoted up to a word boundary, marked with an ellipsis.
     nonisolated static func leadSentence(question: String, chunks: [RetrievedChunk], titles: [String],
-                                         titleWords: Set<String>) -> (sentence: String, chunk: Chunk)? {
+                                         titleWords: Set<String>) -> (sentence: String, chunk: Chunk, headed: Bool)? {
         let asked = contentWords(question)
         guard let anchor = chunks.max(by: { asked.intersection(contentWords($0.chunk.text)).count
                                             < asked.intersection(contentWords($1.chunk.text)).count }),
@@ -142,7 +155,7 @@ public enum SentenceQuoteComposer {
         // "Synopsis:", "Narrative:") after a block of labels (evidence-only round 2026-10-24: "What
         // did NHTSA find in investigation EA09005?" quoted the label block). That text is the account.
         for rc in own {
-            if let account = accountUnderHeading(rc.chunk.text) { return (account, rc.chunk) }
+            if let account = accountUnderHeading(rc.chunk.text) { return (account, rc.chunk, true) }
         }
         let label = #"^[A-Z][A-Za-z /&()\-]{0,40}:\s*\S.{0,80}$"#
         for rc in own {
@@ -166,7 +179,7 @@ public enum SentenceQuoteComposer {
                     let cut = sentence.prefix(600)
                     sentence = String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
                 }
-                return (sentence, rc.chunk)
+                return (sentence, rc.chunk, false)
             }
         }
         return nil
