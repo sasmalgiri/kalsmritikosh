@@ -59,7 +59,9 @@ public nonisolated enum DateQuestionGate {
             // announcement (case bench 2026-10-24): a date only after "announced that" is the event's.
             if let that = s.range(of: #"(?i)\bannounc\w*\s+(?:today\s+)?that\b"#, options: .regularExpression),
                !containsDate(String(s[..<that.lowerBound])) { return false }
-            if s.range(of: #"(?i)\b(?:announc|releas|publish|issu|dated)\w*"#, options: .regularExpression) != nil { return true }
+            // "issued" only of the release itself — "an EPA-issued certificate" dates nothing.
+            if s.range(of: #"(?i)\b(?:announc|releas|publish|dated)\w*|\b(?:release|statement|notice)\b[^.]{0,30}\bissued\b"#,
+                       options: .regularExpression) != nil { return true }
             // A dateline carries the date itself ("WASHINGTON, March 3 —"); "NEW ORLEANS, LOUISIANA –
             // X pleaded guilty on April 9" is a dateline whose date belongs to the plea.
             return s.trimmingCharacters(in: .whitespaces)

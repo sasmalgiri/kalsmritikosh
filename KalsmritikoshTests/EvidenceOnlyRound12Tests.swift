@@ -107,6 +107,10 @@ struct EvidenceOnlyRound12Tests {
         let text = "The case was investigated with the U.S. Attorney's Office for the Southern District of California. "
             + "The Justice Department's Tax Division announced the indictment today."
         #expect(IssuingOfficeGate.office(in: text) == "the Justice Department's Tax Division")
+        // No sentence says who announced: the office or district is only reported as mentioned.
+        let mentioned = IssuingOfficeGate.apply(question: "Which Justice Department office announced the case \"X\"?",
+            VerifiedAnswer(body: "He was found in the Eastern District of Louisiana on December 31.", citations: [], confidence: Confidence(0.7), refused: false, refusalReason: nil))
+        #expect(mentioned.body == "The release doesn't say which office announced it; it mentions the Eastern District of Louisiana.")
         // A joint announcement names both offices.
         #expect(IssuingOfficeGate.office(in: "Herrell was sentenced, U.S. Attorney McGregor W. Scott for the Eastern District of California and Acting Assistant Attorney General Brian C. Rabbitt of the Justice Department's Criminal Division announced.")
                 == "the U.S. Attorney's Office for the Eastern District of California and the Justice Department's Criminal Division")
@@ -165,6 +169,7 @@ struct EvidenceOnlyRound12Tests {
         #expect(!DateQuestionGate.hasPublicationAnchoredDate("NEW ORLEANS, LOUISIANA – DARVIN MORADEL-VELASQUEZ, age 40, plead guilty on April 9, 2026, to illegal reentry."))
         #expect(DateQuestionGate.hasPublicationAnchoredDate("WASHINGTON, June 10, 2014 — A man was sentenced today."))
         #expect(DateQuestionGate.hasPublicationAnchoredDate("The release was issued on March 3, 2009."))
+        #expect(!DateQuestionGate.hasPublicationAnchoredDate("On Sep. 30, 2010, the United States filed a complaint over engines not covered by an EPA-issued certificate."))
     }
 
     // MARK: Engine split
