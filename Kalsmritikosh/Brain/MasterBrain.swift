@@ -516,6 +516,10 @@ public actor MasterBrain {
         // "affirmed" on file — came back as a model-written account of the opinion's reasoning,
         // and one for "reversed and remanded" as "the court affirmed").
         if !SlotFieldResolver.resolve(in: question.lowercased()).isEmpty { return nil }
+        // "What happened in the case "<title>"?" asks for that matter's account, not a history of
+        // the archive (case bench 2026-10-24 answered "History of the user's archive …").
+        if SentenceQuoteComposer.asksWhatHappened(question),
+           !IdentifierAnchoredRetriever.quotedTitles(in: question).isEmpty { return nil }
 
         await sessionProfile?.recordTurn(
             question: question,

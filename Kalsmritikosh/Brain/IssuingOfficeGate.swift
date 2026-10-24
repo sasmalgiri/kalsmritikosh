@@ -21,7 +21,9 @@ public nonisolated enum IssuingOfficeGate {
     }
 
     /// "the Middle District of Pennsylvania", "the Southern District of New York", "the District of Columbia".
-    static let district = #"(?:Northern|Southern|Eastern|Western|Middle|Central)?\s?District of [A-Z][a-z]+(?:\s[A-Z][a-z]+)?"#
+    /// A two-word state only when its first word starts one ("New York", "North Carolina"): "the
+    /// Southern District of California Laura E. Duffy" must not take the attorney's first name.
+    static let district = #"(?:Northern|Southern|Eastern|Western|Middle|Central)?\s?District of (?:(?:New|North|South|West|Rhode|Puerto)\s[A-Z][a-z]+|[A-Z][a-z]+)"#
 
     static let forms: [(String, (String) -> String)] = [
         (#"(?:United States|U\.S\.)\s+Attorney[’']s\s+Office\s+(?:for|in)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
@@ -36,17 +38,52 @@ public nonisolated enum IssuingOfficeGate {
     /// announcer and a district office as a partner answered with the district); within a
     /// stretch of text the earliest-named office wins, whichever form names it.
     public static func office(in text: String) -> String? {
-        var announcing: [String] = []
-        text.enumerateSubstrings(in: text.startIndex..., options: [.bySentences, .localized]) { s, _, _, _ in
-            if let s, s.lowercased().contains("announc") { announcing.append(s) }
+        let announcing = announcingSentences(in: text)
+        // A joint release names every announcing office in that sentence ("U.S. Attorney Scott for
+        // the Eastern District of California and … the Justice Department's Criminal Division
+        // announced") — all of them, in the order named.
+        for stretch in announcing {
+            let all = allOffices(in: stretch)
+            if !all.isEmpty { return all.joined(separator: " and ") }
         }
-        for stretch in announcing + [text] {
-            if let found = earliestOffice(in: stretch) { return found }
-        }
-        return nil
+        // No sentence says who announced: a U.S. Attorney's office named anywhere is the
+        // announcer before a division the release mentions as a helper ("with assistance from
+        // the Criminal Division's Computer Crime Section" — case bench 2026-10-24).
+        return earliestOffice(in: text, forms: Array(forms.prefix(3))) ?? earliestOffice(in: text)
     }
 
-    static func earliestOffice(in text: String) -> String? {
+    /// The sentences that say "announced". Initials ("McGregor W. Scott", "Brian C. Rabbitt") are
+    /// not sentence ends: a sentence starts after a word of two or more lowercase letters (or a
+    /// line break) and its period, so the officials' names stay in the sentence they announce.
+    static func announcingSentences(in text: String) -> [String] {
+        let ns = text as NSString
+        guard let ann = try? NSRegularExpression(pattern: #"(?i)announc"#),
+              let end = try? NSRegularExpression(pattern: #"(?:[a-z]{2,}[.!?]["”’)]?\s+(?=[A-Z“"])|\n)"#) else { return [] }
+        let ends = end.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { $0.range.location + $0.range.length }
+        var out: [String] = []
+        for m in ann.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let start = ends.last { $0 <= m.range.location } ?? 0
+            let stop = ends.first { $0 > m.range.location } ?? ns.length
+            out.append(ns.substring(with: NSRange(location: start, length: stop - start)))
+        }
+        return out
+    }
+
+    /// Every distinct office the text names, in order of appearance.
+    static func allOffices(in text: String) -> [String] {
+        let ns = text as NSString
+        var found: [(location: Int, value: String)] = []
+        for (pattern, render) in forms {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                found.append((m.range.location, render(ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces))))
+            }
+        }
+        var seen = Set<String>()
+        return found.sorted { $0.location < $1.location }.map(\.value).filter { seen.insert($0).inserted }
+    }
+
+    static func earliestOffice(in text: String, forms: [(String, (String) -> String)] = IssuingOfficeGate.forms) -> String? {
         let ns = text as NSString
         var best: (location: Int, value: String)?
         for (pattern, render) in forms {

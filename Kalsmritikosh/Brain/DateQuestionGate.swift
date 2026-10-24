@@ -55,9 +55,16 @@ public nonisolated enum DateQuestionGate {
         let sentences = text.components(separatedBy: CharacterSet(charactersIn: ".!?\n|"))
         return sentences.contains { s in
             guard containsDate(s) else { return false }
+            // "… announced that on May 2, 2019, Hutchins pleaded guilty" dates the plea, not the
+            // announcement (case bench 2026-10-24): a date only after "announced that" is the event's.
+            if let that = s.range(of: #"(?i)\bannounc\w*\s+(?:today\s+)?that\b"#, options: .regularExpression),
+               !containsDate(String(s[..<that.lowerBound])) { return false }
             if s.range(of: #"(?i)\b(?:announc|releas|publish|issu|dated)\w*"#, options: .regularExpression) != nil { return true }
+            // A dateline carries the date itself ("WASHINGTON, March 3 —"); "NEW ORLEANS, LOUISIANA –
+            // X pleaded guilty on April 9" is a dateline whose date belongs to the plea.
             return s.trimmingCharacters(in: .whitespaces)
-                .range(of: #"^[A-Z][A-Z .,'\-]{2,40},\s"#, options: .regularExpression) != nil   // dateline
+                .range(of: #"^[A-Z][A-Z .,'\-]{2,40},\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}\b"#,
+                       options: .regularExpression) != nil
         }
     }
 

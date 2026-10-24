@@ -93,6 +93,9 @@ struct EvidenceOnlyRound12Tests {
         let text = "The case was investigated with the U.S. Attorney's Office for the Southern District of California. "
             + "The Justice Department's Tax Division announced the indictment today."
         #expect(IssuingOfficeGate.office(in: text) == "the Justice Department's Tax Division")
+        // A joint announcement names both offices.
+        #expect(IssuingOfficeGate.office(in: "Herrell was sentenced, U.S. Attorney McGregor W. Scott for the Eastern District of California and Acting Assistant Attorney General Brian C. Rabbitt of the Justice Department's Criminal Division announced.")
+                == "the U.S. Attorney's Office for the Eastern District of California and the Justice Department's Criminal Division")
         #expect(IssuingOfficeGate.office(in: "The Office of the United States Attorney for the District of Vermont announced charges.")
                 == "the U.S. Attorney's Office for the District of Vermont")
     }
@@ -113,4 +116,38 @@ struct EvidenceOnlyRound12Tests {
         #expect(OpenFieldExtractor.split("SAN FRANCISCO – Jose Alvarado was sentenced today.") == nil)
         #expect(OpenFieldExtractor.split("Status — Active")?.label == "Status")
     }
+
+    @Test("A district office never takes the attorney's first name; without an announcing sentence a U.S. Attorney's office outranks a helping division")
+    func districtBoundaries() {
+        #expect(IssuingOfficeGate.office(in: "the U.S. Attorney's Office for the Southern District of California Laura E. Duffy said.")
+                == "the U.S. Attorney's Office for the Southern District of California")
+        #expect(IssuingOfficeGate.office(in: "Help came from the Criminal Division's Computer Crime Section. The U.S. Attorney's Office for the Eastern District of California prosecuted the case.")
+                == "the U.S. Attorney's Office for the Eastern District of California")
+        #expect(IssuingOfficeGate.office(in: "The U.S. Attorney's Office for the District of New Jersey said so.")
+                == "the U.S. Attorney's Office for the District of New Jersey")
+    }
+
+    // MARK: Q-4 — the account keeps the names
+
+    @Test("An announcer roll is not the account; a lead that hides the person takes the sentence naming them")
+    func leadKeepsNames() {
+        #expect(SentenceQuoteComposer.isAnnouncerRoll("Benjamin G. Greenberg, Acting United States Attorney for the Southern District of Florida, and Rafiq Ahmad, Special Agent in Charge, announced the verdict."))
+        #expect(!SentenceQuoteComposer.isAnnouncerRoll("A letter carrier was convicted at trial of access device fraud, the U.S. Attorney announced."))
+        #expect(!SentenceQuoteComposer.isAnnouncerRoll("FRESNO, Calif. — Bryan Connor Herrell, 26, of Aurora, Colorado, was sentenced today by United States District Court Judge Dale A. Drozd to 11 years in prison, U.S. Attorney McGregor W. Scott for the Eastern District of California and Acting Assistant Attorney General Brian C. Rabbitt of the Justice Department's Criminal Division announced."))
+        #expect(!SentenceQuoteComposer.isAnnouncerRoll("United States Attorney Martin Estrada, the United States Attorney for the Central District of California, today announced the establishment of the Environmental Crimes and Consumer Protection Section."))
+        #expect(SentenceQuoteComposer.hidesThePerson("U.S. District Judge Sarah E. Pitlyk on Friday sentenced a man to 18 years in prison."))
+        #expect(!SentenceQuoteComposer.hidesThePerson("Joshua Thomas was sentenced to 18 years in prison."))
+        #expect(SentenceQuoteComposer.namesAPerson("Joshua Thomas was armed with an AR-15-style firearm."))
+    }
+
+    // MARK: Announcement dates
+
+    @Test("A date after \"announced that\" or after a dateline's place dates the event, not the announcement")
+    func announcementDates() {
+        #expect(!DateQuestionGate.hasPublicationAnchoredDate("Matthew D. Krueger, the United States Attorney, announced that on May 2, 2019, Marcus Hutchins pleaded guilty."))
+        #expect(!DateQuestionGate.hasPublicationAnchoredDate("NEW ORLEANS, LOUISIANA – DARVIN MORADEL-VELASQUEZ, age 40, plead guilty on April 9, 2026, to illegal reentry."))
+        #expect(DateQuestionGate.hasPublicationAnchoredDate("WASHINGTON, June 10, 2014 — A man was sentenced today."))
+        #expect(DateQuestionGate.hasPublicationAnchoredDate("The release was issued on March 3, 2009."))
+    }
 }
+

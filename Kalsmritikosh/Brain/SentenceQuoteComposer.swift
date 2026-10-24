@@ -165,8 +165,9 @@ public enum SentenceQuoteComposer {
         }
         let label = #"^[A-Z][A-Za-z /&()\-]{0,40}:\s*\S.{0,80}$"#
         for rc in own {
-            for raw in sentences(of: rc.chunk.text) {
-                var sentence = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let all = sentences(of: rc.chunk.text).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            for (index, raw) in all.enumerated() {
+                var sentence = raw
                 // A headline with no period after it runs into the lead ("… Sentenced to 30
                 // Years in Prison HOUSTON – A 37-year-old Mexican citizen has been …"): the
                 // title comes off and the lead stands.
@@ -181,6 +182,16 @@ public enum SentenceQuoteComposer {
                 if isLabelRun(sentence) { continue }
                 let words = contentWords(sentence)
                 if restatesTitle(sentence, words: words, titles: titles, titleWords: titleWords) { continue }
+                // Q-4 — the lead keeps the names. A sentence that only lists the officials who
+                // announced ("Benjamin G. Greenberg, Acting United States Attorney …, Rafiq Ahmad,
+                // Special Agent in Charge …, announced") tells nothing that happened; and a lead
+                // that hides the person ("sentenced a man to 18 years") takes the next sentence,
+                // which names them (case bench 2026-10-24).
+                if Self.isAnnouncerRoll(sentence) { continue }
+                if Self.hidesThePerson(sentence), index + 1 < all.count, all[index + 1].split(separator: " ").count >= 6,
+                   Self.namesAPerson(all[index + 1]) {
+                    sentence += " " + all[index + 1]
+                }
                 if sentence.count > 600 {
                     let cut = sentence.prefix(600)
                     sentence = String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
@@ -189,6 +200,33 @@ public enum SentenceQuoteComposer {
             }
         }
         return nil
+    }
+
+    /// Two or more officials' titles and an "announced": the sentence that credits the
+    /// announcement, not the account.
+    nonisolated static func isAnnouncerRoll(_ sentence: String) -> Bool {
+        guard sentence.range(of: #"(?i)\bannounc"#, options: .regularExpression) != nil else { return false }
+        let titles = #"(?:United States Attorney|U\.S\. Attorney|Special Agent in Charge|Assistant Attorney General|Attorney General|Director|Commissioner|Inspector General)"#
+        guard let re = try? NSRegularExpression(pattern: titles) else { return false }
+        let matches = re.matches(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length))
+        // The roll OPENS with the officials; a lead that tells what happened and credits them at
+        // its end ("Herrell … was sentenced today …, U.S. Attorney Scott … announced") is the account.
+        guard matches.count >= 2, let first = matches.first, first.range.location <= 80 else { return false }
+        // … and ends with the announcing: "… today announced the establishment of a new unit"
+        // goes on to say what happened, so it is the account.
+        guard let ann = sentence.range(of: #"(?i)\bannounc\w*"#, options: [.regularExpression, .backwards]) else { return false }
+        return sentence[ann.upperBound...].split(separator: " ").count <= 6
+    }
+
+    /// "sentenced a man", "a 37-year-old woman pleaded …": the person is not named.
+    nonisolated static func hidesThePerson(_ sentence: String) -> Bool {
+        sentence.range(of: #"(?i)\b(?:a|an)\s+(?:\d{1,3}-year-old\s+)?(?:former\s+|local\s+)?(?:man|woman|men|women|person|individual|resident|defendant)\b"#,
+                       options: .regularExpression) != nil
+    }
+
+    /// A first-and-last name in capitals ("Joshua Thomas", "Jimmy Wayne Hammonds").
+    nonisolated static func namesAPerson(_ sentence: String) -> Bool {
+        sentence.range(of: #"\b[A-Z][a-z]+(?:\s[A-Z]\.)?\s[A-Z][a-z]{2,}\b"#, options: .regularExpression) != nil
     }
 
     /// Headings under which a record states its account.

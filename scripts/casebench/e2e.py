@@ -90,7 +90,9 @@ def doj_cases(raw, rng):
             for o in offices:
                 m = re.match(r"USAO - ([^,]+)(?:, (\w+))?$", o)
                 if m:
-                    short.append(f"{m.group(2)} District of {m.group(1)}" if m.group(2) else f"District of {m.group(1)}")
+                    place = m.group(1)
+                    # "USAO - District of Columbia" is the District of Columbia, not "District of District of …".
+                    short.append(f"{m.group(2)} District of {place}" if m.group(2) else (place if place.startswith("District of") else f"District of {place}"))
                 # The API files ENRD as "Energy and Natural Resources Division"; releases print its
                 # real name.
                 if o.startswith("ENRD") or "Natural Resources Division" in o:
