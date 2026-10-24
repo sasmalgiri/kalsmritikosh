@@ -67,8 +67,15 @@ struct SentenceQuoteWhyTests {
         // Evidence-only round 2026-10-24: the label block (normalized onto one line) was quoted.
         let record = "NHTSA defect investigation EA09005 Subject: Non-deployment of Side Thorax Air Bags Manufacturer: Nissan North America, Inc. Make: INFINITI Models: M45, Q45 Model years: 2003, 2004, 2005 Component: AIR BAGS:SIDE/WINDOW Date opened: 2009-04-01 Summary: The subject vehicles are equipped with seat-mounted, side thorax air bags for the driver and front passenger. This investigation revealed that faulty connectors can interrupt the circuit."
         let q = try #require(SentenceQuoteComposer.compose(question: "What did NHTSA find in investigation EA09005?", chunks: [chunk(record)]))
-        #expect(q.sentence.hasPrefix("The subject vehicles are equipped with seat-mounted"))
+        #expect(q.sentence.hasPrefix("Non-deployment of Side Thorax Air Bags. The subject vehicles are equipped with seat-mounted"))
         #expect(!q.sentence.contains("Manufacturer:"))
+    }
+
+    @Test("A record's title line leads its account")
+    func headlineLeadsAccount() {
+        let osha = "OSHA accident investigation summary 221257512 Event: Employee crushes hand between equipment and suspended load Event date: February 11, 2020 Inspection number(s): 344714464 Abstract: At 4:30 p.m. on February 11, 2020, an employee working as a machine operator was moving a suspended load when his hand was crushed."
+        #expect(SentenceQuoteComposer.recordHeadline(osha) == "Employee crushes hand between equipment and suspended load")
+        #expect(SentenceQuoteComposer.recordHeadline("No labels here at all.") == nil)
     }
 
     @Test("A headline that runs into the lead comes off; the lead stands")

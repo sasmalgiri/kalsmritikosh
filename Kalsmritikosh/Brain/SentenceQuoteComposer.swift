@@ -155,7 +155,13 @@ public enum SentenceQuoteComposer {
         // "Synopsis:", "Narrative:") after a block of labels (evidence-only round 2026-10-24: "What
         // did NHTSA find in investigation EA09005?" quoted the label block). That text is the account.
         for rc in own {
-            if let account = accountUnderHeading(rc.chunk.text) { return (account, rc.chunk, true) }
+            if let account = accountUnderHeading(rc.chunk.text) {
+                // Lead with the record's own title line ("Event: Employee crushes hand …") when it has one.
+                if let headline = recordHeadline(rc.chunk.text), !account.lowercased().contains(headline.lowercased()) {
+                    return ("\(headline). \(account)", rc.chunk, true)
+                }
+                return (account, rc.chunk, true)
+            }
         }
         let label = #"^[A-Z][A-Za-z /&()\-]{0,40}:\s*\S.{0,80}$"#
         for rc in own {
@@ -202,6 +208,16 @@ public enum SentenceQuoteComposer {
             return String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
         }
         return rest
+    }
+
+    /// A record's title line — the value of an "Event:", "Subject:", "Title:" or "Incident:" label,
+    /// up to the next label or line end (3–140 characters).
+    nonisolated static func recordHeadline(_ text: String) -> String? {
+        let pattern = #"(?:^|[\s|])(?:Event|Subject|Title|Incident)\s*:\s*(.{3,140}?)(?=\s+[A-Z][A-Za-z]{1,20}(?: [a-z][A-Za-z]{0,20}){0,2}\s*(?:\([a-z]\))?:\s|\s*\n|\s*\||$)"#
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let m = re.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) else { return nil }
+        let value = (text as NSString).substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     /// Several "Label: value" pairs run together — a record's header, not an account.
