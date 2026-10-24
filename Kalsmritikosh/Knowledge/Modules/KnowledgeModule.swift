@@ -284,7 +284,7 @@ public enum KnowledgeModuleFlags {
     public nonisolated static func disabledReason(_ m: KnowledgeModule) -> String? {
         guard m.implemented else { return "Not available in this build" }
         if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI {
-            return "Needs AI — choose “AI · evidence-gated” or “AI · free” above"
+            return EvidenceOnlyRelease.enforced ? "Not in this version — answers are evidence-only (no AI model)" : "Needs AI — choose “AI · evidence-gated” or “AI · free” above"
         }
         for dep in m.dependsOn where !isEnabled(dep) {
             return "Requires “\(dep.title)”"

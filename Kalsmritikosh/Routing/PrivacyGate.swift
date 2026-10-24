@@ -25,7 +25,7 @@ public final class PrivacyGate: @unchecked Sendable {
     /// rule/NL/extractive path. Embeddings (on-device, non-generative) are
     /// unaffected, so vector retrieval still works. Default off.
     public nonisolated var offlineNoLLM: Bool {
-        get { queue.sync { UserDefaults.standard.bool(forKey: noLLMKey) } }
+        get { EvidenceOnlyRelease.enforced || queue.sync { UserDefaults.standard.bool(forKey: noLLMKey) } }
         set { queue.sync { UserDefaults.standard.set(newValue, forKey: noLLMKey) } }
     }
 }

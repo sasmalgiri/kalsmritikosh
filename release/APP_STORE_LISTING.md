@@ -45,8 +45,8 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 >
 > **Private by design.** Everything runs on your Mac, and the knowledge base is encrypted on
 > disk. There's no account, no sign-in, and no analytics. By default your files and questions
-> never leave your device. If you choose, connect your own cloud AI key — you'll see exactly
-> what would be sent before anything leaves your Mac.
+> never leave your device. Answers come from your evidence only: every answer is a value or a
+> passage your documents state, with its source, or an honest "the documents don't say".
 >
 > **What you can do**
 > • Cases: intake, triage, plan, tasks and reminders, people and interviews, exhibits, holds, redaction log, review batches with a second-person check, chronology, journal and an append-only case log.
@@ -134,7 +134,8 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > unlocks everything for good). "Restore purchase" is on the same screen. After the trial, the main
 > window shows the purchase screen; Settings (backup and export) stays usable. To test in the
 > sandbox: start the trial, then buy; or buy directly. **No subscription, no other purchases.** **No model download** in this version. Minimum OS
-> macOS 15.6; AI-written answers require macOS 26+ with Apple Intelligence on supported hardware.
+> macOS 15.6. **No AI model is used in this version** (on-device or cloud): answers are built from the
+> person's documents by keyword, structured-field and document matching.
 > Workflows cite US and international instruments; procedures are jurisdiction-neutral and
 > deviations are recorded on the certificate.
 
