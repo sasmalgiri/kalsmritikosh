@@ -8,7 +8,7 @@
       "internalID" : "7A1F3B20",
       "localizations" : [
         {
-          "description" : "Try everything in Kalsmritikosh free for 14 days. Nothing is charged.",
+          "description" : "Try everything in Investigations Made Easy free for 14 days. Nothing is charged.",
           "displayName" : "14-day free trial",
           "locale" : "en_US"
         }
@@ -23,13 +23,13 @@
       "internalID" : "7A1F3B21",
       "localizations" : [
         {
-          "description" : "Unlock Kalsmritikosh for good: one purchase, no subscription, every Mac on your Apple account.",
-          "displayName" : "Kalsmritikosh",
+          "description" : "Unlock Investigations Made Easy for good: one purchase, no subscription, every Mac on your Apple account.",
+          "displayName" : "Investigations Made Easy",
           "locale" : "en_US"
         }
       ],
       "productID" : "ecosanskritiinnovation.Kalsmritikosh.unlock",
-      "referenceName" : "Unlock Kalsmritikosh",
+      "referenceName" : "Unlock Investigations Made Easy",
       "type" : "NonConsumable"
     }
   ],
