@@ -183,5 +183,15 @@ struct EvidenceOnlyRound12Tests {
             #expect(!MasterBrain.answersFromEvidenceOnly(q), "\(q)")
         }
     }
+
+    @Test("A harm record that numbers its people answers how many were hurt")
+    func numberedNarrative() {
+        let text = "Event: Employee injured in fall from moving forklift. At 7:00 a.m. Employee #1 was standing on the street. The rope became tangled, pulling him off. He sustained facial cuts and was hospitalized."
+        let chunk = Chunk(objectID: UUID(), ordinal: 0, text: text, characterRange: 0..<text.count)
+        let counted = NumberedEntryCount.compose(question: "How many employees were hurt in OSHA investigation 891770?",
+                                                 chunks: [RetrievedChunk(chunk: chunk, score: 1, viaLayer: .metadata)])
+        #expect(counted?.count == 1)
+        #expect(NumberedEntryCount.compose(question: "How many employees were trained?", chunks: [RetrievedChunk(chunk: chunk, score: 1, viaLayer: .metadata)]) == nil)
+    }
 }
 

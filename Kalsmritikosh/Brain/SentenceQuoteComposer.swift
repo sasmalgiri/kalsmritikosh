@@ -424,6 +424,28 @@ public struct NumberedEntryCount: Sendable, Equatable {
                     }
                 }
             }
+                // No listed entries: a record about a harm whose narrative numbers the people it is
+            // about ("Event: Employee injured in fall …  Employee #1 was standing on the street …")
+            // — the distinct numbered people are counted and each first mention quoted (case bench
+            // 2026-10-24: OSHA summaries with no injury list).
+            if seen.isEmpty, Self.asksAboutHarm(question) {
+                let ordered = rcs.sorted(by: { $0.chunk.ordinal < $1.chunk.ordinal })
+                // The record is about a harm (its title or its account says so).
+                let aboutHarm = ordered.contains { $0.chunk.text.range(of: Self.harmWords, options: .regularExpression) != nil }
+                for rc in ordered where aboutHarm {
+                    SentenceQuoteComposer.sentences(of: rc.chunk.text).forEach { sentence in
+                        let ns = sentence as NSString
+                        guard let re = try? NSRegularExpression(pattern: "(?i)\\b" + n0 + "s?\\s*#\\s*(\\d{1,3})\\b") else { return }
+                        for m in re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)) {
+                            let n = ns.substring(with: m.range(at: 1))
+                            if seen[n] == nil {
+                                seen[n] = sentence.count > 160 ? String(sentence.prefix(160)) + "…" : sentence
+                                if first == nil { first = rc.chunk }
+                            }
+                        }
+                    }
+                }
+            }
             guard let chunk = first, !seen.isEmpty else { continue }
             if best == nil || seen.count > best!.count {
                 let entries = seen.sorted { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }.map(\.value)
@@ -431,6 +453,12 @@ public struct NumberedEntryCount: Sendable, Equatable {
             }
         }
         return best
+    }
+
+    nonisolated static let harmWords = #"(?i)\b(?:injur\w*|hurt|kill\w*|died|death|fatal\w*|hospitali[sz]ed|burn\w*|fractur\w*|amputat\w*|lacerat\w*|crush\w*|struck|fell|sustained)\b"#
+
+    nonisolated static func asksAboutHarm(_ question: String) -> Bool {
+        question.range(of: harmWords, options: .regularExpression) != nil
     }
 
     /// One entry, cut where the next entry or the next label begins ("Employee #1: hospitalized
