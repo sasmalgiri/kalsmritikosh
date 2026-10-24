@@ -1469,14 +1469,19 @@ public struct SettingsView: View {
             // One choice, three options, with a full explanation of each. Changing it
             // re-evaluates every module's availability below (the token bump).
             let regime = FeatureFlags.aiRegimeValue()
-            if EvidenceOnlyRelease.enforced {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Answers").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                    Label("Evidence only — every answer is a value or passage your documents state, with its source, or an honest \u{201C}the documents don't say\u{201D}. No AI model is used in this version.", systemImage: "checkmark.seal")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Answers").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Toggle("Use AI to write answers", isOn: Binding(
+                    get: { EvidenceOnlyRelease.aiEnabled },
+                    set: { EvidenceOnlyRelease.aiEnabled = $0; moduleFlagsVersion &+= 1 }
+                ))
+                Text(EvidenceOnlyRelease.aiEnabled
+                     ? "AI may write answers from your evidence. Choose Apple's on-device model below, or your own cloud AI key under Online mode (you approve every send)."
+                     : "Off — evidence only. Every answer is a value or passage your documents state, with its source, or an honest \u{201C}the documents don't say\u{201D}. No AI model is used.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if EvidenceOnlyRelease.aiEnabled {
             VStack(alignment: .leading, spacing: 6) {
                 Text("AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Picker("AI", selection: Binding(
@@ -2218,7 +2223,7 @@ public struct SettingsView: View {
             // private / AI gated / AI free — now lives in ONE place, Modules → AI,
             // so it can never drift out of sync with a second toggle here.
             Label(EvidenceOnlyRelease.enforced
-                  ? "This version answers from your evidence only — no AI model is used, on this Mac or anywhere else."
+                  ? "Answers come from your evidence only — no AI model is used. Turn on \u{201C}Use AI to write answers\u{201D} under Modules to choose on-device or your own cloud AI."
                   : "Choose Fully private · AI gated · AI free under Modules → AI. That one control turns AI on or off everywhere.", systemImage: "switch.2")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
