@@ -138,6 +138,12 @@ public enum SentenceQuoteComposer {
                                             < asked.intersection(contentWords($1.chunk.text)).count }),
               asked.intersection(contentWords(anchor.chunk.text)).count >= 2 else { return nil }
         let own = chunks.filter { $0.chunk.objectID == anchor.chunk.objectID }.sorted { $0.chunk.ordinal < $1.chunk.ordinal }
+        // A record states its account under a heading ("Summary:", "Findings:", "Conclusion:",
+        // "Synopsis:", "Narrative:") after a block of labels (evidence-only round 2026-10-24: "What
+        // did NHTSA find in investigation EA09005?" quoted the label block). That text is the account.
+        for rc in own {
+            if let account = accountUnderHeading(rc.chunk.text) { return (account, rc.chunk) }
+        }
         let label = #"^[A-Z][A-Za-z /&()\-]{0,40}:\s*\S.{0,80}$"#
         for rc in own {
             for raw in sentences(of: rc.chunk.text) {
@@ -153,6 +159,7 @@ public enum SentenceQuoteComposer {
                 }
                 guard sentence.split(separator: " ").count >= 12 else { continue }
                 if sentence.range(of: label, options: .regularExpression) != nil { continue }
+                if isLabelRun(sentence) { continue }
                 let words = contentWords(sentence)
                 if restatesTitle(sentence, words: words, titles: titles, titleWords: titleWords) { continue }
                 if sentence.count > 600 {
@@ -163,6 +170,32 @@ public enum SentenceQuoteComposer {
             }
         }
         return nil
+    }
+
+    /// Headings under which a record states its account.
+    nonisolated static let accountHeading = #"(?i)(?:^|[\s.|])(?:summary|findings|conclusions?|synopsis|narrative|abstract|description of (?:the )?(?:incident|event|accident|occurrence))\s*:\s*"#
+
+    /// The text under an account heading, up to 600 characters (cut at a word, marked with …).
+    nonisolated static func accountUnderHeading(_ text: String) -> String? {
+        guard let r = text.range(of: accountHeading, options: .regularExpression) else { return nil }
+        var rest = text[r.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        // Stop at the next label line ("Recall campaign: …") if one follows the account.
+        if let next = rest.range(of: #"\n[A-Z][A-Za-z /&()\-]{0,40}:\s"#, options: .regularExpression) {
+            rest = String(rest[..<next.lowerBound])
+        }
+        guard rest.split(separator: " ").count >= 8 else { return nil }
+        if rest.count > 600 {
+            let cut = rest.prefix(600)
+            return String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
+        }
+        return rest
+    }
+
+    /// Several "Label: value" pairs run together — a record's header, not an account.
+    nonisolated static func isLabelRun(_ sentence: String) -> Bool {
+        let re = try? NSRegularExpression(pattern: #"\b[A-Z][A-Za-z]{1,20}(?: [A-Za-z]{1,20}){0,2}:\s"#)
+        let n = re?.numberOfMatches(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length)) ?? 0
+        return n >= 3
     }
 
     /// The first sentence of at least five words after `heading` in `text`, cut to 600 characters.

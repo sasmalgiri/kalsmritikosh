@@ -62,6 +62,15 @@ struct SentenceQuoteWhyTests {
         #expect(q.sentence.contains("FATIGUE FAILURE"), "\(q.sentence)")
     }
 
+    @Test("A record's account is the text under its Summary heading, not its label block")
+    func accountUnderSummaryHeading() throws {
+        // Evidence-only round 2026-10-24: the label block (normalized onto one line) was quoted.
+        let record = "NHTSA defect investigation EA09005 Subject: Non-deployment of Side Thorax Air Bags Manufacturer: Nissan North America, Inc. Make: INFINITI Models: M45, Q45 Model years: 2003, 2004, 2005 Component: AIR BAGS:SIDE/WINDOW Date opened: 2009-04-01 Summary: The subject vehicles are equipped with seat-mounted, side thorax air bags for the driver and front passenger. This investigation revealed that faulty connectors can interrupt the circuit."
+        let q = try #require(SentenceQuoteComposer.compose(question: "What did NHTSA find in investigation EA09005?", chunks: [chunk(record)]))
+        #expect(q.sentence.hasPrefix("The subject vehicles are equipped with seat-mounted"))
+        #expect(!q.sentence.contains("Manufacturer:"))
+    }
+
     @Test("A headline that runs into the lead comes off; the lead stands")
     func headlineRunsIntoLead() throws {
         let release = "Leader of meth trafficking ring operating in Houston sentenced to 30 years in prison HOUSTON – A 37-year-old Mexican citizen has been ordered to federal prison following his involvement in a conspiracy to possess meth. Today, U.S. District Judge David Hittner handed Carrasco-Garcia a 360-month term of imprisonment."
