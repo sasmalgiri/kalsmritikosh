@@ -56,6 +56,13 @@ public enum SlotAnswerComposer {
 
     /// Compose the slot answer for `slotFieldIDs` from the retrieval-surfaced
     /// facts. Returns nil when the plan carries no slot fields.
+    /// "a grant date", "an invoice number", "the parties" — the field named as the sentence needs it.
+    nonisolated static func withArticle(_ label: String) -> String {
+        let l = label.lowercased()
+        if l.hasSuffix("ies") || (l.hasSuffix("s") && !l.hasSuffix("ss") && !l.hasSuffix("us")) { return "the " + l }
+        return (l.first.map { "aeiou".contains($0) } ?? false ? "an " : "a ") + l
+    }
+
     public nonisolated static func compose(
         slotFieldIDs: [String],
         facts: [GenericFact],
@@ -145,9 +152,9 @@ public enum SlotAnswerComposer {
             var sentence: String
             if let related {
                 sentence = "Your archive shows \(labeledValue(related.fact)), "
-                    + "but none of the \(documentsSearched) document(s) searched carries a \(label.lowercased())."
+                    + "but none of the \(documentsSearched) document(s) searched carries \(Self.withArticle(label))."
             } else {
-                sentence = "None of the \(documentsSearched) document(s) searched carries a \(label.lowercased())."
+                sentence = "None of the \(documentsSearched) document(s) searched carries \(Self.withArticle(label))."
             }
             // F8 (NF-1/NF-2) — the abstention carries its RECEIPT: what was
             // exhausted, and — for a field no extractor even emits — the honest
@@ -269,7 +276,11 @@ public enum SlotAnswerComposer {
         var best: [[String]?] = Array(repeating: nil, count: chars.count + 1)
         best[0] = []
         for i in 0..<chars.count where best[i] != nil {
-            for j in (i + 2)...min(chars.count, i + 14) {
+            // Words are 2–14 letters; near the end of the id the range can be empty — never form a
+            // closed range whose lower bound exceeds its upper (that traps).
+            let upper = min(chars.count, i + 14)
+            guard i + 2 <= upper else { continue }
+            for j in (i + 2)...upper {
                 let w = String(chars[i..<j])
                 guard Self.fieldWords.contains(w), let prev = best[i] else { continue }
                 if best[j] == nil || (best[j]?.count ?? .max) > prev.count + 1 { best[j] = prev + [w] }

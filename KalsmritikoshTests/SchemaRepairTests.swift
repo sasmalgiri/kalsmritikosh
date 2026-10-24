@@ -35,6 +35,23 @@ struct SchemaRepairTests {
         #expect(try await MigrationFixtureBuilder.tableExists(db, "case_exhibits"))
     }
 
+    @Test("Conformance adds back tables and ALTER-added columns an old upgrade left out")
+    func conformanceRepairs() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let cols = try await db.query("PRAGMA table_info(chunks);", []).compactMap { $0.string(1) }
+        let column = try #require(cols.first { $0 == "derivation_digest" } ?? cols.last)
+        try await db.exec("ALTER TABLE chunks DROP COLUMN \(column);")
+        try await db.exec("DROP TABLE case_hold_notices;")
+        let report = try await SchemaConformance.repair(db)
+        #expect(report.added.contains("table case_hold_notices"))
+        #expect(report.added.contains("column chunks.\(column)"))
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "case_hold_notices"))
+        let after = try await db.query("PRAGMA table_info(chunks);", []).compactMap { $0.string(1) }
+        #expect(after.contains(column))
+        // A conformant ledger needs nothing.
+        #expect(try await SchemaConformance.repair(db).isClean)
+    }
+
     @Test("Only create-if-missing migrations are re-run")
     func idempotencyClassifier() {
         for v in [148, 149, 150, 151, 152] {

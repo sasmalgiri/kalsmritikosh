@@ -43,11 +43,47 @@ public nonisolated enum DateQuestionGate {
         return s.isEmpty ? nil : String(s.prefix(220))
     }
 
+    /// "When did X announce …?" / "When was it announced?" — an announcement-date question. Kept to
+    /// "announce" on purpose: "When was the patent issued?" is answered by a grant date, which must stand.
+    static func asksPublicationDate(_ question: String) -> Bool {
+        question.range(of: #"(?i)\bannounc\w*"#, options: .regularExpression) != nil
+    }
+
+    /// True when some date in the text sits in a sentence that ties it to the publication itself
+    /// ("announced on March 3", "Dated: …", "Released 2014-03-03", or a dateline "WASHINGTON, March 3 —").
+    static func hasPublicationAnchoredDate(_ text: String) -> Bool {
+        let sentences = text.components(separatedBy: CharacterSet(charactersIn: ".!?\n|"))
+        return sentences.contains { s in
+            guard containsDate(s) else { return false }
+            // "… announced that on May 2, 2019, Hutchins pleaded guilty" dates the plea, not the
+            // announcement (case bench 2026-10-24): a date only after "announced that" is the event's.
+            if let that = s.range(of: #"(?i)\bannounc\w*\s+(?:today\s+)?that\b"#, options: .regularExpression),
+               !containsDate(String(s[..<that.lowerBound])) { return false }
+            if s.range(of: #"(?i)\b(?:announc|releas|publish|issu|dated)\w*"#, options: .regularExpression) != nil { return true }
+            // A dateline carries the date itself ("WASHINGTON, March 3 —"); "NEW ORLEANS, LOUISIANA –
+            // X pleaded guilty on April 9" is a dateline whose date belongs to the plea.
+            return s.trimmingCharacters(in: .whitespaces)
+                .range(of: #"^[A-Z][A-Z .,'\-]{2,40},\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}\b"#,
+                       options: .regularExpression) != nil
+        }
+    }
+
     /// The answer as it should be recorded.
     public static func apply(question: String, _ answer: VerifiedAnswer) -> VerifiedAnswer {
         guard asksWhen(question), !answer.refused else { return answer }
         let said = answer.answerText ?? answer.body
-        guard !containsDate(said), !containsDate(answer.body) else { return answer }
+        let hasDate = containsDate(said) || containsDate(answer.body)
+        // A date that belongs to another event in the source is not the publication date.
+        if hasDate, asksPublicationDate(question), !hasPublicationAnchoredDate(answer.body) {
+            let text = "The documents don't say when it was announced; the dates they give are for other events."
+            return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
+                                  confidence: answer.confidence, contradictions: answer.contradictions, refused: true,
+                                  refusalReason: "A publication-date question whose evidence dates only other events.",
+                                  report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
+                                  reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
+                                  ledgerAnswerID: answer.ledgerAnswerID)
+        }
+        guard !hasDate else { return answer }
         var text = "The documents don't give a date for this."
         if let rel = relativeSentence(in: answer.body) {
             text += " The source only says \u{201C}\(rel)\u{201D}, without a calendar date."

@@ -84,9 +84,10 @@ public actor SyntheticQuestionsRepository {
     public func search(_ query: String, limit: Int = 25) async throws -> [MatchRow] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        let sanitized = trimmed
-            .replacingOccurrences(of: "\"", with: "")
-            .replacingOccurrences(of: "'", with: "")
+        // A question's own punctuation ("?", "-", ":") is FTS5 syntax; raw text failed with
+        // "fts5: syntax error near "?"" on every question (case bench 2026-10-24).
+        let sanitized = FTSQuerySanitizer.sanitize(trimmed)
+        guard !sanitized.isEmpty else { return [] }
         let rows = try await database.query(
             """
             SELECT sq.id, sq.chunk_id, sq.object_id, sq.text, bm25(synthetic_questions_fts)

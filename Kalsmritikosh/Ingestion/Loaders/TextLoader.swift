@@ -46,6 +46,15 @@ public struct TextLoader: Ingestor {
             content = s
             encodingTag = e
             #endif
+        case .html, .xml:
+            // Case bench 2026-10-24: html/xml reach this loader as the text-fallback reader, and the
+            // decoded MARKUP used to become the KO's content — so every consumer of `content`
+            // (incident/milestone event extraction, fetchContent readers) quoted `<p class="p1">…`
+            // into answers. The content is the readable text instead: the SAME element texts the
+            // structural parser cites, one per line. The original bytes are untouched.
+            let (s, e) = Self.decodeWithDetectedEncoding(data)
+            content = Self.readableMarkupText(decoded: s, data: data, type: type)
+            encodingTag = e
         default:
             let (s, e) = Self.decodeWithDetectedEncoding(data)
             content = s
@@ -86,6 +95,29 @@ public struct TextLoader: Ingestor {
                 "encoding": AnyCodable(.string(encodingTag))
             ]
         )
+    }
+
+    /// The readable text of an HTML/XML document: its element texts (tags dropped, entities
+    /// decoded, script/style/head skipped for HTML) joined by newlines — exactly the texts
+    /// `StructuredTextStructuralParser` emits as evidence blocks. Well-formed XML goes through
+    /// XMLParser (declared encoding, CDATA); malformed XML and all HTML through the tolerant scanner.
+    /// HTML inline tags (`<span>`, `<b>`, `<a>` …) are unwrapped first: the scanner breaks a run at
+    /// EVERY tag, and Cocoa HTML Writer wraps sentence pieces in `<span class="s1">`, so without
+    /// this one sentence would be split across lines and sentence-level extractors would see halves.
+    static func readableMarkupText(decoded: String, data: Data, type: SourceType) -> String {
+        let texts: [String]
+        if type == .xml {
+            let parsed = StructuredTextStructuralParser.xmlElementTexts(data)
+            texts = parsed.failure == nil
+                ? parsed.texts.map(\.text)
+                : StructuredTextStructuralParser.elementTexts(in: decoded, isHTML: false).map(\.text)
+        } else {
+            let unwrapped = decoded.replacingOccurrences(
+                of: "</?(?:span|font|a|b|i|u|s|em|strong|small|big|sup|sub|abbr|code|mark|strike|tt|cite|q|time|kbd|var|dfn|label|wbr)\\b[^>]*>",
+                with: "", options: [.regularExpression, .caseInsensitive])
+            texts = StructuredTextStructuralParser.elementTexts(in: unwrapped, isHTML: true).map(\.text)
+        }
+        return texts.joined(separator: "\n")
     }
 
     /// chardet-equivalent decoding: detect the encoding from BOMs,

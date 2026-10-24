@@ -31,7 +31,14 @@ public nonisolated struct IdentityFieldResolver: Sendable {
 
     /// Map an identity/document question to the field type it asks for (nil = not one).
     public static func questionFieldType(_ question: String) -> TypedFieldType? {
+        // A quoted title names the matter, not the field asked for. Case bench 2026-10-24: "What
+        // happened in the case "Shipping company fined $1.5M …"?" matched "company" inside the
+        // title and answered "The organization is ambiguous across the evidence".
         let q = question.lowercased()
+            .replacingOccurrences(of: #""[^"]*"|“[^”]*”"#, with: " ", options: .regularExpression)
+        // An account question ("what happened", "why", "how did") asks for no identity field.
+        if q.range(of: #"\bwhat happened\b|\bwhat did\b[^?]{0,60}\b(?:find|decide|do)\b|^\s*why\b"#,
+                   options: .regularExpression) != nil { return nil }
         func any(_ ks: [String]) -> Bool { ks.contains { q.contains($0) } }
         // AN AGGREGATE QUESTION IS NOT A FIELD LOOKUP. This path answers "what
         // IS the <field>" by reading located values; a counting or listing

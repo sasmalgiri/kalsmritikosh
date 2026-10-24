@@ -158,6 +158,10 @@ public enum SlotFieldResolver {
         (["decided"], ["date", "when"], "decisiondate", .date, "Decision date", "legal"),
         // "What did the court decide in <case>?" — the disposition.
         (["court", "decide"], ["what"], "disposition", .status, "Disposition", "legal"),
+        // "Who were the parties in X v. Y?" — the caption's parties; a contract's parties are not
+        // a court case's, so the question must name a case (a "v.", "in re", case, suit, court).
+        (["parties"], ["v", "vs", "in re", "ex parte", "case", "suit", "lawsuit", "litigation", "court", "appeal"],
+         "parties", .counterparty, "Parties", "legal"),
         // A1.1 — "who is the owner/holder of this patent" (no field bigram).
         (["patent"], ["owner", "owns", "proprietor", "holder", "belongs"], "applicant", .counterparty, "Applicant", "patent"),
     ]
@@ -173,6 +177,7 @@ public enum SlotFieldResolver {
         "decisiondate": "Decision date",
         "disposition": "Disposition",
         "opinionauthor": "Opinion by",
+        "parties": "Parties",
         "filingdate": "Filing date",
         "invoicenumber": "Invoice number",
         "casenumber": "Case number",
@@ -356,8 +361,12 @@ public enum SlotFieldResolver {
     /// point callers that HAVE the inventory should use; `resolve(in:)` stays
     /// unchanged for callers that do not, so nothing existing shifts.
     public nonisolated static func resolve(
-        in question: String, knownFields: Set<String>
+        in fullQuestion: String, knownFields: Set<String>
     ) -> [Resolution] {
+        // A quoted title names the matter, not a field: "What happened in the case "Oakland
+        // Resident Who Sold Fentanyl In San Francisco's Tenderloin …"?" reached a field minted
+        // from a dateline ("sanfrancisco") through the title's words (case bench 2026-10-24).
+        let question = withoutQuotedTitles(fullQuestion)
         let curated = resolve(in: question)
         // Case bench 2026-10-21: "When was FDA recall D-0227-2026 initiated?" resolved to the bare
         // "date" field and answered "2026" (a stray year) while the document states "Recall
@@ -373,10 +382,16 @@ public enum SlotFieldResolver {
         // "Where did the NTSB ERA25LA118 accident happen?" names no field; a place-shaped field
         // on file for the matter ("Location: Kennesaw, GA") is what it asks for.
         if let place = placeField(in: question, knownFields: knownFields) { return [place] }
+        if let reason = reasonField(in: question, knownFields: knownFields) { return [reason] }
         if let discovered = resolveAgainstInventory(question, knownFields: knownFields) {
             return [discovered]
         }
         return []
+    }
+
+    /// The question with its quoted titles ("…" or “…”) blanked out.
+    nonisolated static func withoutQuotedTitles(_ question: String) -> String {
+        question.replacingOccurrences(of: #""[^"]{3,}"|“[^”]{3,}”"#, with: " ", options: .regularExpression)
     }
 
     nonisolated static let placeFields = ["location", "accidentlocation", "incidentlocation", "place", "site", "venue", "address"]
@@ -387,6 +402,29 @@ public enum SlotFieldResolver {
               let f = placeFields.first(where: { knownFields.contains($0) }) else { return nil }
         return Resolution(fieldID: f, requestedField: .identifier, humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
     }
+
+    /// "Why was FDA recall D-0775-2020 issued?" names no field; a reason field on file ("Reason
+    /// for recall: Lack of sterility assurance.") is what it asks for. Case bench 2026-10-24: the
+    /// answer was the record's fact list or its distribution sentence.
+    nonisolated static func reasonField(in question: String, knownFields: Set<String>) -> Resolution? {
+        let q = question.lowercased().trimmingCharacters(in: .whitespaces)
+        guard q.hasPrefix("why ") || q.hasPrefix("for what reason") || q.hasPrefix("what was the reason") else { return nil }
+        // The field must be about what the question names ("reasonforrecall" for a recall), so a
+        // "why" about something else never lands on an unrelated record's reason.
+        let words = Set(q.components(separatedBy: CharacterSet.letters.inverted).filter { $0.count >= 4 })
+        let candidates = knownFields.filter { f in
+            guard f.hasPrefix("reasonfor") else { return false }
+            let topic = String(f.dropFirst("reasonfor".count))
+            return !topic.isEmpty && words.contains { $0.hasPrefix(topic) || topic.hasPrefix($0) }
+        }.sorted { $0.count < $1.count }
+        guard let f = candidates.first else { return nil }
+        return Resolution(fieldID: f, requestedField: .identifier, humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
+    }
+
+    /// Fields that date the event a record is about (an accident, an incident, a loss).
+    nonisolated static let eventDateFields = ["accidentdate", "incidentdate", "eventdate", "dateofaccident",
+                                              "dateofincident", "dateofloss", "lossdate", "occurrencedate",
+                                              "dateandtime", "datetime"]
 
     /// A known date-shaped field whose name carries the stem of one of the question's words
     /// ("initiated" → "initiat" ⊂ "recallinitiationdate"). Only for when-questions; the longest
@@ -407,6 +445,13 @@ public enum SlotFieldResolver {
                     best = (f, stem.count)
                 }
             }
+        }
+        // Case bench 2026-10-24: "When did the accident in NTSB case ERA13CA130 happen?" names no
+        // dated field — "happen" is the event itself — so the answer was the report's text while
+        // the ledger held "Date & time: February 9, 2013". An event's own date field answers it.
+        if best == nil, q.range(of: #"\b(?:happen(?:ed)?|occur(?:red)?|take place|took place)\b"#, options: .regularExpression) != nil,
+           let f = eventDateFields.first(where: { dateFields.contains($0) }) {
+            best = (f, 0)
         }
         guard let hit = best else { return nil }
         return Resolution(fieldID: hit.field, requestedField: .date,

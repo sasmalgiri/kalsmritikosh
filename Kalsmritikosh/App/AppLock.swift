@@ -55,7 +55,9 @@ public final class AppLock {
         observers.append(nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in
                 let lock = AppLock.shared
-                if let t = lock.resignedAt, Date().timeIntervalSince(t) > Double(AppLock.idleMinutes) * 60 { lock.lockIfEnabled() }
+                if AppLock.shouldLockOnReturn(resignedAt: lock.resignedAt, now: Date(), idleMinutes: AppLock.idleMinutes) {
+                    lock.lockIfEnabled()
+                }
                 lock.resignedAt = nil
             }
         })
@@ -64,22 +66,44 @@ public final class AppLock {
         lockIfEnabled()
     }
 
+    /// Coming back locks the app only after more than the idle limit away.
+    nonisolated static func shouldLockOnReturn(resignedAt: Date?, now: Date, idleMinutes: Int) -> Bool {
+        guard let resignedAt else { return false }
+        return now.timeIntervalSince(resignedAt) > Double(idleMinutes) * 60
+    }
+
+    /// How the person proves it is them. Tests replace it; the app uses LocalAuthentication.
+    struct Authenticator {
+        /// nil when this Mac can authenticate; otherwise why it can't.
+        var unavailableReason: @MainActor () -> String?
+        var evaluate: @MainActor () async throws -> Bool
+    }
+
+    var authenticator = Authenticator(
+        unavailableReason: {
+            let context = LAContext()
+            var error: NSError?
+            return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) ? nil : (error?.localizedDescription ?? "This Mac has no way to verify you.")
+        },
+        evaluate: {
+            let context = LAContext()
+            context.localizedCancelTitle = "Cancel"
+            return try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "unlock your archive")
+        })
+
     public func lockIfEnabled() {
         if ProductModuleFlags.isEnabled(.appLock) { locked = true }
     }
 
     public func unlock() async {
-        let context = LAContext()
-        context.localizedCancelTitle = "Cancel"
-        var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+        if let reason = authenticator.unavailableReason() {
             // No way to authenticate on this Mac: never leave the user locked out.
-            lastError = error?.localizedDescription
+            lastError = reason
             locked = false
             return
         }
         do {
-            if try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "unlock your archive") {
+            if try await authenticator.evaluate() {
                 locked = false
                 lastError = nil
             }

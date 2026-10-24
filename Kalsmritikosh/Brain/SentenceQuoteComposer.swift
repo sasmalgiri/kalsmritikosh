@@ -24,6 +24,18 @@ public struct QuotedAnswer: Sendable, Equatable {
     public let objectID: KnowledgeObject.ID
     public let chunkID: Chunk.ID
     public let receiptLine: String
+    /// True when the sentence is the document's own account under a heading ("Summary:",
+    /// "Findings:"…) — the document answering the account question in its own words.
+    public var underAccountHeading: Bool = false
+}
+
+extension SentenceQuoteComposer {
+    /// The document's own account (text under its Summary/Findings heading), for an account
+    /// question — nil when the question isn't one or no matching document has such a heading.
+    public nonisolated static func headedAccount(question: String, chunks: [RetrievedChunk]) -> QuotedAnswer? {
+        guard asksWhatHappened(question), let q = compose(question: question, chunks: chunks), q.underAccountHeading else { return nil }
+        return q
+    }
 }
 
 public enum SentenceQuoteComposer {
@@ -74,7 +86,8 @@ public enum SentenceQuoteComposer {
         if asksAccount, let lead = Self.leadSentence(question: question, chunks: chunks, titles: titles, titleWords: titleWords) {
             return QuotedAnswer(
                 sentence: lead.sentence, objectID: lead.chunk.objectID, chunkID: lead.chunk.id,
-                receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+                receiptLine: "Quoted verbatim from the cited document; no model was consulted.",
+                underAccountHeading: lead.headed)
         }
 
         var best: (score: Int, tiebreak: String, sentence: String, chunk: Chunk)?
@@ -132,16 +145,29 @@ public enum SentenceQuoteComposer {
     /// skipping the title, label lines ("Make: KENWORTH") and short lines. A sentence longer
     /// than 600 characters is quoted up to a word boundary, marked with an ellipsis.
     nonisolated static func leadSentence(question: String, chunks: [RetrievedChunk], titles: [String],
-                                         titleWords: Set<String>) -> (sentence: String, chunk: Chunk)? {
+                                         titleWords: Set<String>) -> (sentence: String, chunk: Chunk, headed: Bool)? {
         let asked = contentWords(question)
         guard let anchor = chunks.max(by: { asked.intersection(contentWords($0.chunk.text)).count
                                             < asked.intersection(contentWords($1.chunk.text)).count }),
               asked.intersection(contentWords(anchor.chunk.text)).count >= 2 else { return nil }
         let own = chunks.filter { $0.chunk.objectID == anchor.chunk.objectID }.sorted { $0.chunk.ordinal < $1.chunk.ordinal }
+        // A record states its account under a heading ("Summary:", "Findings:", "Conclusion:",
+        // "Synopsis:", "Narrative:") after a block of labels (evidence-only round 2026-10-24: "What
+        // did NHTSA find in investigation EA09005?" quoted the label block). That text is the account.
+        for rc in own {
+            if let account = accountUnderHeading(rc.chunk.text) {
+                // Lead with the record's own title line ("Event: Employee crushes hand …") when it has one.
+                if let headline = recordHeadline(rc.chunk.text), !account.lowercased().contains(headline.lowercased()) {
+                    return ("\(headline). \(account)", rc.chunk, true)
+                }
+                return (account, rc.chunk, true)
+            }
+        }
         let label = #"^[A-Z][A-Za-z /&()\-]{0,40}:\s*\S.{0,80}$"#
         for rc in own {
-            for raw in sentences(of: rc.chunk.text) {
-                var sentence = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let all = sentences(of: rc.chunk.text).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            for (index, raw) in all.enumerated() {
+                var sentence = raw
                 // A headline with no period after it runs into the lead ("… Sentenced to 30
                 // Years in Prison HOUSTON – A 37-year-old Mexican citizen has been …"): the
                 // title comes off and the lead stands.
@@ -153,16 +179,90 @@ public enum SentenceQuoteComposer {
                 }
                 guard sentence.split(separator: " ").count >= 12 else { continue }
                 if sentence.range(of: label, options: .regularExpression) != nil { continue }
+                if isLabelRun(sentence) { continue }
                 let words = contentWords(sentence)
                 if restatesTitle(sentence, words: words, titles: titles, titleWords: titleWords) { continue }
+                // Q-4 — the lead keeps the names. A sentence that only lists the officials who
+                // announced ("Benjamin G. Greenberg, Acting United States Attorney …, Rafiq Ahmad,
+                // Special Agent in Charge …, announced") tells nothing that happened; and a lead
+                // that hides the person ("sentenced a man to 18 years") takes the next sentence,
+                // which names them (case bench 2026-10-24).
+                if Self.isAnnouncerRoll(sentence) { continue }
+                if Self.hidesThePerson(sentence), index + 1 < all.count, all[index + 1].split(separator: " ").count >= 6,
+                   Self.namesAPerson(all[index + 1]) {
+                    sentence += " " + all[index + 1]
+                }
                 if sentence.count > 600 {
                     let cut = sentence.prefix(600)
                     sentence = String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
                 }
-                return (sentence, rc.chunk)
+                return (sentence, rc.chunk, false)
             }
         }
         return nil
+    }
+
+    /// Two or more officials' titles and an "announced": the sentence that credits the
+    /// announcement, not the account.
+    nonisolated static func isAnnouncerRoll(_ sentence: String) -> Bool {
+        guard sentence.range(of: #"(?i)\bannounc"#, options: .regularExpression) != nil else { return false }
+        let titles = #"(?:United States Attorney|U\.S\. Attorney|Special Agent in Charge|Assistant Attorney General|Attorney General|Director|Commissioner|Inspector General)"#
+        guard let re = try? NSRegularExpression(pattern: titles) else { return false }
+        let matches = re.matches(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length))
+        // The roll OPENS with the officials; a lead that tells what happened and credits them at
+        // its end ("Herrell … was sentenced today …, U.S. Attorney Scott … announced") is the account.
+        guard matches.count >= 2, let first = matches.first, first.range.location <= 80 else { return false }
+        // … and ends with the announcing: "… today announced the establishment of a new unit"
+        // goes on to say what happened, so it is the account.
+        guard let ann = sentence.range(of: #"(?i)\bannounc\w*"#, options: [.regularExpression, .backwards]) else { return false }
+        return sentence[ann.upperBound...].split(separator: " ").count <= 6
+    }
+
+    /// "sentenced a man", "a 37-year-old woman pleaded …": the person is not named.
+    nonisolated static func hidesThePerson(_ sentence: String) -> Bool {
+        sentence.range(of: #"(?i)\b(?:a|an)\s+(?:\d{1,3}-year-old\s+)?(?:former\s+|local\s+)?(?:man|woman|men|women|person|individual|resident|defendant)\b"#,
+                       options: .regularExpression) != nil
+    }
+
+    /// A first-and-last name in capitals ("Joshua Thomas", "Jimmy Wayne Hammonds").
+    nonisolated static func namesAPerson(_ sentence: String) -> Bool {
+        sentence.range(of: #"\b[A-Z][a-z]+(?:\s[A-Z]\.)?\s[A-Z][a-z]{2,}\b"#, options: .regularExpression) != nil
+    }
+
+    /// Headings under which a record states its account.
+    nonisolated static let accountHeading = #"(?i)(?:^|[\s.|])(?:summary|findings|conclusions?|synopsis|narrative|abstract|description of (?:the )?(?:incident|event|accident|occurrence))\s*:\s*"#
+
+    /// The text under an account heading, up to 600 characters (cut at a word, marked with …).
+    nonisolated static func accountUnderHeading(_ text: String) -> String? {
+        guard let r = text.range(of: accountHeading, options: .regularExpression) else { return nil }
+        var rest = text[r.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        // Stop at the next label line ("Recall campaign: …") if one follows the account.
+        if let next = rest.range(of: #"\n[A-Z][A-Za-z /&()\-]{0,40}:\s"#, options: .regularExpression) {
+            rest = String(rest[..<next.lowerBound])
+        }
+        guard rest.split(separator: " ").count >= 8 else { return nil }
+        if rest.count > 600 {
+            let cut = rest.prefix(600)
+            return String(cut[..<(cut.lastIndex(of: " ") ?? cut.endIndex)]) + " …"
+        }
+        return rest
+    }
+
+    /// A record's title line — the value of an "Event:", "Subject:", "Title:" or "Incident:" label,
+    /// up to the next label or line end (3–140 characters).
+    nonisolated static func recordHeadline(_ text: String) -> String? {
+        let pattern = #"(?:^|[\s|])(?:Event|Subject|Title|Incident)\s*:\s*(.{3,140}?)(?=\s+[A-Z][A-Za-z]{1,20}(?: [a-z][A-Za-z]{0,20}){0,2}\s*(?:\([a-z]\))?:\s|\s*\n|\s*\||$)"#
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let m = re.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) else { return nil }
+        let value = (text as NSString).substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    /// Several "Label: value" pairs run together — a record's header, not an account.
+    nonisolated static func isLabelRun(_ sentence: String) -> Bool {
+        let re = try? NSRegularExpression(pattern: #"\b[A-Z][A-Za-z]{1,20}(?: [A-Za-z]{1,20}){0,2}:\s"#)
+        let n = re?.numberOfMatches(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length)) ?? 0
+        return n >= 3
     }
 
     /// The first sentence of at least five words after `heading` in `text`, cut to 600 characters.
@@ -302,8 +402,13 @@ public struct NumberedEntryCount: Sendable, Equatable {
 
     public nonisolated static func compose(question: String, chunks: [RetrievedChunk]) -> NumberedEntryCount? {
         guard let noun = countedNoun(in: question) else { return nil }
-        let pattern = "(?im)^\\s*(" + NSRegularExpression.escapedPattern(for: noun) + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n]*"
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        // An entry starts a line or follows a space / separator (normalized text runs entries
+        // together: "… injured employees Employee #1: hospitalized injury, age 35 OSHA …").
+        let n0 = NSRegularExpression.escapedPattern(for: noun)
+        let patterns = ["(?im)^\\s*(" + n0 + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*",   // a line of its own
+                        "(?i)(?<=[\\s|])(" + n0 + ")s?\\s*#\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*"]  // mid-line: needs the #
+        let regexes = patterns.compactMap { try? NSRegularExpression(pattern: $0) }
+        guard !regexes.isEmpty else { return nil }
         var best: NumberedEntryCount?
         let byObject = Dictionary(grouping: chunks, by: { $0.chunk.objectID })
         for (object, rcs) in byObject {
@@ -311,10 +416,10 @@ public struct NumberedEntryCount: Sendable, Equatable {
             var first: Chunk?
             for rc in rcs.sorted(by: { $0.chunk.ordinal < $1.chunk.ordinal }) {
                 let ns = rc.chunk.text as NSString
-                for m in re.matches(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) {
+                for m in regexes.flatMap({ $0.matches(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) }) {
                     let n = ns.substring(with: m.range(at: 2))
                     if seen[n] == nil {
-                        seen[n] = ns.substring(with: m.range).trimmingCharacters(in: .whitespacesAndNewlines)
+                        seen[n] = Self.trimEntry(ns.substring(with: m.range), noun: noun)
                         if first == nil { first = rc.chunk }
                     }
                 }
@@ -326,6 +431,22 @@ public struct NumberedEntryCount: Sendable, Equatable {
             }
         }
         return best
+    }
+
+    /// One entry, cut where the next entry or the next label begins ("Employee #1: hospitalized
+    /// injury, age 35 OSHA accident investigation summary …" → "Employee #1: hospitalized injury, age 35").
+    nonisolated static func trimEntry(_ raw: String, noun: String) -> String {
+        var e = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stops = [#"\s+"# + NSRegularExpression.escapedPattern(for: noun) + #"s?\s*#\s*\d"#,   // the next entry
+                     #"(?<=\d)\s+[A-Z]{2,}\b"#,                                                 // "… age 35 OSHA …"
+                     #"\s+[A-Z][A-Za-z]{1,20}(?: [a-z][A-Za-z]{0,20}){0,2}\s*(?:\([a-z]\))?:\s"#]   // the next label
+        for stop in stops {
+            if let r = e.range(of: stop, options: [.regularExpression, .caseInsensitive], range: e.index(e.startIndex, offsetBy: min(4, e.count))..<e.endIndex) {
+                e = String(e[..<r.lowerBound])
+            }
+        }
+        if e.count > 100 { e = String(e.prefix(100)) + "…" }
+        return e.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",;")))
     }
 
     /// The noun after "how many" ("how many employees were hurt" → "employee"), singular.

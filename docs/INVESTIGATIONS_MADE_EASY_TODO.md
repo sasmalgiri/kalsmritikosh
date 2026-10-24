@@ -83,7 +83,7 @@ IDs are stable; work top to bottom. **(A)** = agent builds, **(O)** = owner, **(
 - [x] T-1 (A) Test phase for the A1–D4 work: every suite touching the changed types, `InvestigationCaseSimulationTests` (9 personas, wrong facts = 0), `PersonaJobCoverageMeasuredTests`; fix every failure at its root.
 - [x] T-2 (A) Update pinned tests that change on purpose (Compliance has 17 jobs; module count; persona list hides Content creator).
 - [x] T-3 (A) One 190-case full-AI round on the final build; record per-category results in the case-bench report.
-- [ ] T-4 (A) One PR → CI → merge → main CI (two-run protocol; Actions budget).
+- [x] T-4 (A) One PR → CI → merge → main CI (two-run protocol; Actions budget).
 
 ### Phase N — the name
 - [x] N-1 (A) Rename to **Investigations Made Easy** wherever a person sees it: display/bundle name (InfoPlist.xcstrings), menus, onboarding, Share extension, Services item, viewer title, feedback mail, AppleScript dictionary title, listing, website, privacy/terms/support pages, CLAIMS fragments. Bundle IDs, schemes and the `kalsmritikosh://` scheme stay (renaming them breaks updates and links).
@@ -192,3 +192,18 @@ Next: **Phase T** (test everything built, one push), then Q-2…Q-5 on the case 
 - **Q-3 done:** when-questions get a date or an honest "no date given"; which-office questions get the office the
   release names (from the cited documents) or "not named".
 - Next: **T-4** (one PR → CI → merge → main CI), then Q-2 civil authors/outcomes, then the owner's R steps.
+
+- **T-4 done (2026-10-24):** PR #166 merged as 29773987; PR CI 7/7 green on its third push (fixed: claims fragment, rawMatch in an answer surface, generated decision field without its Yes assertion); main CI green.
+
+## Status 2026-10-24 (evidence-only release)
+
+- **AI off by default, switchable** (82d65711 → 21973020): answers are evidence-only; Settings → Modules → "Use AI to
+  write answers" brings back on-device AI or the person's own cloud key (Online mode). Cloud AI comparison is the next
+  step after this release is complete.
+- **Evidence-only accuracy, first measure** (10 categories, 306 answers): close to the AI rounds; 25 wrong. Fixed: opinion
+  bylines ("ALEXANDER, Justice.", "VAN ORSDEL, Associate Justice.", "BROWN, J."), announcement dates taken from other
+  events (d9fa3065). Round 8 (all 190 cases, evidence-only) measures the result.
+- **Schema conformance at boot** (3b8d6cdd): the app adds any table/index/trigger/column an older upgrade left out of the
+  owner's ledger (only adds; once per schema version).
+- Open (agent): drive evidence-only wrong answers to 0; court outcomes; one push + CI. Open (owner): R-6…R-9.
+

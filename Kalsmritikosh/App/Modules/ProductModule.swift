@@ -450,7 +450,7 @@ nonisolated public enum ProductModuleFlags {
             if ConnectivityMode.current != .online { return "Needs Online mode" }
         }
         if s.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI {
-            return "Needs AI — choose “AI · evidence-gated” or “AI · free”"
+            return EvidenceOnlyRelease.enforced ? "Not in this version — answers are evidence-only (no AI model)" : "Needs AI — choose “AI · evidence-gated” or “AI · free”"
         }
         for dep in s.dependsOn where !isEnabled(dep) {
             return "Requires “\(dep.title)”"

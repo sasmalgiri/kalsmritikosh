@@ -1,19 +1,23 @@
-# App Store metadata — v1.0 (paste-ready)
+# App Store metadata — v1.0
+
+> **The paste source is `release/APP_STORE_LISTING.md`** (name, subtitle, promo, description,
+> review notes). This file is kept in step with it (R-2, 2026-10-24) and must not contradict it.
 
 ## Promotional Text (≤170)
-One-time purchase, yours for good. Your documents become a cited evidence ledger — worked by real
-professional SOPs, entirely on your Mac. No cloud, no account, nothing uploaded. Ever.
+Run every investigation from intake to findings — evidence, interviews, exhibits and a cited
+report — privately on your Mac. The app keeps the record; you make the call.
 
 ## Description (≤4000)
-Kalsmritikosh turns your own documents and emails into a cited evidence ledger —
-then works it the way professionals do: following the real Standard Operating
-Procedures of each profession, step by step, to the actual deliverable.
+Investigations Made Easy turns your own documents and emails into a cited
+evidence ledger — then works it the way professionals do: following the real
+Standard Operating Procedures of each profession, step by step, to the actual
+deliverable. It organises and cites the evidence; every finding is yours to make.
 
-THE PRIVATE AI THAT ANSWERS WITH RECEIPTS
-Ask in plain language. Every claim in every answer links to the exact source —
-file, page, and line. If your documents don't support it, the app says so
-instead of guessing. Conflicting evidence is shown with both sources — never
-averaged away.
+PRIVATE ANSWERS WITH RECEIPTS
+Ask in plain language. Every answer links to the exact source — file, page,
+and line. By default no AI writes answers: each one is a value or a passage
+your documents state, or an honest "the documents don't say". Conflicting
+evidence is shown with both sources — never averaged away.
 
 REAL SOPs, ENCODED — NOT TEMPLATES
 Every workflow is a real profession's procedure, encoded as completeness
@@ -31,7 +35,7 @@ deviation:
   study, GRADE certainty
 • Genealogists — the Genealogical Proof Standard, all five elements, nil
   results logged
-• HR, insurance SIU, forensic accounting, content creators, and families —
+• HR, insurance SIU, forensic accounting, and personal disputes —
   each with its own studio ending in the real hardcopy, with a printed
   audit trail
 
@@ -45,35 +49,38 @@ itself to, on demand. Conformance means the encoded procedure was followed;
 it is not legal or regulatory certification.
 
 PRIVATE BY ARCHITECTURE — NOT BY PROMISE
-Your documents, questions, and every answer stay on this Mac. The app makes
-no network connections at all — enforced by the macOS sandbox itself. The
-semantic-search models ship inside the app; written answers use Apple's
-on-device intelligence. No account. No analytics. No training on your data —
-because we never receive it. (That's also why the download is larger:
-your AI never phones home.)
+Everything runs on this Mac. The app starts in Private mode, where it makes
+no network connections; the main app has no network permission at all — a
+separate helper connects only if you turn on Online mode. The search models
+ship inside the app. If you turn on "Use AI to write answers", it uses Apple's
+on-device intelligence, or your own cloud AI key in Online mode, with consent
+before every send. No account. No analytics. No training on your data —
+because we never receive it. (That's also why the download is larger.)
 
 YOURS, NOT RENTED
-Kalsmritikosh is a one-time purchase — no subscription, no per-gigabyte fees.
-Your data remains yours and exportable, always.
+Try it free for 14 days, then buy it once for $79 — no subscription, no
+yearly fee, Family Sharing on. Your data remains yours and exportable, always.
 
 WHAT IT READS — STATED PLAINLY
 Documents, spreadsheets, PowerPoint (PPTX), and email (EML, MBOX, Apple Mail,
 Outlook MSG/PST) are read with exact citations. ZIP archives are opened within
 safety limits; RAR and 7z are kept but not opened. Scans are read by on-device
-OCR, so accuracy depends on the scan. Reading is tuned for English: other
-languages are kept and keyword-searchable, but names and dates in them may be
-missed. When two names clearly mean the same person, they are combined — every
-merge is listed and can be undone.
+OCR, so accuracy depends on the scan. The app is in English only in this
+version, and reading is tuned for English: other languages are kept and
+keyword-searchable, but names and dates in them may be missed. When two names
+clearly mean the same person, they are combined — every merge is listed and
+can be undone.
 
-Requires macOS 15.6 or later. AI-written answers use Apple's on-device model
-where available; the app is fully useful without it — instant, deterministic,
-cited answers from your evidence ledger.
+Requires macOS 15.6 or later. Answers come from your evidence by default —
+instant, cited, no AI model. AI-written answers are optional: Apple's
+on-device model on macOS 26 with Apple Intelligence, or your own cloud key.
 
 Standard names belong to their respective bodies; no affiliation or
-certification is implied. Not legal or professional advice.
+certification is implied. The app does not decide findings, guilt or
+outcomes — you do. Not legal or professional advice.
 
 ## Keywords (≤100 chars)
-evidence,timeline,investigation,chronology,privilege log,case,offline ai,private,cited,research
+investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private
 
 ## Support URL
 https://sasmalgiri.github.io/kalsmritikosh/support.html
@@ -88,27 +95,30 @@ https://sasmalgiri.github.io/kalsmritikosh/
 - Sign-in required: NO (uncheck — the app has no accounts at all)
 - Contact: Shirshendu Sasmal · sasmalgiri@gmail.com · (your phone)
 - Notes (paste):
-  Kalsmritikosh is a fully offline, on-device app. There is no sign-in, no
-  server, and the app makes no network connections (the sandbox has no
-  network entitlement — by design; it is the core privacy feature).
+  Investigations Made Easy is an on-device app. There is no sign-in and no
+  server. It starts in Private mode and makes no network connections; the
+  main app has no network entitlement. Only the bundled helper
+  KalsmritikoshNetworkHelper may connect, and only in opt-in Online mode
+  (full review notes: release/APP_STORE_LISTING.md).
   To review: launch the app. Onboarding offers "load sample data" (a bundled
   fixture of sample emails/contracts) so you can try Ask/Timeline without
   adding files. Each professional studio (Fact-Check, Reasoning, Hypotheses,
   Privilege Log, Evidence Review, Proof Argument — reachable via ⌘K or the
   sidebar) has a "Load a worked example" button that shows the complete
-  workflow and finished report. AI-written prose uses Apple's on-device
-  model where available; all core features work without it.
+  workflow and finished report. By default no AI model is used; AI is
+  optional (Settings → Modules → "Use AI to write answers").
 
 ## Export compliance (build section)
-App uses NO proprietary encryption and makes no network connections.
-ITSAppUsesNonExemptEncryption = NO (only exempt/OS-provided crypto, e.g.
-file hashing via CryptoKit). Answer "None of the algorithms mentioned" /
+App uses NO proprietary encryption. ITSAppUsesNonExemptEncryption = NO
+(only Apple OS crypto: SQLCipher on CommonCrypto, CryptoKit, URLSession HTTPS
+in Online mode — SHIP_DECISIONS 2026-10-17). Answer "None of the algorithms mentioned" /
 exempt if the questionnaire appears.
 
 ## Other
-- Price: one-time purchase, $29–$49 tier per SHIP_DECISIONS §1 (owner sets the exact tier in Pricing and Availability)
+- Price: free download; in-app purchases "14-day free trial" (Free) and the $79 non-consumable unlock, Family Sharing on (SHIP_DECISIONS 2026-10-18)
 - Privacy label: Data Not Collected
 - App Sandbox Information (optional field): can note user-selected
-  read/write files only; no network entitlements.
+  read/write files only; the main app has no network entitlement (only the
+  Online-mode helper holds network.client).
 - Version release: Manually release this version (recommended for v1 —
   you press the button after approval).

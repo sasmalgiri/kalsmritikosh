@@ -24,6 +24,13 @@ struct SlotFieldLabelTests {
         #expect(SlotAnswerComposer.documentLabel(Self.fact(pair.0)) == pair.1)
     }
 
+    @Test("Ids whose split reaches the last letters never trap (crash 2026-10-24, NHTSA shard)", arguments: [
+        "casenumberx", "recallingfirma", "componentname", "manufacturerz", "datex", "makemodelyear", "aaaaaaaaaaaaaaaaaaaaaaaaaaaa"])
+    func neverTraps(_ id: String) {
+        _ = SlotAnswerComposer.documentLabel(Self.fact(id))
+        _ = SlotAnswerComposer.labeledValue(Self.fact(id))
+    }
+
     @Test("Unknown or single words are left alone")
     func leftAlone() {
         #expect(SlotAnswerComposer.documentLabel(Self.fact("plaintiff")) == nil)

@@ -382,6 +382,7 @@ public final class FeatureFlags {
         set { UserDefaults.standard.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
     }
     public nonisolated static func generalKnowledgeLaneValue(in defaults: UserDefaults = .standard) -> Bool {
+        if EvidenceOnlyRelease.enforced { return false }   // evidence-only release: no AI-written block
         if defaults.object(forKey: kGeneralKnowledgeLane) == nil { return true }
         return defaults.bool(forKey: kGeneralKnowledgeLane)
     }

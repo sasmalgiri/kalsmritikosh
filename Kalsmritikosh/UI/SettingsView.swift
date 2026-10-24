@@ -1470,6 +1470,19 @@ public struct SettingsView: View {
             // re-evaluates every module's availability below (the token bump).
             let regime = FeatureFlags.aiRegimeValue()
             VStack(alignment: .leading, spacing: 6) {
+                Text("Answers").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Toggle("Use AI to write answers", isOn: Binding(
+                    get: { EvidenceOnlyRelease.aiEnabled },
+                    set: { EvidenceOnlyRelease.aiEnabled = $0; moduleFlagsVersion &+= 1 }
+                ))
+                Text(EvidenceOnlyRelease.aiEnabled
+                     ? "AI may write answers from your evidence. Choose Apple's on-device model below, or your own cloud AI key under Online mode (you approve every send)."
+                     : "Off — evidence only. Every answer is a value or passage your documents state, with its source, or an honest \u{201C}the documents don't say\u{201D}. No AI model is used.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if EvidenceOnlyRelease.aiEnabled {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Picker("AI", selection: Binding(
                     get: { FeatureFlags.aiRegimeValue() },
@@ -1504,6 +1517,7 @@ public struct SettingsView: View {
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
+            }
             }
             Divider()
             Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
@@ -2208,13 +2222,16 @@ public struct SettingsView: View {
             // Consolidation (owner request 2026-09-21): the AI posture — Fully
             // private / AI gated / AI free — now lives in ONE place, Modules → AI,
             // so it can never drift out of sync with a second toggle here.
-            Label("Choose Fully private · AI gated · AI free under Modules → AI. That one control turns AI on or off everywhere.", systemImage: "switch.2")
+            Label(EvidenceOnlyRelease.enforced
+                  ? "Answers come from your evidence only — no AI model is used. Turn on \u{201C}Use AI to write answers\u{201D} under Modules to choose on-device or your own cloud AI."
+                  : "Choose Fully private · AI gated · AI free under Modules → AI. That one control turns AI on or off everywhere.", systemImage: "switch.2")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 2)
 
-            // GK (owner decision) — the General-Knowledge Lane.
+            // GK (owner decision) — the General-Knowledge Lane. Not offered in the evidence-only release.
+            if !EvidenceOnlyRelease.enforced {
             Toggle("Answer general questions too (clearly marked)", isOn: Binding(
                 get: { FeatureFlags.shared.generalKnowledgeLane },
                 set: { FeatureFlags.shared.generalKnowledgeLane = $0 }
@@ -2222,6 +2239,7 @@ public struct SettingsView: View {
             Text("When your documents don't hold the answer, the on-device AI may add a separate block marked \u{201C}Not from your documents\u{201D}. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. On by default; turn it off for legal, compliance, or HR work.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            }
 
             Divider().padding(.vertical, 2)
 
