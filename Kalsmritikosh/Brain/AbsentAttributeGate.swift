@@ -78,9 +78,37 @@ public nonisolated enum AbsentAttributeGate {
         let thing = asked.filter { !reference.contains($0) }
         guard !thing.isEmpty else { return answer }
         let pool = ([answer.body] + answer.citations.map(\.snippet) + sourceTexts).joined(separator: "\n")
-        guard !speaksTo(thing, question: question, text: pool) else { return answer }
-        let named = thing.joined(separator: " ")
-        let text = "The documents searched don't mention the \(named)."
+        // A named institution answers a question about one under its own word ("Taft Correctional
+        // Institution" for "which prison").
+        if let noun = thing.last, Self.institutions.contains(noun), Self.namesAnInstance(of: noun, in: pool) { return answer }
+        guard !speaksTo(thing, question: question, text: pool) else {
+            // "WHICH prison …" asks for a particular one: the documents must NAME one ("Taft
+            // Correctional Institution", "FCI Butner"), not just use the word ("faces up to 30 years
+            // in prison"). Wide case bench 2026-10-25: 56 such answers handed back the release.
+            if question.lowercased().hasPrefix("which "), let noun = thing.last, Self.institutions.contains(noun),
+               !Self.namesAnInstance(of: noun, in: pool) {
+                return refusal(answer, "The documents searched don't name a particular \(noun).")
+            }
+            return answer
+        }
+        return refusal(answer, "The documents searched don't mention the \(thing.joined(separator: " ")).")
+    }
+
+    /// Places a release mentions generically ("up to 30 years in prison") — a "which" question
+    /// about one needs a named one.
+    static let institutions: Set<String> = ["prison", "hospital", "bank", "school", "jail", "facility"]
+
+    /// A capitalised name of the thing: "Taft Correctional Institution", "Prison Camp Yankton" — the
+    /// noun (or a near kin of it) next to capitalised words.
+    static func namesAnInstance(of noun: String, in text: String) -> Bool {
+        let kin = ["prison": "prison|correctional|penitentiary|detention|jail|fci|usp|facility",
+                   "hospital": "hospital|medical center|clinic", "bank": "bank|credit union",
+                   "school": "school|college|university|academy"][noun] ?? NSRegularExpression.escapedPattern(for: noun)
+        let pattern = "(?:\\b[A-Z][a-zA-Z.]+\\s+){1,4}(?i:" + kin + ")\\b|\\b(?i:" + kin + ")\\s+(?:of\\s+|at\\s+)?[A-Z][a-z]+"
+        return text.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    static func refusal(_ answer: VerifiedAnswer, _ text: String) -> VerifiedAnswer {
         return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
                               confidence: answer.confidence, contradictions: answer.contradictions, refused: true,
                               refusalReason: "The evidence never mentions what the question asks for.", report: answer.report,

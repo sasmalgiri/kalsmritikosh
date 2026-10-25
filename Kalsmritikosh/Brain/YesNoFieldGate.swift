@@ -96,10 +96,10 @@ public nonisolated enum YesNoFieldGate {
     /// initiation date for FDA recall X 2021-03-15?" → "recall initiation date".
     static func fieldPhrase(_ question: String) -> String? {
         let q = withoutTitles(question).lowercased()
-        guard let r = q.range(of: #"^\s*(?:what|which|is|was|are|were)\s+(?:is\s+|was\s+|are\s+|were\s+)?the\s+([a-z][a-z /&\-]{1,40}?)\s+(?:for|of|in|on)\s"#,
+        guard let r = q.range(of: #"^\s*(?:what|which|is|was|are|were)\s+(?:is\s+|was\s+|are\s+|were\s+)?the\s+([a-z][a-z /&()\-]{1,40}?)\s+(?:for|of|in|on)\s"#,
                               options: .regularExpression) else { return nil }
         let span = String(q[r])
-        guard let re = try? NSRegularExpression(pattern: #"the\s+([a-z][a-z /&\-]{1,40}?)\s+(?:for|of|in|on)\s$"#),
+        guard let re = try? NSRegularExpression(pattern: #"the\s+([a-z][a-z /&()\-]{1,40}?)\s+(?:for|of|in|on)\s$"#),
               let m = re.firstMatch(in: span, range: NSRange(location: 0, length: (span as NSString).length)) else { return nil }
         let phrase = (span as NSString).substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
         return phrase.count >= 3 ? phrase : nil

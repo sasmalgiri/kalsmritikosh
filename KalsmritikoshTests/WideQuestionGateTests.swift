@@ -90,5 +90,17 @@ struct WideQuestionGateTests {
         #expect(IdentityFieldResolver.questionFieldType("Name the company behind FDA recall F-3176-2017.") == nil)
         #expect(IdentityFieldResolver.questionFieldType("What is the company name?") == .organizationName)
     }
+
+    @Test("Which prison? needs a named prison, not the word")
+    func whichInstitution() {
+        let q = "Which prison is the defendant held in for the case \"X\"?"
+        let generic = AbsentAttributeGate.apply(question: q, Self.answer("He faces up to 30 years in federal prison."))
+        #expect(generic.refused)
+        let named = AbsentAttributeGate.apply(question: q, Self.answer("He is held at the Taft Correctional Institution in California."))
+        #expect(!named.refused)
+        // Not an institution: a word on file is enough.
+        #expect(!AbsentAttributeGate.apply(question: "Which component was investigated in NHTSA investigation PE10025?",
+                                           Self.answer("Model years: 2003\nComponent: AIR BAGS:SIDE/WINDOW")).refused)
+    }
 }
 
