@@ -28,8 +28,13 @@ public enum QuestionUnderstanding {
     /// that answer. Keyed by the question text; only the most recent few are kept.
     private static let chosen = OSAllocatedUnfairLock(initialState: [String: String]())
 
+    /// Keyed case- and space-insensitively: callers pass the question as asked or lowercased.
+    static func key(_ question: String) -> String {
+        question.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
     public static func interpretedField(for question: String) -> String? {
-        chosen.withLock { $0[question] }
+        chosen.withLock { $0[key(question)] }
     }
 
     /// Remembered when the interpreter found that no field on file answers the question.
@@ -38,7 +43,7 @@ public enum QuestionUnderstanding {
     static func remember(_ field: String?, for question: String) {
         chosen.withLock { table in
             if table.count > 64 { table.removeAll() }
-            table[question] = field
+            table[key(question)] = field
         }
     }
 

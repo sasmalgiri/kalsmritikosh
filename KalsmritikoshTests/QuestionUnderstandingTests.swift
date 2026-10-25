@@ -42,6 +42,8 @@ struct QuestionUnderstandingTests {
         #expect(step == "interpreted:disposition")
         #expect(cloud.asked == 0)
         #expect(SlotFieldResolver.resolve(in: q, knownFields: fields).first?.fieldID == "disposition")
+        // The plan compiler passes the question lowercased: the choice still applies.
+        #expect(SlotFieldResolver.resolve(in: q.lowercased(), knownFields: fields).first?.fieldID == "disposition")
     }
 
     @Test("The cloud is asked only when both earlier steps missed")
