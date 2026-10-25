@@ -133,7 +133,7 @@ struct WideQuestionGateTests {
         #expect(!AbsentAttributeGate.apply(question: "What airplane was involved in NTSB case ERA13CA130?",
                                            Self.answer("Aircraft: Cessna 172, registration N662DA.")).refused)
         #expect(SlotFieldResolver.resolve(in: "What did the court rule in Pinching v. Wurdeman?").map(\.fieldID) == ["disposition"])
-        #expect(SentenceQuoteComposer.reasonWeight("NTSB SEA03LA084 — probable cause The pilot did not attain the proper touchdown point.", previous: "") == 6)
+        #expect(SentenceQuoteComposer.reasonWeight("NTSB SEA03LA084 — probable cause The pilot did not attain the proper touchdown point.", previous: "") == SentenceQuoteComposer.labeledReason)
     }
 
     @Test("Untouched-wording fixes: modifier nouns, justices, who is credited, what led to")
@@ -181,6 +181,19 @@ struct WideQuestionGateTests {
         #expect(DateQuestionGate.asksPublicationDate("When did \"X\" come out?"))
         #expect(CountQuestionGate.asksCount("What number of employees were injured in OSHA investigation 1?"))
         #expect(SentenceQuoteComposer.asksWhy("What did investigators determine caused NTSB case ERA13CA130?"))
+    }
+
+    @Test("Held-out wording set 5: each side, the court's opinion, the result, the source office")
+    func heldOutSetFive() {
+        let court: Set<String> = ["disposition", "court", "opinionauthor", "decisiondate", "casenumber", "parties"]
+        func f(_ q: String) -> String? { SlotFieldResolver.resolve(in: q, knownFields: court).first?.fieldID }
+        #expect(f("Who is on each side of Hughes v. Life Insurance Co. of North America?") == "parties")
+        #expect(f("Who wrote the court's opinion in Hughes v. Life Insurance Co.?") == "opinionauthor")
+        #expect(f("What was the result of Pinching v. Wurdeman, 12 F.2d 164?") == "disposition")
+        #expect(IssuingOfficeGate.asksIssuingOffice("Which office is the source of \"X\"?"))
+        let release = "Jessie Alan Fuller was sentenced today to 37 months in prison, the Justice Department announced. "
+            + "“…,” said Thomas E. Perez, Assistant Attorney General for Civil Rights Division. “…,” said the U.S. Attorney for the Middle District of Alabama."
+        #expect(IssuingOfficeGate.office(in: release)?.contains("Civil Rights Division") == true)
     }
 
     @Test("A day asked for is not answered by a bare year")

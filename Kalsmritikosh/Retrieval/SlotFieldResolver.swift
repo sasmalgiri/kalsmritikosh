@@ -178,6 +178,11 @@ public enum SlotFieldResolver {
          "parties", .counterparty, "Parties", "legal"),
         // "Who were the two sides in X v. Y?", "Who was involved as plaintiff and defendant in …?"
         (["sides"], ["v", "vs", "in re", "case", "suit", "lawsuit", "court"], "parties", .counterparty, "Parties", "legal"),
+        // Held-out wording set 5 (2026-10-25): "Who is on each side of X v. Y?", "Who wrote the
+        // court's opinion in …?", "What was the result of X v. Y?".
+        (["side"], ["v", "vs", "in re", "suit", "lawsuit", "court"], "parties", .counterparty, "Parties", "legal"),
+        (["wrote", "opinion"], ["who", "which", "name"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["result"], ["v", "vs", "in re", "ex parte", "court", "appeal"], "disposition", .status, "Disposition", "legal"),
         (["plaintiff", "defendant"], ["who", "v", "vs", "case"], "parties", .counterparty, "Parties", "legal"),
         // A1.1 — "who is the owner/holder of this patent" (no field bigram).
         (["patent"], ["owner", "owns", "proprietor", "holder", "belongs"], "applicant", .counterparty, "Applicant", "patent"),

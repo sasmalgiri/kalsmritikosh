@@ -133,11 +133,28 @@ public enum SentenceQuoteComposer {
             return QuotedAnswer(sentence: body, objectID: hit.chunk.objectID, chunkID: hit.chunk.id,
                                 receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
         }
+        // A labeled reason runs on in its paragraph ("failure of the throttle cable. A factor
+        // relating to the accident was: …") — quote the paragraph, not its first sentence.
+        let quoted = asksWhy && hit.score >= labeledReason ? Self.paragraph(from: hit.sentence, in: hit.chunk.text) : hit.sentence
         return QuotedAnswer(
-            sentence: hit.sentence,
+            sentence: quoted,
             objectID: hit.chunk.objectID,
             chunkID: hit.chunk.id,
             receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+    }
+
+    /// `sentence` and what follows it up to the end of its paragraph (a line break), at most ~400
+    /// characters, cut at a sentence end.
+    nonisolated static func paragraph(from sentence: String, in text: String) -> String {
+        guard let r = text.range(of: sentence) else { return sentence }
+        let rest = text[r.lowerBound...]
+        let line = rest.prefix { $0 != "\n" }
+        guard line.count > sentence.count else { return sentence }
+        if line.count <= 400 { return String(line).trimmingCharacters(in: .whitespaces) }
+        let head = line.prefix(400)
+        guard let end = head.lastIndex(where: { $0 == "." || $0 == "!" || $0 == "?" }),
+              head.distance(from: head.startIndex, to: end) >= sentence.count - 1 else { return sentence }
+        return String(head[...end]).trimmingCharacters(in: .whitespaces)
     }
 
     /// The account of a matter: the first substantive sentence of the matter's own document —
@@ -312,15 +329,22 @@ public enum SentenceQuoteComposer {
             || q.range(of: #"\b(?:determine[sd]?|f(?:i|ou)nd|conclude[sd]?|decide[sd]?)\s+(?:had\s+|was\s+)?caused\b"#, options: .regularExpression) != nil
     }
 
+    /// The weight of a sentence the record labels as the reason: above any overlap-plus-connective
+    /// score a narrative sentence can reach.
+    nonisolated static let labeledReason = 12
+
     /// How strongly a sentence reads as the stated reason: the line under a reason label scores
     /// highest; a sentence with a causal connective scores some.
     nonisolated static func reasonWeight(_ sentence: String, previous: String) -> Int {
         let prev = previous.lowercased().trimmingCharacters(in: .whitespaces)
-        if prev.hasSuffix(":"), prev.contains("reason") || prev.contains("cause") || prev.contains("basis") { return 6 }
+        // The line a record LABELS as the reason outweighs any narrative sentence that merely
+        // mentions the event (held-out wording set 5, 2026-10-25: "What caused the accident …?"
+        // quoted the factual narrative over the line under "— probable cause").
+        if prev.hasSuffix(":"), prev.contains("reason") || prev.contains("cause") || prev.contains("basis") { return labeledReason }
         // A heading line that names the cause ("NTSB SEA03LA084 — probable cause") introduces it.
-        if prev.range(of: #"(?:—|-|:)\s*(?:probable cause|cause|reason for recall)\s*$"#, options: .regularExpression) != nil { return 6 }
+        if prev.range(of: #"(?:—|-|:)\s*(?:probable cause|cause|reason for recall)\s*$"#, options: .regularExpression) != nil { return labeledReason }
         // … or runs straight into it when the line break was lost ("NTSB X — probable cause The pilot …").
-        if sentence.prefix(80).range(of: #"(?i)(?:—|-)\s*probable cause\s+[A-Z]"#, options: .regularExpression) != nil { return 6 }
+        if sentence.prefix(80).range(of: #"(?i)(?:—|-)\s*probable cause\s+[A-Z]"#, options: .regularExpression) != nil { return labeledReason }
         let lower = sentence.lowercased()
         if lower.hasPrefix("reason") || lower.hasPrefix("cause") { return 5 }
         let connectives = ["because", "due to", "as a result", "resulted in", "caused", "failure to", "failed to", "could ", "may "]

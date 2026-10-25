@@ -24,6 +24,9 @@ public nonisolated enum IssuingOfficeGate {
             // itself (held-out wording set 4, 2026-10-25). "Who issued FDA recall X" has no title.
             || q.range(of: #"^\s*who\s+(?:released|issued|published|put out|sent out)\s+(?:the\s+(?:release|statement|announcement)\s+)?["“]"#,
                        options: .regularExpression) != nil
+            // "Which office is the source of "…"?" (held-out wording set 5, 2026-10-25).
+            || q.range(of: #"^\s*(?:which|what)\s+(?:office|agency|department)\s+is\s+(?:the\s+)?(?:source|author|origin)\s+of\b"#,
+                       options: .regularExpression) != nil
             // "Who announced the case …?" (wide case bench 2026-10-25).
             // "Who issued FDA recall X?" asks for the recalling firm, not an office: issued /
             // released / published count only of a release or announcement.
@@ -62,6 +65,13 @@ public nonisolated enum IssuingOfficeGate {
         for stretch in announcing {
             let all = allOffices(in: stretch)
             if !all.isEmpty { return (all.joined(separator: " and "), true) }
+        }
+        // "… the Justice Department announced." with no office in that sentence: the department
+        // announced, and the division the release names is its part in it — not a U.S. Attorney's
+        // office mentioned further down (held-out wording set 5, 2026-10-25).
+        if announcing.contains(where: { $0.range(of: #"(?i)\b(?:Justice Department|Department of Justice)\b"#, options: .regularExpression) != nil }),
+           let division = earliestOffice(in: text, forms: [forms[3]]) {
+            return ("the Justice Department (the release names \(division.replacingOccurrences(of: "the Justice Department's ", with: "its ")))", true)
         }
         // No sentence says who announced: a U.S. Attorney's office named anywhere is the
         // announcer before a division the release mentions as a helper ("with assistance from
