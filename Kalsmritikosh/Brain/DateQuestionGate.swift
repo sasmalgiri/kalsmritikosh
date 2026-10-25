@@ -26,6 +26,8 @@ public nonisolated enum DateQuestionGate {
         let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if q.hasPrefix("when ") || q.hasPrefix("when's ") { return true }
         return q.range(of: #"^(?:on |in )?(?:which|what) (?:date|day|year)\b"#, options: .regularExpression) != nil
+            // "Give me the announcement date of the release …" (wide case bench 2026-10-25).
+            || q.range(of: #"^(?:give me|tell me|what is|what was|state|list)\s+the\s+(?:[a-z]+\s+)?date\s+(?:of|for)\b"#, options: .regularExpression) != nil
     }
 
     public static func containsDate(_ text: String) -> Bool {

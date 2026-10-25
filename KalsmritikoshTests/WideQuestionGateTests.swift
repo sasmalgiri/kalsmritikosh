@@ -102,5 +102,15 @@ struct WideQuestionGateTests {
         #expect(!AbsentAttributeGate.apply(question: "Which component was investigated in NHTSA investigation PE10025?",
                                            Self.answer("Model years: 2003\nComponent: AIR BAGS:SIDE/WINDOW")).refused)
     }
+
+    @Test("The office comes from this matter's release, not another one the search surfaced")
+    func officeFromThisMatter() {
+        let q = "Who announced the case Oxnard Man Indicted for Stealing Mail Truck from Kern County Post Office?"
+        let mine = "Oxnard Man Indicted for Stealing Mail Truck from Kern County Post Office. FRESNO — A grand jury indicted Ryan Taylor of Oxnard for stealing a mail truck from the Kern County post office."
+        let other = "Milwaukee Woman Sentenced. United States Attorney Gregory J. Haanstad of the Eastern District of Wisconsin announced the sentence."
+        let out = IssuingOfficeGate.apply(question: q, Self.answer(mine), sourceTexts: [mine, other])
+        #expect(out.body == "The release doesn't name the office that announced it.")
+        #expect(DateQuestionGate.asksWhen("Give me the announcement date of the release \"X\"."))
+    }
 }
 

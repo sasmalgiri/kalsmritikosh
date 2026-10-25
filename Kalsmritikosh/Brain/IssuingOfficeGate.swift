@@ -121,7 +121,22 @@ public nonisolated enum IssuingOfficeGate {
         // a statement of who announced (wide case bench 2026-10-25: "Who announced the case …?"
         // came back as the cover email and release text).
         guard asksIssuingOffice(question), !answer.refused, !(said.count <= 250 && namesOffice(said)) else { return answer }
-        let pool = ([answer.body] + answer.citations.map(\.snippet) + sourceTexts).joined(separator: "\n")
+        // Only texts about THIS matter: a release that shares most of the question's words. Wide case
+        // bench 2026-10-25: "Who announced the case Oxnard Man Indicted …?" (title unquoted, so not
+        // anchored) took the office of another release the search surfaced.
+        let asked = Set(question.lowercased().components(separatedBy: CharacterSet.letters.inverted)
+            .filter { $0.count >= 4 && !["which", "office", "announced", "announce", "justice", "department", "case",
+                                         "release", "issued", "about", "what", "that"].contains($0) })
+        func aboutThisMatter(_ t: String) -> Bool {
+            guard asked.count >= 3 else { return true }
+            let words = Set(t.lowercased().components(separatedBy: CharacterSet.letters.inverted))
+            return Double(asked.intersection(words).count) / Double(asked.count) >= 0.6
+        }
+        let all = [answer.body] + answer.citations.map(\.snippet) + sourceTexts
+        // When some texts are about this matter, the others (another release) are set aside; when
+        // none is recognisably about it, all of them are read as before.
+        let matching = all.filter(aboutThisMatter)
+        let pool = (matching.isEmpty ? all : matching).joined(separator: "\n")
         let text: String
         let refused: Bool
         if let found = located(in: pool) {
