@@ -66,7 +66,10 @@ public enum QuestionUnderstanding {
         guard !fields.isEmpty, !handledByAGate(question) else { return nil }
         let rules = SlotFieldResolver.resolve(in: question, knownFields: fields).first?.fieldID
         if let rules, !weakRuleFields.contains(rules) { return "rules" }
-        let menu = Array(fields).sorted()
+        // The bare "date" field is offered only when the record has no date of its own kind
+        // ("decisiondate", "dateopened") — otherwise the model takes the generic one.
+        let specificDates = fields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }
+        let menu = Array(specificDates.isEmpty ? fields : fields.subtracting(["date"])).sorted()
         var said: String?
         if let onDevice { said = await onDevice.field(askedBy: question, among: menu) }
         if said == nil, rules == nil, let cloud { said = await cloud.field(askedBy: question, among: menu) }
