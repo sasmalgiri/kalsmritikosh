@@ -326,7 +326,8 @@ public enum SlotFieldResolver {
         if let hi = headIndex {
             var head = words[hi]
             // A record calls the same thing by its own word: a recall's "company" is its firm.
-            let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator"]
+            let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator",
+                       "part": "component", "class": "classification"]
             if !knownFields.contains(where: { $0.hasSuffix(head) }), let k = kin[head] { head = k }
             if head.count >= 4, !ungrammaticalAlone.contains(head) {
                 if knownFields.contains(head) { best = (fieldID: head, length: 1) }

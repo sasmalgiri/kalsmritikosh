@@ -31,6 +31,9 @@ struct WideQuestionGateTests {
         // Dates match however they are written.
         #expect(YesNoFieldGate.apply(question: "Is the date opened for NHTSA investigation PE04074 2004-11-02?",
                                      Self.answer("Date opened: November 2, 2004.")).body.hasPrefix("Yes"))
+        // The app writes dates day first ("03/05/2019" is 3 May 2019).
+        #expect(YesNoFieldGate.apply(question: "Is the recall initiation date for FDA recall Z-2066-2019 2019-05-03?",
+                                     Self.answer("Recall initiation date: 03/05/2019.")).body.hasPrefix("Yes"))
         // Not a yes/no question, or not a labeled value: untouched.
         #expect(YesNoFieldGate.apply(question: "Which firm initiated FDA recall X?", a).body == a.body)
         #expect(YesNoFieldGate.apply(question: "Is the recall still ongoing?", Self.answer("The document states: “…”")).body == "The document states: “…”")
@@ -111,6 +114,16 @@ struct WideQuestionGateTests {
         let out = IssuingOfficeGate.apply(question: q, Self.answer(mine), sourceTexts: [mine, other])
         #expect(out.body == "The release doesn't name the office that announced it.")
         #expect(DateQuestionGate.asksWhen("Give me the announcement date of the release \"X\"."))
+    }
+
+    @Test("An unquoted headline is a title; account questions ask for no field")
+    func unquotedTitles() {
+        #expect(IdentifierAnchoredRetriever.quotedTitles(in: "Summarize the case Alabama Woman Pleads Guilty to Stealing Over $700,000 From Her Employer.")
+                == ["alabama woman pleads guilty to stealing over $700,000 from her employer"])
+        #expect(IdentifierAnchoredRetriever.quotedTitles(in: "Summarize the case files for me.").isEmpty)
+        let known: Set<String> = ["component", "classification"]
+        #expect(SlotFieldResolver.resolve(in: "What part of the vehicle is NHTSA investigation PE10025 about?", knownFields: known).map(\.fieldID) == ["component"])
+        #expect(SlotFieldResolver.resolve(in: "Which class is FDA recall Z-0049-2018?", knownFields: known).map(\.fieldID) == ["classification"])
     }
 }
 

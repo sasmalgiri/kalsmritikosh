@@ -46,7 +46,8 @@ public nonisolated enum YesNoFieldGate {
         let q = " " + normalized(question) + " ", v = normalized(value)
         guard !v.isEmpty else { return false }
         if q.contains(" " + v + " ") { return true }
-        if let d = isoDates(in: value).first { return isoDates(in: question).contains(d) }
+        let valueDates = Set(isoDates(in: value))
+        if !valueDates.isEmpty { return !valueDates.isDisjoint(with: isoDates(in: question)) }
         return false
     }
 
@@ -63,6 +64,15 @@ public nonisolated enum YesNoFieldGate {
                 guard let mi = months.firstIndex(of: ns.substring(with: m.range(at: 1)).lowercased()),
                       let day = Int(ns.substring(with: m.range(at: 2))) else { continue }
                 out.append(String(format: "%@-%02d-%02d", ns.substring(with: m.range(at: 3)), mi + 1, day))
+            }
+        }
+        // "03/05/2019": the app writes dates day first, sources often month first — both readings.
+        if let numeric = try? NSRegularExpression(pattern: #"\b(\d{1,2})/(\d{1,2})/(\d{4})\b"#) {
+            for m in numeric.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let a = Int(ns.substring(with: m.range(at: 1))) ?? 0, b = Int(ns.substring(with: m.range(at: 2))) ?? 0
+                let y = ns.substring(with: m.range(at: 3))
+                if b <= 12, a <= 31 { out.append(String(format: "%@-%02d-%02d", y, b, a)) }
+                if a <= 12, b <= 31 { out.append(String(format: "%@-%02d-%02d", y, a, b)) }
             }
         }
         return out
