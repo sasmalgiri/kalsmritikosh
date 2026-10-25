@@ -40,6 +40,16 @@ def name_forms(v):
 def value_in(expect, text):
     """(present, note) — is the expected value in `text`?"""
     b = text.lower()
+    if "yesno" in expect:
+        # A yes/no check: the answer must lead with the right polarity. A "no" may also be shown
+        # by the answer giving the true value instead (e.g. "No — it is Class I").
+        lead = b.strip()[:160]
+        says_yes = re.match(r"^\W*(yes|correct|that is right|it is|it was)\b", lead) is not None
+        says_no = re.match(r"^\W*(no|not|that is not|incorrect|it is not|it was not)\b", lead) is not None or \
+                  re.search(r"\b(does not|doesn.t|is not|isn.t|was not|wasn.t) (match|state|say)", lead) is not None
+        if expect["yesno"]: return says_yes and not says_no, None
+        truth = (expect.get("truth") or "").lower()
+        return says_no or (bool(truth) and truth in b and not says_yes), None
     if "date" in expect:
         if any(f.lower() in b for f in date_forms(expect["date"])): return True, None
         other = FULL_DATE.findall(text)

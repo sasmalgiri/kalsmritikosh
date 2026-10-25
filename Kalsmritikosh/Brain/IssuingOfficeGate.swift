@@ -37,19 +37,31 @@ public nonisolated enum IssuingOfficeGate {
     /// announced comes first (case bench 2026-10-24: a release naming the Tax Division as the
     /// announcer and a district office as a partner answered with the district); within a
     /// stretch of text the earliest-named office wins, whichever form names it.
-    public static func office(in text: String) -> String? {
+    public static func office(in text: String) -> String? { located(in: text)?.office }
+
+    /// The office and whether a sentence says it announced (false: the release only names it).
+    static func located(in text: String) -> (office: String, announced: Bool)? {
         let announcing = announcingSentences(in: text)
         // A joint release names every announcing office in that sentence ("U.S. Attorney Scott for
         // the Eastern District of California and … the Justice Department's Criminal Division
         // announced") — all of them, in the order named.
         for stretch in announcing {
             let all = allOffices(in: stretch)
-            if !all.isEmpty { return all.joined(separator: " and ") }
+            if !all.isEmpty { return (all.joined(separator: " and "), true) }
         }
         // No sentence says who announced: a U.S. Attorney's office named anywhere is the
         // announcer before a division the release mentions as a helper ("with assistance from
         // the Criminal Division's Computer Crime Section" — case bench 2026-10-24).
-        return earliestOffice(in: text, forms: Array(forms.prefix(3))) ?? earliestOffice(in: text)
+        if let named = earliestOffice(in: text, forms: Array(forms.prefix(3))) ?? earliestOffice(in: text) {
+            return (named, false)
+        }
+        // Only a district, with no office around it ("… found in the Eastern District of Louisiana")
+        // — reported as what the release mentions, never as the announcer.
+        if let r = text.range(of: #"\b(?:the\s+)?("# + district + ")", options: .regularExpression) {
+            let d = String(text[r]).replacingOccurrences(of: #"^the\s+"#, with: "", options: .regularExpression)
+            return ("the \(d.trimmingCharacters(in: .whitespaces))", false)
+        }
+        return nil
     }
 
     /// The sentences that say "announced". Initials ("McGregor W. Scott", "Brian C. Rabbitt") are
@@ -97,7 +109,7 @@ public nonisolated enum IssuingOfficeGate {
     }
 
     /// True when the answer already names a specific office (a district office or a division).
-    static func namesOffice(_ text: String) -> Bool { office(in: text) != nil }
+    static func namesOffice(_ text: String) -> Bool { earliestOffice(in: text) != nil }
 
     /// `sourceTexts` — the full text of the cited documents (the office line is often outside the
     /// cited snippet). Without it, a "not named" refusal is only given when the snippets are all there is.
@@ -106,8 +118,12 @@ public nonisolated enum IssuingOfficeGate {
         let pool = ([answer.body] + answer.citations.map(\.snippet) + sourceTexts).joined(separator: "\n")
         let text: String
         let refused: Bool
-        if let found = office(in: pool) {
-            text = "\(found.prefix(1).uppercased() + found.dropFirst()) announced it."
+        if let found = located(in: pool) {
+            // Only a sentence that says who announced is stated as the announcer; otherwise the
+            // reader is told the release names the office without saying it announced.
+            text = found.announced
+                ? "\(found.office.prefix(1).uppercased() + found.office.dropFirst()) announced it."
+                : "The release doesn't say which office announced it; it mentions \(found.office)."
             refused = false
         } else {
             text = "The release doesn't name the office that announced it."

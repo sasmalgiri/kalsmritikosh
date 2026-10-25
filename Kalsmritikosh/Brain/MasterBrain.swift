@@ -1511,6 +1511,23 @@ public actor MasterBrain {
         return clean
     }
 
+    /// The engine split (owner decision 2026-10-24): a question that asks for ONE value — a date,
+    /// a count, a name, a number, a court, an office — is answered by the evidence engine alone, word
+    /// for word from the document. The model never rewrites it: measured on 621 case-bench answers,
+    /// the model's rewrite was right 80.0% of the time against 92.8% for the evidence answer
+    /// (opinion authors 47% vs 95%, dates 84% vs 97%), because it changed the exact value. The model
+    /// still writes the account questions ("what happened", "why", "how", "explain").
+    nonisolated static func answersFromEvidenceOnly(_ question: String) -> Bool {
+        let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if SentenceQuoteComposer.asksWhatHappened(question) || SentenceQuoteComposer.asksWhy(question) { return false }
+        if q.range(of: #"^(?:how did|how was|how were|explain|describe|summari[sz]e|tell me about|give me an overview)\b"#,
+                   options: .regularExpression) != nil { return false }
+        if DateQuestionGate.asksWhen(question) || CountQuestionGate.asksCount(question)
+            || IssuingOfficeGate.asksIssuingOffice(question) { return true }
+        if !SlotFieldResolver.resolve(in: question).isEmpty { return true }
+        return asksForOneValue(question)
+    }
+
     nonisolated static func asksForOneValue(_ question: String) -> Bool {
         question.lowercased().range(of: #"^\s*(?:what|which|when|where|who)\b"#, options: .regularExpression) != nil
     }
@@ -2053,6 +2070,7 @@ public actor MasterBrain {
         let composeEveryAnswer = KnowledgeModuleFlags.isEnabled(.aiComposeEveryAnswer)
         var synthesizedBody: String? = nil
         if (escalation != .none || composeEveryAnswer),
+           !Self.answersFromEvidenceOnly(question),
            FeatureFlags.llmAnswerSynthesisValue(),
            !verified.refused, !verified.citations.isEmpty {
             let depth: AnswerSynthesizer.Depth

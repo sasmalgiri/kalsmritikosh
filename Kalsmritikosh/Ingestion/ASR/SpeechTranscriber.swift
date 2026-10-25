@@ -124,17 +124,8 @@ public actor SpeechTranscriber: AudioTranscribing {
             request.addsPunctuation = true
         }
 
-        // 3. Bridge the callback API to async, guaranteeing exactly one resume.
-        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
-            let gate = ResumeOnce(continuation)
-            recognizer.recognitionTask(with: request) { result, error in
-                if let error {
-                    gate.resume(throwing: error)
-                } else if let result, result.isFinal {
-                    gate.resume(returning: result.bestTranscription.formattedString)
-                }
-            }
-        }
+        // 3. Every utterance, not just the first final one (see `recognizeAll`).
+        return Self.groupIntoLines(try await Self.recognizeAll(recognizer, request)).map(\.text).joined(separator: " ")
         #else
         throw ASRError("Speech framework unavailable on this platform.")
         #endif
@@ -160,17 +151,7 @@ public actor SpeechTranscriber: AudioTranscribing {
         }
         if #available(macOS 13.0, iOS 16.0, *) { request.addsPunctuation = true }
 
-        let words: [SFTranscriptionSegment] = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[SFTranscriptionSegment], Error>) in
-            let gate = ResumeOnce(continuation)
-            recognizer.recognitionTask(with: request) { result, error in
-                if let error {
-                    gate.resume(throwing: error)
-                } else if let result, result.isFinal {
-                    gate.resume(returning: result.bestTranscription.segments)
-                }
-            }
-        }
-        return Self.groupIntoLines(words)
+        return Self.groupIntoLines(try await Self.recognizeAll(recognizer, request))
         #else
         throw ASRError("Speech framework unavailable on this platform.")
         #endif
@@ -184,8 +165,12 @@ public actor SpeechTranscriber: AudioTranscribing {
 
         func flush() {
             guard let first = bucket.first, let last = bucket.last else { return }
-            let text = bucket.map(\.substring).joined(separator: " ")
-                .trimmingCharacters(in: .whitespaces)
+            // Apple splits a clock time into "9:" and "30"; they rejoin without a space.
+            var text = ""
+            for w in bucket.map(\.substring) {
+                if text.isEmpty || (text.hasSuffix(":") && w.first?.isNumber == true) { text += w } else { text += " " + w }
+            }
+            text = text.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { bucket.removeAll(); return }
             let conf = bucket.map { Double($0.confidence) }.reduce(0, +) / Double(bucket.count)
             lines.append(ASRSegment(
@@ -204,7 +189,9 @@ public actor SpeechTranscriber: AudioTranscribing {
             }
             bucket.append(w)
             let endsSentence = w.substring.hasSuffix(".") || w.substring.hasSuffix("?") || w.substring.hasSuffix("!")
-            if endsSentence || bucket.count >= 18 || i == words.count - 1 { flush() }
+            // The word cap never cuts a value in two ("9:" | "30", case bench 2026-10-25).
+            let midValue = w.substring.hasSuffix(":") && i + 1 < words.count && words[i + 1].substring.first?.isNumber == true
+            if endsSentence || (bucket.count >= 18 && !midValue) || i == words.count - 1 { flush() }
         }
         flush()
         return lines
@@ -232,6 +219,45 @@ public actor SpeechTranscriber: AudioTranscribing {
     /// Ensures a CheckedContinuation is resumed at most once, from any queue
     /// (SFSpeechRecognitionTask may deliver partials + a final on arbitrary
     /// threads).
+    /// Every word of the recording. On-device recognition delivers a long recording as SEVERAL
+    /// final results, one per utterance; the old callback kept only the first final result and
+    /// dropped the rest (measured 2026-10-25: a three-sentence recording came back as its middle
+    /// sentence — 19 of 47 words). The delegate collects each finished utterance and resumes once,
+    /// when the whole task has finished.
+    static func recognizeAll(_ recognizer: SFSpeechRecognizer, _ request: SFSpeechURLRecognitionRequest) async throws -> [SFTranscriptionSegment] {
+        let collector = UtteranceCollector()
+        let words: [SFTranscriptionSegment] = try await withCheckedThrowingContinuation { continuation in
+            collector.gate = ResumeOnce(continuation)
+            collector.task = recognizer.recognitionTask(with: request, delegate: collector)
+        }
+        return withExtendedLifetime(collector) { words }
+    }
+
+    private final class UtteranceCollector: NSObject, SFSpeechRecognitionTaskDelegate, @unchecked Sendable {
+        var gate: ResumeOnce<[SFTranscriptionSegment]>?
+        var task: SFSpeechRecognitionTask?
+        private var words: [SFTranscriptionSegment] = []
+        private var seen = Set<String>()
+        private let lock = NSLock()
+
+        func speechRecognitionTask(_ task: SFSpeechRecognitionTask, didFinishRecognition result: SFSpeechRecognitionResult) {
+            lock.lock(); defer { lock.unlock() }
+            // The same word at the same moment can be reported twice; anything else is kept in order.
+            for w in result.bestTranscription.segments where seen.insert("\(w.timestamp)|\(w.substring)").inserted {
+                words.append(w)
+            }
+        }
+
+        func speechRecognitionTask(_ task: SFSpeechRecognitionTask, didFinishSuccessfully successfully: Bool) {
+            lock.lock(); let collected = words; lock.unlock()
+            if successfully || !collected.isEmpty {
+                gate?.resume(returning: collected)
+            } else {
+                gate?.resume(throwing: task.error ?? ASRError("No speech was recognized in this recording."))
+            }
+        }
+    }
+
     private final class ResumeOnce<T>: @unchecked Sendable {
         private let continuation: CheckedContinuation<T, Error>
         private var resumed = false

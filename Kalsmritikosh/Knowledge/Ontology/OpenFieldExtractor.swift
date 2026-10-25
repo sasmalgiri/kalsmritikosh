@@ -194,7 +194,8 @@ public enum OpenFieldExtractor {
             }
             guard line.count >= minimumLabelCharacters + 2 else { continue }
             guard let pair = split(line) else { continue }
-            guard isLabelLike(pair.label), isValueLike(pair.value) else { continue }
+            guard isLabelLike(pair.label),
+                  isValueLike(pair.value) || (statesAReason(pair.label) && isReasonValue(pair.value)) else { continue }
 
             let fieldID = FactSchemaRegistry.normalizeField(normalizeLabel(pair.label))
             guard !fieldID.isEmpty else { continue }
@@ -283,6 +284,22 @@ public enum OpenFieldExtractor {
         if label.hasSuffix(".") && words.count > 1 { return false }
         if label.contains("?") || label.contains("!") { return false }
         return true
+    }
+
+    /// A label that introduces a stated reason ("Reason for recall", "Cause", "Probable cause"):
+    /// its value is a sentence by nature (case bench 2026-10-24: "Lack of Assurance of Sterility: A
+    /// recall of all compounded sterile preparations … is being initiated due to …" was over the
+    /// value limits, so 18% of FDA reasons were never filed).
+    nonisolated static func statesAReason(_ label: String) -> Bool {
+        let l = label.lowercased().trimmingCharacters(in: .whitespaces)
+        return l.hasPrefix("reason") || l == "cause" || l == "probable cause" || l.hasSuffix(" cause")
+    }
+
+    /// A reason is up to a few sentences, never a page.
+    nonisolated static func isReasonValue(_ value: String) -> Bool {
+        let lower = value.lowercased().trimmingCharacters(in: .whitespaces)
+        guard value.count <= 600, !placeholderValues.contains(lower) else { return false }
+        return value.contains(where: \.isLetter)
     }
 
     /// Is this a VALUE, or prose that follows a colon?

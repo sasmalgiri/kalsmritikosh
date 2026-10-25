@@ -54,6 +54,20 @@ struct EvidenceOnlyRound12Tests {
         #expect(!facts.contains { $0.field == "court" })
     }
 
+    @Test("A national court with no place after it is still a court; a bare court type is not")
+    func nationalCourts() {
+        #expect(LegalCaseDomainPack.captionCourtName(in: "No. 487-53.\nUnited States Court of Claims.\nMay 3, 1955.") == "United States Court of Claims")
+        #expect(LegalCaseDomainPack.captionCourtName(in: "the Supreme Court held that") == nil)
+        #expect(LegalCaseDomainPack.captionCourtName(in: "Circuit Court of Appeals, Fifth Circuit.") == "Circuit Court of Appeals, Fifth Circuit")
+    }
+
+    @Test("A California byline and a narrated lower court")
+    func bylinesAndCourtBelow() {
+        #expect(LegalCaseDomainPack.opinionAuthor(in: "Deputy Attorneys General, for Respondent. BROWN (G. A.), P. J. Opinion") == "Brown")
+        let short = "This suit was filed in the District Court of Grayson County, Texas, by the appellee."
+        #expect(!LegalCaseDomainPack.extractFacts(fromText: short, subjectLabel: "x", blockID: UUID()).contains { $0.field == "court" })
+    }
+
     // MARK: Question routing
 
     @Test("Who were the parties in a case resolves to the parties; a contract's parties do not")
@@ -100,6 +114,10 @@ struct EvidenceOnlyRound12Tests {
         let text = "The case was investigated with the U.S. Attorney's Office for the Southern District of California. "
             + "The Justice Department's Tax Division announced the indictment today."
         #expect(IssuingOfficeGate.office(in: text) == "the Justice Department's Tax Division")
+        // No sentence says who announced: the office or district is only reported as mentioned.
+        let mentioned = IssuingOfficeGate.apply(question: "Which Justice Department office announced the case \"X\"?",
+            VerifiedAnswer(body: "He was found in the Eastern District of Louisiana on December 31.", citations: [], confidence: Confidence(0.7), refused: false, refusalReason: nil))
+        #expect(mentioned.body == "The release doesn't say which office announced it; it mentions the Eastern District of Louisiana.")
         // A joint announcement names both offices.
         #expect(IssuingOfficeGate.office(in: "Herrell was sentenced, U.S. Attorney McGregor W. Scott for the Eastern District of California and Acting Assistant Attorney General Brian C. Rabbitt of the Justice Department's Criminal Division announced.")
                 == "the U.S. Attorney's Office for the Eastern District of California and the Justice Department's Criminal Division")
@@ -115,6 +133,9 @@ struct EvidenceOnlyRound12Tests {
         #expect(within.first?.fieldID == "reasonforrecall")
         #expect(within.first?.value == "cGMP Deviations: Potential product contamination.")
         #expect(OpenFieldExtractor.danglingLabel("Reason for recall:") == "Reason for recall")
+        let long = "Lack of Assurance of Sterility: A recall of all compounded sterile preparations within expiry is being initiated due to observations associated with poor sterile production practices."
+        #expect(OpenFieldExtractor.fields(in: "Reason for recall:\n" + long, kind: .paragraph).first?.value == long)
+        #expect(OpenFieldExtractor.fields(in: "Note: " + long, kind: .paragraph).isEmpty)
         #expect(OpenFieldExtractor.danglingLabel("He said: ") == nil)
     }
 
@@ -155,6 +176,34 @@ struct EvidenceOnlyRound12Tests {
         #expect(!DateQuestionGate.hasPublicationAnchoredDate("NEW ORLEANS, LOUISIANA – DARVIN MORADEL-VELASQUEZ, age 40, plead guilty on April 9, 2026, to illegal reentry."))
         #expect(DateQuestionGate.hasPublicationAnchoredDate("WASHINGTON, June 10, 2014 — A man was sentenced today."))
         #expect(DateQuestionGate.hasPublicationAnchoredDate("The release was issued on March 3, 2009."))
+        #expect(!DateQuestionGate.hasPublicationAnchoredDate("On Sep. 30, 2010, the United States filed a complaint over engines not covered by an EPA-issued certificate."))
+    }
+
+    // MARK: Engine split
+
+    @Test("Value questions are answered by the evidence engine; account questions may use the model")
+    func engineSplit() {
+        for q in ["When was Edenfield v. United States decided?", "Who wrote the majority opinion in In re Kindred?",
+                  "Which firm initiated FDA recall F-3176-2017?", "How many employees were hurt in OSHA investigation 891770?",
+                  "Which Justice Department office announced the case \"X\"?", "What is the docket number in Goudeau v. Daigle?",
+                  "Where did the NTSB SEA03LA084 accident happen?"] {
+            #expect(MasterBrain.answersFromEvidenceOnly(q), "\(q)")
+        }
+        for q in ["What happened in the case \"Patriot Coal to Pay $6.5 Million\"?", "Why was FDA recall D-0775-2020 issued?",
+                  "What did NHTSA find in investigation PE10025?", "Explain the timeline of the dispute",
+                  "Tell me about the contract with Acme"] {
+            #expect(!MasterBrain.answersFromEvidenceOnly(q), "\(q)")
+        }
+    }
+
+    @Test("A harm record that numbers its people answers how many were hurt")
+    func numberedNarrative() {
+        let text = "Event: Employee injured in fall from moving forklift. At 7:00 a.m. Employee #1 was standing on the street. The rope became tangled, pulling him off. He sustained facial cuts and was hospitalized."
+        let chunk = Chunk(objectID: UUID(), ordinal: 0, text: text, characterRange: 0..<text.count)
+        let counted = NumberedEntryCount.compose(question: "How many employees were hurt in OSHA investigation 891770?",
+                                                 chunks: [RetrievedChunk(chunk: chunk, score: 1, viaLayer: .metadata)])
+        #expect(counted?.count == 1)
+        #expect(NumberedEntryCount.compose(question: "How many employees were trained?", chunks: [RetrievedChunk(chunk: chunk, score: 1, viaLayer: .metadata)]) == nil)
     }
 }
 
