@@ -91,6 +91,40 @@ struct ProceedingAnswererTests {
         #expect(ProceedingAnswerer.parse("Who wrote the opinion in Pinching v. Wurdeman?") == nil)
     }
 
+    @Test("PDF line wraps, a judge's sentencing clause, and a headline that states the step")
+    func layouts() throws {
+        let wrapped = """
+            U.S. Department of Justice
+            Southern District of West Virginia
+            FOR IMMEDIATE RELEASE
+            Wednesday, February 18, 2015
+            Felon sentenced for concealing illegal firearm
+            CHARLESTON, W.Va. – United States Attorney Booth Goodwin announced today that Reginald Bennett, 41, of
+            Cedar Grove, West Virginia, was sentenced to 30 months in federal prison, followed by three years of supervised
+            release.
+            """
+        let arrest = """
+            U.S. Department of Justice
+            District of Virgin Islands
+            FOR IMMEDIATE RELEASE
+            Wednesday, August 16, 2017
+            Man Arrested for Possession with Intent to Distribute Cocaine
+            St. Thomas, USVI- Kenneth James, 51, of Dominica, made his initial appearance today before the court.
+            """
+        let src = [wrapped, arrest].map { ProceedingAnswerer.Source(objectID: UUID(), text: $0) }
+        func answer(_ q: String) throws -> VerifiedAnswer {
+            let parsed = try #require(ProceedingAnswerer.parse(q))
+            return try #require(ProceedingAnswerer.answer(parsed, sources: src))
+        }
+        #expect(try answer("What sentence did Reginald Bennett receive?").body.hasPrefix("Reginald Bennett was sentenced to 30 months in federal prison"))
+        #expect(try answer("When was Reginald Bennett sentenced?").body.contains("February 18, 2015"))
+        #expect(try answer("Give me the timeline of the case against Kenneth James.").body.contains("August 16, 2017 (date of the report) — arrested"))
+        #expect(IssuingOfficeGate.office(in: arrest)?.contains("Virgin Islands") == true)
+        let charged = try #require(ProceedingAnswerer.parse("What was Christi Machala charged with?"))
+        #expect(charged.ask == .chargedWith)
+        #expect(try ask("What was Christi Machala charged with?").body.contains("seven counts of wire fraud"))
+    }
+
     @Test("Steps become ledger events only when the document gives the day")
     func events() {
         let events = ProceedingEventExtractor.extract(text: Self.sentenced, sourceObjectID: UUID(),

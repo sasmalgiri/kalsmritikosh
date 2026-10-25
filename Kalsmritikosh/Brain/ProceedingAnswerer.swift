@@ -20,6 +20,7 @@ public nonisolated enum ProceedingAnswerer {
         case when(ProceedingEventExtractor.Step)
         case whether(ProceedingEventExtractor.Step)
         case sentenceImposed
+        case chargedWith
         case timeline
         case documentCount
     }
@@ -68,6 +69,10 @@ public nonisolated enum ProceedingAnswerer {
         if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
         }
+        // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
+        if q.range(of: #"^what (?:was|were|is|are)\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what (?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .chargedWith)
+        }
         guard let step else { return nil }
         if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
@@ -95,14 +100,19 @@ public nonisolated enum ProceedingAnswerer {
         return "\u{201C}\(t)\u{201D}"
     }
 
+    static func key(_ f: ProceedingEventExtractor.Finding) -> String {
+        guard let d = f.day ?? f.reportedOn, let y = d.year, let m = d.month, let dd = d.day else { return "9999" }
+        return String(format: "%04d-%02d-%02d", y, m, dd)
+    }
+
     /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
     public static func answer(_ parsed: Parsed, sources: [Source]) -> VerifiedAnswer? {
         let about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
         // One line per step and day across documents (the sentencing release repeats the plea's day).
         var seenSteps = Set<String>()
         let found = about.flatMap { s in ProceedingEventExtractor.findings(in: s.text, person: parsed.person).map { (s.objectID, $0) } }
-            .sorted { ProceedingEventExtractor.order($0.1) < ProceedingEventExtractor.order($1.1) }
-            .filter { seenSteps.insert($0.1.step.rawValue + ProceedingEventExtractor.order($0.1)).inserted }
+            .sorted { ($0.1.day == nil ? 1 : 0, key($0.1)) < ($1.1.day == nil ? 1 : 0, key($1.1)) }
+            .filter { seenSteps.insert($0.1.step.rawValue + key($0.1)).inserted }
         let name = parsed.person
         func cite(_ items: [(UUID, ProceedingEventExtractor.Finding)]) -> [VerifiedAnswer.Citation] {
             items.map { VerifiedAnswer.Citation(objectID: $0.0, snippet: String($0.1.sentence.prefix(300))) }
@@ -116,11 +126,21 @@ public nonisolated enum ProceedingAnswerer {
         case .when(let step):
             let hits = found.filter { $0.1.step == step }
             guard let best = hits.first(where: { $0.1.day != nil }) ?? hits.first else {
+                // Asked when X was charged, the documents only report the arrest or arraignment:
+                // say so, with that day — never present it as the charge.
+                if step == .charged, let near = found.first(where: { [.arrested, .arraigned].contains($0.1.step) && ($0.1.day ?? $0.1.reportedOn) != nil }),
+                   let day = render(near.1.day ?? near.1.reportedOn) {
+                    let text = "The documents don't say when \(name) was charged; they report \(name) was \(near.1.step.phrase) on \(day): \(quote(near.1.sentence))"
+                    return VerifiedAnswer(body: text, answerText: text, citations: cite([near]), confidence: Confidence(0.6))
+                }
                 return refuse("The documents that name \(name) don't record \(name) being \(step.phrase).")
             }
             let text: String
             if let day = render(best.1.day) {
                 text = "\(name) was \(step.phrase) on \(day). The document says: \(quote(best.1.sentence))"
+            } else if let reported = render(best.1.reportedOn) {
+                // The sentence gives no day of its own; the document's printed date is when it was reported.
+                text = "The document dated \(reported) reports that \(name) was \(step.phrase); it gives no other day: \(quote(best.1.sentence))"
             } else {
                 text = "The documents say \(name) was \(step.phrase) but give no date for it: \(quote(best.1.sentence))"
             }
@@ -143,12 +163,25 @@ public nonisolated enum ProceedingAnswerer {
             }
             let text = "\(name) was sentenced to \(hit.1.detail ?? ""). The document says: \(quote(hit.1.sentence))"
             return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.8))
+        case .chargedWith:
+            // The charging sentence names the offence; failing that, the plea or verdict does.
+            let order: [ProceedingEventExtractor.Step] = [.charged, .pleaded, .convicted, .sentenced]
+            guard let hit = order.lazy.compactMap({ step in found.first { $0.1.step == step && $0.1.sentence.count > 60 } }).first else {
+                return refuse("The documents that name \(name) don't state what \(name) was charged with.")
+            }
+            let text = "The documents say: \(quote(hit.1.sentence))"
+            return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.75))
         case .timeline:
-            let dated = found.filter { $0.1.day != nil }
+            // A step whose sentence gives no day sits at the day its document reports it, marked so.
+            let dated = found.filter { ($0.1.day ?? $0.1.reportedOn) != nil }
+                .sorted { key($0.1) < key($1.1) }
             guard !dated.isEmpty else {
                 return refuse("The documents that name \(name) give no dated step of the case.")
             }
-            let lines = dated.map { "• \(render($0.1.day) ?? "") — \($0.1.step.phrase): \(quote($0.1.sentence))" }
+            let lines = dated.map { f -> String in
+                let when = f.1.day != nil ? (render(f.1.day) ?? "") : "\(render(f.1.reportedOn) ?? "") (date of the report)"
+                return "• \(when) — \(f.1.step.phrase): \(quote(f.1.sentence))"
+            }
             let text = "The case against \(name), in date order (\(dated.count) step\(dated.count == 1 ? "" : "s") from \(Set(dated.map(\.0)).count) document\(Set(dated.map(\.0)).count == 1 ? "" : "s")):\n" + lines.joined(separator: "\n")
             return VerifiedAnswer(body: text, answerText: text, citations: cite(dated), confidence: Confidence(0.8))
         case .documentCount:

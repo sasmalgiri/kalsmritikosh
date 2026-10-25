@@ -143,7 +143,7 @@ def main():
         if len(days) >= 2:
             q.append({"id": "timeline", "q": f"Give me the timeline of the case against {name}.", "expect": {"order": days}})
         q.append({"id": "count", "q": f"How many press releases are about {name}?", "expect": {"number": len(rels)}})
-        lead = re.split(r"(?<=[a-z]\.)\s+(?=[A-Z])", first["body"])[0]
+        lead = re.split(r"(?<=[a-z]{3}\.)\s+(?=[A-Z])", first["body"])[0]
         q.append({"id": "charge", "q": f"What was {name} charged with?", "expect": {"overlap": lead[:300]}})
         offices = sorted(set(first["components"] + office_names(first["components"])))
         if offices:

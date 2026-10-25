@@ -44,7 +44,7 @@ public nonisolated enum IssuingOfficeGate {
     /// "the Middle District of Pennsylvania", "the Southern District of New York", "the District of Columbia".
     /// A two-word state only when its first word starts one ("New York", "North Carolina"): "the
     /// Southern District of California Laura E. Duffy" must not take the attorney's first name.
-    static let district = #"(?:Northern|Southern|Eastern|Western|Middle|Central)?\s?District of (?:(?:New|North|South|West|Rhode|Puerto)\s[A-Z][a-z]+|[A-Z][a-z]+)"#
+    static let district = #"(?:Northern|Southern|Eastern|Western|Middle|Central)?\s?District of (?:(?:New|North|South|West|Rhode|Puerto|Virgin)\s[A-Z][a-z]+|Northern Mariana Islands|the Virgin Islands|[A-Z][a-z]+)"#
 
     static let forms: [(String, (String) -> String)] = [
         (#"(?:United States|U\.S\.)\s+Attorney[’']s\s+Office\s+(?:for|in)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
@@ -87,7 +87,7 @@ public nonisolated enum IssuingOfficeGate {
         // — reported as what the release mentions, never as the announcer.
         if let r = text.range(of: #"\b(?:the\s+)?("# + district + ")", options: .regularExpression) {
             let d = String(text[r]).replacingOccurrences(of: #"^the\s+"#, with: "", options: .regularExpression)
-            return ("the \(d.trimmingCharacters(in: .whitespaces))", false)
+            return ("the \(d.trimmingCharacters(in: .whitespacesAndNewlines))", false)
         }
         return nil
     }

@@ -48,13 +48,13 @@ public nonisolated enum ProceedingEventExtractor {
         /// Past-tense wording that reports the step. Matched case-insensitively.
         var pattern: String {
             switch self {
-            case .charged: return #"\b(?:was|were|has been|have been|been) (?:indicted|charged)\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:federal )?(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
+            case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:federal )?(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
             case .arrested: return #"\b(?:was|were|has been) arrested\b"#
             case .arraigned: return #"\b(?:was|were) arraigned\b"#
             case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b"#
             case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
-            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\s+(?:\w+\s+){0,6}to\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|life|time served|probation)"#
+            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b[^.]{0,140}?\bto\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
             case .released: return #"\b(?:was|were) released from (?:prison|custody)\b"#
             }
@@ -71,6 +71,8 @@ public nonisolated enum ProceedingEventExtractor {
         public let sentence: String
         /// "to 48 months in federal prison …" — what a sentencing sentence imposes.
         public let detail: String?
+        /// The date the document itself prints (the day it reports the step), when it prints one.
+        public var reportedOn: DateComponents? = nil
     }
 
     /// Words that make a sentence about the future or a possibility, not a step taken.
@@ -110,10 +112,38 @@ public nonisolated enum ProceedingEventExtractor {
                 let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?")
                 guard seen.insert(key).inserted else { continue }
                 out.append(Finding(step: step, day: day, dayFromPrintedDate: relative, sentence: sentence.trimmingCharacters(in: .whitespacesAndNewlines),
-                                   detail: step == .sentenced ? sentenceDetail(sentence) : nil))
+                                   detail: step == .sentenced ? sentenceDetail(sentence) : nil, reportedOn: printed))
+            }
+        }
+        // A release's headline states its step ("Man Arrested for Possession …") while its lead only
+        // says what happened in court that day ("Kenneth James … made his initial appearance"): the
+        // step is reported on the document's printed date, undated in itself.
+        if let title = headline(of: text), mentionsFully(String(lower.prefix(1500)), tokens: tokens) {
+            let t = title.lowercased()
+            let headlineSteps: [(String, Step)] = [("sentenced", .sentenced), ("pleads guilty", .pleaded), ("pleaded guilty", .pleaded),
+                                                   ("convicted", .convicted), ("found guilty", .convicted), ("indicted", .charged),
+                                                   ("charged", .charged), ("arrested", .arrested), ("acquitted", .acquitted), ("pardoned", .pardoned)]
+            if let step = headlineSteps.first(where: { t.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil })?.1,
+               !out.contains(where: { $0.step == step }) {
+                out.append(Finding(step: step, day: nil, dayFromPrintedDate: false, sentence: title, detail: nil, reportedOn: printed))
             }
         }
         return out.sorted { order($0) < order($1) }
+    }
+
+    /// The document's headline: the first line of four or more words near its head that is not an
+    /// organisation line, a release line or a date.
+    static func headline(of text: String) -> String? {
+        for raw in text.components(separatedBy: .newlines).prefix(14) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard line.split(separator: " ").count >= 4, line.count <= 200,
+                  line.range(of: #"(?i)^(?:u\.s\. department|department of|united states attorney|for immediate release|office of|(?:(?:northern|southern|eastern|western|middle|central)\s+)?district of\b)|(?i)\b(?:division|office|bureau|department|section)$"#, options: .regularExpression) == nil,
+                  fullDate(in: line) == nil || line.count > 40 else { continue }
+            // A lead paragraph ("PROVIDENCE, R.I. – …") is not a headline.
+            if line.range(of: #"^[A-Z][A-Z .,'\-]{2,40}(?:,|\s[–—-])"#, options: .regularExpression) != nil { return nil }
+            return line
+        }
+        return nil
     }
 
     static func order(_ f: Finding) -> String {
@@ -201,8 +231,23 @@ public nonisolated enum ProceedingEventExtractor {
 
     /// Sentence split that keeps initials and "U.S." inside the sentence.
     static func sentences(of text: String) -> [String] {
-        // A line break ends a sentence too: a release's header lines are not part of its lead.
-        text.components(separatedBy: .newlines).flatMap(sentencesOfLine)
+        // A short line without closing punctuation is a heading ("District of Rhode Island",
+        // "FOR IMMEDIATE RELEASE") and ends a sentence; a long one is a wrapped line of a paragraph
+        // (PDF text breaks "Reginald Bennett, 41, of\nCedar Grove, … was sentenced") and runs on.
+        var paragraphs: [String] = [], current = ""
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { if !current.isEmpty { paragraphs.append(current); current = "" }; continue }
+            let heading = line.count < 60 && line.last.map { !".!?:;,”\")".contains($0) } == true
+            if heading {
+                if !current.isEmpty { paragraphs.append(current); current = "" }
+                paragraphs.append(line)
+            } else {
+                current += current.isEmpty ? line : " " + line
+            }
+        }
+        if !current.isEmpty { paragraphs.append(current) }
+        return paragraphs.flatMap(sentencesOfLine)
     }
 
     static func sentencesOfLine(_ flat: String) -> [String] {

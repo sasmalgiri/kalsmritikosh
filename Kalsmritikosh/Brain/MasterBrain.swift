@@ -520,6 +520,10 @@ public actor MasterBrain {
         // the archive (case bench 2026-10-24 answered "History of the user's archive …").
         if SentenceQuoteComposer.asksWhatHappened(question),
            !IdentifierAnchoredRetriever.quotedTitles(in: question).isEmpty { return nil }
+        // "The timeline of the case against Christi Machala" is that person's proceeding, read
+        // step by step from the documents that name them — not a history of the whole archive
+        // (closed-case simulation 2026-10-26 answered "History of the user's archive …").
+        if ProceedingAnswerer.parse(question) != nil { return nil }
 
         await sessionProfile?.recordTurn(
             question: question,
@@ -1966,8 +1970,15 @@ public actor MasterBrain {
         // "the timeline of the case against X") is read across every retrieved document that names
         // them, step by step, each step quoted and cited (closed-case simulation, 2026-10-26).
         if let parsed = ProceedingAnswerer.parse(intent.rawQuestion), let objects {
+            // The question's own retrieval ranks the step's wording ("sentenced") as much as the
+            // person; a second pass on the name alone — same access scope — reaches the other
+            // documents of the case (the arrest release of a sentencing question).
+            let byName = (try? await retriever.retrieve(
+                for: UserIntent(kind: intent.kind, scope: intent.scope, rawQuestion: parsed.person),
+                layers: decision.retrievalLayers, access: access))?.result
+            let ids = sharedRetrieval.chunks.map(\.chunk.objectID) + (byName?.chunks.map(\.chunk.objectID) ?? [])
             var sources: [ProceedingAnswerer.Source] = []
-            for id in NSOrderedSet(array: sharedRetrieval.chunks.map(\.chunk.objectID)).compactMap({ $0 as? UUID }).prefix(16) {
+            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(24) {
                 do {
                     if let text = try await objects.fetchContent(id: id) { sources.append(.init(objectID: id, text: String(text.prefix(40_000)))) }
                 } catch {
