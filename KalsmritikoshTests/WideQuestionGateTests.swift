@@ -125,5 +125,15 @@ struct WideQuestionGateTests {
         #expect(SlotFieldResolver.resolve(in: "What part of the vehicle is NHTSA investigation PE10025 about?", knownFields: known).map(\.fieldID) == ["component"])
         #expect(SlotFieldResolver.resolve(in: "Which class is FDA recall Z-0049-2018?", knownFields: known).map(\.fieldID) == ["classification"])
     }
+
+    @Test("Held-out wordings: who issued a recall is its firm; litigants are parties; what the court ruled is its decision")
+    func heldOutFixes() {
+        #expect(!IssuingOfficeGate.asksIssuingOffice("Who issued FDA recall Z-2066-2019?"))
+        #expect(IssuingOfficeGate.asksIssuingOffice("Who issued the release about the case X?"))
+        #expect(!AbsentAttributeGate.apply(question: "What airplane was involved in NTSB case ERA13CA130?",
+                                           Self.answer("Aircraft: Cessna 172, registration N662DA.")).refused)
+        #expect(SlotFieldResolver.resolve(in: "What did the court rule in Pinching v. Wurdeman?").map(\.fieldID) == ["disposition"])
+        #expect(SentenceQuoteComposer.reasonWeight("NTSB SEA03LA084 — probable cause The pilot did not attain the proper touchdown point.", previous: "") == 6)
+    }
 }
 

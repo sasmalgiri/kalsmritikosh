@@ -19,7 +19,10 @@ public nonisolated enum IssuingOfficeGate {
         return q.range(of: #"\b(?:which|what)\b[^?]{0,40}\b(?:office|agency|component|department|division|unit)\b[^?]{0,40}\b(?:announc|issu|publish|releas)"#,
                        options: .regularExpression) != nil
             // "Who announced the case …?" (wide case bench 2026-10-25).
-            || q.range(of: #"^\s*who\s+(?:announced|issued|released|published)\b"#, options: .regularExpression) != nil
+            // "Who issued FDA recall X?" asks for the recalling firm, not an office: issued /
+            // released / published count only of a release or announcement.
+            || q.range(of: #"^\s*who\s+announced\b"#, options: .regularExpression) != nil
+            || q.range(of: #"^\s*who\s+(?:issued|released|published)\s+the\s+(?:release|press release|announcement|statement)\b"#, options: .regularExpression) != nil
             || q.range(of: #"^\s*who\s+(?:made|issued|put out|sent out)\s+the\s+(?:announcement|release|press release)\b"#, options: .regularExpression) != nil
     }
 

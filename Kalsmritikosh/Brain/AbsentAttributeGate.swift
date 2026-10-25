@@ -49,8 +49,14 @@ public nonisolated enum AbsentAttributeGate {
                                        "docket", "author", "opinion", "court", "firm", "company", "party", "parties",
                                        "judge", "defendant", "plaintiff", "office", "agency", "location", "place"]
 
+    /// The word a record uses for the same thing ("Aircraft:" for "airplane", "Parties:" for
+    /// "litigants") — wide case bench 2026-10-25.
+    static let kin: [String: [String]] = ["airplane": ["aircraft"], "plane": ["aircraft"], "litigant": ["part"],
+                                          "litigants": ["part"], "company": ["firm"], "maker": ["manufactur"],
+                                          "vehicle": ["make", "model"], "ruling": ["disposition", "affirm", "revers"]]
+
     static func stems(_ w: String) -> [String] {
-        var out = [w]
+        var out = [w] + (kin[w] ?? [])
         for suffix in ["ies", "es", "s", "ing", "ed", "er", "or"] where w.hasSuffix(suffix) && w.count > suffix.count + 3 {
             out.append(String(w.dropLast(suffix.count)))
         }

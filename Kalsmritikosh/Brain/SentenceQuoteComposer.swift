@@ -314,6 +314,10 @@ public enum SentenceQuoteComposer {
     nonisolated static func reasonWeight(_ sentence: String, previous: String) -> Int {
         let prev = previous.lowercased().trimmingCharacters(in: .whitespaces)
         if prev.hasSuffix(":"), prev.contains("reason") || prev.contains("cause") || prev.contains("basis") { return 6 }
+        // A heading line that names the cause ("NTSB SEA03LA084 — probable cause") introduces it.
+        if prev.range(of: #"(?:—|-|:)\s*(?:probable cause|cause|reason for recall)\s*$"#, options: .regularExpression) != nil { return 6 }
+        // … or runs straight into it when the line break was lost ("NTSB X — probable cause The pilot …").
+        if sentence.prefix(80).range(of: #"(?i)(?:—|-)\s*probable cause\s+[A-Z]"#, options: .regularExpression) != nil { return 6 }
         let lower = sentence.lowercased()
         if lower.hasPrefix("reason") || lower.hasPrefix("cause") { return 5 }
         let connectives = ["because", "due to", "as a result", "resulted in", "caused", "failure to", "failed to", "could ", "may "]

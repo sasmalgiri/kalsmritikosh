@@ -163,6 +163,8 @@ public enum SlotFieldResolver {
         (["judge"], ["wrote", "authored", "write"], "opinionauthor", .identity, "Opinion by", "legal"),
         (["outcome"], ["v", "case", "court", "appeal", "in re"], "disposition", .status, "Disposition", "legal"),
         (["decided"], ["how"], "disposition", .status, "Disposition", "legal"),
+        // "What did the court rule / hold / order in …?" asks what it decided, not which court.
+        (["court"], ["rule", "ruled", "hold", "held", "order", "ordered", "conclude", "concluded"], "disposition", .status, "Disposition", "legal"),
         (["ruling"], ["v", "case", "court", "in re"], "disposition", .status, "Disposition", "legal"),
         (["court"], ["heard", "name", "named"], "court", .identity, "Court", "legal"),
         (["date"], ["v", "in re", "ex parte"], "decisiondate", .date, "Decision date", "legal"),

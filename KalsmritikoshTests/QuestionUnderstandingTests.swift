@@ -70,8 +70,8 @@ struct QuestionUnderstandingTests {
     @Test("When the model says no field holds the answer, a weak rule match is set aside")
     func noneSetsAsideWeakRule() async {
         let device = Scripted("none")
-        let q = "What did the court rule in Pinching v. Wurdeman?"
-        let onlyCourt: Set<String> = ["court", "casenumber"]
+        let q = "What was wrong with the product in FDA recall Z-1?"
+        let onlyCourt: Set<String> = ["product", "casenumber"]
         _ = await QuestionUnderstanding.interpret(question: q, fields: onlyCourt, onDevice: device, cloud: nil)
         #expect(SlotFieldResolver.resolve(in: q, knownFields: onlyCourt).isEmpty)
     }
