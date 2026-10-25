@@ -16,10 +16,13 @@ import Foundation
     func togglePersists() {
         let m = KnowledgeModule.topicMinimization
         #expect(m.implemented)
+        // The STORED preference is what persists. The effective state also depends on the AI regime
+        // and on autoTopics, which AIRegimeMatrixTests flips in parallel (CI PR #169 flake).
+        let key = KnowledgeModuleFlags.storageKey(m)
         KnowledgeModuleFlags.setEnabled(m, false)
-        #expect(KnowledgeModuleFlags.isEnabled(m) == false)
+        #expect(UserDefaults.standard.object(forKey: key) as? Bool == false)
         KnowledgeModuleFlags.setEnabled(m, true)
-        #expect(KnowledgeModuleFlags.isEnabled(m) == true)
+        #expect(UserDefaults.standard.object(forKey: key) as? Bool == true)
         // restore default
         KnowledgeModuleFlags.setEnabled(m, m.defaultEnabled)
     }

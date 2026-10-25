@@ -28,7 +28,7 @@ struct QuestionUnderstandingTests {
     func rulesFirst() async {
         let device = Scripted("court"), cloud = Scripted("court")
         let q = "Who wrote the majority opinion in Pinching v. Wurdeman?"
-        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud)
+        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud, modelsAllowed: true)
         #expect(step == "rules")
         #expect(device.asked == 0 && cloud.asked == 0)
         #expect(SlotFieldResolver.resolve(in: q, knownFields: fields).first?.fieldID == "opinionauthor")
@@ -38,7 +38,7 @@ struct QuestionUnderstandingTests {
     func onDeviceSecond() async {
         let device = Scripted("disposition"), cloud = Scripted("court")
         let q = "What was the verdict-like conclusion reached in Pinching v. Wurdeman?"
-        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud)
+        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud, modelsAllowed: true)
         #expect(step == "interpreted:disposition")
         #expect(cloud.asked == 0)
         #expect(SlotFieldResolver.resolve(in: q, knownFields: fields).first?.fieldID == "disposition")
@@ -49,8 +49,8 @@ struct QuestionUnderstandingTests {
     @Test("The cloud is asked only when both earlier steps missed")
     func cloudLast() async {
         let device = Scripted(nil), cloud = Scripted("decisiondate")
-        let q = "Tell me the day the judges handed this down for Pinching v. Wurdeman"
-        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud)
+        let q = "Tell me when the judges spoke in Pinching v. Wurdeman"
+        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud, modelsAllowed: true)
         #expect(step == "interpreted:decisiondate")
         #expect(device.asked == 1 && cloud.asked == 1)
     }
@@ -59,12 +59,12 @@ struct QuestionUnderstandingTests {
     func boundaries() async {
         let invented = Scripted("prisonname")
         let q = "What was the verdict-like conclusion reached in Pinching v. Wurdeman?"
-        _ = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: invented, cloud: nil)
+        _ = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: invented, cloud: nil, modelsAllowed: true)
         #expect(QuestionUnderstanding.interpretedField(for: q) == nil)
         let device = Scripted("court")
         for gated in ["Who made the announcement in the case \"X\"?", "Give me a summary of the case \"X\".",
                       "How many employees were injured in OSHA investigation 1?"] {
-            _ = await QuestionUnderstanding.interpret(question: gated, fields: fields, onDevice: device, cloud: nil)
+            _ = await QuestionUnderstanding.interpret(question: gated, fields: fields, onDevice: device, cloud: nil, modelsAllowed: true)
         }
         #expect(device.asked == 0)
     }
@@ -74,8 +74,45 @@ struct QuestionUnderstandingTests {
         let device = Scripted("none")
         let q = "What was wrong with the product in FDA recall Z-1?"
         let onlyCourt: Set<String> = ["product", "casenumber"]
-        _ = await QuestionUnderstanding.interpret(question: q, fields: onlyCourt, onDevice: device, cloud: nil)
+        _ = await QuestionUnderstanding.interpret(question: q, fields: onlyCourt, onDevice: device, cloud: nil, modelsAllowed: true)
         #expect(SlotFieldResolver.resolve(in: q, knownFields: onlyCourt).isEmpty)
+    }
+
+    @Test("The model may hand a wording to a gate; the gate's detector then takes it")
+    func gateIntents() async {
+        let release: Set<String> = ["date", "amount"]
+        let office = "Which bureau got the word out about \"Man Sentenced For Fraud\"?"
+        _ = await QuestionUnderstanding.interpret(question: office, fields: release,
+                                                  onDevice: Scripted("announcingoffice"), cloud: nil, modelsAllowed: true)
+        #expect(IssuingOfficeGate.asksIssuingOffice(office))
+        let when = "On which day did \"Man Sentenced For Fraud\" hit the wires?"
+        _ = await QuestionUnderstanding.interpret(question: when, fields: release,
+                                                  onDevice: Scripted("releasedate"), cloud: nil, modelsAllowed: true)
+        #expect(DateQuestionGate.asksWhen(when) && DateQuestionGate.asksPublicationDate(when))
+        let hurt = "Tell me the toll of hurt workers in OSHA investigation 1."
+        _ = await QuestionUnderstanding.interpret(question: hurt, fields: ["eventdate", "keywords"],
+                                                  onDevice: Scripted("peoplecount"), cloud: nil, modelsAllowed: true)
+        #expect(CountQuestionGate.asksCount(hurt))
+        // A record whose own fields say who issued it is never offered the office gate.
+        let menu = MenuRecorder()
+        _ = await QuestionUnderstanding.interpret(question: "Which outfit is behind FDA recall Z-1?", fields: ["recallingfirm", "product"],
+                                                  onDevice: menu, cloud: nil, modelsAllowed: true)
+        #expect(!menu.offered.contains("announcingoffice") && menu.offered.contains("recallingfirm"))
+    }
+
+    final class MenuRecorder: QuestionInterpreting, @unchecked Sendable {
+        private(set) var offered: [String] = []
+        func field(askedBy question: String, among fields: [String]) async -> String? { offered = fields; return nil }
+    }
+
+    @Test("Fully private: no model is asked, the rules decide alone")
+    func fullyPrivateAsksNoModel() async {
+        let device = Scripted("disposition"), cloud = Scripted("disposition")
+        let q = "What was the verdict-like conclusion reached in Fully v. Private?"
+        let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud, modelsAllowed: false)
+        #expect(step == nil)
+        #expect(device.asked == 0 && cloud.asked == 0)
+        #expect(QuestionUnderstanding.interpretedField(for: q) == nil)
     }
 
     @Test("The cloud reply is used only when it is exactly one listed field")

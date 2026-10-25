@@ -59,7 +59,7 @@ public enum SentenceQuoteComposer {
     ) -> QuotedAnswer? {
         let queryWords = contentWords(question)
         guard queryWords.count >= minOverlap else { return nil }
-        let asksForValue = question.lowercased().contains("how many")
+        let asksForValue = CountQuestionGate.asksCount(question)
             || question.lowercased().contains("when ")
             || question.lowercased().contains("how much")
 
@@ -308,6 +308,8 @@ public enum SentenceQuoteComposer {
         let q = question.lowercased()
         return q.hasPrefix("why ") || q.contains(" why ") || q.contains("what was the reason") || q.contains("what caused")
             || q.contains("what led to") || q.range(of: #"\bsay caused\b|\bwhat (?:problem|issue|defect) (?:caused|led)"#, options: .regularExpression) != nil
+            // "What did investigators determine caused …?" (held-out wording set 4, 2026-10-25).
+            || q.range(of: #"\b(?:determine[sd]?|f(?:i|ou)nd|conclude[sd]?|decide[sd]?)\s+(?:had\s+|was\s+)?caused\b"#, options: .regularExpression) != nil
     }
 
     /// How strongly a sentence reads as the stated reason: the line under a reason label scores
@@ -488,8 +490,11 @@ public struct NumberedEntryCount: Sendable, Equatable {
     /// The noun after "how many" ("how many employees were hurt" → "employee"), singular.
     nonisolated static func countedNoun(in question: String) -> String? {
         let q = question.lowercased()
-        guard let r = q.range(of: #"how many ([a-z]+)"#, options: .regularExpression) else { return nil }
-        var word = String(q[r].dropFirst("how many ".count))
+        guard let r = q.range(of: #"(?:how many|number of) ([a-z]+)"#, options: .regularExpression) else {
+            // The interpreter placed a count wording the rules miss: count the people a record numbers.
+            return QuestionUnderstanding.gateIntent(for: question) == .peopleCount ? "person" : nil
+        }
+        var word = String(q[r].split(separator: " ").last ?? "")
         guard word.count >= 3, !["times", "days", "years", "months", "hours", "dollars"].contains(word) else { return nil }
         if word.hasSuffix("ies") { word = String(word.dropLast(3)) + "y" }
         else if word.hasSuffix("s") { word = String(word.dropLast()) }

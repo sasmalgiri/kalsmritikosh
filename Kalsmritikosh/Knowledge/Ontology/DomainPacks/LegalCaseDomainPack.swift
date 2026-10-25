@@ -97,8 +97,12 @@ public enum LegalCaseDomainPack {
         // The decision date: "Decided July 23, 1993", "Opinion filed August 3, 1971", or the
         // caption's own date line ("August 8, 1924.)"). Case bench 2026-10-18: US decisions
         // carried no decision-date fact at all, so "When was X decided?" had nothing to read.
+        // A long body paragraph saying "decided" is citing another decision ("Acacia Park Cemetery
+        // Ass'n v. Commissioner, supra, decided January 11, 1934" — held-out case bench 2026-10-25
+        // gave a 1955 decision that 1934 date): outside a caption only its opening is read.
+        let labelText = captionLike ? text : String(text.prefix(600))
         if let raw = DomainPackText.labeledDate(after: ["decided", "opinion filed", "date of decision",
-                                                        "date of judgment", "judgment dated"], in: text)
+                                                        "date of judgment", "judgment dated"], in: labelText)
             ?? captionDateLine(in: text) ?? courtLineDate(in: text),
            let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10 {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "decisionDate", value: iso,

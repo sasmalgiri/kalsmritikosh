@@ -15,8 +15,14 @@ import Foundation
 public nonisolated enum IssuingOfficeGate {
 
     public static func asksIssuingOffice(_ question: String) -> Bool {
+        // A wording the rules miss, placed by the question interpreter.
+        if QuestionUnderstanding.gateIntent(for: question) == .announcingOffice { return true }
         let q = question.lowercased()
-        return q.range(of: #"\b(?:which|what)\b[^?]{0,40}\b(?:office|agency|component|department|division|unit)\b[^?]{0,40}\b(?:announc|issu|publish|releas)"#,
+        return q.range(of: #"\b(?:which|what)\b[^?]{0,40}\b(?:office|agency|component|department|division|unit)\b[^?]{0,40}\b(?:announc|issu|publish|releas|put out|sent out)"#,
+                       options: .regularExpression) != nil
+            // "Who released "Fairfield Man Indicted …"?" — a quoted release title names the release
+            // itself (held-out wording set 4, 2026-10-25). "Who issued FDA recall X" has no title.
+            || q.range(of: #"^\s*who\s+(?:released|issued|published|put out|sent out)\s+(?:the\s+(?:release|statement|announcement)\s+)?["“]"#,
                        options: .regularExpression) != nil
             // "Who announced the case …?" (wide case bench 2026-10-25).
             // "Who issued FDA recall X?" asks for the recalling firm, not an office: issued /

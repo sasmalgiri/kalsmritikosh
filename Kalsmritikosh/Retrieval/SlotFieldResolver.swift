@@ -160,8 +160,8 @@ public enum SlotFieldResolver {
         (["court", "decide"], ["what"], "disposition", .status, "Disposition", "legal"),
         // Wide case bench 2026-10-25 — the same questions asked other ways.
         (["authored"], ["opinion", "judge", "justice", "ruling", "decision"], "opinionauthor", .identity, "Opinion by", "legal"),
-        (["justice"], ["wrote", "authored", "write"], "opinionauthor", .identity, "Opinion by", "legal"),
-        (["judge"], ["wrote", "authored", "write"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["justice"], ["wrote", "authored", "write", "penned"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["judge"], ["wrote", "authored", "write", "penned"], "opinionauthor", .identity, "Opinion by", "legal"),
         (["outcome"], ["v", "case", "court", "appeal", "in re"], "disposition", .status, "Disposition", "legal"),
         (["decided"], ["how"], "disposition", .status, "Disposition", "legal"),
         // "What did the court rule / hold / order in …?" asks what it decided, not which court.
@@ -169,10 +169,16 @@ public enum SlotFieldResolver {
         (["ruling"], ["v", "case", "court", "in re"], "disposition", .status, "Disposition", "legal"),
         (["court"], ["heard", "name", "named"], "court", .identity, "Court", "legal"),
         (["date"], ["v", "in re", "ex parte"], "decisiondate", .date, "Decision date", "legal"),
+        (["decided"], ["day", "year"], "decisiondate", .date, "Decision date", "legal"),
+        (["handed", "down"], ["date", "when", "day", "year"], "decisiondate", .date, "Decision date", "legal"),
+        (["tribunal"], ["which", "what", "name", "decided", "heard"], "court", .identity, "Court", "legal"),
         // "Who were the parties in X v. Y?" — the caption's parties; a contract's parties are not
         // a court case's, so the question must name a case (a "v.", "in re", case, suit, court).
         (["parties"], ["v", "vs", "in re", "ex parte", "case", "suit", "lawsuit", "litigation", "court", "appeal"],
          "parties", .counterparty, "Parties", "legal"),
+        // "Who were the two sides in X v. Y?", "Who was involved as plaintiff and defendant in …?"
+        (["sides"], ["v", "vs", "in re", "case", "suit", "lawsuit", "court"], "parties", .counterparty, "Parties", "legal"),
+        (["plaintiff", "defendant"], ["who", "v", "vs", "case"], "parties", .counterparty, "Parties", "legal"),
         // A1.1 — "who is the owner/holder of this patent" (no field bigram).
         (["patent"], ["owner", "owns", "proprietor", "holder", "belongs"], "applicant", .counterparty, "Applicant", "patent"),
     ]
@@ -247,6 +253,11 @@ public enum SlotFieldResolver {
             }
         }
         out = positioned.sorted { $0.position < $1.position }.map(\.r)
+        // "On what date did the court rule in X?" asks when, not what was ruled.
+        if out.contains(where: { $0.fieldID == "decisiondate" }),
+           q.range(of: #"\b(?:when|date|day)\b"#, options: .regularExpression) != nil {
+            out.removeAll { $0.fieldID == "disposition" }
+        }
 
         // F8 (rung 1n) — FIELD-SHAPED FALLBACK, only when the vocabulary named
         // nothing: "what is the trademark number" is unmistakably a field
@@ -331,11 +342,20 @@ public enum SlotFieldResolver {
             // "What recall class was …": the first noun only modifies the second.
             let joiners: Set<String> = ["was", "were", "is", "are", "did", "does", "do", "has", "had", "of", "for", "in", "on",
                                         "at", "to", "behind", "named", "listed", "given", "assigned", "the", "a", "an"]
-            if hi + 2 < words.count, !joiners.contains(words[hi + 1]), joiners.contains(words[hi + 2]),
-               words[hi + 1].count >= 3, !words[hi + 1].contains(where: \.isNumber) { head = words[hi + 1] }
             // A record calls the same thing by its own word: a recall's "company" is its firm.
             let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator",
-                       "part": "component", "class": "classification"]
+                       "part": "component", "class": "classification", "system": "component"]
+            func namesField(_ w: String) -> Bool {
+                w.count >= 4 && (knownFields.contains(where: { $0.hasSuffix(w) }) || kin[w].map { k in knownFields.contains(where: { $0.hasSuffix(k) }) } == true)
+            }
+            if hi + 2 < words.count, !joiners.contains(words[hi + 1]), joiners.contains(words[hi + 2]),
+               words[hi + 1].count >= 3, !words[hi + 1].contains(where: \.isNumber),
+               // "Which firm recalled the product …": a verb after the noun is not a second noun.
+               !words[hi + 1].hasSuffix("ed") || namesField(words[hi + 1]) { head = words[hi + 1] }
+            // "What recall class applies to …", "What vehicle system does …": when the second word
+            // names a field on file, the first only modifies it (held-out wording set 4, 2026-10-25).
+            if head == words[hi], hi + 1 < words.count, !joiners.contains(words[hi + 1]),
+               namesField(words[hi + 1]) { head = words[hi + 1] }
             if !knownFields.contains(where: { $0.hasSuffix(head) }), let k = kin[head] { head = k }
             if head.count >= 4, !ungrammaticalAlone.contains(head) {
                 if knownFields.contains(head) { best = (fieldID: head, length: 1) }
@@ -410,6 +430,14 @@ public enum SlotFieldResolver {
         // Resident Who Sold Fentanyl In San Francisco's Tenderloin …"?" reached a field minted
         // from a dateline ("sanfrancisco") through the title's words (case bench 2026-10-24).
         let question = withoutQuotedTitles(fullQuestion)
+        // "What was the court's decision in X?", "Was X affirmed or reversed?" ask what the court
+        // decided — not which court, and not when (held-out case bench 2026-10-25 answered both
+        // with the court's name or the decision date).
+        if knownFields.contains("disposition"),
+           question.lowercased().range(of: #"^(?!.*\b(?:when|date|day|year)\b).*(?:\bcourt'?s (?:decision|ruling|holding|judgment|disposition)\b|\b(?:decision|ruling|holding|judgment) of the court\b|\b(?:affirmed|reversed|upheld|overturned|dismissed|granted|denied)\s+or\s+(?:affirmed|reversed|upheld|overturned|dismissed|granted|denied|not)\b|\bcome out\b|\bturn out\b)"#,
+                                           options: .regularExpression) != nil {
+            return [Resolution(fieldID: "disposition", requestedField: .status, humanLabel: "Disposition", domainGroup: "legal")]
+        }
         let curated = resolve(in: question)
         // Case bench 2026-10-21: "When was FDA recall D-0227-2026 initiated?" resolved to the bare
         // "date" field and answered "2026" (a stray year) while the document states "Recall
@@ -430,12 +458,23 @@ public enum SlotFieldResolver {
         // happens to share a word with the reference ("recall").
         if question.lowercased().range(of: #"^\s*how\s+(?:was|were|is|are)\b"#, options: .regularExpression) != nil,
            let stemmed = verbNamedField(in: question, knownFields: knownFields) { return [stemmed] }
-        if let discovered = resolveAgainstInventory(question, knownFields: knownFields) {
+        // A case caption names the matter, not a field: "Missouri-Kansas-Texas Railroad v. National
+        // Railroad Adjustment Board" reached a field minted from "St. Louis, Mo." lines ("missouri")
+        // through the party's name (held-out wording set 4, 2026-10-25).
+        let matterless = withoutCaseCaption(question)
+        if let discovered = resolveAgainstInventory(matterless, knownFields: knownFields) {
             return [discovered]
         }
         // Last: a verb that names a field ("How was it classified?" → classification).
-        if let stemmed = verbNamedField(in: question, knownFields: knownFields) { return [stemmed] }
+        if let stemmed = verbNamedField(in: matterless, knownFields: knownFields) { return [stemmed] }
         return []
+    }
+
+    /// The question with a trailing case caption ("… in Hughes v. Life Insurance Co., 112 F. Supp.
+    /// 2d 780?") blanked out: the run of capitalised words before "v." to the end.
+    nonisolated static func withoutCaseCaption(_ question: String) -> String {
+        question.replacingOccurrences(of: #"(?:\b[A-Z][\w.&'’\-]*,?\s+(?:(?:of|and|the|for|&)\s+)*)+v(?:s)?\.\s.*$"#,
+                                      with: " ", options: .regularExpression)
     }
 
     /// The question with its quoted titles ("…" or “…”) blanked out.

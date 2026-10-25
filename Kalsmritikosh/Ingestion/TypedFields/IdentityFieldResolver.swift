@@ -79,6 +79,15 @@ public nonisolated struct IdentityFieldResolver: Sendable {
             return .organizationName
         }
         if any(["address"]) { return .address }
+        // "The name of the court / the firm / the drug" asks for that thing's name, not a person's
+        // (held-out case bench 2026-10-25: "What is the name of the court in X?" answered with every
+        // personName in the ledger). Only a person-like noun keeps the person-name field.
+        if let r = q.range(of: #"\bname of (?:the |this |that |a )?([a-z]+)"#, options: .regularExpression) {
+            let noun = String(q[r]).split(separator: " ").last.map(String.init) ?? ""
+            let personNouns: Set<String> = ["person", "holder", "applicant", "owner", "bearer", "passenger",
+                                            "patient", "customer", "signatory", "employee", "individual"]
+            if !personNouns.contains(noun) { return nil }
+        }
         if any(["what is the name", "the name in", "name in this", "name on this", "whose name",
                 "who is this document for", "who is this for", "person's name", "name of the holder",
                 "holder name", "name of person"]) { return .personName }

@@ -26,6 +26,10 @@ public protocol QuestionInterpreting: Sendable {
 /// run-together names. Unknown fields fall back to their human label.
 public enum FieldMeaning {
     public nonisolated static let descriptions: [String: String] = [
+        // The gates (QuestionUnderstanding.GateIntent).
+        "announcingoffice": "WHO put out, issued or released the announcement or press release itself (the office or agency) — not a person in it",
+        "releasedate": "WHEN the announcement, press release or statement itself was issued or came out — not when the events in it happened",
+        "peoplecount": "HOW MANY people (workers, employees, victims) were hurt, injured or killed",
         "disposition": "WHAT the court decided: its ruling, outcome or result (affirmed, reversed, dismissed …)",
         "opinionauthor": "WHO wrote the court's opinion or decision (the judge or justice)",
         "court": "the NAME of the court that heard the case — not what it decided",

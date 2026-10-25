@@ -151,5 +151,45 @@ struct WideQuestionGateTests {
         #expect(DateQuestionGate.asksPublicationDate("What's the publication date of \"X\"?"))
         #expect(!DateQuestionGate.asksPublicationDate("When was Pinching v. Wurdeman decided?"))
     }
+
+    @Test("Held-out wording set 4: outcomes, tribunals, handed down, offices, counts, parts")
+    func heldOutSetFour() {
+        let court: Set<String> = ["disposition", "court", "opinionauthor", "decisiondate", "casenumber", "parties", "date"]
+        func f(_ q: String, _ k: Set<String>) -> String? { SlotFieldResolver.resolve(in: q, knownFields: k).first?.fieldID }
+        #expect(f("What was the court's decision in Mayo v. United States?", court) == "disposition")
+        #expect(f("Was Mayo v. United States affirmed or reversed?", court) == "disposition")
+        #expect(f("When was the court's decision in Mayo v. United States issued?", court) == "decisiondate")
+        #expect(f("Which tribunal decided Mayo v. United States?", court) == "court")
+        #expect(f("On what date did the court rule in Mayo v. United States?", court) == "decisiondate")
+        #expect(f("What day was Mayo v. United States handed down?", court) == "decisiondate")
+        #expect(f("Who were the two sides in Mayo v. United States?", court) == "parties")
+        // A party's name is not a field, even when the ledger minted one from it.
+        let minted = court.union(["missouri"])
+        #expect(f("Which justice or judge penned Missouri-Kansas-Texas Railroad v. National Railroad Adjustment Board?", minted) == "opinionauthor")
+        #expect(f("How did Missouri-Kansas-Texas Railroad v. National Railroad Adjustment Board come out?", minted) == "disposition")
+        #expect(!YesNoFieldGate.asksYesNo("Was Mayo v. United States affirmed or reversed?"))
+        #expect(YesNoFieldGate.asksYesNo("Was Mayo v. United States affirmed or not?"))
+        #expect(IdentityFieldResolver.questionFieldType("What is the name of the court in Mayo v. United States?") == nil)
+        #expect(IdentityFieldResolver.questionFieldType("What is the name of the holder?") == .personName)
+        #expect(f("What recall class applies to FDA recall Z-2066-2019?", ["classification", "reasonforrecall", "recallingfirm"]) == "classification")
+        #expect(f("What vehicle system does NHTSA investigation EQ08013 concern?", ["component", "subject", "manufacturer"]) == "component")
+        #expect(IssuingOfficeGate.asksIssuingOffice("Which office put out \"X\"?"))
+        #expect(IssuingOfficeGate.asksIssuingOffice("Who released \"X\"?"))
+        #expect(!IssuingOfficeGate.asksIssuingOffice("Who issued FDA recall Z-2066-2019?"))
+        #expect(DateQuestionGate.asksPublicationDate("When did \"X\" come out?"))
+        #expect(CountQuestionGate.asksCount("What number of employees were injured in OSHA investigation 1?"))
+        #expect(SentenceQuoteComposer.asksWhy("What did investigators determine caused NTSB case ERA13CA130?"))
+    }
+
+    @Test("A body paragraph citing another decision gives no decision date")
+    func citedDecisionDateIgnored() {
+        let body = String(repeating: "The controlling facts are stipulated by the parties. ", count: 14)
+            + "This ruling was made upon the authority of the decision in Acacia Park Cemetery Ass'n v. Commissioner, supra, decided January 11, 1934, which dealt with the plaintiff's deduction."
+        let facts = LegalCaseDomainPack.extractFacts(fromText: body, subjectLabel: "M", blockID: UUID())
+        #expect(!facts.contains { $0.field.lowercased() == "decisiondate" })
+        let caption = "Memphis Memorial Park v. McCann\nCiv. A. Nos. 1675-1677.\nUnited States District Court M. D. Tennessee, Nashville Division.\nJuly 28, 1955.\nBenjamin Goodman for plaintiff."
+        #expect(LegalCaseDomainPack.extractFacts(fromText: caption, subjectLabel: "M", blockID: UUID())
+            .first { $0.field.lowercased() == "decisiondate" }?.value == "1955-07-28")
+    }
 }
 

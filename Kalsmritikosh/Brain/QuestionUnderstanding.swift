@@ -22,7 +22,7 @@
 import Foundation
 import os
 
-public enum QuestionUnderstanding {
+public nonisolated enum QuestionUnderstanding {
 
     /// The field chosen for a question by step 2 or 3, read by `SlotFieldResolver` for the rest of
     /// that answer. Keyed by the question text; only the most recent few are kept.
@@ -39,6 +39,30 @@ public enum QuestionUnderstanding {
 
     /// Remembered when the interpreter found that no field on file answers the question.
     public static let noField = ""
+
+    /// Questions a dedicated gate answers, offered to the model beside the fields when the rules
+    /// could not place a wording ("Which office put out …", "When did … come out", "What number of
+    /// workers were hurt …"). The model only chooses the gate; the gate still reads the answer from
+    /// the documents, or says the documents don't give it.
+    public enum GateIntent: String, CaseIterable, Sendable {
+        case announcingOffice = "announcingoffice"
+        case releaseDate = "releasedate"
+        case peopleCount = "peoplecount"
+    }
+
+    private static let intents = OSAllocatedUnfairLock(initialState: [String: GateIntent]())
+
+    /// The gate the interpreter chose for this question, if any.
+    public static func gateIntent(for question: String) -> GateIntent? {
+        intents.withLock { $0[key(question)] }
+    }
+
+    static func remember(_ intent: GateIntent?, for question: String) {
+        intents.withLock { table in
+            if table.count > 64 { table.removeAll() }
+            table[key(question)] = intent
+        }
+    }
 
     static func remember(_ field: String?, for question: String) {
         chosen.withLock { table in
@@ -66,21 +90,37 @@ public enum QuestionUnderstanding {
     /// or nil when no step placed it).
     @discardableResult
     public static func interpret(question: String, fields: Set<String>,
-                                 onDevice: (any QuestionInterpreting)?, cloud: (any QuestionInterpreting)?) async -> String? {
-        remember(nil, for: question)
+                                 onDevice: (any QuestionInterpreting)?, cloud: (any QuestionInterpreting)?,
+                                 modelsAllowed: Bool = FeatureFlags.aiRegimeValue().allowsAI) async -> String? {
+        remember(nil as String?, for: question)
+        remember(nil as GateIntent?, for: question)
         guard !fields.isEmpty, !handledByAGate(question) else { return nil }
         let rules = SlotFieldResolver.resolve(in: question, knownFields: fields).first?.fieldID
         // A rule that names a field this record does not hold ("decided" → decision date, asked of a
         // defect investigation) has not placed the question either.
         if let rules, !weakRuleFields.contains(rules), fields.contains(rules) { return "rules" }
+        // "Fully private" means no model at all — not even on-device — so the rules decide alone.
+        guard modelsAllowed else { return rules == nil ? nil : "rules" }
         // The bare "date" field is offered only when the record has no date of its own kind
         // ("decisiondate", "dateopened") — otherwise the model takes the generic one.
         let specificDates = fields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }
-        let menu = Array(specificDates.isEmpty ? fields : fields.subtracting(["date"])).sorted()
+        var menu = Array(specificDates.isEmpty ? fields : fields.subtracting(["date"])).sorted()
+        // The gates, where they can apply: a release's own date only when the record has no date
+        // of its own kind; the announcing office only when no field already says who issued it
+        // (a recall's firm, a decision's court).
+        if specificDates.isEmpty { menu.append(GateIntent.releaseDate.rawValue) }
+        if !fields.contains(where: { ["recallingfirm", "manufacturer", "court", "opinionauthor"].contains($0) }) {
+            menu.append(GateIntent.announcingOffice.rawValue)
+        }
+        menu.append(GateIntent.peopleCount.rawValue)
         var said: String?
         if let onDevice { said = await onDevice.field(askedBy: question, among: menu) }
         if said == nil, rules == nil, let cloud { said = await cloud.field(askedBy: question, among: menu) }
         guard let said else { return rules == nil ? nil : "rules" }
+        if let gate = GateIntent(rawValue: said) {
+            remember(gate, for: question)
+            return "interpreted:" + said
+        }
         if fields.contains(said) {
             remember(said, for: question)
             return "interpreted:" + said

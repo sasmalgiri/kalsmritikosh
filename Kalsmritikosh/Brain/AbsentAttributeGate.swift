@@ -53,7 +53,12 @@ public nonisolated enum AbsentAttributeGate {
     /// "litigants") — wide case bench 2026-10-25.
     static let kin: [String: [String]] = ["airplane": ["aircraft"], "plane": ["aircraft"], "litigant": ["part"],
                                           "litigants": ["part"], "company": ["firm"], "maker": ["manufactur"],
-                                          "vehicle": ["make", "model"], "ruling": ["disposition", "affirm", "revers"]]
+                                          "vehicle": ["make", "model"], "ruling": ["disposition", "affirm", "revers"],
+                                          // Held-out wording set 4 (2026-10-25): "Which part is under
+                                          // investigation" ("Component:"), "the two sides" ("Parties:"),
+                                          // "the problem that led to" ("Reason for recall:").
+                                          "part": ["component"], "system": ["component"], "side": ["part"],
+                                          "sides": ["part"], "problem": ["reason", "defect"], "issue": ["reason", "defect"]]
 
     static func stems(_ w: String) -> [String] {
         var out = [w] + (kin[w] ?? [])

@@ -16,8 +16,10 @@ import Foundation
 public nonisolated enum YesNoFieldGate {
 
     public static func asksYesNo(_ question: String) -> Bool {
-        question.trimmingCharacters(in: .whitespacesAndNewlines)
-            .range(of: #"(?i)^(?:is|was|are|were|does|did|do|has|have|had)\s"#, options: .regularExpression) != nil
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        // "Was X affirmed or reversed?" offers a choice; its answer is one of them, not yes or no.
+        if q.range(of: #"(?i)\b[a-z]+\s+or\s+(?!not\b)[a-z]+[?.!\s]*$"#, options: .regularExpression) != nil { return false }
+        return q.range(of: #"(?i)^(?:is|was|are|were|does|did|do|has|have|had)\s"#, options: .regularExpression) != nil
     }
 
     /// The single "Label: value" the answer states, if that is all it states.
