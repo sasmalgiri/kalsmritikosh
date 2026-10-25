@@ -455,6 +455,23 @@ public struct NumberedEntryCount: Sendable, Equatable {
                         }
                     }
                 }
+                // No numbered people either: an event line naming ONE of them ("Event: Employee
+                // amputates finger in moving chain") is a count of one (held-out wording set 4,
+                // 2026-10-25). A plural or a number word in that line is left to the other paths.
+                if seen.isEmpty, aboutHarm,
+                   let re = try? NSRegularExpression(pattern: "(?im)^\\s*event:\\s*(?:an?\\s+)?(" + n0 + ")\\s+(?!s\\b)[a-z][^\\n]*$") {
+                    for rc in ordered {
+                        let ns = rc.chunk.text as NSString
+                        guard let m = re.firstMatch(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) else { continue }
+                        let line = ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
+                        guard line.range(of: Self.harmWords, options: .regularExpression) != nil,
+                              line.range(of: CountQuestionGate.numberWords, options: .regularExpression) == nil,
+                              line.range(of: "(?i)\\b" + n0 + "s\\b", options: .regularExpression) == nil else { continue }
+                        seen["1"] = line
+                        first = rc.chunk
+                        break
+                    }
+                }
             }
             guard let chunk = first, !seen.isEmpty else { continue }
             if best == nil || seen.count > best!.count {

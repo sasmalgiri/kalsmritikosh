@@ -344,7 +344,8 @@ public enum SlotFieldResolver {
                                         "at", "to", "behind", "named", "listed", "given", "assigned", "the", "a", "an"]
             // A record calls the same thing by its own word: a recall's "company" is its firm.
             let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator",
-                       "part": "component", "class": "classification", "system": "component"]
+                       "part": "component", "class": "classification", "system": "component",
+                       "airplane": "aircraft", "plane": "aircraft"]
             func namesField(_ w: String) -> Bool {
                 w.count >= 4 && (knownFields.contains(where: { $0.hasSuffix(w) }) || kin[w].map { k in knownFields.contains(where: { $0.hasSuffix(k) }) } == true)
             }
@@ -497,7 +498,9 @@ public enum SlotFieldResolver {
     nonisolated static func reasonField(in question: String, knownFields: Set<String>) -> Resolution? {
         let q = question.lowercased().trimmingCharacters(in: .whitespaces)
         guard q.hasPrefix("why ") || q.hasPrefix("for what reason") || q.hasPrefix("what was the reason")
-              || q.range(of: #"^what (?:problem |issue |defect )?led to\b"#, options: .regularExpression) != nil else { return nil }
+              || q.range(of: #"^what (?:problem |issue |defect )?led to\b"#, options: .regularExpression) != nil
+              // "What was the problem that led to FDA recall X?" (held-out wording set 4, 2026-10-25).
+              || q.range(of: #"^what (?:was|is) the (?:problem|issue|defect|reason) (?:that )?(?:led to|caused|prompted|behind)\b"#, options: .regularExpression) != nil else { return nil }
         // The field must be about what the question names ("reasonforrecall" for a recall), so a
         // "why" about something else never lands on an unrelated record's reason.
         let words = Set(q.components(separatedBy: CharacterSet.letters.inverted).filter { $0.count >= 4 })

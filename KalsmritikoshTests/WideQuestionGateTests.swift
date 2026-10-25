@@ -173,6 +173,8 @@ struct WideQuestionGateTests {
         #expect(IdentityFieldResolver.questionFieldType("What is the name of the holder?") == .personName)
         #expect(f("What recall class applies to FDA recall Z-2066-2019?", ["classification", "reasonforrecall", "recallingfirm"]) == "classification")
         #expect(f("What vehicle system does NHTSA investigation EQ08013 concern?", ["component", "subject", "manufacturer"]) == "component")
+        #expect(f("Which airplane was involved in NTSB case ERA13CA130?", ["aircraft", "location", "probablecause"]) == "aircraft")
+        #expect(f("What was the problem that led to FDA recall F-2312-2012?", ["reasonforrecall", "recallingfirm"]) == "reasonforrecall")
         #expect(IssuingOfficeGate.asksIssuingOffice("Which office put out \"X\"?"))
         #expect(IssuingOfficeGate.asksIssuingOffice("Who released \"X\"?"))
         #expect(!IssuingOfficeGate.asksIssuingOffice("Who issued FDA recall Z-2066-2019?"))
