@@ -84,7 +84,7 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 >
 > **Supported files** include common document, spreadsheet, presentation, email, image (with text
 > recognition), and structured-data formats. Some formats are supported with limits and are shown
-> honestly in-app; audio and video are catalogued and preserved at ingest (never auto-transcribed) — transcribe individual files on demand in Transcripts, fully on-device (Apple Speech, English).
+> honestly in-app; the words spoken in audio and video are turned into text while importing (on by default; Settings ▸ Modules ▸ “Transcribe audio & video”), fully on-device with Apple’s speech recognition, English, each line timecoded — the transcript is as accurate as the recording, and the app reads only what is said: it does not watch video, identify speakers or judge what the footage shows.
 > Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
 >
 > _Investigations Made Easy is an informational aid. It organises and cites your evidence; it does not
@@ -152,7 +152,7 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 
 - [x] Does not claim *every* format (says "common … formats", "some with limits").
 - [x] Does not claim legal admissibility (explicit "not legal advice / verify against sources").
-- [x] Does not claim full video understanding (says audio/video are preserved at ingest; transcription is on-demand, on-device, English-only in this version).
+- [x] Does not claim video understanding: speech is transcribed on-device (Apple speech recognition, English, on by default, timecoded); the app does not watch footage, identify speakers or decide what happened. Does not name Whisper — the app does not use it.
 - [x] Does not claim 1 TB / unlimited scale (no scale number in copy; store page uses tested figure).
 - [x] Does not claim a bundled reasoning model (says Apple on-device where supported, else deterministic).
 - [x] Does not imply AI writes answers by default (says no AI writes answers unless "Use AI to write answers" is on; SHIP_DECISIONS 2026-10-24).
