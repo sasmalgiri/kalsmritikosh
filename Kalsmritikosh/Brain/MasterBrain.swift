@@ -1669,22 +1669,29 @@ public actor MasterBrain {
         var officeSources: [String] = []
         if IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil
             || YesNoFieldGate.asksYesNo(question)
-            || question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil,
+            || question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil
+            || DateQuestionGate.asksWhen(question) || RecordLineGate.asksKilled(question) || ConclusionGate.asksConclusion(question),
            let objects {
             // The office line is often outside the cited snippet — read the cited documents themselves.
             for id in Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3) {
                 if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
             }
         }
+        // A record's own labeled line ("Date: …", "Injuries: 4 fatal …") answers its when / how-many-killed
+        // question before the date gate looks at it (closed-case simulation, 2026-10-26).
+        let recordLined = RecordLineGate.apply(question: question, verified, sourceTexts: officeSources)
         let gated = CountQuestionGate.apply(question: question,
-                                            IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
+                                            IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, recordLined),
                                                                     sourceTexts: officeSources))
         // Wide case bench 2026-10-25: a yes/no question is answered yes or no; a question about
         // something the documents never mention is answered "not mentioned".
-        let verified = YesNoFieldGate.apply(question: question,
-                                            AbsentAttributeGate.apply(question: question,
-                                                                      YesNoFieldGate.answerFieldQuestion(question: question, gated, sourceTexts: officeSources),
-                                                                      sourceTexts: officeSources),
+        // A conclusion ("What did the NTSB conclude caused …?") only from text labeled as one.
+        let verified = ConclusionGate.apply(question: question,
+                                            YesNoFieldGate.apply(question: question,
+                                                                 AbsentAttributeGate.apply(question: question,
+                                                                                           YesNoFieldGate.answerFieldQuestion(question: question, gated, sourceTexts: officeSources),
+                                                                                           sourceTexts: officeSources),
+                                                                 sourceTexts: officeSources),
                                             sourceTexts: officeSources)
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
