@@ -20,6 +20,7 @@ public nonisolated enum IssuingOfficeGate {
                        options: .regularExpression) != nil
             // "Who announced the case …?" (wide case bench 2026-10-25).
             || q.range(of: #"^\s*who\s+(?:announced|issued|released|published)\b"#, options: .regularExpression) != nil
+            || q.range(of: #"^\s*who\s+(?:made|issued|put out|sent out)\s+the\s+(?:announcement|release|press release)\b"#, options: .regularExpression) != nil
     }
 
     /// "the Middle District of Pennsylvania", "the Southern District of New York", "the District of Columbia".

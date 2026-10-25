@@ -391,6 +391,12 @@ public enum SlotFieldResolver {
     public nonisolated static func resolve(
         in fullQuestion: String, knownFields: Set<String>
     ) -> [Resolution] {
+        // A field the on-device or cloud interpreter chose for this question (QuestionUnderstanding,
+        // owner decision 2026-10-25) — only ever one the retrieved facts carry.
+        if let chosen = QuestionUnderstanding.interpretedField(for: fullQuestion), knownFields.contains(chosen) {
+            return [Resolution(fieldID: chosen, requestedField: requestedFieldClass(for: chosen),
+                               humanLabel: humanLabel(forFieldID: chosen), domainGroup: "interpreted")]
+        }
         // A quoted title names the matter, not a field: "What happened in the case "Oakland
         // Resident Who Sold Fentanyl In San Francisco's Tenderloin …"?" reached a field minted
         // from a dateline ("sanfrancisco") through the title's words (case bench 2026-10-24).

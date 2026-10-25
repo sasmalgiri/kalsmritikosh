@@ -1601,6 +1601,14 @@ public actor MasterBrain {
     public func setAbsentSubjectCheck(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
         absentSubjectCheck = c
     }
+    /// Steps 2 and 3 of QuestionUnderstanding (owner decision 2026-10-25).
+    private var onDeviceInterpreter: (any QuestionInterpreting)?
+    private var cloudInterpreter: (any QuestionInterpreting)?
+    public func setQuestionInterpreters(onDevice: (any QuestionInterpreting)?, cloud: (any QuestionInterpreting)?) {
+        onDeviceInterpreter = onDevice
+        cloudInterpreter = cloud
+    }
+
     public func setAskSnapshotEnd(_ p: @escaping @Sendable () async -> Void) {
         askSnapshotEnd = p
     }
@@ -1944,6 +1952,16 @@ public actor MasterBrain {
         // prose naming the agent too (0.30) across identical runs. Anything
         // less than a clean single value (none, a conflict, unstructured) runs
         // the experts exactly as before.
+        // Understand the question: rules first; the on-device model only for what they could not
+        // place; the cloud only for what both missed. Each only chooses a field the retrieved facts
+        // carry; the answer is still read from the documents.
+        if onDeviceInterpreter != nil || cloudInterpreter != nil {
+            let fields = Set(sharedRetrieval.genericFacts.map { FactSchemaRegistry.normalizeField($0.field) })
+            if let step = await QuestionUnderstanding.interpret(question: intent.rawQuestion, fields: fields,
+                                                                onDevice: onDeviceInterpreter, cloud: cloudInterpreter), step != "rules" {
+                KalsmritikoshLog.brain.info("question understood by the \(step, privacy: .public) interpreter")
+            }
+        }
         var slotFirst: VerifiedAnswer?
         if Self.isSlotLawQuestion(intent: intent, retrieval: sharedRetrieval),
            let answered = try? await verifier.verify(intent: intent, findings: [], retrieval: sharedRetrieval),

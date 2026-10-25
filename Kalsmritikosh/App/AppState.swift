@@ -714,6 +714,9 @@ public final class AppState {
     public var ledgerLocationNotice: String?
     /// O-5 — every online send, append-only.
     public private(set) var outboundLog: OutboundLogRepository?
+    /// The person's own cloud AI (Online mode) — kept so the question interpreter's last step
+    /// reaches it through the same masking, limit and consent as every other send.
+    @ObservationIgnored var onlineProvider: OnlineCloudProvider?
     /// W1-9 — files waiting, running and finished in this session.
     public let importQueue = ImportQueue()
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
@@ -1312,7 +1315,7 @@ public final class AppState {
             // ONLY in Online mode with the network helper bundled (CapabilityRegistry
             // .cloudEligible); in Private mode it is never eligible.
             self.outboundLog = OutboundLogRepository(database: db)
-            await capabilities.register(OnlineCloudProvider(
+            let online = OnlineCloudProvider(
                 outboundLog: self.outboundLog,
                 knownNames: { [db] in
                     let rows = (try? await db.query("""
@@ -1322,7 +1325,9 @@ public final class AppState {
                         LIMIT 3000;
                         """, [])) ?? []
                     return rows.compactMap { $0.string(0) }
-                }))
+                })
+            self.onlineProvider = online
+            await capabilities.register(online)
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when
@@ -2732,6 +2737,19 @@ public final class AppState {
             await brain.setSubjectEventAnswer { [weak self] question, access in
                 await self?.composeSubjectEventAnswer(question: question, access: access)
             }
+            // Understanding the question (owner decision 2026-10-25): rules first, then the
+            // on-device model for what the rules could not place, then the person's own cloud AI
+            // (Online mode only, through its masking, limit and consent) for what both missed.
+            let onDevice: (any QuestionInterpreting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionInterpreter() : nil
+            let cloud: (any QuestionInterpreting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                ? CloudQuestionInterpreter { [weak self] prompt in
+                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
+                        throw OnlineCloudProvider.OnlineError.notAvailable
+                    }
+                    return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
+                } : nil
+            await brain.setQuestionInterpreters(onDevice: onDevice, cloud: cloud)
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in
                 await self?.composeToolGroundedAnswer(question: question, access: access)
