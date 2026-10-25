@@ -31,6 +31,17 @@ public nonisolated enum DateQuestionGate {
             || q.range(of: #"^(?:give me|tell me|what is|what was|state|list)\s+the\s+(?:[a-z]+\s+)?date\s+(?:of|for)\b"#, options: .regularExpression) != nil
     }
 
+    /// "On which day …", "What date …", "What day was …" — a calendar day, not just a year.
+    static func asksDay(_ question: String) -> Bool {
+        question.range(of: #"(?i)\b(?:what|which)\s+(?:date|day)\b|\bthe\s+(?:exact\s+)?(?:date|day)\b"#, options: .regularExpression) != nil
+    }
+
+    /// A date that names its day: "March 3", "3 March", "03/05/2019", "2019-05-03".
+    static func containsDay(_ text: String) -> Bool {
+        text.range(of: #"(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b"#,
+                   options: .regularExpression) != nil
+    }
+
     public static func containsDate(_ text: String) -> Bool {
         text.range(of: datePattern, options: .regularExpression) != nil
     }
@@ -92,6 +103,18 @@ public nonisolated enum DateQuestionGate {
             return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
                                   confidence: answer.confidence, contradictions: answer.contradictions, refused: true,
                                   refusalReason: "A publication-date question whose evidence dates only other events.",
+                                  report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
+                                  reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
+                                  ledgerAnswerID: answer.ledgerAnswerID)
+        }
+        // A day asked for ("On which day …", "What date …", a release's own date) is not answered by
+        // a bare year ("Date: 2023." — held-out wording set 4, 2026-10-25).
+        let stated = said.components(separatedBy: "---").first ?? said   // not the "Also on file" lines
+        if hasDate, asksDay(question) || asksPublicationDate(question), containsDate(stated), !containsDay(stated) {
+            let text = "The documents found give only a year for this, not the day."
+            return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
+                                  confidence: answer.confidence, contradictions: answer.contradictions, refused: true,
+                                  refusalReason: "A question asking for a day whose evidence gives only a year.",
                                   report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
                                   reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
                                   ledgerAnswerID: answer.ledgerAnswerID)

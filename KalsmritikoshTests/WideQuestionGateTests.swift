@@ -181,6 +181,17 @@ struct WideQuestionGateTests {
         #expect(SentenceQuoteComposer.asksWhy("What did investigators determine caused NTSB case ERA13CA130?"))
     }
 
+    @Test("A day asked for is not answered by a bare year")
+    func yearIsNotADay() {
+        let year = Self.answer("Date: 2023.  --- Also on file: Amount $75,754 · Date 06/05/2008")
+        #expect(DateQuestionGate.apply(question: "On which day did the government release the statement \"X\"?", year).refused)
+        #expect(DateQuestionGate.apply(question: "When did \"X\" come out?", year).refused)
+        // A year asked for, or a day given: kept.
+        #expect(!DateQuestionGate.apply(question: "In what year was Mayo v. United States decided?", Self.answer("Decision date: 1956.")).refused)
+        #expect(!DateQuestionGate.apply(question: "On what date did the court rule in Mayo v. United States?",
+                                        Self.answer("Decision date: 24/01/1956.")).refused)
+    }
+
     @Test("A body paragraph citing another decision gives no decision date")
     func citedDecisionDateIgnored() {
         let body = String(repeating: "The controlling facts are stipulated by the parties. ", count: 14)
