@@ -41,8 +41,9 @@ public struct FoundationModelsQuestionInterpreter: QuestionInterpreting {
                 You read an investigator's question about a case record and decide which ONE field of the \
                 record it asks for. Answer with a field id from the list. Answer none when the question asks \
                 for a summary or account of what happened, a count, a yes-or-no about something that is not \
-                one of these fields, or anything none of these fields holds. Never guess a field the question \
-                does not ask about.
+                one of these fields, or anything none of these fields holds. Match what the question asks \
+                for — who, what, when or where — to a field that holds exactly that kind of thing; a field that \
+                only shares a word with the question is wrong. If no field holds what is asked, answer none.
                 """)
             let response = try await session.respond(to: """
                 Fields this record has:
@@ -51,7 +52,7 @@ public struct FoundationModelsQuestionInterpreter: QuestionInterpreting {
                 Question: \(question)
                 """, schema: schema, options: FoundationModels.GenerationOptions(sampling: .greedy))
             let chosen = try response.content.value(String.self, forProperty: "field")
-            return chosen == Self.none ? nil : chosen
+            return chosen   // "none" is an answer too: the question asks for no field on file
         } catch {
             KalsmritikoshLog.brain.error("Question interpreter (on-device) failed: \(error.localizedDescription, privacy: .public)")
             return nil

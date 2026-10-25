@@ -208,7 +208,10 @@ public enum LegalCaseDomainPack {
         let joined = head.map(\.text).joined(separator: " ")
         // A caption line that is only the date ("March 16, 1939.") when the court line does not
         // run straight into it.
-        guard let raw = courtLineDate(in: joined) ?? captionDateLine(in: head.map(\.text).joined(separator: "\n")),
+        // "Decided April 5, 1926." among the caption's lines (wide case bench 2026-10-25: a caption
+        // whose court line is in parentheses filed no decision date).
+        let labeled = DomainPackText.labeledDate(after: ["decided", "opinion filed", "date of decision"], in: head.map(\.text).joined(separator: "\n"))
+        guard let raw = courtLineDate(in: joined) ?? labeled ?? captionDateLine(in: head.map(\.text).joined(separator: "\n")),
               let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10,
               let at = head.firstIndex(where: { $0.text.contains(raw) }) else { return nil }
         var cited = [head[at].id]

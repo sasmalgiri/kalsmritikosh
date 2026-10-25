@@ -17,7 +17,8 @@ import Foundation
 
 public protocol QuestionInterpreting: Sendable {
     /// The field of `fields` (normalised ids, e.g. "disposition", "recallingfirm") the question asks
-    /// for, or nil when it asks for none of them (an account, a count, something not on file).
+    /// for; "none" when it asks for none of them (an account, a count, something not on file); nil
+    /// when the interpreter could not answer at all (unavailable, declined, failed).
     func field(askedBy question: String, among fields: [String]) async -> String?
 }
 
@@ -25,10 +26,10 @@ public protocol QuestionInterpreting: Sendable {
 /// run-together names. Unknown fields fall back to their human label.
 public enum FieldMeaning {
     public nonisolated static let descriptions: [String: String] = [
-        "disposition": "the court's decision, ruling, outcome or result (affirmed, reversed, dismissed …)",
-        "opinionauthor": "the judge or justice who wrote the court's opinion",
-        "court": "the court that heard or decided the case",
-        "decisiondate": "the date the court decided the case",
+        "disposition": "WHAT the court decided: its ruling, outcome or result (affirmed, reversed, dismissed …)",
+        "opinionauthor": "WHO wrote the court's opinion or decision (the judge or justice)",
+        "court": "the NAME of the court that heard the case — not what it decided",
+        "decisiondate": "WHEN the court decided the case (a date) — not who wrote the decision",
         "casenumber": "the docket or case number",
         "parties": "the parties or litigants in the case",
         "recallingfirm": "the company or firm that recalled the product",

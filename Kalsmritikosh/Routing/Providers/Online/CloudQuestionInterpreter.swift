@@ -38,6 +38,7 @@ public struct CloudQuestionInterpreter: QuestionInterpreting {
         let token = reply.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "`\"'.:"))
             .lowercased()
+        if token == "none" { return "none" }
         return fields.first { $0 == token }
     }
 

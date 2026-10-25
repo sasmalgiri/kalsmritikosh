@@ -393,6 +393,7 @@ public enum SlotFieldResolver {
     ) -> [Resolution] {
         // A field the on-device or cloud interpreter chose for this question (QuestionUnderstanding,
         // owner decision 2026-10-25) — only ever one the retrieved facts carry.
+        if QuestionUnderstanding.interpretedField(for: fullQuestion) == QuestionUnderstanding.noField { return [] }
         if let chosen = QuestionUnderstanding.interpretedField(for: fullQuestion), knownFields.contains(chosen) {
             return [Resolution(fieldID: chosen, requestedField: requestedFieldClass(for: chosen),
                                humanLabel: humanLabel(forFieldID: chosen), domainGroup: "interpreted")]

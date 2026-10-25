@@ -39,7 +39,7 @@ struct QuestionUnderstandingTests {
         let device = Scripted("disposition"), cloud = Scripted("court")
         let q = "What was the verdict-like conclusion reached in Pinching v. Wurdeman?"
         let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud)
-        #expect(step == "on-device")
+        #expect(step == "interpreted:disposition")
         #expect(cloud.asked == 0)
         #expect(SlotFieldResolver.resolve(in: q, knownFields: fields).first?.fieldID == "disposition")
     }
@@ -49,7 +49,7 @@ struct QuestionUnderstandingTests {
         let device = Scripted(nil), cloud = Scripted("decisiondate")
         let q = "Tell me the day the judges handed this down for Pinching v. Wurdeman"
         let step = await QuestionUnderstanding.interpret(question: q, fields: fields, onDevice: device, cloud: cloud)
-        #expect(step == "cloud")
+        #expect(step == "interpreted:decisiondate")
         #expect(device.asked == 1 && cloud.asked == 1)
     }
 
@@ -67,13 +67,22 @@ struct QuestionUnderstandingTests {
         #expect(device.asked == 0)
     }
 
+    @Test("When the model says no field holds the answer, a weak rule match is set aside")
+    func noneSetsAsideWeakRule() async {
+        let device = Scripted("none")
+        let q = "What did the court rule in Pinching v. Wurdeman?"
+        let onlyCourt: Set<String> = ["court", "casenumber"]
+        _ = await QuestionUnderstanding.interpret(question: q, fields: onlyCourt, onDevice: device, cloud: nil)
+        #expect(SlotFieldResolver.resolve(in: q, knownFields: onlyCourt).isEmpty)
+    }
+
     @Test("The cloud reply is used only when it is exactly one listed field")
     func cloudParse() {
         let f = ["disposition", "court"]
         #expect(CloudQuestionInterpreter.parse(" disposition\n", fields: f) == "disposition")
         #expect(CloudQuestionInterpreter.parse("`court`", fields: f) == "court")
         #expect(CloudQuestionInterpreter.parse("The field is disposition.", fields: f) == nil)
-        #expect(CloudQuestionInterpreter.parse("none", fields: f) == nil)
+        #expect(CloudQuestionInterpreter.parse("none", fields: f) == "none")
         #expect(!CloudQuestionInterpreter.prompt(question: "Q?", fields: f).contains("documents:"))
     }
 }

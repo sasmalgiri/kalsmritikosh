@@ -32,6 +32,9 @@ public enum QuestionUnderstanding {
         chosen.withLock { $0[question] }
     }
 
+    /// Remembered when the interpreter found that no field on file answers the question.
+    public static let noField = ""
+
     static func remember(_ field: String?, for question: String) {
         chosen.withLock { table in
             if table.count > 64 { table.removeAll() }
@@ -64,14 +67,17 @@ public enum QuestionUnderstanding {
         let rules = SlotFieldResolver.resolve(in: question, knownFields: fields).first?.fieldID
         if let rules, !weakRuleFields.contains(rules) { return "rules" }
         let menu = Array(fields).sorted()
-        if let onDevice, let f = await onDevice.field(askedBy: question, among: menu), fields.contains(f) {
-            remember(f, for: question)
-            return "on-device"
+        var said: String?
+        if let onDevice { said = await onDevice.field(askedBy: question, among: menu) }
+        if said == nil, rules == nil, let cloud { said = await cloud.field(askedBy: question, among: menu) }
+        guard let said else { return rules == nil ? nil : "rules" }
+        if fields.contains(said) {
+            remember(said, for: question)
+            return "interpreted:" + said
         }
-        if rules == nil, let cloud, let f = await cloud.field(askedBy: question, among: menu), fields.contains(f) {
-            remember(f, for: question)
-            return "cloud"
-        }
+        // "none": no field on file holds what is asked. A weak rule match ("court" for "What did
+        // the court rule …?" when no ruling was filed) is then set aside rather than answered.
+        if said == "none", rules != nil { remember(Self.noField, for: question); return "interpreted:none" }
         return rules == nil ? nil : "rules"
     }
 }

@@ -65,6 +65,12 @@ public nonisolated enum AbsentAttributeGate {
 
     public static func apply(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
         guard !answer.refused, let asked = askedFor(question) else { return answer }
+        // The interpreter matched the question to a field on file ("litigants" → parties) and the
+        // answer states that field: the documents speak to it under their own word.
+        if let chosen = QuestionUnderstanding.interpretedField(for: question),
+           let lv = YesNoFieldGate.labeledValue(answer.answerText ?? answer.body),
+           YesNoFieldGate.normalized(lv.label).replacingOccurrences(of: " ", with: "")
+               .contains(String(chosen.prefix(5))) { return answer }
         // A field the slot law stated whose name carries the thing asked for is the documents
         // speaking to it ("Recalling firm: …" for "Which firm …"). A field of another name ("Reason
         // for recall: …" for "Who was the FDA investigator …") is not, and is checked below.
