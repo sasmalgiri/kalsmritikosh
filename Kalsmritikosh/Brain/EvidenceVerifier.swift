@@ -696,7 +696,7 @@ public struct EvidenceVerifier: Verifier {
         // field, even when its title holds a field's word ("… From Her Employer").
         let asksForValue = !SentenceQuoteComposer.asksWhatHappened(intent.rawQuestion)
             && ([.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
-                || YesNoFieldGate.asksYesNo(intent.rawQuestion))
+                || (YesNoFieldGate.asksYesNo(intent.rawQuestion) && YesNoFieldGate.fieldPhrase(intent.rawQuestion) != nil))
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
                                                knownFields: asksForValue ? retrievedFields : [])
         // A1.2 — the receipt speaks for the WHOLE archive.
