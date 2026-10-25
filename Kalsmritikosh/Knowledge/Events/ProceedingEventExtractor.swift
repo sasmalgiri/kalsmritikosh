@@ -54,7 +54,7 @@ public nonisolated enum ProceedingEventExtractor {
             case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b"#
             case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
-            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b[^.]{0,140}?\bto\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
+            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
             case .released: return #"\b(?:was|were) released from (?:prison|custody)\b"#
             }
@@ -99,9 +99,20 @@ public nonisolated enum ProceedingEventExtractor {
         }
         var out: [Finding] = []
         var seen = Set<String>()
-        for sentence in sentences(of: text) {
+        let all = sentences(of: text)
+        // "A Florida man was sentenced today to one year …" — the lead names the person a sentence or
+        // two later. In a document about one defendant (one "Name, 41," introduction at most), the
+        // descriptive lead is about the person asked.
+        let introductions = (try? NSRegularExpression(pattern: #"\b[A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+, (?:a\s)?\d{2},"#))?
+            .numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length)) ?? 0
+        var descriptiveLead: Int?
+        if introductions <= 1, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent)\b"#, options: .regularExpression) != nil }),
+           i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
+            descriptiveLead = i
+        }
+        for (index, sentence) in all.enumerated() {
             let s = sentence.lowercased()
-            guard surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
+            guard index == descriptiveLead || surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
             for step in Step.allCases {
                 guard let r = s.range(of: step.pattern, options: .regularExpression) else { continue }
                 // A future or conditional clause right around the step is not the step.
@@ -219,7 +230,7 @@ public nonisolated enum ProceedingEventExtractor {
 
     /// "to 48 months in federal prison, followed by three years of supervised release".
     static func sentenceDetail(_ sentence: String) -> String? {
-        let pattern = #"(?i)\bsentenced\b[^.]{0,140}?\bto\s+((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
+        let pattern = #"(?i)\bsentenced\b.{0,200}?\bto\s+((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
         guard let re = try? NSRegularExpression(pattern: pattern),
               let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length)),
               m.range(at: 1).location != NSNotFound else { return nil }
@@ -238,7 +249,15 @@ public nonisolated enum ProceedingEventExtractor {
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.isEmpty { if !current.isEmpty { paragraphs.append(current); current = "" }; continue }
-            let heading = line.count < 60 && line.last.map { !".!?:;,”\")".contains($0) } == true
+            let open = line.last.map { !".!?:;,”\")".contains($0) } == true
+            // A headline is Title Case ("Hedge Fund Manager Sentenced for Operating …"); a wrapped
+            // paragraph line is mostly lower-case words.
+            let words = line.split(separator: " ")
+            let capitalised = words.filter { $0.first?.isUppercase == true || $0.first?.isNumber == true }.count
+            let endsMidPhrase = ["of", "to", "the", "and", "a", "an", "in", "for", "with", "that", "by", "on", "at", "from"].contains(words.last.map { $0.lowercased() } ?? "")
+            let prose = line.range(of: #", \d{1,3},|\b(?:announced|said|was|were|today)\b"#, options: .regularExpression) != nil
+            let heading = open && (line.count < 60 || (line.count < 180 && words.count >= 4 && !endsMidPhrase && !prose
+                                                       && Double(capitalised) / Double(words.count) >= 0.7))
             if heading {
                 if !current.isEmpty { paragraphs.append(current); current = "" }
                 paragraphs.append(line)

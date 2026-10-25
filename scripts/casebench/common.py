@@ -71,6 +71,12 @@ def value_in(expect, text):
     if "number" in expect:
         n = expect["number"]
         return bool(re.search(rf"\b{n}\b", b) or (n in WORDS and re.search(rf"\b{WORDS[n]}\b", b))), None
+    if "overlap_any" in expect:
+        # Any one of several phrasings of the same fact (the charge as each release words it).
+        for phrase in expect["overlap_any"]:
+            want = set(words(phrase))
+            if want and len(want & set(words(text))) / len(want) >= 0.6: return True, None
+        return False, None
     if "overlap" in expect:
         want = set(words(expect["overlap"]))
         if not want: return False, None

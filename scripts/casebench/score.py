@@ -25,7 +25,7 @@ def classify(case, q, a):
     body = a["body"] or ""
     own = any(c.startswith(case + "/") for c in a["cited"])
     others = [c for c in a["cited"] if not c.startswith(case + "/") and c != "?"]
-    present, note = value_present(q["expect"], body + "\n" + "\n".join(a.get("snippets", [])) if "overlap" in q["expect"] else body)
+    present, note = value_present(q["expect"], body + "\n" + "\n".join(a.get("snippets", [])) if ("overlap" in q["expect"] or "overlap_any" in q["expect"]) else body)
     refused = a["refused"] or (not present and REFUSAL.search(body))
     if not q.get("in_docs", True):
         # The value is not in this case's documents: refusing is the right answer.
@@ -34,7 +34,7 @@ def classify(case, q, a):
     if refused: return "missed", note
     # A short value (a name, a class, a number, a date) answered by a long passage that merely
     # contains it is a dump, not an answer: the reader still has to find the value.
-    if present and own and "overlap" not in q["expect"] and "order" not in q["expect"] and len(body) > 600 and "\n---\n" not in body[:400]:
+    if present and own and "overlap" not in q["expect"] and "order" not in q["expect"] and "overlap_any" not in q["expect"] and len(body) > 600 and "\n---\n" not in body[:400]:
         return "dump", note
     if present and own: return "correct", note
     if present: return "uncited", note

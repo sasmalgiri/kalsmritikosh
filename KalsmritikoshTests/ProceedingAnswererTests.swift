@@ -125,6 +125,22 @@ struct ProceedingAnswererTests {
         #expect(try ask("What was Christi Machala charged with?").body.contains("seven counts of wire fraud"))
     }
 
+    @Test("A descriptive lead ('A Florida man was sentenced …') is about the one defendant the release names")
+    func descriptiveLead() throws {
+        let release = """
+            U.S. Department of Justice
+            Criminal Division
+            FOR IMMEDIATE RELEASE
+            Friday, April 19, 2024
+            Hedge Fund Manager Sentenced for Operating Multimillion-Dollar Ponzi Scheme
+            A Florida man was sentenced today to one year and one day in prison for using his hedge fund management company to defraud investors.
+            According to court documents, Michael Wayne Williams, 63, of Fort Lauderdale, operated the fund.
+            """
+        let parsed = try #require(ProceedingAnswerer.parse("What sentence did Michael Wayne Williams receive?"))
+        let a = try #require(ProceedingAnswerer.answer(parsed, sources: [.init(objectID: UUID(), text: release)]))
+        #expect(a.body.hasPrefix("Michael Wayne Williams was sentenced to one year and one day in prison"))
+    }
+
     @Test("Steps become ledger events only when the document gives the day")
     func events() {
         let events = ProceedingEventExtractor.extract(text: Self.sentenced, sourceObjectID: UUID(),

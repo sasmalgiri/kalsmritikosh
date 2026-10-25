@@ -143,15 +143,21 @@ def main():
         if len(days) >= 2:
             q.append({"id": "timeline", "q": f"Give me the timeline of the case against {name}.", "expect": {"order": days}})
         q.append({"id": "count", "q": f"How many press releases are about {name}?", "expect": {"number": len(rels)}})
-        lead = re.split(r"(?<=[a-z]{3}\.)\s+(?=[A-Z])", first["body"])[0]
-        q.append({"id": "charge", "q": f"What was {name} charged with?", "expect": {"overlap": lead[:300]}})
+        # The offence, as the releases word it ("charges Romano with seven counts of wire fraud",
+        # "pleaded guilty to wire fraud", "convicted of …"): any one of them answers.
+        offences = []
+        for r in rels:
+            for m in re.finditer(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|pleaded guilty to|pled guilty to|convicted of|indicted (?:for|on))\s+([^.;]{12,160})", r["body"], re.I):
+                offences.append(m.group(1))
+        if offences:
+            q.append({"id": "charge", "q": f"What was {name} charged with?", "expect": {"overlap_any": offences[:6]}})
         offices = sorted(set(first["components"] + office_names(first["components"])))
         if offices:
             q.append({"id": "office", "q": f"Which office prosecuted {name}?", "expect": {"any": offices}})
         q.append({"id": "absent", "q": f"When was {name} pardoned?", "expect": {"dates": ["1900-01-01"]}, "in_docs": False})
         for one in q:
             if "in_docs" in one: continue
-            if "overlap" in one["expect"] or "yesno" in one["expect"] or "order" in one["expect"] or "number" in one["expect"]:
+            if "overlap" in one["expect"] or "overlap_any" in one["expect"] or "yesno" in one["expect"] or "order" in one["expect"] or "number" in one["expect"]:
                 one["in_docs"] = True
             else:
                 one["in_docs"] = value_in(one["expect"], alltext)[0]
