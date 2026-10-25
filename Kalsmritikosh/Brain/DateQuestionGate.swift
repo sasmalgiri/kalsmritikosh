@@ -48,7 +48,10 @@ public nonisolated enum DateQuestionGate {
     /// "When did X announce …?" / "When was it announced?" — an announcement-date question. Kept to
     /// "announce" on purpose: "When was the patent issued?" is answered by a grant date, which must stand.
     static func asksPublicationDate(_ question: String) -> Bool {
-        question.range(of: #"(?i)\bannounc\w*"#, options: .regularExpression) != nil
+        // … or asks when the release itself came out ("When was the press release … issued?",
+        // "What's the publication date of …?" — untouched wording set 2026-10-25).
+        question.range(of: #"(?i)\bannounc\w*|\bpress release\b|\bpublication date\b|\bpublished\b|\brelease date\b|\bput out\b"#,
+                       options: .regularExpression) != nil
     }
 
     /// True when some date in the text sits in a sentence that ties it to the publication itself

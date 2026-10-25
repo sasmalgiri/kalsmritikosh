@@ -144,5 +144,12 @@ struct WideQuestionGateTests {
         #expect(IssuingOfficeGate.asksIssuingOffice("Who is credited with announcing \"X\"?"))
         #expect(SentenceQuoteComposer.asksWhy("What led to the accident in NTSB case ERA13CA130?"))
     }
+
+    @Test("A release's publication date is asked many ways")
+    func publicationDates() {
+        #expect(DateQuestionGate.asksPublicationDate("When was the press release about \"X\" issued?"))
+        #expect(DateQuestionGate.asksPublicationDate("What's the publication date of \"X\"?"))
+        #expect(!DateQuestionGate.asksPublicationDate("When was Pinching v. Wurdeman decided?"))
+    }
 }
 
