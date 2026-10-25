@@ -1655,7 +1655,10 @@ public actor MasterBrain {
         // Q-3 — a when-question is answered with a date or an honest "no date given"; a which-office
         // question with the office the release names, or an honest "not named".
         var officeSources: [String] = []
-        if IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil, let objects {
+        if IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil
+            || YesNoFieldGate.asksYesNo(question)
+            || question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil,
+           let objects {
             // The office line is often outside the cited snippet — read the cited documents themselves.
             for id in Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3) {
                 if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
@@ -1667,7 +1670,10 @@ public actor MasterBrain {
         // Wide case bench 2026-10-25: a yes/no question is answered yes or no; a question about
         // something the documents never mention is answered "not mentioned".
         let verified = YesNoFieldGate.apply(question: question,
-                                            AbsentAttributeGate.apply(question: question, gated, sourceTexts: officeSources))
+                                            AbsentAttributeGate.apply(question: question,
+                                                                      YesNoFieldGate.answerFieldQuestion(question: question, gated, sourceTexts: officeSources),
+                                                                      sourceTexts: officeSources),
+                                            sourceTexts: officeSources)
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
             // Degraded (no ledger wired — tests/boot): the terminal state is

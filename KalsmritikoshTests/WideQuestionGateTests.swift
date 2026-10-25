@@ -69,5 +69,26 @@ struct WideQuestionGateTests {
         #expect(LegalCaseDomainPack.opensWithReportedCaption("Pinching v. Wurdeman\n12 F.2d 164\nPINCHING v. WURDEMAN."))
         #expect(!LegalCaseDomainPack.opensWithReportedCaption("Minutes of the meeting\nSee Smith v. Jones."))
     }
+
+    @Test("A record's own field line answers what/yes-no questions about that field")
+    func fieldLines() {
+        let report = "FDA Enforcement Report — recall D-0561-2021 Recalling firm: Cardinal Health Inc. Location: Dublin, OH Status: Terminated Recall initiation date: 2021-03-15"
+        let passage = Self.answer("FDA Enforcement Report — recall D-0561-2021 Recalling firm: Cardinal Health Inc. …")
+        #expect(YesNoFieldGate.answerFieldQuestion(question: "What is the status for FDA recall D-0561-2021?", passage, sourceTexts: [report]).body
+                == "Status: Terminated.")
+        #expect(YesNoFieldGate.apply(question: "Is the status for FDA recall D-0561-2021 Terminated?", passage, sourceTexts: [report]).body.hasPrefix("Yes"))
+        #expect(YesNoFieldGate.apply(question: "Is the recall initiation date for FDA recall D-0561-2021 2019-12-20?", passage, sourceTexts: [report]).body
+                == "No — the documents give recall initiation date: 2021-03-15.")
+        #expect(IdentityFieldResolver.questionFieldType("Is the distribution pattern for X nationwide to research organizations?") == nil)
+    }
+
+    @Test("A recall's company is its firm; what led to a recall is its reason")
+    func kinWords() {
+        let known: Set<String> = ["recallingfirm", "reasonforrecall", "recall"]
+        #expect(SlotFieldResolver.resolve(in: "Name the company behind FDA recall F-3176-2017.", knownFields: known).map(\.fieldID) == ["recallingfirm"])
+        #expect(SlotFieldResolver.resolve(in: "What problem led to FDA recall F-3176-2017?", knownFields: known).map(\.fieldID) == ["reasonforrecall"])
+        #expect(IdentityFieldResolver.questionFieldType("Name the company behind FDA recall F-3176-2017.") == nil)
+        #expect(IdentityFieldResolver.questionFieldType("What is the company name?") == .organizationName)
+    }
 }
 

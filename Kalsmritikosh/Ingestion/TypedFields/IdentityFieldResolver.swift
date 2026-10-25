@@ -36,6 +36,9 @@ public nonisolated struct IdentityFieldResolver: Sendable {
         // title and answered "The organization is ambiguous across the evidence".
         let q = question.lowercased()
             .replacingOccurrences(of: #""[^"]*"|“[^”]*”"#, with: " ", options: .regularExpression)
+        // A yes/no check states its own value ("Is the distribution pattern for X … research
+        // organizations?") — it asks whether, not what (wide case bench 2026-10-25).
+        if q.range(of: #"^\s*(?:is|was|are|were|does|did|do|has|have|had)\s"#, options: .regularExpression) != nil { return nil }
         // An account question ("what happened", "why", "how did") asks for no identity field.
         if q.range(of: #"\bwhat happened\b|\bwhat did\b[^?]{0,60}\b(?:find|decide|do)\b|^\s*why\b"#,
                    options: .regularExpression) != nil { return nil }
@@ -68,7 +71,13 @@ public nonisolated struct IdentityFieldResolver: Sendable {
         // because a trailing "?" or space is a boundary; "emails" does not.
         if any(["email address", "e-mail"]) || word("email", in: q) { return .email }
         if any(["phone number", "phone", "mobile number", "contact number"]) { return .phone }
-        if any(["organization", "organisation", "company", "issued by", "issuing authority"]) { return .organizationName }
+        // The organization a DOCUMENT is from ("the company name", "issued by") — not any question
+        // that says "company" ("Name the company behind FDA recall X" asks for the recalling firm;
+        // wide case bench 2026-10-25).
+        if any(["organization name", "organisation name", "company name", "name of the company", "name of the organization",
+                "issued by", "issuing authority"]) || q.range(of: #"^\s*(?:what|which) (?:is the )?(?:organi[sz]ation|company)\??$"#, options: .regularExpression) != nil {
+            return .organizationName
+        }
         if any(["address"]) { return .address }
         if any(["what is the name", "the name in", "name in this", "name on this", "whose name",
                 "who is this document for", "who is this for", "person's name", "name of the holder",

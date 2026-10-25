@@ -320,8 +320,14 @@ public enum SlotFieldResolver {
         // "Which firm initiated FDA recall F-3176-2017?" asks for the firm: the noun right after
         // which/what names the field, before any other word of the question that happens to be a
         // field on file ("recall") — case bench 2026-10-24.
-        if words.count >= 2, ["which", "what"].contains(words[0]) {
-            let head = words[1]
+        // "Name the company behind …" names its head noun after "name the".
+        let headIndex = (words.count >= 3 && words[0] == "name" && words[1] == "the") ? 2
+            : (words.count >= 2 && ["which", "what"].contains(words[0])) ? 1 : nil
+        if let hi = headIndex {
+            var head = words[hi]
+            // A record calls the same thing by its own word: a recall's "company" is its firm.
+            let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator"]
+            if !knownFields.contains(where: { $0.hasSuffix(head) }), let k = kin[head] { head = k }
             if head.count >= 4, !ungrammaticalAlone.contains(head) {
                 if knownFields.contains(head) { best = (fieldID: head, length: 1) }
                 else {
@@ -435,7 +441,8 @@ public enum SlotFieldResolver {
     /// answer was the record's fact list or its distribution sentence.
     nonisolated static func reasonField(in question: String, knownFields: Set<String>) -> Resolution? {
         let q = question.lowercased().trimmingCharacters(in: .whitespaces)
-        guard q.hasPrefix("why ") || q.hasPrefix("for what reason") || q.hasPrefix("what was the reason") else { return nil }
+        guard q.hasPrefix("why ") || q.hasPrefix("for what reason") || q.hasPrefix("what was the reason")
+              || q.range(of: #"^what (?:problem |issue |defect )?led to\b"#, options: .regularExpression) != nil else { return nil }
         // The field must be about what the question names ("reasonforrecall" for a recall), so a
         // "why" about something else never lands on an unrelated record's reason.
         let words = Set(q.components(separatedBy: CharacterSet.letters.inverted).filter { $0.count >= 4 })

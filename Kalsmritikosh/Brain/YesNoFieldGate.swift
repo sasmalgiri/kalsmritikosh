@@ -29,7 +29,10 @@ public nonisolated enum YesNoFieldGate {
         let label = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
         var value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
         if value.hasSuffix(".") { value.removeLast() }
-        guard !value.isEmpty, value.count <= 160 else { return nil }
+        // A field name is a few words ("Recall initiation date"), not a title line that runs into
+        // one ("FDA Enforcement Report — recall D-0561-2021 Recalling firm").
+        guard !value.isEmpty, value.count <= 160, label.split(separator: " ").count <= 5,
+              !label.contains(where: \.isNumber), !label.contains("—") else { return nil }
         return (label, value)
     }
 
@@ -65,16 +68,80 @@ public nonisolated enum YesNoFieldGate {
         return out
     }
 
-    public static func apply(question: String, _ answer: VerifiedAnswer) -> VerifiedAnswer {
+    /// The "Label: value" line in `texts` whose label the question names (every label word of three
+    /// letters or more is in the question) — the longest such label wins ("Recall initiation date"
+    /// over "Date"). A record's own field line is the answer to a question about that field even
+    /// when no extractor filed it (wide case bench 2026-10-25: "Status: Terminated" sat in the
+    /// cited report while the answer was the report's opening passage).
+    public static func namedFieldLine(question: String, in texts: [String]) -> (label: String, value: String)? {
+        guard let phrase = fieldPhrase(question) else { return nil }
+        // "Status: Terminated", "Recall initiation date: 2021-03-15" — the value runs to the end of
+        // its line or to the next label ("… Location: Dublin, OH Status: …" on one PDF line).
+        let words = phrase.split(separator: " ").map { NSRegularExpression.escapedPattern(for: String($0)) }
+        let pattern = "(?:^|[\\s|])((?i:" + words.joined(separator: "\\s+") + "))\\s*:\\s*([^\\n|]{1,200}?)(?=\\s+[A-Z][A-Za-z]+(?:\\s[a-z]+){0,3}\\s*:\\s|\\s*\\n|\\s*\\||\\s*$)"
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        for text in texts {
+            let ns = text as NSString
+            guard let m = re.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { continue }
+            var value = ns.substring(with: m.range(at: 2)).trimmingCharacters(in: .whitespaces)
+            if value.hasSuffix(".") { value.removeLast() }
+            guard !value.isEmpty else { continue }
+            let label = ns.substring(with: m.range(at: 1))
+            return (label.prefix(1).uppercased() + label.dropFirst(), value)
+        }
+        return nil
+    }
+
+    /// The field a question names: "What is the status for …" → "status"; "Is the recall
+    /// initiation date for FDA recall X 2021-03-15?" → "recall initiation date".
+    static func fieldPhrase(_ question: String) -> String? {
+        let q = withoutTitles(question).lowercased()
+        guard let r = q.range(of: #"^\s*(?:what|which|is|was|are|were)\s+(?:is\s+|was\s+|are\s+|were\s+)?the\s+([a-z][a-z /&\-]{1,40}?)\s+(?:for|of|in|on)\s"#,
+                              options: .regularExpression) else { return nil }
+        let span = String(q[r])
+        guard let re = try? NSRegularExpression(pattern: #"the\s+([a-z][a-z /&\-]{1,40}?)\s+(?:for|of|in|on)\s$"#),
+              let m = re.firstMatch(in: span, range: NSRange(location: 0, length: (span as NSString).length)) else { return nil }
+        let phrase = (span as NSString).substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
+        return phrase.count >= 3 ? phrase : nil
+    }
+
+    static func withoutTitles(_ q: String) -> String {
+        q.replacingOccurrences(of: #""[^"]{3,}"|“[^”]{3,}”"#, with: " ", options: .regularExpression)
+    }
+
+    public static func apply(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
         guard asksYesNo(question), !answer.refused else { return answer }
         let said = answer.answerText ?? answer.body
-        guard let lv = labeledValue(said) else { return answer }
-        // Only when the question is about that field: its label words appear in the question.
-        let labelWords = normalized(lv.label).split(separator: " ").filter { $0.count >= 3 }
-        guard !labelWords.isEmpty, labelWords.allSatisfy({ normalized(question).contains($0) }) else { return answer }
+        // The answer's own labeled value when it is about the asked field; else the record's line.
+        func aboutQuestion(_ lv: (label: String, value: String)) -> Bool {
+            let labelWords = normalized(lv.label).split(separator: " ").filter { $0.count >= 3 }
+            return !labelWords.isEmpty && labelWords.allSatisfy { normalized(question).contains($0) }
+        }
+        let stated = labeledValue(said).flatMap { aboutQuestion($0) ? $0 : nil }
+        guard let lv = stated ?? namedFieldLine(question: question, in: [said] + answer.citations.map(\.snippet) + sourceTexts)
+        else { return answer }
         let text = questionStates(lv.value, in: question)
             ? "Yes — \(lv.label): \(lv.value)."
             : "No — the documents give \(lv.label.lowercased()): \(lv.value)."
+        return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
+                              confidence: answer.confidence, contradictions: answer.contradictions, refused: false,
+                              refusalReason: nil, report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
+                              reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
+                              ledgerAnswerID: answer.ledgerAnswerID)
+    }
+
+    /// "What is the status for FDA recall X?" answered with a passage while the record states
+    /// "Status: Terminated": the record's own line answers it.
+    public static func answerFieldQuestion(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
+        guard !answer.refused,
+              question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil
+        else { return answer }
+        let said = answer.answerText ?? answer.body
+        // Kept when it already states the asked field; replaced when it is a passage or another field.
+        if let lv = labeledValue(said), let phrase = fieldPhrase(question),
+           normalized(lv.label).contains(normalized(phrase)) { return answer }
+        guard let lv = namedFieldLine(question: question, in: [said] + answer.citations.map(\.snippet) + sourceTexts) else { return answer }
+        let text = "\(lv.label): \(lv.value)."
         return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
                               confidence: answer.confidence, contradictions: answer.contradictions, refused: false,
                               refusalReason: nil, report: answer.report, walkSteps: answer.walkSteps, source: answer.source,

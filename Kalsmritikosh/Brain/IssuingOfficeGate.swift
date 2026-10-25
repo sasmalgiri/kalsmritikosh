@@ -116,7 +116,11 @@ public nonisolated enum IssuingOfficeGate {
     /// `sourceTexts` — the full text of the cited documents (the office line is often outside the
     /// cited snippet). Without it, a "not named" refusal is only given when the snippets are all there is.
     public static func apply(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
-        guard asksIssuingOffice(question), !answer.refused, !namesOffice(answer.answerText ?? answer.body) else { return answer }
+        let said = answer.answerText ?? answer.body
+        // An answer that STATES an office is kept; a pasted passage that merely contains one is not
+        // a statement of who announced (wide case bench 2026-10-25: "Who announced the case …?"
+        // came back as the cover email and release text).
+        guard asksIssuingOffice(question), !answer.refused, !(said.count <= 250 && namesOffice(said)) else { return answer }
         let pool = ([answer.body] + answer.citations.map(\.snippet) + sourceTexts).joined(separator: "\n")
         let text: String
         let refused: Bool
