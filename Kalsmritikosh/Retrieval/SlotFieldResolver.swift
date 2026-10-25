@@ -159,7 +159,8 @@ public enum SlotFieldResolver {
         // "What did the court decide in <case>?" — the disposition.
         (["court", "decide"], ["what"], "disposition", .status, "Disposition", "legal"),
         // Wide case bench 2026-10-25 — the same questions asked other ways.
-        (["authored"], ["opinion", "judge"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["authored"], ["opinion", "judge", "justice", "ruling", "decision"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["justice"], ["wrote", "authored", "write"], "opinionauthor", .identity, "Opinion by", "legal"),
         (["judge"], ["wrote", "authored", "write"], "opinionauthor", .identity, "Opinion by", "legal"),
         (["outcome"], ["v", "case", "court", "appeal", "in re"], "disposition", .status, "Disposition", "legal"),
         (["decided"], ["how"], "disposition", .status, "Disposition", "legal"),
@@ -327,6 +328,11 @@ public enum SlotFieldResolver {
             : (words.count >= 2 && ["which", "what"].contains(words[0])) ? 1 : nil
         if let hi = headIndex {
             var head = words[hi]
+            // "What recall class was …": the first noun only modifies the second.
+            let joiners: Set<String> = ["was", "were", "is", "are", "did", "does", "do", "has", "had", "of", "for", "in", "on",
+                                        "at", "to", "behind", "named", "listed", "given", "assigned", "the", "a", "an"]
+            if hi + 2 < words.count, !joiners.contains(words[hi + 1]), joiners.contains(words[hi + 2]),
+               words[hi + 1].count >= 3, !words[hi + 1].contains(where: \.isNumber) { head = words[hi + 1] }
             // A record calls the same thing by its own word: a recall's "company" is its firm.
             let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator",
                        "part": "component", "class": "classification"]

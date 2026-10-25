@@ -135,5 +135,14 @@ struct WideQuestionGateTests {
         #expect(SlotFieldResolver.resolve(in: "What did the court rule in Pinching v. Wurdeman?").map(\.fieldID) == ["disposition"])
         #expect(SentenceQuoteComposer.reasonWeight("NTSB SEA03LA084 — probable cause The pilot did not attain the proper touchdown point.", previous: "") == 6)
     }
+
+    @Test("Untouched-wording fixes: modifier nouns, justices, who is credited, what led to")
+    func untouchedWordings() {
+        let known: Set<String> = ["classification", "reasonforrecall", "recallingfirm"]
+        #expect(SlotFieldResolver.resolve(in: "What recall class was assigned to FDA recall Z-2066-2019?", knownFields: known).map(\.fieldID) == ["classification"])
+        #expect(SlotFieldResolver.resolve(in: "Which justice authored the ruling in Pinching v. Wurdeman?").first?.fieldID == "opinionauthor")
+        #expect(IssuingOfficeGate.asksIssuingOffice("Who is credited with announcing \"X\"?"))
+        #expect(SentenceQuoteComposer.asksWhy("What led to the accident in NTSB case ERA13CA130?"))
+    }
 }
 

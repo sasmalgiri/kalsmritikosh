@@ -70,7 +70,9 @@ public enum QuestionUnderstanding {
         remember(nil, for: question)
         guard !fields.isEmpty, !handledByAGate(question) else { return nil }
         let rules = SlotFieldResolver.resolve(in: question, knownFields: fields).first?.fieldID
-        if let rules, !weakRuleFields.contains(rules) { return "rules" }
+        // A rule that names a field this record does not hold ("decided" → decision date, asked of a
+        // defect investigation) has not placed the question either.
+        if let rules, !weakRuleFields.contains(rules), fields.contains(rules) { return "rules" }
         // The bare "date" field is offered only when the record has no date of its own kind
         // ("decisiondate", "dateopened") — otherwise the model takes the generic one.
         let specificDates = fields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }

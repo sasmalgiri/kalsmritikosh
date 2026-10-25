@@ -307,6 +307,7 @@ public enum SentenceQuoteComposer {
     nonisolated static func asksWhy(_ question: String) -> Bool {
         let q = question.lowercased()
         return q.hasPrefix("why ") || q.contains(" why ") || q.contains("what was the reason") || q.contains("what caused")
+            || q.contains("what led to") || q.range(of: #"\bsay caused\b|\bwhat (?:problem|issue|defect) (?:caused|led)"#, options: .regularExpression) != nil
     }
 
     /// How strongly a sentence reads as the stated reason: the line under a reason label scores
