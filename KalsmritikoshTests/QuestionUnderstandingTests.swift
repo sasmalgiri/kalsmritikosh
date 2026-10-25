@@ -122,6 +122,9 @@ struct QuestionUnderstandingTests {
         #expect(CloudQuestionInterpreter.parse("`court`", fields: f) == "court")
         #expect(CloudQuestionInterpreter.parse("The field is disposition.", fields: f) == nil)
         #expect(CloudQuestionInterpreter.parse("none", fields: f) == "none")
+        // A reason after the answer is ignored; a sentence that only mentions a field is not one.
+        #expect(CloudQuestionInterpreter.parse("none\n\nThe question asks for the issuing agency.", fields: f) == "none")
+        #expect(CloudQuestionInterpreter.parse("**court**\nIt names the court.", fields: f) == "court")
         #expect(!CloudQuestionInterpreter.prompt(question: "Q?", fields: f).contains("documents:"))
     }
 }

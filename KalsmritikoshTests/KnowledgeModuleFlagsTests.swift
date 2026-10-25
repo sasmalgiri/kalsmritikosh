@@ -13,18 +13,19 @@ import Foundation
 @Suite struct KnowledgeModuleFlagsTests {
 
     @Test("An implemented module toggles on and off and persists")
-    func togglePersists() {
+    func togglePersists() throws {
         let m = KnowledgeModule.topicMinimization
         #expect(m.implemented)
-        // The STORED preference is what persists. The effective state also depends on the AI regime
-        // and on autoTopics, which AIRegimeMatrixTests flips in parallel (CI PR #169 flake).
+        // A private store: CI runs several test hosts at once and they share the standard domain,
+        // so two hosts toggling the same key raced (CI PR #169, twice).
+        let name = "KnowledgeModuleFlagsTests-\(UUID().uuidString)"
+        let store = try #require(UserDefaults(suiteName: name))
+        defer { UserDefaults().removePersistentDomain(forName: name) }
         let key = KnowledgeModuleFlags.storageKey(m)
-        KnowledgeModuleFlags.setEnabled(m, false)
-        #expect(UserDefaults.standard.object(forKey: key) as? Bool == false)
-        KnowledgeModuleFlags.setEnabled(m, true)
-        #expect(UserDefaults.standard.object(forKey: key) as? Bool == true)
-        // restore default
-        KnowledgeModuleFlags.setEnabled(m, m.defaultEnabled)
+        KnowledgeModuleFlags.setEnabled(m, false, defaults: store)
+        #expect(store.object(forKey: key) as? Bool == false)
+        KnowledgeModuleFlags.setEnabled(m, true, defaults: store)
+        #expect(store.object(forKey: key) as? Bool == true)
     }
 
     @Test("Every registered module is implemented (all discussion items wired)")

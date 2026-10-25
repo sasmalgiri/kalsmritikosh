@@ -295,8 +295,10 @@ public enum KnowledgeModuleFlags {
         return nil
     }
 
-    public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool) {
-        UserDefaults.standard.set(on, forKey: m.storageKey)
+    /// `defaults` is the store the preference is written to — the standard one in the app; tests
+    /// pass their own, because parallel test hosts share the standard domain.
+    public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(on, forKey: m.storageKey)
     }
 
     /// The persisted key, for SwiftUI bindings that need it.

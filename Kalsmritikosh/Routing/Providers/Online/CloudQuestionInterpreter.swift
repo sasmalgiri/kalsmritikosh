@@ -35,8 +35,12 @@ public struct CloudQuestionInterpreter: QuestionInterpreting {
 
     /// The reply's field id, only when it is exactly one of `fields`.
     static func parse(_ reply: String, fields: [String]) -> String? {
-        let token = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "`\"'.:"))
+        // Only the reply's first line counts: a model sometimes adds a reason after its answer
+        // ("none\n\nThe question asks for …" — measured with Claude on 1,088 questions, 2026-10-25).
+        let firstLine = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines).first ?? ""
+        let token = firstLine.trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "`\"'.:*"))
             .lowercased()
         if token == "none" { return "none" }
         return fields.first { $0 == token }
