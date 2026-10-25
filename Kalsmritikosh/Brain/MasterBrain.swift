@@ -1655,15 +1655,19 @@ public actor MasterBrain {
         // Q-3 — a when-question is answered with a date or an honest "no date given"; a which-office
         // question with the office the release names, or an honest "not named".
         var officeSources: [String] = []
-        if IssuingOfficeGate.asksIssuingOffice(question), let objects {
+        if IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil, let objects {
             // The office line is often outside the cited snippet — read the cited documents themselves.
             for id in Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3) {
                 if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
             }
         }
-        let verified = CountQuestionGate.apply(question: question,
-                                               IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
-                                                                       sourceTexts: officeSources))
+        let gated = CountQuestionGate.apply(question: question,
+                                            IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, verified),
+                                                                    sourceTexts: officeSources))
+        // Wide case bench 2026-10-25: a yes/no question is answered yes or no; a question about
+        // something the documents never mention is answered "not mentioned".
+        let verified = YesNoFieldGate.apply(question: question,
+                                            AbsentAttributeGate.apply(question: question, gated, sourceTexts: officeSources))
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
             // Degraded (no ledger wired — tests/boot): the terminal state is

@@ -153,7 +153,9 @@ def main():
             for i, tmpl in enumerate(REPHRASE.get(q["id"], [])):
                 k = ref.strip("\"") if fam in ("doj",) and "case" in tmpl else ref
                 qs.append({**q, "id": f"{q['id']}~r{i+1}", "q": tmpl.format(k=k)}); counts["rephrase"] += 1
-        for label, value in list(fields.items())[:14]:
+        # Labeled-field questions only for records written as labeled fields (FDA, NHTSA, NTSB, OSHA);
+        # in decisions and releases a "Word:" line is an index heading, not a field.
+        for label, value in (list(fields.items())[:14] if fam in ("fda", "nhtsa", "ntsb", "osha") else []):
             qs.append({"id": f"field:{label.lower()}", "q": field_question(label, ref), "expect": expect_for(value), "in_docs": True})
             counts["field"] += 1
             if len(value.split()) <= 6:

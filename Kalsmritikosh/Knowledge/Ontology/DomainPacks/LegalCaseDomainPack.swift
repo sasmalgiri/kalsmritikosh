@@ -231,7 +231,7 @@ public enum LegalCaseDomainPack {
                                                  have: Set<String>) -> [GenericFact] {
         let head = Array(blocks.prefix(20))
         let joined = head.map(\.text).joined(separator: "\n")
-        guard numberedBesideCourt(joined) || courtLineDate(in: joined) != nil else { return [] }
+        guard numberedBesideCourt(joined) || courtLineDate(in: joined) != nil || opensWithReportedCaption(joined) else { return [] }
         func block(containing value: String) -> UUID? { head.first(where: { $0.text.contains(value) })?.id }
         // Field names are compared normalized ("decisionDate" is stored as "decisiondate").
         let filed = Set(have.map(FactSchemaRegistry.normalizeField))
@@ -251,6 +251,16 @@ public enum LegalCaseDomainPack {
             out.append(fact(subjectLabel, "parties", v, b, 0.75))
         }
         return out
+    }
+
+    /// A decision that opens with its case name and its reporter citation ("Pinching v. Wurdeman" /
+    /// "12 F.2d 164") is a caption even when its court line is printed in a form the other tests do
+    /// not read ("(Court of Appeals of District of Columbia. Submitted March. 5, 1926. …"). Wide
+    /// case bench 2026-10-25.
+    nonisolated static func opensWithReportedCaption(_ text: String) -> Bool {
+        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(3)
+        guard lines.contains(where: { $0.range(of: #"^[A-Z].{0,120}\s(?:v\.|vs\.)\s[A-Z]|^In re\s[A-Z]"#, options: .regularExpression) != nil }) else { return false }
+        return lines.contains { $0.range(of: #"^\d{1,4}\s+(?:[A-Z][A-Za-z.]*\s?(?:\d[a-z]{1,2}\s?)?){1,4}\d{1,5}$"#, options: .regularExpression) != nil }
     }
 
     /// The parties as the caption's case name gives them: "Sims v. Dallas Ry. & Terminal Co.",

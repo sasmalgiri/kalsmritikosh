@@ -404,7 +404,10 @@ public struct NumberedEntryCount: Sendable, Equatable {
         guard let noun = countedNoun(in: question) else { return nil }
         // An entry starts a line or follows a space / separator (normalized text runs entries
         // together: "… injured employees Employee #1: hospitalized injury, age 35 OSHA …").
-        let n0 = NSRegularExpression.escapedPattern(for: noun)
+        // "How many workers were hurt?" of a record that numbers "Employee #1" (wide case bench 2026-10-25).
+        let kin: [String: [String]] = ["worker": ["employee"], "employee": ["worker"], "person": ["employee", "victim"],
+                                       "people": ["employee", "victim", "person"], "staff": ["employee"]]
+        let n0 = "(?:" + ([noun] + (kin[noun] ?? [])).map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")"
         let patterns = ["(?im)^\\s*(" + n0 + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*",   // a line of its own
                         "(?i)(?<=[\\s|])(" + n0 + ")s?\\s*#\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*"]  // mid-line: needs the #
         let regexes = patterns.compactMap { try? NSRegularExpression(pattern: $0) }

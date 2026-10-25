@@ -18,6 +18,8 @@ public nonisolated enum IssuingOfficeGate {
         let q = question.lowercased()
         return q.range(of: #"\b(?:which|what)\b[^?]{0,40}\b(?:office|agency|component|department|division|unit)\b[^?]{0,40}\b(?:announc|issu|publish|releas)"#,
                        options: .regularExpression) != nil
+            // "Who announced the case …?" (wide case bench 2026-10-25).
+            || q.range(of: #"^\s*who\s+(?:announced|issued|released|published)\b"#, options: .regularExpression) != nil
     }
 
     /// "the Middle District of Pennsylvania", "the Southern District of New York", "the District of Columbia".

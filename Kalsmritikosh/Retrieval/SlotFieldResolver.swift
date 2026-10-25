@@ -158,6 +158,14 @@ public enum SlotFieldResolver {
         (["decided"], ["date", "when"], "decisiondate", .date, "Decision date", "legal"),
         // "What did the court decide in <case>?" — the disposition.
         (["court", "decide"], ["what"], "disposition", .status, "Disposition", "legal"),
+        // Wide case bench 2026-10-25 — the same questions asked other ways.
+        (["authored"], ["opinion", "judge"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["judge"], ["wrote", "authored", "write"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["outcome"], ["v", "case", "court", "appeal", "in re"], "disposition", .status, "Disposition", "legal"),
+        (["decided"], ["how"], "disposition", .status, "Disposition", "legal"),
+        (["ruling"], ["v", "case", "court", "in re"], "disposition", .status, "Disposition", "legal"),
+        (["court"], ["heard", "name", "named"], "court", .identity, "Court", "legal"),
+        (["date"], ["v", "in re", "ex parte"], "decisiondate", .date, "Decision date", "legal"),
         // "Who were the parties in X v. Y?" — the caption's parties; a contract's parties are not
         // a court case's, so the question must name a case (a "v.", "in re", case, suit, court).
         (["parties"], ["v", "vs", "in re", "ex parte", "case", "suit", "lawsuit", "litigation", "court", "appeal"],
@@ -344,14 +352,9 @@ public enum SlotFieldResolver {
         // holds `recallingfirm`, and "firm" is its last word, not its whole name, so the
         // question got the report's text instead of the firm. A content word of four letters
         // or more that ENDS exactly one field on file names that field.
-        if best == nil {
-            var ends: Set<String> = []
-            for w in words where w.count >= 4 && !ungrammaticalAlone.contains(w) && !FTSQuerySanitizer.stopwords.contains(w) {
-                let matches = knownFields.filter { $0 != w && $0.hasSuffix(w) }
-                if matches.count == 1, let f = matches.first { ends.insert(f) }
-            }
-            if ends.count == 1, let f = ends.first { best = (fieldID: f, length: 1) }
-        }
+        // (2026-10-25: the end-of-field rule now reads only the question's head noun, above. Applied
+        // to every word it sent "Who was the FDA investigator assigned to FDA recall X?" to
+        // "reasonforrecall" through the word "recall".)
         guard let hit = best else { return nil }
         return Resolution(
             fieldID: hit.fieldID,
@@ -401,9 +404,15 @@ public enum SlotFieldResolver {
         // on file for the matter ("Location: Kennesaw, GA") is what it asks for.
         if let place = placeField(in: question, knownFields: knownFields) { return [place] }
         if let reason = reasonField(in: question, knownFields: knownFields) { return [reason] }
+        // "How was FDA recall X classified?" asks for what the verb names, not for a field that
+        // happens to share a word with the reference ("recall").
+        if question.lowercased().range(of: #"^\s*how\s+(?:was|were|is|are)\b"#, options: .regularExpression) != nil,
+           let stemmed = verbNamedField(in: question, knownFields: knownFields) { return [stemmed] }
         if let discovered = resolveAgainstInventory(question, knownFields: knownFields) {
             return [discovered]
         }
+        // Last: a verb that names a field ("How was it classified?" → classification).
+        if let stemmed = verbNamedField(in: question, knownFields: knownFields) { return [stemmed] }
         return []
     }
 
@@ -439,6 +448,26 @@ public enum SlotFieldResolver {
         return Resolution(fieldID: f, requestedField: .identifier, humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
     }
 
+    /// A question VERB that names a field on file: "How was FDA recall X classified?" →
+    /// classification, "Who manufactured the vehicles …" → manufacturer, "What caused the accident …"
+    /// → probable cause. The verb's stem (its last three letters off, at least five left) must
+    /// begin a word of exactly one known field. Wide case bench 2026-10-25.
+    nonisolated static func verbNamedField(in question: String, knownFields: Set<String>) -> Resolution? {
+        let words = withoutQuotedTitles(question).lowercased()
+            .components(separatedBy: CharacterSet.letters.inverted)
+            .filter { $0.count >= 6 && ($0.hasSuffix("ed") || $0.hasSuffix("ied")) }
+        for w in words {
+            let stem = String(w.dropLast(w.hasSuffix("ied") ? 3 : 2).prefix(max(5, w.count - 3)))
+            guard stem.count >= 4 else { continue }
+            let hits = knownFields.filter { $0.contains(stem) }
+            if hits.count == 1, let f = hits.first {
+                return Resolution(fieldID: f, requestedField: requestedFieldClass(for: f),
+                                  humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
+            }
+        }
+        return nil
+    }
+
     /// Fields that date the event a record is about (an accident, an incident, a loss).
     nonisolated static let eventDateFields = ["accidentdate", "incidentdate", "eventdate", "dateofaccident",
                                               "dateofincident", "dateofloss", "lossdate", "occurrencedate",
@@ -449,7 +478,8 @@ public enum SlotFieldResolver {
     /// stem wins, ties go to the shorter (more specific) field name.
     nonisolated static func namedDateField(in question: String, knownFields: Set<String>) -> Resolution? {
         let q = question.lowercased()
-        guard q.hasPrefix("when ") || q.contains(" when ") || q.hasPrefix("on what date") || q.hasPrefix("what date") else { return nil }
+        guard q.hasPrefix("when ") || q.contains(" when ") || q.hasPrefix("on what date") || q.hasPrefix("what date")
+              || q.range(of: #"\bthe date (?:for|of)\b"#, options: .regularExpression) != nil else { return nil }
         let dateFields = knownFields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }
         guard !dateFields.isEmpty else { return nil }
         let words = q.components(separatedBy: CharacterSet.letters.inverted)
