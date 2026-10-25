@@ -1,0 +1,243 @@
+//
+//  ProceedingEventExtractor.swift
+//  Kalsmritikosh
+//
+//  The steps of a proceeding against a person, as the documents report them: charged, arrested,
+//  pleaded guilty, convicted, acquitted, sentenced, pardoned, released.
+//
+//  FOUND BY THE CLOSED-CASE SIMULATION, 2026-10-26. 200 finished federal prosecutions, each followed
+//  across the Justice Department's own releases (charged → pleaded → sentenced): "When was Christi
+//  Machala sentenced?", "Did she plead guilty?", "Give me the timeline of the case against her"
+//  were answered 0–2% of the time — the release came back as a passage, because nothing in the
+//  ledger held "this person, this step, this day". The incident and milestone extractors know
+//  accidents and patent filings, not the steps of a case.
+//
+//  A sentence names the person (full name or surname) and a step in the past tense ("was
+//  sentenced", "pleaded guilty", "was convicted by a jury"); future and conditional wording
+//  ("is scheduled to be sentenced", "faces up to 20 years", "agreed to plead") is not a step.
+//  The day is the one the sentence states ("on March 3, 2015"), or — for "today" / "yesterday" —
+//  the day the document itself prints at its head (a release's "FOR IMMEDIATE RELEASE Thursday,
+//  September 24, 2015"). With neither, the step is kept undated: the document's file date is never
+//  substituted.
+//
+//  Deterministic, offline, pure.
+//
+
+import Foundation
+
+public nonisolated enum ProceedingEventExtractor {
+
+    public enum Step: String, Sendable, CaseIterable {
+        case charged, arrested, arraigned, pleaded, convicted, acquitted, sentenced, pardoned, released
+
+        /// How the step reads in an answer.
+        public var phrase: String {
+            switch self {
+            case .charged: return "charged"
+            case .arrested: return "arrested"
+            case .arraigned: return "arraigned"
+            case .pleaded: return "pleaded guilty"
+            case .convicted: return "convicted"
+            case .acquitted: return "acquitted"
+            case .sentenced: return "sentenced"
+            case .pardoned: return "pardoned"
+            case .released: return "released"
+            }
+        }
+
+        /// Past-tense wording that reports the step. Matched case-insensitively.
+        var pattern: String {
+            switch self {
+            case .charged: return #"\b(?:was|were|has been|have been|been) (?:indicted|charged)\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:federal )?(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
+            case .arrested: return #"\b(?:was|were|has been) arrested\b"#
+            case .arraigned: return #"\b(?:was|were) arraigned\b"#
+            case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b"#
+            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b"#
+            case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
+            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\s+(?:\w+\s+){0,6}to\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|life|time served|probation)"#
+            case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
+            case .released: return #"\b(?:was|were) released from (?:prison|custody)\b"#
+            }
+        }
+    }
+
+    public struct Finding: Sendable, Equatable {
+        public let step: Step
+        /// The day the step happened, as the document states it (nil: the document gives none).
+        public let day: DateComponents?
+        /// True when the day was read from "today"/"yesterday" against the document's printed date.
+        public let dayFromPrintedDate: Bool
+        /// The sentence that reports the step, verbatim.
+        public let sentence: String
+        /// "to 48 months in federal prison …" — what a sentencing sentence imposes.
+        public let detail: String?
+    }
+
+    /// Words that make a sentence about the future or a possibility, not a step taken.
+    static let notYet = #"(?i)\b(?:scheduled to|will be|faces?|facing|could|would|may(?!\s+\d)|might|agreed to|expected to|is set to|set for|awaiting|faces up to|maximum|up to \d+ years)\b"#
+
+    /// The steps the text reports for `person` (the name as asked), earliest first, one per step and day.
+    public static func findings(in text: String, person: String) -> [Finding] {
+        let tokens = nameTokens(person)
+        guard let surname = tokens.last, tokens.count >= 2 else { return [] }
+        let lower = text.lowercased()
+        // The document must name the person in full (all of the asked tokens near each other).
+        guard mentionsFully(lower, tokens: tokens) else { return [] }
+        let printed = printedDate(in: text)
+        // "Christi Romano, aka Christi Machala" — later sentences call the person by either name.
+        var surnames: Set<String> = [surname]
+        if let re = try? NSRegularExpression(pattern: #"\b([a-z]+(?: [a-z]\.?)? [a-z'\-]+),? (?:aka|a/k/a|also known as|formerly known as|née) ([a-z]+(?: [a-z]\.?)? [a-z'\-]+)\b"#) {
+            let ns = lower as NSString
+            for m in re.matches(in: lower, range: NSRange(location: 0, length: ns.length)) {
+                let a = ns.substring(with: m.range(at: 1)), b = ns.substring(with: m.range(at: 2))
+                let asked = tokens.joined(separator: " ")
+                if a.hasSuffix(surname) || a == asked, let s = nameTokens(b).last { surnames.insert(s) }
+                if b.hasSuffix(surname) || b == asked, let s = nameTokens(a).last { surnames.insert(s) }
+            }
+        }
+        var out: [Finding] = []
+        var seen = Set<String>()
+        for sentence in sentences(of: text) {
+            let s = sentence.lowercased()
+            guard surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
+            for step in Step.allCases {
+                guard let r = s.range(of: step.pattern, options: .regularExpression) else { continue }
+                // A future or conditional clause right around the step is not the step.
+                let window = String(s[s.index(r.lowerBound, offsetBy: -min(40, s.distance(from: s.startIndex, to: r.lowerBound)))..<r.upperBound])
+                if window.range(of: notYet, options: .regularExpression) != nil { continue }
+                if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
+                let (day, relative) = stepDay(sentence, printed: printed)
+                let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?")
+                guard seen.insert(key).inserted else { continue }
+                out.append(Finding(step: step, day: day, dayFromPrintedDate: relative, sentence: sentence.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   detail: step == .sentenced ? sentenceDetail(sentence) : nil))
+            }
+        }
+        return out.sorted { order($0) < order($1) }
+    }
+
+    static func order(_ f: Finding) -> String {
+        guard let d = f.day, let y = d.year, let m = d.month, let dd = d.day else { return "9999" + f.step.rawValue }
+        return String(format: "%04d-%02d-%02d", y, m, dd)
+    }
+
+    static func nameTokens(_ person: String) -> [String] {
+        person.lowercased().components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'-")).inverted)
+            .filter { $0.count >= 2 && !["jr", "sr", "ii", "iii"].contains($0) }
+    }
+
+    /// All the asked name's tokens within a short stretch ("Christi Romano, aka Christi Machala").
+    static func mentionsFully(_ lower: String, tokens: [String]) -> Bool {
+        guard let first = tokens.first, let last = tokens.last else { return false }
+        let pattern = #"\b"# + NSRegularExpression.escapedPattern(for: first) + #"\b[^.]{0,40}?\b"# + NSRegularExpression.escapedPattern(for: last) + #"\b"#
+        return lower.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// The date a document prints at its head: a line that is only a date ("Thursday, September 24,
+    /// 2015"), a "Date:" line, or a release line ("FOR IMMEDIATE RELEASE … September 24, 2015").
+    public static func printedDate(in text: String) -> DateComponents? {
+        let head = String(text.prefix(600))
+        for raw in head.components(separatedBy: .newlines).prefix(12) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard line.count <= 60 else { continue }
+            let bare = line.replacingOccurrences(of: #"(?i)^(?:date|dated|released?|for immediate release)\s*:?\s*"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"(?i)^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+"#, with: "", options: .regularExpression)
+            if let d = fullDate(in: bare), bare.count <= 22 { return d }
+        }
+        if let r = head.range(of: #"(?i)for immediate release[^A-Za-z0-9]{0,6}(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?"#, options: .regularExpression) {
+            return fullDate(in: String(head[r.upperBound...].prefix(30)))
+        }
+        return nil
+    }
+
+    static let months: [String: Int] = [
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    ]
+    static let monthPattern = #"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?"#
+
+    /// "September 24, 2015" / "Sept. 24, 2015" (with year).
+    static func fullDate(in text: String) -> DateComponents? {
+        guard let re = try? NSRegularExpression(pattern: #"(?i)\b"# + monthPattern + #"\b"#),
+              let m = re.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)),
+              m.range(at: 3).location != NSNotFound else { return nil }
+        let ns = text as NSString
+        guard let month = months[String(ns.substring(with: m.range(at: 1)).lowercased().prefix(3))],
+              let day = Int(ns.substring(with: m.range(at: 2))), let year = Int(ns.substring(with: m.range(at: 3))),
+              (1...31).contains(day) else { return nil }
+        return DateComponents(year: year, month: month, day: day)
+    }
+
+    /// The day a sentence gives its step: "on March 3, 2015" (a year-less "on March 3" takes the
+    /// printed date's year), or "today"/"yesterday" against the printed date.
+    static func stepDay(_ sentence: String, printed: DateComponents?) -> (DateComponents?, Bool) {
+        let ns = sentence as NSString
+        if let re = try? NSRegularExpression(pattern: #"(?i)\bon\s+(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?"# + monthPattern + #"\b"#),
+           let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)),
+           let month = months[String(ns.substring(with: m.range(at: 1)).lowercased().prefix(3))],
+           let day = Int(ns.substring(with: m.range(at: 2))) {
+            let year = m.range(at: 3).location != NSNotFound ? Int(ns.substring(with: m.range(at: 3))) : printed?.year
+            if let year { return (DateComponents(year: year, month: month, day: day), false) }
+        }
+        guard let printed, let date = Calendar(identifier: .gregorian).date(from: printed) else { return (nil, false) }
+        if sentence.range(of: #"(?i)\btoday\b"#, options: .regularExpression) != nil { return (printed, true) }
+        if sentence.range(of: #"(?i)\byesterday\b"#, options: .regularExpression) != nil,
+           let y = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: date) {
+            return (Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: y), true)
+        }
+        return (nil, false)
+    }
+
+    /// "to 48 months in federal prison, followed by three years of supervised release".
+    static func sentenceDetail(_ sentence: String) -> String? {
+        let pattern = #"(?i)\bsentenced\b[^.]{0,140}?\bto\s+((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length)),
+              m.range(at: 1).location != NSNotFound else { return nil }
+        let term = (sentence as NSString).substring(with: m.range(at: 1))
+        // "… from her employer, announced United States Attorney …" — the term ends before the attribution.
+        let cut = term.replacingOccurrences(of: #"(?i),?\s+(?:announced|said|stated|according to|the (?:justice )?department)\b.*$"#, with: "", options: .regularExpression)
+        return cut.trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
+    }
+
+    /// Sentence split that keeps initials and "U.S." inside the sentence.
+    static func sentences(of text: String) -> [String] {
+        // A line break ends a sentence too: a release's header lines are not part of its lead.
+        text.components(separatedBy: .newlines).flatMap(sentencesOfLine)
+    }
+
+    static func sentencesOfLine(_ flat: String) -> [String] {
+        guard let re = try? NSRegularExpression(pattern: #"(?<=[a-z0-9\)”"'][.!?])\s+(?=[A-Z“"])"#) else { return [flat] }
+        let ns = flat as NSString
+        var out: [String] = [], start = 0
+        for m in re.matches(in: flat, range: NSRange(location: 0, length: ns.length)) {
+            // "Mr. Smith", "U.S. Attorney", "St. Louis" do not end a sentence.
+            let before = ns.substring(with: NSRange(location: max(0, m.range.location - 4), length: min(4, m.range.location)))
+            if before.range(of: #"(?:\b[A-Z][a-z]?|Mr|Ms|Mrs|Dr|St|Jr|Sr|No|U\.S|Inc|Co)\.$"#, options: .regularExpression) != nil { continue }
+            out.append(ns.substring(with: NSRange(location: start, length: m.range.location - start)))
+            start = m.range.location + m.range.length
+        }
+        out.append(ns.substring(from: start))
+        return out.filter { $0.count >= 20 }
+    }
+
+    /// Steps as ledger events: one per step and day, dated only when the document gives the day.
+    public static func extract(text: String, sourceObjectID: UUID, people: [(name: String, entityID: UUID)]) -> [Event] {
+        // Cheap gate: most documents report no proceeding at all.
+        guard text.range(of: #"(?i)\b(?:sentenced|pleaded|pled|indicted|charged|convicted|arrested|acquitted|pardon|arraigned)\b"#,
+                         options: .regularExpression) != nil else { return [] }
+        var out: [Event] = []
+        var asked = Set<String>()
+        for person in people.prefix(40) where nameTokens(person.name).count >= 2 && asked.insert(person.name.lowercased()).inserted {
+            for f in findings(in: text, person: person.name) {
+                guard let day = f.day, let date = Calendar(identifier: .gregorian).date(from: day) else { continue }
+                out.append(Event(kind: .other, date: date, title: "\(person.name) \(f.step.phrase)",
+                                 summary: String(f.sentence.prefix(300)), entityIDs: [person.entityID],
+                                 sourceObjectID: sourceObjectID, confidence: .medium,
+                                 dateConfidence: f.dayFromPrintedDate ? 0.6 : 0.7,
+                                 attributes: ["proceedingStep": AnyCodable(.string(f.step.rawValue))],
+                                 datePrecision: .day, status: .asserted))
+            }
+        }
+        return Array(out.prefix(24))
+    }
+}

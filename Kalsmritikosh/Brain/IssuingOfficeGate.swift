@@ -24,6 +24,10 @@ public nonisolated enum IssuingOfficeGate {
             // itself (held-out wording set 4, 2026-10-25). "Who issued FDA recall X" has no title.
             || q.range(of: #"^\s*who\s+(?:released|issued|published|put out|sent out)\s+(?:the\s+(?:release|statement|announcement)\s+)?["“]"#,
                        options: .regularExpression) != nil
+            // "Which office prosecuted Christi Machala?" — a federal release is issued by the office
+            // that prosecutes the case (closed-case simulation, 2026-10-26).
+            || q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+)?(?:office|agency|prosecutors?)\s+(?:prosecuted|handled|brought|charged|is prosecuting)\b"#,
+                       options: .regularExpression) != nil
             // "Which office is the source of "…"?" (held-out wording set 5, 2026-10-25).
             || q.range(of: #"^\s*(?:which|what)\s+(?:office|agency|department)\s+is\s+(?:the\s+)?(?:source|author|origin)\s+of\b"#,
                        options: .regularExpression) != nil

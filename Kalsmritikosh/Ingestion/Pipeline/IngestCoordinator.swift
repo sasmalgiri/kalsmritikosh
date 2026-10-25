@@ -2823,7 +2823,14 @@ public actor IngestCoordinator {
                 sourceObjectID: object.id,
                 entityIDs: extractedEntities.map(\.id)
             )
-            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents).map { event in
+            // The steps of a proceeding against a person named in the document (charged, pleaded
+            // guilty, sentenced …), dated as the document dates them (closed-case simulation 2026-10-26).
+            let proceedingEvents = ProceedingEventExtractor.extract(
+                text: object.content,
+                sourceObjectID: object.id,
+                people: extractedEntities.filter { $0.kind == .person }.map { (name: $0.value, entityID: $0.id) }
+            )
+            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents + proceedingEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             })
             // P1.2 — a failed event INSERT loses dated evidence silently, so

@@ -51,6 +51,17 @@ def value_in(expect, text):
         if expect["yesno"]: return says_yes and not says_no, None
         truth = (expect.get("truth") or "").lower()
         return says_no or (bool(truth) and truth in b and not says_yes), None
+    if "order" in expect:
+        # A chronology: every expected date appears, and in the expected order (first mention).
+        at = []
+        for iso in expect["order"]:
+            hits = [b.find(f.lower()) for f in date_forms(iso) if f.lower() in b]
+            if not hits: return False, f"order-missing:{iso}"
+            at.append(min(hits))
+        return at == sorted(at), ("order-ok" if at == sorted(at) else "order-wrong")
+    if "dates" in expect:
+        # Any one of several acceptable dates (the release's day, or the day the release names).
+        return any(f.lower() in b for iso in expect["dates"] for f in date_forms(iso)), None
     if "date" in expect:
         if any(f.lower() in b for f in date_forms(expect["date"])): return True, None
         other = FULL_DATE.findall(text)

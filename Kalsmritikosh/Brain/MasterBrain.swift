@@ -1962,6 +1962,23 @@ public actor MasterBrain {
                 KalsmritikoshLog.brain.info("question understood by the \(step, privacy: .public) interpreter")
             }
         }
+        // What happened to a PERSON in a proceeding ("When was X sentenced?", "Did X plead guilty?",
+        // "the timeline of the case against X") is read across every retrieved document that names
+        // them, step by step, each step quoted and cited (closed-case simulation, 2026-10-26).
+        if let parsed = ProceedingAnswerer.parse(intent.rawQuestion), let objects {
+            var sources: [ProceedingAnswerer.Source] = []
+            for id in NSOrderedSet(array: sharedRetrieval.chunks.map(\.chunk.objectID)).compactMap({ $0 as? UUID }).prefix(16) {
+                do {
+                    if let text = try await objects.fetchContent(id: id) { sources.append(.init(objectID: id, text: String(text.prefix(40_000)))) }
+                } catch {
+                    KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+            if let answered = ProceedingAnswerer.answer(parsed, sources: sources) {
+                KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")
+                return answered
+            }
+        }
         var slotFirst: VerifiedAnswer?
         if Self.isSlotLawQuestion(intent: intent, retrieval: sharedRetrieval),
            let answered = try? await verifier.verify(intent: intent, findings: [], retrieval: sharedRetrieval),
