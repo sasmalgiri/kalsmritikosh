@@ -232,4 +232,70 @@ public struct BackupService: Sendable {
         try? fm.removeItem(at: aside)
         return manifest
     }
+
+    // MARK: - Complete backup (brief §11)
+
+    public static let sourcesMapName = "backup-sources.json"
+
+    /// What a complete backup carries besides the ledger: each original's backup path, keyed by the
+    /// ledger's file id, and the sources that could not be read (kept as external dependencies).
+    public struct SourcesMap: Codable, Sendable, Equatable {
+        public var originals: [String: String]      // file id → relative path inside the backup
+        public var notIncluded: [String]            // original locations that could not be read
+    }
+
+    /// Ledger snapshot + every readable original (under `originals/`) + the sources map, all in one
+    /// manifest with sizes and SHA-256. `databaseSnapshot` must be a consistent snapshot (the caller
+    /// takes it with the online backup API).
+    @discardableResult
+    public func createCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
+                                     destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
+        let fm = FileManager.default
+        try fm.createDirectory(at: destination.appendingPathComponent("originals", isDirectory: true), withIntermediateDirectories: true)
+        var entries: [BackupEntry] = []
+        var taken = Self.reservedNames
+        let dbName = Self.uniqueName(for: databaseSnapshot.lastPathComponent, taken: &taken)
+        let dbDst = destination.appendingPathComponent(dbName)
+        if fm.fileExists(atPath: dbDst.path) { try fm.removeItem(at: dbDst) }
+        try fm.copyItem(at: databaseSnapshot, to: dbDst)
+        let dbMeasured = try Self.measure(dbDst)
+        entries.append(BackupEntry(relativePath: dbName, byteSize: dbMeasured.byteSize, sha256: dbMeasured.sha256, kind: .database))
+        var map = SourcesMap(originals: [:], notIncluded: notIncluded)
+        var takenOriginals = Set<String>()
+        for o in originals {
+            let rel = "originals/" + Self.uniqueName(for: o.url.lastPathComponent, taken: &takenOriginals)
+            let dst = destination.appendingPathComponent(rel)
+            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+            do { try fm.copyItem(at: o.url, to: dst) } catch { map.notIncluded.append(o.url.path); continue }
+            let measured = try Self.measure(dst)
+            entries.append(BackupEntry(relativePath: rel, byteSize: measured.byteSize, sha256: measured.sha256, kind: .originalSource))
+            map.originals[o.fileID.uuidString] = rel
+        }
+        let mapURL = destination.appendingPathComponent(Self.sourcesMapName)
+        try JSONEncoder().encode(map).write(to: mapURL)
+        let mapMeasured = try Self.measure(mapURL)
+        entries.append(BackupEntry(relativePath: Self.sourcesMapName, byteSize: mapMeasured.byteSize, sha256: mapMeasured.sha256, kind: .derivedExport))
+        let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion, createdAtEpoch: nowEpoch, entries: entries, coverage: .complete)
+        try JSONEncoder().encode(manifest).write(to: destination.appendingPathComponent(Self.manifestName))
+        return manifest
+    }
+
+    /// Restore a complete backup into `targetFolder` (verified, staged and failure-atomic, as
+    /// `restore`), then relink the restored ledger's sources to the restored originals so every
+    /// citation opens on this Mac without the old Mac's paths. Returns the sources not included.
+    @discardableResult
+    public func restoreComplete(backupFolder: URL, into targetFolder: URL,
+                                ledgerKey: LedgerKey? = LedgerKeychain.load()) async throws -> SourcesMap {
+        let manifest = try restore(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
+        guard manifest.coverage == .complete, let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
+        let map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
+        let db = try Database(url: targetFolder.appendingPathComponent(dbEntry.relativePath), key: ledgerKey)
+        for (fileID, rel) in map.originals {
+            guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
+            let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL
+            try await db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(restored.absoluteString), .uuid(id)])
+        }
+        await db.close()
+        return map
+    }
 }

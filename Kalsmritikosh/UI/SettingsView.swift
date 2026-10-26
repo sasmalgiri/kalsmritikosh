@@ -1775,6 +1775,13 @@ public struct SettingsView: View {
                 }
                 .disabled(backingUp)
                 Button {
+                    backUpEverything()
+                } label: {
+                    Label("Back up everything…", systemImage: "externaldrive.fill.badge.plus")
+                }
+                .disabled(backingUp)
+                .help("The ledger and a copy of every original file it can read, so the whole archive can be restored on another Mac.")
+                Button {
                     inspectBackup()
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
@@ -1809,6 +1816,51 @@ public struct SettingsView: View {
     /// Copy the live database (+ its -wal/-shm sidecars, if present) into a
     /// timestamped backup folder the user selects. Read-only w.r.t. the app's
     /// own data; failures are surfaced, never swallowed.
+    /// Brief §11 — a complete backup: the ledger snapshot plus every readable original, with the map
+    /// that relinks them on restore. Originals that cannot be read are listed in the backup, not hidden.
+    private func backUpEverything() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.prompt = "Back Up Here"
+        panel.message = "Choose a folder for a complete backup: the ledger and a copy of every original file."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        backingUp = true; backupStatus = nil
+        Task {
+            let stamp = Int(Date().timeIntervalSince1970)
+            let dest = dir.appendingPathComponent("Investigations Made Easy-Complete-Backup-\(stamp)")
+            let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("kalsmritikosh-cbackup-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: scratch) }
+            var opened: [URL] = []
+            defer { for u in opened { appState.bookmarks.stopAccessing(u) } }
+            do {
+                guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
+                try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+                let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
+                try await database.backupSnapshot(to: snapshot)
+                for root in appState.bookmarks.roots { if let u = try? appState.bookmarks.resolve(root) { opened.append(u) } }
+                var originals: [(fileID: UUID, url: URL)] = [], missing: [String] = []
+                for r in try await database.query("SELECT id, url FROM files;", []) {
+                    guard let id = r.uuid(0), let url = r.string(1).flatMap(URL.init(string:)) else { continue }
+                    if FileManager.default.isReadableFile(atPath: url.path) { originals.append((id, url)) } else { missing.append(url.path) }
+                }
+                let manifest = try BackupService().createCompleteBackup(
+                    databaseSnapshot: snapshot, originals: originals, notIncluded: missing, destination: dest,
+                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970)
+                let copied = manifest.entries.filter { $0.kind == .originalSource }.count
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Complete backup “\(dest.lastPathComponent)”: the ledger and \(copied) original file(s), each with its SHA-256."
+                        + (missing.isEmpty ? "" : " \(missing.count) original(s) could not be read and are listed in the backup as not included.")
+                        + " The ledger stays encrypted; keep the recovery key (Settings ▸ Data ▸ Encryption) separately."
+                }
+            } catch {
+                await MainActor.run { backingUp = false; backupStatus = "Complete backup failed: \(error.localizedDescription)" }
+            }
+        }
+        #endif
+    }
+
     private func backUpNow() {
         #if canImport(AppKit)
         let panel = NSOpenPanel()

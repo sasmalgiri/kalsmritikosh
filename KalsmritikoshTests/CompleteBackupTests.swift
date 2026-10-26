@@ -1,0 +1,83 @@
+//
+//  CompleteBackupTests.swift
+//  KalsmritikoshTests
+//
+//  Implementation brief §11: a complete backup carries the ledger AND the original files, with the
+//  map that relinks them. Restored on another "Mac" (a fresh folder, the originals gone from their old
+//  paths), every source the ledger names opens from the restored copy, byte for byte; what could not
+//  be read is listed; a tampered original refuses the restore and leaves the target untouched.
+//
+
+import Foundation
+import Testing
+@testable import Kalsmritikosh
+
+@Suite("Complete backup and restore")
+struct CompleteBackupTests {
+
+    func scratch(_ tag: String) throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("cbk-\(tag)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    @Test("Originals travel with the ledger and are relinked on restore; unreadable ones are listed")
+    func roundTrip() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let oldMac = try scratch("old")
+        let letter = oldMac.appendingPathComponent("letter.txt"), memo = oldMac.appendingPathComponent("memo.txt")
+        try Data("The approval letter.".utf8).write(to: letter)
+        try Data("The internal memo.".utf8).write(to: memo)
+        let letterID = UUID(), memoID = UUID()
+        for (id, url) in [(letterID, letter), (memoID, memo)] {
+            try await db.exec("INSERT INTO files (id, url, source_type, availability) VALUES (?,?,?,?);",
+                              [.uuid(id), .text(url.absoluteString), .text("txt"), .text("available")])
+        }
+        let snapshotDir = try scratch("snap")
+        let snapshot = snapshotDir.appendingPathComponent("knowledge.sqlite")
+        try await db.backupSnapshot(to: snapshot)
+        let backup = try scratch("backup")
+        let manifest = try BackupService().createCompleteBackup(
+            databaseSnapshot: snapshot, originals: [(letterID, letter), (memoID, memo)], notIncluded: ["/Volumes/Gone/scan.pdf"],
+            destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+        #expect(manifest.coverage == .complete)
+        #expect(manifest.entries.filter { $0.kind == .originalSource }.count == 2)
+        #expect(try BackupService().inspect(backupFolder: backup).verdict.ok)
+
+        // The old Mac is gone.
+        try FileManager.default.removeItem(at: oldMac)
+        let newMac = try scratch("new")
+        let map = try await BackupService().restoreComplete(backupFolder: backup, into: newMac, ledgerKey: nil)
+        #expect(map.notIncluded == ["/Volumes/Gone/scan.pdf"])
+        let restored = try Database(url: newMac.appendingPathComponent("knowledge.sqlite"))
+        for (id, text) in [(letterID, "The approval letter."), (memoID, "The internal memo.")] {
+            let url = try #require(try await restored.query("SELECT url FROM files WHERE id = ?;", [.uuid(id)]).first?.string(0).flatMap(URL.init(string:)))
+            #expect(url.path.hasPrefix(newMac.standardizedFileURL.path))
+            #expect(try String(contentsOf: url, encoding: .utf8) == text)
+        }
+        await restored.close()
+    }
+
+    @Test("A tampered original refuses the restore and the target is left as it was")
+    func tamperRefused() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let src = try scratch("src")
+        let letter = src.appendingPathComponent("letter.txt")
+        try Data("Original bytes.".utf8).write(to: letter)
+        let id = UUID()
+        try await db.exec("INSERT INTO files (id, url, source_type, availability) VALUES (?,?,?,?);",
+                          [.uuid(id), .text(letter.absoluteString), .text("txt"), .text("available")])
+        let snap = try scratch("snap").appendingPathComponent("knowledge.sqlite")
+        try await db.backupSnapshot(to: snap)
+        let backup = try scratch("backup")
+        try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [(id, letter)], notIncluded: [],
+                                                 destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+        try Data("Altered bytes!!".utf8).write(to: backup.appendingPathComponent("originals/letter.txt"))
+        let target = try scratch("target")
+        try Data("existing ledger".utf8).write(to: target.appendingPathComponent("knowledge.sqlite"))
+        await #expect(throws: BackupService.BackupError.self) {
+            try await BackupService().restoreComplete(backupFolder: backup, into: target, ledgerKey: nil)
+        }
+        #expect(try String(contentsOf: target.appendingPathComponent("knowledge.sqlite"), encoding: .utf8) == "existing ledger")
+    }
+}
