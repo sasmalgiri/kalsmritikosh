@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 154
+    public static let latestVersion = 155
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -543,7 +543,9 @@ public enum SchemaMigrations {
             // v154 — hypothesis decisions carry their reasons; evidence links carry reliability + relevance.
             "investigation_hypothesis_decisions": ["id", "hypothesis_id", "decision", "rationale", "contrary_evidence",
                                                     "alternatives", "for_lineages", "against_lineages", "actor", "decided_at"],
-            "investigation_hypothesis_evidence_assessments": ["link_id", "reliability", "diagnostic_relevance", "assessed_by", "assessed_at"]
+            "investigation_hypothesis_evidence_assessments": ["link_id", "reliability", "diagnostic_relevance", "assessed_by", "assessed_at"],
+            // v155 — schema-conformance verification recorded in the ledger it verified.
+            "schema_conformance_marks": ["schema_version", "schema_fingerprint", "status", "added", "could_not_add", "checked_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -753,7 +755,8 @@ public enum SchemaMigrations {
         (151, v151),
         (152, v152),
         (153, v153),
-        (154, v154)
+        (154, v154),
+        (155, v155)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7505,6 +7508,24 @@ public enum SchemaMigrations {
         CHECK(reliability IN ('high','medium','low','unknown')),
         CHECK(diagnostic_relevance IN ('high','medium','low','none')),
         CHECK(length(trim(assessed_by)) > 0)
+    );
+    """
+
+
+    // MARK: - v155 — schema conformance is verified per database (implementation brief §11). The
+    // "already checked" marker lived in global UserDefaults, so a restored ledger, or a second
+    // ledger at the same version, was never checked. The mark now lives in the ledger it describes,
+    // pinned to the schema version and a fingerprint of that ledger's own schema; an incomplete
+    // repair is recorded, not hidden.
+    private static let v155: String = """
+    CREATE TABLE IF NOT EXISTS schema_conformance_marks (
+        schema_version     INTEGER PRIMARY KEY NOT NULL,
+        schema_fingerprint TEXT NOT NULL,
+        status             TEXT NOT NULL,
+        added              TEXT NOT NULL DEFAULT '',
+        could_not_add      TEXT NOT NULL DEFAULT '',
+        checked_at         REAL NOT NULL,
+        CHECK(status IN ('clean','incomplete'))
     );
     """
 

@@ -54,6 +54,33 @@ struct SchemaRepairTests {
         #expect(try await SchemaConformance.repair(db).isClean)
     }
 
+    @Test("Conformance is verified per ledger: each database at one version is checked; a clean, unchanged one is not re-checked")
+    func conformancePerLedger() async throws {
+        let first = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let second = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        await SchemaConformance.checkAtBoot(first)
+        #expect(try await SchemaConformance.mark(first)?.clean == true)
+        // Checking one ledger says nothing about another at the same version.
+        try await second.exec("DROP TABLE case_hold_notices;")
+        await SchemaConformance.checkAtBoot(second)
+        #expect(try await MigrationFixtureBuilder.tableExists(second, "case_hold_notices"))
+        // A clean mark whose schema no longer matches is checked again (a restored or altered ledger).
+        try await first.exec("DROP TABLE case_hold_notices;")
+        await SchemaConformance.checkAtBoot(first)
+        #expect(try await MigrationFixtureBuilder.tableExists(first, "case_hold_notices"))
+        #expect(try await SchemaConformance.unrepaired(first).isEmpty)
+    }
+
+    @Test("A repair that cannot complete is recorded and readable, never marked clean")
+    func incompleteRepairVisible() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        // A NOT NULL column with no default cannot be added back by ALTER TABLE.
+        try await db.exec("ALTER TABLE case_action_seal_boundaries DROP COLUMN legacy_action_count;")
+        await SchemaConformance.checkAtBoot(db)
+        #expect(try await SchemaConformance.mark(db)?.clean == false)
+        #expect(try await SchemaConformance.unrepaired(db).contains { $0.contains("case_action_seal_boundaries.legacy_action_count") })
+    }
+
     @Test("Only create-if-missing migrations are re-run")
     func idempotencyClassifier() {
         for v in [148, 149, 150, 151, 152] {
