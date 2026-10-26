@@ -113,6 +113,10 @@ struct EmailHeaderAnswererTests {
         #expect(EmailHeaderAnswerer.answer(.count(from: "Mary Miller", to: "Bill Rapp"), messages: [bare]) == nil)   // header alone: unknown
         let matched = try #require(EmailHeaderAnswerer.answer(.count(from: "Mary Miller", to: "Bill Rapp"), messages: [bare], ledgerPairs: [bare.objectID]))
         #expect(matched.body.hasPrefix("1 of the emails found are from Mary Miller to Bill Rapp"))
+        // The subject-first actor/person doors leave these questions to the dedicated answerers.
+        #expect(AppState.ownedByDedicatedAnswerer("Who's the sender listed on the email \"Azalea Trail\"?"))
+        #expect(AppState.ownedByDedicatedAnswerer("Could you specify the sentence that Christi Machala received?"))
+        #expect(!AppState.ownedByDedicatedAnswerer("Who filed the trademark renewal?"))
         // With no emails searched, an unknown subject is left to the normal pipeline.
         let parsed = try #require(EmailHeaderAnswerer.parse("Who sent the email \"Nothing like this\"?"))
         #expect(EmailHeaderAnswerer.answer(parsed, messages: []) == nil)
