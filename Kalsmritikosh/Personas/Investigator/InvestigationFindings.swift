@@ -76,4 +76,42 @@ public nonisolated enum InvestigationFindingsError: Error, Sendable, Equatable {
     case blankActor
     case blankReceiptSeal
     case revisionConflict(expected: Int, actual: Int)
+    case findingsCaseMismatch(findingsCase: UUID, approvingCase: UUID)   // case A's report never approves case B
+    case staleFindings                     // the case scope changed after these findings were built
+    case receiptIntegrityFailed            // the receipt no longer verifies against the persisted run
+    case blankPolicyJustification          // "not applicable" must say why
+}
+
+extension InvestigationFindingsError: CustomStringConvertible {
+    public nonisolated var description: String {
+        switch self {
+        case .caseNotFound: return "The case was not found."
+        case .workspaceNotFound: return "The case's workspace was not found."
+        case .blankRationale: return "Give a rationale."
+        case .blankActor: return "The reviewer's name is missing."
+        case .blankReceiptSeal: return "The findings have no sealed receipt."
+        case .revisionConflict: return "Someone else changed this record; reload and try again."
+        case .findingsCaseMismatch: return "These findings were built for a different case."
+        case .staleFindings: return "The case's sources changed after these findings were built. Rebuild the findings, then approve."
+        case .receiptIntegrityFailed: return "The findings' receipt no longer matches the saved report. Rebuild the findings."
+        case .blankPolicyJustification: return "Say why no standard of proof applies."
+        }
+    }
+}
+
+/// The decision policy every findings approval declares (implementation brief §6): a named standard of
+/// proof, or an explicitly justified statement that no standard applies (e.g. a fact-finding review that
+/// makes no determination). There is no approval without one.
+public nonisolated enum FindingsDecisionPolicy: Sendable, Equatable {
+    case standard(EvidentiaryStandard)
+    case notApplicable(justification: String)
+
+    /// The line stamped at the head of the recorded rationale.
+    public var rationaleLine: String {
+        switch self {
+        case .standard(let s): return s.rationaleLine
+        case .notApplicable(let why):
+            return "No standard of proof applied: \(why.trimmingCharacters(in: .whitespacesAndNewlines))"
+        }
+    }
 }

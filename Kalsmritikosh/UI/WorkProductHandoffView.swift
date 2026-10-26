@@ -414,6 +414,8 @@ public final class WorkProductHandoffModel {
             // collapses into a single transition — compensation no longer
             // exists because no partial state can ever be observed.
             if !FeatureFlags.classicConformanceValue(), let txn = self.approvalTxn, self.assessments != nil {
+                // Same currency checks as the service path: this case's findings, unchanged scope, intact receipt.
+                try await self.findings.requireCurrent(f, caseID: snap.caseID)
                 let projected = self.currentAssessment(at: date, assumingApproval: true)
                 let nextRevision = try await txn.nextRevision(caseID: snap.caseID)
                 var linkage = ConformanceSealLinkage(caseID: snap.caseID,
