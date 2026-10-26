@@ -23,7 +23,7 @@ legal judgement. Nothing here has been done by the agent. Tick each with the dat
       correction → hypothesis with rationale/contrary/alternatives → build findings → approve under a
       standard of proof → close → reopen. Check: "Next steps" on the Overview change as you go;
       "References to repair" stays empty; the statement export shows the correction after the text.
-- [ ] **Audit chain**: Settings → integrity/verify after the journey reports intact (the v157 fix:
+- [ ] **Audit chain**: sidebar → Audit → "Verify integrity" after the journey reports intact (the v157 fix:
       sealing used to fail once any case action existed).
 - [ ] **Private mode network test**: with Little Snitch / `nettop`, use the app for 10 minutes in
       Private mode (import, search, Ask, export) — zero connections from the app and its helper.
