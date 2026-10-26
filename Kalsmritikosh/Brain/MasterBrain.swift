@@ -1976,6 +1976,32 @@ public actor MasterBrain {
         // What happened to a PERSON in a proceeding ("When was X sentenced?", "Did X plead guilty?",
         // "the timeline of the case against X") is read across every retrieved document that names
         // them, step by step, each step quoted and cited (closed-case simulation, 2026-10-26).
+        // Who sent / received the email "<subject>", when, what it said; how many emails A sent B —
+        // read from the messages' own header lines (closed-case simulation, Enron mailboxes, 2026-10-26).
+        if let ask = EmailHeaderAnswerer.parse(intent.rawQuestion), let objects {
+            var ids = sharedRetrieval.chunks.map(\.chunk.objectID)
+            switch ask {
+            case .count(let a, let b), .when(let a, let b):
+                for name in [a, b] {
+                    let more = (try? await retriever.retrieve(for: UserIntent(kind: intent.kind, scope: intent.scope, rawQuestion: name),
+                                                             layers: decision.retrievalLayers, access: access))?.result
+                    ids += more?.chunks.map(\.chunk.objectID) ?? []
+                }
+            default: break
+            }
+            var messages: [EmailHeaderAnswerer.Message] = []
+            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(60) {
+                do {
+                    if let text = try await objects.fetchContent(id: id), let m = EmailHeaderAnswerer.message(objectID: id, text: text) { messages.append(m) }
+                } catch {
+                    KalsmritikoshLog.brain.error("email answer: content fetch failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages) {
+                KalsmritikoshLog.brain.info("email answer: \(String(describing: ask).prefix(40), privacy: .public) from \(messages.count, privacy: .public) message(s)")
+                return answered
+            }
+        }
         if let parsed = ProceedingAnswerer.parse(intent.rawQuestion), let objects {
             // The question's own retrieval ranks the step's wording ("sentenced") as much as the
             // person; a second pass on the name alone — same access scope — reaches the other

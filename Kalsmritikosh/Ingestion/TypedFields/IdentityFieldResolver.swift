@@ -69,7 +69,12 @@ public nonisolated struct IdentityFieldResolver: Sendable {
         // "emails" — which asks about messages, not about an address — resolve
         // to the email-address field. "What is his email?" still matches,
         // because a trailing "?" or space is a boundary; "emails" does not.
-        if any(["email address", "e-mail"]) || word("email", in: q) { return .email }
+        // "Who sent the email …", "the email about the merger" name a MESSAGE, not an address
+        // (closed-case simulation, Enron mailboxes 2026-10-26: answered with every address on file).
+        if any(["email address", "e-mail address", "email id", "mail id"])
+            || q.range(of: #"\b(?:his|her|their|my|your|its)\s+e-?mail\b|'s\s+e-?mail\b|^\s*what\s+is\s+(?:the\s+)?e-?mail\s*\??\s*$|\be-?mail\s+(?:on|in|of|from)\s+(?:this|the)\s+(?:form|document|record|card|letter|application|page|file)\b"#, options: .regularExpression) != nil {
+            return .email
+        }
         if any(["phone number", "phone", "mobile number", "contact number"]) { return .phone }
         // The organization a DOCUMENT is from ("the company name", "issued by") — not any question
         // that says "company" ("Name the company behind FDA recall X" asks for the recalling firm;
