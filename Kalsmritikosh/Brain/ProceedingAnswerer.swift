@@ -95,7 +95,8 @@ public nonisolated enum ProceedingAnswerer {
             return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
-        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what (?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
+        // "What were the charges brought against X?", "What exact charges were filed against X?"
+        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .chargedWith)
         }
         guard let step else { return nil }
@@ -154,6 +155,10 @@ public nonisolated enum ProceedingAnswerer {
         guard let d = f.day ?? f.reportedOn, let y = d.year, let m = d.month, let dd = d.day else { return "9999" }
         return String(format: "%04d-%02d-%02d", y, m, dd)
     }
+
+    /// A prior record in a sentence, not the offence charged ("possession of ammunition by a
+    /// convicted felon" and "a firearm for a person she knew to be a convicted felon" are offences).
+    static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
 
     /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
     /// `complete` is false when the documents searched were capped: a count is then a floor.
@@ -236,9 +241,12 @@ public nonisolated enum ProceedingAnswerer {
             // The sentence that STATES the offence ("charges Romano with seven counts of wire fraud",
             // "pleaded guilty to four counts of …") over one that only mentions the charge ("After
             // Canty was charged in the above crimes, detectives …").
-            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b[^.]{0,60}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b[^.]{0,60}\bto\b|\b(?:convicted|found guilty)\b[^.]{0,60}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#
-            // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge.
-            let prior = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
+            // An initial or "U.S." keeps the clause going ("pled guilty today before Chief U.S. District
+            // Judge Daniel P. Jordan III to commercial driver's license fraud").
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#
+            // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge;
+            // "possession of a firearm by a convicted felon" IS the charge.
+            let prior = Self.priorRecord
             let rank: [ProceedingEventExtractor.Step: Int] = [.charged: 3, .pleaded: 2, .convicted: 2, .sentenced: 1]
             let surname = parsed.person.split(separator: " ").last.map { $0.lowercased() } ?? ""
             struct Candidate { let sentence: String; let objectID: UUID; let rank: Int }

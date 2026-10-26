@@ -135,8 +135,8 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
                   quote.range(of: #"(?i)\bsentenc"#, options: .regularExpression) != nil else { return nil }
             text = "\(parsed.person) was sentenced to \(value)."
         case .chargedWith:
-            guard quote.range(of: #"(?i)\bcharg(?:ed|es|ing)\b[^.]{0,60}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b[^.]{0,80}\bto\b|\b(?:convicted|found guilty)\b[^.]{0,80}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#, options: .regularExpression) != nil,
-                  quote.range(of: #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|convicted felon|criminal history)\b"#, options: .regularExpression) == nil else { return nil }
+            guard quote.range(of: #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#, options: .regularExpression) != nil,
+                  quote.range(of: ProceedingAnswerer.priorRecord, options: .regularExpression) == nil else { return nil }
             text = "The documents say:"
         case .whether(let step):
             let yes = answer.lowercased().hasPrefix("yes"), no = answer.lowercased().hasPrefix("no")

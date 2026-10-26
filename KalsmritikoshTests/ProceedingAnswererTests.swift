@@ -86,6 +86,11 @@ struct ProceedingAnswererTests {
     @Test("Claude-reworded sentencing dates and document counts parse to the same ask")
     func rewordings() throws {
         let n = QuestionCanonicalizer.normalize
+        for q in ["What were the charges brought against Christi Machala?", "What exact charges were brought against Christi Machala?",
+                  "What were the actual charges filed against Christi Machala?", "What charges were filed against Christi Machala?",
+                  "What were the charges against Christi Machala?"] {
+            #expect(ProceedingAnswerer.parse(n(q)) == ProceedingAnswerer.Parsed(person: "Christi Machala", ask: .chargedWith), "\(q)")
+        }
         for q in ["I need to know when Christi Machala's sentencing took place.",
                   "I need to know when sentencing occurred for Christi Machala — do we have that on record?",
                   "I need to know when Christi Machala received her sentencing — do you have that date?",
@@ -348,6 +353,19 @@ struct ProceedingAnswererTests {
         #expect(try #require(ProceedingAnswerer.answer(sentence, sources: src)).body.hasPrefix("Nathaniel E. Robinson was sentenced to 18 months in prison"))
         let charge = try #require(ProceedingAnswerer.parse("What was Nathaniel E. Robinson charged with?"))
         #expect(try #require(ProceedingAnswerer.answer(charge, sources: src)).body.contains("theft from a program receiving federal funds"))
+        // A judge's initials and "U.S." inside the plea clause; "by a convicted felon" is the offence itself.
+        func charged(_ name: String, _ body: String) throws -> String {
+            let text = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nTuesday, May 7, 2019\n\n" + body
+            let parsed = try #require(ProceedingAnswerer.parse("What was \(name) charged with?"))
+            return try #require(ProceedingAnswerer.answer(parsed, sources: [.init(objectID: UUID(), text: text)])).body
+        }
+        #expect(try charged("Benjamin James McGrigg", "Jackson, Miss. – Benjamin James McGrigg, 43, of Jackson, pled guilty today before Chief U.S. District Judge Daniel P. Jordan III to commercial driver’s license fraud, announced U.S. Attorney Mike Hurst.")
+            .contains("commercial driver’s license fraud"))
+        #expect(try charged("Robin Stephan", "CONCORD - Robin Stephan, 43, of Manchester, pleaded guilty in federal court to possession of ammunition by a convicted felon, Acting United States Attorney John J. Farley announced today.")
+            .contains("possession of ammunition by a convicted felon"))
+        // A prior record is still not the charge.
+        #expect(try charged("Tom Reed", "Tom Reed, 30, a previously convicted felon, was arrested in March. Reed has prior felony convictions.")
+            .hasPrefix("The documents that name Tom Reed don't state"))
     }
 
     @Test("Steps become ledger events only when the document gives the day")
