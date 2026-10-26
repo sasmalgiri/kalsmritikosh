@@ -107,6 +107,19 @@ struct ProceedingAnswererTests {
             #expect(ProceedingAnswerer.parse(n(q))?.ask == .documentCount, "\(q)")
         }
         #expect(try ask(n("Do you know the total count of press releases concerning Christi Machala?")).body.hasPrefix("3 of the documents found name Christi Machala"))
+        // Fully-private (rules-only) rewordings from the tuned reworded set.
+        let shapes: [(String, ProceedingAnswerer.Ask)] = [
+            ("What was the sentence handed down to Christi Machala?", .sentenceImposed),
+            ("Could you specify the sentence that Christi Machala received?", .sentenceImposed),
+            ("I'm trying to confirm — did Christi Machala plead guilty?", .whether(.pleaded)),
+            ("I'm trying to confirm whether Christi Machala pled guilty — can you verify that?", .whether(.pleaded)),
+            ("For the record, did Christi Machala plead guilty, yes or no?", .whether(.pleaded)),
+            ("I need a chronological rundown of the case against Christi Machala — can you give me that?", .timeline),
+            ("I'd like to know which prosecuting office was responsible for the case against Christi Machala.", .office),
+            ("Can you identify the office that prosecuted Christi Machala?", .office),
+            ("Who was the prosecuting office in the matter of Christi Machala?", .office),
+        ]
+        for (q, want) in shapes { #expect(ProceedingAnswerer.parse(n(q))?.ask == want, "\(q) → \(n(q))") }
     }
 
     @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")

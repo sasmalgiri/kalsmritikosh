@@ -43,7 +43,7 @@ public nonisolated enum ProceedingAnswerer {
         ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged),
         ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),
         ("charge", .charged), ("arrested", .arrested), ("arrest", .arrested), ("arraigned", .arraigned), ("plead guilty", .pleaded), ("pleaded guilty", .pleaded),
-        ("plead", .pleaded), ("pleaded", .pleaded), ("convicted", .convicted), ("convict", .convicted), ("found guilty", .convicted),
+        ("plead", .pleaded), ("pleaded", .pleaded), ("pled guilty", .pleaded), ("pled", .pleaded), ("convicted", .convicted), ("convict", .convicted), ("found guilty", .convicted),
         ("acquitted", .acquitted), ("acquit", .acquitted), ("pardoned", .pardoned), ("pardon", .pardoned),
         ("released from prison", .released), ("released from custody", .released),
     ]
@@ -76,7 +76,7 @@ public nonisolated enum ProceedingAnswerer {
         // A quoted title names a release, not a person.
         guard !question.contains("\""), !question.contains("“"), let name = person(in: question) else { return nil }
         let step = stepWords.first { q.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil }?.1
-        if q.range(of: #"\btimeline\b|\bchronology\b|\bsequence of events\b|\bin (?:chronological )?order\b|\bwhat happened (?:to|with)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"\btimeline\b|\bchronology\b|\bchronological\b|\bsequence of events\b|\bin (?:chronological )?order\b|\bwhat happened (?:to|with)\b|\b(?:rundown|run-through|walk-through)\b.*\b(?:case|proceedings?|prosecution)\b|\bfrom start to finish\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .timeline)
         }
         // "How many (separate) press releases …", "the total count of press releases about X", "a count of
@@ -86,11 +86,12 @@ public nonisolated enum ProceedingAnswerer {
             || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?"# + documents, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .documentCount)
         }
-        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b"#, options: .regularExpression) != nil {
+        // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
+        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
-        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+)?(?:office|agency|prosecutors?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued)\b|\bwho prosecuted\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+)?(?:office|agency|prosecutors?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible)\b|\bwho prosecuted\b|\bprosecuting (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
