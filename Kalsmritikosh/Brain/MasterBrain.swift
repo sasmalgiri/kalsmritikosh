@@ -1982,7 +1982,12 @@ public actor MasterBrain {
             var ids = sharedRetrieval.chunks.map(\.chunk.objectID)
             switch ask {
             case .count(let a, let b), .when(let a, let b):
-                for name in [a, b] {
+                // The names as asked, and as addresses spell them ("debra.perlingiere"): headers hold addresses.
+                let forms = [a, b].flatMap { n -> [String] in
+                    let parts = n.lowercased().split(separator: " ").map(String.init)
+                    return parts.count >= 2 && !n.contains("@") ? [n, "\(parts[0]).\(parts[parts.count - 1])"] : [n]
+                }
+                for name in forms {
                     let more = (try? await retriever.retrieve(for: UserIntent(kind: intent.kind, scope: intent.scope, rawQuestion: name),
                                                              layers: decision.retrievalLayers, access: access))?.result
                     ids += more?.chunks.map(\.chunk.objectID) ?? []

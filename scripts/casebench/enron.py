@@ -84,7 +84,10 @@ def main():
         pairs = Counter((m["from"], t) for m in msgs for t in m["to"][:1])
         (pf, pt), n = pairs.most_common(1)[0]
         names = {m["from"]: person(m["from_name"]) for m in msgs}
-        tname = next((person(nm) for m in msgs for addr, nm in zip(m["to"], m["to_names"]) if addr == pt and person(nm)), None)
+        # The recipient's name from the address itself ("mike.maggi@enron.com" → "Mike Maggi"): X-To
+        # display names hold commas ("Maggi, Mike") and cannot be zipped with the To addresses.
+        local = pt.split("@")[0]
+        tname = " ".join(w.capitalize() for w in local.split(".")) if re.fullmatch(r"[a-z]{2,}\.[a-z]{2,}", local) else None
         if n >= 2 and names.get(pf) and tname:
             q.append({"id": "count", "q": f"How many emails did {names[pf]} send to {tname}?", "expect": {"number": n}})
         who = names.get(pf) or pf

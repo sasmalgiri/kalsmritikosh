@@ -62,6 +62,9 @@ struct EmailHeaderAnswererTests {
         let none = try ask("When did Debra Perlingiere email Zelda Quackenbush?")
         #expect(none.refused)
         #expect(none.body == "None of the emails found from Debra Perlingiere is addressed to Zelda Quackenbush.")
+        // A sender that is an organisation or an address, never found at all: said so.
+        let org = try ask("When did EDIS Service email Zelda Quackenbush?")
+        #expect(org.refused && org.body == "None of the emails found is from EDIS Service to Zelda Quackenbush.")
         // An unknown subject is left to the normal pipeline.
         let parsed = try #require(EmailHeaderAnswerer.parse("Who sent the email \"Nothing like this\"?"))
         #expect(EmailHeaderAnswerer.answer(parsed, messages: messages) == nil)

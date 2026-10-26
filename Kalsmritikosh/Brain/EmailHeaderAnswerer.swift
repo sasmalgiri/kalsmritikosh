@@ -51,6 +51,11 @@ public nonisolated enum EmailHeaderAnswerer {
         if let m = firstMatch(#"^(?i:when did)\s+"# + name + #"\s+(?i:e-?mail|write to|message|send (?:an )?e-?mail to)\s+"# + name, question) {
             return .when(from: m[0], to: m[1])
         }
+        // A sender that is an address or an organisation ("EDIS Service", "noreply@…"): any words
+        // before "email" (closed-case simulation, Enron mailboxes).
+        if let m = firstMatch(#"^(?i:when did)\s+(\S.{1,80}?)\s+(?i:e-?mail|write to|message)\s+(\S.{1,80}?)\s*\?*\s*$"#, question) {
+            return .when(from: m[0], to: m[1])
+        }
         return nil
     }
 
@@ -88,6 +93,7 @@ public nonisolated enum EmailHeaderAnswerer {
 
     static func names(_ person: String, in header: String) -> Bool {
         let h = header.lowercased()
+        if person.contains("@") { return h.contains(person.lowercased()) }
         let tokens = person.lowercased().split(separator: " ").map(String.init).filter { $0.count >= 2 && !$0.hasSuffix(".") }
         guard let first = tokens.first, let last = tokens.last else { return false }
         // "Debra Perlingiere", "Perlingiere, Debra", "debra.perlingiere@enron.com".
@@ -134,7 +140,11 @@ public nonisolated enum EmailHeaderAnswerer {
             return answered(text, distinct.isEmpty ? Array(fromA.prefix(3)) : distinct)
         case .when(let a, let b):
             let fromA = messages.filter { names(a, in: $0.from) }
-            guard !fromA.isEmpty else { return nil }
+            guard !fromA.isEmpty else {
+                // Nothing found from the sender at all: that is what the emails found show.
+                guard !messages.isEmpty else { return nil }
+                return answered("None of the emails found is from \(a) to \(b).", [], refused: true)
+            }
             let toB = fromA.filter { names(b, in: $0.to) }
             guard !toB.isEmpty else {
                 return answered("None of the emails found from \(a) is addressed to \(b).", Array(fromA.prefix(3)), refused: true)
