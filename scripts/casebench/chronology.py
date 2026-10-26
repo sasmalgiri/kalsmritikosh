@@ -114,7 +114,7 @@ def page(rel):
     when = rel["day"].strftime("%A, %B %-d, %Y")
     return f"U.S. Department of Justice\n{office}\nFOR IMMEDIATE RELEASE\n{when}\n\n{rel['title']}\n\n{rel['body']}\n"
 
-OFFENCE = re.compile(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|(?:pleaded|pled|pleads) guilty\b(?:[^.;]|(?<=[A-Z])\.){0,120}?\bto|found \w+ guilty of|convicted(?:\s+\w+){0,6}?\s+of|found guilty(?:\s+\w+){0,6}?\s+of|indicted (?:for|on))\s+([^.;]{12,160})", re.I)
+OFFENCE = re.compile(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|(?:pleaded|pled|pleads) guilty\b(?:[^.;]|(?<=[A-Z])\.){0,120}?\bto|found \w+ guilty of|convicted(?:\s+[\w'-]+){0,14}?\s+(?<!District\s)(?<!Court\s)(?<!State\s)(?<!Commonwealth\s)of|found guilty(?:\s+[\w'-]+){0,14}?\s+(?<!District\s)(?<!Court\s)(?<!State\s)(?<!Commonwealth\s)of|indicted (?:for|on))\s+([^.;]{12,160})", re.I)
 PRIOR = re.compile(r"\b(?:previously (?:been )?convicted|prior (?:conviction|record|offen[cs]e)s?|criminal history|had (?:previously )?been convicted|registered sex offender|on (?:probation|parole|supervised release) for|years? earlier|an earlier case)\b", re.I)
 
 CHARGE_VERB = r"(?:indicted|charged|arrested|indictment (?:was )?returned|complaint (?:was )?filed|returned (?:an|a \w+) indictment)"

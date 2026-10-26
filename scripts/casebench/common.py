@@ -109,6 +109,10 @@ def value_in(expect, text):
         for phrase in expect["overlap_any"]:
             want = set(words(phrase))
             if want and len(want & set(words(text))) / len(want) >= 0.6: return True, None
+            # The offence as the release opens it ("one count of conspiracy to misappropriate and
+            # embezzle …"), when the phrase runs on into the next clause ("…, founded Celerity in 2004").
+            head = words(phrase)[:8]
+            if len(set(head)) >= 6 and set(head) <= set(words(text)): return True, "offence-head"
         return False, None
     if "overlap" in expect:
         want = set(words(expect["overlap"]))
