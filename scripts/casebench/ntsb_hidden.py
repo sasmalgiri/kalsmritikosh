@@ -21,7 +21,13 @@ def main():
     ap.add_argument("mdb", nargs="+"); ap.add_argument("--out", required=True)
     ap.add_argument("--cases", type=int, default=150); ap.add_argument("--shard-size", type=int, default=10)
     ap.add_argument("--seed", type=int, default=20261026)
+    ap.add_argument("--skip-keys", help="a truth root whose investigations must not be drawn again")
     a = ap.parse_args()
+    import glob
+    skip = set()
+    if a.skip_keys:
+        for t in glob.glob(os.path.join(a.skip_keys, "*", "*", "truth.jsonl")):
+            skip |= {json.loads(l)["case"] for l in open(t)}
     rng = random.Random(a.seed)
     pool = []
     for mdb in a.mdb:
@@ -34,7 +40,7 @@ def main():
             ns = narr.get(ev_id, [])
             factual, analysis, cause = joined(ns, "narr_accf"), joined(ns, "narr_accp"), joined(ns, "narr_cause")
             date = date_iso(e.get("ev_date"))
-            if not factual or not cause or not date or len(factual) < 400: continue
+            if not factual or not cause or not date or len(factual) < 400 or ev_id in skip: continue
             pool.append((ev_id, e, aircraft.get(ev_id, []), factual, analysis, cause, date))
     rng.shuffle(pool)
     os.makedirs(a.out, exist_ok=True)

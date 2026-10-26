@@ -43,12 +43,19 @@ def main():
     ap.add_argument("--maildir", required=True); ap.add_argument("--out", required=True)
     ap.add_argument("--cases", type=int, default=100); ap.add_argument("--per", type=int, default=40)
     ap.add_argument("--shard-size", type=int, default=10); ap.add_argument("--seed", type=int, default=20261026)
+    ap.add_argument("--skip-keys", help="a truth root whose mailboxes must not be drawn again")
     a = ap.parse_args()
+    import glob
+    skip = set()
+    if a.skip_keys:
+        for t in glob.glob(os.path.join(a.skip_keys, "*", "*", "truth.jsonl")):
+            skip |= {json.loads(l)["key"] for l in open(t)}
     rng = random.Random(a.seed)
     custodians = sorted(os.listdir(a.maildir)); rng.shuffle(custodians)
     made = 0
     for cust in custodians:
         if made >= a.cases: break
+        if cust in skip: continue
         files = []
         for root, _, names in os.walk(os.path.join(a.maildir, cust)):
             files += [os.path.join(root, n) for n in names if not n.startswith(".")]

@@ -105,7 +105,12 @@ def main():
     ap.add_argument("--raw", required=True); ap.add_argument("--out", required=True); ap.add_argument("--render", required=True)
     ap.add_argument("--cases", type=int, default=200); ap.add_argument("--shard-size", type=int, default=10)
     ap.add_argument("--seed", type=int, default=20261026)
+    ap.add_argument("--skip-keys", help="a truth root whose defendants must not be drawn again (a fresh, untuned draw)")
     a = ap.parse_args()
+    skip = set()
+    if a.skip_keys:
+        for t in glob.glob(os.path.join(a.skip_keys, "*", "*", "truth.jsonl")):
+            skip |= {json.loads(l)["key"] for l in open(t)}
     rng = random.Random(a.seed)
     by = collections.defaultdict(list)
     for rel in releases(a.raw):
@@ -116,7 +121,7 @@ def main():
         stages = {r["stage"] for r in rels}
         # A finished prosecution followed across at least two stages, ending in a sentence.
         if len(rels) < 2 or "sentenced" not in stages or len(stages) < 2 or len(rels) > 6: continue
-        if rels[-1]["stage"] != "sentenced": continue
+        if rels[-1]["stage"] != "sentenced" or name in skip: continue
         pool.append((name, rels))
     print("finished prosecutions followed across releases:", len(pool), file=sys.stderr)
     rng.shuffle(pool)

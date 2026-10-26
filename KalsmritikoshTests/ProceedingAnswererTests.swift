@@ -141,6 +141,33 @@ struct ProceedingAnswererTests {
         #expect(a.body.hasPrefix("Michael Wayne Williams was sentenced to one year and one day in prison"))
     }
 
+    @Test("A headline in AP style and a 'The leader of …' lead")
+    func headlineStyles() throws {
+        let duncan = """
+            FOR IMMEDIATE RELEASE
+            Tuesday, May 9, 2023
+            District Man Sentenced to 18 Months’ Imprisonment for Assault on a Member of the LGBTQ+ Community
+            WASHINGTON – Anthony Duncan, 42, of Washington, D.C., was sentenced to 18 months’ imprisonment and 3
+            years of supervised release today for assaulting a pedestrian.
+            """
+        let resnik = """
+            FOR IMMEDIATE RELEASE
+            Tuesday, July 10, 2018
+            Long Beach Man Sentenced to Over 26 Years in Prison for Leading Counterfeit Opioid Scheme that Distributed
+            Fentanyl Analogue
+            LOS ANGELES – The leader of a narcotics distribution ring that imported a powerful fentanyl analogue from
+            China and produced hundreds of thousands of opioid pills was
+            sentenced yesterday to 320 months in federal prison.
+            Gary Resnik, 33, of Long Beach, led a conspiracy that imported acetylfentanyl.
+            """
+        func sentence(_ name: String, _ text: String) throws -> String {
+            let parsed = try #require(ProceedingAnswerer.parse("What sentence did \(name) receive?"))
+            return try #require(ProceedingAnswerer.answer(parsed, sources: [.init(objectID: UUID(), text: text)])).body
+        }
+        #expect(try sentence("Anthony Duncan", duncan).hasPrefix("Anthony Duncan was sentenced to 18 months’ imprisonment"))
+        #expect(try sentence("Gary Resnik", resnik).hasPrefix("Gary Resnik was sentenced to 320 months in federal prison"))
+    }
+
     @Test("A middle initial is part of the name; the offence-stating sentence answers 'charged with'")
     func initialsAndOffence() throws {
         let release = """

@@ -106,7 +106,7 @@ public nonisolated enum ProceedingEventExtractor {
         let introductions = (try? NSRegularExpression(pattern: #"\b[A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+, (?:a\s)?\d{2},"#))?
             .numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length)) ?? 0
         var descriptiveLead: Int?
-        if introductions <= 1, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent)\b"#, options: .regularExpression) != nil }),
+        if introductions <= 1, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon)\b"#, options: .regularExpression) != nil }),
            i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
@@ -265,11 +265,14 @@ public nonisolated enum ProceedingEventExtractor {
             // A headline is Title Case ("Hedge Fund Manager Sentenced for Operating …"); a wrapped
             // paragraph line is mostly lower-case words.
             let words = line.split(separator: " ")
-            let capitalised = words.filter { $0.first?.isUppercase == true || $0.first?.isNumber == true }.count
+            // Headline style lower-cases the small words ("Sentenced to 18 Months for Assault on a …").
+            let small: Set<String> = ["a", "an", "the", "and", "or", "of", "to", "for", "on", "in", "at", "by", "with", "from", "as", "into", "over"]
+            let content = words.filter { !small.contains($0.lowercased()) }
+            let capitalised = content.filter { $0.first?.isUppercase == true || $0.first?.isNumber == true }.count
             let endsMidPhrase = ["of", "to", "the", "and", "a", "an", "in", "for", "with", "that", "by", "on", "at", "from"].contains(words.last.map { $0.lowercased() } ?? "")
             let prose = line.range(of: #", \d{1,3},|\b(?:announced|said|was|were|today)\b"#, options: .regularExpression) != nil
             let heading = open && (line.count < 60 || (line.count < 180 && words.count >= 4 && !endsMidPhrase && !prose
-                                                       && Double(capitalised) / Double(words.count) >= 0.7))
+                                                       && Double(capitalised) / Double(max(1, content.count)) >= 0.8))
             if heading {
                 if !current.isEmpty { paragraphs.append(current); current = "" }
                 paragraphs.append(line)
