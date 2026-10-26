@@ -178,6 +178,10 @@ struct ProceedingAnswererTests {
         let lt = try #require(ProceedingAnswerer.parse("What sentence did Leon Eugene Smith receive?"))
         #expect(try #require(ProceedingAnswerer.answer(lt, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: run)])).body.contains("161-month"))
         #expect(ProceedingAnswerer.parse("Roughly how many press releases reference Leon Eugene Smith?")?.ask == .documentCount)
+        // A descriptive lead with an occupation the list lacked ("A former deputy and helicopter pilot …").
+        let deputy = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nMonday, March 16, 2026\n\nFormer Deputy Sentenced\n\nLOS ANGELES – A former deputy and helicopter pilot with the Los Angeles County Sheriff’s Department was sentenced today to 63 months in federal prison for helping extort a rival. Michael David Coberg, 44, of Eastvale, was sentenced by United States District Judge Percy Anderson."
+        let mc = try #require(ProceedingAnswerer.parse("What sentence did Michael David Coberg receive?"))
+        #expect(try #require(ProceedingAnswerer.answer(mc, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: deputy)])).body.contains("63 months"))
         // "pleaded guilty … to an information charging him" is the plea, not a charging event on that day.
         let plea = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nTuesday, March 28, 2017\n\nStango Sentenced\n\nCharles Stango, 73, of Henderson, Nevada, previously pleaded guilty to an information charging him with one count of using an interstate facility with intent to murder."
         let cs = try #require(ProceedingAnswerer.parse("When was Charles Stango charged?"))
