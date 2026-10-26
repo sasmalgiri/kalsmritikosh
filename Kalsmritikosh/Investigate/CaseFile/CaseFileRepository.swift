@@ -299,6 +299,14 @@ public actor CaseFileRepository {
         let actor = try Self.clean(actor, "Actor")
         guard let current = try await interview(id: iv.id) else { throw CaseFileError.notFound("interview", iv.id) }
         if current.status == .attested, current.statementText != iv.statementText { throw CaseFileError.statementAlreadyAttested }
+        // After confirmation the statement's person, recording, transcript and when/how/where are its
+        // provenance; changing them silently would change what was confirmed (brief §9).
+        if current.status == .attested {
+            let locked: [(String, Bool)] = [("interviewee", current.personID != iv.personID), ("recording", current.recordingRef != iv.recordingRef),
+                                            ("transcript", current.transcriptRef != iv.transcriptRef), ("date", current.scheduledAt != iv.scheduledAt),
+                                            ("mode", current.mode != iv.mode), ("location", current.location != iv.location)]
+            if let changed = locked.first(where: { $0.1 }) { throw CaseFileError.attestedFieldLocked(changed.0) }
+        }
         let status: InterviewStatus = current.status == .attested ? .attested : iv.status
         guard current.caseID == iv.caseID else { throw CaseFileError.notInCase("interview", iv.id) }
         try await write("cf_ivu", caseID: iv.caseID, actor: actor, action: "interviewUpdated", detail: status.label, at: date) { db in
@@ -332,6 +340,52 @@ public actor CaseFileRepository {
             }
             try db.exec("UPDATE case_interviews SET status = 'attested', attested_by = ?, attested_at = ?, statement_sha256 = ?, updated_at = ? WHERE id = ? AND case_id = ?;",
                         [.text(by), .date(date), .text(hash), .date(date), .uuid(interviewID), .uuid(caseID)])
+        }
+    }
+
+    // MARK: - Statement corrections (addenda)
+
+    /// Correct a CONFIRMED statement by an addendum linked to it; the confirmed text stays as it was.
+    @discardableResult
+    public func addStatementAddendum(caseID: UUID, interviewID: UUID, text: String, reason: String,
+                                     actor: String, at date: Date = Date()) async throws -> UUID {
+        let actor = try Self.clean(actor, "Actor")
+        let body = try Self.clean(text, "Correction")
+        let why = try Self.clean(reason, "Reason for the correction")
+        let id = UUID(), hash = CaseFileHash.sha256(body)
+        try await write("cf_adn", caseID: caseID, actor: actor, action: "statementCorrected", detail: "addendum · \(hash.prefix(12))", at: date) { db in
+            try Self.requireInCase(db, "interview", interviewID, caseID: caseID)
+            guard try !db.query("SELECT 1 FROM case_interviews WHERE id = ? AND case_id = ? AND status = 'attested' LIMIT 1;",
+                                [.uuid(interviewID), .uuid(caseID)]).isEmpty else { throw CaseFileError.notAttested }
+            try db.exec("""
+                INSERT INTO case_statement_addenda (id, interview_id, case_id, text, reason, sha256, recorded_by, recorded_at)
+                VALUES (?,?,?,?,?,?,?,?);
+                """, [.uuid(id), .uuid(interviewID), .uuid(caseID), .text(body), .text(why), .text(hash), .text(actor), .date(date)])
+        }
+        return id
+    }
+
+    /// Record that the interviewee confirmed a correction. Once only.
+    public func confirmAddendum(caseID: UUID, id: UUID, confirmedBy: String, actor: String, at date: Date = Date()) async throws {
+        let by = try Self.clean(confirmedBy, "Who confirmed the correction")
+        try await write("cf_adc", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "correctionConfirmed", detail: by, at: date) { db in
+            guard let row = try db.query("SELECT confirmed_by FROM case_statement_addenda WHERE id = ? AND case_id = ? LIMIT 1;",
+                                         [.uuid(id), .uuid(caseID)]).first else { throw CaseFileError.notInCase("correction", id) }
+            guard row.isNull(0) else { throw CaseFileError.addendumAlreadyConfirmed }
+            try db.exec("UPDATE case_statement_addenda SET confirmed_by = ?, confirmed_at = ? WHERE id = ? AND case_id = ? AND confirmed_by IS NULL;",
+                        [.text(by), .date(date), .uuid(id), .uuid(caseID)])
+        }
+    }
+
+    public func addenda(caseID: UUID) async throws -> [StatementAddendum] {
+        (try await database.query("""
+            SELECT id, interview_id, case_id, text, reason, sha256, recorded_by, recorded_at, confirmed_by, confirmed_at
+            FROM case_statement_addenda WHERE case_id = ? ORDER BY recorded_at, id;
+            """, [.uuid(caseID)])).compactMap { r in
+            guard let id = r.uuid(0), let iv = r.uuid(1), let c = r.uuid(2), let t = r.string(3), let why = r.string(4),
+                  let h = r.string(5), let by = r.string(6), let at = r.date(7) else { return nil }
+            return StatementAddendum(id: id, interviewID: iv, caseID: c, text: t, reason: why, sha256: h, recordedBy: by, recordedAt: at,
+                                     confirmedBy: r.string(8), confirmedAt: r.date(9))
         }
     }
 

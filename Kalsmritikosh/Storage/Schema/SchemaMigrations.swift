@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 155
+    public static let latestVersion = 156
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -545,7 +545,9 @@ public enum SchemaMigrations {
                                                     "alternatives", "for_lineages", "against_lineages", "actor", "decided_at"],
             "investigation_hypothesis_evidence_assessments": ["link_id", "reliability", "diagnostic_relevance", "assessed_by", "assessed_at"],
             // v155 — schema-conformance verification recorded in the ledger it verified.
-            "schema_conformance_marks": ["schema_version", "schema_fingerprint", "status", "added", "could_not_add", "checked_at"]
+            "schema_conformance_marks": ["schema_version", "schema_fingerprint", "status", "added", "could_not_add", "checked_at"],
+            // v156 — corrections to a confirmed statement are linked addenda, never edits.
+            "case_statement_addenda": ["id", "interview_id", "case_id", "text", "reason", "sha256", "recorded_by", "recorded_at", "confirmed_by", "confirmed_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -756,7 +758,8 @@ public enum SchemaMigrations {
         (152, v152),
         (153, v153),
         (154, v154),
-        (155, v155)
+        (155, v155),
+        (156, v156)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7527,6 +7530,37 @@ public enum SchemaMigrations {
         checked_at         REAL NOT NULL,
         CHECK(status IN ('clean','incomplete'))
     );
+    """
+
+
+    // MARK: - v156 — a confirmed statement is corrected by an addendum, never edited (implementation
+    // brief §9). Each addendum links to its interview, carries its own SHA-256 and reason, and can be
+    // confirmed once. Rows are append-only: text, reason and fingerprint never change, a confirmation
+    // is written once, and nothing is deleted except with the interview itself.
+    private static let v156: String = """
+    CREATE TABLE IF NOT EXISTS case_statement_addenda (
+        id            TEXT PRIMARY KEY NOT NULL,
+        interview_id  TEXT NOT NULL,
+        case_id       TEXT NOT NULL,
+        text          TEXT NOT NULL,
+        reason        TEXT NOT NULL,
+        sha256        TEXT NOT NULL,
+        recorded_by   TEXT NOT NULL,
+        recorded_at   REAL NOT NULL,
+        confirmed_by  TEXT,
+        confirmed_at  REAL,
+        FOREIGN KEY(interview_id) REFERENCES case_interviews(id) ON DELETE CASCADE,
+        CHECK(length(trim(text)) > 0),
+        CHECK(length(trim(reason)) > 0),
+        CHECK(length(trim(recorded_by)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_statement_addenda_case ON case_statement_addenda(case_id, interview_id);
+    CREATE TRIGGER IF NOT EXISTS case_statement_addenda_fixed BEFORE UPDATE ON case_statement_addenda
+    WHEN NEW.text IS NOT OLD.text OR NEW.reason IS NOT OLD.reason OR NEW.sha256 IS NOT OLD.sha256
+      OR NEW.interview_id IS NOT OLD.interview_id OR NEW.case_id IS NOT OLD.case_id
+      OR NEW.recorded_by IS NOT OLD.recorded_by OR NEW.recorded_at IS NOT OLD.recorded_at
+      OR OLD.confirmed_by IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_statement_addenda is append-only'); END;
     """
 
 }

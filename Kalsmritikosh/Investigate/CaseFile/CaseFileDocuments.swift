@@ -29,16 +29,18 @@ public nonisolated struct CaseFileSnapshot: Sendable {
     public let conflicts: [CaseConflictCheck]
     public let actions: [CaseAction]
     public let custody: [CustodyManifestEntry]
+    public let addenda: [StatementAddendum]
 
     public init(caseHeader: InvestigationCase, profile: CaseProfile, allegations: [CaseAllegation], grid: [AllegationEvidence],
                 tasks: [CaseTaskItem], journal: [CaseJournalEntry], people: [CasePerson], contacts: [CaseContact],
                 interviews: [CaseInterview], credibility: [CredibilityNote], exhibits: [CaseExhibit], holds: [CaseHoldNotice],
                 redactions: [CaseRedaction], batches: [CaseReviewBatch], conflicts: [CaseConflictCheck], actions: [CaseAction],
-                custody: [CustodyManifestEntry]) {
+                custody: [CustodyManifestEntry], addenda: [StatementAddendum] = []) {
         self.caseHeader = caseHeader; self.profile = profile; self.allegations = allegations; self.grid = grid; self.tasks = tasks
         self.journal = journal; self.people = people; self.contacts = contacts; self.interviews = interviews
         self.credibility = credibility; self.exhibits = exhibits; self.holds = holds; self.redactions = redactions
         self.batches = batches; self.conflicts = conflicts; self.actions = actions; self.custody = custody
+        self.addenda = addenda
     }
 
     public func person(_ id: UUID?) -> CasePerson? { id.flatMap { pid in people.first { $0.id == pid } } }
@@ -56,7 +58,7 @@ extension CaseFileService {
             credibility: try await file.credibility(caseID: caseID), exhibits: try await file.exhibits(caseID: caseID, includeWithdrawn: true),
             holds: try await file.holdNotices(caseID: caseID), redactions: try await file.redactions(caseID: caseID),
             batches: try await file.reviewBatches(caseID: caseID), conflicts: try await file.conflictChecks(caseID: caseID),
-            actions: try await file.actions(caseID: caseID), custody: custody)
+            actions: try await file.actions(caseID: caseID), custody: custody, addenda: try await file.addenda(caseID: caseID))
     }
 }
 
@@ -146,6 +148,12 @@ public nonisolated enum CaseFileDocuments {
             out += "Statement fingerprint (SHA-256): `\(interview.statementSHA256 ?? "")`" + (interview.statementIntact ? "" : " — **the text no longer matches the attested fingerprint**") + "\n"
         } else {
             out += "I have read this statement and it is true and complete to the best of my knowledge.\n\nSigned: ______________________   Date: ____________\n"
+        }
+        // Corrections follow the confirmed statement, in order; the statement itself is never edited.
+        for (n, a) in s.addenda.filter({ $0.interviewID == interview.id }).enumerated() {
+            out += "\n## Correction \(n + 1) — recorded \(t(a.recordedAt)) by \(a.recordedBy)\n\nReason: \(a.reason)\n\n\(a.text)\n\n"
+            out += a.confirmedAt.map { "Confirmed by \(a.confirmedBy ?? who) on \(t($0)).\n" } ?? "Not yet confirmed by the interviewee.\n"
+            out += "Correction fingerprint (SHA-256): `\(a.sha256)`" + (a.intact ? "" : " — **the text no longer matches its fingerprint**") + "\n"
         }
         return out + footer(by, at)
     }

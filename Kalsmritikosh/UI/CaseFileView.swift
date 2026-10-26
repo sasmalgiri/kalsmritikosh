@@ -702,6 +702,9 @@ struct InterviewEditor: View {
     @State var interview: CaseInterview
     let done: () -> Void
     @State private var attestedBy = ""
+    @State private var correction = ""
+    @State private var correctionReason = ""
+    @State private var correctionConfirmedBy = ""
     @State private var factor: CredibilityFactor = .consistency
     @State private var assessment: CredibilityAssessment = .neutral
     @State private var credNote = ""
@@ -717,13 +720,14 @@ struct InterviewEditor: View {
                         ForEach(InterviewStatus.allCases.filter { $0 != .attested || attested }) { Text($0.label).tag($0) }
                     }.disabled(attested)
                     DatePicker("When", selection: Binding(get: { interview.scheduledAt ?? Date() }, set: { interview.scheduledAt = $0 }))
-                    TextField("How (in person, video, phone)", text: str(\.mode))
-                    TextField("Where", text: str(\.location))
+                        .disabled(attested)
+                    TextField("How (in person, video, phone)", text: str(\.mode)).disabled(attested)
+                    TextField("Where", text: str(\.location)).disabled(attested)
                     TextField("Questions", text: str(\.questions), axis: .vertical).lineLimit(3...10)
                 }
                 Section("Recording and transcript") {
-                    EvidencePicker(title: "Recording", ref: str(\.recordingRef))
-                    EvidencePicker(title: "Transcript", ref: str(\.transcriptRef))
+                    EvidencePicker(title: "Recording", ref: str(\.recordingRef)).disabled(attested)
+                    EvidencePicker(title: "Transcript", ref: str(\.transcriptRef)).disabled(attested)
                     Text("Add the recording to the case's sources; its transcript is made on this Mac and can be chosen here.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Summary") {
@@ -750,6 +754,40 @@ struct InterviewEditor: View {
                     }
                     Button("Export statement for signature…") {
                         CaseFileSave.save(CaseFileDocuments.statement(s, interview: interview, by: model.actor), name: "Statement - \(s.person(interview.personID)?.name ?? "interview")", ext: "md")
+                    }
+                }
+                if attested {
+                    Section("Corrections") {
+                        let mine = s.addenda.filter { $0.interviewID == interview.id }
+                        if mine.isEmpty {
+                            Text("A confirmed statement is never edited. If the interviewee corrects it, record the correction here; it is kept with the statement, in order.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        ForEach(mine) { a in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(a.text).font(.callout)
+                                Text("Reason: \(a.reason) · recorded \(CaseFileDocuments.t(a.recordedAt)) by \(a.recordedBy)").font(.caption).foregroundStyle(.secondary)
+                                if let at = a.confirmedAt {
+                                    Text("Confirmed by \(a.confirmedBy ?? "") on \(CaseFileDocuments.t(at))").font(.caption)
+                                } else {
+                                    HStack {
+                                        TextField("Confirmed by (interviewee's name)", text: $correctionConfirmedBy)
+                                        Button("Record confirmation") {
+                                            let id = a.id, by = correctionConfirmedBy
+                                            model.run(appState) { try await $0.file.confirmAddendum(caseID: model.caseID, id: id, confirmedBy: by, actor: model.actor) }
+                                            correctionConfirmedBy = ""
+                                        }.disabled(correctionConfirmedBy.trimmingCharacters(in: .whitespaces).isEmpty)
+                                    }
+                                }
+                            }
+                        }
+                        TextField("The correction, in the interviewee's words", text: $correction, axis: .vertical).lineLimit(2...8)
+                        TextField("Why it is being corrected", text: $correctionReason)
+                        Button("Add correction") {
+                            let id = interview.id, text = correction, why = correctionReason
+                            model.run(appState) { try await $0.file.addStatementAddendum(caseID: model.caseID, interviewID: id, text: text, reason: why, actor: model.actor) }
+                            correction = ""; correctionReason = ""
+                        }.disabled(correction.trimmingCharacters(in: .whitespaces).isEmpty || correctionReason.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
                 Section("Credibility", content: {

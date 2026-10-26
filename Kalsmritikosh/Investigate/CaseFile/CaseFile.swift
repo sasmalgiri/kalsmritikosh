@@ -280,6 +280,24 @@ public nonisolated struct CaseInterview: Identifiable, Sendable, Equatable {
     }
 }
 
+/// A correction to an attested statement (implementation brief §9). The attested statement is never
+/// edited: a correction is a new, append-only record linked to it, with its own fingerprint, the reason,
+/// and — once the interviewee confirms it — who confirmed it and when. A confirmation entered here is a
+/// recorded assertion, not cryptographic proof of the interviewee's identity.
+public nonisolated struct StatementAddendum: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let interviewID: UUID
+    public let caseID: UUID
+    public let text: String
+    public let reason: String
+    public let sha256: String
+    public let recordedBy: String
+    public let recordedAt: Date
+    public let confirmedBy: String?
+    public let confirmedAt: Date?
+    public var intact: Bool { CaseFileHash.sha256(text) == sha256 }
+}
+
 public nonisolated enum CredibilityFactor: String, Codable, Sendable, CaseIterable, Identifiable {
     case consistency, corroboration, plausibility, motive, demeanour
     public var id: String { rawValue }
@@ -417,6 +435,9 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
     case duplicateExhibitNumber(String)
     case statementAlreadyAttested
     case noStatement
+    case attestedFieldLocked(String)
+    case notAttested
+    case addendumAlreadyConfirmed
     case taskEngineUnavailable
     /// The record exists but belongs to another case (implementation brief §3).
     case notInCase(String, UUID)
@@ -434,6 +455,9 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
         case .duplicateExhibitNumber(let n): return "Exhibit \(n) already exists in this case."
         case .statementAlreadyAttested: return "The statement is already attested. Record a new statement instead of changing it."
         case .noStatement: return "There is no statement to attest."
+        case .attestedFieldLocked(let what): return "The statement is confirmed, so its \(what) can't be changed. Add a correction instead."
+        case .notAttested: return "Only a confirmed statement takes a correction; edit the statement directly."
+        case .addendumAlreadyConfirmed: return "This correction is already confirmed."
         case .taskEngineUnavailable: return "Tasks aren't available yet."
         case .notInCase(let what, _): return "That \(what) belongs to another case."
         case .caseClosed: return "The case is closed. Reopen it to make changes."
