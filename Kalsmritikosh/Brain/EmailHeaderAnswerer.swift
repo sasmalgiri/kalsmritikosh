@@ -119,6 +119,15 @@ public nonisolated enum EmailHeaderAnswerer {
                        fromName: headers["x-from"] ?? "", toNames: headers["x-to"] ?? "")
     }
 
+    /// A long distribution list reads as its size and first addressees; the email itself (cited)
+    /// holds every one.
+    static func recipientList(_ to: String) -> String {
+        guard !to.isEmpty else { return "(no recipient line)" }
+        let all = to.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard all.count > 12 else { return to }
+        return "\(all.count) recipients — " + all.prefix(12).joined(separator: ", ") + ", and \(all.count - 12) more (all are in the cited email)"
+    }
+
     static func normalizedSubject(_ s: String) -> String {
         s.lowercased().replacingOccurrences(of: #"^(?:\s*(?:re|fw|fwd)\s*:\s*)+"#, with: "", options: .regularExpression)
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -163,7 +172,7 @@ public nonisolated enum EmailHeaderAnswerer {
             switch ask {
             case .sender: lines = distinct.map { "From: \($0.from)" + (several ? " (Date: \($0.date))" : "") }
             case .sentDate: lines = distinct.map { "Date: \($0.date)" + (several ? " (From: \($0.from))" : "") }
-            case .recipients: lines = distinct.map { "To: \($0.to.isEmpty ? "(no recipient line)" : $0.to)" + (several ? " (From: \($0.from), Date: \($0.date))" : "") }
+            case .recipients: lines = distinct.map { "To: \(Self.recipientList($0.to))" + (several ? " (From: \($0.from), Date: \($0.date))" : "") }
             default:
                 lines = distinct.map { m in
                     let body = m.body.count > 500 ? String(m.body.prefix(500)) + "…" : m.body

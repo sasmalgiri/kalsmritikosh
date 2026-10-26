@@ -140,6 +140,11 @@ struct EmailHeaderAnswererTests {
         #expect(try #require(EmailHeaderAnswerer.answer(.count(from: "Enron Announcements", to: "All Houston"), messages: [houston, otherList])).body.hasPrefix("1 of the emails found"))
         #expect(EmailHeaderAnswerer.parse("How many times did Lorna Brennan send an email to Bill Cordes?") == .count(from: "Lorna Brennan", to: "Bill Cordes"))
         #expect(EmailLoader.exportNameLines(["from": "pete.davis@enron.com", "x-from": "Schedule Crawler<pete.davis@enron.com>"]) == ["X-From: Schedule Crawler<pete.davis@enron.com>"])
+        // A long distribution list is its size and first addressees.
+        let list = (1...30).map { "person\($0)@enron.com" }.joined(separator: ", ")
+        let staff = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: a.b@enron.com\nTo: \(list)\nSubject: Staff Meeting\nDate: Tue, 1 May 2001 10:00:00 -0700\n\nAgenda."))
+        let r = try #require(EmailHeaderAnswerer.answer(.recipients(subject: "Staff Meeting"), messages: [staff]))
+        #expect(r.body.hasPrefix("To: 30 recipients — person1@enron.com, person2@enron.com") && r.body.contains("and 18 more"))
         // With no emails searched, an unknown subject is left to the normal pipeline.
         let parsed = try #require(EmailHeaderAnswerer.parse("Who sent the email \"Nothing like this\"?"))
         #expect(EmailHeaderAnswerer.answer(parsed, messages: []) == nil)
