@@ -164,9 +164,15 @@ public nonisolated enum ProceedingEventExtractor {
             let headlineSteps: [(String, Step)] = [("sentenced", .sentenced), ("pleads guilty", .pleaded), ("pleaded guilty", .pleaded),
                                                    ("convicted", .convicted), ("found guilty", .convicted), ("indicted", .charged),
                                                    ("charged", .charged), ("arrested", .arrested), ("acquitted", .acquitted), ("pardoned", .pardoned)]
-            if let step = headlineSteps.first(where: { t.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil })?.1,
-               !out.contains(where: { $0.step == step }) {
-                out.append(Finding(step: step, day: nil, dayFromPrintedDate: false, sentence: title, detail: nil, reportedOn: printed))
+            if let step = headlineSteps.first(where: { t.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil })?.1 {
+                // "Owner … Sentenced to 113 Months in Prison" — the headline's term, when no sentence
+                // in the body states one for this person.
+                let detail = step == .sentenced ? sentenceDetail(title) : nil
+                let bodyHasStep = out.contains(where: { $0.step == step })
+                let bodyHasTerm = out.contains(where: { $0.step == .sentenced && $0.detail != nil })
+                if !bodyHasStep || (detail != nil && !bodyHasTerm) {
+                    out.append(Finding(step: step, day: nil, dayFromPrintedDate: false, sentence: title, detail: detail, reportedOn: printed))
+                }
             }
         }
         return out.sorted { order($0) < order($1) }

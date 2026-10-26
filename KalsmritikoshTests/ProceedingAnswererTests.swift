@@ -140,6 +140,11 @@ struct ProceedingAnswererTests {
         #expect(body.hasPrefix("David Stanley was sentenced to three years in prison"))
         #expect(!body.contains("two years and six months"))
         // The brother's own question gets the brother's sentence.
+        // A term stated only in the headline is the sentence.
+        let headline = "U.S. Department of Justice\nCriminal Division\nFOR IMMEDIATE RELEASE\nThursday, April 16, 2015\n\nOwner of Miami Home Health Company Sentenced to 113 Months in Prison for $32 Million Medicare Fraud Scheme\n\nAn owner of a Miami home health company, Felix Gonzalez, 48, of Miami, was sentenced today for his role in a Medicare fraud scheme."
+        let fg = try #require(ProceedingAnswerer.parse("What sentence did Felix Gonzalez receive?"))
+        let fgBody = try #require(ProceedingAnswerer.answer(fg, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: headline)])).body
+        #expect(fgBody.hasPrefix("Felix Gonzalez was sentenced to 113 Months in Prison"))
         let brotherAsk = try #require(ProceedingAnswerer.parse("What sentence did Charles Stanley receive?"))
         let brother = try #require(ProceedingAnswerer.answer(brotherAsk, sources: src)).body
         #expect(brother.contains("two years and six months"))
