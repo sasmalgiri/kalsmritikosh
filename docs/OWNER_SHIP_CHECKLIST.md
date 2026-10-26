@@ -61,7 +61,8 @@ legal judgement. Nothing here has been done by the agent. Tick each with the dat
 
 ## Accuracy claims you may make (from measured results only)
 
-- Use only figures in `docs/CLOSED_CASE_SIMULATION.md` with their sample and mode. The honest
-  held-out figure for reworded prosecution questions is 87.6 % right / 7.2 % wrong (rules → Claude,
-  n = 898). "What was X charged with" and "what sentence" are below the brief's bar — do not claim
-  them as reliable. Never claim zero errors.
+- Use only figures in `docs/CLOSED_CASE_SIMULATION.md` with their sample and mode. Latest honest
+  held-out figure for reworded prosecution questions (held-out set 3, n = 888): **86.5 % right /
+  10.0 % wrong in the default mode (AI off)**, 90.2 % / 7.5 % with the person's Claude key.
+  "What was X charged with" and "when was X charged" are below the brief's bar — do not claim them
+  as reliable. Never claim zero errors.
