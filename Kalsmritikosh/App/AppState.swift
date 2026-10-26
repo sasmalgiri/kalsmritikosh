@@ -2761,6 +2761,23 @@ public final class AppState {
                     return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
                 } : nil
             await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
+            // Emails by exact subject, or sent by one person to another, straight from the ledger.
+            let participants = EmailParticipantRepository(database: db)
+            await brain.setEmailLookup { [weak chunks] lookup in
+                switch lookup {
+                case .subject(let subject):
+                    let phrase = "\"" + subject.replacingOccurrences(of: "\"", with: " ") + "\""
+                    do { return (try await chunks?.searchFTS(phrase, limit: 80) ?? []).map(\.objectID) } catch {
+                        KalsmritikoshLog.brain.error("email lookup by subject failed: \(String(describing: error), privacy: .public)")
+                        return []
+                    }
+                case .between(let a, let b):
+                    do { return try await participants.messageIDs(from: a, to: b) } catch {
+                        KalsmritikoshLog.brain.error("email lookup between people failed: \(String(describing: error), privacy: .public)")
+                        return []
+                    }
+                }
+            }
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in
                 await self?.composeToolGroundedAnswer(question: question, access: access)

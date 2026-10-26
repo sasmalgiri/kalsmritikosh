@@ -141,6 +141,31 @@ public actor EmailParticipantRepository {
         }
     }
 
+    /// The messages one person sent another (closed-case simulation, Enron mailboxes 2026-10-26:
+    /// counts read from retrieval stopped at its top hits). A person matches by display name, or by
+    /// an address that spells the name ("debra.perlingiere@…"); To and Cc both count as received.
+    public func messageIDs(from sender: String, to recipient: String, limit: Int = 2_000) async throws -> [UUID] {
+        func clauses(_ name: String, alias: String) -> (String, [SQLValue]) {
+            let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+            let parts = n.split(separator: " ").map(String.init)
+            var sql = "(lower(COALESCE(\(alias).display_name, '')) LIKE ? OR lower(\(alias).raw_address) LIKE ?"
+            var args: [SQLValue] = [.text("%\(n)%"), .text(n.contains("@") ? n : "%\(n)%")]
+            if parts.count >= 2 {
+                sql += " OR lower(\(alias).raw_address) LIKE ? OR (lower(COALESCE(\(alias).display_name, '')) LIKE ? AND lower(COALESCE(\(alias).display_name, '')) LIKE ?)"
+                args += [.text("\(parts[0]).\(parts[parts.count - 1])@%"), .text("%\(parts[0])%"), .text("%\(parts[parts.count - 1])%")]
+            }
+            return (sql + ")", args)
+        }
+        let (f, fa) = clauses(sender, alias: "f"), (t, ta) = clauses(recipient, alias: "t")
+        let rows = try await database.query("""
+        SELECT DISTINCT f.source_ko_id FROM email_participant_occurrences f
+          JOIN email_participant_occurrences t ON t.source_ko_id = f.source_ko_id
+         WHERE f.role = 'from' AND \(f) AND t.role IN ('to', 'cc') AND \(t)
+         LIMIT ?;
+        """, fa + ta + [.integer(Int64(limit))])
+        return rows.compactMap { $0.uuid(0) }
+    }
+
     /// L5 — the display names an address SENDS under ("Shirshendu Sasmal"),
     /// most frequent first.
     public func displayNames(sentBy address: String, limit: Int = 3) async throws -> [String] {

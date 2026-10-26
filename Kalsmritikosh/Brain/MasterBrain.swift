@@ -1619,6 +1619,13 @@ public actor MasterBrain {
         onDeviceRewriter = onDevice
         cloudRewriter = cloud
     }
+    /// The ledger's own lookup of emails — by exact subject, or sent by one person to another —
+    /// wired by AppState (MasterBrain holds no Database). Every id it returns passes the same
+    /// sensitive-scope policy as retrieval before it is read.
+    public enum EmailLookup: Sendable { case subject(String), between(String, String) }
+    private var emailLookup: (@Sendable (EmailLookup) async -> [UUID])?
+    public func setEmailLookup(_ lookup: @escaping @Sendable (EmailLookup) async -> [UUID]) { emailLookup = lookup }
+
     /// The case bench measures the cloud step with answers kept evidence-only; nil in the app,
     /// where the AI regime decides.
     private var interpreterModelsAllowedOverride: Bool?
@@ -2016,8 +2023,22 @@ public actor MasterBrain {
                 }
             default: break
             }
+            // The ledger's own lookup, so a count is over every email in scope, not the top hits.
+            if let emailLookup {
+                var found: [UUID] = []
+                switch ask {
+                case .sender(let s), .sentDate(let s), .recipients(let s), .content(let s): found = await emailLookup(.subject(s))
+                case .count(let a, let b), .when(let a, let b): found = await emailLookup(.between(a, b))
+                }
+                if !found.isEmpty {
+                    if let policy = sensitivePolicy {
+                        found = await policy.filter(result: RetrievalResult(authorityObjectIDs: found), access: access).result.authorityObjectIDs
+                    }
+                    ids = found + ids
+                }
+            }
             var messages: [EmailHeaderAnswerer.Message] = []
-            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(60) {
+            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(400) {
                 do {
                     if let text = try await objects.fetchContent(id: id), let m = EmailHeaderAnswerer.message(objectID: id, text: text) { messages.append(m) }
                 } catch {
