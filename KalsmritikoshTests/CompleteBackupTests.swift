@@ -58,6 +58,44 @@ struct CompleteBackupTests {
         await restored.close()
     }
 
+    @Test("A restore chosen in Settings runs at the next launch, keeps the replaced ledger, and runs once")
+    func scheduledAtBoot() async throws {
+        defer { PendingRestore.cancel() }
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let src = try scratch("psrc")
+        let letter = src.appendingPathComponent("letter.txt")
+        try Data("The approval letter.".utf8).write(to: letter)
+        let id = UUID()
+        try await db.exec("INSERT INTO files (id, url, source_type, availability) VALUES (?,?,?,?);",
+                          [.uuid(id), .text(letter.absoluteString), .text("txt"), .text("available")])
+        let snap = try scratch("psnap").appendingPathComponent("knowledge.sqlite")
+        try await db.backupSnapshot(to: snap)
+        let backup = try scratch("pbackup")
+        try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [(id, letter)], notIncluded: [],
+                                                 destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+        #expect(PendingRestore.schedule(backupFolder: backup) == nil)
+        #expect(PendingRestore.isScheduled)
+        // This Mac's current ledger.
+        let data = try scratch("pdata")
+        let live = data.appendingPathComponent("knowledge.sqlite")
+        try Data("the current ledger".utf8).write(to: live)
+        let outcome = await PendingRestore.performIfScheduled(databaseURL: live, recoveryKey: nil, nowEpoch: 42)
+        guard case .restored(let note) = outcome else { Issue.record("not restored: \(outcome)"); return }
+        #expect(note.contains("1 original file(s)"))
+        #expect(!PendingRestore.isScheduled)
+        // The replaced ledger is kept, never deleted.
+        #expect(try String(contentsOf: data.appendingPathComponent("Before restore 42/knowledge.sqlite"), encoding: .utf8) == "the current ledger")
+        let restored = try Database(url: live)
+        let url = try #require(try await restored.query("SELECT url FROM files WHERE id = ?;", [.uuid(id)]).first?.string(0).flatMap(URL.init(string:)))
+        #expect(try String(contentsOf: url, encoding: .utf8) == "The approval letter.")
+        await restored.close()
+        // Nothing scheduled: boot does nothing.
+        #expect(await PendingRestore.performIfScheduled(databaseURL: live, recoveryKey: nil) == .none)
+        // A folder that is not a backup is not scheduled.
+        #expect(PendingRestore.schedule(backupFolder: try scratch("empty")) != nil)
+        #expect(!PendingRestore.isScheduled)
+    }
+
     @Test("A tampered original refuses the restore and the target is left as it was")
     func tamperRefused() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)

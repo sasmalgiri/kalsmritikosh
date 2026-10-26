@@ -714,6 +714,8 @@ public final class AppState {
     public var deepLinkMessage: String?
     /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
     public var ledgerLocationNotice: String?
+    /// Brief §11 — what the restore scheduled in Settings did at this launch.
+    public var restoreNotice: String?
     /// O-5 — every online send, append-only.
     public private(set) var outboundLog: OutboundLogRepository?
     /// The person's own cloud AI (Online mode) — kept so the question interpreter's last step
@@ -1000,8 +1002,22 @@ public final class AppState {
             }
             // W2-7 — open the encrypted ledger (creating the key, or converting a plaintext
             // ledger once). Off the main actor: converting a large ledger takes a while.
-            let recoveryKey = bootRecoveryKey
+            var recoveryKey = bootRecoveryKey
             bootRecoveryKey = nil
+            // Brief §11 — a restore chosen in Settings runs now, before the ledger opens.
+            if databaseURL == nil {
+                switch await PendingRestore.performIfScheduled(databaseURL: resolvedDBURL, recoveryKey: recoveryKey) {
+                case .none: break
+                case .restored(let note): restoreNotice = note
+                case .failed(let note):
+                    restoreNotice = note
+                    recoveryKey = nil   // a key typed for the backup is not this ledger's
+                case .needsKey(let why):
+                    pendingBoot = (databaseURL, suppressAutoReingest)
+                    self.phase = .needsRecoveryKey(why)
+                    return
+                }
+            }
             if LedgerFileState.of(resolvedDBURL) == .plaintext {
                 bootNote = "Encrypting your ledger (one time — this can take a few minutes for a large archive)…"
             }

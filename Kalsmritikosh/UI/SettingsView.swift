@@ -1786,6 +1786,13 @@ public struct SettingsView: View {
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                Button {
+                    restoreFromBackup()
+                } label: {
+                    Label("Restore from a backup…", systemImage: "arrow.counterclockwise.circle")
+                }
+                .disabled(backingUp)
+                .help("Replace this ledger with a verified backup. The app quits and restores it when it opens again; the current ledger is kept in a “Before restore” folder.")
                 MoveToNewMacButton()
                 // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
                 if ProductModuleFlags.showPreviewFeatures {
@@ -1810,7 +1817,33 @@ public struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if let note = appState.restoreNotice {
+                Label(note, systemImage: "arrow.counterclockwise.circle").font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    /// Brief §11 — choose a backup, verify it, confirm, and quit; the next launch restores it before
+    /// the ledger opens (a live ledger is never replaced).
+    private func restoreFromBackup() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.prompt = "Restore This Backup"
+        panel.message = "Choose a backup folder made by “Back up now…” or “Back up everything…”."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        let scoped = dir.startAccessingSecurityScopedResource()
+        defer { if scoped { dir.stopAccessingSecurityScopedResource() } }
+        if let problem = PendingRestore.schedule(backupFolder: dir) { backupStatus = problem; return }
+        let alert = NSAlert()
+        alert.messageText = "Restore “\(dir.lastPathComponent)”?"
+        alert.informativeText = "Investigations Made Easy will quit. When you open it again, it replaces this ledger with the backup (checked file by file), and keeps the current ledger in a “Before restore” folder beside it. If anything fails, the current ledger is left as it is."
+        alert.addButton(withTitle: "Quit and Restore")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { PendingRestore.cancel(); return }
+        NSApp.terminate(nil)
+        #endif
     }
 
     /// Copy the live database (+ its -wal/-shm sidecars, if present) into a

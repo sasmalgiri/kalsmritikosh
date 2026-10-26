@@ -229,7 +229,7 @@ struct MoveToNewMacView: View {
             stepTitle("3. On the new Mac", "macbook")
             Text("Simplest: use Apple's Migration Assistant when you set up the new Mac. It moves the app together with its ledger. The ledger's key is kept for this Mac only and does not move, so the first time you open Investigations Made Easy on the new Mac it asks for the recovery key from step 2 — enter it once and the new Mac keeps it.")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
-            Text("Starting fresh instead: install Investigations Made Easy from the App Store with the same Apple ID (your purchase carries over), and connect the drive with your backup. Restoring a backup from inside the app is not available in this version yet — keep the backup folder and your recovery key, and contact \(FeedbackMail.supportAddress) for help moving the ledger across.")
+            Text("Starting fresh instead: install Investigations Made Easy from the App Store with the same Apple ID (your purchase carries over), and connect the drive with your backup. Then choose Settings ▸ Data ▸ Restore from a backup…: the app quits, restores the backup when it opens again, and asks for the recovery key from step 2. A backup made with “Back up everything…” brings the original files too, so citations open without re-adding your folders.")
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             Text("Either way, if your original folders are in a different place on the new Mac, add them again in Sources so citations can open the original files.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
