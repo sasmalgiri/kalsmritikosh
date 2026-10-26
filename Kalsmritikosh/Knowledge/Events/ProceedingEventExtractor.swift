@@ -114,7 +114,18 @@ public nonisolated enum ProceedingEventExtractor {
             let s = sentence.lowercased()
             guard index == descriptiveLead || surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
             // Where the person is named in the sentence (by any of their surnames, or the descriptive lead).
-            let named = surnames.compactMap { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) }
+            // A surname right after a DIFFERENT given name is someone else ("The brother, Charles Stanley,
+            // … was sentenced" is not David Stanley's sentence — closed-case simulation 2026-10-26).
+            let named = surnames.flatMap { surname -> [Range<String.Index>] in
+                guard let re = try? NSRegularExpression(pattern: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#) else { return [] }
+                let ns = s as NSString
+                return re.matches(in: s, range: NSRange(location: 0, length: ns.length)).compactMap { m -> Range<String.Index>? in
+                    guard let r = Range(m.range, in: s) else { return nil }
+                    if sentence.count == s.count, Self.namesSomeoneElse(sentence, at: m.range, asked: tokens) { return nil }
+                    return r
+                }
+            }
+            if index != descriptiveLead, named.isEmpty { continue }
             for step in Step.allCases {
                 guard let r = s.range(of: step.pattern, options: .regularExpression) else { continue }
                 // The step is the person's when they are named before it ("Romano … was sentenced"), or
@@ -187,6 +198,34 @@ public nonisolated enum ProceedingEventExtractor {
     }
 
     /// All the asked name's tokens within a short stretch ("Christi Romano, aka Christi Machala").
+    /// True when the surname at `range` (in the original-case sentence) follows a capitalised given
+    /// name that is not one of the asked person's ("Charles Stanley" when asked about David Stanley).
+    static func namesSomeoneElse(_ sentence: String, at range: NSRange, asked tokens: [String]) -> Bool {
+        let ns = sentence as NSString
+        guard range.location > 0 else { return false }
+        let before = ns.substring(to: range.location)
+        guard let m = before.range(of: #"([A-Z][a-z'’\-]+)\s+(?:[A-Z]\.\s+)?$"#, options: .regularExpression) else { return false }
+        let word = String(before[m]).trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).first ?? ""
+        let given = word.lowercased()
+        let titles: Set<String> = ["mr", "mrs", "ms", "dr", "judge", "justice", "defendant", "officer", "agent", "detective", "sergeant",
+                                   "deputy", "senator", "representative", "governor", "mayor", "pastor", "reverend", "the", "a", "an",
+                                   "and", "said", "says", "when", "after", "before", "then", "while", "that", "according", "to", "both",
+                                   "general", "attorney", "special", "former", "acting", "assistant", "chief", "commissioner",
+                                   "yesterday", "today", "earlier", "later", "meanwhile", "however", "also", "here", "there"]
+        if titles.contains(given) || tokens.dropLast().contains(given) { return false }
+        // A given name the person goes by is a prefix of an asked token ("Dave" ~ "david") — kept as theirs.
+        if tokens.dropLast().contains(where: { $0.hasPrefix(given) || given.hasPrefix($0) }) { return false }
+        // At the start of a sentence a capital proves nothing ("Yesterday Stanley …") unless the release's
+        // own introduction follows: "Charles Stanley, 52, of Shady Spring".
+        let isSentenceStart = before[..<m.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+            .range(of: #"(?:^|[.!?]["”’)]?)$"#, options: .regularExpression) != nil
+        if isSentenceStart {
+            let after = ns.substring(from: range.location + range.length)
+            return after.range(of: #"^,\s*(?:a\s)?\d{1,3},"#, options: .regularExpression) != nil
+        }
+        return true
+    }
+
     static func mentionsFully(_ lower: String, tokens: [String]) -> Bool {
         guard let first = tokens.first, let last = tokens.last else { return false }
         // A middle initial's period ("Nathaniel E. Robinson") is part of the name.

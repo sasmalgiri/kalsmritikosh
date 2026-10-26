@@ -123,6 +123,28 @@ struct ProceedingAnswererTests {
         #expect(plea.hasPrefix("The documents that name Christi Machala don't report a verdict. They say Christi Machala pleaded guilty"))
     }
 
+    @Test("A relative with the same surname is someone else; the person's own sentence is found")
+    func sameSurnameRelative() throws {
+        let text = """
+            U.S. Department of Justice
+            FOR IMMEDIATE RELEASE
+            Wednesday, June 22, 2022
+
+            Brothers Sentenced for Destroying Energy Facility
+
+            CHARLESTON, W.Va. – David Stanley, 50, of Shady Spring, was sentenced today to three years in prison for destruction of an energy facility. The brother, Charles Stanley, 52, of Shady Spring, pleaded guilty to aiding and abetting the destruction of an energy facility and was sentenced to two years and six months in prison. Yesterday Stanley's lawyer declined to comment.
+            """
+        let src = [ProceedingAnswerer.Source(objectID: UUID(), text: text)]
+        let parsed = try #require(ProceedingAnswerer.parse("What sentence did David Stanley receive?"))
+        let body = try #require(ProceedingAnswerer.answer(parsed, sources: src)).body
+        #expect(body.hasPrefix("David Stanley was sentenced to three years in prison"))
+        #expect(!body.contains("two years and six months"))
+        // The brother's own question gets the brother's sentence.
+        let brotherAsk = try #require(ProceedingAnswerer.parse("What sentence did Charles Stanley receive?"))
+        let brother = try #require(ProceedingAnswerer.answer(brotherAsk, sources: src)).body
+        #expect(brother.contains("two years and six months"))
+    }
+
     @Test("A step no document records is said to be unrecorded; a person no document names is left to the pipeline")
     func absent() throws {
         let pardon = try ask("When was Christi Machala pardoned?")
