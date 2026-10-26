@@ -128,7 +128,7 @@ public nonisolated enum EmailHeaderAnswerer {
     }
 
     /// The answer, or nil when no email among `messages` is the one asked about (the pipeline runs).
-    public static func answer(_ ask: Ask, messages: [Message]) -> VerifiedAnswer? {
+    public static func answer(_ ask: Ask, messages: [Message], complete: Bool = true) -> VerifiedAnswer? {
         switch ask {
         case .sender(let s), .sentDate(let s), .recipients(let s), .content(let s):
             let wanted = normalizedSubject(s)
@@ -160,7 +160,10 @@ public nonisolated enum EmailHeaderAnswerer {
             guard !fromA.isEmpty else { return nil }
             var distinct: [Message] = []
             for m in fromA where names(b, in: m.to) && !distinct.contains(where: { $0.subject == m.subject && $0.date == m.date }) { distinct.append(m) }
-            let text = "\(distinct.count) of the emails found are from \(a) to \(b)" + (distinct.isEmpty ? "." : ":\n" + distinct.map { "• \($0.date) — \($0.subject)" }.joined(separator: "\n"))
+            // A search that stopped at its cap gives a floor, never a total (brief §7 exact aggregates).
+            let lead = complete ? "\(distinct.count)" : "At least \(distinct.count)"
+            var text = "\(lead) of the emails found are from \(a) to \(b)" + (distinct.isEmpty ? "." : ":\n" + distinct.map { "• \($0.date) — \($0.subject)" }.joined(separator: "\n"))
+            if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
             return answered(text, distinct.isEmpty ? Array(fromA.prefix(3)) : distinct)
         case .when(let a, let b):
             let fromA = messages.filter { names(a, in: $0.from) }

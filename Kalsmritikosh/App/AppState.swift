@@ -2775,7 +2775,7 @@ public final class AppState {
                         return []
                     }
                 case .between(let a, let b):
-                    do { return try await participants.messageIDs(from: a, to: b) } catch {
+                    do { return try await participants.messageIDs(from: a, to: b, limit: MasterBrain.emailLookupCap) } catch {
                         KalsmritikoshLog.brain.error("email lookup between people failed: \(String(describing: error), privacy: .public)")
                         return []
                     }

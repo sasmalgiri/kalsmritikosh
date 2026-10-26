@@ -1624,6 +1624,8 @@ public actor MasterBrain {
     /// sensitive-scope policy as retrieval before it is read.
     public enum EmailLookup: Sendable { case subject(String), between(String, String) }
     private var emailLookup: (@Sendable (EmailLookup) async -> [UUID])?
+    /// The most message ids one between-people lookup returns (EmailParticipantRepository's limit).
+    static let emailLookupCap = 2_000
     public func setEmailLookup(_ lookup: @escaping @Sendable (EmailLookup) async -> [UUID]) { emailLookup = lookup }
 
     /// The case bench measures the cloud step with answers kept evidence-only; nil in the app,
@@ -2025,11 +2027,15 @@ public actor MasterBrain {
             default: break
             }
             // The ledger's own lookup, so a count is over every email in scope, not the top hits.
+            // `complete` is false when the lookup stopped at its cap: the count is then "at least".
+            var complete = true
             if let emailLookup {
                 var found: [UUID] = []
                 switch ask {
                 case .sender(let s), .sentDate(let s), .recipients(let s), .content(let s): found = await emailLookup(.subject(s))
-                case .count(let a, let b), .when(let a, let b): found = await emailLookup(.between(a, b))
+                case .count(let a, let b), .when(let a, let b):
+                    found = await emailLookup(.between(a, b))
+                    complete = found.count < Self.emailLookupCap
                 }
                 if !found.isEmpty {
                     if let policy = sensitivePolicy {
@@ -2043,14 +2049,20 @@ public actor MasterBrain {
                 }
             }
             var messages: [EmailHeaderAnswerer.Message] = []
-            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(400) {
+            // A count or "when" reads every message found (up to the lookup cap); other asks need only the top.
+            let loadCap: Int
+            switch ask {
+            case .count, .when: loadCap = Self.emailLookupCap + 400
+            default: loadCap = 400
+            }
+            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap) {
                 do {
                     if let text = try await objects.fetchContent(id: id), let m = EmailHeaderAnswerer.message(objectID: id, text: text) { messages.append(m) }
                 } catch {
                     KalsmritikoshLog.brain.error("email answer: content fetch failed: \(String(describing: error), privacy: .public)")
                 }
             }
-            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages) {
+            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages, complete: complete) {
                 KalsmritikoshLog.brain.info("email answer: \(String(describing: ask).prefix(40), privacy: .public) from \(messages.count, privacy: .public) message(s)")
                 return answered
             }

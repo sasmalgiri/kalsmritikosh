@@ -92,6 +92,9 @@ struct EmailHeaderAnswererTests {
     @Test("How many emails one person sent another; an email to someone never written to is unrecorded")
     func betweenPeople() throws {
         #expect(try ask("How many emails did Debra Perlingiere send to Robin Masciangelo?").body.hasPrefix("2 of the emails found are from Debra Perlingiere to Robin Masciangelo"))
+        // A lookup that stopped at its cap gives a floor, never a total.
+        let capped = try #require(EmailHeaderAnswerer.answer(.count(from: "Debra Perlingiere", to: "Robin Masciangelo"), messages: messages, complete: false))
+        #expect(capped.body.hasPrefix("At least 2 of the emails found") && capped.body.contains("there may be more"))
         let none = try ask("When did Debra Perlingiere email Zelda Quackenbush?")
         #expect(none.refused)
         #expect(none.body == "None of the emails found from Debra Perlingiere is addressed to Zelda Quackenbush.")
