@@ -701,6 +701,8 @@ public final class AppState {
     public private(set) var enrichmentDrainer: EnrichmentDrainer?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
+    /// Schema objects the boot check could not add to this ledger (brief §11) — shown in Settings, never only logged.
+    public private(set) var schemaUnrepaired: [String] = []
 
     // MARK: - Header search hand-off
     /// A query typed into the always-visible header search box. SearchView
@@ -1018,6 +1020,10 @@ public final class AppState {
             try await SchemaMigrations.migrate(db)
             // Add anything an older upgrade left out (only adds; once per schema version).
             await SchemaConformance.checkAtBoot(db)
+            do { schemaUnrepaired = try await SchemaConformance.unrepaired(db) } catch {
+                schemaUnrepaired = ["the schema check result could not be read"]
+                KalsmritikoshLog.storage.error("Schema conformance result unreadable: \(error.localizedDescription, privacy: .public)")
+            }
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
 
             // HNSW ANN index — built lazily after boot. Pass it to

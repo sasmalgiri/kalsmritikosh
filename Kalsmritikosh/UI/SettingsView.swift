@@ -3166,6 +3166,13 @@ private struct LedgerEncryptionSubsection: View {
                 Image(systemName: encrypted ? "lock.shield.fill" : "lock.open").foregroundStyle(Theme.brand)
                 Text("Encryption").font(.title3.bold())
             }
+            if !appState.schemaUnrepaired.isEmpty {
+                // Brief §11: a repair that could not finish is shown before anyone relies on the ledger.
+                Label("This ledger is missing \(appState.schemaUnrepaired.count) part(s) of its structure that could not be added automatically: \(appState.schemaUnrepaired.prefix(3).joined(separator: "; ")). Back it up and contact support before approving findings or exporting.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(encrypted
                  ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them."
                  : "The ledger is not open yet.")

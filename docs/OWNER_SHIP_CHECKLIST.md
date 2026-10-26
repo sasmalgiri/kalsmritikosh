@@ -16,7 +16,7 @@ legal judgement. Nothing here has been done by the agent. Tick each with the dat
 - [ ] **Fresh install** on a Mac that never had the app: onboarding shows "Investigations Made Easy —
       From evidence to findings"; Cases opens by default; Private mode is on.
 - [ ] **Upgrade**: run the archived build over your existing ledger; it opens, the schema reaches 157,
-      Settings shows no "could not repair" warning (`SchemaConformance.unrepaired` empty).
+      Settings → Data → Encryption shows no orange "missing part(s) of its structure" warning.
 - [ ] **A real case end to end** (brief §1 reference journeys — do one of: workplace complaint, safety
       incident, payment fraud): create the case → add a small mixed set of documents → frame an
       allegation → link evidence for AND against → interview → confirm the statement → add a
