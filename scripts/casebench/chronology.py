@@ -47,7 +47,9 @@ def sentence_forms(n, unit):
 
 MONTH = r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
 
-def stated_days(body, verb, year, printed=None, window=80):
+OTHER_STEP = re.compile(r"\b(?:pleaded|pled|pleading|indicted|charged|arrested|convicted|found guilty|arraigned)\b", re.I)
+
+def stated_days(body, verb, year, printed=None, window=80, clause=False):
     """Days a release itself gives for the event — a date in the same sentence as the step ("was
     sentenced on March 3, 2015", "Judge X on March 15, 2017, sentenced …"), or "yesterday" (the day
     before the release): the release's own day is not the only right answer."""
@@ -56,7 +58,12 @@ def stated_days(body, verb, year, printed=None, window=80):
         v = re.search(verb, sent, re.I)
         if not v: continue
         for m in re.finditer(r"\b(" + MONTH + r")\.? (\d{1,2})(?:, (\d{4}))?", sent):
-            if abs(m.start() - v.start()) > window: continue   # a date of another step in the same sentence
+            # A date of another step in the same sentence is not this step's. With clause=True a
+            # later date belongs to the step unless another step's verb comes between them
+            # ("was sentenced to 33 months … by Judge Lawson on Feb. 23, after pleading guilty on Nov. 19").
+            if clause and m.start() > v.start():
+                if OTHER_STEP.search(sent[v.end():m.start()]): continue
+            elif abs(m.start() - v.start()) > window: continue
             try:
                 d = datetime.datetime.strptime(f"{m.group(1)[:3]} {m.group(2)} {m.group(3) or year}", "%b %d %Y").date()
                 out.add(d.isoformat())
@@ -144,7 +151,7 @@ def charge_days(name, rels):
 def sentencing_days(name, sent):
     """The sentencing release's day and any day its sentences give the sentencing (wider window:
     "was sentenced … by Judge X … on February 23, 2022")."""
-    return sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year, sent["day"], window=170))
+    return sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year, sent["day"], window=170, clause=True))
 
 def offence_sentences(name, rels):
     """The person's OWN sentences that state what they were charged with, pleaded to or convicted
@@ -162,7 +169,7 @@ def offence_sentences(name, rels):
             # dealer pleaded guilty to …").
             own = surname in low[:m.start() + 1]
             pronoun = re.match(r"\s*(?:He|She)\b", sent) is not None and i > 0 and surname in parts[i - 1].lower()
-            lead = i < 2 and re.match(r"\s*(?:[A-Z][\w.,' ]{0,40}[–—-]\s*)?An?\s", sent) is not None
+            lead = i < 2 and re.match(r"\s*(?:[A-Z][\w.,'\s]{0,40}[–—-]\s*)?An?\s", sent) is not None
             if own or pronoun or lead: out.append(re.sub(r"\s+", " ", sent.strip()))
     return list(dict.fromkeys(out))
 
@@ -182,8 +189,10 @@ def main():
             skip |= {json.loads(l)["key"] for l in open(t)}
     rng = random.Random(a.seed)
     by = collections.defaultdict(list)
+    copies = collections.defaultdict(set)   # (name, day) -> every component a copy was posted under
     for rel in releases(a.raw):
         by[(rel["name"], tuple(rel["components"][:1]))].append(rel)
+        copies[(rel["name"], rel["day"])].update(rel["components"])
     pool = []
     for (name, _), rels in by.items():
         rels = sorted({r["uuid"]: r for r in rels}.values(), key=lambda r: r["day"])
@@ -236,7 +245,10 @@ def main():
         offences, said = offences_for(name, rels), offence_sentences(name, rels)
         if offences:
             q.append({"id": "charge", "q": f"What was {name} charged with?", "expect": {"overlap_any": offences, "quote_any": said}})
-        offices = sorted(set(first["components"] + office_names(first["components"])))
+        # Every office the case's releases were posted under: DOJ cross-posts one release under each
+        # prosecuting component (a U.S. Attorney's Office and the Civil Rights Division together).
+        comps = sorted({c for r in rels for c in copies[(name, r["day"])]})
+        offices = sorted(set(comps + office_names(comps)))
         if offices:
             q.append({"id": "office", "q": f"Which office prosecuted {name}?", "expect": {"any": offices}})
         q.append({"id": "absent", "q": f"When was {name} pardoned?", "expect": {"dates": ["1900-01-01"]}, "in_docs": False})
