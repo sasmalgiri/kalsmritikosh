@@ -2365,6 +2365,10 @@ public final class AppState {
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 baseRetriever: retriever,
                 evidence: evidenceStoreRepo,
+                // A case-scoped brain gets NO archive-wide lookups (setEmailLookup and the like): those
+                // query the whole ledger, filtered for sensitivity and workspace but not for the case's
+                // source scope. Without them the email/proceeding answerers read only the scoped
+                // retrieval, so nothing outside the case can enter an answer.
                 makeBrain: { scoped in
                     MasterBrain(
                         intentDetector: intentDetector, router: router, retriever: scoped, executor: executor,
