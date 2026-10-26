@@ -2029,6 +2029,7 @@ public actor MasterBrain {
             // The ledger's own lookup, so a count is over every email in scope, not the top hits.
             // `complete` is false when the lookup stopped at its cap: the count is then "at least".
             var complete = true
+            var ledgerPairs = Set<UUID>()
             if let emailLookup {
                 var found: [UUID] = []
                 switch ask {
@@ -2043,7 +2044,7 @@ public actor MasterBrain {
                     }
                     // An exact-subject hit set is the answer's whole pool; a count needs every message.
                     switch ask {
-                    case .count, .when: ids = found + ids
+                    case .count, .when: ids = found + ids; ledgerPairs = Set(found)
                     default: ids = found
                     }
                 }
@@ -2062,7 +2063,7 @@ public actor MasterBrain {
                     KalsmritikoshLog.brain.error("email answer: content fetch failed: \(String(describing: error), privacy: .public)")
                 }
             }
-            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages, complete: complete) {
+            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages, complete: complete, ledgerPairs: ledgerPairs) {
                 KalsmritikoshLog.brain.info("email answer: \(String(describing: ask).prefix(40), privacy: .public) from \(messages.count, privacy: .public) message(s)")
                 return answered
             }

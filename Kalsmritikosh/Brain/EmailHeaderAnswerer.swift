@@ -68,6 +68,11 @@ public nonisolated enum EmailHeaderAnswerer {
         if let m = firstMatch(#"^(?i:when did)\s+(\S.{1,80}?)\s+(?i:e-?mail|write to|message)\s+(\S.{1,80}?)\s*\?*\s*$"#, question) {
             return .when(from: m[0], to: m[1])
         }
+        // "On what date did feedback@intcx.com send an email to B?", "When anthony.carroll@… sent an
+        // email to B?" — any sender, the date asked for, "send/sent an email to".
+        if let m = firstMatch(#"^(?i:(?:when|on what (?:date|day)|what (?:date|day))(?:\s+did)?)\s+(\S.{1,80}?)\s+(?i:send|sent)\s+(?i:(?:an?|any)\s+)?(?i:e-?mails?|messages?)\s+(?i:to)\s+(\S.{1,80}?)\s*\?*\s*$"#, question) {
+            return .when(from: m[0], to: m[1])
+        }
         return nil
     }
 
@@ -128,7 +133,9 @@ public nonisolated enum EmailHeaderAnswerer {
     }
 
     /// The answer, or nil when no email among `messages` is the one asked about (the pipeline runs).
-    public static func answer(_ ask: Ask, messages: [Message], complete: Bool = true) -> VerifiedAnswer? {
+    /// `ledgerPairs`: messages the ledger's participant index already matched as from A to B (by the
+    /// display name the header line may not carry — "From: m.miller@…" for "Mary Miller").
+    public static func answer(_ ask: Ask, messages: [Message], complete: Bool = true, ledgerPairs: Set<UUID> = []) -> VerifiedAnswer? {
         switch ask {
         case .sender(let s), .sentDate(let s), .recipients(let s), .content(let s):
             let wanted = normalizedSubject(s)
@@ -156,23 +163,23 @@ public nonisolated enum EmailHeaderAnswerer {
             let lead = several ? "\(distinct.count) emails found have that subject:\n" : ""
             return answered(lead + lines.joined(separator: "\n"), distinct)
         case .count(let a, let b):
-            let fromA = messages.filter { names(a, in: $0.from) }
+            let fromA = messages.filter { names(a, in: $0.from) || ledgerPairs.contains($0.objectID) }
             guard !fromA.isEmpty else { return nil }
             var distinct: [Message] = []
-            for m in fromA where names(b, in: m.to) && !distinct.contains(where: { $0.subject == m.subject && $0.date == m.date }) { distinct.append(m) }
+            for m in fromA where (names(b, in: m.to) || ledgerPairs.contains(m.objectID)) && !distinct.contains(where: { $0.subject == m.subject && $0.date == m.date }) { distinct.append(m) }
             // A search that stopped at its cap gives a floor, never a total (brief §7 exact aggregates).
             let lead = complete ? "\(distinct.count)" : "At least \(distinct.count)"
             var text = "\(lead) of the emails found are from \(a) to \(b)" + (distinct.isEmpty ? "." : ":\n" + distinct.map { "• \($0.date) — \($0.subject)" }.joined(separator: "\n"))
             if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
             return answered(text, distinct.isEmpty ? Array(fromA.prefix(3)) : distinct)
         case .when(let a, let b):
-            let fromA = messages.filter { names(a, in: $0.from) }
+            let fromA = messages.filter { names(a, in: $0.from) || ledgerPairs.contains($0.objectID) }
             guard !fromA.isEmpty else {
                 // Nothing found from the sender at all: that is what the emails found show.
                 guard !messages.isEmpty else { return nil }
                 return answered("None of the emails found is from \(a) to \(b).", [], refused: true)
             }
-            let toB = fromA.filter { names(b, in: $0.to) }
+            let toB = fromA.filter { names(b, in: $0.to) || ledgerPairs.contains($0.objectID) }
             guard !toB.isEmpty else {
                 return answered("None of the emails found from \(a) is addressed to \(b).", Array(fromA.prefix(3)), refused: true)
             }

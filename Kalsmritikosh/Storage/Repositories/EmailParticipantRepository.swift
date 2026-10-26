@@ -144,6 +144,7 @@ public actor EmailParticipantRepository {
     /// The messages one person sent another (closed-case simulation, Enron mailboxes 2026-10-26:
     /// counts read from retrieval stopped at its top hits). A person matches by display name, or by
     /// an address that spells the name ("debra.perlingiere@…"); To and Cc both count as received.
+    /// Messages from `sender` ADDRESSED to `recipient` (the To line; a Cc is a copy, not "sent to").
     public func messageIDs(from sender: String, to recipient: String, limit: Int = 2_000) async throws -> [UUID] {
         func clauses(_ name: String, alias: String) -> (String, [SQLValue]) {
             let n = name.lowercased().trimmingCharacters(in: .whitespaces)
@@ -160,7 +161,7 @@ public actor EmailParticipantRepository {
         let rows = try await database.query("""
         SELECT DISTINCT f.source_ko_id FROM email_participant_occurrences f
           JOIN email_participant_occurrences t ON t.source_ko_id = f.source_ko_id
-         WHERE f.role = 'from' AND \(f) AND t.role IN ('to', 'cc') AND \(t)
+         WHERE f.role = 'from' AND \(f) AND t.role = 'to' AND \(t)
          LIMIT ?;
         """, fa + ta + [.integer(Int64(limit))])
         return rows.compactMap { $0.uuid(0) }

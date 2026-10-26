@@ -101,6 +101,18 @@ struct EmailHeaderAnswererTests {
         // A sender that is an organisation or an address, never found at all: said so.
         let org = try ask("When did EDIS Service email Zelda Quackenbush?")
         #expect(org.refused && org.body == "None of the emails found is from EDIS Service to Zelda Quackenbush.")
+        // An address sender, asked for a date, parses — and an address never written to is refused.
+        let n = QuestionCanonicalizer.normalize
+        #expect(EmailHeaderAnswerer.parse(n("On what date did feedback@intcx.com send an email to Zelda Quackenbush?")) == .when(from: "feedback@intcx.com", to: "Zelda Quackenbush"))
+        #expect(EmailHeaderAnswerer.parse(n("Do you know the date feedback@intcx.com sent an email to Zelda Quackenbush?")) == .when(from: "feedback@intcx.com", to: "Zelda Quackenbush"))
+        let addr = try ask("On what date did debra.perlingiere@enron.com send an email to Zelda Quackenbush?")
+        #expect(addr.refused)
+        // A header that holds only an address ("From: m.miller@…") is still from Mary Miller when the
+        // ledger's participant index matched the display name.
+        let bare = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: m.miller@enron.com\nTo: b.rapp@enron.com\nSubject: Survey\nDate: Tue, 15 May 2001 16:50:00 -0700\n\nSee attached."))
+        #expect(EmailHeaderAnswerer.answer(.count(from: "Mary Miller", to: "Bill Rapp"), messages: [bare]) == nil)   // header alone: unknown
+        let matched = try #require(EmailHeaderAnswerer.answer(.count(from: "Mary Miller", to: "Bill Rapp"), messages: [bare], ledgerPairs: [bare.objectID]))
+        #expect(matched.body.hasPrefix("1 of the emails found are from Mary Miller to Bill Rapp"))
         // With no emails searched, an unknown subject is left to the normal pipeline.
         let parsed = try #require(EmailHeaderAnswerer.parse("Who sent the email \"Nothing like this\"?"))
         #expect(EmailHeaderAnswerer.answer(parsed, messages: []) == nil)
