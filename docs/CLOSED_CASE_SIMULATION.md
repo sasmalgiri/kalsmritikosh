@@ -61,6 +61,14 @@ was fixed from these cases before the run.
 | "What was X charged with?" | 82 | 22–44 % | 56–61 % | 35 % |
 | "What sentence did X receive?" | 74 | 13.5 % | 73 % | 5 % |
 
+**Triage of the 111 held-out misses by Claude** (`judge.py`, reads the case documents; brief §17: an
+LLM judge assists triage and is not the release oracle — a human must adjudicate a sample):
+bench 28 (the app's answer is right or the label is wrong — 18 of them "charged with", where the
+label is word overlap with any release and often picks a prior record), extraction 25 (12 of them
+the sentence imposed — O-2), retrieval 22, attribution 13, over-refusal 11, composition 7,
+understanding 3, **honesty 2** (the app stated something the documents do not support). If the 28
+"bench" verdicts hold on human review, held-out correctness is about 90.7 %.
+
 Against the brief's proposed bar (≥ 90 % answerable correctness, ≥ 99 % precision among answered
 factual questions) this is **not** release-grade for the charge and sentence kinds; the other kinds
 are close on correctness but not on precision. Claims must be restricted accordingly.
