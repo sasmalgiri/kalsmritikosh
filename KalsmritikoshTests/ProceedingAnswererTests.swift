@@ -77,6 +77,10 @@ struct ProceedingAnswererTests {
         let count = try ask("How many press releases are about Christi Machala?")
         #expect(count.body.hasPrefix("3 of the documents found name Christi Machala"))
         #expect(count.citations.count == 3)
+        // A capped document search gives a floor, never a total.
+        let parsed = try #require(ProceedingAnswerer.parse("How many press releases are about Christi Machala?"))
+        let floor = try #require(ProceedingAnswerer.answer(parsed, sources: sources, complete: false))
+        #expect(floor.body.hasPrefix("At least 3 of the documents found name Christi Machala") && floor.body.contains("there may be more"))
     }
 
     @Test("Claude-reworded sentencing dates and document counts parse to the same ask")

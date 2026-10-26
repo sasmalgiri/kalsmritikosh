@@ -1626,6 +1626,12 @@ public actor MasterBrain {
     private var emailLookup: (@Sendable (EmailLookup) async -> [UUID])?
     /// The most message ids one between-people lookup returns (EmailParticipantRepository's limit).
     static let emailLookupCap = 2_000
+    /// Documents naming a person, from the ledger's full-text index — every match, not the top hits
+    /// (brief §7 exact aggregates). `complete` is false when the index search stopped at its cap.
+    private var nameLookup: (@Sendable (String) async -> (ids: [UUID], complete: Bool))?
+    public func setNameLookup(_ lookup: @escaping @Sendable (String) async -> (ids: [UUID], complete: Bool)) { nameLookup = lookup }
+    static let nameLookupCap = 2_000
+    static let documentCountLoadCap = 600
     public func setEmailLookup(_ lookup: @escaping @Sendable (EmailLookup) async -> [UUID]) { emailLookup = lookup }
 
     /// The case bench measures the cloud step with answers kept evidence-only; nil in the app,
@@ -2075,16 +2081,30 @@ public actor MasterBrain {
             let byName = (try? await retriever.retrieve(
                 for: UserIntent(kind: intent.kind, scope: intent.scope, rawQuestion: parsed.person),
                 layers: decision.retrievalLayers, access: access))?.result
-            let ids = sharedRetrieval.chunks.map(\.chunk.objectID) + (byName?.chunks.map(\.chunk.objectID) ?? [])
+            var ids = sharedRetrieval.chunks.map(\.chunk.objectID) + (byName?.chunks.map(\.chunk.objectID) ?? [])
+            // A document count reads every document the ledger's index finds naming the person (same
+            // sensitivity/workspace filter), not the top retrieval hits; capped searches say "at least".
+            var complete = true
+            var loadCap = 24
+            if case .documentCount = parsed.ask, let nameLookup {
+                let lookup = await nameLookup(parsed.person)
+                var found = lookup.ids
+                if let policy = sensitivePolicy {
+                    found = await policy.filter(result: RetrievalResult(authorityObjectIDs: found), access: access).result.authorityObjectIDs
+                }
+                ids = found + ids
+                loadCap = Self.documentCountLoadCap
+                complete = lookup.complete && NSOrderedSet(array: ids).count <= loadCap
+            }
             var sources: [ProceedingAnswerer.Source] = []
-            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(24) {
+            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap) {
                 do {
                     if let text = try await objects.fetchContent(id: id) { sources.append(.init(objectID: id, text: String(text.prefix(40_000)))) }
                 } catch {
                     KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
                 }
             }
-            if let answered = ProceedingAnswerer.answer(parsed, sources: sources) {
+            if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete) {
                 KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")
                 return answered
             }

@@ -2790,6 +2790,19 @@ public final class AppState {
                     }
                 }
             }
+            // Documents naming a person, for exact document counts (brief §7). Archive-wide brain only:
+            // case-scoped brains never get this lookup (see makeBrain).
+            await brain.setNameLookup { [weak chunks] name in
+                let phrase = "\"" + name.replacingOccurrences(of: "\"", with: " ") + "\""
+                do {
+                    let hits = try await chunks?.searchFTS(phrase, limit: MasterBrain.nameLookupCap) ?? []
+                    let ids = NSOrderedSet(array: hits.map(\.objectID)).compactMap { $0 as? UUID }
+                    return (ids, hits.count < MasterBrain.nameLookupCap)
+                } catch {
+                    KalsmritikoshLog.brain.error("name lookup failed: \(String(describing: error), privacy: .public)")
+                    return ([], false)
+                }
+            }
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in
                 await self?.composeToolGroundedAnswer(question: question, access: access)

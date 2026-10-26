@@ -155,7 +155,8 @@ public nonisolated enum ProceedingAnswerer {
     }
 
     /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
-    public static func answer(_ parsed: Parsed, sources: [Source]) -> VerifiedAnswer? {
+    /// `complete` is false when the documents searched were capped: a count is then a floor.
+    public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true) -> VerifiedAnswer? {
         let about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
         // One line per step and day across documents (the sentencing release repeats the plea's day).
         typealias Hit = (UUID, ProceedingEventExtractor.Finding)
@@ -281,7 +282,8 @@ public nonisolated enum ProceedingAnswerer {
             let n = about.count
             let lines = about.map { s in "• " + (s.text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
                 .first { $0.count > 25 && ProceedingEventExtractor.fullDate(in: $0) == nil && !$0.hasPrefix("U.S. Department") && !$0.hasPrefix("FOR IMMEDIATE") } ?? "document") }
-            let text = "\(n) of the documents found name \(name):\n" + lines.joined(separator: "\n")
+            var text = "\(complete ? "\(n)" : "At least \(n)") of the documents found name \(name):\n" + lines.joined(separator: "\n")
+            if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
             return VerifiedAnswer(body: text, answerText: text,
                                   citations: about.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },
                                   confidence: Confidence(0.75))
