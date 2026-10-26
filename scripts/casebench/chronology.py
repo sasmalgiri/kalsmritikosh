@@ -102,6 +102,27 @@ def page(rel):
     when = rel["day"].strftime("%A, %B %-d, %Y")
     return f"U.S. Department of Justice\n{office}\nFOR IMMEDIATE RELEASE\n{when}\n\n{rel['title']}\n\n{rel['body']}\n"
 
+OFFENCE = re.compile(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|(?:pleaded|pled|pleads) guilty(?:\s+[\w,]+){0,6}?\s+to|convicted(?:\s+\w+){0,6}?\s+of|found guilty(?:\s+\w+){0,6}?\s+of|indicted (?:for|on))\s+([^.;]{12,160})", re.I)
+PRIOR = re.compile(r"\b(?:previously (?:been )?convicted|prior (?:conviction|record|offen[cs]e)s?|criminal history|had (?:previously )?been convicted|registered sex offender|on (?:probation|parole|supervised release) for|years? earlier|an earlier case)\b", re.I)
+
+def offence_sentences(name, rels):
+    """The person's OWN sentences that state what they were charged with, pleaded to or convicted
+    of — never a prior record or another defendant's (2026-10-27 bench repair)."""
+    surname = name.split()[-1].rstrip(".,").lower()
+    out = []
+    for r in rels:
+        for sent in re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", r["body"]):
+            low = sent.lower()
+            if surname not in low or PRIOR.search(sent) or not OFFENCE.search(sent): continue
+            # The offence must be the person's: their surname before the verb phrase.
+            m = OFFENCE.search(sent)
+            if surname not in low[:m.start() + 1]: continue
+            out.append(re.sub(r"\s+", " ", sent.strip()))
+    return list(dict.fromkeys(out))
+
+def offences_for(name, rels):
+    return list(dict.fromkeys(m.group(1) for s in offence_sentences(name, rels) for m in OFFENCE.finditer(s)))
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", required=True); ap.add_argument("--out", required=True); ap.add_argument("--render", required=True)
@@ -166,12 +187,9 @@ def main():
         q.append({"id": "count", "q": f"How many press releases are about {name}?", "expect": {"number": len(rels)}})
         # The offence, as the releases word it ("charges Romano with seven counts of wire fraud",
         # "pleaded guilty to wire fraud", "convicted of …"): any one of them answers.
-        offences = []
-        for r in rels:
-            for m in re.finditer(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|pleaded guilty to|pled guilty to|convicted of|indicted (?:for|on))\s+([^.;]{12,160})", r["body"], re.I):
-                offences.append(m.group(1))
+        offences, said = offences_for(name, rels), offence_sentences(name, rels)
         if offences:
-            q.append({"id": "charge", "q": f"What was {name} charged with?", "expect": {"overlap_any": offences[:6]}})
+            q.append({"id": "charge", "q": f"What was {name} charged with?", "expect": {"overlap_any": offences, "quote_any": said}})
         offices = sorted(set(first["components"] + office_names(first["components"])))
         if offices:
             q.append({"id": "office", "q": f"Which office prosecuted {name}?", "expect": {"any": offices}})

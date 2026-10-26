@@ -98,6 +98,12 @@ def value_in(expect, text):
     if "number" in expect:
         n = expect["number"]
         return bool(re.search(rf"\b{n}\b", b) or (n in WORDS and re.search(rf"\b{WORDS[n]}\b", b))), None
+    if expect.get("quote_any"):
+        # A verbatim quote of one of the person's own offence sentences answers "charged with".
+        got = " ".join(words(text))
+        for sent in expect["quote_any"]:
+            head = " ".join(words(sent))[:90]
+            if len(head) >= 40 and head in got: return True, "quoted-own-offence"
     if "overlap_any" in expect:
         # Any one of several phrasings of the same fact (the charge as each release words it).
         for phrase in expect["overlap_any"]:
