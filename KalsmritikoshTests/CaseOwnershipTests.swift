@@ -18,6 +18,7 @@ struct CaseOwnershipTests {
     struct Two {
         let db: Database
         let file: CaseFileRepository
+        let cases: InvestigationCaseRepository
         let a: UUID, b: UUID
     }
 
@@ -30,7 +31,7 @@ struct CaseOwnershipTests {
         let a = try await cases.createCase(workspaceID: ws.id, title: "Case A", actor: "Ada", at: Date())
         let b = try await cases.createCase(workspaceID: ws.id, title: "Case B", actor: "Ada", at: Date())
         let svc = CaseFileService(database: db, cases: cases, workspaces: workspaces)
-        return Two(db: db, file: svc.file, a: a.id, b: b.id)
+        return Two(db: db, file: svc.file, cases: cases, a: a.id, b: b.id)
     }
 
     func actionCount(_ t: Two, _ caseID: UUID) async throws -> Int {
@@ -41,7 +42,8 @@ struct CaseOwnershipTests {
     func crossCaseRefused() async throws {
         let t = try await Self.two()
         let allegationB = try await t.file.addAllegation(caseID: t.b, text: "B's allegation", actor: "Ada")
-        try await t.file.addAllegationEvidence(caseID: t.b, allegationID: allegationB, evidenceRef: "doc-1", label: nil, stance: .supports, note: nil, actor: "Ada")
+        let sourceB = try #require(try await CaseFileTestSources.inScope(t.db, cases: t.cases, caseID: t.b).first)
+        try await t.file.addAllegationEvidence(caseID: t.b, allegationID: allegationB, evidenceRef: sourceB, label: nil, stance: .supports, note: nil, actor: "Ada")
         let linkB = try #require(try await t.file.allegationEvidence(caseID: t.b).first).id
         let personB = try await t.file.addPerson(caseID: t.b, name: "Bea", role: .witness, entityID: nil, contact: nil, notes: nil, actor: "Ada")
         let interviewB = try await t.file.addInterview(caseID: t.b, personID: personB, questions: nil, actor: "Ada")
@@ -53,12 +55,12 @@ struct CaseOwnershipTests {
         let exhibitB = try #require(try await t.file.exhibits(caseID: t.b).first).id
         try await t.file.issueHold(caseID: t.b, custodian: "IT", personID: nil, noticeText: "Keep it", reminderDue: nil, actor: "Ada")
         let holdB = try #require(try await t.file.holdNotices(caseID: t.b).first).id
-        _ = try await t.file.createBatches(caseID: t.b, sourceRefs: ["s1"], size: 5, reviewer: "Ada", actor: "Ada")
+        _ = try await t.file.createBatches(caseID: t.b, sourceRefs: [sourceB], size: 5, reviewer: "Ada", actor: "Ada")
         let batchB = try #require(try await t.file.reviewBatches(caseID: t.b).first).id
 
         let beforeA = try await actionCount(t, t.a), beforeB = try await actionCount(t, t.b)
         let attempts: [() async throws -> Void] = [
-            { try await t.file.addAllegationEvidence(caseID: t.a, allegationID: allegationB, evidenceRef: "doc-2", label: nil, stance: .contradicts, note: nil, actor: "Ada") },
+            { try await t.file.addAllegationEvidence(caseID: t.a, allegationID: allegationB, evidenceRef: "note:A says otherwise", label: nil, stance: .contradicts, note: nil, actor: "Ada") },
             { try await t.file.decide(allegationID: allegationB, caseID: t.a, disposition: .substantiated, rationale: "x", actor: "Ada") },
             { try await t.file.retractAllegationEvidence(caseID: t.a, id: linkB, actor: "Ada") },
             { try await t.file.retractJournal(caseID: t.a, id: journalB, actor: "Ada") },
@@ -82,6 +84,46 @@ struct CaseOwnershipTests {
         #expect(try await t.file.allegations(caseID: t.b).first?.disposition == .pending)
         #expect(try await t.file.interview(id: interviewB)?.status != .attested)
         #expect(try await t.file.exhibits(caseID: t.b).count == 1)
+    }
+
+    @Test("Evidence references resolve in the case: in-scope sources, live exhibits, labelled notes; the rest is queued for repair")
+    func referencesResolve() async throws {
+        let t = try await Self.two()
+        let allegation = try await t.file.addAllegation(caseID: t.a, text: "A's allegation", actor: "Ada")
+        let inA = try #require(try await CaseFileTestSources.inScope(t.db, cases: t.cases, caseID: t.a).first)
+        let inB = try #require(try await CaseFileTestSources.inScope(t.db, cases: t.cases, caseID: t.b).first)
+        let nowhere = try await CaseFileTestSources.seed(t.db).uuidString
+        func link(_ ref: String) async throws {
+            try await t.file.addAllegationEvidence(caseID: t.a, allegationID: allegation, evidenceRef: ref, label: nil, stance: .supports, note: nil, actor: "Ada")
+        }
+        try await link(inA)
+        try await link("note:The manager told me in person")
+        let exhibit = try await t.file.addExhibit(caseID: t.a, number: nil, description: "Laptop", sourceRef: nil, sha256: nil,
+                                                  collectedBy: nil, collectedAt: nil, collectedWhere: nil, actor: "Ada")
+        try await link("exhibit:\(exhibit)")
+        // Another case's source, a source in no case, a missing exhibit and free text are refused — no scope widening.
+        for bad in [inB, nowhere, "exhibit:EX-999", "doc-1", UUID().uuidString] {
+            await #expect(throws: CaseFileError.self, "\(bad) should be refused") { try await link(bad) }
+        }
+        // A batch takes only sources; a journal entry's evidence must resolve too.
+        await #expect(throws: CaseFileError.self) {
+            _ = try await t.file.createBatches(caseID: t.a, sourceRefs: ["note:x"], size: 5, reviewer: "Ada", actor: "Ada")
+        }
+        await #expect(throws: CaseFileError.self) {
+            _ = try await t.file.addJournal(caseID: t.a, kind: .note, text: "n", eventDate: nil, evidenceRef: inB, actor: "Ada")
+        }
+        #expect(try await t.file.allegationEvidence(caseID: t.a).count == 3)
+        #expect(try await t.file.unresolvedReferences(caseID: t.a).isEmpty)
+        // A legacy free-text row (written before references were checked) and a source taken out of
+        // scope are listed for repair, as written.
+        try await t.db.exec("INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at) VALUES (?,?,?,?,?,?,?,?);",
+                            [.uuid(UUID()), .uuid(t.a), .text("note"), .null, .text("old"), .text("the blue folder"), .text("Ada"), .real(1)])
+        let header = try #require(try await t.cases.fetch(caseID: t.a)).caseHeader
+        _ = try await t.cases.excludeSource(caseID: t.a, expectedRevision: header.revision, sourceRef: inA, sourceKind: .sourceVersion,
+                                            note: "wrong custodian", actor: "Ada", at: Date())
+        let queue = try await t.file.unresolvedReferences(caseID: t.a)
+        #expect(queue.contains { $0.ref == "the blue folder" && $0.record == "Journal" })
+        #expect(queue.contains { $0.ref == inA && $0.problem.contains("not in this case's scope") })
     }
 
     @Test("A closed case takes no new work until it is reopened")

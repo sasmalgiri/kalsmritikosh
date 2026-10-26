@@ -163,6 +163,7 @@ public actor CaseFileRepository {
         let actor = try Self.clean(actor, "Actor")
         try await write("cf_grid", caseID: caseID, actor: actor, action: "gridLinked", detail: "\(stance.rawValue) \(label ?? ref)", at: date) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
+            try Self.requireResolvable(db, ref, caseID: caseID)
             try db.exec("INSERT INTO case_allegation_evidence (id, allegation_id, evidence_ref, label, stance, note, added_by, created_at) VALUES (?,?,?,?,?,?,?,?);",
                         [.uuid(UUID()), .uuid(allegationID), .text(ref), .optionalText(label), .text(stance.rawValue), .optionalText(note), .text(actor), .date(date)])
         }
@@ -196,6 +197,7 @@ public actor CaseFileRepository {
         let actor = try Self.clean(actor, "Actor")
         let id = UUID()
         try await write("cf_jr", caseID: caseID, actor: actor, action: kind == .note ? "noteAdded" : "chronologyAdded", detail: text, at: date) { db in
+            if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
             try db.exec("INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at) VALUES (?,?,?,?,?,?,?,?);",
                         [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date)])
         }
@@ -312,6 +314,9 @@ public actor CaseFileRepository {
         try await write("cf_ivu", caseID: iv.caseID, actor: actor, action: "interviewUpdated", detail: status.label, at: date) { db in
             try Self.requireInCase(db, "interview", iv.id, caseID: iv.caseID)
             if let personID = iv.personID { try Self.requireInCase(db, "person", personID, caseID: iv.caseID) }
+            // A changed recording or transcript must be a source in this case.
+            if let r = iv.recordingRef, r != current.recordingRef { try Self.requireResolvable(db, r, caseID: iv.caseID, sourceOnly: true) }
+            if let r = iv.transcriptRef, r != current.transcriptRef { try Self.requireResolvable(db, r, caseID: iv.caseID, sourceOnly: true) }
             try db.exec("""
                 UPDATE case_interviews SET person_id = ?, status = ?, scheduled_at = ?, mode = ?, location = ?, questions = ?,
                     recording_ref = ?, transcript_ref = ?, summary = ?, statement_text = ?, updated_at = ? WHERE id = ? AND case_id = ? AND status != 'attested' OR (id = ? AND case_id = ? AND status = 'attested' AND COALESCE(statement_text, '') = COALESCE(?, ''));
@@ -405,6 +410,7 @@ public actor CaseFileRepository {
         let actor = try Self.clean(actor, "Actor")
         try await write("cf_cred", caseID: caseID, actor: actor, action: "credibilityNoted", detail: "\(factor.label): \(assessment.label)", at: date) { db in
             try Self.requireInCase(db, "interview", interviewID, caseID: caseID)
+            if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
             try db.exec("INSERT INTO case_credibility (id, interview_id, factor, assessment, note, evidence_ref, by, created_at) VALUES (?,?,?,?,?,?,?,?);",
                         [.uuid(UUID()), .uuid(interviewID), .text(factor.rawValue), .text(assessment.rawValue), .optionalText(note),
                          .optionalText(evidenceRef), .text(actor), .date(date)])
@@ -443,6 +449,8 @@ public actor CaseFileRepository {
             assigned = String(format: "EX-%03d", n)
         }
         try await write("cf_ex", caseID: caseID, actor: actor, action: "exhibitRegistered", detail: "\(assigned) \(description)", at: date) { db in
+            // An exhibit's source, when it has one, is a document in this case — a physical item has none.
+            if let sourceRef { try Self.requireResolvable(db, sourceRef, caseID: caseID, sourceOnly: true) }
             try db.exec("""
                 INSERT INTO case_exhibits (id, case_id, number, description, source_ref, sha256, collected_by, collected_at, collected_where, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?);
@@ -545,6 +553,7 @@ public actor CaseFileRepository {
         let chunks = stride(from: 0, to: refs.count, by: size).map { Array(refs[$0..<min($0 + size, refs.count)]) }
         let actor = try Self.clean(actor, "Actor")
         try await write("cf_rb", caseID: caseID, actor: actor, action: "batchesCreated", detail: "\(chunks.count) × ≤\(size)", at: date) { db in
+            for ref in refs { try Self.requireResolvable(db, ref, caseID: caseID, sourceOnly: true) }
             for (i, chunk) in chunks.enumerated() {
                 let json = String(data: (try? JSONEncoder().encode(chunk)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
                 try db.exec("INSERT INTO case_review_batches (id, case_id, name, reviewer, source_refs_json, status, created_at, updated_at) VALUES (?,?,?,?,?, 'open', ?,?);",
@@ -713,6 +722,50 @@ public actor CaseFileRepository {
         default: throw CaseFileError.notFound(what, id)
         }
         guard try !db.query(sql + " LIMIT 1;", [.uuid(id), .uuid(caseID)]).isEmpty else { throw CaseFileError.notInCase(what, id) }
+    }
+
+    /// A new reference must resolve in this case (brief §4): an in-scope source version, a live exhibit
+    /// of this case, or an explicit investigator note. `sourceOnly` admits only a source version.
+    private static func requireResolvable(_ db: isolated Database, _ raw: String, caseID: UUID, sourceOnly: Bool = false) throws {
+        if sourceOnly {
+            guard case .sourceVersion = CaseEvidenceReference.parse(raw) else {
+                throw CaseFileError.unresolvedReference(raw, "only a source in this case can be chosen here")
+            }
+        }
+        if let problem = try CaseEvidenceReference.problem(raw, caseID: caseID, in: db) {
+            throw CaseFileError.unresolvedReference(raw, problem)
+        }
+    }
+
+    /// The repair queue: every stored reference in the case that no longer resolves — legacy free
+    /// text, a source taken out of scope, a withdrawn exhibit. Listed as written, never rewritten.
+    public func unresolvedReferences(caseID: UUID) async throws -> [UnresolvedCaseReference] {
+        try await database.withSavepoint("cf_refq_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            var refs: [(String, UUID, String)] = []
+            let sources: [(record: String, sql: String, columns: Int)] = [
+                ("Evidence grid", "SELECT e.id, e.evidence_ref FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id WHERE a.case_id = ? AND e.removed_at IS NULL;", 1),
+                ("Journal", "SELECT id, evidence_ref FROM case_journal WHERE case_id = ? AND removed_at IS NULL;", 1),
+                ("Credibility note", "SELECT c.id, c.evidence_ref FROM case_credibility c JOIN case_interviews i ON i.id = c.interview_id WHERE i.case_id = ?;", 1),
+                ("Exhibit", "SELECT id, source_ref FROM case_exhibits WHERE case_id = ? AND withdrawn_at IS NULL;", 1),
+                ("Interview", "SELECT id, recording_ref, transcript_ref FROM case_interviews WHERE case_id = ?;", 2),
+            ]
+            for source in sources {
+                for r in try db.query(source.sql, [.uuid(caseID)]) {
+                    guard let id = r.uuid(0) else { continue }
+                    for i in 1...source.columns { if let ref = r.string(i), !ref.isEmpty { refs.append((source.record, id, ref)) } }
+                }
+            }
+            for r in try db.query("SELECT id, source_refs_json FROM case_review_batches WHERE case_id = ?;", [.uuid(caseID)]) {
+                guard let id = r.uuid(0), let data = r.string(1)?.data(using: .utf8),
+                      let list = try? JSONDecoder().decode([String].self, from: data) else { continue }
+                refs += list.map { ("Review batch", id, $0) }
+            }
+            return try refs.compactMap { record, id, ref in
+                try CaseEvidenceReference.problem(ref, caseID: caseID, in: db).map {
+                    UnresolvedCaseReference(record: record, recordID: id, ref: ref, problem: $0)
+                }
+            }
+        }
     }
 
     private static func clean(_ s: String, _ field: String) throws -> String {

@@ -24,6 +24,8 @@ final class CaseFileModel {
     var busy = false
     /// The custody manifest could not be read: reports must not present an empty custody record.
     var custodyReadFailed = false
+    /// Stored evidence references that no longer resolve in this case (brief §4 repair queue).
+    var unresolvedRefs: [UnresolvedCaseReference] = []
 
     init(caseID: UUID, workspaceID: UUID) { self.caseID = caseID; self.workspaceID = workspaceID }
 
@@ -46,6 +48,9 @@ final class CaseFileModel {
             }
             snapshot = try await svc.snapshot(caseID: caseID, custody: custody)
             labels = try await svc.file.sourceLabels(custody.map(\.sourceVersionID))
+            do { unresolvedRefs = try await svc.file.unresolvedReferences(caseID: caseID) } catch {
+                KalsmritikoshLog.app.error("Case reference check failed: \(String(describing: error), privacy: .public)")
+            }
             if named == nil, let title = snapshot?.caseHeader.title {   // read once: it scans every case document
                 named = await app.studioCaseFacts(StudioCaseChoice(id: caseID, workspaceID: workspaceID, title: title), includePrivileged: false)
             }
@@ -842,6 +847,17 @@ struct CaseEvidenceTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if !model.unresolvedRefs.isEmpty {
+                CaseSection(title: "References to repair",
+                            subtitle: "\(model.unresolvedRefs.count) piece(s) of evidence in this case point at something that isn't a source, exhibit or note of this case. They are kept as written; relink or retract each one.") {
+                    ForEach(model.unresolvedRefs) { u in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(u.record): “\(model.label(for: u.ref))”").lineLimit(2)
+                            Text(u.problem.prefix(1).uppercased() + u.problem.dropFirst() + ".").font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
             CaseSection(title: "Sources in the case", subtitle: "\(s.custody.count) document(s) in scope, each with its content fingerprint.") {
                 ForEach(s.custody.prefix(200), id: \.sourceVersionID) { e in
                     let ref = e.sourceVersionID.uuidString

@@ -77,7 +77,8 @@ struct CaseFileTests {
         await #expect(throws: CaseFileError.self) {
             try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: " ", actor: "Ada")
         }
-        try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: "src-1", label: "Email 4 March",
+        let source = try #require(try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID).first)
+        try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: source, label: "Email 4 March",
                                                stance: .supports, note: "Names the date", actor: "Ada")
         try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two witnesses and the email agree", actor: "Ada")
         let list = try await f.file.allegations(caseID: f.caseID)
@@ -151,7 +152,8 @@ struct CaseFileTests {
     @Test("Review batches split documents and need a second person for QC")
     func batches() async throws {
         let f = try await Self.fixture()
-        let n = try await f.file.createBatches(caseID: f.caseID, sourceRefs: (1...25).map { "s\($0)" }, size: 10, reviewer: "Ada", actor: "Ada")
+        let sources = try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID, count: 25)
+        let n = try await f.file.createBatches(caseID: f.caseID, sourceRefs: sources, size: 10, reviewer: "Ada", actor: "Ada")
         #expect(n == 3)
         let b = try #require(try await f.file.reviewBatches(caseID: f.caseID).first)
         #expect(b.sourceRefs.count == 10)

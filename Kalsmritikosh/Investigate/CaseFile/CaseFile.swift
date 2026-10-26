@@ -438,6 +438,7 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
     case attestedFieldLocked(String)
     case notAttested
     case addendumAlreadyConfirmed
+    case unresolvedReference(String, String)
     case taskEngineUnavailable
     /// The record exists but belongs to another case (implementation brief §3).
     case notInCase(String, UUID)
@@ -458,6 +459,7 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
         case .attestedFieldLocked(let what): return "The statement is confirmed, so its \(what) can't be changed. Add a correction instead."
         case .notAttested: return "Only a confirmed statement takes a correction; edit the statement directly."
         case .addendumAlreadyConfirmed: return "This correction is already confirmed."
+        case .unresolvedReference(let ref, let why): return "“\(ref)” can't be used as evidence: \(why)."
         case .taskEngineUnavailable: return "Tasks aren't available yet."
         case .notInCase(let what, _): return "That \(what) belongs to another case."
         case .caseClosed: return "The case is closed. Reopen it to make changes."
