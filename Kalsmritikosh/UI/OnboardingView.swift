@@ -91,7 +91,7 @@ public struct OnboardingView: View {
                 .foregroundStyle(.tint)
             Text("Welcome to Investigations Made Easy")
                 .font(.title.bold())
-            Text("Your private knowledge operating system")
+            Text("From evidence to findings")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

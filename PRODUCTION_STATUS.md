@@ -1,6 +1,65 @@
 # PRODUCTION_STATUS
 
 ```
+Audit date:            2026-10-26 (Implementation Brief execution — ~/Downloads/Investigations_Made_Easy_Complete_Implementation_Brief.md)
+Current branch:        investigations-next (PR #169 open; unpushed commits after 3bef103c — see git log)
+Latest schema version: 157
+Verification state:    every item below is UNIT VERIFIED at most (its suites pass locally on the stated
+                       commit). Nothing here is integration-verified in the GUI, runtime-witnessed by the
+                       owner, or release-verified. Exact-commit CI has not run on these commits yet.
+```
+
+## Implementation brief — execution record (2026-10-26)
+
+Status vocabulary from brief §2: implemented · statically reviewed · unit verified · integration verified ·
+runtime witnessed · release verified.
+
+| Brief | What changed | Commit | Evidence | Status |
+|---|---|---|---|---|
+| §3 | Every case-file mutation checks the child record belongs to the case; a closed case takes no new work; an attestation of a statement changed in between is refused | 3e96919a | CaseOwnershipTests | unit verified |
+| §5 | case_actions append-only (v153) and in the audit chain; case events, findings approvals, hypothesis decisions sealed too (v157); **bug fixed**: audit_chain's CHECK refused every source but three, so from v153 any case action made every seal() fail — never reached main | a1da4bc9, 6c6970dc | CaseActionSealTests (seals + verifies, deletion detected), AuditChainTests, MigrationMatrixTests | unit verified |
+| §5/§6 | Exports logged only when the file is written (with its SHA-256); a failed custody read is never an empty custody record — custody report refused, others marked INCOMPLETE/DRAFT | c1160374 | build + code review; no GUI run | implemented |
+| §7 | Contradictions and gaps: scope before limit (keyset paging) | dfd41a8f | InvestigationReviewDeskServiceTests.scopeBeforeLimit | unit verified |
+| §7 | Email counts read every message found; a capped lookup says "at least N" | 3a2f9008 | EmailHeaderAnswererTests | unit verified |
+| §4 | Case evidence references are typed (in-scope source version · case exhibit · labelled investigator note); free text refused at attach; unresolved stored references listed in "References to repair" | b74e779c | CaseOwnershipTests.referencesResolve, CaseFileTests | unit verified (UI list not GUI-run) |
+| §6 | One FindingsDecisionPolicy (named standard, or justified not-applicable); swapped-case, stale-scope and tampered-receipt findings refused on both approval paths | e5f93bdb | InvestigationFindingsServiceTests.approvalPolicyAndCurrency, WorkProductHandoffModelTests | unit verified |
+| §8 | Hypothesis confirmation needs rationale + contrary evidence + alternatives (no count majority); lineages = distinct sources; reliability/relevance per link (v154) | 1b487a00 | InvestigationAnalysisServiceTests | unit verified (no UI for assessments yet) |
+| §9 | Confirmed statement's provenance locked; corrections are append-only addenda, confirmed once, exported with the statement (v156) | 68129b50 | StatementCorrectionTests | unit verified |
+| §11 | Schema conformance marked per ledger (version + schema SHA-256), incomplete repair recorded (v155) | 6eec984f | SchemaRepairTests | unit verified |
+| §17 | Scorer: negated mentions are not answers; snippets not credited. Enron count truth: any To recipient, one email per subject+date (31 rows corrected) | 9553e814, a3566d85 | re-scored sets below | implemented |
+| §1 | Onboarding subtitle "From evidence to findings" (was "knowledge operating system") | this commit | — | implemented |
+
+### Measured (repaired scorer, Fully private unless stated; "right" includes proper refusals)
+
+| Set | Build | n | Right | Wrong |
+|---|---|---|---|---|
+| Chronology, fresh draw (never tuned on) | 9b1914bb | 751 | 87.9 % | 7.2 % |
+| NTSB conclusion withheld, fresh | 9b1914bb | 360 | 98.3 % | 1.1 % |
+| Enron, fresh (corrected count truth) | 9b1914bb | 540 | 95.7 % | 1.7 % |
+| NTSB, Claude-reworded, rules only / rules→Claude | 18:44 build ≈ 9553e814 | 720 | 88.8 % / 96.7 % | 6.8 % / 1.9 % |
+| Chronology, Claude-reworded, rules only / rules→Claude | same | 1,502 | 49.4 % / 79.3 % | 25.9 % / 11.1 % |
+| Enron, Claude-reworded, rules→Claude (corrected truth) | 36afa942 | 1,080 | 85.8 % | 9.4 % |
+
+Reworded chronology is the weakest category; its two biggest failure shapes (noun-form sentencing dates,
+"count of press releases about X") were fixed in 66da52c9/26dea109 and are being re-measured (v3 runs).
+Against the brief's proposed thresholds (≥ 90 % answerable correctness, ≥ 99 % precision among answered
+factual questions) **no category is yet shown to meet the precision bar**; claims must stay restricted.
+
+### Not done in this pass (brief items still open)
+
+- §4 click-through to the cited location for PDF/email/DOCX/spreadsheet/transcript; revalidation at review/approval/reopen.
+- §6 one authorised export request object feeding every export path; one lifecycle service across stage/findings/closure.
+- §10 per-source/per-child ingestion dispositions; real PST/OST/MSG/NSF fixtures.
+- §11 complete case/archive backup (originals, source maps, work products, checkpoints) with staged restore.
+- §12 signed-release privacy tests; online payload preview/consent review.
+- §13 measured memory/disk envelope at the declared supported volume.
+- §14 Cases as default home with next action; usability sessions (owner).
+- §17 structured gold tuples, independent human adjudication, per-mode reporting with confidence intervals.
+- §18 StoreKit/TestFlight flows, signed-binary checks, exact-commit CI, beta, legal/name review (owner).
+
+## Earlier status (2026-10-23)
+
+```
 Audit date:            2026-10-23 (Investigations Made Easy — main-app program)
 Current branch:        investigation-docs (from main af956108, PR #165 merged; NOT yet pushed)
 Latest schema version: 152 (SchemaMigrations.latestVersion; v151 case file, v152 ACH in the ledger)
