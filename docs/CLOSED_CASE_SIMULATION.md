@@ -48,8 +48,22 @@ one of 29 canonical forms (only the question is sent, never a document).
 | Chronology (16 unsupported plea labels excluded) | ≈9553e814 → d8672752 | 1,486 | 49.9 → 69.1 % | 79.2 → **91.3 %** | 11.1 → 6.3 % |
 
 The second number in each pair is **tuned**: the fixes between the two builds were read from these
-sets' own failures. The honest figure is a held-out set — new prosecutions never drawn, newly
-reworded — being measured now (`~/CaseBench/ho-chron`).
+sets' own failures. The honest figure is the held-out set below.
+
+**Held-out (honest), 2026-10-26, build c581f8fb:** 60 new prosecutions never drawn before
+(`--seed 4242`, skipping both earlier sets), each question newly reworded twice by Claude; nothing
+was fixed from these cases before the run.
+
+| Held-out chronology | n | Rules only | Rules → Claude | Wrong (→ Claude) |
+|---|---|---|---|---|
+| All questions | 898 | 65.0 % | **87.6 %** | **7.2 %** |
+| When sentenced / charged / timeline / count / office / plea / never-happened | 60–120 each | — | 78–100 % | — |
+| "What was X charged with?" | 82 | 22–44 % | 56–61 % | 35 % |
+| "What sentence did X receive?" | 74 | 13.5 % | 73 % | 5 % |
+
+Against the brief's proposed bar (≥ 90 % answerable correctness, ≥ 99 % precision among answered
+factual questions) this is **not** release-grade for the charge and sentence kinds; the other kinds
+are close on correctness but not on precision. Claims must be restricted accordingly.
 
 ## Gaps found and fixed
 

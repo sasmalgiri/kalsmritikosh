@@ -39,6 +39,9 @@ runtime witnessed · release verified.
 | NTSB, Claude-reworded, rules only / rules→Claude | 18:44 build ≈ 9553e814 | 720 | 88.8 % / 96.7 % | 6.8 % / 1.9 % |
 | Chronology, Claude-reworded, rules only / rules→Claude | same | 1,502 | 49.4 % / 79.3 % | 25.9 % / 11.1 % |
 | Enron, Claude-reworded, rules→Claude (corrected truth) | 36afa942 | 1,080 | 85.8 % | 9.4 % |
+| Enron, Claude-reworded, rules→Claude, after fixes (tuned) | d8672752 | 1,080 | 88.3 % | 7.9 % |
+| Chronology, Claude-reworded, rules→Claude, after fixes (tuned) | d8672752 | 1,486 | 91.3 % | 6.3 % |
+| **Chronology HELD-OUT** (new cases + new wordings), rules→Claude / rules only | c581f8fb | 898 | **87.6 %** / 65.0 % | **7.2 %** / 23.4 % |
 
 Reworded chronology is the weakest category; its two biggest failure shapes (noun-form sentencing dates,
 "count of press releases about X") were fixed in 66da52c9/26dea109 and are being re-measured (v3 runs).
