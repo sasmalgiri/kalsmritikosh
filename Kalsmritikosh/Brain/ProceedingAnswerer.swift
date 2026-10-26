@@ -42,7 +42,9 @@ public nonisolated enum ProceedingAnswerer {
     /// A person's name in the question: two to four capitalised words ("Christi Machala", "Alexandria
     /// Jasmine Estep", "Gary L. Smith"), not the question's own first word.
     static func person(in question: String) -> String? {
-        let pattern = #"(?<![A-Za-z])([A-Z][a-z'’\-]+(?:\s+(?:[A-Z]\.|[A-Z][a-z'’\-]+)){1,3})(?:,?\s+(?:Jr|Sr|II|III)\.?)?"#
+        // "Jose Garcia-Zamora", "Mary O'Neil-Smith": a hyphen may join two capitalised parts.
+        let part = #"[A-Z][a-z'’]+(?:-[A-Z][a-z'’]+)?"#
+        let pattern = #"(?<![A-Za-z])("# + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})(?:,?\s+(?:Jr|Sr|II|III)\.?)?"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = question as NSString
         let skip: Set<String> = ["When", "Did", "Was", "Were", "What", "Which", "Who", "How", "Give", "Tell", "Show", "List", "Has", "Is",
@@ -109,10 +111,19 @@ public nonisolated enum ProceedingAnswerer {
     public static func answer(_ parsed: Parsed, sources: [Source]) -> VerifiedAnswer? {
         let about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
         // One line per step and day across documents (the sentencing release repeats the plea's day).
+        typealias Hit = (UUID, ProceedingEventExtractor.Finding)
+        var all: [Hit] = []
+        for s in about {
+            for f in ProceedingEventExtractor.findings(in: s.text, person: parsed.person) { all.append((s.objectID, f)) }
+        }
+        func sortKey(_ h: Hit) -> String { (h.1.day == nil ? "1" : "0") + key(h.1) }
+        all.sort { sortKey($0) < sortKey($1) }
         var seenSteps = Set<String>()
-        let found = about.flatMap { s in ProceedingEventExtractor.findings(in: s.text, person: parsed.person).map { (s.objectID, $0) } }
-            .sorted { ($0.1.day == nil ? 1 : 0, key($0.1)) < ($1.1.day == nil ? 1 : 0, key($1.1)) }
-            .filter { seenSteps.insert($0.1.step.rawValue + key($0.1)).inserted }
+        var found: [Hit] = []
+        for h in all {
+            let undated = h.1.day == nil ? String(h.1.sentence.prefix(60)) : ""
+            if seenSteps.insert(h.1.step.rawValue + key(h.1) + undated).inserted { found.append(h) }
+        }
         let name = parsed.person
         func cite(_ items: [(UUID, ProceedingEventExtractor.Finding)]) -> [VerifiedAnswer.Citation] {
             items.map { VerifiedAnswer.Citation(objectID: $0.0, snippet: String($0.1.sentence.prefix(300))) }
@@ -128,7 +139,7 @@ public nonisolated enum ProceedingAnswerer {
             guard let best = hits.first(where: { $0.1.day != nil }) ?? hits.first else {
                 // Asked when X was charged, the documents only report the arrest or arraignment:
                 // say so, with that day — never present it as the charge.
-                if step == .charged, let near = found.first(where: { [.arrested, .arraigned].contains($0.1.step) && ($0.1.day ?? $0.1.reportedOn) != nil }),
+                if step == .charged, let near = found.first(where: { ($0.1.step == .arrested || $0.1.step == .arraigned) && ($0.1.day ?? $0.1.reportedOn) != nil }),
                    let day = render(near.1.day ?? near.1.reportedOn) {
                     let text = "The documents don't say when \(name) was charged; they report \(name) was \(near.1.step.phrase) on \(day): \(quote(near.1.sentence))"
                     return VerifiedAnswer(body: text, answerText: text, citations: cite([near]), confidence: Confidence(0.6))
@@ -165,8 +176,17 @@ public nonisolated enum ProceedingAnswerer {
             return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.8))
         case .chargedWith:
             // The charging sentence names the offence; failing that, the plea or verdict does.
-            let order: [ProceedingEventExtractor.Step] = [.charged, .pleaded, .convicted, .sentenced]
-            guard let hit = order.lazy.compactMap({ step in found.first { $0.1.step == step && $0.1.sentence.count > 60 } }).first else {
+            // The sentence that STATES the offence ("charges Romano with seven counts of wire fraud",
+            // "pleaded guilty to four counts of …") over one that only mentions the charge ("After
+            // Canty was charged in the above crimes, detectives …").
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b[^.]{0,60}\bwith\b|\b(?:pleaded|pled) guilty\b[^.]{0,40}\bto\b|\bconvicted\b[^.]{0,40}\bof\b|\bcounts? of\b"#
+            let rank: [ProceedingEventExtractor.Step: Int] = [.charged: 3, .pleaded: 2, .convicted: 2, .sentenced: 1]
+            let candidates = found.filter { rank[$0.1.step] != nil && $0.1.sentence.count > 60 }
+            guard let hit = candidates.max(by: { a, b in
+                let sa = (a.1.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + (rank[a.1.step] ?? 0)
+                let sb = (b.1.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + (rank[b.1.step] ?? 0)
+                return sa < sb
+            }) else {
                 return refuse("The documents that name \(name) don't state what \(name) was charged with.")
             }
             let text = "The documents say: \(quote(hit.1.sentence))"

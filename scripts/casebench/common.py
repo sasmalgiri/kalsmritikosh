@@ -51,6 +51,15 @@ def value_in(expect, text):
         if expect["yesno"]: return says_yes and not says_no, None
         truth = (expect.get("truth") or "").lower()
         return says_no or (bool(truth) and truth in b and not says_yes), None
+    if "order_any" in expect:
+        # A chronology whose steps may each be dated more than one right way: each step's earliest
+        # mention, by any of its days, must come in order.
+        at = []
+        for options in expect["order_any"]:
+            hits = [b.find(f.lower()) for iso in options for f in date_forms(iso) if f.lower() in b]
+            if not hits: return False, f"order-missing:{options[0]}"
+            at.append(min(hits))
+        return at == sorted(at), ("order-ok" if at == sorted(at) else "order-wrong")
     if "order" in expect:
         # A chronology: every expected date appears, and in the expected order (first mention).
         at = []

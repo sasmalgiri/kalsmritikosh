@@ -44,15 +44,22 @@ def sentence_forms(n, unit):
 
 MONTH = r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
 
-def stated_days(body, verb, year):
-    """Days a release itself gives for the event ("was sentenced on March 3, 2015", "indicted on
-    May 2"): the release's own day is not the only right answer."""
+def stated_days(body, verb, year, printed=None):
+    """Days a release itself gives for the event — a date in the same sentence as the step ("was
+    sentenced on March 3, 2015", "Judge X on March 15, 2017, sentenced …"), or "yesterday" (the day
+    before the release): the release's own day is not the only right answer."""
     out = set()
-    for m in re.finditer(verb + r"[^.]{0,60}?\bon (" + MONTH + r")\.? (\d{1,2})(?:, (\d{4}))?", body, re.I):
-        try:
-            d = datetime.datetime.strptime(f"{m.group(1)[:3]} {m.group(2)} {m.group(3) or year}", "%b %d %Y").date()
-            out.add(d.isoformat())
-        except ValueError: pass
+    for sent in re.split(r"(?<=[a-z]{2}[.!?])\s+(?=[A-Z])", body):
+        v = re.search(verb, sent, re.I)
+        if not v: continue
+        for m in re.finditer(r"\b(" + MONTH + r")\.? (\d{1,2})(?:, (\d{4}))?", sent):
+            if abs(m.start() - v.start()) > 80: continue   # a date of another step in the same sentence
+            try:
+                d = datetime.datetime.strptime(f"{m.group(1)[:3]} {m.group(2)} {m.group(3) or year}", "%b %d %Y").date()
+                out.add(d.isoformat())
+            except ValueError: pass
+        if printed and re.search(r"\byesterday\b", sent, re.I):
+            out.add((printed - datetime.timedelta(days=1)).isoformat())
     return out
 
 def stage(title):
@@ -128,8 +135,8 @@ def main():
         charged = [r for r in rels if r["stage"] == "charged"]
         q = []
         if charged:
-            q.append({"id": "charged", "q": f"When was {name} charged?", "expect": {"dates": sorted({charged[0]["day"].isoformat()} | stated_days(charged[0]["body"], r"(?:indicted|charged|arrested|indictment (?:was )?returned|complaint (?:was )?filed)", charged[0]["day"].year))}})
-        q.append({"id": "sentenced", "q": f"When was {name} sentenced?", "expect": {"dates": sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year))}})
+            q.append({"id": "charged", "q": f"When was {name} charged?", "expect": {"dates": sorted({charged[0]["day"].isoformat()} | stated_days(charged[0]["body"], r"(?:indicted|charged|arrested|indictment (?:was )?returned|complaint (?:was )?filed)", charged[0]["day"].year, charged[0]["day"]))}})
+        q.append({"id": "sentenced", "q": f"When was {name} sentenced?", "expect": {"dates": sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year, sent["day"]))}})
         m = SENTENCE.search(sent["body"])
         if m:
             q.append({"id": "sentence", "q": f"What sentence did {name} receive?", "expect": {"any": sentence_forms(m.group(1), m.group(2))}})
@@ -139,9 +146,14 @@ def main():
             q.append({"id": "plea", "q": f"Did {name} plead guilty?", "expect": {"yesno": True}})
         elif convicted and not pleaded:
             q.append({"id": "plea", "q": f"Did {name} plead guilty?", "expect": {"yesno": False, "truth": "jury"}})
-        days = sorted({r["day"].isoformat() for r in rels})
-        if len(days) >= 2:
-            q.append({"id": "timeline", "q": f"Give me the timeline of the case against {name}.", "expect": {"order": days}})
+        # Each release's step, dated by the release's own day or the day its step sentence states.
+        steps = []
+        for r in rels:
+            verb = {"charged": r"(?:indicted|charged|arrested|indictment)", "pleaded": r"(?:pleaded|pled) guilty",
+                    "convicted": r"(?:convicted|found guilty)", "sentenced": r"sentenced"}[r["stage"]]
+            steps.append(sorted({r["day"].isoformat()} | stated_days(r["body"], verb, r["day"].year, r["day"])))
+        if len(steps) >= 2:
+            q.append({"id": "timeline", "q": f"Give me the timeline of the case against {name}.", "expect": {"order_any": steps}})
         q.append({"id": "count", "q": f"How many press releases are about {name}?", "expect": {"number": len(rels)}})
         # The offence, as the releases word it ("charges Romano with seven counts of wire fraud",
         # "pleaded guilty to wire fraud", "convicted of …"): any one of them answers.
@@ -157,7 +169,7 @@ def main():
         q.append({"id": "absent", "q": f"When was {name} pardoned?", "expect": {"dates": ["1900-01-01"]}, "in_docs": False})
         for one in q:
             if "in_docs" in one: continue
-            if "overlap" in one["expect"] or "overlap_any" in one["expect"] or "yesno" in one["expect"] or "order" in one["expect"] or "number" in one["expect"]:
+            if "overlap" in one["expect"] or "overlap_any" in one["expect"] or "yesno" in one["expect"] or "order" in one["expect"] or "order_any" in one["expect"] or "number" in one["expect"]:
                 one["in_docs"] = True
             else:
                 one["in_docs"] = value_in(one["expect"], alltext)[0]

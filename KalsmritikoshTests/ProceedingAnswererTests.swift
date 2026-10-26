@@ -141,6 +141,23 @@ struct ProceedingAnswererTests {
         #expect(a.body.hasPrefix("Michael Wayne Williams was sentenced to one year and one day in prison"))
     }
 
+    @Test("A middle initial is part of the name; the offence-stating sentence answers 'charged with'")
+    func initialsAndOffence() throws {
+        let release = """
+            U.S. Department of Justice
+            FOR IMMEDIATE RELEASE
+            Thursday, March 12, 2015
+            PHILADELPHIA - Nathaniel E. Robinson, 45, of Philadelphia, was sentenced today to 18 months in prison.
+            After Robinson was charged, investigators found more records.
+            An indictment unsealed in 2014 charged Robinson with theft from a program receiving federal funds.
+            """
+        let src = [ProceedingAnswerer.Source(objectID: UUID(), text: release)]
+        let sentence = try #require(ProceedingAnswerer.parse("What sentence did Nathaniel E. Robinson receive?"))
+        #expect(try #require(ProceedingAnswerer.answer(sentence, sources: src)).body.hasPrefix("Nathaniel E. Robinson was sentenced to 18 months in prison"))
+        let charge = try #require(ProceedingAnswerer.parse("What was Nathaniel E. Robinson charged with?"))
+        #expect(try #require(ProceedingAnswerer.answer(charge, sources: src)).body.contains("theft from a program receiving federal funds"))
+    }
+
     @Test("Steps become ledger events only when the document gives the day")
     func events() {
         let events = ProceedingEventExtractor.extract(text: Self.sentenced, sourceObjectID: UUID(),

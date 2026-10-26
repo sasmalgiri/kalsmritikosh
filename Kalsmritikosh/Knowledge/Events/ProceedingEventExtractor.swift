@@ -113,14 +113,25 @@ public nonisolated enum ProceedingEventExtractor {
         for (index, sentence) in all.enumerated() {
             let s = sentence.lowercased()
             guard index == descriptiveLead || surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
+            // Where the person is named in the sentence (by any of their surnames, or the descriptive lead).
+            let named = surnames.compactMap { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) }
             for step in Step.allCases {
                 guard let r = s.range(of: step.pattern, options: .regularExpression) else { continue }
+                // The step is the person's when they are named before it ("Romano … was sentenced"), or
+                // right after it ("sentenced Kalomi Kambui, 41, to 18 months") — not when the name only
+                // follows it in an attribution ("… was sentenced today, announced U.S. Attorney Peter F. Neronha").
+                if index != descriptiveLead {
+                    let before = named.contains { $0.lowerBound < r.lowerBound }
+                    let rightAfter = named.contains { $0.lowerBound >= r.lowerBound && s.distance(from: r.lowerBound, to: $0.lowerBound) <= 60 }
+                    guard before || rightAfter else { continue }
+                }
                 // A future or conditional clause right around the step is not the step.
                 let window = String(s[s.index(r.lowerBound, offsetBy: -min(40, s.distance(from: s.startIndex, to: r.lowerBound)))..<r.upperBound])
                 if window.range(of: notYet, options: .regularExpression) != nil { continue }
                 if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
                 let (day, relative) = stepDay(sentence, printed: printed)
-                let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?")
+                // One per step and day; undated mentions are kept apart (the one that states the offence may come second).
+                let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?" + String(sentence.prefix(60)))
                 guard seen.insert(key).inserted else { continue }
                 out.append(Finding(step: step, day: day, dayFromPrintedDate: relative, sentence: sentence.trimmingCharacters(in: .whitespacesAndNewlines),
                                    detail: step == .sentenced ? sentenceDetail(sentence) : nil, reportedOn: printed))
@@ -170,7 +181,8 @@ public nonisolated enum ProceedingEventExtractor {
     /// All the asked name's tokens within a short stretch ("Christi Romano, aka Christi Machala").
     static func mentionsFully(_ lower: String, tokens: [String]) -> Bool {
         guard let first = tokens.first, let last = tokens.last else { return false }
-        let pattern = #"\b"# + NSRegularExpression.escapedPattern(for: first) + #"\b[^.]{0,40}?\b"# + NSRegularExpression.escapedPattern(for: last) + #"\b"#
+        // A middle initial's period ("Nathaniel E. Robinson") is part of the name.
+        let pattern = #"\b"# + NSRegularExpression.escapedPattern(for: first) + #"\b(?:[^.]|(?<=\b[a-z])\.){0,40}?\b"# + NSRegularExpression.escapedPattern(for: last) + #"\b"#
         return lower.range(of: pattern, options: .regularExpression) != nil
     }
 
