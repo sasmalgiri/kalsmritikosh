@@ -34,6 +34,23 @@ The fresh draws (`--seed 777 --skip-keys …`) use the same question wordings on
 never read from; the scores held, so the fixes were not fitted to the first cases. Builds: tuned
 chronology a0866664, conclusion-withheld cb83f72d, Enron a0866664; fresh draws 9b1914bb.
 
+### Claude-reworded questions (repaired scorer, 2026-10-26)
+
+Each question rewritten two ways by Claude the way different investigators ask (names and quoted
+subjects verbatim; Claude never sees the documents or the answers). "Rules" = Fully private;
+"rules → Claude" = the question canonicalizer may ask the person's Claude key to map the wording onto
+one of 29 canonical forms (only the question is sent, never a document).
+
+| Set | Build | n | Rules only | Rules → Claude | Wrong (→ Claude) |
+|---|---|---|---|---|---|
+| NTSB conclusion withheld | ≈9553e814 | 720 | 88.8 % | 96.7 % | 1.9 % |
+| Enron mailboxes (corrected count truth) | 36afa942 → d8672752 | 1,080 | 80.2 → 83.3 % | 85.8 → **88.3 %** | 9.4 → 7.9 % |
+| Chronology (16 unsupported plea labels excluded) | ≈9553e814 → d8672752 | 1,486 | 49.9 → 69.1 % | 79.2 → **91.3 %** | 11.1 → 6.3 % |
+
+The second number in each pair is **tuned**: the fixes between the two builds were read from these
+sets' own failures. The honest figure is a held-out set — new prosecutions never drawn, newly
+reworded — being measured now (`~/CaseBench/ho-chron`).
+
 ## Gaps found and fixed
 
 | # | Gap (what the simulation showed) | Fix | Commit |
@@ -53,20 +70,24 @@ chronology a0866664, conclusion-withheld cb83f72d, Enron a0866664; fresh draws 9
 | 13 | **"Who sent the email …?"** was read as the email-ADDRESS field and answered with every address on file; "When was the email sent?" said no date was given | `EmailHeaderAnswerer` reads the message's own headers (From / To / Date / body), RE:/FW: is the same subject, copies in several mailboxes are one email; "the email …" no longer means the address field | a0866664 |
 | 14 | "When did A email B?" for an organisation or address sender went to a passage | any sender parses; a sender none of the emails found shows is said so | 9b1914bb |
 
+| 15 | Claude-reworded questions (O-10) were not understood by the rules: "Who's the sender listed on …", "To whom was … addressed", "the total count of press releases about X", "when X's sentencing took place", "the exact date X was sentenced", "emails that went from A to B" | courtesy wrappers stripped; the question canonicalizer maps a wording to one of 29 forms (on-device model, then the person's cloud key — never in Fully private); rules extended for each shape found | 36afa942, c20fd94e, a3566d85, 66da52c9, 26dea109 |
+| 16 | O-3 counts over retrieved emails only | the ledger's participant index is the count's pool (every email in scope), read in full; a capped lookup says "at least N"; the index's display-name match counts when the header holds only an address | 36afa942, 3a2f9008, 1b8cb31e |
+| 17 | O-5 record vs narrative day answered with one date | both days shown as a conflict | ae12c5f3 |
+| 18 | O-6 no procedural gaps detected | a sentencing with no plea or verdict on file, or no charging document, is a gap (rule 11) | 765e7c4a |
+| 19 | "Did X plead guilty?" answered "No" whenever X was convicted — but a conviction follows a plea as often as a trial | "No" only on a verdict at trial; a bare conviction is reported as such; a plea is never "not convicted" | be30350a |
+
 ## Open gaps (not yet closed)
 
 | # | Gap | Measured | What would close it |
 |---|---|---|---|
 | O-1 | **"What was X charged with?"** — the offence is worded many ways; the quoted sentence is sometimes not the charging one | 70–73 % | an offence extractor (count + statute + description) and offence normalisation |
 | O-2 | **Sentence terms** with unusual wording ("to serve 87 months", "time served", resentencing, two terms in one release) | 73–82 % | a sentence-term grammar; several sentences shown as a list |
-| O-3 | **Counts across a large archive** ("How many emails did A send to B?") are counted over the emails *retrieved*, not every email in scope; undercounts | 54–55 % (Enron) | a scoped ledger query over the email headers (participants table), not retrieval |
+| O-3 | Counts: closed by 16 above for email; "how many releases name X" still counts the documents retrieval found (stated as "of the documents found") | — | an exhaustive name lookup for documents, as for email |
 | O-4 | **Which office**: Main-Justice releases with a U.S. Attorney's office as partner — the bench's metadata lists both, the app names one; some releases name no office in the text at all | 72–89 % | list every office the release credits |
-| O-5 | **Date conflicts** between a record page and the narrative (UTC vs local day) are answered with one date, not shown as a conflict | 6 % of NTSB date answers | surface both, as the conflict rule requires |
-| O-6 | **Gap analysis** in the opened case found 0 gaps across 200 prosecutions (a case with a charge and a sentence but no plea or verdict release is a real gap) | 0 / 200 | procedural-gap rules for proceedings |
 | O-7 | **Pronouns** ("He was sentenced …") are not followed; only descriptive leads are | — | a bounded coreference pass |
-| O-8 | **Email display names** (X-To/X-From) are not kept by the email loader, so name questions rely on address spellings | — | keep display names in the header block |
-| O-9 | A long or punctuated **subject** ("CA RTO News --Prediction-- …") is sometimes not retrieved, and the answer cites another case | ~1 % | exact-subject retrieval |
-| O-10 | These simulations ran **Fully private**. The on-device model and Claude interpreter steps were not run on them | — | rerun in Gated and Online modes |
+| O-8 | **Email display names** (X-To/X-From) are not kept in the header block; the participant index carries them and now backs count/when answers, but subject questions read the header alone | — | keep display names in the header block |
+| O-9 | A long or punctuated **subject** is sometimes not retrieved | ~1 % | exact-subject retrieval (FTS phrase lookup added 36afa942) |
+| O-11 | Ambiguous **recipient names** ("All Houston" vs "All Enron Houston" lists) over- or under-count by one or two | ~30 % of remaining count misses | match a recipient by address first, display name second |
 
 ## Bench honesty notes
 
@@ -75,8 +96,17 @@ chronology a0866664, conclusion-withheld cb83f72d, Enron a0866664; fresh draws 9
   truer one.
 - "What was X charged with?" is scored by word overlap with any release's wording of the offence
   (≥ 60 %); a correct answer in other words can still score wrong (O-1 is partly the bench).
-- The Enron count question counts only each message's first recipient; the app counts any
-  recipient, so a few "wrong" counts are the bench's.
+- **Corrected 2026-10-26:** the Enron count truth counted only each message's first To recipient and
+  counted two folder copies of one message twice. `enron.py` now counts any To recipient, one email per
+  subject + date; `enron_recount.py` corrected the existing sets (31 rows). The app was not tuned to
+  the old labels.
+- **Corrected 2026-10-26:** the chronology plea truth expected "No" to "Did X plead guilty?" from any
+  conviction. A conviction does not rule a plea out; the question is now asked only with trial
+  wording, and `chronology_relabel.py` marks the 28 unsupported labels excluded — kept and counted,
+  never scored.
+- **Scorer repaired 2026-10-26 (brief §17):** a negated mention ("Alice did not send it") is not the
+  answer, and retrieved snippets are not credited to the answer; only the visible body is scored.
+  Re-scored fresh draws held: chronology 87.9 %, NTSB 98.3 %, Enron 95.7 %.
 - The fixes were made by reading the first sets' failures, so the "after fixes" column is tuned.
   The "fresh draw" column is the honest figure: new cases, never read while fixing.
 - Fresh draws reuse the question wordings; new wordings were tested separately (held-out wording
