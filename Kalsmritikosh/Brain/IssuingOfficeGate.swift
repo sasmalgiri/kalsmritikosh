@@ -51,7 +51,9 @@ public nonisolated enum IssuingOfficeGate {
         (#"Office\s+of\s+the\s+(?:United States|U\.S\.)\s+Attorney\s+(?:for|in)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
         // "United States Attorney Gregory J. Haanstad of the Eastern District of Wisconsin announced".
         (#"(?:United States|U\.S\.)\s+Attorney\s+(?:[A-Z][A-Za-z.'’\-]*\s+){0,4}(?:for|of)\s+the\s+("# + district + ")", { "the U.S. Attorney's Office for the \($0)" }),
-        (#"\b(Criminal|Civil|Tax|Antitrust|Civil Rights|National Security|Environment and Natural Resources)\s+Division\b"#, { "the Justice Department's \($0) Division" }),
+        // A Justice Department division — not another agency's ("the FBI Washington Field Office
+        // Criminal Division" is the FBI's; held-out chronology 2026-10-26 answered it as the DOJ's).
+        (#"(?<!Office )(?<!FBI )(?<!Bureau )(?<!Police )\b(Criminal|Civil|Tax|Antitrust|Civil Rights|National Security|Environment and Natural Resources)\s+Division\b"#, { "the Justice Department's \($0) Division" }),
     ]
 
     /// The office as a release names it, normalised to one form. The sentence that says who

@@ -84,7 +84,7 @@ public nonisolated enum QuestionCanonicalizer {
     /// questions to the cloud only because of such wrappers.
     public static func normalize(_ question: String) -> String {
         var q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        let leadIns = #"^(?i:(?:hi|hey|hello|ok|okay|so)[,!.]?\s+)?(?i:(?:can|could|would|will) you\s+(?:please\s+)?(?:tell|show|give|let)\s+me\s+(?:know\s+)?|(?:can|could) you\s+(?:please\s+)?(?:identify|find|confirm|provide|check|clarify|walk me through|share)\s+|i(?:'d| would)? (?:like|want|need) to (?:know|find out|confirm|see|understand)\s+|i need\s+|please\s+(?:tell me|let me know|confirm|provide|identify|show me|give me)?\s*|do you know\s+|tell me\s+|i'm (?:trying|looking) to (?:find out|figure out|learn)\s+)"#
+        let leadIns = #"^(?i:(?:hi|hey|hello|ok|okay|so)[,!.]?\s+)?(?i:(?:can|could|would|will) you\s+(?:please\s+)?(?:tell|show|give|let)\s+me\s+(?:know\s+)?|(?:can|could) you\s+(?:please\s+)?(?:identify|find|confirm|provide|check|clarify|walk me through|share)\s+|i(?:'d| would)? (?:like|want|need) to (?:know|find out|confirm|see|understand)\s+|i need\s+|please\s+(?:tell me|let me know|confirm|provide|identify|show me|give me)?\s*|do you know\s+|tell me\s+|i'm (?:trying|looking|attempting) to (?:find out|figure out|learn|determine|establish|identify|confirm|work out|understand|pin down)\s+)"#
         while let r = q.range(of: leadIns, options: .regularExpression), !r.isEmpty {
             q = String(q[r.upperBound...]).trimmingCharacters(in: .whitespaces)
         }

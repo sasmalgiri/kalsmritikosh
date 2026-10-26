@@ -35,6 +35,11 @@ struct IssuingOfficeGateTests {
         #expect(IssuingOfficeGate.office(in: "announced Assistant Attorney General Lanny A. Breuer of the Criminal Division.")
                 == "the Justice Department's Criminal Division")
         #expect(IssuingOfficeGate.office(in: "U.S. Attorney Kenneth A. Polite announced") == nil)
+        // Another agency's division is not the Justice Department's (held-out chronology 2026-10-26).
+        let fbi = "pleaded guilty today, announced Acting U.S. Attorney Channing D. Phillips and Special Agent in Charge of the FBI Washington Field Office Criminal Division Wayne A. Jacobs. Stanton pleaded guilty in the U.S. District Court for the District of Columbia."
+        #expect(IssuingOfficeGate.office(in: fbi)?.contains("Criminal Division") != true)
+        #expect(IssuingOfficeGate.office(in: fbi) == "the District of Columbia")
+        #expect(QuestionCanonicalizer.normalize("I'm trying to determine which office prosecuted Daniel Navarro.") == "Which office prosecuted Daniel Navarro.")
     }
 
     @Test("The office line outside the cited snippet is found in the cited document's own text")
