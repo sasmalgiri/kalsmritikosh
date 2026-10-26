@@ -16,10 +16,12 @@ struct SchemaRepairTests {
 
     @Test("A ledger one version behind runs the newest migration instead of being stamped over it")
     func upgradeRunsNewest() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion - 2)
+        // Pinned to v150 (the last version before the case file), not "latest - n", which drifts.
+        let db = try await MigrationFixtureBuilder.database(atVersion: 150)
         #expect(try await !MigrationFixtureBuilder.tableExists(db, "case_profiles"))
         try await SchemaMigrations.migrate(db, through: SchemaMigrations.latestVersion)
-        for table in ["case_profiles", "case_allegations", "case_actions", "ach_analyses"] {
+        for table in ["case_profiles", "case_allegations", "case_actions", "ach_analyses", "case_action_seal_boundaries",
+                      "investigation_hypothesis_decisions", "investigation_hypothesis_evidence_assessments"] {
             #expect(try await MigrationFixtureBuilder.tableExists(db, table), "\(table) missing after upgrade")
         }
     }

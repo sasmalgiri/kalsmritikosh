@@ -8,8 +8,9 @@
 //  enforces the persona invariants that the repository cannot see:
 //    • every cited (source version + knowledge object) must be inside the case's authorized scope AND the
 //      object must actually belong to that version — no unauthorized or mismatched evidence (INV-05/07),
-//    • a hypothesis is CONFIRMED only when its counted evidence profile supports it; an unsupported
-//      hypothesis stays a proposal (INV-07) — the engine never picks a winner,
+//    • a hypothesis is CONFIRMED only by a human who records why, how the contrary evidence was weighed
+//      and which alternatives were considered; one with no supporting citation stays a proposal (INV-07,
+//      brief §8) — counts describe the evidence, the engine never picks a winner,
 //    • the human decisions (promote a lead, confirm/reject a hypothesis, confirm an evidence request) are
 //      recorded, never taken autonomously.
 //
@@ -64,12 +65,29 @@ public actor InvestigationAnalysisService {
     public func profile(hypothesisID: UUID) async throws -> HypothesisEvidenceProfile { try await analysis.profile(hypothesisID: hypothesisID) }
     public func evidence(hypothesisID: UUID) async throws -> [HypothesisEvidenceLink] { try await analysis.evidence(hypothesisID: hypothesisID) }
 
-    /// Confirm a hypothesis — the human decision. Refused if the counted profile does NOT support it (an
-    /// unsupported hypothesis stays a proposal; the engine never confirms autonomously).
-    public func confirmHypothesis(hypothesisID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> InvestigationHypothesis {
+    public func assessEvidence(linkID: UUID, reliability: SourceReliability, relevance: DiagnosticRelevance, note: String?,
+                               actor: String, at date: Date) async throws {
+        try await analysis.assess(linkID: linkID, reliability: reliability, relevance: relevance, note: note, assessedBy: actor, at: date)
+    }
+    public func assessments(hypothesisID: UUID) async throws -> [HypothesisEvidenceAssessment] { try await analysis.assessments(hypothesisID: hypothesisID) }
+    public func decisions(hypothesisID: UUID) async throws -> [HypothesisDecision] { try await analysis.decisions(hypothesisID: hypothesisID) }
+
+    /// Confirm a hypothesis — the human decision (brief §8). Counts never decide it: a confirmation needs at
+    /// least one supporting citation AND the reviewer's written rationale, how the contrary evidence was
+    /// weighed, and which alternatives were considered. The reasons and the evidence profile at that moment
+    /// are recorded with the decision; the engine never confirms autonomously.
+    public func confirmHypothesis(hypothesisID: UUID, expectedRevision: Int, reason: HypothesisConfirmationReason,
+                                  actor: String, at date: Date) async throws -> InvestigationHypothesis {
+        func clean(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let cleaned = HypothesisConfirmationReason(rationale: clean(reason.rationale), contraryEvidence: clean(reason.contraryEvidence),
+                                                   alternatives: clean(reason.alternatives))
+        guard !cleaned.rationale.isEmpty else { throw InvestigationHypothesisError.confirmationRationaleRequired }
+        guard !cleaned.contraryEvidence.isEmpty else { throw InvestigationHypothesisError.contraryEvidenceNotAddressed }
+        guard !cleaned.alternatives.isEmpty else { throw InvestigationHypothesisError.alternativesNotAddressed }
         let profile = try await analysis.profile(hypothesisID: hypothesisID)
         guard profile.isSupported else { throw InvestigationHypothesisError.unsupportedCannotConfirm(hypothesisID) }
-        return try await analysis.setHypothesisStatus(hypothesisID: hypothesisID, expectedRevision: expectedRevision, to: .confirmed, actor: actor, at: date)
+        return try await analysis.setHypothesisStatus(hypothesisID: hypothesisID, expectedRevision: expectedRevision, to: .confirmed,
+                                                      actor: actor, at: date, decision: (cleaned, profile))
     }
     public func rejectHypothesis(hypothesisID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> InvestigationHypothesis {
         try await analysis.setHypothesisStatus(hypothesisID: hypothesisID, expectedRevision: expectedRevision, to: .rejected, actor: actor, at: date)

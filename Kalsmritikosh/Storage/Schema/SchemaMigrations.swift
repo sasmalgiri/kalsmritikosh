@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 153
+    public static let latestVersion = 154
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -539,7 +539,11 @@ public enum SchemaMigrations {
             "ach_cells": ["analysis_id", "evidence_id", "hypothesis_id", "consistency", "updated_by", "updated_at"],
             "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"],
             // v153 — case-action log made append-only and sealed into the audit chain.
-            "case_action_seal_boundaries": ["id", "sealed_from_at", "legacy_action_count", "created_at"]
+            "case_action_seal_boundaries": ["id", "sealed_from_at", "legacy_action_count", "created_at"],
+            // v154 — hypothesis decisions carry their reasons; evidence links carry reliability + relevance.
+            "investigation_hypothesis_decisions": ["id", "hypothesis_id", "decision", "rationale", "contrary_evidence",
+                                                    "alternatives", "for_lineages", "against_lineages", "actor", "decided_at"],
+            "investigation_hypothesis_evidence_assessments": ["link_id", "reliability", "diagnostic_relevance", "assessed_by", "assessed_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -748,7 +752,8 @@ public enum SchemaMigrations {
         (150, v150),
         (151, v151),
         (152, v152),
-        (153, v153)
+        (153, v153),
+        (154, v154)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7457,6 +7462,50 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
     CREATE TRIGGER IF NOT EXISTS case_actions_append_only_delete BEFORE DELETE ON case_actions
     BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    """
+
+
+    // MARK: - v154 — a hypothesis is confirmed by reasons, not by a count (implementation brief §8).
+    // The profile used to allow confirmation when "for >= against"; neither a majority nor the absence
+    // of contradiction proves a hypothesis. A confirmation now records the reviewer's rationale, how the
+    // contrary evidence was weighed, the alternatives considered, and the evidence profile at that moment
+    // (append-only). Each evidence link may carry a source-reliability and diagnostic-relevance assessment.
+    private static let v154: String = """
+    CREATE TABLE IF NOT EXISTS investigation_hypothesis_decisions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        hypothesis_id     TEXT NOT NULL,
+        decision          TEXT NOT NULL,
+        rationale         TEXT NOT NULL,
+        contrary_evidence TEXT,
+        alternatives      TEXT,
+        for_count         INTEGER NOT NULL,
+        against_count     INTEGER NOT NULL,
+        for_lineages      INTEGER NOT NULL,
+        against_lineages  INTEGER NOT NULL,
+        unassessed_count  INTEGER NOT NULL,
+        actor             TEXT NOT NULL,
+        decided_at        REAL NOT NULL,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE CASCADE,
+        CHECK(decision IN ('confirmed','rejected','dismissed')),
+        CHECK(length(trim(rationale)) > 0),
+        CHECK(decision <> 'confirmed' OR (length(trim(coalesce(contrary_evidence,''))) > 0 AND length(trim(coalesce(alternatives,''))) > 0)),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_hypothesis_decisions_hyp ON investigation_hypothesis_decisions(hypothesis_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_hypothesis_decisions_append_only_update BEFORE UPDATE ON investigation_hypothesis_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_hypothesis_decisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS investigation_hypothesis_evidence_assessments (
+        link_id              TEXT PRIMARY KEY NOT NULL,
+        reliability          TEXT NOT NULL,
+        diagnostic_relevance TEXT NOT NULL,
+        note                 TEXT,
+        assessed_by          TEXT NOT NULL,
+        assessed_at          REAL NOT NULL,
+        FOREIGN KEY(link_id) REFERENCES investigation_hypothesis_evidence(id) ON DELETE CASCADE,
+        CHECK(reliability IN ('high','medium','low','unknown')),
+        CHECK(diagnostic_relevance IN ('high','medium','low','none')),
+        CHECK(length(trim(assessed_by)) > 0)
+    );
     """
 
 }
