@@ -83,7 +83,8 @@ public nonisolated struct IdentityFieldResolver: Sendable {
                 "issued by", "issuing authority"]) || q.range(of: #"^\s*(?:what|which) (?:is the )?(?:organi[sz]ation|company)\??$"#, options: .regularExpression) != nil {
             return .organizationName
         }
-        if any(["address"]) { return .address }
+        // "address" the noun, not "addressed" ("To whom was "…" addressed?" asks for recipients).
+        if q.range(of: #"\baddress(?:es)?\b"#, options: .regularExpression) != nil { return .address }
         // "The name of the court / the firm / the drug" asks for that thing's name, not a person's
         // (held-out case bench 2026-10-25: "What is the name of the court in X?" answered with every
         // personName in the ledger). Only a person-like noun keeps the person-name field.

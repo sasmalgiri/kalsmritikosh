@@ -71,6 +71,19 @@ struct EmailHeaderAnswererTests {
         #expect(AbsentAttributeGate.askedFor("What was the content of the email \"X\"?") == nil)
     }
 
+    @Test("Folded subjects, normalised count shapes, and a subject no email has")
+    func moreShapes() throws {
+        let folded = "From: a.b@enron.com\nTo: c.d@enron.com\nSubject: OnePass Member continental.com Specials\n for Jane Tholt\nDate: Tue, 1 May 2001 10:00:00 -0700\n\nHello."
+        let m = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: folded))
+        #expect(m.subject == "OnePass Member continental.com Specials for Jane Tholt")
+        #expect(EmailHeaderAnswerer.parse("How many emails Mary Miller sent to Bill Rapp?") == .count(from: "Mary Miller", to: "Bill Rapp"))
+        #expect(EmailHeaderAnswerer.parse("When Matt Smith sent an email to Zelda Quackenbush?") == .when(from: "Matt Smith", to: "Zelda Quackenbush"))
+        let none = try #require(EmailHeaderAnswerer.answer(.sender(subject: "Nothing like this"), messages: messages))
+        #expect(none.refused && none.body == "None of the emails found has the subject “Nothing like this”.")
+        #expect(IdentityFieldResolver.questionFieldType("To whom was \"X\" addressed?") == nil)
+        #expect(AbsentAttributeGate.askedFor("What exactly did the email \"X\" state?") == nil)
+    }
+
     @Test("How many emails one person sent another; an email to someone never written to is unrecorded")
     func betweenPeople() throws {
         #expect(try ask("How many emails did Debra Perlingiere send to Robin Masciangelo?").body.hasPrefix("2 of the emails found are from Debra Perlingiere to Robin Masciangelo"))
@@ -80,8 +93,8 @@ struct EmailHeaderAnswererTests {
         // A sender that is an organisation or an address, never found at all: said so.
         let org = try ask("When did EDIS Service email Zelda Quackenbush?")
         #expect(org.refused && org.body == "None of the emails found is from EDIS Service to Zelda Quackenbush.")
-        // An unknown subject is left to the normal pipeline.
+        // With no emails searched, an unknown subject is left to the normal pipeline.
         let parsed = try #require(EmailHeaderAnswerer.parse("Who sent the email \"Nothing like this\"?"))
-        #expect(EmailHeaderAnswerer.answer(parsed, messages: messages) == nil)
+        #expect(EmailHeaderAnswerer.answer(parsed, messages: []) == nil)
     }
 }

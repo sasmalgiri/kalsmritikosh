@@ -50,7 +50,9 @@ public nonisolated enum AbsentAttributeGate {
                                        "judge", "defendant", "plaintiff", "office", "agency", "location", "place",
                                        // An email's parts (Claude-reworded Enron questions, 2026-10-26).
                                        "content", "contents", "body", "text", "message", "recipient", "recipients",
-                                       "sender", "timestamp", "subject", "email", "e-mail"]
+                                       "sender", "timestamp", "subject", "email", "e-mail", "time",
+                                       // Adverbs a rewording adds ("What exactly did …").
+                                       "exactly", "actually", "precisely", "really", "specifically"]
 
     /// The word a record uses for the same thing ("Aircraft:" for "airplane", "Parties:" for
     /// "litigants") — wide case bench 2026-10-25.

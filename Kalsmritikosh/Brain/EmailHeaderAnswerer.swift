@@ -49,9 +49,13 @@ public nonisolated enum EmailHeaderAnswerer {
         // "How many emails did Debra Perlingiere send to Robin Masciangelo?" / "When did A email B?"
         let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’\-]+"#
         let name = "(" + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})"#
-        if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages|times)(?:\s+(?:in\s+)?total)?\s+did)\s+"# + name + #"\s+(?i:send|write|e-?mail|message)(?:\s+(?i:to))?\s+"# + name, question)
+        if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages|times)(?:\s+(?:in\s+)?total)?(?:\s+did)?)\s+"# + name + #"\s+(?i:send|sent|write|wrote|e-?mail(?:ed)?|message(?:d)?)(?:\s+(?i:to))?\s+"# + name, question)
             ?? firstMatch(#"(?i:(?:count|number) of (?:the )?(?:e-?mails?|messages)(?:\s+that)?)\s+"# + name + #"\s+(?i:sent|wrote|e-?mailed)(?:\s+(?i:to))?\s+"# + name, question) {
             return .count(from: m[0], to: m[1])
+        }
+        // "When Matt Smith sent an email to Zelda Quackenbush?" (after the courtesy wrapper is gone).
+        if let m = firstMatch(#"^(?i:when(?: did)?)\s+"# + name + #"\s+(?i:sent (?:an? )?e-?mail to|e-?mailed|wrote to|sent a message to|messaged)\s+"# + name, question) {
+            return .when(from: m[0], to: m[1])
         }
         if let m = firstMatch(#"^(?i:when did)\s+"# + name + #"\s+(?i:e-?mail|write to|message|send (?:an )?e-?mail to)\s+"# + name, question) {
             return .when(from: m[0], to: m[1])
@@ -80,11 +84,19 @@ public nonisolated enum EmailHeaderAnswerer {
         var headers: [String: String] = [:]
         let parts = text.components(separatedBy: "\n\n")
         guard let head = parts.first else { return nil }
+        var last: String?
         for line in head.components(separatedBy: .newlines) {
+            // A folded header continues on lines that start with white space.
+            if let key = last, line.first?.isWhitespace == true {
+                headers[key, default: ""] += " " + line.trimmingCharacters(in: .whitespaces)
+                continue
+            }
+            last = nil
             guard let colon = line.firstIndex(of: ":") else { continue }
             let key = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
             guard ["from", "to", "cc", "subject", "date"].contains(key) else { continue }
             headers[key] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            last = key
         }
         guard let from = headers["from"], let subject = headers["subject"] else { return nil }
         return Message(objectID: objectID, from: from, to: headers["to"] ?? "", subject: subject, date: headers["date"] ?? "",
@@ -118,7 +130,11 @@ public nonisolated enum EmailHeaderAnswerer {
         case .sender(let s), .sentDate(let s), .recipients(let s), .content(let s):
             let wanted = normalizedSubject(s)
             let hits = messages.filter { normalizedSubject($0.subject) == wanted }
-            guard !hits.isEmpty else { return nil }
+            guard !hits.isEmpty else {
+                // Emails were searched and none has that subject: said so, not answered from a passage.
+                guard messages.count >= 3 else { return nil }
+                return answered("None of the emails found has the subject “\(s)”.", [], refused: true)
+            }
             // The same message filed in several mailboxes is one email; different senders or days are several.
             var distinct: [Message] = []
             for m in hits where !distinct.contains(where: { $0.from == m.from && $0.date == m.date }) { distinct.append(m) }
