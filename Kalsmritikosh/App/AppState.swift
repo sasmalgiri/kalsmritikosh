@@ -2779,6 +2779,15 @@ public final class AppState {
                     return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
                 } : nil
             await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
+            // Verified record extraction (Online, AI on): the person's documents go through the Online
+            // provider — its preview, masking and consent — and only a verbatim-verified answer is shown.
+            await brain.setRecordExtractor(KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                ? VerifiedRecordExtractor { [weak self] prompt in
+                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
+                        throw OnlineCloudProvider.OnlineError.notAvailable
+                    }
+                    return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 600, temperature: 0))
+                } : nil)
             // Emails by exact subject, or sent by one person to another, straight from the ledger.
             let participants = EmailParticipantRepository(database: db)
             await brain.setEmailLookup { [weak chunks] lookup in

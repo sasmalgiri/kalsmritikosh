@@ -1615,6 +1615,8 @@ public actor MasterBrain {
     /// Any wording → one canonical form (QuestionCanonicalizer): rules, then on-device, then cloud.
     private var onDeviceRewriter: (any QuestionRewriting)?
     private var cloudRewriter: (any QuestionRewriting)?
+    private var recordExtractor: VerifiedRecordExtractor?
+    public func setRecordExtractor(_ extractor: VerifiedRecordExtractor?) { recordExtractor = extractor }
     public func setQuestionRewriters(onDevice: (any QuestionRewriting)?, cloud: (any QuestionRewriting)?) {
         onDeviceRewriter = onDevice
         cloudRewriter = cloud
@@ -2115,6 +2117,13 @@ public actor MasterBrain {
                 } catch {
                     KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
                 }
+            }
+            // Online with AI on: the person's model reads the documents and proposes a quoted answer,
+            // shown only if it verifies against them (VerifiedRecordExtractor); otherwise the rules answer.
+            if interpreterModelsAllowed, let recordExtractor, VerifiedRecordExtractor.handles(parsed.ask),
+               let verified = await recordExtractor.answer(question: intent.rawQuestion, parsed: parsed, sources: sources) {
+                KalsmritikoshLog.brain.info("proceeding answer: verified extraction for \(String(describing: parsed.ask), privacy: .public)")
+                return verified
             }
             if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete) {
                 KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")

@@ -202,6 +202,10 @@ struct CaseBenchRunner {
             let send: @Sendable (String) async throws -> String = { prompt in try await BenchClaude.send(prompt, key: key, model: model) }
             await brain.setQuestionInterpreters(onDevice: nil, cloud: CloudQuestionInterpreter(generate: send))
             await brain.setQuestionRewriters(onDevice: nil, cloud: CloudQuestionRewriter(generate: send))
+            // Verified record extraction reads the person's documents — a stronger reader than the
+            // question rewriter; every answer it proposes is checked verbatim against the documents.
+            let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-sonnet-5"
+            await brain.setRecordExtractor(VerifiedRecordExtractor { prompt in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) })
             await brain.setInterpreterModelsAllowedOverride(true)
         }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
@@ -346,14 +350,14 @@ struct CaseBenchRunner {
 
 /// The bench's direct Claude call (test target only).
 enum BenchClaude {
-    static func send(_ prompt: String, key: String, model: String) async throws -> String {
+    static func send(_ prompt: String, key: String, model: String, maxTokens: Int = 400) async throws -> String {
         guard let url = URL(string: "https://api.anthropic.com/v1/messages") else { throw URLError(.badURL) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 60
+        request.timeoutInterval = 120
         for (k, v) in ["x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
         request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model, "max_tokens": 400, "messages": [["role": "user", "content": prompt]]])
+            "model": model, "max_tokens": maxTokens, "messages": [["role": "user", "content": prompt]]])
         let (data, _) = try await URLSession.shared.data(for: request)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let content = object["content"] as? [[String: Any]] else { throw URLError(.badServerResponse) }
