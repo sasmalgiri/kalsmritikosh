@@ -418,6 +418,12 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
     case statementAlreadyAttested
     case noStatement
     case taskEngineUnavailable
+    /// The record exists but belongs to another case (implementation brief §3).
+    case notInCase(String, UUID)
+    /// The case is closed; reopen it to change it.
+    case caseClosed
+    /// The record changed since it was read; reload and try again.
+    case staleRecord(String, UUID)
 
     public var errorDescription: String? {
         switch self {
@@ -429,6 +435,9 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
         case .statementAlreadyAttested: return "The statement is already attested. Record a new statement instead of changing it."
         case .noStatement: return "There is no statement to attest."
         case .taskEngineUnavailable: return "Tasks aren't available yet."
+        case .notInCase(let what, _): return "That \(what) belongs to another case."
+        case .caseClosed: return "The case is closed. Reopen it to make changes."
+        case .staleRecord(let what, _): return "The \(what) changed since it was opened. Reload it and try again."
         }
     }
 }

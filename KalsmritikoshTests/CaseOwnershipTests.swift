@@ -1,0 +1,99 @@
+//
+//  CaseOwnershipTests.swift
+//  KalsmritikoshTests
+//
+//  Implementation brief §3 (P0): every mutation guarded by case A that names a child record of
+//  case B is refused — without changing either case and without writing a success line to the
+//  action log. A closed case takes no new work until reopened; an attestation of a statement that
+//  changed in between is refused.
+//
+
+import Foundation
+import Testing
+@testable import Kalsmritikosh
+
+@Suite("Case ownership on every mutation")
+struct CaseOwnershipTests {
+
+    struct Two {
+        let db: Database
+        let file: CaseFileRepository
+        let a: UUID, b: UUID
+    }
+
+    static func two() async throws -> Two {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let workspaces = WorkspaceRepository(database: db)
+        let ws = Workspace(title: "WS")
+        try await workspaces.upsert(ws)
+        let cases = InvestigationCaseRepository(database: db)
+        let a = try await cases.createCase(workspaceID: ws.id, title: "Case A", actor: "Ada", at: Date())
+        let b = try await cases.createCase(workspaceID: ws.id, title: "Case B", actor: "Ada", at: Date())
+        let svc = CaseFileService(database: db, cases: cases, workspaces: workspaces)
+        return Two(db: db, file: svc.file, a: a.id, b: b.id)
+    }
+
+    func actionCount(_ t: Two, _ caseID: UUID) async throws -> Int {
+        try await t.file.actions(caseID: caseID).count
+    }
+
+    @Test("Case A cannot touch case B's allegation, evidence link, person, interview, exhibit, hold or batch")
+    func crossCaseRefused() async throws {
+        let t = try await Self.two()
+        let allegationB = try await t.file.addAllegation(caseID: t.b, text: "B's allegation", actor: "Ada")
+        try await t.file.addAllegationEvidence(caseID: t.b, allegationID: allegationB, evidenceRef: "doc-1", label: nil, stance: .supports, note: nil, actor: "Ada")
+        let linkB = try #require(try await t.file.allegationEvidence(caseID: t.b).first).id
+        let personB = try await t.file.addPerson(caseID: t.b, name: "Bea", role: .witness, entityID: nil, contact: nil, notes: nil, actor: "Ada")
+        let interviewB = try await t.file.addInterview(caseID: t.b, personID: personB, questions: nil, actor: "Ada")
+        var iv = try #require(try await t.file.interview(id: interviewB))
+        iv.statementText = "I saw it."
+        try await t.file.updateInterview(iv, actor: "Ada")
+        let journalB = try await t.file.addJournal(caseID: t.b, kind: .note, text: "B note", eventDate: nil, evidenceRef: nil, actor: "Ada")
+        _ = try await t.file.addExhibit(caseID: t.b, number: nil, description: "B exhibit", sourceRef: nil, sha256: nil, collectedBy: nil, collectedAt: nil, collectedWhere: nil, actor: "Ada")
+        let exhibitB = try #require(try await t.file.exhibits(caseID: t.b).first).id
+        try await t.file.issueHold(caseID: t.b, custodian: "IT", personID: nil, noticeText: "Keep it", reminderDue: nil, actor: "Ada")
+        let holdB = try #require(try await t.file.holdNotices(caseID: t.b).first).id
+        _ = try await t.file.createBatches(caseID: t.b, sourceRefs: ["s1"], size: 5, reviewer: "Ada", actor: "Ada")
+        let batchB = try #require(try await t.file.reviewBatches(caseID: t.b).first).id
+
+        let beforeA = try await actionCount(t, t.a), beforeB = try await actionCount(t, t.b)
+        let attempts: [() async throws -> Void] = [
+            { try await t.file.addAllegationEvidence(caseID: t.a, allegationID: allegationB, evidenceRef: "doc-2", label: nil, stance: .contradicts, note: nil, actor: "Ada") },
+            { try await t.file.decide(allegationID: allegationB, caseID: t.a, disposition: .substantiated, rationale: "x", actor: "Ada") },
+            { try await t.file.retractAllegationEvidence(caseID: t.a, id: linkB, actor: "Ada") },
+            { try await t.file.retractJournal(caseID: t.a, id: journalB, actor: "Ada") },
+            { try await t.file.retractPerson(caseID: t.a, id: personB, actor: "Ada") },
+            { try await t.file.addContact(caseID: t.a, personID: personB, at: Date(), mode: "phone", note: nil, actor: "Ada") },
+            { _ = try await t.file.addInterview(caseID: t.a, personID: personB, questions: nil, actor: "Ada") },
+            { try await t.file.attest(interviewID: interviewB, caseID: t.a, attestedBy: "Bea", actor: "Ada") },
+            { try await t.file.addCredibility(caseID: t.a, interviewID: interviewB, factor: CredibilityFactor.allCases[0], assessment: CredibilityAssessment.allCases[0], note: nil, evidenceRef: nil, actor: "Ada") },
+            { try await t.file.withdrawExhibit(caseID: t.a, id: exhibitB, actor: "Ada") },
+            { try await t.file.acknowledgeHold(caseID: t.a, id: holdB, acknowledgedAt: Date(), actor: "Ada") },
+            { try await t.file.releaseHold(caseID: t.a, id: holdB, reason: "done", actor: "Ada") },
+            { try await t.file.advanceBatch(caseID: t.a, id: batchB, to: ReviewBatchStatus.allCases[1], qcNote: nil, actor: "Bob") },
+        ]
+        for attempt in attempts {
+            await #expect(throws: CaseFileError.self) { try await attempt() }
+        }
+        // Nothing changed in either case, and no success was logged.
+        #expect(try await actionCount(t, t.a) == beforeA)
+        #expect(try await actionCount(t, t.b) == beforeB)
+        #expect(try await t.file.allegationEvidence(caseID: t.b).count == 1)
+        #expect(try await t.file.allegations(caseID: t.b).first?.disposition == .pending)
+        #expect(try await t.file.interview(id: interviewB)?.status != .attested)
+        #expect(try await t.file.exhibits(caseID: t.b).count == 1)
+    }
+
+    @Test("A closed case takes no new work until it is reopened")
+    func closedCase() async throws {
+        let t = try await Self.two()
+        try await t.file.markClosed(caseID: t.a, reopened: false, actor: "Ada")
+        await #expect(throws: CaseFileError.caseClosed) {
+            _ = try await t.file.addAllegation(caseID: t.a, text: "late", actor: "Ada")
+        }
+        // Recording a read or export of a closed case is still allowed.
+        try await t.file.logAction(caseID: t.a, action: "viewed", detail: nil, actor: "Ada")
+        try await t.file.markClosed(caseID: t.a, reopened: true, actor: "Ada")
+        _ = try await t.file.addAllegation(caseID: t.a, text: "after reopening", actor: "Ada")
+    }
+}
