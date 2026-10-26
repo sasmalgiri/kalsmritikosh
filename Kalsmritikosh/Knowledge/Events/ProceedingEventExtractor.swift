@@ -106,8 +106,15 @@ public nonisolated enum ProceedingEventExtractor {
         let introductions = (try? NSRegularExpression(pattern: #"\b[A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+, (?:a\s)?\d{2},"#))?
             .numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length)) ?? 0
         var descriptiveLead: Int?
-        if introductions <= 1, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
+        if introductions <= 1, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+,?\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
            i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
+            descriptiveLead = i
+        }
+        // "Two Florida women pleaded guilty today …" followed by "Analay Rico, 37, … and Daylen Diaz,
+        // 44, …": a plural lead is about each defendant the next sentences introduce.
+        if descriptiveLead == nil,
+           let i = all.prefix(8).firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|\d{1,2})\s(?:[A-Za-z\-]+,?\s){0,6}(?:men|women|residents|people|individuals|defendants|officers|officials|executives|employees|doctors|physicians|nurses|members|brothers|sisters|siblings|nationals|citizens|leaders|owners|operators)\b"#, options: .regularExpression) != nil }),
+           all[(i + 1)..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
         for (index, sentence) in all.enumerated() {
@@ -131,7 +138,7 @@ public nonisolated enum ProceedingEventExtractor {
                 // "pleaded guilty … to an information charging him with …" reports the plea; the charge is
                 // background, not a charging event on this sentence's day — unless the day is stated for it.
                 if step == .charged,
-                   [Step.pleaded, .convicted, .sentenced].contains(where: { s.range(of: $0.pattern, options: .regularExpression) != nil }),
+                   [Step.pleaded, .convicted, .sentenced, .arraigned].contains(where: { s.range(of: $0.pattern, options: .regularExpression) != nil }),
                    s.range(of: #"\b(?:charged|indicted|indictment|complaint|information)\b[^.]{0,60}\bon\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d"#, options: .regularExpression) == nil {
                     continue
                 }
@@ -155,7 +162,7 @@ public nonisolated enum ProceedingEventExtractor {
                 let window = String(s[s.index(r.lowerBound, offsetBy: -min(40, s.distance(from: s.startIndex, to: r.lowerBound)))..<r.upperBound])
                 if window.range(of: notYet, options: .regularExpression) != nil { continue }
                 if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
-                let (day, relative) = stepDay(sentence, printed: printed)
+                let (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
                 // One per step and day; undated mentions are kept apart (the one that states the offence may come second).
                 let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?" + String(sentence.prefix(60)))
                 guard seen.insert(key).inserted else { continue }
@@ -293,13 +300,21 @@ public nonisolated enum ProceedingEventExtractor {
 
     /// The day a sentence gives its step: "on March 3, 2015" (a year-less "on March 3" takes the
     /// printed date's year), or "today"/"yesterday" against the printed date.
-    static func stepDay(_ sentence: String, printed: DateComponents?) -> (DateComponents?, Bool) {
+    static func stepDay(_ sentence: String, printed: DateComponents?, stepEnd: Int? = nil) -> (DateComponents?, Bool) {
         let ns = sentence as NSString
+        // A date after the step belongs to it unless another step's verb comes between them ("was
+        // sentenced to 27 months … Parks pled guilty … on May 27, 2015" is the plea's day).
+        let stepEndUTF16 = stepEnd.map { NSRange(sentence.startIndex..<sentence.index(sentence.startIndex, offsetBy: min($0, sentence.count)), in: sentence).length }
+        func belongs(_ m: NSTextCheckingResult) -> Bool {
+            guard let end = stepEndUTF16, m.range.location > end else { return true }
+            let between = ns.substring(with: NSRange(location: end, length: m.range.location - end))
+            return between.range(of: #"(?i)\b(?:pleaded|pled|pleading|indicted|charged|convicted|found guilty|arraigned|arrested|sentenced)\b"#, options: .regularExpression) == nil
+        }
         // "was sentenced today …, on December 15, 2023, Smith …" (two sentences a text conversion ran
         // together): "today"/"yesterday" attached to the step wins over a date further along.
         let attached = sentence.range(of: #"(?i)\b(?:sentenced|pleaded|pled|convicted|charged|indicted|arrested|arraigned|found guilty)\s+(?:\w+\s+){0,2}?(?:today|yesterday)\b"#, options: .regularExpression)
         if let re = try? NSRegularExpression(pattern: #"(?i)\bon\s+(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?"# + monthPattern + #"\b"#),
-           let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)),
+           let m = re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)).first(where: belongs),
            attached.map({ NSRange($0, in: sentence).location > m.range.location }) ?? true,
            let month = months[String(ns.substring(with: m.range(at: 1)).lowercased().prefix(3))],
            let day = Int(ns.substring(with: m.range(at: 2))) {

@@ -252,6 +252,38 @@ struct ProceedingAnswererTests {
         let parsed = try #require(ProceedingAnswerer.parse("What sentence did Michael Wayne Williams receive?"))
         let a = try #require(ProceedingAnswerer.answer(parsed, sources: [.init(objectID: UUID(), text: release)]))
         #expect(a.body.hasPrefix("Michael Wayne Williams was sentenced to one year and one day in prison"))
+        // A locality with commas; an arraignment "on an indictment charging" is not the charging.
+        let scallion = """
+            U.S. Department of Justice
+            FOR IMMEDIATE RELEASE
+            Tuesday, May 28, 2013
+            Jackson County Man Charged With Methamphetamine Conspiracy
+            A Jackson County, Illinois, man was indicted by a federal grand jury on May 9, 2013, for conspiracy to manufacture methamphetamine, the United States Attorney for the Southern District of Illinois, Stephen R. Wigginton, announced today. On May 24, 2013, Charles W. Scallion, 41, of Carbondale, was arraigned in United States District Court in Benton on an indictment charging conspiracy to manufacture methamphetamine.
+            """
+        let steps = ProceedingEventExtractor.findings(in: scallion, person: "Charles W. Scallion")
+        #expect(steps.filter { $0.step == .charged }.compactMap(\.day).map(\.day) == [9])
+        #expect(steps.contains { $0.step == .arraigned && $0.day?.day == 24 })
+        // A plural lead is about each defendant the next sentences introduce.
+        let rico = """
+            U.S. Department of Justice
+            FOR IMMEDIATE RELEASE
+            Wednesday, July 20, 2022
+            Two Florida Medical Study Coordinators Plead Guilty in Connection with Scheme to Falsify Clinical Trial Data
+            Two Florida women pleaded guilty today in connection with their participation in a conspiracy to falsify clinical trial data. According to court documents, Analay Rico, 37, of Fort Lauderdale, and Daylen Diaz, 44, of Miami, worked as study coordinators.
+            """
+        let plea = ProceedingEventExtractor.findings(in: rico, person: "Analay Rico").first { $0.step == .pleaded }
+        #expect(plea?.day?.month == 7 && plea?.day?.day == 20)
+        // Two sentences run together: the date after the plea verb is the plea's, not the sentencing's.
+        let parks = """
+            U.S. Department of Justice
+            FOR IMMEDIATE RELEASE
+            Wednesday, October 7, 2015
+            Parks Sentenced To 27 Months For Wire Fraud
+            Christopher R. Thyer, United States Attorney for the Eastern District of Arkansas, announced today that, Stephen K. Parks, 62, of Little Rock, Arkansas, was sentenced to 27 months imprisonment and ordered to pay $845,000 in restitution to the IRS; Parks pled guilty to a Federal Information charging him with wire fraud on May 27, 2015.
+            """
+        let parksSteps = ProceedingEventExtractor.findings(in: parks, person: "Stephen K. Parks")
+        #expect(parksSteps.first { $0.step == .sentenced }?.day?.month == 10)
+        #expect(parksSteps.first { $0.step == .pleaded }?.day?.month == 5)
     }
 
     @Test("A headline in AP style and a 'The leader of …' lead")
