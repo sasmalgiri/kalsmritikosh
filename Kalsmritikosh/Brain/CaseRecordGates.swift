@@ -31,7 +31,7 @@ public nonisolated enum RecordLineGate {
     }
 
     static func asksKilled(_ question: String) -> Bool {
-        question.range(of: #"(?i)\bhow many\b[^?]{0,40}\b(?:killed|died|dead|fatalit|lost their lives|perished)|\bnumber of (?:fatalities|deaths|dead)\b"#,
+        question.range(of: #"(?i)\bhow many\b[^?]{0,40}\b(?:killed|died|dead|fatalit|lost their lives|perished|lives (?:were )?lost|deaths)|\bnumber of (?:fatalities|deaths|dead|people killed)\b|\b(?:death toll|fatality count)\b"#,
                        options: .regularExpression) != nil
     }
 
