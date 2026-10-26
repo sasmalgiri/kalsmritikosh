@@ -49,7 +49,7 @@ public nonisolated enum EmailHeaderAnswerer {
         // "How many emails did Debra Perlingiere send to Robin Masciangelo?" / "When did A email B?"
         let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’\-]+"#
         let name = "(" + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})"#
-        if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages|times)(?:\s+(?:in\s+)?total)?(?:\s+did)?)\s+"# + name + #"\s+(?i:send|sent|write|wrote|e-?mail(?:ed)?|message(?:d)?)(?:\s+(?i:to))?\s+"# + name, question)
+        if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages|times)(?:\s+(?:in\s+)?total)?(?:\s+did)?)\s+"# + name + #"\s+(?i:send|sent|write|wrote|e-?mail(?:ed)?|message(?:d)?)(?:\s+(?i:an?\s+(?:e-?mail|message)))?(?:\s+(?i:to))?\s+"# + name, question)
             ?? firstMatch(#"(?i:(?:count|number) of (?:the )?(?:e-?mails?|messages)(?:\s+that)?)\s+"# + name + #"\s+(?i:sent|wrote|e-?mailed)(?:\s+(?i:to))?\s+"# + name, question)
             // "the total number of emails that went from A to B", "a count of the emails sent from A
             // to B", "How many total emails went from A to B?" (Claude rewordings, Enron mailboxes).
@@ -89,6 +89,8 @@ public nonisolated enum EmailHeaderAnswerer {
     public struct Message: Sendable {
         public let objectID: UUID
         public let from: String, to: String, subject: String, date: String, body: String
+        /// The display names an export keeps apart from the addresses (X-From / X-To), when any.
+        public var fromName: String = "", toNames: String = ""
     }
 
     /// The header lines an email's text opens with, as the email loader writes them.
@@ -106,13 +108,15 @@ public nonisolated enum EmailHeaderAnswerer {
             last = nil
             guard let colon = line.firstIndex(of: ":") else { continue }
             let key = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
-            guard ["from", "to", "cc", "subject", "date"].contains(key) else { continue }
+            guard ["from", "to", "cc", "subject", "date", "x-from", "x-to"].contains(key) else { continue }
             headers[key] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
             last = key
         }
-        guard let from = headers["from"], let subject = headers["subject"] else { return nil }
-        return Message(objectID: objectID, from: from, to: headers["to"] ?? "", subject: subject, date: headers["date"] ?? "",
-                       body: parts.dropFirst().joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines))
+        // An email with no subject is still an email (the loader writes no Subject line for it).
+        guard let from = headers["from"], headers["date"] != nil || headers["subject"] != nil else { return nil }
+        return Message(objectID: objectID, from: from, to: headers["to"] ?? "", subject: headers["subject"] ?? "", date: headers["date"] ?? "",
+                       body: parts.dropFirst().joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines),
+                       fromName: headers["x-from"] ?? "", toNames: headers["x-to"] ?? "")
     }
 
     static func normalizedSubject(_ s: String) -> String {
@@ -125,8 +129,10 @@ public nonisolated enum EmailHeaderAnswerer {
         if person.contains("@") { return h.contains(person.lowercased()) }
         let tokens = person.lowercased().split(separator: " ").map(String.init).filter { $0.count >= 2 && !$0.hasSuffix(".") }
         guard let first = tokens.first, let last = tokens.last else { return false }
-        // "Debra Perlingiere", "Perlingiere, Debra", "debra.perlingiere@enron.com".
-        return (h.contains(first) && h.contains(last)) || h.contains("\(first).\(last)@")
+        // "Debra Perlingiere", "Perlingiere, Debra", "debra.perlingiere@enron.com" — whole words, so
+        // "All Houston" is not "robert.allwein@…" nor "dl-ga-all_enron_houston@…".
+        func word(_ w: String) -> Bool { h.range(of: #"(?<![a-z0-9_])"# + NSRegularExpression.escapedPattern(for: w) + #"(?![a-z0-9_])"#, options: .regularExpression) != nil }
+        return (word(first) && word(last)) || h.contains("\(first).\(last)@")
     }
 
     static func answered(_ text: String, _ cites: [Message], refused: Bool = false) -> VerifiedAnswer {
@@ -167,23 +173,23 @@ public nonisolated enum EmailHeaderAnswerer {
             let lead = several ? "\(distinct.count) emails found have that subject:\n" : ""
             return answered(lead + lines.joined(separator: "\n"), distinct)
         case .count(let a, let b):
-            let fromA = messages.filter { names(a, in: $0.from) || ledgerPairs.contains($0.objectID) }
+            let fromA = messages.filter { names(a, in: $0.from + " " + $0.fromName) || ledgerPairs.contains($0.objectID) }
             guard !fromA.isEmpty else { return nil }
             var distinct: [Message] = []
-            for m in fromA where (names(b, in: m.to) || ledgerPairs.contains(m.objectID)) && !distinct.contains(where: { $0.subject == m.subject && $0.date == m.date }) { distinct.append(m) }
+            for m in fromA where (names(b, in: m.to + " " + m.toNames) || ledgerPairs.contains(m.objectID)) && !distinct.contains(where: { $0.subject == m.subject && $0.date == m.date }) { distinct.append(m) }
             // A search that stopped at its cap gives a floor, never a total (brief §7 exact aggregates).
             let lead = complete ? "\(distinct.count)" : "At least \(distinct.count)"
             var text = "\(lead) of the emails found are from \(a) to \(b)" + (distinct.isEmpty ? "." : ":\n" + distinct.map { "• \($0.date) — \($0.subject)" }.joined(separator: "\n"))
             if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
             return answered(text, distinct.isEmpty ? Array(fromA.prefix(3)) : distinct)
         case .when(let a, let b):
-            let fromA = messages.filter { names(a, in: $0.from) || ledgerPairs.contains($0.objectID) }
+            let fromA = messages.filter { names(a, in: $0.from + " " + $0.fromName) || ledgerPairs.contains($0.objectID) }
             guard !fromA.isEmpty else {
                 // Nothing found from the sender at all: that is what the emails found show.
                 guard !messages.isEmpty else { return nil }
                 return answered("None of the emails found is from \(a) to \(b).", [], refused: true)
             }
-            let toB = fromA.filter { names(b, in: $0.to) || ledgerPairs.contains($0.objectID) }
+            let toB = fromA.filter { names(b, in: $0.to + " " + $0.toNames) || ledgerPairs.contains($0.objectID) }
             guard !toB.isEmpty else {
                 return answered("None of the emails found from \(a) is addressed to \(b).", Array(fromA.prefix(3)), refused: true)
             }

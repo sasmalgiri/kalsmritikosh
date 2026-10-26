@@ -129,6 +129,17 @@ struct EmailHeaderAnswererTests {
         #expect(AppState.ownedByDedicatedAnswerer("Who's the sender listed on the email \"Azalea Trail\"?"))
         #expect(AppState.ownedByDedicatedAnswerer("Could you specify the sentence that Christi Machala received?"))
         #expect(!AppState.ownedByDedicatedAnswerer("Who filed the trademark renewal?"))
+        // An email with no subject is still counted; the names an export keeps in X-From / X-To match;
+        // a name matches as whole words ("All Houston" is not "allwein" nor "all_enron_houston").
+        let noSubject = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: benjamin.rogers@enron.com\nTo: james.bartlett@csfb.com\nDate: Mon, 21 Aug 2000 07:59:00 -0700\n\nJim, the numbers."))
+        let crawler = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: pete.davis@enron.com\nTo: pete.davis@enron.com\nDate: Tue, 10 Apr 2001 19:00:00 -0700\nX-From: Schedule Crawler<pete.davis@enron.com>\nX-To: Pete Davis\n\nStart date: 4/10/01"))
+        let houston = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: enron.announcements@enron.com\nTo: all.houston@enron.com\nSubject: Training\nDate: Tue, 8 May 2001 17:55:00 -0700\n\nHi."))
+        let otherList = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: announcements.enron@enron.com\nTo: dl-ga-all_enron_houston_employees@enron.com\nSubject: Bus passes\nDate: Thu, 10 Jan 2002 07:22:28 -0800\n\nHi."))
+        #expect(try #require(EmailHeaderAnswerer.answer(.count(from: "Benjamin Rogers", to: "James Bartlett"), messages: [noSubject])).body.hasPrefix("1 of the emails found"))
+        #expect(try #require(EmailHeaderAnswerer.answer(.count(from: "Schedule Crawler", to: "Pete Davis"), messages: [crawler])).body.hasPrefix("1 of the emails found"))
+        #expect(try #require(EmailHeaderAnswerer.answer(.count(from: "Enron Announcements", to: "All Houston"), messages: [houston, otherList])).body.hasPrefix("1 of the emails found"))
+        #expect(EmailHeaderAnswerer.parse("How many times did Lorna Brennan send an email to Bill Cordes?") == .count(from: "Lorna Brennan", to: "Bill Cordes"))
+        #expect(EmailLoader.exportNameLines(["from": "pete.davis@enron.com", "x-from": "Schedule Crawler<pete.davis@enron.com>"]) == ["X-From: Schedule Crawler<pete.davis@enron.com>"])
         // With no emails searched, an unknown subject is left to the normal pipeline.
         let parsed = try #require(EmailHeaderAnswerer.parse("Who sent the email \"Nothing like this\"?"))
         #expect(EmailHeaderAnswerer.answer(parsed, messages: []) == nil)
