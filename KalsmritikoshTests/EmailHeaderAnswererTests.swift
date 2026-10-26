@@ -113,6 +113,13 @@ struct EmailHeaderAnswererTests {
         #expect(EmailHeaderAnswerer.answer(.count(from: "Mary Miller", to: "Bill Rapp"), messages: [bare]) == nil)   // header alone: unknown
         let matched = try #require(EmailHeaderAnswerer.answer(.count(from: "Mary Miller", to: "Bill Rapp"), messages: [bare], ledgerPairs: [bare.objectID]))
         #expect(matched.body.hasPrefix("1 of the emails found are from Mary Miller to Bill Rapp"))
+        // "Do we know …" / "Do you have a record of …" are wrappers, not yes/no questions (an email's
+        // date came back as "No — the documents give date: …").
+        #expect(n("Do we know the date/time the email \"Past Due Invoice\" went out?") == "The date/time the email \"Past Due Invoice\" went out?")
+        #expect(n("Do you have a record of when the email \"ENA Group Expenses\" was sent?") == "When the email \"ENA Group Expenses\" was sent?")
+        #expect(EmailHeaderAnswerer.parse(n("Do we know the date/time the email \"Past Due Invoice\" went out?")) == .sentDate(subject: "Past Due Invoice"))
+        // A yes/no about whether a record exists keeps its shape.
+        #expect(n("Do we have any record of a meeting with Bill Rapp?") == "Do we have any record of a meeting with Bill Rapp?")
         // The subject-first actor/person doors leave these questions to the dedicated answerers.
         #expect(AppState.ownedByDedicatedAnswerer("Who's the sender listed on the email \"Azalea Trail\"?"))
         #expect(AppState.ownedByDedicatedAnswerer("Could you specify the sentence that Christi Machala received?"))
