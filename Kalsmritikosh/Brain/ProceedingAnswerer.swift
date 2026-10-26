@@ -78,7 +78,7 @@ public nonisolated enum ProceedingAnswerer {
             return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
-        if q.range(of: #"^what (?:was|were|is|are)\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what (?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what (?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .chargedWith)
         }
         guard let step else { return nil }

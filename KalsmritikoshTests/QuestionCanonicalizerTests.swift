@@ -53,3 +53,17 @@ struct QuestionCanonicalizerTests {
         #expect(prompt.hasSuffix("Question: Q?") && prompt.contains("email-sender"))
     }
 }
+
+@Suite("Question normalizer")
+struct QuestionNormalizerTests {
+    @Test("Courtesy wrappers go; what is asked stays")
+    func wrappers() {
+        #expect(QuestionCanonicalizer.normalize("Can you tell me the date on which Brandy Mize was sentenced?") == "When Brandy Mize was sentenced?")
+        #expect(QuestionCanonicalizer.normalize("Could you tell me what Miguel Arias Velasquez was charged with?") == "What Miguel Arias Velasquez was charged with?")
+        #expect(QuestionCanonicalizer.normalize("Can you tell me who sent the email titled \"California Contract Meeting\"?") == "Who sent the email titled \"California Contract Meeting\"?")
+        #expect(QuestionCanonicalizer.normalize("I need to know the probable cause listed for NTSB case ERA15LA366 — what was it?") == "The probable cause listed for NTSB case ERA15LA366?")
+        #expect(QuestionCanonicalizer.normalize("When was Mayo v. United States decided?") == "When was Mayo v. United States decided?")
+        #expect(ProceedingAnswerer.parse("What Miguel Arias Velasquez was charged with?")?.ask == .chargedWith)
+        #expect(ProceedingAnswerer.parse("When Brandy Mize was sentenced?")?.ask == .when(.sentenced))
+    }
+}

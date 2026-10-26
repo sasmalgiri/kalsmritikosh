@@ -77,6 +77,29 @@ public nonisolated enum QuestionCanonicalizer {
         .init(id: "title-account", wording: "What happened in the case \"{title}\"?", meaning: "an account of the matter the titled release is about"),
     ]
 
+    /// The question without its courtesy wrapper — deterministic, before any rule or model reads it:
+    /// "Can you tell me the date on which X was sentenced?" → "When X was sentenced?", "I need to know
+    /// the probable cause listed for NTSB case Y — what was it?" → "the probable cause listed for NTSB
+    /// case Y?". Claude-written rewordings of real closed-case questions (2026-10-26) sent four in five
+    /// questions to the cloud only because of such wrappers.
+    public static func normalize(_ question: String) -> String {
+        var q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let leadIns = #"^(?i:(?:hi|hey|hello|ok|okay|so)[,!.]?\s+)?(?i:(?:can|could|would|will) you\s+(?:please\s+)?(?:tell|show|give|let)\s+me\s+(?:know\s+)?|(?:can|could) you\s+(?:please\s+)?(?:identify|find|confirm|provide|check|clarify|walk me through|share)\s+|i(?:'d| would)? (?:like|want|need) to (?:know|find out|confirm|see|understand)\s+|i need\s+|please\s+(?:tell me|let me know|confirm|provide|identify|show me|give me)?\s*|do you know\s+|tell me\s+|i'm (?:trying|looking) to (?:find out|figure out|learn)\s+)"#
+        while let r = q.range(of: leadIns, options: .regularExpression), !r.isEmpty {
+            q = String(q[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+        }
+        // A trailing "— what was it?" / ", please?" adds nothing.
+        q = q.replacingOccurrences(of: #"(?i)\s*(?:[—–-]|,)\s*(?:what (?:was|is|were|are) (?:it|they|that)|please)\s*\?*\s*$"#, with: "?", options: .regularExpression)
+        // "the date on which X happened" / "the day X was sentenced" → "When X …".
+        q = q.replacingOccurrences(of: #"(?i)^(?:the\s+)?(?:exact\s+|specific\s+|precise\s+)?(?:date|day)\s+(?:on which|when|that)\s+"#, with: "When ", options: .regularExpression)
+        // "whether X pleaded guilty" → "Did X plead guilty".
+        q = q.replacingOccurrences(of: #"(?i)^whether\s+(.+?)\s+pleaded guilty"#, with: "Did $1 plead guilty", options: .regularExpression)
+        q = q.replacingOccurrences(of: #"(?i)^(who|what|when|where|which|how)\b"#, with: "$1", options: .regularExpression)
+        if let first = q.first, first.isLowercase { q = first.uppercased() + q.dropFirst() }
+        if !q.hasSuffix("?") && !q.hasSuffix(".") { q += "?" }
+        return q.isEmpty ? question : q
+    }
+
     /// True when a rule already understands the question — no model is asked.
     public static func recognizedByRules(_ question: String) -> Bool {
         ProceedingAnswerer.parse(question) != nil

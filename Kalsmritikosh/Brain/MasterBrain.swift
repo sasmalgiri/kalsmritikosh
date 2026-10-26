@@ -1647,7 +1647,8 @@ public actor MasterBrain {
         let askStartLedgerState = await ledgerStateProvider?()
         // A wording no rule understands is rewritten into the canonical form that asks the same thing
         // (names and quoted subjects copied from the question), then answered from the documents.
-        var question = question
+        // The courtesy wrapper goes first ("Can you tell me …"), so the rules read what is asked.
+        var question = QuestionCanonicalizer.normalize(question)
         if onDeviceRewriter != nil || cloudRewriter != nil,
            let canonical = await QuestionCanonicalizer.canonicalize(question, onDevice: onDeviceRewriter, cloud: cloudRewriter,
                                                                     modelsAllowed: interpreterModelsAllowed) {
