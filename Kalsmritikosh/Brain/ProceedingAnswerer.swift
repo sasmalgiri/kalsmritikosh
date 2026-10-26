@@ -82,7 +82,7 @@ public nonisolated enum ProceedingAnswerer {
         // "How many (separate) press releases …", "the total count of press releases about X", "a count of
         // the press releases that mention X" — anywhere in the question, after any courtesy wrapper.
         let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements)\b"#
-        if q.range(of: #"^how many\s+"# + documents, options: .regularExpression) != nil
+        if q.range(of: #"^(?:roughly\s+|approximately\s+|about\s+|around\s+)?how many\s+"# + documents, options: .regularExpression) != nil
             || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?"# + documents, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .documentCount)
         }

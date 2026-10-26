@@ -167,6 +167,14 @@ struct ProceedingAnswererTests {
         let jl = try #require(ProceedingAnswerer.parse("What sentence did James Lomax receive?"))
         let jlBody = try #require(ProceedingAnswerer.answer(jl, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: lomax)])).body
         #expect(jlBody.hasPrefix("James Lomax was sentenced to three years") && !jlBody.contains("probation"))
+        // "sentenced today" wins over a later date run into the same sentence; a hyphenated term is a term.
+        let run = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nFriday, September 13, 2024\n\nBeckley Man Sentenced\n\nBECKLEY, W.Va. – Leon Eugene Smith Jr., 43, of Beckley, was sentenced today to a 161-month prison term for distribution of fentanyl According to court documents, on December 15, 2023, Smith sold fentanyl."
+        let ls = try #require(ProceedingAnswerer.parse("When was Leon Eugene Smith sentenced?"))
+        let lsBody = try #require(ProceedingAnswerer.answer(ls, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: run)])).body
+        #expect(lsBody.hasPrefix("Leon Eugene Smith was sentenced on September 13, 2024"))
+        let lt = try #require(ProceedingAnswerer.parse("What sentence did Leon Eugene Smith receive?"))
+        #expect(try #require(ProceedingAnswerer.answer(lt, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: run)])).body.contains("161-month"))
+        #expect(ProceedingAnswerer.parse("Roughly how many press releases reference Leon Eugene Smith?")?.ask == .documentCount)
         // "pleaded guilty … to an information charging him" is the plea, not a charging event on that day.
         let plea = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nTuesday, March 28, 2017\n\nStango Sentenced\n\nCharles Stango, 73, of Henderson, Nevada, previously pleaded guilty to an information charging him with one count of using an interstate facility with intent to murder."
         let cs = try #require(ProceedingAnswerer.parse("When was Charles Stango charged?"))

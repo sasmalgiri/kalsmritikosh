@@ -295,8 +295,12 @@ public nonisolated enum ProceedingEventExtractor {
     /// printed date's year), or "today"/"yesterday" against the printed date.
     static func stepDay(_ sentence: String, printed: DateComponents?) -> (DateComponents?, Bool) {
         let ns = sentence as NSString
+        // "was sentenced today …, on December 15, 2023, Smith …" (two sentences a text conversion ran
+        // together): "today"/"yesterday" attached to the step wins over a date further along.
+        let attached = sentence.range(of: #"(?i)\b(?:sentenced|pleaded|pled|convicted|charged|indicted|arrested|arraigned|found guilty)\s+(?:\w+\s+){0,2}?(?:today|yesterday)\b"#, options: .regularExpression)
         if let re = try? NSRegularExpression(pattern: #"(?i)\bon\s+(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?"# + monthPattern + #"\b"#),
            let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)),
+           attached.map({ NSRange($0, in: sentence).location > m.range.location }) ?? true,
            let month = months[String(ns.substring(with: m.range(at: 1)).lowercased().prefix(3))],
            let day = Int(ns.substring(with: m.range(at: 2))) {
             let year = m.range(at: 3).location != NSNotFound ? Int(ns.substring(with: m.range(at: 3))) : printed?.year
@@ -313,7 +317,7 @@ public nonisolated enum ProceedingEventExtractor {
 
     /// "to 48 months in federal prison, followed by three years of supervised release".
     static func sentenceDetail(_ sentence: String) -> String? {
-        let pattern = #"(?i)\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
+        let pattern = #"(?i)\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?(?:an?\s+)?((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|\d+-(?:month|year|day)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
         guard let re = try? NSRegularExpression(pattern: pattern),
               let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length)),
               m.range(at: 1).location != NSNotFound else { return nil }
