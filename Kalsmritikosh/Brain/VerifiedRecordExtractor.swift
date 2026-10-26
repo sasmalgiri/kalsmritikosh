@@ -121,7 +121,12 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
                 return false
             }()
             guard stated || monthDay || relative else { return nil }
-            if case .when(let step) = parsed.ask, quote.range(of: Self.stepWords(step), options: [.regularExpression, .caseInsensitive]) == nil { return nil }
+            // The step TAKEN, in the past tense — "Sentencing is scheduled for October 4" is not a sentencing.
+            if case .when(let step) = parsed.ask {
+                let lower = quote.lowercased()
+                guard lower.range(of: step.pattern, options: .regularExpression) != nil,
+                      lower.range(of: ProceedingEventExtractor.notYet, options: .regularExpression) == nil else { return nil }
+            }
             let verb = stepPhrase(parsed.ask) == "pleaded guilty" ? "pleaded guilty" : "was \(stepPhrase(parsed.ask))"
             text = "\(parsed.person) \(verb) on \(ProceedingAnswerer.render(day) ?? value)."
         case .sentenceImposed:

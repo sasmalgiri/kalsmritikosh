@@ -46,7 +46,7 @@ public nonisolated enum ProceedingEventExtractor {
         }
 
         /// Past-tense wording that reports the step. Matched case-insensitively.
-        var pattern: String {
+        public var pattern: String {
             switch self {
             case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:federal )?(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
             case .arrested: return #"\b(?:was|were|has been) arrested\b"#

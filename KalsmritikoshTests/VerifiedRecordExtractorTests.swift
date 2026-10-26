@@ -60,6 +60,11 @@ struct VerifiedRecordExtractorTests {
         // "No" to a plea without a trial verdict in the quote.
         #expect(try verify("Did Leon Eugene Smith plead guilty?",
             #"{"answer":"No","quote":"Smith pleaded guilty on May 1, 2024, to distribution of fentanyl.","doc":1}"#) == nil)
+        // A scheduled step is not a step taken.
+        let scheduled = [ProceedingAnswerer.Source(objectID: UUID(), text: "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nMonday, June 3, 2019\n\nAtif Ullah, 30, pleaded guilty today. Sentencing is scheduled for October 4, 2019, before Judge Vilardo.")]
+        let au = try #require(ProceedingAnswerer.parse("When was Atif Ullah sentenced?"))
+        let sp = try #require(VerifiedRecordExtractor.parse(#"{"answer":"October 4, 2019","quote":"Sentencing is scheduled for October 4, 2019, before Judge Vilardo.","doc":1,"value":"2019-10-04"}"#))
+        #expect(VerifiedRecordExtractor.verify(sp, parsed: au, sources: scheduled, docs: scheduled.map(\.text)) == nil)
         // A document number out of range, or nothing found.
         #expect(try verify("When was Leon Eugene Smith sentenced?", #"{"answer":"x","quote":"Smith pleaded guilty on May 1, 2024, to distribution of fentanyl.","doc":3,"value":"2024-05-01"}"#) == nil)
         #expect(try verify("When was Leon Eugene Smith sentenced?", #"{"answer":null}"#) == nil)

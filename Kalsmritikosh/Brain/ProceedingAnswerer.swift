@@ -40,7 +40,7 @@ public nonisolated enum ProceedingAnswerer {
         // Noun forms first ("when X's sentencing took place", "the date of the guilty plea") —
         // Claude-reworded closed-case questions, 2026-10-26.
         ("sentencing", .sentenced), ("guilty plea", .pleaded), ("indictment", .charged), ("conviction", .convicted),
-        ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged),
+        ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged), ("charging", .charged),
         ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),
         ("charge", .charged), ("arrested", .arrested), ("arrest", .arrested), ("arraigned", .arraigned), ("plead guilty", .pleaded), ("pleaded guilty", .pleaded),
         ("plead", .pleaded), ("pleaded", .pleaded), ("pled guilty", .pleaded), ("pled", .pleaded), ("convicted", .convicted), ("convict", .convicted), ("found guilty", .convicted),
@@ -100,7 +100,7 @@ public nonisolated enum ProceedingAnswerer {
         }
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
-        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)\s+(?:was|is|were)\s+the\s+(?:\w+\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
         }
         if q.range(of: #"^(?:did|was|were|has|have|is)\b"#, options: .regularExpression) != nil {

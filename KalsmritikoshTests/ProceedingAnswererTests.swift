@@ -118,6 +118,9 @@ struct ProceedingAnswererTests {
             ("I'd like to know which prosecuting office was responsible for the case against Christi Machala.", .office),
             ("Can you identify the office that prosecuted Christi Machala?", .office),
             ("Who was the prosecuting office in the matter of Christi Machala?", .office),
+            ("What's the charge date for Christi Machala?", .when(.charged)),
+            ("I need the charging date for Christi Machala — when did that happen?", .when(.charged)),
+            ("Do we have the sentencing date for Christi Machala on record?", .when(.sentenced)),
         ]
         for (q, want) in shapes { #expect(ProceedingAnswerer.parse(n(q))?.ask == want, "\(q) → \(n(q))") }
     }
