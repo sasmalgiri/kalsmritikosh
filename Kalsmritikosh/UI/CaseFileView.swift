@@ -233,7 +233,21 @@ struct CaseOverviewTab: View {
 
     var body: some View {
         let closed = s.caseHeader.status == .closed
+        let steps = CaseNextSteps.compute(s, unresolvedReferences: model.unresolvedRefs.count, custodyReadFailed: model.custodyReadFailed)
         VStack(alignment: .leading, spacing: 0) {
+            if !steps.isEmpty {
+                CaseSection(title: "Next steps", subtitle: "From what this case holds now. They suggest; you decide.") {
+                    ForEach(steps.prefix(6)) { step in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: "arrow.right.circle").foregroundStyle(.tint).accessibilityHidden(true)
+                            Text(step.text)
+                            Spacer()
+                            Text(Self.tabName(step.place)).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if steps.count > 6 { Text("and \(steps.count - 6) more").font(.caption).foregroundStyle(.secondary) }
+                }
+            }
             CaseSection(title: "Stage", subtitle: "Move the case along. Closing is a recorded decision below.") {
                 HStack {
                     StageChip(stage: closed ? .closed : s.profile.stage)
@@ -360,6 +374,17 @@ struct CaseOverviewTab: View {
         profile = s.profile
         triage = s.profile.triage
         teamText = s.profile.team.joined(separator: ", ")
+    }
+
+    static func tabName(_ place: CaseNextStep.Place) -> String {
+        switch place {
+        case .overview: return CaseFileTab.overview.rawValue
+        case .plan: return CaseFileTab.plan.rawValue
+        case .tasks: return CaseFileTab.tasks.rawValue
+        case .people: return CaseFileTab.people.rawValue
+        case .evidence: return CaseFileTab.evidence.rawValue
+        case .log: return CaseFileTab.log.rawValue
+        }
     }
 
     private func closeOrReopen(_ closed: Bool) {
