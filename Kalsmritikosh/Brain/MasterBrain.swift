@@ -1612,6 +1612,18 @@ public actor MasterBrain {
         onDeviceInterpreter = onDevice
         cloudInterpreter = cloud
     }
+    /// Any wording → one canonical form (QuestionCanonicalizer): rules, then on-device, then cloud.
+    private var onDeviceRewriter: (any QuestionRewriting)?
+    private var cloudRewriter: (any QuestionRewriting)?
+    public func setQuestionRewriters(onDevice: (any QuestionRewriting)?, cloud: (any QuestionRewriting)?) {
+        onDeviceRewriter = onDevice
+        cloudRewriter = cloud
+    }
+    /// The case bench measures the cloud step with answers kept evidence-only; nil in the app,
+    /// where the AI regime decides.
+    private var interpreterModelsAllowedOverride: Bool?
+    public func setInterpreterModelsAllowedOverride(_ allowed: Bool?) { interpreterModelsAllowedOverride = allowed }
+    var interpreterModelsAllowed: Bool { interpreterModelsAllowedOverride ?? FeatureFlags.aiRegimeValue().allowsAI }
 
     public func setAskSnapshotEnd(_ p: @escaping @Sendable () async -> Void) {
         askSnapshotEnd = p
@@ -1626,6 +1638,15 @@ public actor MasterBrain {
         // C-ii: stamp the ledger state observed at ASK START — the receipt's
         // determinism contract is (question, stamped state, pinned clock).
         let askStartLedgerState = await ledgerStateProvider?()
+        // A wording no rule understands is rewritten into the canonical form that asks the same thing
+        // (names and quoted subjects copied from the question), then answered from the documents.
+        var question = question
+        if onDeviceRewriter != nil || cloudRewriter != nil,
+           let canonical = await QuestionCanonicalizer.canonicalize(question, onDevice: onDeviceRewriter, cloud: cloudRewriter,
+                                                                    modelsAllowed: interpreterModelsAllowed) {
+            KalsmritikoshLog.brain.info("question rewritten to a canonical form")
+            question = canonical
+        }
         for await update in answerStream(question: question, context: context, access: access,
                                          originScopeID: originScopeID) {
             // AEE-M2 — the terminal states are verifiedFinal (locked, durably committed) and
@@ -1969,7 +1990,8 @@ public actor MasterBrain {
         if onDeviceInterpreter != nil || cloudInterpreter != nil {
             let fields = Set(sharedRetrieval.genericFacts.map { FactSchemaRegistry.normalizeField($0.field) })
             if let step = await QuestionUnderstanding.interpret(question: intent.rawQuestion, fields: fields,
-                                                                onDevice: onDeviceInterpreter, cloud: cloudInterpreter), step != "rules" {
+                                                                onDevice: onDeviceInterpreter, cloud: cloudInterpreter,
+                                                                modelsAllowed: interpreterModelsAllowed), step != "rules" {
                 KalsmritikoshLog.brain.info("question understood by the \(step, privacy: .public) interpreter")
             }
         }

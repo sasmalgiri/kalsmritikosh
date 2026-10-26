@@ -186,16 +186,31 @@ struct CaseBenchRunner {
 
         // 2. Ask each case's questions over the whole shard's ledger (an archive holds many cases).
         let brain = await state.brain
+        // CASEBENCH_CLOUD_KEY_FILE — the cloud step of the understanding cascade, measured with the
+        // owner's Claude key (read from a file outside the repo; the app itself reaches the cloud only
+        // through its network helper, which a test host does not have). Answers stay evidence-only:
+        // only the question's wording goes to the model, never a document.
+        if let keyFile = Self.env["CASEBENCH_CLOUD_KEY_FILE"],
+           let key = try? String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
+            let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-haiku-4-5-20251001"
+            let send: @Sendable (String) async throws -> String = { prompt in try await BenchClaude.send(prompt, key: key, model: model) }
+            await brain.setQuestionInterpreters(onDevice: nil, cloud: CloudQuestionInterpreter(generate: send))
+            await brain.setQuestionRewriters(onDevice: nil, cloud: CloudQuestionRewriter(generate: send))
+            await brain.setInterpreterModelsAllowedOverride(true)
+        }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         func ask(_ id: String, _ q: String) async -> AnswerResult {
             let s = Date()
             let before = await LLMCallCounters.shared.snapshot().completedByProvider
+            let claudeBefore = await BenchClaude.Usage.shared.calls
             let a = await brain.answer(question: q, access: access)
+            let claudeCalls = await BenchClaude.Usage.shared.calls - claudeBefore
             let after = await LLMCallCounters.shared.snapshot().completedByProvider
-            let calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
+            var calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
                 let d = kv.value - (before[kv.key] ?? 0)
                 if d > 0 { out[kv.key] = d }
             }
+            if claudeCalls > 0 { calls["claude"] = claudeCalls }
             return AnswerResult(id: id, q: q, body: a.body, refused: a.refused, refusal: a.refusalReason,
                                 cited: a.citations.map { caseOfObject[$0.objectID] ?? "?" },
                                 snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
@@ -320,5 +335,29 @@ struct CaseBenchRunner {
         } catch {
             return failed(error)
         }
+    }
+}
+
+/// The bench's direct Claude call (test target only).
+enum BenchClaude {
+    static func send(_ prompt: String, key: String, model: String) async throws -> String {
+        guard let url = URL(string: "https://api.anthropic.com/v1/messages") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        for (k, v) in ["x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": model, "max_tokens": 400, "messages": [["role": "user", "content": prompt]]])
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = object["content"] as? [[String: Any]] else { throw URLError(.badServerResponse) }
+        await BenchClaude.Usage.shared.add((object["usage"] as? [String: Any]).map { ($0["input_tokens"] as? Int ?? 0) + ($0["output_tokens"] as? Int ?? 0) } ?? 0)
+        return content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined()
+    }
+
+    actor Usage {
+        static let shared = Usage()
+        private(set) var tokens = 0, calls = 0
+        func add(_ n: Int) { tokens += n; calls += 1 }
     }
 }

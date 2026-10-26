@@ -2750,6 +2750,17 @@ public final class AppState {
                     return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
                 } : nil
             await brain.setQuestionInterpreters(onDevice: onDevice, cloud: cloud)
+            // Any wording → one canonical form, the same cascade.
+            let rewriteOnDevice: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionRewriter() : nil
+            let rewriteCloud: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                ? CloudQuestionRewriter { [weak self] prompt in
+                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
+                        throw OnlineCloudProvider.OnlineError.notAvailable
+                    }
+                    return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
+                } : nil
+            await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in
                 await self?.composeToolGroundedAnswer(question: question, access: access)
