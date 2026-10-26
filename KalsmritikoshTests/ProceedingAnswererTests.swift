@@ -168,6 +168,26 @@ struct ProceedingAnswererTests {
         #expect(try sentence("Gary Resnik", resnik).hasPrefix("Gary Resnik was sentenced to 320 months in federal prison"))
     }
 
+    @Test("Which office prosecuted X, from X's own releases; Mc-names; a co-defendant's step is not X's")
+    func officeAndNames() throws {
+        let release = """
+            U.S. Department of Justice
+            Eastern District of Pennsylvania
+            FOR IMMEDIATE RELEASE
+            Monday, March 2, 2020
+            PHILADELPHIA – Matthew McKinney, 39, of Philadelphia, was sentenced today to 10 years in prison.
+            McKinney's co-defendant Arthur Upchurch was sentenced to 20 years.
+            The case was prosecuted by Assistant U.S. Attorney Jane Roe.
+            """
+        let src = [ProceedingAnswerer.Source(objectID: UUID(), text: release)]
+        func answer(_ q: String) throws -> String {
+            let parsed = try #require(ProceedingAnswerer.parse(q))
+            return try #require(ProceedingAnswerer.answer(parsed, sources: src)).body
+        }
+        #expect(try answer("Which office prosecuted Matthew McKinney?").contains("Eastern District of Pennsylvania"))
+        #expect(try answer("What sentence did Matthew McKinney receive?").hasPrefix("Matthew McKinney was sentenced to 10 years in prison"))
+    }
+
     @Test("A middle initial is part of the name; the offence-stating sentence answers 'charged with'")
     func initialsAndOffence() throws {
         let release = """

@@ -44,7 +44,8 @@ public nonisolated enum EmailHeaderAnswerer {
             return nil
         }
         // "How many emails did Debra Perlingiere send to Robin Masciangelo?" / "When did A email B?"
-        let name = #"([A-Z][a-z'’\-]+(?:\s+(?:[A-Z]\.|[A-Z][a-z'’\-]+)){1,3})"#
+        let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’\-]+"#
+        let name = "(" + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})"#
         if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages)\s+did)\s+"# + name + #"\s+(?i:send|write)\s+(?i:to)\s+"# + name, question) {
             return .count(from: m[0], to: m[1])
         }

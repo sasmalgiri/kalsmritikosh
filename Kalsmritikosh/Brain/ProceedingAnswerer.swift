@@ -21,6 +21,7 @@ public nonisolated enum ProceedingAnswerer {
         case whether(ProceedingEventExtractor.Step)
         case sentenceImposed
         case chargedWith
+        case office
         case timeline
         case documentCount
     }
@@ -43,7 +44,8 @@ public nonisolated enum ProceedingAnswerer {
     /// Jasmine Estep", "Gary L. Smith"), not the question's own first word.
     static func person(in question: String) -> String? {
         // "Jose Garcia-Zamora", "Mary O'Neil-Smith": a hyphen may join two capitalised parts.
-        let part = #"[A-Z][a-z'’]+(?:-[A-Z][a-z'’]+)?"#
+        // "McKinney", "DeShawn", "O'Brien": a capital may follow a short prefix inside the name.
+        let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’]+(?:-[A-Z][a-z'’]+)?"#
         let pattern = #"(?<![A-Za-z])("# + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})(?:,?\s+(?:Jr|Sr|II|III)\.?)?"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = question as NSString
@@ -70,6 +72,10 @@ public nonisolated enum ProceedingAnswerer {
         }
         if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
+        }
+        // "Which office prosecuted X?" — the office the person's own releases name.
+        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+)?(?:office|agency|prosecutors?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued)\b|\bwho prosecuted\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
         if q.range(of: #"^what (?:was|were|is|are)\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what (?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
@@ -100,6 +106,30 @@ public nonisolated enum ProceedingAnswerer {
     static func quote(_ s: String) -> String {
         let t = s.count > 320 ? String(s.prefix(320)) + "…" : s
         return "\u{201C}\(t)\u{201D}"
+    }
+
+    /// Offices a release names: a heading line of its own, the announcing office, a "prosecuted by …
+    /// for the … District of …" line.
+    static func offices(in text: String) -> [String] {
+        var out: [String] = []
+        for raw in text.components(separatedBy: .newlines).prefix(8) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard line.count <= 80, !line.lowercased().hasPrefix("u.s. department of justice"),
+                  line.range(of: #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&]+ Division$|^Office of [A-Z][A-Za-z ]+$"#,
+                             options: .regularExpression) != nil else { continue }
+            out.append(line)
+        }
+        if let announced = IssuingOfficeGate.office(in: text), !out.contains(where: { announced.contains($0) || $0.contains(announced) }) {
+            out.append(announced)
+        }
+        if let r = text.range(of: #"(?i)\bprosecut\w*\b[^.]{0,120}?\bfor the ((?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
+            let span = String(text[r])
+            if let d = span.range(of: #"(?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
+                let district = String(span[d])
+                if !out.contains(where: { $0.contains(district) }) { out.append("the U.S. Attorney's Office for the \(district)") }
+            }
+        }
+        return out
     }
 
     static func key(_ f: ProceedingEventExtractor.Finding) -> String {
@@ -191,6 +221,22 @@ public nonisolated enum ProceedingAnswerer {
             }
             let text = "The documents say: \(quote(hit.1.sentence))"
             return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.75))
+        case .office:
+            // The office each release about the person names: its heading line ("District of Rhode
+            // Island", "Criminal Division"), the office that announced it, or "prosecuted by … for the
+            // Western District of Pennsylvania" (closed-case simulation, judged by Claude: the office
+            // questions failed on extraction, retrieval of another case's release, and refusals).
+            var offices: [(String, Source)] = []
+            for s in about {
+                for office in Self.offices(in: s.text) where !offices.contains(where: { $0.0 == office }) { offices.append((office, s)) }
+            }
+            guard !offices.isEmpty else {
+                return refuse("The documents that name \(name) don't say which office prosecuted the case.")
+            }
+            let text = "The documents about \(name) name: " + offices.map(\.0).joined(separator: "; ") + "."
+            return VerifiedAnswer(body: text, answerText: text,
+                                  citations: offices.map { VerifiedAnswer.Citation(objectID: $0.1.objectID, snippet: String($0.1.text.prefix(300))) },
+                                  confidence: Confidence(0.75))
         case .timeline:
             // A step whose sentence gives no day sits at the day its document reports it, marked so.
             let dated = found.filter { ($0.1.day ?? $0.1.reportedOn) != nil }

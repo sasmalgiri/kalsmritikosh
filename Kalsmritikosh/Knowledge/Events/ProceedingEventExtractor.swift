@@ -121,7 +121,15 @@ public nonisolated enum ProceedingEventExtractor {
                 // right after it ("sentenced Kalomi Kambui, 41, to 18 months") — not when the name only
                 // follows it in an attribution ("… was sentenced today, announced U.S. Attorney Peter F. Neronha").
                 if index != descriptiveLead {
-                    let before = named.contains { $0.lowerBound < r.lowerBound }
+                    // "Steed's co-defendant Upchurch was sentenced …" — the step is the other person's.
+                    let before = named.contains { m in
+                        guard m.lowerBound < r.lowerBound else { return false }
+                        let between = s[m.upperBound..<r.lowerBound]
+                        // "Steed and her co-defendant Upchurch were sentenced" is both of them.
+                        if s[r].hasPrefix("were") { return true }
+                        return between.range(of: #"\b(?:co-?defendants?|co-?conspirators?|associates?|accomplices?|partners?|wife|husband|brother|sister|son|daughter|father|mother)\b"#,
+                                             options: .regularExpression) == nil
+                    }
                     let rightAfter = named.contains { $0.lowerBound >= r.lowerBound && s.distance(from: r.lowerBound, to: $0.lowerBound) <= 60 }
                     guard before || rightAfter else { continue }
                 }
