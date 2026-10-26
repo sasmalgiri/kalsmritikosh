@@ -50,7 +50,10 @@ public nonisolated enum EmailHeaderAnswerer {
         let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’\-]+"#
         let name = "(" + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})"#
         if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages|times)(?:\s+(?:in\s+)?total)?(?:\s+did)?)\s+"# + name + #"\s+(?i:send|sent|write|wrote|e-?mail(?:ed)?|message(?:d)?)(?:\s+(?i:to))?\s+"# + name, question)
-            ?? firstMatch(#"(?i:(?:count|number) of (?:the )?(?:e-?mails?|messages)(?:\s+that)?)\s+"# + name + #"\s+(?i:sent|wrote|e-?mailed)(?:\s+(?i:to))?\s+"# + name, question) {
+            ?? firstMatch(#"(?i:(?:count|number) of (?:the )?(?:e-?mails?|messages)(?:\s+that)?)\s+"# + name + #"\s+(?i:sent|wrote|e-?mailed)(?:\s+(?i:to))?\s+"# + name, question)
+            // "the total number of emails that went from A to B", "a count of the emails sent from A
+            // to B", "How many total emails went from A to B?" (Claude rewordings, Enron mailboxes).
+            ?? firstMatch(#"(?i:(?:how many|(?:count|number) of)(?:\s+the)?(?:\s+total)?\s+(?:e-?mails?|messages)(?:\s+in total)?(?:\s+that)?\s+(?:went|were sent|was sent|sent|came|have gone)\s+from)\s+"# + name + #"\s+(?i:to)\s+"# + name, question) {
             return .count(from: m[0], to: m[1])
         }
         // "When Matt Smith sent an email to Zelda Quackenbush?" (after the courtesy wrapper is gone).

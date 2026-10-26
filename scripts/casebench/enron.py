@@ -30,6 +30,16 @@ def parse(path):
             "to": [a.strip().lower() for a in (m.get("To") or "").replace("\n", " ").split(",") if a.strip()],
             "to_names": to_names, "own": own}
 
+def sent_pairs(msgs):
+    """(sender address, To address) → number of distinct emails."""
+    seen, pairs = set(), Counter()
+    for m in msgs:
+        key = (m["subject"].lower(), m["date"])
+        if key in seen: continue
+        seen.add(key)
+        for t in set(m["to"]): pairs[(m["from"], t)] += 1
+    return pairs
+
 def person(n):
     """"Kenneth Lay" from "Kenneth Lay", "Lay, Kenneth", "Kenneth L Lay" — a two-word name or None."""
     n = re.sub(r"\s+", " ", n or "").strip()
@@ -87,8 +97,10 @@ def main():
             q.append({"id": f"when~{k}", "q": f"When was the email \"{s}\" sent?", "expect": {"date": m["date"].date().isoformat()}})
             q.append({"id": f"to~{k}", "q": f"Who received the email \"{s}\"?", "expect": {"any": m["to"][:3] + [n for n in m["to_names"][:3] if n]}})
             q.append({"id": f"said~{k}", "q": f"What did the email \"{s}\" say?", "expect": {"overlap": m["own"][:300]}})
-        # How many messages one person sent another, within this mailbox.
-        pairs = Counter((m["from"], t) for m in msgs for t in m["to"][:1])
+        # How many messages one person sent another, within this mailbox: the recipient anywhere in
+        # To (not just first), and copies of one message (same subject and date, filed in two
+        # folders) once. 2026-10-26: counting only the first addressee made correct answers "wrong".
+        pairs = sent_pairs(msgs)
         (pf, pt), n = pairs.most_common(1)[0]
         names = {m["from"]: person(m["from_name"]) for m in msgs}
         # The recipient's name from the address itself ("mike.maggi@enron.com" → "Mike Maggi"): X-To
