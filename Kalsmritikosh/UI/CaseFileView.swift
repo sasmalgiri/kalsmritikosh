@@ -22,6 +22,8 @@ final class CaseFileModel {
     var named: StudioCaseFacts?
     var error: String?
     var busy = false
+    /// The custody manifest could not be read: reports must not present an empty custody record.
+    var custodyReadFailed = false
 
     init(caseID: UUID, workspaceID: UUID) { self.caseID = caseID; self.workspaceID = workspaceID }
 
@@ -30,7 +32,18 @@ final class CaseFileModel {
     func load(_ app: AppState) async {
         guard let svc = app.caseFiles else { error = "The ledger isn't ready yet."; return }
         do {
-            let custody = (try? await app.investigationCustody?.manifest(caseID: caseID)) ?? []
+            // A custody read that fails is not an empty custody record (implementation brief §6): the
+            // case still opens, but the custody report refuses and every report says it is incomplete.
+            var custody: [CustodyManifestEntry] = []
+            custodyReadFailed = false
+            if let custodyService = app.investigationCustody {
+                do { custody = try await custodyService.manifest(caseID: caseID) } catch {
+                    custodyReadFailed = true
+                    KalsmritikoshLog.app.error("Case custody read failed: \(String(describing: error), privacy: .public)")
+                }
+            } else {
+                custodyReadFailed = true
+            }
             snapshot = try await svc.snapshot(caseID: caseID, custody: custody)
             labels = try await svc.file.sourceLabels(custody.map(\.sourceVersionID))
             if named == nil, let title = snapshot?.caseHeader.title {   // read once: it scans every case document
@@ -836,6 +849,8 @@ struct CaseEvidenceTab: View {
                     Spacer()
                     Button("Export exhibit list…") { CaseFileSave.save(CaseFileDocuments.exhibitListCSV(s), name: "Exhibits - \(s.caseHeader.title)", ext: "csv") }
                     Button("Export custody report…") { CaseFileSave.save(CaseFileDocuments.custodyReport(s, by: model.actor), name: "Custody - \(s.caseHeader.title)", ext: "md") }
+                        .disabled(model.custodyReadFailed)
+                        .help(model.custodyReadFailed ? "The custody record could not be read." : "")
                 }
             }
             CaseSection(title: "Preservation (hold) notices", subtitle: "Issue a notice per custodian, record when they acknowledge, release it when the matter ends.") {
@@ -1032,7 +1047,42 @@ struct CaseLogTab: View {
     }
 
     private func export(_ text: String, _ name: String, _ ext: String, _ action: String) {
-        CaseFileSave.save(text, name: name, ext: ext)
-        Task { try? await appState.caseFiles?.file.logAction(caseID: model.caseID, action: "exported", detail: action, actor: model.actor) }
+        if model.custodyReadFailed, action == "custodyReport" {
+            let alert = NSAlert()
+            alert.messageText = "The custody record could not be read"
+            alert.informativeText = "A custody report can't be exported until the custody record reads correctly. Nothing was exported."
+            alert.runModal()
+            return
+        }
+        // A case-file report is a working draft, never an approved findings report; a report built
+        // while custody could not be read says so at the top.
+        var body = text
+        if action == "caseFileReport" {
+            body = "> DRAFT case file — not an approved findings report.\n\n" + body
+        }
+        if model.custodyReadFailed, ext == "md" {
+            body = "> INCOMPLETE — the custody record could not be read when this was exported.\n\n" + body
+        }
+        let outcome = CaseFileSave.save(body, name: name, ext: ext)
+        let caseID = model.caseID, actor = model.actor
+        switch outcome {
+        case .saved(let fileName, let sha256):
+            Task {
+                do {
+                    try await appState.caseFiles?.file.logAction(caseID: caseID, action: "exported",
+                                                                 detail: "\(action) · \(fileName) · sha256 \(sha256.prefix(16))", actor: actor)
+                } catch {
+                    KalsmritikoshLog.app.error("Export log failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        case .failed(let why):
+            Task {
+                do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: "exportFailed", detail: "\(action) · \(why)", actor: actor) } catch {
+                    KalsmritikoshLog.app.error("Export-failure log failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        case .cancelled:
+            break   // nothing was written; nothing is recorded as exported
+        }
     }
 }

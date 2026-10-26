@@ -327,14 +327,30 @@ enum CaseReminders {
 
 @MainActor
 enum CaseFileSave {
-    static func save(_ text: String, name: String, ext: String) {
+    /// What happened to a save: written (with the file's SHA-256), cancelled, or failed. Only a written
+    /// file may be logged as an export (implementation brief §5/§6: a cancelled save was logged as a
+    /// successful export).
+    enum Outcome: Equatable {
+        case saved(fileName: String, sha256: String)
+        case cancelled
+        case failed(String)
+    }
+
+    @discardableResult
+    static func save(_ text: String, name: String, ext: String) -> Outcome {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
+        guard panel.runModal() == .OK, let url = panel.url else { return .cancelled }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            // The bytes on disk, read back: the export record names what was actually written.
+            let written = try Data(contentsOf: url)
+            return .saved(fileName: url.lastPathComponent, sha256: CaseFileHash.sha256(String(decoding: written, as: UTF8.self)))
+        } catch {
             KalsmritikoshLog.app.error("Case export failed: \(error.localizedDescription, privacy: .public)")
             NSAlert(error: error).runModal()
+            return .failed(error.localizedDescription)
         }
     }
 }
