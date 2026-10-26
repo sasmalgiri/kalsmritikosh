@@ -49,6 +49,7 @@ runtime witnessed · release verified.
 | Chronology, Claude-reworded, rules→Claude, after fixes (tuned) | d8672752 | 1,486 | 91.3 % | 6.3 % |
 | **Chronology HELD-OUT** (new cases + new wordings), rules→Claude / rules only | c581f8fb | 898 | **87.6 %** / 65.0 % | **7.2 %** / 23.4 % |
 | **Chronology HELD-OUT 2** (another 60 new cases), rules→Claude / rules only (default mode) | 7dee6891 | 898 | **92.4 %** / **70.0 %** | **6.0 %** / **20.6 %** |
+| **Chronology HELD-OUT 3** (another 60 new cases, after rules-only fixes), rules→Claude / rules only (default mode) | e3859f63 | 888 | **90.2 %** / **86.5 %** | **7.5 %** / **10.0 %** |
 
 Reworded chronology was the weakest category; the held-out set (new cases, new wordings) now gives the
 honest figure. Its weak kinds are "what was X charged with" (56–61 %) and "what sentence" (73 %).

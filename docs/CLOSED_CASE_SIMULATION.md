@@ -68,6 +68,18 @@ after the same-surname and headline-term fixes): rules → Claude **92.4 % right
 rules-only shapes were then extended from the tuned set (commit after 7dee6891); a third held-out set
 is needed to measure that honestly.
 
+**Third held-out set** (another 60 new prosecutions, `--seed 6161`, newly reworded; build e3859f63,
+after the rules-only wording fixes, measured with nothing tuned on it): **rules only (the default
+mode) 86.5 % right, 10.0 % wrong**; rules → Claude 90.2 % right, 7.5 % wrong (n = 888). Remaining
+weak kinds in both modes: "what was X charged with" (40–70 %, partly the bench) and "when was X
+charged" (59–71 %).
+
+| Held-out set | Build | n | Rules only (default) | Rules → Claude |
+|---|---|---|---|---|
+| 1 (seed 4242) | c581f8fb | 898 | 65.0 % / 23.4 % wrong | 87.6 % / 7.2 % wrong |
+| 2 (seed 5151) | 7dee6891 | 898 | 70.0 % / 20.6 % wrong | 92.4 % / 6.0 % wrong |
+| 3 (seed 6161) | e3859f63 | 888 | **86.5 % / 10.0 % wrong** | **90.2 % / 7.5 % wrong** |
+
 **Triage of the 111 held-out misses by Claude** (`judge.py`, reads the case documents; brief §17: an
 LLM judge assists triage and is not the release oracle — a human must adjudicate a sample):
 bench 28 (the app's answer is right or the label is wrong — 18 of them "charged with", where the
