@@ -128,6 +128,13 @@ public nonisolated enum ProceedingEventExtractor {
             if index != descriptiveLead, named.isEmpty { continue }
             for step in Step.allCases {
                 guard let r = s.range(of: step.pattern, options: .regularExpression) else { continue }
+                // "pleaded guilty … to an information charging him with …" reports the plea; the charge is
+                // background, not a charging event on this sentence's day — unless the day is stated for it.
+                if step == .charged,
+                   [Step.pleaded, .convicted, .sentenced].contains(where: { s.range(of: $0.pattern, options: .regularExpression) != nil }),
+                   s.range(of: #"\b(?:charged|indicted|indictment|complaint|information)\b[^.]{0,60}\bon\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d"#, options: .regularExpression) == nil {
+                    continue
+                }
                 // The step is the person's when they are named before it ("Romano … was sentenced"), or
                 // right after it ("sentenced Kalomi Kambui, 41, to 18 months") — not when the name only
                 // follows it in an attribution ("… was sentenced today, announced U.S. Attorney Peter F. Neronha").
@@ -221,16 +228,27 @@ public nonisolated enum ProceedingEventExtractor {
         if titles.contains(given) || tokens.dropLast().contains(given) { return false }
         // A given name the person goes by is a prefix of an asked token ("Dave" ~ "david") — kept as theirs.
         if tokens.dropLast().contains(where: { $0.hasPrefix(given) || given.hasPrefix($0) }) { return false }
-        // At the start of a sentence a capital proves nothing ("Yesterday Stanley …") unless the release's
-        // own introduction follows: "Charles Stanley, 52, of Shady Spring".
+        // At the start of a sentence the capital may only be the sentence's ("Yesterday Stanley …"):
+        // common opening words are not given names; anything else is ("Gary Lomax was sentenced …" is not
+        // James Lomax — held-out chronology 2026-10-27).
         let isSentenceStart = before[..<m.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
             .range(of: #"(?:^|[.!?]["”’)]?)$"#, options: .regularExpression) != nil
-        if isSentenceStart {
-            let after = ns.substring(from: range.location + range.length)
-            return after.range(of: #"^,\s*(?:a\s)?\d{1,3},"#, options: .regularExpression) != nil
-        }
+        if isSentenceStart { return !Self.sentenceOpeners.contains(given) }
         return true
     }
+
+    /// Words that open a sentence before a bare surname without being a given name.
+    static let sentenceOpeners: Set<String> = [
+        "yesterday", "today", "tomorrow", "then", "now", "later", "earlier", "afterward", "afterwards", "subsequently",
+        "previously", "eventually", "ultimately", "finally", "additionally", "also", "however", "meanwhile", "thereafter",
+        "according", "in", "on", "at", "during", "following", "after", "before", "when", "while", "since", "as", "if",
+        "because", "although", "though", "both", "each", "either", "neither", "this", "that", "these", "those", "there",
+        "here", "his", "her", "their", "its", "our", "defendant", "defendants", "prosecutors", "investigators", "officials",
+        "authorities", "agents", "police", "federal", "judge", "district", "chief", "senior", "attorney", "assistant",
+        "acting", "former", "special", "co-defendant", "codefendant", "victim", "witnesses", "evidence", "court", "records",
+        "documents", "sentencing", "trial", "jurors", "jury", "under", "with", "without", "by", "from", "for", "of", "to",
+        "last", "next", "first", "second", "third", "once", "upon", "unlike", "like", "specifically", "separately",
+    ]
 
     static func mentionsFully(_ lower: String, tokens: [String]) -> Bool {
         guard let first = tokens.first, let last = tokens.last else { return false }

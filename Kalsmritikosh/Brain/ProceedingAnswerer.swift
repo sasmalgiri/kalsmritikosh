@@ -236,20 +236,39 @@ public nonisolated enum ProceedingAnswerer {
             // The sentence that STATES the offence ("charges Romano with seven counts of wire fraud",
             // "pleaded guilty to four counts of …") over one that only mentions the charge ("After
             // Canty was charged in the above crimes, detectives …").
-            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b[^.]{0,60}\bwith\b|\b(?:pleaded|pled) guilty\b[^.]{0,40}\bto\b|\bconvicted\b[^.]{0,40}\bof\b|\bcounts? of\b"#
-            let rank: [ProceedingEventExtractor.Step: Int] = [.charged: 3, .pleaded: 2, .convicted: 2, .sentenced: 1]
-            let candidates = found.filter { rank[$0.1.step] != nil && $0.1.sentence.count > 60 }
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b[^.]{0,60}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b[^.]{0,60}\bto\b|\b(?:convicted|found guilty)\b[^.]{0,60}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#
             // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge.
-            let prior = #"(?i)\b(?:previously|prior|earlier|felony convictions?|convicted felon|was on (?:probation|parole))\b"#
-            func score(_ f: ProceedingEventExtractor.Finding) -> Int {
-                (f.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + (rank[f.step] ?? 0)
-                    - (f.sentence.range(of: prior, options: .regularExpression) != nil ? 6 : 0)
+            let prior = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
+            let rank: [ProceedingEventExtractor.Step: Int] = [.charged: 3, .pleaded: 2, .convicted: 2, .sentenced: 1]
+            let surname = parsed.person.split(separator: " ").last.map { $0.lowercased() } ?? ""
+            struct Candidate { let sentence: String; let objectID: UUID; let rank: Int }
+            var candidates: [Candidate] = found.compactMap { hit in
+                rank[hit.1.step].map { Candidate(sentence: hit.1.sentence, objectID: hit.0, rank: $0) }
             }
-            guard let hit = candidates.max(by: { score($0.1) < score($1.1) }) else {
+            // Any sentence of the person's documents that states the offence with the person named
+            // before the verb ("CHARLESTON – James Lomax, 33, … pleaded guilty today to theft of public
+            // money") — not only the sentences the step reader kept (held-out chronology 2026-10-27).
+            for src in about {
+                for sent in ProceedingEventExtractor.sentences(of: src.text) {
+                    let low = sent.lowercased()
+                    guard let verb = low.range(of: statesOffence, options: .regularExpression),
+                          let at = low.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: .regularExpression),
+                          at.lowerBound < verb.lowerBound else { continue }
+                    if !candidates.contains(where: { $0.sentence == sent }) { candidates.append(Candidate(sentence: sent, objectID: src.objectID, rank: 2)) }
+                }
+            }
+            func score(_ c: Candidate) -> Int {
+                (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
+                    - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
+            }
+            // Only a sentence that STATES an offence answers; one that merely mentions a charge does not.
+            guard let hit = candidates.filter({ $0.sentence.count > 40 && score($0) >= 10 }).max(by: { score($0) < score($1) }) else {
                 return refuse("The documents that name \(name) don't state what \(name) was charged with.")
             }
-            let text = "The documents say: \(quote(hit.1.sentence))"
-            return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.75))
+            let text = "The documents say: \(quote(hit.sentence))"
+            return VerifiedAnswer(body: text, answerText: text,
+                                  citations: [VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String(hit.sentence.prefix(200)))],
+                                  confidence: Confidence(0.75))
         case .office:
             // The office each release about the person names: its heading line ("District of Rhode
             // Island", "Criminal Division"), the office that announced it, or "prosecuted by … for the

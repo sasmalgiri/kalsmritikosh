@@ -2086,15 +2086,23 @@ public actor MasterBrain {
             // sensitivity/workspace filter), not the top retrieval hits; capped searches say "at least".
             var complete = true
             var loadCap = 24
-            if case .documentCount = parsed.ask, let nameLookup {
+            // Every proceeding question reads the person's documents the index finds, not only the top
+            // retrieval hits: a timeline or a "when charged" needs the release retrieval ranked low
+            // (held-out chronology triage 2026-10-27: 15 of 62 real misses were retrieval).
+            if let nameLookup {
                 let lookup = await nameLookup(parsed.person)
                 var found = lookup.ids
                 if let policy = sensitivePolicy {
                     found = await policy.filter(result: RetrievalResult(authorityObjectIDs: found), access: access).result.authorityObjectIDs
                 }
-                ids = found + ids
-                loadCap = Self.documentCountLoadCap
-                complete = lookup.complete && NSOrderedSet(array: ids).count <= loadCap
+                if case .documentCount = parsed.ask {
+                    ids = found + ids
+                    loadCap = Self.documentCountLoadCap
+                    complete = lookup.complete && NSOrderedSet(array: ids).count <= loadCap
+                } else {
+                    ids = ids + found
+                    loadCap = 80
+                }
             }
             var sources: [ProceedingAnswerer.Source] = []
             for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap) {

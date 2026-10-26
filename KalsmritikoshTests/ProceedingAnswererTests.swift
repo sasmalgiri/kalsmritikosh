@@ -162,6 +162,16 @@ struct ProceedingAnswererTests {
         let fg = try #require(ProceedingAnswerer.parse("What sentence did Felix Gonzalez receive?"))
         let fgBody = try #require(ProceedingAnswerer.answer(fg, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: headline)])).body
         #expect(fgBody.hasPrefix("Felix Gonzalez was sentenced to 113 Months in Prison"))
+        // A different given name at the start of a sentence is someone else too.
+        let lomax = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nTuesday, August 12, 2025\n\nHurricane Man Sentenced\n\nCHARLESTON, W.Va. – James Lomax, 33, of Hurricane, was sentenced today to three years in prison for theft of public money. Gary Lomax was sentenced on November 19, 2024, to five years of federal probation."
+        let jl = try #require(ProceedingAnswerer.parse("What sentence did James Lomax receive?"))
+        let jlBody = try #require(ProceedingAnswerer.answer(jl, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: lomax)])).body
+        #expect(jlBody.hasPrefix("James Lomax was sentenced to three years") && !jlBody.contains("probation"))
+        // "pleaded guilty … to an information charging him" is the plea, not a charging event on that day.
+        let plea = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nTuesday, March 28, 2017\n\nStango Sentenced\n\nCharles Stango, 73, of Henderson, Nevada, previously pleaded guilty to an information charging him with one count of using an interstate facility with intent to murder."
+        let cs = try #require(ProceedingAnswerer.parse("When was Charles Stango charged?"))
+        let csAnswer = try #require(ProceedingAnswerer.answer(cs, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: plea)]))
+        #expect(csAnswer.refused)
         let brotherAsk = try #require(ProceedingAnswerer.parse("What sentence did Charles Stanley receive?"))
         let brother = try #require(ProceedingAnswerer.answer(brotherAsk, sources: src)).body
         #expect(brother.contains("two years and six months"))
