@@ -2,7 +2,7 @@
 
 ```
 Audit date:            2026-10-26 (Implementation Brief execution — ~/Downloads/Investigations_Made_Easy_Complete_Implementation_Brief.md)
-Current branch:        investigations-next (PR #169 open; unpushed commits after 3bef103c — see git log)
+Current branch:        investigations-next (PR #169 open; pushed through ac671a71 — later commits local, see git log)
 Latest schema version: 157
 Verification state:    every item below is UNIT VERIFIED at most (its suites pass locally on the stated
                        commit). Nothing here is integration-verified in the GUI, runtime-witnessed by the
@@ -27,7 +27,13 @@ runtime witnessed · release verified.
 | §9 | Confirmed statement's provenance locked; corrections are append-only addenda, confirmed once, exported with the statement (v156) | 68129b50 | StatementCorrectionTests | unit verified |
 | §11 | Schema conformance marked per ledger (version + schema SHA-256), incomplete repair recorded (v155) | 6eec984f | SchemaRepairTests | unit verified |
 | §17 | Scorer: negated mentions are not answers; snippets not credited. Enron count truth: any To recipient, one email per subject+date (31 rows corrected) | 9553e814, a3566d85 | re-scored sets below | implemented |
-| §1 | Onboarding subtitle "From evidence to findings" (was "knowledge operating system") | this commit | — | implemented |
+| §1 | Onboarding subtitle "From evidence to findings" (was "knowledge operating system") | 0a1c5a02 | — | implemented |
+| §6 | A closure pins only the case's approved findings run (checked in the closure savepoint); the handoff screen pins only approved findings | d8672752 | InvestigationClosureServiceTests, WorkProductHandoffModelTests | unit verified |
+| §8 | "Did X plead guilty?" → "No" only on a verdict at trial; a bare conviction is reported as such; a plea is not "not convicted". Bench plea labels corrected (28 excluded) | be30350a | ProceedingAnswererTests.pleaSemantics | unit verified |
+| §7 | Email pair counts trust the participant index's display-name match; pair lookup is To-only; document counts read every document the index finds naming the person ("at least" when capped) | 1b8cb31e, c9576d0f | EmailHeaderAnswererTests, ProceedingAnswererTests | unit verified |
+| §14 | Case overview "Next steps" from observable state (untriaged, no sources, no/only-supporting evidence, unconfirmed statement, open hold, overdue, references to repair, custody unreadable); Cases is already the default home | 70009926 | CaseNextStepsTests | unit verified (not GUI-run) |
+| §17 | Rewording fixes from the Claude-reworded sets; held-out set measured (87.6 % / 7.2 % wrong) | 66da52c9, 26dea109, 36a65ba6 | held-out run, see below | implemented |
+| CI | Hosted CI on 0a1c5a02: 6 of 7 groups green; build-and-test failed one textual guard (oneSystemGuard), fixed in ac671a71 and re-pushed | ac671a71 | hosted run 40345306875 | pending re-run |
 
 ### Measured (repaired scorer, Fully private unless stated; "right" includes proper refusals)
 
@@ -43,8 +49,8 @@ runtime witnessed · release verified.
 | Chronology, Claude-reworded, rules→Claude, after fixes (tuned) | d8672752 | 1,486 | 91.3 % | 6.3 % |
 | **Chronology HELD-OUT** (new cases + new wordings), rules→Claude / rules only | c581f8fb | 898 | **87.6 %** / 65.0 % | **7.2 %** / 23.4 % |
 
-Reworded chronology is the weakest category; its two biggest failure shapes (noun-form sentencing dates,
-"count of press releases about X") were fixed in 66da52c9/26dea109 and are being re-measured (v3 runs).
+Reworded chronology was the weakest category; the held-out set (new cases, new wordings) now gives the
+honest figure. Its weak kinds are "what was X charged with" (56–61 %) and "what sentence" (73 %).
 Against the brief's proposed thresholds (≥ 90 % answerable correctness, ≥ 99 % precision among answered
 factual questions) **no category is yet shown to meet the precision bar**; claims must stay restricted.
 
@@ -56,7 +62,7 @@ factual questions) **no category is yet shown to meet the precision bar**; claim
 - §11 complete case/archive backup (originals, source maps, work products, checkpoints) with staged restore.
 - §12 signed-release privacy tests; online payload preview/consent review.
 - §13 measured memory/disk envelope at the declared supported volume.
-- §14 Cases as default home with next action; usability sessions (owner).
+- §14 GUI automation of the flagship journeys; usability sessions (owner).
 - §17 structured gold tuples, independent human adjudication, per-mode reporting with confidence intervals.
 - §18 StoreKit/TestFlight flows, signed-binary checks, exact-commit CI, beta, legal/name review (owner).
 
