@@ -92,6 +92,8 @@ public nonisolated enum QuestionCanonicalizer {
         q = q.replacingOccurrences(of: #"(?i)\s*(?:[—–-]|,)\s*(?:what (?:was|is|were|are) (?:it|they|that)|please)\s*\?*\s*$"#, with: "?", options: .regularExpression)
         // "the date on which X happened" / "the day X was sentenced" → "When X …".
         q = q.replacingOccurrences(of: #"(?i)^(?:the\s+)?(?:exact\s+|specific\s+|precise\s+)?(?:date|day)\s+(?:on which|when|that)\s+"#, with: "When ", options: .regularExpression)
+        // "the exact date Demarcus Foy was sentenced" — no connector, a name follows.
+        q = q.replacingOccurrences(of: #"^(?i:(?:the\s+)?(?:exact\s+|specific\s+|precise\s+)?(?:date|day))\s+(?=[A-Z])"#, with: "When ", options: .regularExpression)
         // "whether X pleaded guilty" → "Did X plead guilty".
         q = q.replacingOccurrences(of: #"(?i)^whether\s+(.+?)\s+pleaded guilty"#, with: "Did $1 plead guilty", options: .regularExpression)
         q = q.replacingOccurrences(of: #"(?i)^(who|what|when|where|which|how)\b"#, with: "$1", options: .regularExpression)

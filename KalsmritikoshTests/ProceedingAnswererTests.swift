@@ -84,10 +84,13 @@ struct ProceedingAnswererTests {
         let n = QuestionCanonicalizer.normalize
         for q in ["I need to know when Christi Machala's sentencing took place.",
                   "I need to know when sentencing occurred for Christi Machala — do we have that on record?",
-                  "I need to know when Christi Machala received her sentencing — do you have that date?"] {
+                  "I need to know when Christi Machala received her sentencing — do you have that date?",
+                  "Can you tell me the exact date Christi Machala was sentenced?",
+                  "What was the sentencing date for Christi Machala?"] {
             #expect(ProceedingAnswerer.parse(n(q))?.ask == .when(.sentenced), "\(q)")
         }
         #expect(try ask(n("I need to know when Christi Machala's sentencing took place.")).body.hasPrefix("Christi Machala was sentenced on September 24, 2015."))
+        #expect(ProceedingAnswerer.parse(n("I need to know when charges were filed against Christi Machala — do you have that date?"))?.ask == .when(.charged))
         for q in ["Do you know the total count of press releases concerning Christi Machala?",
                   "I need a count of the press releases that mention Christi Machala.",
                   "Can you check the count of press releases that mention Christi Machala?",
