@@ -6,7 +6,7 @@ Usage: chronology_relabel2.py RAW CASES_ROOT...
 """
 import collections, glob, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chronology import releases, sentence_terms, charge_days   # noqa: E402
+from chronology import releases, sentence_terms, charge_days, sentencing_days, office_names   # noqa: E402
 
 raw, roots = sys.argv[1], sys.argv[2:]
 by = collections.defaultdict(list)
@@ -25,6 +25,12 @@ for root in roots:
                     new = {"any": sentence_terms(r["key"], rels)}
                 elif kind == "charged":
                     new = {"dates": charge_days(r["key"], rels)}
+                elif kind == "sentenced":
+                    sent = [x for x in rels if x["stage"] == "sentenced"]
+                    if not sent: continue
+                    new = {"dates": sentencing_days(r["key"], sent[-1])}
+                elif kind == "office":
+                    new = {"any": sorted(set(rels[0]["components"] + office_names(rels[0]["components"])))}
                 else:
                     continue
                 if not list(new.values())[0] or q["expect"] == new: continue

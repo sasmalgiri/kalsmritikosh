@@ -47,7 +47,7 @@ def sentence_forms(n, unit):
 
 MONTH = r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
 
-def stated_days(body, verb, year, printed=None):
+def stated_days(body, verb, year, printed=None, window=80):
     """Days a release itself gives for the event — a date in the same sentence as the step ("was
     sentenced on March 3, 2015", "Judge X on March 15, 2017, sentenced …"), or "yesterday" (the day
     before the release): the release's own day is not the only right answer."""
@@ -56,7 +56,7 @@ def stated_days(body, verb, year, printed=None):
         v = re.search(verb, sent, re.I)
         if not v: continue
         for m in re.finditer(r"\b(" + MONTH + r")\.? (\d{1,2})(?:, (\d{4}))?", sent):
-            if abs(m.start() - v.start()) > 80: continue   # a date of another step in the same sentence
+            if abs(m.start() - v.start()) > window: continue   # a date of another step in the same sentence
             try:
                 d = datetime.datetime.strptime(f"{m.group(1)[:3]} {m.group(2)} {m.group(3) or year}", "%b %d %Y").date()
                 out.add(d.isoformat())
@@ -78,7 +78,11 @@ def office_names(components):
         if m:
             place = m.group(1)
             out.append(f"{m.group(2)} District of {place}" if m.group(2) else (place if place.startswith("District of") else f"District of {place}"))
-        elif o: out.append(o)
+        elif o:
+            out.append(o)
+            # "Criminal - Child Exploitation and Obscenity Section" is part of the Criminal Division.
+            d = re.match(r"(Criminal|Civil|Tax|Antitrust|Civil Rights|National Security|Environment and Natural Resources) - ", o)
+            if d: out.append(f"{d.group(1)} Division")
     return out
 
 def releases(raw):
@@ -130,9 +134,17 @@ def charge_days(name, rels):
     out = set()
     for r in rels:
         if r["stage"] == "charged": out.add(r["day"].isoformat())
-        own = " ".join(x + "." for x in own_sentences(name, r["body"]))
-        out |= stated_days(own, CHARGE_VERB, r["day"].year, r["day"] if r["stage"] == "charged" else None)
+        # The person's own sentences, and the release's opening ones ("A Jackson County man was indicted
+        # … on May 9, 2013", "A federal complaint was filed … on August 13, 2015") which are about them.
+        parts = re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", r["body"])
+        own = " ".join(x + "." for x in dict.fromkeys(own_sentences(name, r["body"]) + parts[:4]))
+        out |= stated_days(own, CHARGE_VERB + r"|filed|returned", r["day"].year, r["day"] if r["stage"] == "charged" else None, window=170)
     return sorted(out)
+
+def sentencing_days(name, sent):
+    """The sentencing release's day and any day its sentences give the sentencing (wider window:
+    "was sentenced … by Judge X … on February 23, 2022")."""
+    return sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year, sent["day"], window=170))
 
 def offence_sentences(name, rels):
     """The person's OWN sentences that state what they were charged with, pleaded to or convicted
@@ -140,13 +152,18 @@ def offence_sentences(name, rels):
     surname = name.split()[-1].rstrip(".,").lower()
     out = []
     for r in rels:
-        for sent in re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", r["body"]):
+        parts = re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", r["body"])
+        for i, sent in enumerate(parts):
             low = sent.lower()
-            if surname not in low or PRIOR.search(sent) or not OFFENCE.search(sent): continue
-            # The offence must be the person's: their surname before the verb phrase.
             m = OFFENCE.search(sent)
-            if surname not in low[:m.start() + 1]: continue
-            out.append(re.sub(r"\s+", " ", sent.strip()))
+            if not m or PRIOR.search(sent): continue
+            # The person's offence: their surname before the verb phrase; "He/She …" right after a
+            # sentence naming them; or the release's opening sentence about them ("A Florida reptile
+            # dealer pleaded guilty to …").
+            own = surname in low[:m.start() + 1]
+            pronoun = re.match(r"\s*(?:He|She)\b", sent) is not None and i > 0 and surname in parts[i - 1].lower()
+            lead = i < 2 and re.match(r"\s*(?:[A-Z][\w.,' ]{0,40}[–—-]\s*)?An?\s", sent) is not None
+            if own or pronoun or lead: out.append(re.sub(r"\s+", " ", sent.strip()))
     return list(dict.fromkeys(out))
 
 def offences_for(name, rels):
@@ -193,7 +210,7 @@ def main():
         q = []
         if charged:
             q.append({"id": "charged", "q": f"When was {name} charged?", "expect": {"dates": charge_days(name, rels)}})
-        q.append({"id": "sentenced", "q": f"When was {name} sentenced?", "expect": {"dates": sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year, sent["day"]))}})
+        q.append({"id": "sentenced", "q": f"When was {name} sentenced?", "expect": {"dates": sentencing_days(name, sent)}})
         terms = sentence_terms(name, rels)
         if terms:
             q.append({"id": "sentence", "q": f"What sentence did {name} receive?", "expect": {"any": terms}})
