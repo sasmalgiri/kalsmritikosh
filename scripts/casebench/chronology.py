@@ -27,7 +27,8 @@ STAGE_ORDER = {"charged": 0, "pleaded": 1, "convicted": 1, "sentenced": 2}
 TRIAL = re.compile(r"\bjury (?:convicted|found|verdict|trial)\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b", re.I)
 # "Steven Daniel Miller, 47, of Fairfield" — the defendant as releases introduce them.
 NAME = re.compile(r"\b([A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+(?: (?:Jr|Sr|II|III)\.?)?), (?:a\s)?(\d{2}),? (?:of|from) ([A-Z][A-Za-z .'\-]+?)[,.]")
-SENTENCE = re.compile(r"sentenced\b[^.]{0,140}?\bto (\d+|[a-z]+(?:-[a-z]+)?) (months?|years?)\b(?! of (?:supervised release|probation))", re.I)
+# A period after a capital ("U.S. District Court", "Judge D. Brock Hornby") does not end the sentence.
+SENTENCE = re.compile(r"sentenced\b(?:[^.]|(?<=[A-Z])\.){0,160}?\bto (?:serve )?(?:a total of )?(\d+|[a-z]+(?:-[a-z]+)?)[ -](months?|years?)\b(?! of (?:supervised release|probation))", re.I)
 NUMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
         "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30}
 
@@ -102,8 +103,36 @@ def page(rel):
     when = rel["day"].strftime("%A, %B %-d, %Y")
     return f"U.S. Department of Justice\n{office}\nFOR IMMEDIATE RELEASE\n{when}\n\n{rel['title']}\n\n{rel['body']}\n"
 
-OFFENCE = re.compile(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|(?:pleaded|pled|pleads) guilty(?:\s+[\w,]+){0,6}?\s+to|convicted(?:\s+\w+){0,6}?\s+of|found guilty(?:\s+\w+){0,6}?\s+of|indicted (?:for|on))\s+([^.;]{12,160})", re.I)
+OFFENCE = re.compile(r"(?:charg(?:ed|es|ing)\s+(?:\w+\s+){0,3}with|(?:pleaded|pled|pleads) guilty\b(?:[^.;]|(?<=[A-Z])\.){0,120}?\bto|found \w+ guilty of|convicted(?:\s+\w+){0,6}?\s+of|found guilty(?:\s+\w+){0,6}?\s+of|indicted (?:for|on))\s+([^.;]{12,160})", re.I)
 PRIOR = re.compile(r"\b(?:previously (?:been )?convicted|prior (?:conviction|record|offen[cs]e)s?|criminal history|had (?:previously )?been convicted|registered sex offender|on (?:probation|parole|supervised release) for|years? earlier|an earlier case)\b", re.I)
+
+CHARGE_VERB = r"(?:indicted|charged|arrested|indictment (?:was )?returned|complaint (?:was )?filed|returned (?:an|a \w+) indictment)"
+
+def own_sentences(name, body):
+    """The release's sentences that name the person (surname), split like the app splits them."""
+    surname = name.split()[-1].rstrip(".,").lower()
+    return [x for x in re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", body) if surname in x.lower()]
+
+def sentence_terms(name, rels):
+    """Every prison term the person's own sentencing sentences state, across all their releases
+    (2026-10-27: the first match anywhere in the body was often a co-defendant's)."""
+    surname = name.split()[-1].rstrip(".,").lower()
+    out = []
+    for r in rels:
+        for x in own_sentences(name, r["body"]):
+            for m in SENTENCE.finditer(x):
+                if surname in x.lower()[:m.start() + 1]: out += sentence_forms(m.group(1), m.group(2))
+    return sorted(set(out))
+
+def charge_days(name, rels):
+    """Every day the person was charged: each charging release's own day, and any day a sentence
+    naming the person attaches to a charge, indictment or complaint, in any of their releases."""
+    out = set()
+    for r in rels:
+        if r["stage"] == "charged": out.add(r["day"].isoformat())
+        own = " ".join(x + "." for x in own_sentences(name, r["body"]))
+        out |= stated_days(own, CHARGE_VERB, r["day"].year, r["day"] if r["stage"] == "charged" else None)
+    return sorted(out)
 
 def offence_sentences(name, rels):
     """The person's OWN sentences that state what they were charged with, pleaded to or convicted
@@ -163,11 +192,11 @@ def main():
         charged = [r for r in rels if r["stage"] == "charged"]
         q = []
         if charged:
-            q.append({"id": "charged", "q": f"When was {name} charged?", "expect": {"dates": sorted({charged[0]["day"].isoformat()} | stated_days(charged[0]["body"], r"(?:indicted|charged|arrested|indictment (?:was )?returned|complaint (?:was )?filed)", charged[0]["day"].year, charged[0]["day"]))}})
+            q.append({"id": "charged", "q": f"When was {name} charged?", "expect": {"dates": charge_days(name, rels)}})
         q.append({"id": "sentenced", "q": f"When was {name} sentenced?", "expect": {"dates": sorted({sent["day"].isoformat()} | stated_days(sent["body"], r"sentenced", sent["day"].year, sent["day"]))}})
-        m = SENTENCE.search(sent["body"])
-        if m:
-            q.append({"id": "sentence", "q": f"What sentence did {name} receive?", "expect": {"any": sentence_forms(m.group(1), m.group(2))}})
+        terms = sentence_terms(name, rels)
+        if terms:
+            q.append({"id": "sentence", "q": f"What sentence did {name} receive?", "expect": {"any": terms}})
         pleaded = any(r["stage"] == "pleaded" for r in rels) or re.search(r"pleaded guilty|pled guilty", sent["body"], re.I)
         convicted = any(r["stage"] == "convicted" for r in rels) or re.search(r"\b(?:convicted|found guilty) by a (?:federal )?jury", sent["body"], re.I)
         if pleaded and not convicted:
