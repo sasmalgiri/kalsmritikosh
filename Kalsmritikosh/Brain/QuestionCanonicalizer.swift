@@ -84,12 +84,17 @@ public nonisolated enum QuestionCanonicalizer {
     /// questions to the cloud only because of such wrappers.
     public static func normalize(_ question: String) -> String {
         var q = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        let leadIns = #"^(?i:(?:hi|hey|hello|ok|okay|so)[,!.]?\s+)?(?i:(?:can|could|would|will) you\s+(?:please\s+)?(?:tell|show|give|let)\s+me\s+(?:know\s+)?|(?:can|could) you\s+(?:please\s+)?(?:identify|find|confirm|provide|check|clarify|walk me through|share)\s+|i(?:'d| would)? (?:like|want|need) to (?:know|find out|confirm|see|understand)\s+|i need\s+|please\s+(?:tell me|let me know|confirm|provide|identify|show me|give me)?\s*|do you know\s+|tell me\s+|i'm (?:trying|looking|attempting) to (?:find out|figure out|learn|determine|establish|identify|confirm|work out|understand|pin down)\s+)"#
+        let leadIns = #"^(?i:(?:hi|hey|hello|ok|okay|so)[,!.]?\s+)?(?i:(?:can|could|would|will) you\s+(?:please\s+)?(?:tell|show|give|let)\s+me\s+(?:know\s+)?|(?:can|could) you\s+(?:please\s+)?(?:identify|find|confirm|provide|check|clarify|walk me through|share|pull up|pull|look up|get|retrieve|dig up)\s+|i(?:'d| would)? (?:like|want|need) to (?:know|find out|confirm|see|understand)\s+|i need\s+|please\s+(?:tell me|let me know|confirm|provide|identify|show me|give me)?\s*|do you know\s+|tell me\s+|i'm (?:trying|looking|attempting) to (?:find out|figure out|learn|determine|establish|identify|confirm|work out|understand|pin down)\s+)"#
         while let r = q.range(of: leadIns, options: .regularExpression), !r.isEmpty {
             q = String(q[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+            // "I need to confirm — when exactly …": the dash after a wrapper goes with it.
+            q = q.replacingOccurrences(of: #"^[—–\-:,]\s*"#, with: "", options: .regularExpression)
         }
         // A trailing "— what was it?" / ", please?" adds nothing.
-        q = q.replacingOccurrences(of: #"(?i)\s*(?:[—–-]|,)\s*(?:what (?:was|is|were|are) (?:it|they|that)|please)\s*\?*\s*$"#, with: "?", options: .regularExpression)
+        // So do "— when was it?", "— when did that occur?", "— do you have that on record?".
+        q = q.replacingOccurrences(of: #"(?i)\s*(?:[—–-]|,)\s*(?:what (?:was|is|were|are) (?:it|they|that)|please|when (?:was|did) (?:it|that|this)(?: (?:occur|happen|take place))?|do (?:you|we) have (?:that|it|this)(?: (?:on record|on file|anywhere))?)\s*\?*\s*$"#, with: "?", options: .regularExpression)
+        // "the sentencing date for X" asks for it: "What was the sentencing date for X?".
+        q = q.replacingOccurrences(of: #"(?i)^(the\s+(?:\w+\s+)?(?:date|day)\s+(?:for|of)\s+)"#, with: "What was $1", options: .regularExpression)
         // "the date on which X happened" / "the day X was sentenced" → "When X …".
         q = q.replacingOccurrences(of: #"(?i)^(?:the\s+)?(?:exact\s+|specific\s+|precise\s+)?(?:date|day)\s+(?:on which|when|that)\s+"#, with: "When ", options: .regularExpression)
         // "the exact date Demarcus Foy was sentenced" — no connector, a name follows.

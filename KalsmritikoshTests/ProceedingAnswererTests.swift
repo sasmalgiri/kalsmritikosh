@@ -90,7 +90,11 @@ struct ProceedingAnswererTests {
                   "I need to know when sentencing occurred for Christi Machala — do we have that on record?",
                   "I need to know when Christi Machala received her sentencing — do you have that date?",
                   "Can you tell me the exact date Christi Machala was sentenced?",
-                  "What was the sentencing date for Christi Machala?"] {
+                  "What was the sentencing date for Christi Machala?",
+                  "I need to confirm — when exactly was Christi Machala's sentencing handed down?",
+                  "I need the sentencing date for Christi Machala — when was it?",
+                  "I need the sentencing date for Christi Machala — do you have that on record?",
+                  "Could you pull up the sentencing date for Christi Machala?"] {
             #expect(ProceedingAnswerer.parse(n(q))?.ask == .when(.sentenced), "\(q)")
         }
         #expect(try ask(n("I need to know when Christi Machala's sentencing took place.")).body.hasPrefix("Christi Machala was sentenced on September 24, 2015."))
