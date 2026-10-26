@@ -577,6 +577,22 @@ public actor CaseFileRepository {
         }
     }
 
+    /// Every case action written since the seal boundary, as audit-chain events (implementation
+    /// brief §5). The free-text detail enters the chain as a digest, not as text.
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        let boundary = try await database.query("SELECT sealed_from_at FROM case_action_seal_boundaries ORDER BY sealed_from_at LIMIT 1;").first?.date(0)
+        guard let boundary else { return [] }
+        let rows = try await database.query("""
+            SELECT id, case_id, sequence, actor, action, detail, at FROM case_actions WHERE at >= ? ORDER BY at ASC, case_id ASC, sequence ASC;
+            """, [.date(boundary)])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let actor = r.string(3), let action = r.string(4), let at = r.date(6) else { return nil }
+            let payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);"
+                + "detailSHA256=\(CaseFileHash.sha256(r.string(5) ?? ""));sequence=\(seq)"
+            return AuditChainEvent(source: .caseAction, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
+    }
+
     /// Record a read or export (viewing the case file, exporting a report) — S-4.
     public func logAction(caseID: UUID, action: String, detail: String?, actor: String, at date: Date = Date()) async throws {
         try await write("cf_act", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: action, detail: detail, at: date,

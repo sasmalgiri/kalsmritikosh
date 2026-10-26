@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 152
+    public static let latestVersion = 153
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -537,7 +537,9 @@ public enum SchemaMigrations {
             // self-healed straight to 152 and the ACH tables would never be created.
             "ach_analyses": ["id", "case_id", "workspace_id", "title", "origin", "created_by", "updated_by", "retracted_at"],
             "ach_cells": ["analysis_id", "evidence_id", "hypothesis_id", "consistency", "updated_by", "updated_at"],
-            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"]
+            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"],
+            // v153 — case-action log made append-only and sealed into the audit chain.
+            "case_action_seal_boundaries": ["id", "sealed_from_at", "legacy_action_count", "created_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -745,7 +747,8 @@ public enum SchemaMigrations {
         (149, v149),
         (150, v150),
         (151, v151),
-        (152, v152)
+        (152, v152),
+        (153, v153)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7433,6 +7436,27 @@ public enum SchemaMigrations {
         source_key TEXT PRIMARY KEY NOT NULL, analysis_count INTEGER NOT NULL,
         imported_by TEXT NOT NULL, imported_at REAL NOT NULL
     );
+    """
+
+    // MARK: - v153 — the case-action log is append-only and inside the audit chain (implementation
+    // brief §5). case_actions rows could be updated or deleted by any SQL; the audit chain sealed
+    // custody, reviews and governance but not case actions. Triggers now refuse UPDATE and DELETE,
+    // and the seal boundary records where sealed history begins: rows written before this
+    // migration are legacy, unsealed history — never claimed to have been protected.
+    private static let v153: String = """
+    CREATE TABLE IF NOT EXISTS case_action_seal_boundaries (
+        id TEXT PRIMARY KEY NOT NULL,
+        sealed_from_at REAL NOT NULL,
+        legacy_action_count INTEGER NOT NULL,
+        created_at REAL NOT NULL
+    );
+    INSERT INTO case_action_seal_boundaries (id, sealed_from_at, legacy_action_count, created_at)
+        SELECT 'v153', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM case_actions), CAST(strftime('%s','now') AS REAL)
+        WHERE NOT EXISTS (SELECT 1 FROM case_action_seal_boundaries WHERE id = 'v153');
+    CREATE TRIGGER IF NOT EXISTS case_actions_append_only_update BEFORE UPDATE ON case_actions
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_actions_append_only_delete BEFORE DELETE ON case_actions
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
     """
 
 }
