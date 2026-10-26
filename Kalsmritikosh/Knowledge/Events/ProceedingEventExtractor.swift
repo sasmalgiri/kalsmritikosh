@@ -54,7 +54,7 @@ public nonisolated enum ProceedingEventExtractor {
             case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b"#
             case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
-            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
+            case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
             case .released: return #"\b(?:was|were) released from (?:prison|custody)\b"#
             }
@@ -250,7 +250,7 @@ public nonisolated enum ProceedingEventExtractor {
 
     /// "to 48 months in federal prison, followed by three years of supervised release".
     static func sentenceDetail(_ sentence: String) -> String? {
-        let pattern = #"(?i)\bsentenced\b.{0,200}?\bto\s+((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
+        let pattern = #"(?i)\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?((?:\d+|[a-z]+(?:-[a-z]+)?)\s+(?:months?|years?|days?)\b[^.;]{0,120}|life\b[^.;]{0,80}|time served\b[^.;]{0,80}|probation\b[^.;]{0,80})"#
         guard let re = try? NSRegularExpression(pattern: pattern),
               let m = re.firstMatch(in: sentence, range: NSRange(location: 0, length: (sentence as NSString).length)),
               m.range(at: 1).location != NSNotFound else { return nil }

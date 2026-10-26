@@ -34,6 +34,10 @@ struct CaseRecordGatesTests {
                 == "Date: December 18, 2009.")
         #expect(RecordLineGate.apply(question: "How many people were killed in NTSB case CEN10CA077?", dump, sourceTexts: [Self.record]).body
                 == "4 killed — the record gives Injuries: 4 fatal, 0 serious, 0 minor.")
+        // A narrative day that differs from the record's day is shown as a conflict, both days given.
+        let narrative = Self.answer("The document states: “On December 17, 2009, about 2330, the airplane collided with terrain.”")
+        #expect(RecordLineGate.apply(question: "When did the accident in NTSB case CEN10CA077 happen?", narrative, sourceTexts: [Self.record]).body
+                == "Date: December 18, 2009. The narrative gives December 17, 2009 — the documents differ on the day.")
         // Another record's line is never used: the question's identifier must be in the text.
         let other = Self.answer("…")
         #expect(RecordLineGate.apply(question: "When did the accident in NTSB case ERA13CA130 happen?", other, sourceTexts: [Self.record]).body == "…")

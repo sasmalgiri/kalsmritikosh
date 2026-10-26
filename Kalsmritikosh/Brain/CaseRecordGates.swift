@@ -55,8 +55,16 @@ public nonisolated enum RecordLineGate {
            let line = labeledLine(#"(?m)^\s*(?:date(?:\s*(?:&|and)\s*time)?|event date|accident date|incident date|date of (?:the )?(?:accident|incident|event|occurrence))\s*:\s*[^\n]{4,60}$"#, in: pool) {
             // An answer that already states that day, briefly, stands.
             let value = line.replacingOccurrences(of: #"^[^:]+:\s*"#, with: "", options: .regularExpression)
-            if said.count <= 240, DateQuestionGate.containsDay(said), said.localizedCaseInsensitiveContains(value.prefix(10)) { return answer }
-            return replaced(answer, with: line.hasSuffix(".") ? line : line + ".")
+            let day = value.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+            if said.count <= 240, DateQuestionGate.containsDay(said), said.localizedCaseInsensitiveContains(day) { return answer }
+            // Another day stated for the same event (a narrative in local time against a record in
+            // UTC) is a conflict: shown with both, never settled silently.
+            let stated = line.hasSuffix(".") ? line : line + "."
+            if let other = said.range(of: #"(?i)\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},\s+\d{4}\b"#, options: .regularExpression)
+                .map({ String(said[$0]) }), !day.localizedCaseInsensitiveContains(other), said.range(of: #"(?i)\b(?:occurred|happened|accident|crash|collided|took place)\b"#, options: .regularExpression) != nil {
+                return replaced(answer, with: "\(stated) The narrative gives \(other) — the documents differ on the day.")
+            }
+            return replaced(answer, with: stated)
         }
         if asksKilled(question),
            let line = labeledLine(#"(?m)^\s*injuries\s*:\s*[^\n]{3,80}$"#, in: pool),
