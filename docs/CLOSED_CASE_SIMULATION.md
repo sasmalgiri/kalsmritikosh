@@ -61,6 +61,13 @@ was fixed from these cases before the run.
 | "What was X charged with?" | 82 | 22–44 % | 56–61 % | 35 % |
 | "What sentence did X receive?" | 74 | 13.5 % | 73 % | 5 % |
 
+**Second held-out set** (60 more new prosecutions, `--seed 5151`, newly reworded; build 7dee6891,
+after the same-surname and headline-term fixes): rules → Claude **92.4 % right, 6.0 % wrong**
+(n = 898; charge 75–77 %, sentence 84 %). **Rules only — the default mode (AI off) — 70.0 % right,
+20.6 % wrong**: reworded sentence questions were not understood without a model (3–8 %). The
+rules-only shapes were then extended from the tuned set (commit after 7dee6891); a third held-out set
+is needed to measure that honestly.
+
 **Triage of the 111 held-out misses by Claude** (`judge.py`, reads the case documents; brief §17: an
 LLM judge assists triage and is not the release oracle — a human must adjudicate a sample):
 bench 28 (the app's answer is right or the label is wrong — 18 of them "charged with", where the
