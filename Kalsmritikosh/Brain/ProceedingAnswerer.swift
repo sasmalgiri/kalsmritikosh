@@ -31,6 +31,10 @@ public nonisolated enum ProceedingAnswerer {
         public let ask: Ask
     }
 
+    /// A verdict reached at trial: "a federal jury convicted", "convicted by a jury", "found guilty at
+    /// trial", "following a three-week jury trial … was convicted", "a jury verdict".
+    static let trialVerdict = #"\bjury (?:convicted|found|verdict|trial)\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b"#
+
     /// The step a question's verb names.
     static let stepWords: [(String, ProceedingEventExtractor.Step)] = [
         // Noun forms first ("when X's sentencing took place", "the date of the guilty plea") —
@@ -204,11 +208,19 @@ public nonisolated enum ProceedingAnswerer {
                 let text = "Yes — \(quote(hit.1.sentence))"
                 return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.8))
             }
-            // Asked about a plea, the documents report a jury verdict (or the reverse): that answers it.
-            let other: ProceedingEventExtractor.Step? = step == .pleaded ? .convicted : (step == .convicted ? .pleaded : nil)
-            if let other, let hit = found.first(where: { $0.1.step == other }) {
-                let text = "No — the documents say \(name) \(other == .convicted ? "was convicted" : "pleaded guilty"): \(quote(hit.1.sentence))"
-                return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.75))
+            // Brief §8: an absent plea record is not proof there was no plea, and a guilty plea is not
+            // "not convicted". Only a verdict reached AT TRIAL answers "did X plead guilty?" with No; a
+            // bare "was convicted" (which follows a plea as often as a trial) is reported as what it is.
+            if step == .pleaded, let hit = found.first(where: { $0.1.step == .convicted }) {
+                let atTrial = hit.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
+                let text = atTrial
+                    ? "No — the documents say \(name) was found guilty at trial: \(quote(hit.1.sentence))"
+                    : "The documents that name \(name) don't record a guilty plea. They say \(name) was convicted: \(quote(hit.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(atTrial ? 0.75 : 0.6))
+            }
+            if step == .convicted, let hit = found.first(where: { $0.1.step == .pleaded }) {
+                let text = "The documents that name \(name) don't report a verdict. They say \(name) pleaded guilty: \(quote(hit.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.6))
             }
             return refuse("The documents that name \(name) don't say whether \(name) was \(step.phrase).")
         case .sentenceImposed:

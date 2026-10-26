@@ -101,6 +101,24 @@ struct ProceedingAnswererTests {
         #expect(try ask(n("Do you know the total count of press releases concerning Christi Machala?")).body.hasPrefix("3 of the documents found name Christi Machala"))
     }
 
+    @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")
+    func pleaSemantics() throws {
+        func release(_ body: String) -> ProceedingAnswerer.Source {
+            ProceedingAnswerer.Source(objectID: UUID(), text: "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nThursday, March 18, 2021\n\n" + body)
+        }
+        func answer(_ q: String, _ body: String) throws -> String {
+            let parsed = try #require(ProceedingAnswerer.parse(q))
+            return try #require(ProceedingAnswerer.answer(parsed, sources: [release(body)])).body
+        }
+        let trial = try answer("Did Tywan Sykes plead guilty?", "On March 17, 2021, a federal jury convicted Tywan Sykes, 45, of Louisville, of child exploitation charges.")
+        #expect(trial.hasPrefix("No — the documents say Tywan Sykes was found guilty at trial"))
+        let bare = try answer("Did Austin Campbell plead guilty?", "Austin Campbell, 46, of Smyrna, Delaware, was convicted of interstate travel with intent to engage in illicit sexual conduct.")
+        #expect(bare.hasPrefix("The documents that name Austin Campbell don't record a guilty plea. They say Austin Campbell was convicted"))
+        #expect(!bare.hasPrefix("No"))
+        let plea = try answer("Was Christi Machala convicted?", "Christi Machala, 35, of Smithfield, R.I., pleaded guilty in federal court in Providence today to stealing more than $274,000.")
+        #expect(plea.hasPrefix("The documents that name Christi Machala don't report a verdict. They say Christi Machala pleaded guilty"))
+    }
+
     @Test("A step no document records is said to be unrecorded; a person no document names is left to the pipeline")
     func absent() throws {
         let pardon = try ask("When was Christi Machala pardoned?")

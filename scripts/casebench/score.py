@@ -85,6 +85,8 @@ def main():
             for ans in r["answers"]:
                 q = qs.get(ans["id"])
                 if not q: continue
+                if q.get("exclude"):   # an unsupported truth label, kept and counted, never scored
+                    by_q[f"{src}:{ans['id']} excluded"]["excluded"] += 1; continue
                 cls, note = classify(r["case"], q, ans)
                 by_q[f"{src}:{ans['id']}"][cls] += 1
                 # DIRECT: the answer LEADS with the value (first 200 characters), instead of the

@@ -23,6 +23,8 @@ STAGES = [("sentenced", r"\bsentenced\b"), ("convicted", r"\b(?:convicted|found 
           ("pleaded", r"\b(?:pleads?|pleaded|pled) guilty\b"),
           ("charged", r"\b(?:indicted|charged|arrested|complaint|indictment)\b")]
 STAGE_ORDER = {"charged": 0, "pleaded": 1, "convicted": 1, "sentenced": 2}
+# A verdict reached at trial (mirrors ProceedingAnswerer.trialVerdict).
+TRIAL = re.compile(r"\bjury (?:convicted|found|verdict|trial)\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b", re.I)
 # "Steven Daniel Miller, 47, of Fairfield" — the defendant as releases introduce them.
 NAME = re.compile(r"\b([A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+(?: (?:Jr|Sr|II|III)\.?)?), (?:a\s)?(\d{2}),? (?:of|from) ([A-Z][A-Za-z .'\-]+?)[,.]")
 SENTENCE = re.compile(r"sentenced\b[^.]{0,140}?\bto (\d+|[a-z]+(?:-[a-z]+)?) (months?|years?)\b(?! of (?:supervised release|probation))", re.I)
@@ -149,7 +151,9 @@ def main():
         convicted = any(r["stage"] == "convicted" for r in rels) or re.search(r"\b(?:convicted|found guilty) by a (?:federal )?jury", sent["body"], re.I)
         if pleaded and not convicted:
             q.append({"id": "plea", "q": f"Did {name} plead guilty?", "expect": {"yesno": True}})
-        elif convicted and not pleaded:
+        elif convicted and not pleaded and any(TRIAL.search(r["body"]) for r in rels):
+            # "No" only when a release states a verdict AT TRIAL: a bare "was convicted" follows a
+            # guilty plea as often as a trial, so it does not rule a plea out (2026-10-26, brief §8).
             q.append({"id": "plea", "q": f"Did {name} plead guilty?", "expect": {"yesno": False, "truth": "jury"}})
         # Each release's step, dated by the release's own day or the day its step sentence states.
         steps = []
