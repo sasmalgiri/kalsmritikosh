@@ -305,7 +305,7 @@ public actor InvestigationCaseRepository {
             guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let rev = r.int(3), let action = r.string(4),
                   let actor = r.string(5), let at = r.date(7) else { return nil }
             let payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);caseRevision=\(rev);"
-                + "detailSHA256=\(CaseFileHash.sha256(r.string(6) ?? ""));sequence=\(seq)"
+                + "detailDigest=\(CaseFileHash.sha256(r.string(6) ?? ""));sequence=\(seq)"
             return AuditChainEvent(source: .caseEvent, eventID: id, occurredAt: at, canonicalPayload: payload)
         }
     }

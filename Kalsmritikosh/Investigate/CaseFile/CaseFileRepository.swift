@@ -651,7 +651,7 @@ public actor CaseFileRepository {
         return rows.compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let actor = r.string(3), let action = r.string(4), let at = r.date(6) else { return nil }
             let payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);"
-                + "detailSHA256=\(CaseFileHash.sha256(r.string(5) ?? ""));sequence=\(seq)"
+                + "detailDigest=\(CaseFileHash.sha256(r.string(5) ?? ""));sequence=\(seq)"
             return AuditChainEvent(source: .caseAction, eventID: id, occurredAt: at, canonicalPayload: payload)
         }
     }

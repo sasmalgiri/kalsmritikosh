@@ -108,7 +108,7 @@ public actor InvestigationFindingsApprovalRepository {
             guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let decision = r.string(3), let run = r.string(4),
                   let seal = r.string(5), let fp = r.string(6), let actor = r.string(8), let at = r.date(9) else { return nil }
             let payload = "actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);decision=\(decision);"
-                + "rationaleSHA256=\(CaseFileHash.sha256(r.string(7) ?? ""));receiptSeal=\(seal);run=\(run);scope=\(fp);sequence=\(seq)"
+                + "rationaleDigest=\(CaseFileHash.sha256(r.string(7) ?? ""));receiptSeal=\(seal);run=\(run);scope=\(fp);sequence=\(seq)"
             return AuditChainEvent(source: .findingsApproval, eventID: id, occurredAt: at, canonicalPayload: payload)
         }
     }

@@ -205,8 +205,8 @@ public actor InvestigationAnalysisRepository {
             guard let id = r.uuid(0), let h = r.uuid(1), let decision = r.string(2), let actor = r.string(11), let at = r.date(12) else { return nil }
             func digest(_ i: Int) -> String { CaseFileHash.sha256(r.string(i) ?? "") }
             let counts = (6...10).map { String(r.int($0) ?? 0) }.joined(separator: ",")
-            let payload = "actor=\(actor);alternativesSHA256=\(digest(5));at=\(at.timeIntervalSince1970);contrarySHA256=\(digest(4));"
-                + "counts=\(counts);decision=\(decision);hypothesisID=\(h.uuidString);rationaleSHA256=\(digest(3))"
+            let payload = "actor=\(actor);alternativesDigest=\(digest(5));at=\(at.timeIntervalSince1970);contraryDigest=\(digest(4));"
+                + "counts=\(counts);decision=\(decision);hypothesisID=\(h.uuidString);rationaleDigest=\(digest(3))"
             return AuditChainEvent(source: .hypothesisDecision, eventID: id, occurredAt: at, canonicalPayload: payload)
         }
     }
