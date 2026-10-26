@@ -78,6 +78,8 @@ public nonisolated enum QuestionUnderstanding {
     /// True when a dedicated gate answers this kind of question, so no model is asked.
     public static func handledByAGate(_ question: String) -> Bool {
         let l = question.lowercased()
+        // A question a dedicated answerer reads (a person's proceeding, an email by its subject).
+        if ProceedingAnswerer.parse(question) != nil || EmailHeaderAnswerer.parse(question) != nil { return true }
         return IssuingOfficeGate.asksIssuingOffice(question)
             || SentenceQuoteComposer.asksWhatHappened(question)
             || CountQuestionGate.asksCount(question)

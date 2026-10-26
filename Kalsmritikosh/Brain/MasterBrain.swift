@@ -2035,7 +2035,11 @@ public actor MasterBrain {
                     if let policy = sensitivePolicy {
                         found = await policy.filter(result: RetrievalResult(authorityObjectIDs: found), access: access).result.authorityObjectIDs
                     }
-                    ids = found + ids
+                    // An exact-subject hit set is the answer's whole pool; a count needs every message.
+                    switch ask {
+                    case .count, .when: ids = found + ids
+                    default: ids = found
+                    }
                 }
             }
             var messages: [EmailHeaderAnswerer.Message] = []

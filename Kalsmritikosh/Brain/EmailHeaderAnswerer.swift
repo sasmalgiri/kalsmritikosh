@@ -36,17 +36,21 @@ public nonisolated enum EmailHeaderAnswerer {
 
     public static func parse(_ question: String) -> Ask? {
         let q = question.lowercased()
-        if let s = subject(in: question), q.range(of: #"\b(?:e-?mail|message|memo|note)\b"#, options: .regularExpression) != nil {
-            if q.range(of: #"^\s*(?:who|which person)\s+(?:sent|wrote|sends|authored)\b|\bwho (?:was|is) the sender\b|\bfrom whom\b"#, options: .regularExpression) != nil { return .sender(subject: s) }
-            if q.range(of: #"^\s*(?:when|on what (?:date|day)|what (?:date|day))\b"#, options: .regularExpression) != nil { return .sentDate(subject: s) }
-            if q.range(of: #"^\s*(?:who|which people)\s+(?:received|got|was|were)\b|\bsent to whom\b|\bto whom\b|\brecipients?\b"#, options: .regularExpression) != nil { return .recipients(subject: s) }
-            if q.range(of: #"^\s*what\s+(?:did|does)\b.*\b(?:say|said|state|says)\b|\bwhat (?:was|is) (?:in|the content of)\b|\bwhat did .* write\b"#, options: .regularExpression) != nil { return .content(subject: s) }
+        // A quoted subject with an email word — or with a sender/recipient/sent word, which only an
+        // email has ("Who's the sender listed on "TCO MDIQ …"?", "To whom was "…" addressed?").
+        if let s = subject(in: question),
+           q.range(of: #"\b(?:e-?mail|message|memo|note)\b|\bsender\b|\brecipients?\b|\baddressed\b|\bsent\b|\bwent out\b|\bcc'?d\b"#, options: .regularExpression) != nil {
+            if q.range(of: #"^\s*(?:to whom|who|which people)\b.*\b(?:received|got|addressed|recipients?|sent to|cc'?d|copied|on the receiving end)\b|\bsent to whom\b|\bto whom\b|\brecipients?\b"#, options: .regularExpression) != nil { return .recipients(subject: s) }
+            if q.range(of: #"^\s*(?:who|which person)\b.*\b(?:sent|wrote|sends|authored|sender|from|responsible for sending)\b|\bwho (?:was|is) the sender\b|\bfrom whom\b|\bthe sender\b"#, options: .regularExpression) != nil { return .sender(subject: s) }
+            if q.range(of: #"^\s*(?:when|on what (?:date|day)|what (?:date|day|time)|at what time)\b|\b(?:timestamp|send date|sent date|date/time|date and time|send time)\b"#, options: .regularExpression) != nil { return .sentDate(subject: s) }
+            if q.range(of: #"\b(?:say|said|state|says|stated|write|wrote)\b|\b(?:content|contents|body|text)\b|\bsummar"#, options: .regularExpression) != nil { return .content(subject: s) }
             return nil
         }
         // "How many emails did Debra Perlingiere send to Robin Masciangelo?" / "When did A email B?"
         let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’\-]+"#
         let name = "(" + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})"#
-        if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages)\s+did)\s+"# + name + #"\s+(?i:send|write)\s+(?i:to)\s+"# + name, question) {
+        if let m = firstMatch(#"(?i:how many (?:e-?mails?|messages|times)(?:\s+(?:in\s+)?total)?\s+did)\s+"# + name + #"\s+(?i:send|write|e-?mail|message)(?:\s+(?i:to))?\s+"# + name, question)
+            ?? firstMatch(#"(?i:(?:count|number) of (?:the )?(?:e-?mails?|messages)(?:\s+that)?)\s+"# + name + #"\s+(?i:sent|wrote|e-?mailed)(?:\s+(?i:to))?\s+"# + name, question) {
             return .count(from: m[0], to: m[1])
         }
         if let m = firstMatch(#"^(?i:when did)\s+"# + name + #"\s+(?i:e-?mail|write to|message|send (?:an )?e-?mail to)\s+"# + name, question) {

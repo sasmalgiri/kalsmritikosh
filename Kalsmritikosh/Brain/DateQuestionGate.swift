@@ -82,6 +82,8 @@ public nonisolated enum DateQuestionGate {
             if let that = s.range(of: #"(?i)\bannounc\w*\s+(?:today\s+)?that\b"#, options: .regularExpression),
                !containsDate(String(s[..<that.lowerBound])) { return false }
             // "issued" only of the release itself — "an EPA-issued certificate" dates nothing.
+            // A document's own header date ("Date: Thu, 10 Aug 2000 …" of an email) is its date.
+            if s.trimmingCharacters(in: .whitespaces).range(of: #"(?i)^(?:date|sent)\s*:"#, options: .regularExpression) != nil { return true }
             if s.range(of: #"(?i)\b(?:announc|releas|publish|dated)\w*|\b(?:release|statement|notice)\b[^.]{0,30}\bissued\b"#,
                        options: .regularExpression) != nil { return true }
             // A dateline carries the date itself ("WASHINGTON, March 3 —"); "NEW ORLEANS, LOUISIANA –

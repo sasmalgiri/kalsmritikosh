@@ -47,7 +47,10 @@ public nonisolated enum AbsentAttributeGate {
                                        // Parts every case record has under some name of its own ("No. 4373" is the
                                        // docket, "BROWN, P. J." the author) — never refused on the word alone.
                                        "docket", "author", "opinion", "court", "firm", "company", "party", "parties",
-                                       "judge", "defendant", "plaintiff", "office", "agency", "location", "place"]
+                                       "judge", "defendant", "plaintiff", "office", "agency", "location", "place",
+                                       // An email's parts (Claude-reworded Enron questions, 2026-10-26).
+                                       "content", "contents", "body", "text", "message", "recipient", "recipients",
+                                       "sender", "timestamp", "subject", "email", "e-mail"]
 
     /// The word a record uses for the same thing ("Aircraft:" for "airplane", "Parties:" for
     /// "litigants") — wide case bench 2026-10-25.

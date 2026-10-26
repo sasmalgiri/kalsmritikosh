@@ -37,6 +37,8 @@ struct CaseBenchRunner {
         /// Generations that returned text while this question was answered, per provider ID —
         /// the proof of which model (if any) wrote the answer.
         let aiCalls: [String: Int]
+        /// The question as the app answered it, when it was rewritten (normalised or canonical form).
+        var resolved: String? = nil
     }
     struct CaseResult: Encodable {
         let `case`: String; let source: String
@@ -215,7 +217,7 @@ struct CaseBenchRunner {
                                 cited: a.citations.map { caseOfObject[$0.objectID] ?? "?" },
                                 snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
                                 confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s),
-                                aiCalls: calls)
+                                aiCalls: calls, resolved: a.resolvedQuestion == q ? nil : a.resolvedQuestion)
         }
         var lines: [String] = []
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
