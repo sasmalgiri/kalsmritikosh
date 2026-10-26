@@ -38,8 +38,23 @@ def name_forms(v):
     if m: forms.append(f"{m.group(2)} {m.group(1)}")
     return forms
 
+NEGATION = re.compile(r"\b(?:not|never|no|neither|nor|didn.t|doesn.t|isn.t|wasn.t|weren.t|aren.t|cannot|can.t|won.t|without|rather than|instead of|except)\b[^.;]{0,40}$")
+
+NEG_AFTER = re.compile(r"^[^.;]{0,25}?\b(?:did not|didn.t|was not|wasn.t|is not|isn.t|never|has not|hasn.t|were not|weren.t)\b")
+
+def affirmed(b, needle):
+    """The value occurs at least once NOT inside a negated clause ("Alice did not send it; Bob did"
+    must not count as naming Alice) — implementation brief §17."""
+    start = 0
+    while True:
+        i = b.find(needle, start)
+        if i < 0: return False
+        after = b[i + len(needle):i + len(needle) + 40]
+        if not NEGATION.search(b[max(0, i - 60):i]) and not NEG_AFTER.search(after): return True
+        start = i + 1
+
 def value_in(expect, text):
-    """(present, note) — is the expected value in `text`?"""
+    """(present, note) — is the expected value in `text`, affirmed (not negated)?"""
     b = text.lower()
     if "yesno" in expect:
         # A yes/no check: the answer must lead with the right polarity. A "no" may also be shown
@@ -70,13 +85,16 @@ def value_in(expect, text):
         return at == sorted(at), ("order-ok" if at == sorted(at) else "order-wrong")
     if "dates" in expect:
         # Any one of several acceptable dates (the release's day, or the day the release names).
-        return any(f.lower() in b for iso in expect["dates"] for f in date_forms(iso)), None
+        return any(affirmed(b, f.lower()) for iso in expect["dates"] for f in date_forms(iso)), None
     if "date" in expect:
-        if any(f.lower() in b for f in date_forms(expect["date"])): return True, None
+        if any(affirmed(b, f.lower()) for f in date_forms(expect["date"])): return True, None
         other = FULL_DATE.findall(text)
         return False, ("other-date:" + other[0]) if other else None
     if "any" in expect:
-        return any(v and any(f in b for f in name_forms(v.lower())) for v in expect["any"]), None
+        hit = any(v and any(f in b for f in name_forms(v.lower())) for v in expect["any"])
+        if hit and not any(v and any(affirmed(b, f) for f in name_forms(v.lower())) for v in expect["any"]):
+            return False, "negated"
+        return hit, None
     if "number" in expect:
         n = expect["number"]
         return bool(re.search(rf"\b{n}\b", b) or (n in WORDS and re.search(rf"\b{WORDS[n]}\b", b))), None

@@ -25,7 +25,9 @@ def classify(case, q, a):
     body = a["body"] or ""
     own = any(c.startswith(case + "/") for c in a["cited"])
     others = [c for c in a["cited"] if not c.startswith(case + "/") and c != "?"]
-    present, note = value_present(q["expect"], body + "\n" + "\n".join(a.get("snippets", [])) if ("overlap" in q["expect"] or "overlap_any" in q["expect"]) else body)
+    # The user-visible answer is scored on its own; retrieved snippets the answer did not state are
+    # not credited to it (implementation brief §17).
+    present, note = value_present(q["expect"], body)
     refused = a["refused"] or (not present and REFUSAL.search(body))
     if not q.get("in_docs", True):
         # The value is not in this case's documents: refusing is the right answer.
