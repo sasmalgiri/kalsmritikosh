@@ -3297,6 +3297,9 @@ public final class AppState {
             // Rule 10 (A5.7) — masked / redacted values present in the text.
             found += detector.detectRedactedValues(texts: texts)
 
+            // Rule 11 — steps of a person's proceeding implied but not on file.
+            found += detector.detectProceedingGaps(texts: texts)
+
             // Rule 3 — replies whose original (thread root) wasn't ingested.
             // A message is a "root" if its subject carries no reply prefix;
             // a reply hasParent iff some root shares its normalized subject.

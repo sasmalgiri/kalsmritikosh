@@ -212,11 +212,13 @@ public nonisolated enum ProceedingAnswerer {
             let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b[^.]{0,60}\bwith\b|\b(?:pleaded|pled) guilty\b[^.]{0,40}\bto\b|\bconvicted\b[^.]{0,40}\bof\b|\bcounts? of\b"#
             let rank: [ProceedingEventExtractor.Step: Int] = [.charged: 3, .pleaded: 2, .convicted: 2, .sentenced: 1]
             let candidates = found.filter { rank[$0.1.step] != nil && $0.1.sentence.count > 60 }
-            guard let hit = candidates.max(by: { a, b in
-                let sa = (a.1.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + (rank[a.1.step] ?? 0)
-                let sb = (b.1.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + (rank[b.1.step] ?? 0)
-                return sa < sb
-            }) else {
+            // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge.
+            let prior = #"(?i)\b(?:previously|prior|earlier|felony convictions?|convicted felon|was on (?:probation|parole))\b"#
+            func score(_ f: ProceedingEventExtractor.Finding) -> Int {
+                (f.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + (rank[f.step] ?? 0)
+                    - (f.sentence.range(of: prior, options: .regularExpression) != nil ? 6 : 0)
+            }
+            guard let hit = candidates.max(by: { score($0.1) < score($1.1) }) else {
                 return refuse("The documents that name \(name) don't state what \(name) was charged with.")
             }
             let text = "The documents say: \(quote(hit.1.sentence))"

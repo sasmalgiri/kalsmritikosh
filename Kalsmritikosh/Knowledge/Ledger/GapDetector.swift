@@ -487,6 +487,44 @@ public nonisolated struct GapDetector: Sendable {
     /// document, aggregating its hits; the masked snippets are safe to show.
     ///
     /// - Parameter texts: per-object (objectID, extracted text).
+    /// Rule 11 — steps of a person's proceeding the documents imply but never record. Pure: reads the
+    /// people a document introduces ("Name, 41, of …") and their steps across every text given.
+    public func detectProceedingGaps(texts: [(objectID: UUID, text: String)], limit: Int = 50) -> [GapNode] {
+        guard let intro = try? NSRegularExpression(pattern: #"\b([A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} (?:Mc|Mac|O')?[A-Z][a-zA-Z'\-]+), (?:a\s)?\d{2},"#) else { return [] }
+        var people: [String: UUID] = [:]
+        for t in texts where t.text.range(of: #"(?i)\b(?:sentenced|pleaded|pled|indicted|convicted|charged)\b"#, options: .regularExpression) != nil {
+            let head = String(t.text.prefix(2000)), ns = head as NSString
+            for m in intro.matches(in: head, range: NSRange(location: 0, length: ns.length)) where people[ns.substring(with: m.range(at: 1))] == nil {
+                people[ns.substring(with: m.range(at: 1))] = t.objectID
+            }
+        }
+        var gaps: [GapNode] = []
+        for (person, anchor) in people.sorted(by: { $0.key < $1.key }) {
+            let steps = Set(texts.flatMap { ProceedingEventExtractor.findings(in: $0.text, person: person).map(\.step) })
+            guard !steps.isEmpty else { continue }
+            let guilt = steps.contains(.pleaded) || steps.contains(.convicted)
+            if steps.contains(.sentenced), !guilt {
+                gaps.append(GapNode(kind: .proceedingStep, description: "\(person): sentenced, with no plea or verdict on file",
+                                    reason: "A document records \(person)'s sentencing, but no document on file records a guilty plea or a verdict.",
+                                    nearEntity: person, evidenceObjectID: anchor))
+            }
+            if guilt || steps.contains(.sentenced), !(steps.contains(.charged) || steps.contains(.arrested) || steps.contains(.arraigned)) {
+                gaps.append(GapNode(kind: .proceedingStep, description: "\(person): no charging document on file",
+                                    reason: "Documents record \(person)'s plea, verdict or sentence, but none records the charge, arrest or indictment.",
+                                    nearEntity: person, evidenceObjectID: anchor))
+            }
+            if guilt, !steps.contains(.sentenced),
+               texts.contains(where: { $0.text.range(of: #"(?i)\bscheduled to be sentenced\b|\bsentencing (?:is )?(?:set|scheduled)\b"#, options: .regularExpression) != nil
+                                       && ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(person)) }) {
+                gaps.append(GapNode(kind: .proceedingStep, description: "\(person): sentencing scheduled, no sentence on file",
+                                    reason: "A document says \(person) was to be sentenced, but no document on file records the sentence.",
+                                    nearEntity: person, evidenceObjectID: anchor))
+            }
+            if gaps.count >= limit { break }
+        }
+        return Array(gaps.prefix(limit))
+    }
+
     public func detectRedactedValues(
         texts: [(objectID: UUID, text: String)],
         limit: Int = 50

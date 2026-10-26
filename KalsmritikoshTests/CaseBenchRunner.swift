@@ -186,6 +186,10 @@ struct CaseBenchRunner {
         if embed { await ingest.drainEmbeddingsNow() }
         let embedSeconds = Date().timeIntervalSince(t1)
 
+        // The gap layer the app builds on its idle pass, built now so an opened case can show it
+        // (closed-case simulation 2026-10-26: without it every case reported 0 gaps).
+        if workflowEvery > 0 { _ = await state.scanForGaps() }
+
         // 2. Ask each case's questions over the whole shard's ledger (an archive holds many cases).
         let brain = await state.brain
         // CASEBENCH_CLOUD_KEY_FILE — the cloud step of the understanding cascade, measured with the

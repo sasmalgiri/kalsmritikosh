@@ -215,3 +215,17 @@ struct ProceedingAnswererTests {
                                                  people: [(name: "Christi Machala", entityID: UUID())]).isEmpty)
     }
 }
+
+@Suite("Proceeding gaps")
+struct ProceedingGapTests {
+    @Test("Sentenced with no plea or verdict on file, and no charging document on file, are gaps")
+    func gaps() {
+        let sentencing = "FOR IMMEDIATE RELEASE\nThursday, September 24, 2015\nPROVIDENCE – Christi Romano, 36, of Smithfield, was sentenced today to four years in federal prison."
+        let found = GapDetector().detectProceedingGaps(texts: [(objectID: UUID(), text: sentencing)])
+        #expect(found.count == 2)
+        #expect(found.allSatisfy { $0.kind == .proceedingStep && $0.nearEntity == "Christi Romano" })
+        let plea = "FOR IMMEDIATE RELEASE\nWednesday, May 27, 2015\nPROVIDENCE – Christi Romano, 35, of Smithfield, pleaded guilty today to wire fraud. A federal indictment returned on October 15, 2014, charged Romano with wire fraud."
+        // With the plea and the charge on file, the sentencing has its steps.
+        #expect(GapDetector().detectProceedingGaps(texts: [(objectID: UUID(), text: sentencing), (objectID: UUID(), text: plea)]).isEmpty)
+    }
+}
