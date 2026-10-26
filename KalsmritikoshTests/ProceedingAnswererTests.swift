@@ -79,6 +79,25 @@ struct ProceedingAnswererTests {
         #expect(count.citations.count == 3)
     }
 
+    @Test("Claude-reworded sentencing dates and document counts parse to the same ask")
+    func rewordings() throws {
+        let n = QuestionCanonicalizer.normalize
+        for q in ["I need to know when Christi Machala's sentencing took place.",
+                  "I need to know when sentencing occurred for Christi Machala — do we have that on record?",
+                  "I need to know when Christi Machala received her sentencing — do you have that date?"] {
+            #expect(ProceedingAnswerer.parse(n(q))?.ask == .when(.sentenced), "\(q)")
+        }
+        #expect(try ask(n("I need to know when Christi Machala's sentencing took place.")).body.hasPrefix("Christi Machala was sentenced on September 24, 2015."))
+        for q in ["Do you know the total count of press releases concerning Christi Machala?",
+                  "I need a count of the press releases that mention Christi Machala.",
+                  "Can you check the count of press releases that mention Christi Machala?",
+                  "How many separate press releases have been issued concerning Christi Machala?",
+                  "What's the total count of press releases concerning Christi Machala?"] {
+            #expect(ProceedingAnswerer.parse(n(q))?.ask == .documentCount, "\(q)")
+        }
+        #expect(try ask(n("Do you know the total count of press releases concerning Christi Machala?")).body.hasPrefix("3 of the documents found name Christi Machala"))
+    }
+
     @Test("A step no document records is said to be unrecorded; a person no document names is left to the pipeline")
     func absent() throws {
         let pardon = try ask("When was Christi Machala pardoned?")

@@ -33,6 +33,10 @@ public nonisolated enum ProceedingAnswerer {
 
     /// The step a question's verb names.
     static let stepWords: [(String, ProceedingEventExtractor.Step)] = [
+        // Noun forms first ("when X's sentencing took place", "the date of the guilty plea") —
+        // Claude-reworded closed-case questions, 2026-10-26.
+        ("sentencing", .sentenced), ("guilty plea", .pleaded), ("indictment", .charged), ("conviction", .convicted),
+        ("acquittal", .acquitted), ("arraignment", .arraigned),
         ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),
         ("charge", .charged), ("arrested", .arrested), ("arrest", .arrested), ("arraigned", .arraigned), ("plead guilty", .pleaded), ("pleaded guilty", .pleaded),
         ("plead", .pleaded), ("pleaded", .pleaded), ("convicted", .convicted), ("convict", .convicted), ("found guilty", .convicted),
@@ -53,6 +57,10 @@ public nonisolated enum ProceedingAnswerer {
                                  "Justice", "Department", "Office", "Attorney", "District", "Court", "United", "States", "The"]
         for m in re.matches(in: question, range: NSRange(location: 0, length: ns.length)) {
             var words = ns.substring(with: m.range(at: 1)).components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+            // "Christi Machala's sentencing": the possessive is not part of the name.
+            if let last = words.last, let r = last.range(of: #"['’]s$"#, options: .regularExpression), r.lowerBound > last.startIndex {
+                words[words.count - 1] = String(last[..<r.lowerBound])
+            }
             while let f = words.first, skip.contains(f) { words.removeFirst() }
             if words.count >= 2, !words.contains(where: { skip.contains($0) }) { return words.joined(separator: " ") }
         }
@@ -67,7 +75,11 @@ public nonisolated enum ProceedingAnswerer {
         if q.range(of: #"\btimeline\b|\bchronology\b|\bsequence of events\b|\bin (?:chronological )?order\b|\bwhat happened (?:to|with)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .timeline)
         }
-        if q.range(of: #"^how many\s+(?:press releases|releases|documents|files|records|reports|articles|announcements)\b"#, options: .regularExpression) != nil {
+        // "How many (separate) press releases …", "the total count of press releases about X", "a count of
+        // the press releases that mention X" — anywhere in the question, after any courtesy wrapper.
+        let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements)\b"#
+        if q.range(of: #"^how many\s+"# + documents, options: .regularExpression) != nil
+            || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?"# + documents, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .documentCount)
         }
         if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b"#, options: .regularExpression) != nil {
