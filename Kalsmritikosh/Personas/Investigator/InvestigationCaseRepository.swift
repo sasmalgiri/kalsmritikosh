@@ -292,4 +292,21 @@ public actor InvestigationCaseRepository {
     private nonisolated func savepoint(_ prefix: String, _ id: UUID) -> String {
         "\(prefix)_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
     }
+
+    // MARK: - Audit chain (implementation brief §5)
+
+    /// Every case event — creation, scope set, source included or excluded, scope confirmed, deadline
+    /// bound, reopened — as audit-chain events; free-text detail enters as a digest.
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        try await database.query("""
+            SELECT id, case_id, sequence, case_revision, action, actor, detail, occurred_at
+            FROM investigation_case_events ORDER BY occurred_at ASC, case_id ASC, sequence ASC;
+            """, []).compactMap { r in
+            guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let rev = r.int(3), let action = r.string(4),
+                  let actor = r.string(5), let at = r.date(7) else { return nil }
+            let payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);caseRevision=\(rev);"
+                + "detailSHA256=\(CaseFileHash.sha256(r.string(6) ?? ""));sequence=\(seq)"
+            return AuditChainEvent(source: .caseEvent, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
+    }
 }

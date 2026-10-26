@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 156
+    public static let latestVersion = 157
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -547,7 +547,9 @@ public enum SchemaMigrations {
             // v155 — schema-conformance verification recorded in the ledger it verified.
             "schema_conformance_marks": ["schema_version", "schema_fingerprint", "status", "added", "could_not_add", "checked_at"],
             // v156 — corrections to a confirmed statement are linked addenda, never edits.
-            "case_statement_addenda": ["id", "interview_id", "case_id", "text", "reason", "sha256", "recorded_by", "recorded_at", "confirmed_by", "confirmed_at"]
+            "case_statement_addenda": ["id", "interview_id", "case_id", "text", "reason", "sha256", "recorded_by", "recorded_at", "confirmed_by", "confirmed_at"],
+            // v157 — when sealing of the rest of a case's history began.
+            "audit_seal_boundaries": ["history", "sealed_from_at", "legacy_count", "created_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -759,7 +761,8 @@ public enum SchemaMigrations {
         (153, v153),
         (154, v154),
         (155, v155),
-        (156, v156)
+        (156, v156),
+        (157, v157)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7561,6 +7564,54 @@ public enum SchemaMigrations {
       OR NEW.recorded_by IS NOT OLD.recorded_by OR NEW.recorded_at IS NOT OLD.recorded_at
       OR OLD.confirmed_by IS NOT NULL
     BEGIN SELECT RAISE(ABORT, 'case_statement_addenda is append-only'); END;
+    """
+
+
+    // MARK: - v157 — the rest of a case's history is fixed once written and sealed (brief §5).
+    // Case events (scope membership, reopening), findings approvals/withdrawals and hypothesis
+    // decisions join the audit chain; rows can no longer be edited in place. Deletion is left to the
+    // case's own cascade and is caught by the chain (a sealed event that disappears breaks it).
+    // The boundary rows record when sealing of each began; earlier rows were not protected before.
+    private static let v157: String = """
+    -- Admit the case-history sources. audit_chain's CHECK listed only custody/review/governance, so
+    -- since v153 a case action made every seal fail (found 2026-10-26 by the first test that sealed
+    -- one). SQLite cannot alter a CHECK: recreate and copy rows VERBATIM, as v111 did — every sealed
+    -- hash is untouched and the existing chain stays intact.
+    CREATE TABLE audit_chain__v157 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v157 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v157 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_case_events_fixed BEFORE UPDATE ON investigation_case_events
+    BEGIN SELECT RAISE(ABORT, 'investigation_case_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_findings_approvals_fixed BEFORE UPDATE ON investigation_findings_approvals
+    BEGIN SELECT RAISE(ABORT, 'investigation_findings_approvals is append-only'); END;
+    CREATE TABLE IF NOT EXISTS audit_seal_boundaries (
+        history        TEXT PRIMARY KEY NOT NULL,
+        sealed_from_at REAL NOT NULL,
+        legacy_count   INTEGER NOT NULL,
+        created_at     REAL NOT NULL
+    );
+    INSERT OR IGNORE INTO audit_seal_boundaries (history, sealed_from_at, legacy_count, created_at)
+        VALUES ('investigation_case_events', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_case_events), CAST(strftime('%s','now') AS REAL)),
+               ('investigation_findings_approvals', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_findings_approvals), CAST(strftime('%s','now') AS REAL)),
+               ('investigation_hypothesis_decisions', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_hypothesis_decisions), CAST(strftime('%s','now') AS REAL));
     """
 
 }

@@ -195,6 +195,22 @@ public actor InvestigationAnalysisRepository {
         }
     }
 
+    /// Every hypothesis decision with the evidence profile it was made on (implementation brief §5).
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        try await database.query("""
+            SELECT id, hypothesis_id, decision, rationale, contrary_evidence, alternatives, for_count, against_count,
+                   for_lineages, against_lineages, unassessed_count, actor, decided_at
+            FROM investigation_hypothesis_decisions ORDER BY decided_at ASC, id ASC;
+            """, []).compactMap { r in
+            guard let id = r.uuid(0), let h = r.uuid(1), let decision = r.string(2), let actor = r.string(11), let at = r.date(12) else { return nil }
+            func digest(_ i: Int) -> String { CaseFileHash.sha256(r.string(i) ?? "") }
+            let counts = (6...10).map { String(r.int($0) ?? 0) }.joined(separator: ",")
+            let payload = "actor=\(actor);alternativesSHA256=\(digest(5));at=\(at.timeIntervalSince1970);contrarySHA256=\(digest(4));"
+                + "counts=\(counts);decision=\(decision);hypothesisID=\(h.uuidString);rationaleSHA256=\(digest(3))"
+            return AuditChainEvent(source: .hypothesisDecision, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
+    }
+
     public func decisions(hypothesisID: UUID) async throws -> [HypothesisDecision] {
         let rows = try await database.query("""
             SELECT id, hypothesis_id, decision, rationale, contrary_evidence, alternatives, for_count, against_count,

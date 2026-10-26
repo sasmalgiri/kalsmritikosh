@@ -2571,13 +2571,18 @@ public final class AppState {
                 // treats as a refusal.
                 let auditChainService = AuditChainService(
                     database: db, secret: auditSecret,
-                    eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo, weak self] in
+                    eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo, weak self, db] in
                         var out = try await custodyRepo?.auditChainEvents() ?? []
                         out += try await factReviewsRepo?.auditChainEvents() ?? []
                         out += try await governanceRepo?.auditChainEvents() ?? []
                         // The case-file action log (allegation decisions, interview revisions and
                         // attestations, exhibits, holds, exports, closure and reopening) — brief §5.
                         if let caseFile = await self?.caseFiles?.file { out += try await caseFile.auditChainEvents() }
+                        // Case source membership and reopening, findings approvals and withdrawals,
+                        // hypothesis decisions — the rest of a case's history (brief §5).
+                        out += try await InvestigationCaseRepository(database: db).auditChainEvents()
+                        out += try await InvestigationFindingsApprovalRepository(database: db).auditChainEvents()
+                        out += try await InvestigationAnalysisRepository(database: db).auditChainEvents()
                         return out
                     })
                 self.auditChain = auditChainService
