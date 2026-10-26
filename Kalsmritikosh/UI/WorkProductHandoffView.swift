@@ -517,12 +517,17 @@ public final class WorkProductHandoffModel {
         guard !why.isEmpty else { lastError = "Give a rationale for closure."; return }
         let unresolved = unresolvedText.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        // Only APPROVED findings are pinned to the closure (brief §6); built-but-unapproved findings are
+        // not, and the outcome says the matter closed without approved findings.
+        let approved = snap.latestApproval.flatMap { $0.decision == .approved ? $0 : nil }
+        let pinned = approved.flatMap { a in self.built.flatMap { $0.run.id == a.workProductRunID ? $0 : nil } }
         await perform {
             _ = try await self.closure.closeCase(
                 caseID: snap.caseID, expectedRevision: snap.revision, rationale: why, unresolvedItems: unresolved,
-                workProductRunID: self.built?.run.id, receiptSeal: self.built?.receipt.seal, actor: actor, at: date)
+                workProductRunID: pinned?.run.id, receiptSeal: pinned?.receipt.seal, actor: actor, at: date)
             await self.refresh()
-            return unresolved.isEmpty ? "Matter closed." : "Matter closed with \(unresolved.count) recorded unresolved item(s)."
+            let findings = pinned == nil ? " No approved findings were attached." : ""
+            return (unresolved.isEmpty ? "Matter closed." : "Matter closed with \(unresolved.count) recorded unresolved item(s).") + findings
         }
     }
 
