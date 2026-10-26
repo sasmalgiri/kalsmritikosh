@@ -178,7 +178,7 @@ public nonisolated enum ProceedingAnswerer {
             items.map { VerifiedAnswer.Citation(objectID: $0.0, snippet: String($0.1.sentence.prefix(300))) }
         }
         func refuse(_ text: String) -> VerifiedAnswer {
-            VerifiedAnswer(body: text, answerText: text, citations: about.prefix(3).map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },
+            VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: about.prefix(3).map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },
                            confidence: Confidence(0.6), refused: true, refusalReason: "No document records this step for the person.")
         }
         guard !about.isEmpty else { return nil }   // no document names the person: the normal pipeline decides
@@ -191,7 +191,7 @@ public nonisolated enum ProceedingAnswerer {
                 if step == .charged, let near = found.first(where: { ($0.1.step == .arrested || $0.1.step == .arraigned) && ($0.1.day ?? $0.1.reportedOn) != nil }),
                    let day = render(near.1.day ?? near.1.reportedOn) {
                     let text = "The documents don't say when \(name) was charged; they report \(name) was \(near.1.step.phrase) on \(day): \(quote(near.1.sentence))"
-                    return VerifiedAnswer(body: text, answerText: text, citations: cite([near]), confidence: Confidence(0.6))
+                    return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([near]), confidence: Confidence(0.6))
                 }
                 return refuse("The documents that name \(name) don't record \(name) being \(step.phrase).")
             }
@@ -204,11 +204,11 @@ public nonisolated enum ProceedingAnswerer {
             } else {
                 text = "The documents say \(name) was \(step.phrase) but give no date for it: \(quote(best.1.sentence))"
             }
-            return VerifiedAnswer(body: text, answerText: text, citations: cite([best]), confidence: Confidence(0.8))
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([best]), confidence: Confidence(0.8))
         case .whether(let step):
             if let hit = found.first(where: { $0.1.step == step }) {
                 let text = "Yes — \(quote(hit.1.sentence))"
-                return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.8))
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.8))
             }
             // Brief §8: an absent plea record is not proof there was no plea, and a guilty plea is not
             // "not convicted". Only a verdict reached AT TRIAL answers "did X plead guilty?" with No; a
@@ -218,11 +218,11 @@ public nonisolated enum ProceedingAnswerer {
                 let text = atTrial
                     ? "No — the documents say \(name) was found guilty at trial: \(quote(hit.1.sentence))"
                     : "The documents that name \(name) don't record a guilty plea. They say \(name) was convicted: \(quote(hit.1.sentence))"
-                return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(atTrial ? 0.75 : 0.6))
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(atTrial ? 0.75 : 0.6))
             }
             if step == .convicted, let hit = found.first(where: { $0.1.step == .pleaded }) {
                 let text = "The documents that name \(name) don't report a verdict. They say \(name) pleaded guilty: \(quote(hit.1.sentence))"
-                return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.6))
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.6))
             }
             return refuse("The documents that name \(name) don't say whether \(name) was \(step.phrase).")
         case .sentenceImposed:
@@ -230,7 +230,7 @@ public nonisolated enum ProceedingAnswerer {
                 return refuse("The documents that name \(name) don't state a sentence for \(name).")
             }
             let text = "\(name) was sentenced to \(hit.1.detail ?? ""). The document says: \(quote(hit.1.sentence))"
-            return VerifiedAnswer(body: text, answerText: text, citations: cite([hit]), confidence: Confidence(0.8))
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.8))
         case .chargedWith:
             // The charging sentence names the offence; failing that, the plea or verdict does.
             // The sentence that STATES the offence ("charges Romano with seven counts of wire fraud",
@@ -266,7 +266,7 @@ public nonisolated enum ProceedingAnswerer {
                 return refuse("The documents that name \(name) don't state what \(name) was charged with.")
             }
             let text = "The documents say: \(quote(hit.sentence))"
-            return VerifiedAnswer(body: text, answerText: text,
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                                   citations: [VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String(hit.sentence.prefix(200)))],
                                   confidence: Confidence(0.75))
         case .office:
@@ -282,7 +282,7 @@ public nonisolated enum ProceedingAnswerer {
                 return refuse("The documents that name \(name) don't say which office prosecuted the case.")
             }
             let text = "The documents about \(name) name: " + offices.map(\.0).joined(separator: "; ") + "."
-            return VerifiedAnswer(body: text, answerText: text,
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                                   citations: offices.map { VerifiedAnswer.Citation(objectID: $0.1.objectID, snippet: String($0.1.text.prefix(300))) },
                                   confidence: Confidence(0.75))
         case .timeline:
@@ -297,14 +297,14 @@ public nonisolated enum ProceedingAnswerer {
                 return "• \(when) — \(f.1.step.phrase): \(quote(f.1.sentence))"
             }
             let text = "The case against \(name), in date order (\(dated.count) step\(dated.count == 1 ? "" : "s") from \(Set(dated.map(\.0)).count) document\(Set(dated.map(\.0)).count == 1 ? "" : "s")):\n" + lines.joined(separator: "\n")
-            return VerifiedAnswer(body: text, answerText: text, citations: cite(dated), confidence: Confidence(0.8))
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(dated), confidence: Confidence(0.8))
         case .documentCount:
             let n = about.count
             let lines = about.map { s in "• " + (s.text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
                 .first { $0.count > 25 && ProceedingEventExtractor.fullDate(in: $0) == nil && !$0.hasPrefix("U.S. Department") && !$0.hasPrefix("FOR IMMEDIATE") } ?? "document") }
             var text = "\(complete ? "\(n)" : "At least \(n)") of the documents found name \(name):\n" + lines.joined(separator: "\n")
             if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
-            return VerifiedAnswer(body: text, answerText: text,
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                                   citations: about.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },
                                   confidence: Confidence(0.75))
         }

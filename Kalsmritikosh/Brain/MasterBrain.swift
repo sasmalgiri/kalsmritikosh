@@ -1704,7 +1704,11 @@ public actor MasterBrain {
         // Q-3 — a when-question is answered with a date or an honest "no date given"; a which-office
         // question with the office the release names, or an honest "not named".
         var officeSources: [String] = []
-        if IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil
+        // An answer read from the exact record by a dedicated answerer (an email's own headers, a
+        // person's proceeding steps) is final: the shape gates must not rewrite it — "Do you have the
+        // send date for the email X?" came back as "No — the documents give date: …".
+        let fromRecord = verified.intentKind == VerifiedAnswer.recordAnswerKind
+        if !fromRecord, IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil
             || YesNoFieldGate.asksYesNo(question)
             || question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil
             || DateQuestionGate.asksWhen(question) || RecordLineGate.asksKilled(question) || ConclusionGate.asksConclusion(question),
@@ -1723,7 +1727,7 @@ public actor MasterBrain {
         // Wide case bench 2026-10-25: a yes/no question is answered yes or no; a question about
         // something the documents never mention is answered "not mentioned".
         // A conclusion ("What did the NTSB conclude caused …?") only from text labeled as one.
-        let verified = ConclusionGate.apply(question: question,
+        let verified = fromRecord ? verified : ConclusionGate.apply(question: question,
                                             YesNoFieldGate.apply(question: question,
                                                                  AbsentAttributeGate.apply(question: question,
                                                                                            YesNoFieldGate.answerFieldQuestion(question: question, gated, sourceTexts: officeSources),

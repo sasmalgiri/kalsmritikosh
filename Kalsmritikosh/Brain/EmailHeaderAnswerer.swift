@@ -63,6 +63,10 @@ public nonisolated enum EmailHeaderAnswerer {
         if let m = firstMatch(#"^(?i:when did)\s+"# + name + #"\s+(?i:e-?mail|write to|message|send (?:an )?e-?mail to)\s+"# + name, question) {
             return .when(from: m[0], to: m[1])
         }
+        // "When navigator@nisource.com emailed Zelda Quackenbush?" (after "Can you tell me").
+        if let m = firstMatch(#"^(?i:when)\s+(\S.{1,80}?)\s+(?i:e-?mailed|wrote to|messaged)\s+(\S.{1,80}?)\s*\?*\s*$"#, question) {
+            return .when(from: m[0], to: m[1])
+        }
         // A sender that is an address or an organisation ("EDIS Service", "noreply@…"): any words
         // before "email" (closed-case simulation, Enron mailboxes).
         if let m = firstMatch(#"^(?i:when did)\s+(\S.{1,80}?)\s+(?i:e-?mail|write to|message)\s+(\S.{1,80}?)\s*\?*\s*$"#, question) {
@@ -126,7 +130,7 @@ public nonisolated enum EmailHeaderAnswerer {
     }
 
     static func answered(_ text: String, _ cites: [Message], refused: Bool = false) -> VerifiedAnswer {
-        VerifiedAnswer(body: text, answerText: text,
+        VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                        citations: cites.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: "From: \($0.from)\nTo: \($0.to)\nSubject: \($0.subject)\nDate: \($0.date)") },
                        confidence: Confidence(refused ? 0.6 : 0.85), refused: refused,
                        refusalReason: refused ? "No email found shows it." : nil)

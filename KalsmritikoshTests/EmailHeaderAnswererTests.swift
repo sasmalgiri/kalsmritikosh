@@ -120,6 +120,11 @@ struct EmailHeaderAnswererTests {
         #expect(EmailHeaderAnswerer.parse(n("Do we know the date/time the email \"Past Due Invoice\" went out?")) == .sentDate(subject: "Past Due Invoice"))
         // A yes/no about whether a record exists keeps its shape.
         #expect(n("Do we have any record of a meeting with Bill Rapp?") == "Do we have any record of a meeting with Bill Rapp?")
+        // Record answers are stamped so the yes/no and other shape gates leave them alone.
+        #expect(try ask("When was the email \"Heartland Energy Group\" sent?").intentKind == VerifiedAnswer.recordAnswerKind)
+        #expect(EmailHeaderAnswerer.parse("Do you have the send date for the email \"Heartland Energy Group\"?") == .sentDate(subject: "Heartland Energy Group"))
+        #expect(EmailHeaderAnswerer.parse(n("Can you tell me when navigator@nisource.com emailed Zelda Quackenbush?")) == .when(from: "navigator@nisource.com", to: "Zelda Quackenbush"))
+        #expect(EmailHeaderAnswerer.parse(n("I'm looking for the date that noreply@ccomad3.uu.commissioner.com emailed Zelda Quackenbush — do you have that?")) == .when(from: "noreply@ccomad3.uu.commissioner.com", to: "Zelda Quackenbush"))
         // The subject-first actor/person doors leave these questions to the dedicated answerers.
         #expect(AppState.ownedByDedicatedAnswerer("Who's the sender listed on the email \"Azalea Trail\"?"))
         #expect(AppState.ownedByDedicatedAnswerer("Could you specify the sentence that Christi Machala received?"))
