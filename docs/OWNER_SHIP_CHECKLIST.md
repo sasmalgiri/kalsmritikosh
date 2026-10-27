@@ -62,7 +62,8 @@ legal judgement. Nothing here has been done by the agent. Tick each with the dat
 ## Accuracy claims you may make (from measured results only)
 
 - Use only figures in `docs/CLOSED_CASE_SIMULATION.md` with their sample and mode. Latest honest
-  held-out figure for reworded prosecution questions (held-out set 3, n = 888): **86.5 % right /
-  10.0 % wrong in the default mode (AI off)**, 90.2 % / 7.5 % with the person's Claude key.
-  "What was X charged with" and "when was X charged" are below the brief's bar — do not claim them
-  as reliable. Never claim zero errors.
+  held-out figures for reworded prosecution questions (2026-10-27, two clean sets, n = 932 and 928):
+  **94.0–95.9 % right / 2.0–3.8 % wrong in the default mode (AI off)**, **96.8–98.5 % right /
+  0.5–1.7 % wrong with the person's Claude key (Online mode)**. Quote the lower figure of a range.
+  "What was X charged with" (89–93 % with Claude) is the weakest kind. Email questions held-out:
+  92.4 % (small sample). Never claim zero errors, and do not claim 99 % — it has not been measured.

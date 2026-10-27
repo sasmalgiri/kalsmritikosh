@@ -50,6 +50,16 @@ runtime witnessed · release verified.
 | **Chronology HELD-OUT** (new cases + new wordings), rules→Claude / rules only | c581f8fb | 898 | **87.6 %** / 65.0 % | **7.2 %** / 23.4 % |
 | **Chronology HELD-OUT 2** (another 60 new cases), rules→Claude / rules only (default mode) | 7dee6891 | 898 | **92.4 %** / **70.0 %** | **6.0 %** / **20.6 %** |
 | **Chronology HELD-OUT 3** (another 60 new cases, after rules-only fixes), rules→Claude / rules only (default mode) | e3859f63 | 888 | **90.2 %** / **86.5 %** | **7.5 %** / **10.0 %** |
+| **Chronology HELD-OUT 6** (2026-10-27, after verified record extraction + truth repairs), rules→Claude / rules only | 9c9e18ae | 932 | **98.5 %** / **95.9 %** | **0.5 %** / **2.0 %** |
+| **Chronology HELD-OUT 7** (another 60 new cases, latest fixes), rules→Claude / rules only | 2c43272c | 928 | **96.8 %** / **94.0 %** | **1.7 %** / **3.8 %** |
+| Enron HELD-OUT (8 unused mailboxes — small), rules→Claude / rules only | f73c5a94 | 224 | 92.4 % / 87.9 % | 6.2 % / 9.8 % |
+
+2026-10-27: about half of the remaining Claude-mode misses were bench-truth errors (namesake and
+cross-posted releases, prior-record charge labels, a relative's sentence, distance-bound dates), repaired
+generically and re-applied to every set; the rest were app defects fixed with tests (see
+docs/CLOSED_CASE_SIMULATION.md, 2026-10-27). Claude mode on chronology is 96.8–98.5 % on the last two clean
+sets — **not yet the 99 % target**; Enron held-out is small and lower (fixes after it, be8dd6cb, unmeasured).
+§11 complete backup + in-app restore at next launch (the replaced ledger kept): 8a5bf138, 3be98514, unit verified.
 
 Reworded chronology was the weakest category; the held-out set (new cases, new wordings) now gives the
 honest figure. Its weak kinds are "what was X charged with" (56–61 %) and "what sentence" (73 %).
