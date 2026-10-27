@@ -277,7 +277,7 @@ public actor StudioCaseFactsReader {
 
     /// Names and amounts from the ledger's entities for each case document, kept only when the
     /// document's text states them verbatim (so every line can be checked against its quote).
-    func namesAndAmounts(objectIDs: Set<UUID>) async throws -> (named: [StudioCaseValue], amounts: [StudioCaseValue]) {
+    func namesAndAmounts(objectIDs: Set<UUID>, versionOf: [UUID: UUID] = [:]) async throws -> (named: [StudioCaseValue], amounts: [StudioCaseValue]) {
         guard let entities else { return ([], []) }
         var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = []
         var seenNames = Set<String>(), seenAmounts = Set<String>()
@@ -288,7 +288,8 @@ public actor StudioCaseFactsReader {
                 if e.kind == .money { v = Self.amountAsWritten(v, in: content) }
                 if e.kind == .person, !v.contains(" "), let full = Self.fullName(v, in: content) { v = full }
                 guard v.count >= 2, let quote = Self.sentence(containing: v, in: content) else { continue }
-                let ref = StudioEvidenceRef(objectID: id, quote: quote)
+                // The exact source version the passage was read from (review R1).
+                let ref = StudioEvidenceRef(sourceVersionID: versionOf[id], objectID: id, quote: quote)
                 switch e.kind {
                 case .person, .organization:
                     guard v.contains(" "), seenNames.insert(v.lowercased()).inserted else { continue }
@@ -326,18 +327,22 @@ public actor StudioCaseFactsReader {
         let identifiers = rows.filter { Self.identifierFields.contains($0.field) }
             .map { StudioCaseValue(value: $0.value, label: $0.field, refs: refs($0)) }
 
+        let objectIDs = try await objects.objectIDs(inSourceVersionIDs: sourceVersionIDs)
+        // One case version per document, so every reference names the version it was read from.
+        let versionOf = try await objects.sourceVersionsByObject(inSourceVersionIDs: sourceVersionIDs)
+            .compactMapValues { $0.sorted { $0.uuidString < $1.uuidString }.first }
         let caseEvents = try await events.forSourceVersions(sourceVersionIDs, limit: 400)
             .filter(\.hasTrustworthyDate)
             .sorted { $0.date < $1.date }
             .map { StudioCaseEvent(date: $0.date, title: $0.title,
-                                   refs: [StudioEvidenceRef(objectID: $0.sourceObjectID, quote: String(($0.summary ?? $0.title).prefix(200)))]) }
+                                   refs: [StudioEvidenceRef(sourceVersionID: versionOf[$0.sourceObjectID], objectID: $0.sourceObjectID,
+                                                            quote: String(($0.summary ?? $0.title).prefix(200)))]) }
 
-        let objectIDs = try await objects.objectIDs(inSourceVersionIDs: sourceVersionIDs)
         let names = try await objects.sourceFilenames(for: objectIDs)
         let documents = objectIDs.sorted { (names[$0] ?? "") < (names[$1] ?? "") }
-            .map { StudioCaseDocument(objectID: $0, sourceVersionID: nil, name: names[$0] ?? "Document", date: nil) }
+            .map { StudioCaseDocument(objectID: $0, sourceVersionID: versionOf[$0], name: names[$0] ?? "Document", date: nil) }
 
-        let (named, stated) = try await namesAndAmounts(objectIDs: objectIDs)
+        let (named, stated) = try await namesAndAmounts(objectIDs: objectIDs, versionOf: versionOf)
         return StudioCaseFacts(caseTitle: caseTitle, parties: parties, dates: dates, amounts: amounts,
                                identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all,
                                named: named, statedAmounts: stated)

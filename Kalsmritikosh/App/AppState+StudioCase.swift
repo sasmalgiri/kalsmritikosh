@@ -64,8 +64,9 @@ extension AppState {
             let versions = Set(included)
             let objectIDs = try await objects.objectIDs(inSourceVersionIDs: versions)
             let names = try await objects.sourceFilenames(for: objectIDs)
+            let objectVersions = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
             return StudioEvidenceContext(
-                eligibleSourceVersions: versions, caseObjects: objectIDs, documentNames: names,
+                eligibleSourceVersions: versions, caseObjects: objectIDs, documentNames: names, objectVersions: objectVersions,
                 blockText: { id in
                     guard let r = try? await database.query("SELECT source_version_id, raw_text FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(id)]).first,
                           let text = r.string(1) else { return nil }

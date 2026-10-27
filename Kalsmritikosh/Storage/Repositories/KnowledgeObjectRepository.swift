@@ -362,6 +362,22 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// Each object in the given versions → the versions (among those given) it belongs to. Lets a
+    /// citation be checked against the EXACT source version it names (ship-readiness review R1).
+    public func sourceVersionsByObject(inSourceVersionIDs versionIDs: Set<UUID>) async throws -> [KnowledgeObject.ID: Set<UUID>] {
+        let unique = Array(versionIDs)
+        guard !unique.isEmpty else { return [:] }
+        var out: [KnowledgeObject.ID: Set<UUID>] = [:]
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT ko.id, sv.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let o = r.uuid(0), let v = r.uuid(1) { out[o, default: []].insert(v) } }
+        }
+        return out
+    }
+
     public func objectIDs(inFileIDs fileIDs: [UUID]) async throws -> Set<KnowledgeObject.ID> {
         let unique = Array(Set(fileIDs))
         guard !unique.isEmpty else { return [] }
