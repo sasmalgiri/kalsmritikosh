@@ -1883,8 +1883,11 @@ public struct SettingsView: View {
                 let copied = manifest.entries.filter { $0.kind == .originalSource }.count
                 await MainActor.run {
                     backingUp = false
-                    backupStatus = "Complete backup “\(dest.lastPathComponent)”: the ledger and \(copied) original file(s), each with its SHA-256."
-                        + (missing.isEmpty ? "" : " \(missing.count) original(s) could not be read and are listed in the backup as not included.")
+                    // Final brief §3.8: "complete" only when every original is in it.
+                    let left = (try? BackupService.sourcesMap(in: dest).notIncluded.count) ?? missing.count
+                    backupStatus = (manifest.coverage == .complete
+                        ? "Complete backup “\(dest.lastPathComponent)”: the ledger and all \(copied) original file(s), each with its SHA-256."
+                        : "Backup “\(dest.lastPathComponent)” is NOT complete: the ledger and \(copied) original file(s); \(left) original(s) could not be read and are listed in the backup as not included — keep those files yourself.")
                         + " The ledger stays encrypted; keep the recovery key (Settings ▸ Data ▸ Encryption) separately."
                 }
             } catch {

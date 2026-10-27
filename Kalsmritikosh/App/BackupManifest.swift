@@ -36,9 +36,12 @@ public struct BackupEntry: Sendable, Equatable, Codable {
 public enum BackupCoverage: String, Sendable, Codable, Equatable {
     case ledgerOnly
     case ledgerAndVault
-    /// The ledger plus every readable original source, with the map that relinks them on restore
-    /// (implementation brief §11). What could not be read is listed, never silently dropped.
+    /// The ledger plus EVERY original source, with the map that relinks them on restore
+    /// (implementation brief §11): a self-contained recovery.
     case complete
+    /// The ledger plus the originals that could be read; the rest are listed as not included
+    /// (final brief §3.8: never labelled complete when an original is missing).
+    case ledgerWithSomeOriginals
 }
 
 public struct BackupManifest: Sendable, Equatable, Codable {
@@ -154,7 +157,9 @@ public enum RestoreValidator {
             return o.byteSize != e.byteSize || o.sha256.lowercased() != e.sha256.lowercased()
         }.map(\.relativePath).sorted()
         let coverageNote = manifest.coverage == .complete
-            ? " Complete: the ledger and its original files, relinked on restore."
+            ? " Complete: the ledger and every original file, relinked on restore."
+            : manifest.coverage == .ledgerWithSomeOriginals
+            ? " Ledger with some originals: the originals that could be read are included and relinked on restore; the others are listed in the backup as not included and stay where they were."
             : manifest.coverage == .ledgerAndVault
             ? " Includes the evidence vault."
             : " Ledger only: original files and the managed evidence vault are not in this backup."

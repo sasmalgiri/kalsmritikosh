@@ -275,9 +275,16 @@ public struct BackupService: Sendable {
         try JSONEncoder().encode(map).write(to: mapURL)
         let mapMeasured = try Self.measure(mapURL)
         entries.append(BackupEntry(relativePath: Self.sourcesMapName, byteSize: mapMeasured.byteSize, sha256: mapMeasured.sha256, kind: .derivedExport))
-        let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion, createdAtEpoch: nowEpoch, entries: entries, coverage: .complete)
+        // Complete only when nothing was left out (final brief §3.8).
+        let coverage: BackupCoverage = map.notIncluded.isEmpty ? .complete : .ledgerWithSomeOriginals
+        let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion, createdAtEpoch: nowEpoch, entries: entries, coverage: coverage)
         try JSONEncoder().encode(manifest).write(to: destination.appendingPathComponent(Self.manifestName))
         return manifest
+    }
+
+    /// The sources map a complete (or partial-originals) backup carries.
+    public static func sourcesMap(in backupFolder: URL) throws -> SourcesMap {
+        try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: backupFolder.appendingPathComponent(sourcesMapName)))
     }
 
     /// Restore a complete backup into `targetFolder` (verified, staged and failure-atomic, as
@@ -287,7 +294,8 @@ public struct BackupService: Sendable {
     public func restoreComplete(backupFolder: URL, into targetFolder: URL,
                                 ledgerKey: LedgerKey? = LedgerKeychain.load()) async throws -> SourcesMap {
         let manifest = try restore(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
-        guard manifest.coverage == .complete, let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
+        guard manifest.coverage == .complete || manifest.coverage == .ledgerWithSomeOriginals,
+              let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
         let map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
         let db = try Database(url: targetFolder.appendingPathComponent(dbEntry.relativePath), key: ledgerKey)
         for (fileID, rel) in map.originals {

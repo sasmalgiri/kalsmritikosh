@@ -40,7 +40,9 @@ struct CompleteBackupTests {
         let manifest = try BackupService().createCompleteBackup(
             databaseSnapshot: snapshot, originals: [(letterID, letter), (memoID, memo)], notIncluded: ["/Volumes/Gone/scan.pdf"],
             destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
-        #expect(manifest.coverage == .complete)
+        // One original could not be read, so the backup is NOT labelled complete (final brief §3.8).
+        #expect(manifest.coverage == .ledgerWithSomeOriginals)
+        #expect(try BackupService().inspect(backupFolder: backup).verdict.note.contains("Ledger with some originals"))
         #expect(manifest.entries.filter { $0.kind == .originalSource }.count == 2)
         #expect(try BackupService().inspect(backupFolder: backup).verdict.ok)
 
@@ -71,8 +73,9 @@ struct CompleteBackupTests {
         let snap = try scratch("psnap").appendingPathComponent("knowledge.sqlite")
         try await db.backupSnapshot(to: snap)
         let backup = try scratch("pbackup")
-        try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [(id, letter)], notIncluded: [],
+        let full = try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [(id, letter)], notIncluded: [],
                                                  destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+        #expect(full.coverage == .complete)   // nothing left out
         #expect(PendingRestore.schedule(backupFolder: backup) == nil)
         #expect(PendingRestore.isScheduled)
         // This Mac's current ledger.
