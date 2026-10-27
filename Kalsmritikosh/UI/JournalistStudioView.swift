@@ -234,7 +234,15 @@ public struct JournalistStudioView: View {
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     TextField("Sources supporting it", text: $c.sources).textFieldStyle(.roundedBorder).font(.caption)
-                    TextField("Independent corroboration — or its absence", text: $c.corroboration).textFieldStyle(.roundedBorder).font(.caption)
+                    TextField("Independent corroboration — or its absence (copies of one story are one source)", text: $c.corroboration).textFieldStyle(.roundedBorder).font(.caption)
+                    HStack(spacing: 8) {
+                        Toggle("Adverse to someone", isOn: Binding(get: { c.adverse ?? (c.status?.mustBeLabelledAlleged == true) }, set: { c.adverse = $0 }))
+                            .toggleStyle(.checkbox).font(.caption)
+                        TextField("Who it affects (comma-separated)", text: Binding(
+                            get: { (c.affectedSubjects ?? []).joined(separator: ", ") },
+                            set: { c.affectedSubjects = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }))
+                            .textFieldStyle(.roundedBorder).font(.caption)
+                    }
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
@@ -247,10 +255,8 @@ public struct JournalistStudioView: View {
         VStack(alignment: .leading, spacing: 12) {
             header("Right of reply",
                    "Anyone facing a claim short of verified gets the allegations put to them in full, with a real deadline — and their response (or silence) goes on the record.")
-            if m.wrappedValue.claims.contains(where: { $0.status?.mustBeLabelledAlleged == true }) && m.wrappedValue.replies.isEmpty {
-                Label("This story has claims short of verified — the memo won't complete without at least one reply entry.",
-                      systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange)
+            ForEach(m.wrappedValue.replyGaps, id: \.self) { gap in
+                Label(gap, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
             }
             ForEach(m.replies) { $r in
                 VStack(alignment: .leading, spacing: 6) {
@@ -263,10 +269,18 @@ public struct JournalistStudioView: View {
                     }
                     TextField("What was put to them (in full)", text: $r.claimSummary, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(1...2)
+                    Text("Claims put to them").font(.caption.weight(.medium))
+                    ForEach(Array(m.wrappedValue.claims.enumerated()), id: \.element.id) { i, c in
+                        Toggle("\(i + 1). \(c.text)", isOn: Binding(get: { (r.claimIDs ?? []).contains(c.id) },
+                                                                    set: { on in var v = r.claimIDs ?? []; v.removeAll { $0 == c.id }; if on { v.append(c.id) }; r.claimIDs = v }))
+                            .toggleStyle(.checkbox).font(.caption).lineLimit(1)
+                    }
                     HStack(spacing: 8) {
                         TextField("Deadline", text: $r.deadline).textFieldStyle(.roundedBorder).frame(width: 180)
-                        TextField("Response — or 'no response by deadline'", text: $r.response).textFieldStyle(.roundedBorder)
+                        TextField("Response — or 'no response by deadline' (silence is not an admission)", text: $r.response).textFieldStyle(.roundedBorder)
                     }
+                    TextField("How the story treats the reply", text: Binding(get: { r.editorialTreatment ?? "" }, set: { r.editorialTreatment = $0 }))
+                        .textFieldStyle(.roundedBorder).font(.caption)
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }

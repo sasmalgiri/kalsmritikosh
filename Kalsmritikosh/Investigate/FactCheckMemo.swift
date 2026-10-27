@@ -35,8 +35,14 @@ public struct JClaim: Codable, Identifiable, Hashable, Sendable {
     public var status: ClaimVerification?
     public var sources: String = ""          // who/what supports it
     public var corroboration: String = ""    // independent corroboration, or its absence
+    /// Final brief §3.6: whether the claim is adverse to someone, and to whom — each named subject
+    /// is owed a reply on THIS claim (optional so earlier memos open).
+    public var adverse: Bool?
+    public var affectedSubjects: [String]?
     public init(text: String = "") { self.text = text }
     public var isComplete: Bool { !text.trimmed.isEmpty && status != nil && !sources.trimmed.isEmpty }
+    /// The claim needs a reply: marked adverse, or (memos without the mark) short of verified.
+    var needsReply: Bool { adverse ?? (status?.mustBeLabelledAlleged == true) }
 }
 
 public struct ReplyEntry: Codable, Identifiable, Hashable, Sendable {
@@ -47,6 +53,10 @@ public struct ReplyEntry: Codable, Identifiable, Hashable, Sendable {
     public var method: String = ""           // email / phone / letter
     public var deadline: String = ""
     public var response: String = ""         // their answer, or "no response by deadline"
+    /// The claims this reply put to the subject (final brief §3.6).
+    public var claimIDs: [UUID]?
+    /// How the story treats the reply (quoted, summarised, not used and why).
+    public var editorialTreatment: String?
     public init() {}
     public var isComplete: Bool {
         !subject.trimmed.isEmpty && !claimSummary.trimmed.isEmpty && !contactedDate.trimmed.isEmpty
@@ -106,16 +116,36 @@ public struct FactCheckMemo: Codable, Identifiable, Hashable, Sendable {
         case .story:  return !premise.trimmed.isEmpty && !reporter.trimmed.isEmpty
         case .claims: return !claims.isEmpty && claims.allSatisfy(\.isComplete)
         case .reply:
-            // Every DISPUTED or serious unverified claim's subject deserves a reply
-            // entry; structurally we require at least one complete entry whenever
-            // any claim is short of verified.
-            let needsReply = claims.contains { $0.status?.mustBeLabelledAlleged == true }
-            return needsReply ? (!replies.isEmpty && replies.allSatisfy(\.isComplete)) : true
+            return replyGaps.isEmpty
         case .memo:   return allegedLabellingConfirmed && correctionsPathConfirmed
         }
     }
     public var completionFraction: Double {
         Double(Stage.allCases.filter { isComplete($0) }.count) / Double(Stage.allCases.count)
+    }
+
+    /// Every adverse claim and every subject it affects, without a complete reply entry that put
+    /// THAT claim to THAT subject ("claim 3 → Deputy Mayor's office"). A claim that names no
+    /// subject yet is itself a gap. One unrelated reply no longer satisfies the stage.
+    public var replyGaps: [String] {
+        var gaps: [String] = []
+        let linked = replies.contains { $0.claimIDs != nil }
+        for (i, c) in claims.enumerated() where c.needsReply {
+            if !linked && c.affectedSubjects == nil {
+                // A memo from before linking: the old rule (a complete reply exists) still applies.
+                if replies.isEmpty || !replies.allSatisfy(\.isComplete) { gaps.append("claim \(i + 1): no complete reply entry") }
+                continue
+            }
+            let subjects = (c.affectedSubjects ?? []).map { $0.trimmed }.filter { !$0.isEmpty }
+            if subjects.isEmpty { gaps.append("claim \(i + 1): no affected subject named"); continue }
+            for subject in subjects {
+                let ok = replies.contains { r in
+                    r.isComplete && (r.claimIDs ?? []).contains(c.id) && r.subject.trimmed.lowercased() == subject.lowercased()
+                }
+                if !ok { gaps.append("claim \(i + 1) → \(subject): no reply that put this claim to them") }
+            }
+        }
+        return gaps
     }
 
     /// Worked example — a procurement story with one verified and one disputed claim.
@@ -135,17 +165,24 @@ public struct FactCheckMemo: Codable, Identifiable, Hashable, Sendable {
         c3.status = .disputed
         c3.sources = "One former procurement officer (anonymous)"
         c3.corroboration = "Single source; no documentary support located; the deputy mayor denies it."
+        c2.adverse = true; c2.affectedSubjects = ["Winning firm (director)"]
+        c3.adverse = true; c3.affectedSubjects = ["Deputy Mayor's office"]
+        c1.adverse = true; c1.affectedSubjects = ["Deputy Mayor's office", "Winning firm (director)"]
         m.claims = [c1, c2, c3]
         var r1 = ReplyEntry()
         r1.subject = "Deputy Mayor's office"
         r1.claimSummary = "All three claims, in full, including the intervention allegation."
         r1.contactedDate = "2026-05-02"; r1.method = "Email + phone"; r1.deadline = "2026-05-06 17:00"
         r1.response = "Statement received 2026-05-05: denies intervention; notes the tender exemption was approved by committee."
+        r1.claimIDs = [c1.id, c3.id]
+        r1.editorialTreatment = "Denial quoted in paragraph 6, beside the intervention claim."
         var r2 = ReplyEntry()
         r2.subject = "Winning firm (director)"
         r2.claimSummary = "Ownership and the no-tender award."
         r2.contactedDate = "2026-05-02"; r2.method = "Email"; r2.deadline = "2026-05-06 17:00"
         r2.response = "No response by deadline."
+        r2.claimIDs = [c1.id, c2.id]
+        r2.editorialTreatment = "Story states the firm did not respond by the deadline."
         m.replies = [r1, r2]
         m.allegedLabellingConfirmed = true
         m.correctionsPathConfirmed = true
@@ -178,12 +215,15 @@ public enum FactCheckMemoRenderer {
         out += "## 3. Right-of-reply log\n\n"
         if m.replies.isEmpty { out += "_No reply entries — no claim short of verified._\n\n" }
         else {
-            out += "| Subject | What was put to them | Contacted | Method | Deadline | Response |\n|---|---|---|---|---|---|\n"
+            out += "| Subject | Claims put | What was put to them | Contacted | Method | Deadline | Response | Treatment in the story |\n|---|---|---|---|---|---|---|---|\n"
             for r in m.replies {
-                out += "| \(r.subject.orDashJ) | \(r.claimSummary.orDashJ) | \(r.contactedDate.orDashJ) | \(r.method.orDashJ) | \(r.deadline.orDashJ) | \(r.response.orDashJ) |\n"
+                let nums = (r.claimIDs ?? []).compactMap { id in m.claims.firstIndex { $0.id == id }.map { "\($0 + 1)" } }
+                out += "| \(r.subject.orDashJ) | \(nums.isEmpty ? "—" : nums.joined(separator: ", ")) | \(r.claimSummary.orDashJ) | \(r.contactedDate.orDashJ) | \(r.method.orDashJ) | \(r.deadline.orDashJ) | \(r.response.orDashJ) | \((r.editorialTreatment ?? "").orDashJ) |\n"
             }
-            out += "\n"
+            out += "\n_No response is not an admission._\n\n"
         }
+        let gaps = m.replyGaps
+        if !gaps.isEmpty { out += "**Right of reply not yet complete:** \(gaps.joined(separator: "; ")).\n\n" }
 
         // 4. Copy flags — what must run as ALLEGED.
         let mustFlag = m.claims.filter { $0.status?.mustBeLabelledAlleged == true }

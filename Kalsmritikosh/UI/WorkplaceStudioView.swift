@@ -296,19 +296,52 @@ public struct WorkplaceStudioView: View {
                     .onSubmit { addCredibility(w) }
                 Button { addCredibility(w) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newPerson.trimmed.isEmpty)
             }
+            if w.wrappedValue.credibility.isEmpty {
+                TextField("Or, why no credibility assessment applies (e.g. a documentary case with no witness accounts)",
+                          text: Binding(get: { w.wrappedValue.credibilityNotApplicable ?? "" }, set: { w.wrappedValue.credibilityNotApplicable = $0 }), axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(1...2).font(.caption)
+            }
+            Text("Assess from the evidence — plausibility, corroboration, consistency. Never from emotion, accent or expression.")
+                .font(.caption2).foregroundStyle(.secondary)
             next(.findings)
         }
     }
 
     private func findingsStage(_ w: Binding<WorkplaceInvestigation>) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            header("Findings — balance of probabilities",
-                   "Classify each allegation and give the reasoning as \u{201C}because X, supported by Y\u{201D}. \(FindingClassifications.disciplineNote)")
+            header("Findings",
+                   "Choose the standard of proof, then for each allegation: whether it was put to the respondent, the evidence for and against, how contrary evidence and mitigation were weighed, the finding and its reasoning (\u{201C}because X, supported by Y\u{201D}). \u{201C}Unsubstantiated\u{201D} is not a finding that the complaint was false.")
+            Picker("Standard of proof", selection: w.standardOfProof) {
+                Text("Not chosen").tag(Optional<WIStandard>.none)
+                ForEach(WIStandard.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+            }
+            .frame(maxWidth: 360)
             ForEach(w.allegations) { $a in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(a.question).font(.callout.weight(.semibold))
+                    Picker("Put to the respondent", selection: $a.response) {
+                        Text("Not recorded").tag(Optional<WIResponseState>.none)
+                        ForEach(WIResponseState.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                    }
+                    .frame(maxWidth: 380).font(.caption)
                     TextField("Respondent's response", text: $a.respondentResponse, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(1...2).font(.caption)
+                    if !w.wrappedValue.evidence.isEmpty {
+                        Text("Evidence — supports (+) / points the other way (−)").font(.caption.weight(.medium))
+                        ForEach(w.wrappedValue.evidence) { e in
+                            HStack(spacing: 8) {
+                                Toggle("+", isOn: Binding(get: { (a.supportingEvidence ?? []).contains(e.id) },
+                                                          set: { on in var v = a.supportingEvidence ?? []; v.removeAll { $0 == e.id }; if on { v.append(e.id) }; a.supportingEvidence = v }))
+                                    .toggleStyle(.checkbox)
+                                Toggle("−", isOn: Binding(get: { (a.contraryEvidence ?? []).contains(e.id) },
+                                                          set: { on in var v = a.contraryEvidence ?? []; v.removeAll { $0 == e.id }; if on { v.append(e.id) }; a.contraryEvidence = v }))
+                                    .toggleStyle(.checkbox)
+                                Text(e.descriptionText).font(.caption).lineLimit(1)
+                            }
+                        }
+                    }
+                    TextField("How contrary evidence and any mitigation were weighed", text: Binding(get: { a.contraryAndMitigation ?? "" }, set: { a.contraryAndMitigation = $0 }), axis: .vertical)
+                        .textFieldStyle(.roundedBorder).lineLimit(1...3).font(.caption)
                     Picker("Finding", selection: $a.finding) {
                         Text("Not yet classified").tag(Optional<FindingClassification>.none)
                         ForEach(FindingClassification.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
@@ -317,6 +350,9 @@ public struct WorkplaceStudioView: View {
                     if let f = a.finding { Text(f.detail).font(.caption2).foregroundStyle(.secondary) }
                     TextField("Because X, supported by Y…", text: $a.reasoning, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(2...4)
+                    ForEach(a.findingBlockers, id: \.self) { b in
+                        Label("Before approval: \(b)", systemImage: "exclamationmark.circle").font(.caption2).foregroundStyle(.orange)
+                    }
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }

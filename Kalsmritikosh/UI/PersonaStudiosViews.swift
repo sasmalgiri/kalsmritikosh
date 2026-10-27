@@ -46,30 +46,26 @@ public struct ResearcherStudioView: View {
                     StudioStageHeader("Protocol", "The question and criteria are fixed BEFORE screening — changing them mid-review is how bias creeps in.")
                     TextEditor(text: m.question).font(.body).frame(minHeight: 70)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                        .disabled(m.wrappedValue.protocolFrozenAt != nil)
+                    StudioField("Eligibility criteria (population, intervention, comparison, outcomes, designs)",
+                                Binding(get: { m.wrappedValue.eligibilityCriteria ?? "" }, set: { m.wrappedValue.eligibilityCriteria = $0 }))
                     StudioField("Reviewer", m.reviewer)
+                    if let frozen = m.wrappedValue.protocolFrozenAt {
+                        Label("Protocol fixed on \(frozen.formatted(date: .abbreviated, time: .shortened)).", systemImage: "lock.fill").font(.caption)
+                    } else {
+                        Button("Fix the protocol before screening") { m.wrappedValue.protocolFrozenAt = Date() }
+                            .disabled(m.wrappedValue.question.trimmed.isEmpty)
+                    }
                     studioNext("Screening (PRISMA)") { goTo(.screening) }
                 }
             case .screening:
-                VStack(alignment: .leading, spacing: 12) {
-                    StudioStageHeader("Screening (PRISMA)", "The four counts every published review reports — and each count can only shrink.")
-                    HStack(spacing: 12) {
-                        countField("Identified", m.identified)
-                        countField("Screened", m.screened)
-                        countField("Eligible", m.eligible)
-                        countField("Included", m.included)
-                    }
-                    if !(m.wrappedValue.identified >= m.wrappedValue.screened && m.wrappedValue.screened >= m.wrappedValue.eligible && m.wrappedValue.eligible >= m.wrappedValue.included) {
-                        Label("Counts must not grow down the funnel: identified ≥ screened ≥ eligible ≥ included.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption).foregroundStyle(.orange)
-                    }
-                    StudioField("Exclusion reasons (with counts)", m.exclusionReasons)
-                    studioNext("Extraction") { goTo(.extraction) }
-                }
+                ResearchScreeningStage(m: m) { goTo(.extraction) }
             case .extraction:
                 VStack(alignment: .leading, spacing: 12) {
-                    StudioStageHeader("Extraction", "One row per included study — the stage completes when the row count equals the PRISMA 'included' count.")
-                    if m.wrappedValue.studies.count != m.wrappedValue.included {
-                        Label("\(m.wrappedValue.studies.count) row(s) extracted; PRISMA says \(m.wrappedValue.included) included.", systemImage: "exclamationmark.triangle.fill")
+                    StudioStageHeader("Extraction", "One row per included STUDY (two reports of one trial are one study), each with the source its values come from. A review that includes no study needs no rows.")
+                    let n = m.wrappedValue.includedStudyCount
+                    if m.wrappedValue.studies.count != n {
+                        Label("\(m.wrappedValue.studies.count) row(s) extracted; \(n) stud\(n == 1 ? "y" : "ies") included.", systemImage: "exclamationmark.triangle.fill")
                             .font(.caption).foregroundStyle(.orange)
                     }
                     ForEach(m.studies) { $s in
@@ -84,8 +80,9 @@ public struct ResearcherStudioView: View {
                             HStack(spacing: 8) {
                                 TextField("Outcome measured", text: $s.outcome).textFieldStyle(.roundedBorder)
                                 TextField("Result", text: $s.result).textFieldStyle(.roundedBorder)
-                                TextField("Source document", text: $s.source).textFieldStyle(.roundedBorder)
+                                TextField("Source document (required)", text: $s.source).textFieldStyle(.roundedBorder)
                             }
+                            if !s.isComplete { Text("Needs the study, its result and the source document.").font(.caption2).foregroundStyle(.orange) }
                         }
                         .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                     }
@@ -94,18 +91,81 @@ public struct ResearcherStudioView: View {
                 }
             case .synthesis:
                 VStack(alignment: .leading, spacing: 12) {
-                    StudioStageHeader("Synthesis & certainty", "State what the evidence shows — and how certain it is, on the GRADE scale. Conflicting findings are presented as conflicts.")
+                    StudioStageHeader("Synthesis & certainty", "State what the evidence shows; rate certainty for EACH outcome on the GRADE scale with the reason. Conflicting findings are presented as conflicts, and a review that found nothing says so.")
                     TextEditor(text: m.synthesis).font(.body).frame(minHeight: 90)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
-                    Picker("Certainty of evidence (GRADE)", selection: m.certainty) {
-                        Text("—").tag(Optional<GRADECertainty>.none)
-                        ForEach(GRADECertainty.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
-                    }.frame(maxWidth: 360)
+                    ForEach(Binding(get: { m.wrappedValue.outcomeCertainty ?? [] }, set: { m.wrappedValue.outcomeCertainty = $0 })) { $o in
+                        HStack(spacing: 8) {
+                            TextField("Outcome", text: $o.outcome).textFieldStyle(.roundedBorder).frame(width: 180)
+                            Picker("Certainty", selection: $o.certainty) {
+                                Text("—").tag(Optional<GRADECertainty>.none)
+                                ForEach(GRADECertainty.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                            }.frame(width: 170)
+                            TextField("Why (risk of bias, inconsistency, imprecision…)", text: $o.reason).textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    Button { m.wrappedValue.outcomeCertainty = (m.wrappedValue.outcomeCertainty ?? []) + [RSOutcomeCertainty()] } label: { Label("Rate an outcome", systemImage: "plus") }
+                    Text("PRISMA describes how a review is reported; it is not a quality score.").font(.caption2).foregroundStyle(.secondary)
                     StudioField("Limitations", m.limitations)
                     Text("Report preview").font(.callout.weight(.semibold))
                     StudioReportPreview(text: ResearchReviewRenderer.markdown(m.wrappedValue, generatedAt: Date()))
                 }
             }
+        }
+    }
+
+    private func countField(_ label: String, _ value: Binding<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            TextField(label, value: value, format: .number).textFieldStyle(.roundedBorder).frame(width: 110)
+        }
+    }
+}
+
+/// Searches run, every record found with its screening decision, and the PRISMA flow DERIVED from
+/// those decisions (final brief §3.6). A review saved before this keeps its typed counts, labelled.
+struct ResearchScreeningStage: View {
+    @Binding var m: ResearchReview
+    let next: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            StudioStageHeader("Screening (PRISMA)", "Record each search exactly as run, then every record found and your decision on it. The flow counts are worked out from the decisions.")
+            Text("Searches").font(.headline)
+            ForEach(Binding(get: { m.searches ?? [] }, set: { m.searches = $0 })) { $q in
+                HStack(spacing: 6) {
+                    TextField("Database", text: $q.database).textFieldStyle(.roundedBorder).frame(width: 120)
+                    TextField("Full search string", text: $q.searchString).textFieldStyle(.roundedBorder)
+                    TextField("yyyy-mm-dd", text: $q.date).textFieldStyle(.roundedBorder).frame(width: 110)
+                    TextField("Hits", text: $q.hits).textFieldStyle(.roundedBorder).frame(width: 70)
+                }
+            }
+            Button { m.searches = (m.searches ?? []) + [RSSearch()] } label: { Label("Add search", systemImage: "plus") }
+            Text("Records and decisions").font(.headline)
+            ForEach(Binding(get: { m.records ?? [] }, set: { m.records = $0 })) { $r in
+                HStack(spacing: 6) {
+                    TextField("Citation", text: $r.citation).textFieldStyle(.roundedBorder)
+                    TextField("Study (same for two reports of one study)", text: $r.studyKey).textFieldStyle(.roundedBorder).frame(width: 200)
+                    Picker("", selection: $r.decision) { ForEach(RSDecision.allCases, id: \.self) { Text($0.label).tag($0) } }.frame(width: 210)
+                    if r.decision == .excludedOnFullText || r.decision == .excludedOnTitle {
+                        TextField("Reason", text: $r.reason).textFieldStyle(.roundedBorder).frame(width: 160)
+                    }
+                }
+            }
+            Button { m.records = (m.records ?? []) + [RSRecord()] } label: { Label("Add record", systemImage: "plus") }
+            if m.totalsDerived {
+                let f = m.flow
+                Text("Identified \(f.identified) · duplicates \(f.duplicates) · screened \(f.screened) · full text assessed \(f.fullTextAssessed) · included \(f.includedReports) report(s) of \(f.includedStudies) study(ies)\(f.pending > 0 ? " · \(f.pending) not yet screened" : "")")
+                    .font(.callout.weight(.semibold))
+            } else {
+                Text("No records recorded yet. An older review's typed counts:").font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    countField("Identified", $m.identified); countField("Screened", $m.screened)
+                    countField("Eligible", $m.eligible); countField("Included", $m.included)
+                }
+                StudioField("Exclusion reasons (with counts)", $m.exclusionReasons)
+            }
+            studioNext("Extraction", next)
         }
     }
 
