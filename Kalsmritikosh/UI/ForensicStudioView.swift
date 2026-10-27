@@ -268,16 +268,65 @@ public struct ForensicStudioView: View {
                         TextField("Account", text: $t.account).textFieldStyle(.roundedBorder).frame(width: 120)
                     }
                     TextField("Source document (required)", text: $t.sourceDoc).textFieldStyle(.roundedBorder)
+                    HStack(spacing: 8) {
+                        Picker("Kind", selection: Binding(get: { f.wrappedValue.kind(of: t) }, set: { t.kind = $0 })) {
+                            ForEach(FAKind.allCases, id: \.self) { Text($0.label).tag($0) }
+                        }
+                        .frame(maxWidth: 280)
+                        TextField("Currency (e.g. INR)", text: Binding(get: { t.currency ?? "" }, set: { t.currency = $0 }))
+                            .textFieldStyle(.roundedBorder).frame(width: 110)
+                        TextField("Reference (UTR, cheque, wire)", text: Binding(get: { t.reference ?? "" }, set: { t.reference = $0 }))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    if f.wrappedValue.summary.duplicateCopies.contains(where: { $0.row == t.id }) {
+                        Toggle("Looks like the same transaction as another row (counted once). This is a separate payment", isOn: Binding(get: { t.confirmedDistinct ?? false }, set: { t.confirmedDistinct = $0 }))
+                            .font(.caption)
+                    }
                     if !t.isComplete {
                         Label("Needs date, description, amount, and a source document.", systemImage: "exclamationmark.circle")
+                            .font(.caption2).foregroundStyle(.orange)
+                    } else if f.wrappedValue.kind(of: t) == .unclassified {
+                        Label("An amount the case mentions — say what it is. Until then it is not in the totals.", systemImage: "questionmark.circle")
                             .font(.caption2).foregroundStyle(.orange)
                     }
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
-            Button { f.wrappedValue.schedule.append(FATransaction()) } label: { Label("Add transaction", systemImage: "plus") }
-            Text("Schedule total: $\(String(format: "%.2f", f.wrappedValue.scheduleTotal))")
-                .font(.callout.weight(.semibold))
+            Button { var t = FATransaction(); t.kind = .payment; f.wrappedValue.schedule.append(t) } label: { Label("Add transaction", systemImage: "plus") }
+            let summary = f.wrappedValue.summary
+            if summary.byCurrency.isEmpty {
+                Text("No classified movements yet — the schedule has no total.").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(summary.byCurrency.keys.sorted(), id: \.self) { cur in
+                if let t = summary.byCurrency[cur] {
+                    Text("\(cur.isEmpty ? "Currency not stated" : cur): gross \(FAMoney.format(t.gross)) · returned \(FAMoney.format(t.returned)) · net \(FAMoney.format(t.net))")
+                        .font(.callout.weight(.semibold))
+                }
+            }
+            if !summary.unclassified.isEmpty || !summary.notMovements.isEmpty || !summary.duplicateCopies.isEmpty {
+                Text("Not in the totals: \(summary.unclassified.count) unclassified, \(summary.notMovements.count) not a movement, \(summary.duplicateCopies.count) duplicate copy(ies).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let note = f.wrappedValue.prefillNote { Text(note).font(.caption).foregroundStyle(.orange) }
+            Divider()
+            Text("Reconciliation — each account's statement balances").font(.headline)
+            ForEach(Binding(get: { f.wrappedValue.reconciliations ?? [] }, set: { f.wrappedValue.reconciliations = $0 })) { $r in
+                HStack(spacing: 6) {
+                    TextField("Account", text: $r.account).textFieldStyle(.roundedBorder).frame(width: 110)
+                    TextField("From yyyy-mm-dd", text: $r.periodStart).textFieldStyle(.roundedBorder).frame(width: 120)
+                    TextField("To yyyy-mm-dd", text: $r.periodEnd).textFieldStyle(.roundedBorder).frame(width: 120)
+                    TextField("Opening", text: $r.opening).textFieldStyle(.roundedBorder).frame(width: 100)
+                    TextField("Closing", text: $r.closing).textFieldStyle(.roundedBorder).frame(width: 100)
+                    TextField("Statement", text: $r.sourceDoc).textFieldStyle(.roundedBorder)
+                    if let res = f.wrappedValue.reconcile().first(where: { $0.id == r.id }), let d = res.difference {
+                        Text(d == 0 ? "reconciles" : "\(FAMoney.format(d)) unexplained").font(.caption).foregroundStyle(d == 0 ? Color.green : Color.orange)
+                    }
+                }
+            }
+            Button { f.wrappedValue.reconciliations = (f.wrappedValue.reconciliations ?? []) + [FAReconciliation()] } label: { Label("Add statement period", systemImage: "plus") }
+            ForEach(f.wrappedValue.missingPeriods, id: \.self) { gap in
+                Label("No statement for \(gap)", systemImage: "calendar.badge.exclamationmark").font(.caption).foregroundStyle(.orange)
+            }
             next(.opinion)
         }
     }
