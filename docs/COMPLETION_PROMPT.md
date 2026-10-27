@@ -125,11 +125,20 @@ Close each, add a unit test with the real failing text, rerun the affected set, 
 
 ## 5. Product completion items (beyond accuracy)
 
-1. **Online mode for real users**: Settings flow to add a key or subscribe; the consent screen states
-   exactly what is sent (the question and field/form names, never documents); masking on; daily
-   limit; the Claude model for understanding is Haiku (small, cheap), the person's chosen model only
-   for accounts.
-2. **Subscription server** (separate small repo or `server/` folder, owner approval before
+1. **Online mode for real users**: Settings flow to add a key; the consent screen states exactly what
+   is sent; masking on; daily limit. **Corrected 2026-10-27 (final brief §3.5):** Online has two
+   separate capabilities with their own switches. *Understand any wording* sends only the question and
+   field/form names, never documents. *Let your cloud AI read the documents about a person* (module
+   `onlineRecordReading`, OFF by default) sends up to eight document excerpts (≤ 7,000 characters each)
+   naming that person — privileged material is filtered out before the send, every send is previewed
+   with its exact text, destination and size, needs consent, and is recorded; answers are shown only
+   when their quote verifies word for word. "Never documents" applies to the first capability only.
+2. **SUPERSEDED (2026-10-27): no subscription server.** The authoritative commercial decision is
+   SHIP_DECISIONS 2026-10-18: a free 14-day trial and one $79 non-consumable unlock, no subscription
+   (`Kalsmritikosh/App/Store/Purchase.swift`). Nothing below is built; a shared online service would
+   need a new owner decision with its own authentication, server-held key, purchase verification,
+   limits, billing, data policy and outage behaviour. Original proposal kept for the record:
+   **Subscription server** (separate small repo or `server/` folder, owner approval before
    deploying): App Store Server API receipt check, per-user daily limit, Anthropic call, no logging of
    question text, spend cap, health check. App side: a provider kind "Investigations Made Easy
    service" beside bring-your-own-key; StoreKit 2 subscription product; restore purchases.

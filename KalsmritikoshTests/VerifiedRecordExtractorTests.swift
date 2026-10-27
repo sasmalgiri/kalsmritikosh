@@ -32,6 +32,16 @@ struct VerifiedRecordExtractorTests {
         return VerifiedRecordExtractor.verify(p, parsed: parsed, sources: sources, docs: sources.map(\.text))
     }
 
+    @Test("Sending document text to the cloud is its own switch, off by default, and says what it sends")
+    func ownSwitch() {
+        let m = KnowledgeModule.onlineRecordReading
+        #expect(m.implemented && !m.defaultEnabled)
+        #expect(m.detail.contains("up to eight of the documents") && m.detail.contains("7,000 characters") && m.detail.contains("Privileged material is never sent"))
+        // The question interpreter's promise stays true for it: it sends no documents.
+        #expect(KnowledgeModule.questionInterpreter.detail.contains("never your documents"))
+        #expect(m != .questionInterpreter)
+    }
+
     @Test("A verbatim, person-specific, date-consistent proposal is shown")
     func accepts() throws {
         let when = try #require(try verify("When was Leon Eugene Smith sentenced?",

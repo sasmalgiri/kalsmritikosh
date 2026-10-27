@@ -2797,7 +2797,9 @@ public final class AppState {
             await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
             // Verified record extraction (Online, AI on): the person's documents go through the Online
             // provider — its preview, masking and consent — and only a verbatim-verified answer is shown.
-            await brain.setRecordExtractor(KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+            // Final brief §3.5: its own switch, off by default — it sends document excerpts, unlike the
+            // question interpreter, which sends only the question and field names.
+            await brain.setRecordExtractor(KnowledgeModuleFlags.isEnabled(.onlineRecordReading)
                 ? VerifiedRecordExtractor { [weak self] prompt in
                     guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
                         throw OnlineCloudProvider.OnlineError.notAvailable
