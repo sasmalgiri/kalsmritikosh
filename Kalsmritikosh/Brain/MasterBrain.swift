@@ -2122,15 +2122,26 @@ public actor MasterBrain {
             }
             // Online with AI on: the person's model reads the documents and proposes a quoted answer,
             // shown only if it verifies against them (VerifiedRecordExtractor); otherwise the rules answer.
-            // Final brief §3.5: what goes to the cloud is re-filtered for that purpose — privileged
-            // material never, whatever the local scope permits; without the policy nothing is sent.
+            // Final brief §3.5: what goes to the cloud is re-checked for that purpose — privileged
+            // material never, whatever the local scope permits. Each document's own protection label
+            // decides (an unknown document is denied); with no label source wired, nothing is sent.
             var cloudSources: [ProceedingAnswerer.Source] = []
-            if interpreterModelsAllowed, recordExtractor != nil, VerifiedRecordExtractor.handles(parsed.ask), let policy = sensitivePolicy {
-                let cloudAccess = SensitiveAccessContext(scope: SensitiveScope(
+            if interpreterModelsAllowed, recordExtractor != nil, VerifiedRecordExtractor.handles(parsed.ask) {
+                let cloudScope = SensitiveScope(
                     workspaceID: access.scope.workspaceID, maximumSensitivity: access.scope.maximumSensitivity,
-                    permitsPrivilegedMaterial: false, purpose: .prompt))
-                let allowed = Set(await policy.filter(result: RetrievalResult(authorityObjectIDs: sources.map(\.objectID)), access: cloudAccess).result.authorityObjectIDs)
-                cloudSources = sources.filter { allowed.contains($0.objectID) }
+                    permitsPrivilegedMaterial: false, purpose: .prompt)
+                if let sensitiveScope {
+                    for src in sources {
+                        if case .resolved(let label)? = try? await sensitiveScope.effectiveLabel(for: SensitiveScopeTarget(kind: .knowledgeObject, id: src.objectID)),
+                           cloudScope.permits(label) {
+                            cloudSources.append(src)
+                        }
+                    }
+                } else if let policy = sensitivePolicy {
+                    let allowed = Set(await policy.filter(result: RetrievalResult(authorityObjectIDs: sources.map(\.objectID)),
+                                                          access: SensitiveAccessContext(scope: cloudScope)).result.authorityObjectIDs)
+                    cloudSources = sources.filter { allowed.contains($0.objectID) }
+                }
             }
             if interpreterModelsAllowed, let recordExtractor, VerifiedRecordExtractor.handles(parsed.ask), !cloudSources.isEmpty,
                let verified = await recordExtractor.answer(question: intent.rawQuestion, parsed: parsed, sources: cloudSources) {
