@@ -28,7 +28,7 @@ TRIAL = re.compile(r"\bjury (?:convicted|found|verdict|trial)\b|\b(?:convicted|f
 # "Steven Daniel Miller, 47, of Fairfield" — the defendant as releases introduce them.
 NAME = re.compile(r"\b([A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+(?: (?:Jr|Sr|II|III)\.?)?), (?:a\s)?(\d{2}),? (?:of|from) ([A-Z][A-Za-z .'\-]+?)[,.]")
 # A period after a capital ("U.S. District Court", "Judge D. Brock Hornby") does not end the sentence.
-SENTENCE = re.compile(r"sentenced\b(?:[^.]|(?<=[A-Z])\.){0,160}?\bto (?:serve )?(?:a total of )?(\d+|[a-z]+(?:-[a-z]+)?)[ -](months?|years?)\b(?! of (?:supervised release|probation))", re.I)
+SENTENCE = re.compile(r"sentenced\b(?:[^.]|(?<=[A-Z])\.){0,160}?\bto (?:serve )?(?:a total of )?(?:an? )?(\d+|[a-z]+(?:-[a-z]+)?)[ -](months?|years?)\b(?! of (?:supervised release|probation))", re.I)
 NUMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
         "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30}
 
@@ -119,10 +119,27 @@ PRIOR = re.compile(r"\b(?:previously (?:been )?convicted|prior (?:conviction|rec
 
 CHARGE_VERB = r"(?:indicted|charged|arrested|indictment (?:was )?returned|complaint (?:was )?filed|returned (?:an|a \w+) indictment)"
 
+def someone_else(name, sent):
+    """True when every mention of the surname in the sentence follows a different given name
+    ("Fredia Cowart" when the person is Stephanie W. Cowart)."""
+    parts = [p.rstrip(".,") for p in name.split()]
+    surname, given = parts[-1], {p.lower() for p in parts[:-1]}
+    hits = list(re.finditer(r"\b([A-Z][a-z'’-]+)\s+(?:[A-Z]\.\s+)?" + re.escape(surname) + r"\b", sent))
+    bare = len(re.findall(r"\b" + re.escape(surname) + r"\b", sent))
+    others = [h for h in hits if h.group(1).lower() not in given and h.group(1) not in ("Mr", "Ms", "Mrs", "Dr", "Judge", "Defendant")]
+    return bare > 0 and len(others) == bare
+
+def nearest_mention(text, name):
+    """The stretch from the word before the last mention of the surname to the end of `text`."""
+    surname = name.split()[-1].rstrip(".,")
+    hits = list(re.finditer(r"(?:\b[A-Z][a-z'’-]+\s+(?:[A-Z]\.\s+)?)?\b" + re.escape(surname) + r"\b", text))
+    return text[hits[-1].start():] if hits else text
+
 def own_sentences(name, body):
-    """The release's sentences that name the person (surname), split like the app splits them."""
+    """The release's sentences that name the person (surname), split like the app splits them —
+    not a relative's who shares the surname."""
     surname = name.split()[-1].rstrip(".,").lower()
-    return [x for x in re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", body) if surname in x.lower()]
+    return [x for x in re.split(r"(?<=[a-z0-9)”\"])\.\s+(?=[A-Z“\"])", body) if surname in x.lower() and not someone_else(name, x)]
 
 def sentence_terms(name, rels):
     """Every prison term the person's own sentencing sentences state, across all their releases
@@ -132,7 +149,10 @@ def sentence_terms(name, rels):
     for r in rels:
         for x in own_sentences(name, r["body"]):
             for m in SENTENCE.finditer(x):
-                if surname in x.lower()[:m.start() + 1]: out += sentence_forms(m.group(1), m.group(2))
+                # The person named nearest before the verb is the one sentenced ("…, Fredia Cowart,
+                # 28, …, was sentenced to one year probation" is her daughter-in-law's sentence).
+                if surname in x.lower()[:m.start() + 1] and not someone_else(name, nearest_mention(x[:m.start()], name)):
+                    out += sentence_forms(m.group(1), m.group(2))
     return sorted(set(out))
 
 def charge_days(name, rels):
