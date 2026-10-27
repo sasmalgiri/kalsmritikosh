@@ -7701,7 +7701,7 @@ public enum SchemaMigrations {
 
 
     // MARK: - v159 — the legacy studio store kept byte for byte; an outcome for every element
-    // (ship-readiness review R4). The old preference blob is stored exactly as it was, with its
+    // (ship-readiness review R4); approvals bound to the approved content (R3). The old preference blob is stored exactly as it was, with its
     // SHA-256, BEFORE anything is converted; each element of it gets one recorded outcome
     // (imported, identical duplicate, already migrated, quarantined), so nothing can be skipped.
     private static let v159: String = """
@@ -7723,6 +7723,11 @@ public enum SchemaMigrations {
         recorded_at   REAL NOT NULL,
         PRIMARY KEY (source_key, element_index)
     );
+    -- Review R3: an approval is bound to the exact content approved (revisions coalesce for five
+    -- minutes, so a revision number alone cannot say what was approved).
+    ALTER TABLE studio_records ADD COLUMN approved_payload_sha256 TEXT;
+    ALTER TABLE studio_records ADD COLUMN approved_by TEXT;
+    ALTER TABLE studio_records ADD COLUMN approved_at REAL;
     """
 
 }

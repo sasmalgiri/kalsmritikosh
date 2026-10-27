@@ -29,9 +29,17 @@ public nonisolated enum StudioRecordError: Error, Equatable, LocalizedError {
     case blankActor
     case retracted(UUID)
     case boundToAnotherCase(UUID)
+    case notFound(UUID)
+    case caseNotFound(UUID)
+    case caseInAnotherWorkspace(UUID)
+    case caseClosed(UUID)
 
     public var errorDescription: String? {
         switch self {
+        case .notFound: return "This draft is not in the ledger."
+        case .caseNotFound: return "The case this draft belongs to is not in the ledger."
+        case .caseInAnotherWorkspace: return "That case belongs to another workspace."
+        case .caseClosed: return "The case is closed, so its drafts can be read and exported but not changed. Reopen the case to edit."
         case .blankActor: return "A name is needed to record who made the change."
         case .retracted: return "This draft was removed; it is kept in the record but can no longer be edited."
         case .boundToAnotherCase: return "This draft belongs to another case. Start a new draft for this case instead."
@@ -155,6 +163,13 @@ public actor StudioRecordRepository {
         }
     }
 
+    /// True when the draft is approved AND its current content is exactly the content approved.
+    public func approvalIsCurrent(recordID: UUID) async throws -> Bool {
+        guard let r = try await database.query("SELECT review_state, payload_sha256, approved_payload_sha256 FROM studio_records WHERE id = ? LIMIT 1;",
+                                               [.uuid(recordID)]).first else { throw StudioRecordError.notFound(recordID) }
+        return r.string(0) == StudioReviewState.approved.rawValue && r.string(2) != nil && r.string(1) == r.string(2)
+    }
+
     // MARK: - Write
 
     /// Save a draft's current content. Creates the row on first save (revision 1); later saves update
@@ -168,7 +183,8 @@ public actor StudioRecordRepository {
         let json = String(decoding: payload, as: UTF8.self)
         let sha = Self.sha256(payload)
         return try await database.withSavepoint("studio_save_\(Self.token(id))") { db -> Int in
-            let existing = try db.query("SELECT revision, payload_sha256, retracted_at, case_id, workspace_id FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(id)]).first
+            let existing = try db.query("SELECT revision, payload_sha256, retracted_at, case_id, workspace_id, review_state, approved_payload_sha256 FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(id)]).first
+            if let caseID { try Self.checkCase(db, caseID, workspaceID: workspaceID, forEdit: true) }
             guard let existing else {
                 try db.exec("""
                     INSERT INTO studio_records (id, studio, persona, job_id, case_id, workspace_id, title, model_version, revision,
@@ -181,8 +197,16 @@ public actor StudioRecordRepository {
             }
             if existing.date(2) != nil { throw StudioRecordError.retracted(id) }
             if let bound = existing.uuid(3), let caseID, bound != caseID { throw StudioRecordError.boundToAnotherCase(bound) }
+            // An edit to a draft of a closed case is refused (its history and exports stay readable).
+            if let bound = existing.uuid(3), existing.string(1) != sha { try Self.checkCase(db, bound, workspaceID: nil, forEdit: true) }
             var rev = Int(existing.int(0) ?? 1)
             let changed = existing.string(1) != sha
+            // Approval covers the exact content approved: any change returns the draft to draft.
+            if changed, existing.string(5) == StudioReviewState.approved.rawValue, existing.string(6) != sha {
+                rev += 1
+                try Self.cut(db, id, rev, json, sha, "approval no longer applies: the content changed after it was approved", who, date)
+                try db.exec("UPDATE studio_records SET review_state = 'draft', approved_payload_sha256 = NULL WHERE id = ?;", [.uuid(id)])
+            }
             if changed || reason != nil {
                 let last = try db.query("SELECT saved_at, payload_sha256 FROM studio_record_revisions WHERE record_id = ? ORDER BY revision DESC LIMIT 1;", [.uuid(id)]).first
                 let lastAt = last?.date(0) ?? .distantPast
@@ -208,8 +232,11 @@ public actor StudioRecordRepository {
     public func bind(recordID: UUID, caseID: UUID, workspaceID: UUID?, actor: String, at date: Date = Date()) async throws {
         let who = try Self.clean(actor)
         try await database.withSavepoint("studio_bind_\(Self.token(recordID))") { db in
-            guard let row = try db.query("SELECT case_id, revision, payload_json, payload_sha256, retracted_at FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else { return }
+            guard let row = try db.query("SELECT case_id, revision, payload_json, payload_sha256, retracted_at FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else {
+                throw StudioRecordError.notFound(recordID)
+            }
             if row.date(4) != nil { throw StudioRecordError.retracted(recordID) }
+            try Self.checkCase(db, caseID, workspaceID: workspaceID, forEdit: true)
             if let bound = row.uuid(0) {
                 if bound != caseID { throw StudioRecordError.boundToAnotherCase(bound) }
                 return
@@ -233,12 +260,18 @@ public actor StudioRecordRepository {
     public func setReviewState(recordID: UUID, _ state: StudioReviewState, actor: String, at date: Date = Date()) async throws {
         let who = try Self.clean(actor)
         try await database.withSavepoint("studio_review_\(Self.token(recordID))") { db in
-            guard let row = try db.query("SELECT revision, payload_json, payload_sha256, retracted_at FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else { return }
+            guard let row = try db.query("SELECT revision, payload_json, payload_sha256, retracted_at, case_id FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else {
+                throw StudioRecordError.notFound(recordID)
+            }
             if row.date(3) != nil { throw StudioRecordError.retracted(recordID) }
+            if let bound = row.uuid(4) { try Self.checkCase(db, bound, workspaceID: nil, forEdit: true) }
             let rev = Int(row.int(0) ?? 1) + 1
-            try Self.cut(db, recordID, rev, row.string(1) ?? "{}", row.string(2) ?? "", "review state: \(state.rawValue)", who, date)
-            try db.exec("UPDATE studio_records SET review_state = ?, revision = ?, updated_by = ?, updated_at = MAX(updated_at, ?) WHERE id = ?;",
-                        [.text(state.rawValue), .integer(Int64(rev)), .text(who), .date(date), .uuid(recordID)])
+            let sha = row.string(2) ?? ""
+            try Self.cut(db, recordID, rev, row.string(1) ?? "{}", sha, "review state: \(state.rawValue)", who, date)
+            let approved = state == .approved
+            try db.exec("UPDATE studio_records SET review_state = ?, revision = ?, updated_by = ?, updated_at = MAX(updated_at, ?), approved_payload_sha256 = ?, approved_by = ?, approved_at = ? WHERE id = ?;",
+                        [.text(state.rawValue), .integer(Int64(rev)), .text(who), .date(date),
+                         approved ? .text(sha) : .null, approved ? .text(who) : .null, approved ? .date(date) : .null, .uuid(recordID)])
         }
     }
 
@@ -252,7 +285,7 @@ public actor StudioRecordRepository {
         let exportID = UUID()
         return try await database.withSavepoint("studio_export_\(Self.token(exportID))") { db -> StudioRecordExport in
             guard let row = try db.query("SELECT revision, payload_json, payload_sha256 FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else {
-                throw StudioRecordError.retracted(recordID)
+                throw StudioRecordError.notFound(recordID)
             }
             var rev = Int(row.int(0) ?? 1)
             let last = try db.query("SELECT payload_sha256 FROM studio_record_revisions WHERE record_id = ? ORDER BY revision DESC LIMIT 1;", [.uuid(recordID)]).first?.string(0)
@@ -402,6 +435,16 @@ public actor StudioRecordRepository {
                             modelVersion: Int(r.int(5) ?? 1), revision: Int(r.int(6) ?? 1), payload: Data(json.utf8), payloadSHA256: sha,
                             reviewState: StudioReviewState(rawValue: r.string(9) ?? "") ?? .draft, importedFromDevice: r.string(10) == "appStorageImport",
                             createdBy: createdBy, createdAt: createdAt, updatedBy: updatedBy, updatedAt: updatedAt)
+    }
+
+    /// Review R3: the parent case exists, belongs to `workspaceID` when one is given, and — for an
+    /// edit — is not closed. Checked inside the same savepoint as the write.
+    private static func checkCase(_ db: isolated Database, _ caseID: UUID, workspaceID: UUID?, forEdit: Bool) throws {
+        guard let row = try db.query("SELECT workspace_id, status FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first else {
+            throw StudioRecordError.caseNotFound(caseID)
+        }
+        if let workspaceID, let ws = row.uuid(0), ws != workspaceID { throw StudioRecordError.caseInAnotherWorkspace(caseID) }
+        if forEdit, row.string(1) == "closed" { throw StudioRecordError.caseClosed(caseID) }
     }
 
     private static func cut(_ db: isolated Database, _ id: UUID, _ rev: Int, _ json: String, _ sha: String, _ reason: String,

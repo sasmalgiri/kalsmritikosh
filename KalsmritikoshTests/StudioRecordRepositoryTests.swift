@@ -17,6 +17,15 @@ struct StudioRecordRepositoryTests {
 
     let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
+    /// A real workspace and case (review R3: tests bind to cases that exist).
+    func makeCase(_ db: Database, status: String = "open", workspace: UUID = UUID()) async throws -> (caseID: UUID, workspaceID: UUID) {
+        let c = UUID()
+        try await db.exec("INSERT OR IGNORE INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);", [.uuid(workspace), .text("W"), .real(1), .real(1)])
+        try await db.exec("INSERT INTO investigation_cases (id, workspace_id, title, status, revision, actor, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?);",
+                          [.uuid(c), .uuid(workspace), .text("C"), .text(status), .integer(1), .text("u"), .real(1), .real(1)])
+        return (c, workspace)
+    }
+
     func legacyElement(_ data: Data) -> StudioLegacyElement? {
         guard let m = try? JSONDecoder().decode(SIUReferral.self, from: data) else { return nil }
         return StudioLegacyElement(id: m.id, title: m.title, updatedAt: m.updatedAt)
@@ -92,7 +101,8 @@ struct StudioRecordRepositoryTests {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let repo = StudioRecordRepository(database: db)
         var m = SIUReferral(title: "Claim 1", now: t0)
-        let id = m.id, caseA = UUID(), caseB = UUID()
+        let id = m.id
+        let caseA = try await makeCase(db).caseID, caseB = try await makeCase(db).caseID
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
         try await repo.save(studio: "siu", id: id, title: m.title, payload: try enc.encode(m), actor: "Tester", at: t0)
         try await repo.bind(recordID: id, caseID: caseA, workspaceID: nil, actor: "Tester", at: t0)
@@ -172,6 +182,48 @@ struct StudioRecordRepositoryTests {
         await storage.flush()
         #expect(try await repo.records(studio: "siu").isEmpty)
         #expect(await StudioStorage.flushAll())
+    }
+
+    @Test("Review R3: the parent case must exist, be in the stated workspace and be open to edit; missing drafts fail; approval is bound to the approved content")
+    func parentCaseAndApproval() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = StudioRecordRepository(database: db)
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+        var m = SIUReferral(title: "Claim R3", now: t0)
+        try await repo.save(studio: "siu", id: m.id, title: m.title, payload: try enc.encode(m), actor: "Tester", at: t0)
+        // A case that does not exist; a case in another workspace.
+        await #expect(throws: StudioRecordError.caseNotFound(UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!)) {
+            try await repo.bind(recordID: m.id, caseID: UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!, workspaceID: nil, actor: "Tester")
+        }
+        let (open, ws) = try await makeCase(db)
+        await #expect(throws: StudioRecordError.caseInAnotherWorkspace(open)) {
+            try await repo.bind(recordID: m.id, caseID: open, workspaceID: UUID(), actor: "Tester")
+        }
+        try await repo.bind(recordID: m.id, caseID: open, workspaceID: ws, actor: "Tester")
+        // A missing draft fails explicitly.
+        let ghost = UUID()
+        await #expect(throws: StudioRecordError.notFound(ghost)) { try await repo.setReviewState(recordID: ghost, .approved, actor: "Tester") }
+        await #expect(throws: StudioRecordError.notFound(ghost)) { try await repo.recordExport(recordID: ghost, format: "md", text: "x", actor: "Tester") }
+        // Approval covers exactly the approved content: an edit within the revision interval makes it stale.
+        try await repo.setReviewState(recordID: m.id, .approved, actor: "Reviewer", at: t0.addingTimeInterval(5))
+        #expect(try await repo.approvalIsCurrent(recordID: m.id))
+        m.claimNumber = "EDITED"
+        try await repo.save(studio: "siu", id: m.id, title: m.title, payload: try enc.encode(m), actor: "Tester", at: t0.addingTimeInterval(10))
+        #expect(try await repo.approvalIsCurrent(recordID: m.id) == false)
+        #expect(try await repo.record(id: m.id)?.reviewState == .draft)
+        #expect(try await repo.revisions(recordID: m.id).contains { $0.reason.hasPrefix("approval no longer applies") })
+        // A closed case: its draft can no longer be edited, but it can still be exported.
+        try await db.exec("UPDATE investigation_cases SET status = 'closed' WHERE id = ?;", [.uuid(open)])
+        m.claimNumber = "AFTER CLOSE"
+        await #expect(throws: StudioRecordError.caseClosed(open)) {
+            try await repo.save(studio: "siu", id: m.id, title: m.title, payload: try enc.encode(m), actor: "Tester", at: t0.addingTimeInterval(20))
+        }
+        let ex = try await repo.recordExport(recordID: m.id, format: "md", text: "historical", actor: "Tester", at: t0.addingTimeInterval(30))
+        #expect(ex.snapshot == "historical")
+        // Binding a new draft to the closed case is refused too.
+        let n = SIUReferral(title: "New", now: t0)
+        try await repo.save(studio: "siu", id: n.id, title: n.title, payload: try enc.encode(n), actor: "Tester", at: t0)
+        await #expect(throws: StudioRecordError.caseClosed(open)) { try await repo.bind(recordID: n.id, caseID: open, workspaceID: ws, actor: "Tester") }
     }
 
     @Test("A name is required for every change")
