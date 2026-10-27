@@ -65,6 +65,30 @@ struct VerifiedRecordExtractorTests {
         let au = try #require(ProceedingAnswerer.parse("When was Atif Ullah sentenced?"))
         let sp = try #require(VerifiedRecordExtractor.parse(#"{"answer":"October 4, 2019","quote":"Sentencing is scheduled for October 4, 2019, before Judge Vilardo.","doc":1,"value":"2019-10-04"}"#))
         #expect(VerifiedRecordExtractor.verify(sp, parsed: au, sources: scheduled, docs: scheduled.map(\.text)) == nil)
+        // Final brief §3.3 counterexamples. A term with an invented tail: the quote supports "13 years
+        // and five months", not "… and a $50,000 fine".
+        #expect(try verify("What sentence did Leon Eugene Smith receive?",
+            #"{"answer":"x","quote":"BECKLEY, W.Va. – Leon Eugene Smith Jr., 43, of Beckley, was sentenced today to 13 years and five months in prison for distribution of fentanyl.","doc":1,"value":"13 years and five months in prison and a $50,000 fine"}"#) == nil)
+        func one(_ text: String, _ q: String, _ json: String) throws -> VerifiedAnswer? {
+            let src = [ProceedingAnswerer.Source(objectID: UUID(), text: "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nMonday, June 3, 2019\n\n" + text)]
+            let parsed = try #require(ProceedingAnswerer.parse(q))
+            return VerifiedRecordExtractor.verify(try #require(VerifiedRecordExtractor.parse(json)), parsed: parsed, sources: src, docs: src.map(\.text))
+        }
+        // Not yet sentenced: "Yes" refused.
+        #expect(try one("Atif Ullah, 30, pleaded guilty today and will be sentenced on October 4, 2019.", "Was Atif Ullah sentenced?",
+            #"{"answer":"Yes","quote":"Atif Ullah, 30, pleaded guilty today and will be sentenced on October 4, 2019.","doc":1}"#) == nil)
+        // A proposed term is not the sentence imposed.
+        #expect(try one("Prosecutors sought 87 months for Atif Ullah, 30, who was sentenced today by Judge Vilardo.", "What sentence did Atif Ullah receive?",
+            #"{"answer":"87 months","quote":"Prosecutors sought 87 months for Atif Ullah, 30, who was sentenced today by Judge Vilardo.","doc":1,"value":"87 months"}"#) == nil)
+        // A co-defendant's step.
+        #expect(try one("Ullah's co-defendant Omar Khan was sentenced today to 40 months in prison. Atif Ullah, 30, pleaded guilty in March.", "What sentence did Atif Ullah receive?",
+            #"{"answer":"40 months","quote":"Ullah's co-defendant Omar Khan was sentenced today to 40 months in prison.","doc":1,"value":"40 months in prison"}"#) == nil)
+        // A sentence the record later vacates is not settled.
+        #expect(try one("Atif Ullah, 30, was sentenced today to 60 months in prison. In 2021 the court of appeals vacated his sentence and he was resentenced to 48 months.", "What sentence did Atif Ullah receive?",
+            #"{"answer":"60 months","quote":"Atif Ullah, 30, was sentenced today to 60 months in prison.","doc":1,"value":"60 months in prison"}"#) == nil)
+        // A quote that never names the person, from a document that names several people.
+        #expect(try one("Atif Ullah, 30, and Omar Khan, 41, appeared in court. The defendant was sentenced today to 40 months in prison.", "What sentence did Atif Ullah receive?",
+            #"{"answer":"40 months","quote":"The defendant was sentenced today to 40 months in prison.","doc":1,"value":"40 months in prison"}"#) == nil)
         // A document number out of range, or nothing found.
         #expect(try verify("When was Leon Eugene Smith sentenced?", #"{"answer":"x","quote":"Smith pleaded guilty on May 1, 2024, to distribution of fentanyl.","doc":3,"value":"2024-05-01"}"#) == nil)
         #expect(try verify("When was Leon Eugene Smith sentenced?", #"{"answer":null}"#) == nil)

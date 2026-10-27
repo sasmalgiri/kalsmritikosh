@@ -202,6 +202,8 @@ public nonisolated enum ProceedingEventExtractor {
                   fullDate(in: line) == nil || line.count > 40 else { continue }
             // A lead paragraph ("PROVIDENCE, R.I. – …") is not a headline.
             if line.range(of: #"^[A-Z][A-Z .,'\-]{2,40}(?:,|\s[–—-])"#, options: .regularExpression) != nil { return nil }
+            // Nor is a body paragraph: a headline does not end with a full stop or hold sentence breaks.
+            if line.hasSuffix(".") || line.range(of: #"[a-z0-9)][.!?]\s+[A-Z]"#, options: .regularExpression) != nil { return nil }
             return line
         }
         return nil

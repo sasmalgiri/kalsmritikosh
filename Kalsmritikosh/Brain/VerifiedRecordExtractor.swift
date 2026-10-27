@@ -9,9 +9,13 @@
 //  documents and proposes the answer with a verbatim quote and the document it came from; the app
 //  then VERIFIES it deterministically and shows it only if every check holds:
 //    • the quote is in that document, verbatim (spacing, quotes and dashes normalised);
-//    • the document names the person in full, and the quote names them (or is that document's lead);
+//    • the document names the person in full, and the quote names them — or the rules' own attribution
+//      reads it as theirs (a descriptive lead); no co-defendant/relative word ties the step to another;
+//    • the step is taken: not scheduled, not negated ("was not charged"), not a proposed term
+//      ("prosecutors sought 87 months"); a sentence the record later amends or vacates is not settled;
 //    • a date is stated in the quote, or the quote says "today"/"yesterday" and the document's printed
-//      date gives the day; a sentence term appears in the quote; a charge quote states an offence;
+//      date gives the day; EVERY word of a stated sentence term is in the quote (final brief §3.3);
+//      a charge quote states an offence; "Yes" needs the step in the past tense;
 //    • "No" to "did X plead guilty" only with a verdict at trial in the quote.
 //  Anything unverified is dropped and the rules' answer stands. The model never adds a fact the
 //  documents do not state verbatim. No model names here (capability discipline): the caller supplies
@@ -98,7 +102,25 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
         //    so a quote without the surname is accepted only when the document's opening holds it).
         let surname = parsed.person.split(separator: " ").last.map { $0.lowercased() } ?? ""
         let namesPerson = q.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: .regularExpression) != nil
-        if !namesPerson, !normalized(String(doc.prefix(1_500))).contains(surname) { return nil }
+        // A quote that does not name the person is accepted only when the rules' own attribution reads
+        // it as theirs (a descriptive lead about the one defendant) — never because the surname
+        // appears somewhere near the top of the document.
+        if !namesPerson {
+            let theirs = ProceedingEventExtractor.findings(in: doc, person: parsed.person).contains { normalized($0.sentence).contains(q) || q.contains(normalized($0.sentence)) }
+            guard theirs else { return nil }
+        }
+        // "Smith's co-defendant Jones was sentenced …": a relationship word between the person and the
+        // step makes the step someone else's.
+        if namesPerson, q.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"(?:'s|’s)?\s+(?:\w+\s+){0,2}(?:co-?defendants?|co-?conspirators?|associates?|accomplices?|wife|husband|brother|sister|son|daughter|father|mother|partner)\b"#, options: .regularExpression) != nil {
+            return nil
+        }
+        // Not taken, negated or proposed: "is scheduled to be sentenced", "was not charged", "prosecutors
+        // sought 87 months", "faces up to 20 years".
+        if q.range(of: ProceedingEventExtractor.notYet, options: .regularExpression) != nil
+            || q.range(of: Self.negatedOrProposed, options: .regularExpression) != nil { return nil }
+        // A sentence later amended, vacated or reduced: the record does not settle "the" sentence here.
+        if Self.asksSentence(parsed.ask), docs.contains(where: { $0.range(of: Self.amended, options: [.regularExpression, .caseInsensitive]) != nil }),
+           q.range(of: Self.amended, options: .regularExpression) == nil { return nil }
         // A different given name before the surname is someone else ("Gary Lomax" for James Lomax).
         if let r = quote.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: String(parsed.person.split(separator: " ").last ?? "")) + #"\b"#, options: [.regularExpression, .caseInsensitive]),
            ProceedingEventExtractor.namesSomeoneElse(quote, at: NSRange(r, in: quote), asked: ProceedingEventExtractor.nameTokens(parsed.person)) {
@@ -130,9 +152,11 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
             let verb = stepPhrase(parsed.ask) == "pleaded guilty" ? "pleaded guilty" : "was \(stepPhrase(parsed.ask))"
             text = "\(parsed.person) \(verb) on \(ProceedingAnswerer.render(day) ?? value)."
         case .sentenceImposed:
-            guard let value = p.value, !value.isEmpty,
-                  normalized(quote).contains(normalized(value).components(separatedBy: " ").prefix(2).joined(separator: " ")),
-                  quote.range(of: #"(?i)\bsentenc"#, options: .regularExpression) != nil else { return nil }
+            // Every word of the stated term is in the quote, in order — not just its first two
+            // ("87 months" must not carry an invented "and a $50,000 fine").
+            guard let value = p.value?.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "."))), !value.isEmpty,
+                  q.contains(normalized(value)),
+                  quote.range(of: ProceedingEventExtractor.Step.sentenced.pattern, options: [.regularExpression, .caseInsensitive]) != nil else { return nil }
             text = "\(parsed.person) was sentenced to \(value)."
         case .chargedWith:
             guard quote.range(of: #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#, options: .regularExpression) != nil,
@@ -141,7 +165,8 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
         case .whether(let step):
             let yes = answer.lowercased().hasPrefix("yes"), no = answer.lowercased().hasPrefix("no")
             guard yes || no else { return nil }
-            if yes, quote.range(of: Self.stepWords(step), options: [.regularExpression, .caseInsensitive]) == nil { return nil }
+            // "Yes" needs the step TAKEN in the quote (the same past-tense reading the dates use).
+            if yes, quote.range(of: step.pattern, options: [.regularExpression, .caseInsensitive]) == nil { return nil }
             if no {
                 guard step == .pleaded, quote.range(of: ProceedingAnswerer.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil else { return nil }
             }
@@ -155,17 +180,17 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
                               confidence: Confidence(0.85))
     }
 
-    static func stepWords(_ step: ProceedingEventExtractor.Step) -> String {
-        switch step {
-        case .charged: return #"\b(?:charg|indict|complaint|information)"#
-        case .arrested: return #"\barrest"#
-        case .arraigned: return #"\barraign"#
-        case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b"#
-        case .convicted: return #"\b(?:convicted|found guilty|verdict)\b"#
-        case .acquitted: return #"\b(?:acquitted|not guilty)\b"#
-        case .sentenced: return #"\bsentenc"#
-        case .pardoned: return #"\bpardon"#
-        case .released: return #"\breleased\b"#
+    /// Negated or merely proposed steps and terms.
+    static let negatedOrProposed = #"(?i)\b(?:not|never)\s+(?:yet\s+|been\s+){0,2}(?:sentenced|charged|indicted|convicted|arrested|arraigned|pardoned|released)\b|\bpleaded not guilty\b|\b(?:sought|seeks|seeking|recommended|recommends|requested|requests|asked for|asking for|proposed)\b[^.]{0,40}\b(?:\d+|[a-z]+)\s+(?:months?|years?)\b"#
+
+    /// A sentence the record later changes.
+    static let amended = #"(?i)\bre-?sentenced\b|\bsentence (?:was|has been|is) (?:vacated|reduced|amended|modified|commuted|overturned)\b|\b(?:vacated|reduced|commuted) (?:his|her|their|the) sentence\b"#
+
+    static func asksSentence(_ ask: ProceedingAnswerer.Ask) -> Bool {
+        switch ask {
+        case .sentenceImposed: return true
+        case .when(let step): return step == .sentenced
+        default: return false
         }
     }
 
