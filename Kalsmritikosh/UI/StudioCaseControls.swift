@@ -66,29 +66,62 @@ struct StudioFillFromCaseMenu<M: CaseBackedStudio>: View {
 @MainActor @Observable
 final class StudioProvenanceGate {
     var fields: [String] = []
+    /// Field path → why its cited source did not resolve (final brief §3.2).
+    var reasons: [String: String] = [:]
     var isPresented = false
+    var checking = false
     private var pending: (() -> Void)?
     private var markAll: (() -> Void)?
+    /// Set by the screen: resolves a draft's evidenced fields against its own case (draft id, values,
+    /// provenance, privileged sources allowed). Unset, every evidenced field counts as unchecked.
+    var resolve: ((UUID, [String: String], StudioProvenance?, Bool) async -> [String: String])?
 
-    /// Run `action` now, or ask first when some filled fields have no source and no mark.
-    func run<M: CaseBackedStudio>(_ model: Binding<M>, _ action: @escaping () -> Void) {
-        let missing = StudioExportGate.unsupportedFields(model.wrappedValue.gateValues, provenance: model.wrappedValue.provenance)
-        guard !missing.isEmpty else { action(); return }
-        fields = missing
-        pending = action
-        markAll = {
-            var m = model.wrappedValue
-            var p = m.provenance
-            let marked = StudioExportGate.markUnsupportedAsInvestigatorEntries(m.gateValues, provenance: &p)
-            m.provenance = p
-            StudioAudit.record(&m.history, "Marked \(marked.count) field(s) as investigator entries")
-            model.wrappedValue = m
+    /// Run `action` once every filled field is either resolved to a source in the draft's case or
+    /// marked as the investigator's entry; otherwise ask first, with the reason for each field.
+    func run<M: CaseBackedStudio & StudioPersisted>(_ model: Binding<M>, _ action: @escaping () -> Void) {
+        let m = model.wrappedValue
+        let missing = StudioExportGate.unsupportedFields(m.gateValues, provenance: m.provenance)
+        checking = true
+        Task { @MainActor in
+            defer { checking = false }
+            let unresolved: [String: String]
+            if let resolve {
+                unresolved = await resolve(m.id, m.gateValues, m.provenance, M.needsPrivilegedSources)
+            } else {
+                unresolved = await StudioEvidenceResolver.unresolved(values: m.gateValues, provenance: m.provenance, context: nil)
+            }
+            guard !missing.isEmpty || !unresolved.isEmpty else { action(); return }
+            fields = (missing + unresolved.keys.sorted()).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+            reasons = unresolved
+            pending = action
+            let paths = fields
+            markAll = {
+                var m = model.wrappedValue
+                var p = m.provenance
+                StudioExportGate.markAsInvestigatorEntries(paths, provenance: &p)
+                m.provenance = p
+                StudioAudit.record(&m.history, "Marked \(paths.count) field(s) as investigator entries (\(unresolved.count) whose cited source did not resolve)")
+                model.wrappedValue = m
+            }
+            isPresented = true
         }
-        isPresented = true
     }
 
     func confirm() { markAll?(); pending?(); clear() }
-    func clear() { pending = nil; markAll = nil; fields = []; isPresented = false }
+    func clear() { pending = nil; markAll = nil; fields = []; reasons = [:]; isPresented = false }
+
+    /// The alert's explanation: unsupported fields, then each unresolved source with its reason.
+    var explanation: String {
+        let plain = fields.filter { reasons[$0] == nil }
+        var parts: [String] = []
+        if !plain.isEmpty { parts.append("\(plain.count) filled field(s) are neither taken from the case's documents nor marked as your own entry.") }
+        if !reasons.isEmpty {
+            let shown = reasons.keys.sorted().prefix(4).map { "\($0): \(reasons[$0] ?? "")" }
+            parts.append("\(reasons.count) field(s) cite a source that does not check out — \(shown.joined(separator: "; "))\(reasons.count > 4 ? " …" : "").")
+        }
+        parts.append("A report that leaves the app must say, for every line, which it is. Marking them as your entries prints them as yours, not as documentary evidence.")
+        return parts.joined(separator: " ")
+    }
 }
 
 extension View {
@@ -98,7 +131,7 @@ extension View {
             Button("Mark as my entries and continue") { gate.confirm() }
             Button("Cancel", role: .cancel) { gate.clear() }
         } message: {
-            Text("\(gate.fields.count) filled field(s) are neither taken from the case's documents nor marked as your own entry. A report that leaves the app must say, for every line, which it is.")
+            Text(gate.explanation)
         }
     }
 }

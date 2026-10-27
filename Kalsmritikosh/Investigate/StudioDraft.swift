@@ -87,6 +87,13 @@ public nonisolated enum StudioExportGate {
         return paths
     }
 
+    /// Mark the given fields as investigator entries (the investigator vouches for them).
+    public static func markAsInvestigatorEntries(_ paths: [String], provenance: inout StudioProvenance?) {
+        var p = provenance ?? [:]
+        for path in paths { p[path] = .investigator }
+        provenance = p
+    }
+
     /// The appendix printed with an exported studio report: how many lines rest on documents and
     /// how many on the investigator's word, and the sources cited.
     /// Key prefixes of the source digest a prefill records (named people/organisations, stated amounts).

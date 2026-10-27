@@ -85,6 +85,8 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     /// The report action waiting on the provenance gate, and the fields that stopped it.
     @State private var gatedAction: String?
     @State private var gatedFields: [String] = []
+    /// Field path → why its cited source did not resolve (final brief §3.2).
+    @State private var gatedReasons: [String: String] = [:]
 
     public init(config: StudioConfig<M>,
                 @ViewBuilder stageContent: @escaping (Binding<M>, M.Stage, @escaping (M.Stage) -> Void) -> StageContent) {
@@ -107,7 +109,9 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             Button("Mark as my entries and continue") { releaseGate() }
             Button("Cancel", role: .cancel) { gatedAction = nil }
         } message: {
-            Text("\(gatedFields.count) filled field(s) are neither taken from the case's documents nor marked as your own entry: \(gatedFields.prefix(6).joined(separator: ", "))\(gatedFields.count > 6 ? " …" : ""). A report that leaves the app must say, for every line, which it is.")
+            Text(gatedReasons.isEmpty
+                 ? "\(gatedFields.count) filled field(s) are neither taken from the case's documents nor marked as your own entry: \(gatedFields.prefix(6).joined(separator: ", "))\(gatedFields.count > 6 ? " …" : ""). A report that leaves the app must say, for every line, which it is."
+                 : "\(gatedFields.count) field(s) need a decision. Some cite a source that does not check out — \(gatedReasons.keys.sorted().prefix(4).map { "\($0): \(gatedReasons[$0] ?? "")" }.joined(separator: "; ")). Marking them as your entries prints them as yours, not as documentary evidence.")
         }
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
@@ -364,11 +368,22 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
 
     /// Run a report action, or hold it until the unsupported fields are resolved.
     private func gate(_ m: Binding<M>, _ action: String) {
-        if let cb = m.wrappedValue as? any CaseBackedStudio {
-            let missing = StudioExportGate.unsupportedFields(cb.gateValues, provenance: cb.provenance)
-            if !missing.isEmpty { gatedFields = missing; gatedAction = action; return }
+        guard let cb = m.wrappedValue as? any CaseBackedStudio else { perform(m, action); return }
+        let missing = StudioExportGate.unsupportedFields(cb.gateValues, provenance: cb.provenance)
+        let id = m.wrappedValue.id, values = cb.gateValues, provenance = cb.provenance
+        let privileged = type(of: cb).needsPrivilegedSources
+        Task { @MainActor in
+            // References resolve against the draft's own case (final brief §3.2).
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            let unresolved = await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+            guard missing.isEmpty && unresolved.isEmpty else {
+                gatedFields = (missing + unresolved.keys.sorted()).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+                gatedReasons = unresolved
+                gatedAction = action
+                return
+            }
+            perform(m, action)
         }
-        perform(m, action)
     }
 
     private func releaseGate() {
@@ -376,10 +391,11 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
         gatedAction = nil
         if var cb = m.wrappedValue as? any CaseBackedStudio {
             var p = cb.provenance
-            let marked = StudioExportGate.markUnsupportedAsInvestigatorEntries(cb.gateValues, provenance: &p)
+            let marked = gatedFields
+            StudioExportGate.markAsInvestigatorEntries(marked, provenance: &p)
             cb.provenance = p
             if var updated = cb as? M {
-                StudioAudit.record(&updated.history, "Marked \(marked.count) field(s) as investigator entries")
+                StudioAudit.record(&updated.history, "Marked \(marked.count) field(s) as investigator entries (\(gatedReasons.count) whose cited source did not resolve)")
                 m.wrappedValue = updated
             }
         }

@@ -52,6 +52,11 @@ public struct JournalistStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
+        // Final brief §3.2: references resolve against the draft's own case at preview and export.
+        gate.resolve = { [storage, appState] id, values, provenance, privileged in
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            return await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+        }
         Task { memos = await storage.load(FactCheckMemo.self, app: appState) }
     }
     private func persist() { storage.persist(memos, app: appState) }
