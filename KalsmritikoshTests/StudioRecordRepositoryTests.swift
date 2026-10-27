@@ -49,6 +49,44 @@ struct StudioRecordRepositoryTests {
         #expect(bad.importedIDs.isEmpty && bad.quarantined == 1)
     }
 
+    @Test("Review R4: the exact original store is kept; every element has an outcome; same-id conflicts are quarantined, never skipped")
+    func legacyCollisions() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = StudioRecordRepository(database: db)
+        let a = SIUReferral(title: "Claim A", now: t0)
+        var a2 = a; a2.claimNumber = "DIFFERENT"          // same id, different content
+        let b = SIUReferral(title: "Claim B", now: t0)
+        var bLedger = b; bLedger.claimNumber = "LEDGER"   // the ledger already holds b's id with other content
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+        try await repo.save(studio: "siu", id: b.id, title: b.title, payload: try enc.encode(bLedger), actor: "Tester", at: t0)
+        let c = SIUReferral(title: "Claim C", now: t0)
+        try await repo.save(studio: "siu", id: c.id, title: c.title, payload: try enc.encode(c), actor: "Tester", at: t0)
+        let list = [a, a, a2, b, c]                       // identical duplicate, conflicting duplicate, ledger conflict, already migrated
+        let body = String(decoding: try JSONEncoder().encode(list), as: UTF8.self)
+        let blob = "  \n" + body + "\n "                   // whitespace that a re-encoding would lose
+        let r = try await repo.importLegacy(studio: "siu", sourceKey: "k.col", blob: blob, actor: "Tester", at: t0, decode: legacyElement)
+        #expect(r.importedIDs == [a.id])
+        #expect(r.elementCount == 5 && r.everyElementAccounted)
+        let outcomes = try await repo.legacyOutcomes(sourceKey: "k.col").map(\.outcome)
+        #expect(outcomes == ["imported", "identicalDuplicate", "quarantined", "quarantined", "alreadyMigrated"])
+        // The conflicting versions are preserved, not lost.
+        let q = try await repo.quarantined(sourceKey: "k.col")
+        #expect(q.count == 2 && q[0].raw.contains("DIFFERENT") && q[1].error.contains("ledger holds a different record"))
+        // The ledger's own record was not overwritten.
+        let held = try JSONDecoder().decode(SIUReferral.self, from: try #require(try await repo.record(id: b.id)).payload)
+        #expect(held.claimNumber == "LEDGER")
+        // The exact original text, whitespace and all, with a matching digest.
+        let kept = try #require(try await repo.legacyBlob(sourceKey: "k.col"))
+        #expect(kept.raw == blob && kept.intact)
+        // The kept copy cannot be rewritten.
+        await #expect(throws: (any Error).self) { try await db.exec("UPDATE studio_legacy_blobs SET raw_blob = 'x';", []) }
+        // A store that is not valid JSON is kept exactly, untrimmed.
+        let broken = "  {not json  "
+        let rb = try await repo.importLegacy(studio: "siu", sourceKey: "k.broken", blob: broken, actor: "Tester", at: t0, decode: legacyElement)
+        #expect(rb.everyElementAccounted && rb.quarantined == 1)
+        #expect(try await repo.legacyBlob(sourceKey: "k.broken")?.raw == broken)
+    }
+
     @Test("A draft is bound to one case; another case is refused; revisions and exports are frozen; removal keeps it")
     func bindingRevisionsExports() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)

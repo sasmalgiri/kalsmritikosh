@@ -4,9 +4,10 @@
 //
 //  Final brief §3.1 — every studio's drafts live in the encrypted ledger (StudioRecordRepository),
 //  not in app preferences. One helper per studio screen:
-//    • first open: the old preference store is imported once, record by record; a record that will
-//      not decode is quarantined (kept byte for byte) and reported; only after every imported record
-//      reads back intact is the old preference copy cleared;
+//    • first open: the old preference store is kept byte for byte in the ledger, then imported once,
+//      record by record, every element with a recorded outcome (conflicts quarantined, never
+//      skipped); the preference copy is cleared only when every element is accounted for, the kept
+//      copy matches its digest and every imported record reads back intact;
 //    • edits save in order (one chain per screen), so a slower earlier write can never land after a
 //      later one; a failed write is shown, not swallowed;
 //    • removing a draft retracts it — the record and its history stay;
@@ -71,11 +72,12 @@ final class StudioStorage {
                 // Cleared only once every imported record reads back intact. Records that would not
                 // decode are in the ledger's quarantine byte for byte, so the preference copy is then
                 // no longer the only copy of anything.
-                if intact { UserDefaults.standard.removeObject(forKey: legacyKey) }
+                let blobKept = (try? await repo.legacyBlob(sourceKey: legacyKey))??.intact == true || blob.isEmpty
+                if intact, result.everyElementAccounted, blobKept { UserDefaults.standard.removeObject(forKey: legacyKey) }
                 var parts: [String] = []
                 if !result.importedIDs.isEmpty { parts.append("\(result.importedIDs.count) draft(s) moved from this Mac's settings into the encrypted case ledger — assign each to its case with Fill from case") }
                 if result.quarantined > 0 { parts.append("\(result.quarantined) saved draft(s) could not be read; they are kept unchanged in the ledger's quarantine so nothing is lost") }
-                if !intact { parts.append("the move could not be verified, so the old copy was kept") }
+                if !intact || !result.everyElementAccounted || !blobKept { parts.append("the move could not be verified, so the old copy was kept") }
                 if !parts.isEmpty { notice = parts.joined(separator: "; ") + "." }
             }
             let rows = try await repo.records(studio: studio)

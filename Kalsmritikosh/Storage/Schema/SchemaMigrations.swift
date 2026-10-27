@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 158
+    public static let latestVersion = 159
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -767,7 +767,8 @@ public enum SchemaMigrations {
         (155, v155),
         (156, v156),
         (157, v157),
-        (158, v158)
+        (158, v158),
+        (159, v159)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7695,6 +7696,32 @@ public enum SchemaMigrations {
         raw_json      TEXT NOT NULL,
         error         TEXT NOT NULL,
         captured_at   REAL NOT NULL
+    );
+    """
+
+
+    // MARK: - v159 — the legacy studio store kept byte for byte; an outcome for every element
+    // (ship-readiness review R4). The old preference blob is stored exactly as it was, with its
+    // SHA-256, BEFORE anything is converted; each element of it gets one recorded outcome
+    // (imported, identical duplicate, already migrated, quarantined), so nothing can be skipped.
+    private static let v159: String = """
+    CREATE TABLE IF NOT EXISTS studio_legacy_blobs (
+        source_key   TEXT PRIMARY KEY NOT NULL,
+        raw_blob     TEXT NOT NULL,
+        sha256       TEXT NOT NULL,
+        byte_count   INTEGER NOT NULL,
+        captured_at  REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
+    BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured'); END;
+    CREATE TABLE IF NOT EXISTS studio_legacy_outcomes (
+        source_key    TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        record_id     TEXT,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('imported','identicalDuplicate','alreadyMigrated','quarantined')),
+        detail        TEXT NOT NULL,
+        recorded_at   REAL NOT NULL,
+        PRIMARY KEY (source_key, element_index)
     );
     """
 

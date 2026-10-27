@@ -14,10 +14,11 @@
 //    content changes and the last one is older than `revisionInterval`, or for an explicit reason
 //    (export, case binding, import). Every export is a frozen snapshot with its SHA-256.
 //  • Removing a draft retracts it (retracted_at/by); the row and its history stay.
-//  • The old preference store is imported ONCE per key, element by element: a record that will not
-//    decode is quarantined byte for byte with the reason, never dropped; the import marker is written
-//    in the same savepoint, so a failed import leaves no marker and is retried. The caller clears the
-//    preference copy only after `verifyImported` confirms every imported record reads back intact.
+//  • The old preference store is imported ONCE per key: its exact text is kept first (with its
+//    SHA-256), then every element gets one recorded outcome — imported, identical duplicate, already
+//    migrated, or quarantined (undecodable or a same-id conflict). The marker is written in the same
+//    savepoint, so a failed import leaves nothing and is retried. The caller clears the preference
+//    copy only when every element is accounted for and every imported record reads back intact.
 //
 
 import Foundation
@@ -91,6 +92,11 @@ public nonisolated struct StudioLegacyImportResult: Sendable, Equatable {
     public let importedIDs: [UUID]
     public let quarantined: Int
     public let alreadyImported: Bool
+    /// Elements found in the stored list, and outcomes recorded for them (review R4: equal, or the
+    /// preference copy must not be cleared).
+    public var elementCount: Int = 0
+    public var outcomeCount: Int = 0
+    public var everyElementAccounted: Bool { outcomeCount == elementCount }
 }
 
 public actor StudioRecordRepository {
@@ -139,7 +145,8 @@ public actor StudioRecordRepository {
         }
     }
 
-    /// Records the import could not decode, kept byte for byte.
+    /// Elements the import could not take (undecodable, or a same-id conflict), as parsed JSON with the
+    /// reason; the exact original text of the whole store is in `legacyBlob(sourceKey:)`.
     public func quarantined(sourceKey: String) async throws -> [(index: Int, raw: String, error: String)] {
         try await database.query("SELECT element_index, raw_json, error FROM studio_legacy_quarantine WHERE source_key = ? ORDER BY element_index;",
                                  [.text(sourceKey)]).compactMap { r in
@@ -266,48 +273,63 @@ public actor StudioRecordRepository {
         !(try await database.query("SELECT 1 FROM studio_legacy_imports WHERE source_key = ? LIMIT 1;", [.text(sourceKey)])).isEmpty
     }
 
-    /// Import the JSON array the old view stored under `sourceKey`, once. Each element is decoded on
-    /// its own by `decode`; one that fails is quarantined with its exact JSON and the reason. Records
-    /// already in the ledger (same id) are left as they are. Imported drafts are unbound: the person
-    /// assigns each to its case (`bind`) — the case is never guessed.
+    /// Import the JSON array the old view stored under `sourceKey`, once (review R4):
+    ///  1. the whole stored text is kept byte for byte with its SHA-256 before anything is converted;
+    ///  2. each element gets exactly one recorded outcome — imported; an identical duplicate of an
+    ///     earlier element; already migrated (the ledger holds the same id with the same content);
+    ///     or quarantined (undecodable, or the same id with DIFFERENT content, inside the list or
+    ///     against the ledger — a conflict is kept, never skipped);
+    ///  3. the import marker is written in the same savepoint, so a failed import leaves nothing and
+    ///     is retried. Imported drafts are unbound: the person assigns each to its case.
     public func importLegacy(studio: String, sourceKey: String, blob: String, actor: String, at date: Date = Date(),
                              decode: @Sendable (Data) -> StudioLegacyElement?) async throws -> StudioLegacyImportResult {
         let who = try Self.clean(actor)
-        // Split outside the savepoint (pure work); an unreadable store is one quarantined element.
-        var elements: [(index: Int, data: Data?, raw: String, error: String?)] = []
-        let trimmed = blob.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            if let array = (try? JSONSerialization.jsonObject(with: Data(trimmed.utf8))) as? [Any] {
+        // Parse outside the savepoint (pure work). The canonical form compares content; the raw blob
+        // (kept below) is the exact original.
+        var elements: [(index: Int, canonical: Data?, error: String?)] = []
+        if !blob.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let array = (try? JSONSerialization.jsonObject(with: Data(blob.utf8))) as? [Any] {
                 for (i, e) in array.enumerated() {
-                    if let d = try? JSONSerialization.data(withJSONObject: e, options: [.sortedKeys]) {
-                        elements.append((i, d, String(decoding: d, as: UTF8.self), nil))
-                    } else {
-                        elements.append((i, nil, String(describing: e), "not a JSON object"))
-                    }
+                    if let d = try? JSONSerialization.data(withJSONObject: e, options: [.sortedKeys]) { elements.append((i, d, nil)) }
+                    else { elements.append((i, nil, "not a JSON object")) }
                 }
             } else {
-                elements.append((-1, nil, trimmed, "the stored list is not valid JSON"))
+                elements.append((-1, nil, "the stored list is not valid JSON (the exact text is kept in studio_legacy_blobs)"))
             }
         }
-        var decoded: [(index: Int, element: StudioLegacyElement?, data: Data?, raw: String, error: String?)] = []
-        for e in elements {
-            if let d = e.data, let el = decode(d) { decoded.append((e.index, el, d, e.raw, nil)) }
-            else { decoded.append((e.index, nil, e.data, e.raw, e.error ?? "the record does not match this studio's format")) }
+        let decoded: [(index: Int, canonical: Data?, element: StudioLegacyElement?, error: String?)] = elements.map { e in
+            guard let d = e.canonical else { return (e.index, nil, nil, e.error) }
+            guard let el = decode(d) else { return (e.index, d, nil, "the record does not match this studio's format") }
+            return (e.index, d, el, nil)
         }
-        let rows = decoded
+        let rawSHA = Self.sha256(Data(blob.utf8))
         return try await database.withSavepoint("studio_import_\(Self.token(UUID()))") { db -> StudioLegacyImportResult in
             guard try db.query("SELECT 1 FROM studio_legacy_imports WHERE source_key = ? LIMIT 1;", [.text(sourceKey)]).isEmpty else {
                 return StudioLegacyImportResult(importedIDs: [], quarantined: 0, alreadyImported: true)
             }
-            var imported: [UUID] = [], quarantined = 0
-            for r in rows {
-                guard let el = r.element, let data = r.data else {
-                    try db.exec("INSERT INTO studio_legacy_quarantine (id, source_key, element_index, raw_json, error, captured_at) VALUES (?,?,?,?,?,?);",
-                                [.uuid(UUID()), .text(sourceKey), .integer(Int64(r.index)), .text(r.raw), .text(r.error ?? "unknown"), .date(date)])
-                    quarantined += 1
+            // 1. The exact original, first.
+            try db.exec("INSERT OR IGNORE INTO studio_legacy_blobs (source_key, raw_blob, sha256, byte_count, captured_at) VALUES (?,?,?,?,?);",
+                        [.text(sourceKey), .text(blob), .text(rawSHA), .integer(Int64(blob.utf8.count)), .date(date)])
+            var imported: [UUID] = [], quarantined = 0, outcomes = 0
+            var seen: [UUID: Data] = [:]
+            for r in decoded {
+                let raw = r.canonical.map { String(decoding: $0, as: UTF8.self) } ?? (r.index == -1 ? blob : "")
+                guard let el = r.element, let data = r.canonical else {
+                    try Self.recordQuarantine(db, sourceKey, r.index, raw, r.error ?? "unknown", date); quarantined += 1; try Self.recordOutcome(db, sourceKey, r.index, nil, "quarantined", r.error ?? "unknown", date); outcomes += 1
                     continue
                 }
-                guard try db.query("SELECT 1 FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(el.id)]).isEmpty else { continue }
+                if let earlier = seen[el.id] {
+                    if earlier == data { try Self.recordOutcome(db, sourceKey, r.index, el.id, "identicalDuplicate", "the same record appears earlier in the list", date); outcomes += 1 }
+                    else { try Self.recordQuarantine(db, sourceKey, r.index, raw, "conflict: the same id appears earlier in the list with different content", date); quarantined += 1; try Self.recordOutcome(db, sourceKey, r.index, el.id, "quarantined", "conflict: the same id appears earlier in the list with different content", date); outcomes += 1 }
+                    continue
+                }
+                seen[el.id] = data
+                if let existing = try db.query("SELECT studio, payload_json FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(el.id)]).first {
+                    let same = existing.string(0) == studio && Self.canonical(existing.string(1)) == data
+                    if same { try Self.recordOutcome(db, sourceKey, r.index, el.id, "alreadyMigrated", "the ledger already holds this record with the same content", date); outcomes += 1 }
+                    else { try Self.recordQuarantine(db, sourceKey, r.index, raw, "conflict: the ledger holds a different record under this id", date); quarantined += 1; try Self.recordOutcome(db, sourceKey, r.index, el.id, "quarantined", "conflict: the ledger holds a different record under this id", date); outcomes += 1 }
+                    continue
+                }
                 let json = String(decoding: data, as: UTF8.self), sha = Self.sha256(data)
                 try db.exec("""
                     INSERT INTO studio_records (id, studio, title, model_version, revision, payload_json, payload_sha256, review_state, origin,
@@ -316,11 +338,45 @@ public actor StudioRecordRepository {
                     """, [.uuid(el.id), .text(studio), .text(el.title), .text(json), .text(sha), .text(who), .date(date), .text(who), .date(el.updatedAt)])
                 try Self.cut(db, el.id, 1, json, sha, "imported from the on-device store", who, date)
                 imported.append(el.id)
+                try Self.recordOutcome(db, sourceKey, r.index, el.id, "imported", "imported", date); outcomes += 1
             }
             try db.exec("INSERT INTO studio_legacy_imports (source_key, imported_count, quarantined_count, imported_by, imported_at) VALUES (?,?,?,?,?);",
                         [.text(sourceKey), .integer(Int64(imported.count)), .integer(Int64(quarantined)), .text(who), .date(date)])
-            return StudioLegacyImportResult(importedIDs: imported, quarantined: quarantined, alreadyImported: false)
+            return StudioLegacyImportResult(importedIDs: imported, quarantined: quarantined, alreadyImported: false,
+                                            elementCount: decoded.count, outcomeCount: outcomes)
         }
+    }
+
+    /// The exact stored text of an old preference store, and whether it still matches its digest.
+    public func legacyBlob(sourceKey: String) async throws -> (raw: String, intact: Bool)? {
+        guard let r = try await database.query("SELECT raw_blob, sha256 FROM studio_legacy_blobs WHERE source_key = ? LIMIT 1;", [.text(sourceKey)]).first,
+              let raw = r.string(0), let sha = r.string(1) else { return nil }
+        return (raw, Self.sha256(Data(raw.utf8)) == sha)
+    }
+
+    /// Every element's recorded outcome, in order.
+    public func legacyOutcomes(sourceKey: String) async throws -> [(index: Int, id: UUID?, outcome: String, detail: String)] {
+        try await database.query("SELECT element_index, record_id, outcome, detail FROM studio_legacy_outcomes WHERE source_key = ? ORDER BY element_index;",
+                                 [.text(sourceKey)]).compactMap { r in
+            guard let i = r.int(0), let o = r.string(2), let d = r.string(3) else { return nil }
+            return (Int(i), r.uuid(1), o, d)
+        }
+    }
+
+    private static func recordOutcome(_ db: isolated Database, _ key: String, _ index: Int, _ id: UUID?, _ kind: String,
+                                      _ detail: String, _ date: Date) throws {
+        try db.exec("INSERT INTO studio_legacy_outcomes (source_key, element_index, record_id, outcome, detail, recorded_at) VALUES (?,?,?,?,?,?);",
+                    [.text(key), .integer(Int64(index)), id.map { .uuid($0) } ?? .null, .text(kind), .text(detail), .date(date)])
+    }
+
+    private static func recordQuarantine(_ db: isolated Database, _ key: String, _ index: Int, _ raw: String, _ why: String, _ date: Date) throws {
+        try db.exec("INSERT INTO studio_legacy_quarantine (id, source_key, element_index, raw_json, error, captured_at) VALUES (?,?,?,?,?,?);",
+                    [.uuid(UUID()), .text(key), .integer(Int64(index)), .text(raw), .text(why), .date(date)])
+    }
+
+    static func canonical(_ json: String?) -> Data? {
+        guard let json, let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])
     }
 
     /// True when every id reads back from the ledger with a payload that decodes (`check`). The caller
