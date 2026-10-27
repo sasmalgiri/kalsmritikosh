@@ -158,7 +158,7 @@ public nonisolated enum ProceedingAnswerer {
 
     /// A prior record in a sentence, not the offence charged ("possession of ammunition by a
     /// convicted felon" and "a firearm for a person she knew to be a convicted felon" are offences).
-    static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
+    static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )(?<!as a )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
 
     /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
     /// `complete` is false when the documents searched were capped: a count is then a floor.
@@ -243,7 +243,7 @@ public nonisolated enum ProceedingAnswerer {
             // Canty was charged in the above crimes, detectives …").
             // An initial or "U.S." keeps the clause going ("pled guilty today before Chief U.S. District
             // Judge Daniel P. Jordan III to commercial driver's license fraud").
-            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#
             // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge;
             // "possession of a firearm by a convicted felon" IS the charge.
             let prior = Self.priorRecord

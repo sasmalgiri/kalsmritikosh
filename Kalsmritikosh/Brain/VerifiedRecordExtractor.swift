@@ -135,7 +135,7 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
                   quote.range(of: #"(?i)\bsentenc"#, options: .regularExpression) != nil else { return nil }
             text = "\(parsed.person) was sentenced to \(value)."
         case .chargedWith:
-            guard quote.range(of: #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#, options: .regularExpression) != nil,
+            guard quote.range(of: #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#, options: .regularExpression) != nil,
                   quote.range(of: ProceedingAnswerer.priorRecord, options: .regularExpression) == nil else { return nil }
             text = "The documents say:"
         case .whether(let step):

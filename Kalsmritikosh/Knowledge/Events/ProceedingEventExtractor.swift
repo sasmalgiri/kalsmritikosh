@@ -351,6 +351,12 @@ public nonisolated enum ProceedingEventExtractor {
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.isEmpty { if !current.isEmpty { paragraphs.append(current); current = "" }; continue }
+            // A dateline ("COLUMBUS, Ohio – …", "BECKLEY, W.Va. – …") opens a paragraph: HTML text has
+            // one element per line with no blank line, and a lower-case headline above it would
+            // otherwise run on into the lead.
+            if !current.isEmpty, line.range(of: #"^[A-Z][A-Z.'\- ]{2,30}(?:,\s*[A-Z][A-Za-z.]+(?:\s[A-Z][A-Za-z.]+)?)?\s*[–—-]\s"#, options: .regularExpression) != nil {
+                paragraphs.append(current); current = ""
+            }
             let open = line.last.map { !".!?:;,”\")".contains($0) } == true
             // A headline is Title Case ("Hedge Fund Manager Sentenced for Operating …"); a wrapped
             // paragraph line is mostly lower-case words.

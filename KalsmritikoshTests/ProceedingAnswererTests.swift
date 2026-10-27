@@ -91,6 +91,17 @@ struct ProceedingAnswererTests {
                   "What were the charges against Christi Machala?"] {
             #expect(ProceedingAnswerer.parse(n(q)) == ProceedingAnswerer.Parsed(person: "Christi Machala", ask: .chargedWith), "\(q)")
         }
+        // Lead-ins that are not part of the question.
+        #expect(ProceedingAnswerer.parse(n("For the file, what was the sentencing date for Christi Machala?")) == .init(person: "Christi Machala", ask: .when(.sentenced)))
+        for q in ["Do you know offhand how many press releases reference Christi Machala?", "Any idea how many press releases mention Christi Machala?",
+                  "I'm trying to get a count — how many press releases exist that are about Christi Machala?"] {
+            #expect(ProceedingAnswerer.parse(n(q)) == .init(person: "Christi Machala", ask: .documentCount), "\(q)")
+        }
+        // "Jr." inside the plea clause; "as a convicted felon" is the offence.
+        let rhodes = "U.S. Department of Justice\nFOR IMMEDIATE RELEASE\nMonday, March 4, 2019\n\nGulfport, Miss. – Eddie James Rhodes, 62, of Stone County, pled guilty today before U.S. District Judge Louis Guirola, Jr., to possession of a firearm in furtherance of a drug trafficking crime, announced U.S. Attorney Mike Hurst."
+        let rp = try #require(ProceedingAnswerer.parse("What was Eddie James Rhodes charged with?"))
+        #expect(try #require(ProceedingAnswerer.answer(rp, sources: [.init(objectID: UUID(), text: rhodes)])).body.contains("possession of a firearm in furtherance"))
+        #expect("possessing a firearm as a convicted felon".range(of: ProceedingAnswerer.priorRecord, options: .regularExpression) == nil)
         for q in ["I need to know when Christi Machala's sentencing took place.",
                   "I need to know when sentencing occurred for Christi Machala — do we have that on record?",
                   "I need to know when Christi Machala received her sentencing — do you have that date?",
@@ -286,6 +297,10 @@ struct ProceedingAnswererTests {
             Parks Sentenced To 27 Months For Wire Fraud
             Christopher R. Thyer, United States Attorney for the Eastern District of Arkansas, announced today that, Stephen K. Parks, 62, of Little Rock, Arkansas, was sentenced to 27 months imprisonment and ordered to pay $845,000 in restitution to the IRS; Parks pled guilty to a Federal Information charging him with wire fraud on May 27, 2015.
             """
+        // HTML text: one element per line, a lower-case headline straight above the dateline lead.
+        let bartels = "U.S. Department of Justice\nSouthern District of Ohio\nFOR IMMEDIATE RELEASE\nWednesday, December 21, 2022\nFormer Gallia County 911 dispatcher charged federally for 24 arson fires in Wayne National Forest\nCOLUMBUS, Ohio – A fire department administrator and former 911 dispatcher has been charged federally with crimes related to at least 24 arson fires since spring 2022 in Wayne National Forest.\nJames A. Bartels, 50, of Patriot, Ohio, was arrested yesterday and appeared in federal court in Columbus."
+        let bp = try #require(ProceedingAnswerer.parse("What exactly was James A. Bartels charged with?"))
+        #expect(try #require(ProceedingAnswerer.answer(bp, sources: [.init(objectID: UUID(), text: bartels)])).body.contains("crimes related to at least 24 arson fires"))
         let parksSteps = ProceedingEventExtractor.findings(in: parks, person: "Stephen K. Parks")
         #expect(parksSteps.first { $0.step == .sentenced }?.day?.month == 10)
         #expect(parksSteps.first { $0.step == .pleaded }?.day?.month == 5)
