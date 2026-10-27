@@ -43,7 +43,7 @@ def sentence_forms(n, unit):
         out |= {f"{y} years" if y != 1 else "1 year", f"{y}-year"}
         out |= {f"{w} years" if y != 1 else "one year" for w, v in NUMS.items() if v == y}
         # "a two year term of probation" — the unit as an adjective, no plural.
-        out |= {f"{w} year" for w, v in NUMS.items() if v == y} | {f"{y} year"}
+        out |= {f"{w} year" for w, v in NUMS.items() if v == y}   # not "2 year": it is inside "12 years"
     out |= {f"{w} months" for w, v in NUMS.items() if v == months}
     return sorted(out)
 
