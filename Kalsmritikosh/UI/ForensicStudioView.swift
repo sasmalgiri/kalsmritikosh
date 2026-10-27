@@ -327,9 +327,14 @@ public struct ForensicStudioView: View {
                     TextField("To yyyy-mm-dd", text: $r.periodEnd).textFieldStyle(.roundedBorder).frame(width: 120)
                     TextField("Opening", text: $r.opening).textFieldStyle(.roundedBorder).frame(width: 100)
                     TextField("Closing", text: $r.closing).textFieldStyle(.roundedBorder).frame(width: 100)
+                    TextField("Currency", text: $r.currency).textFieldStyle(.roundedBorder).frame(width: 70)
                     TextField("Statement", text: $r.sourceDoc).textFieldStyle(.roundedBorder)
-                    if let res = f.wrappedValue.reconcile().first(where: { $0.id == r.id }), let d = res.difference {
-                        Text(d == 0 ? "reconciles" : "\(FAMoney.format(d)) unexplained").font(.caption).foregroundStyle(d == 0 ? Color.green : Color.orange)
+                    if let res = f.wrappedValue.reconcile().first(where: { $0.id == r.id }) {
+                        if let d = res.difference {
+                            Text(d == 0 ? "reconciles" : "\(FAMoney.format(d)) unexplained").font(.caption).foregroundStyle(d == 0 ? Color.green : Color.orange)
+                        } else if !res.unresolved.isEmpty {
+                            Text("Can't reconcile: \(res.unresolved.joined(separator: "; "))").font(.caption).foregroundStyle(.orange)
+                        }
                     }
                 }
             }

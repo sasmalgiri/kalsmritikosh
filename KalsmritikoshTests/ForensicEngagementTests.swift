@@ -29,7 +29,7 @@ struct ForensicEngagementTests {
         f.methodID = "direct.specific"; f.methodJustification = ""
         #expect(f.isComplete(.method))
         // Schedule rows must carry a source document.
-        var t = FATransaction(); t.date = "2026-01-01"; t.descriptionText = "wire"; t.amount = "100"
+        var t = FATransaction(); t.date = "2026-01-01"; t.descriptionText = "wire"; t.amount = "100"; t.currency = "USD"
         f.schedule = [t]
         #expect(!f.isComplete(.schedule))
         t.sourceDoc = "stmt.pdf p.1"; f.schedule = [t]
@@ -97,8 +97,8 @@ struct ForensicEngagementTests {
     @Test("Mentions are candidates until classified; non-movements and other currencies stay out of a total")
     func candidatesAndCurrencies() {
         var f = ForensicEngagement(title: "x", now: t0)
-        f.schedule = [row("2026-01-05", "$500", .payment), row("2026-01-06", "€200", .fee),
-                      row("2026-01-07", "$9,999", .invoice), row("2026-01-08", "$750", .unclassified)]
+        f.schedule = [row("2026-01-05", "USD 500", .payment), row("2026-01-06", "€200", .fee),
+                      row("2026-01-07", "USD 9,999", .invoice), row("2026-01-08", "USD 750", .unclassified)]
         let s = f.summary
         #expect(s.byCurrency["USD"]?.gross == 500)
         #expect(s.byCurrency["EUR"]?.gross == 200)
@@ -110,7 +110,7 @@ struct ForensicEngagementTests {
         // Exact decimals: 0.1 + 0.2 is 0.3.
         var g = ForensicEngagement(title: "y", now: t0)
         g.schedule = [row("2026-01-01", "USD 0.10", .payment, ref: "a"), row("2026-01-02", "USD 0.20", .payment, ref: "b")]
-        #expect(g.summary.byCurrency["USD"]?.gross == Decimal(string: "0.3"))
+        #expect(g.summary.byCurrency["USD"]?.gross == Decimal(string: "0.30"))
         #expect(FAMoney.currency(of: "1,000 FOR services") == "")
         #expect(FAMoney.value(of: "(1,250.50)") == Decimal(string: "-1250.5"))
     }
@@ -143,12 +143,51 @@ struct ForensicEngagementTests {
         #expect(md.contains("reconciles") && md.contains("unexplained") && md.contains("Periods with no statement"))
     }
 
+    @Test("Review R6: ISO codes beat '$'; a bare '$' is not USD; decimal commas; magnitude words refused; reconciliation by exact account and currency")
+    func currencyAndReconciliationSafety() {
+        #expect(FAMoney.currency(of: "CAD $1,000") == "CAD")
+        #expect(FAMoney.currency(of: "C$1,000") == "CAD" && FAMoney.currency(of: "US$1,000") == "USD")
+        #expect(FAMoney.currency(of: "$1,000") == "" && FAMoney.currencyIsAmbiguous("$1,000"))
+        #expect(FAMoney.value(of: "1.234,56 EUR") == Decimal(string: "1234.56"))
+        #expect(FAMoney.value(of: "1,234.56") == Decimal(string: "1234.56"))
+        #expect(FAMoney.value(of: "12,5") == Decimal(string: "12.5"))
+        #expect(FAMoney.value(of: "12,34,567") == 1234567)               // Indian grouping
+        #expect(FAMoney.value(of: "₹1,000/-") == 1000)
+        #expect(FAMoney.value(of: "1.5 million") == nil && FAMoney.value(of: "2 lakh") == nil && FAMoney.value(of: "5k") == nil)
+        #expect(FAMoney.value(of: "1.234") == nil)                       // English 1.234 or European 1234: ambiguous
+        // INR and USD movements in one account: only the statement's currency counts; the other is flagged.
+        var f = ForensicEngagement(title: "x", now: t0)
+        f.schedule = [row("2026-01-05", "₹1,000", .payment, ref: "1"), row("2026-01-06", "USD 1,000", .payment, ref: "2")]
+        var jan = FAReconciliation(); jan.account = "#2210"; jan.periodStart = "2026-01-01"; jan.periodEnd = "2026-01-31"
+        jan.opening = "₹5,000"; jan.closing = "₹4,000"
+        f.reconciliations = [jan]
+        var r = f.reconcile()[0]
+        #expect(r.expectedClosing == 4000 && r.unresolved == ["1 movement(s) of this account are in another currency"] && r.difference == nil)
+        // A blank account on a movement, or on the statement, cannot be placed.
+        f.schedule = [row("2026-01-05", "₹1,000", .payment, account: "", ref: "1")]
+        r = f.reconcile()[0]
+        #expect(r.unresolved.contains("1 movement(s) in this period name no account"))
+        jan.account = ""; f.reconciliations = [jan]
+        #expect(f.reconcile()[0].unresolved.contains("the statement names no account"))
+        // An account is matched exactly, not as a substring of a payee ("#22" is not "#2210").
+        f.schedule = [row("2026-01-05", "₹1,000", .payment, account: "#2210", ref: "1")]
+        jan.account = "#22"; f.reconciliations = [jan]
+        #expect(f.reconcile()[0].expectedClosing == 5000)
+        // Two same-value payments with no reference are both counted, and flagged.
+        var g = ForensicEngagement(title: "y", now: t0)
+        g.schedule = [row("2026-01-05", "₹1,000", .payment), row("2026-01-05", "₹1,000", .payment)]
+        #expect(g.summary.byCurrency["INR"]?.gross == 2000 && g.summary.possibleDuplicates.count == 1 && g.summary.duplicateCopies.isEmpty)
+    }
+
     @Test("A schedule saved before classification still opens and totals its hand-entered rows")
     func legacyRows() throws {
         let legacy = ##"{"id":"6F1A2D3E-0000-4000-8000-000000000001","date":"2026-01-01","descriptionText":"wire","payer":"A","payee":"B","amount":"$100","account":"#1","sourceDoc":"s.pdf"}"##
         let t = try JSONDecoder().decode(FATransaction.self, from: Data(legacy.utf8))
         var f = ForensicEngagement(title: "x", now: t0); f.schedule = [t]
-        #expect(f.kind(of: t) == .payment && f.summary.byCurrency["USD"]?.gross == 100)
+        // "$100" does not say which dollar: counted under "currency not stated", and the schedule
+        // cannot complete until it is stated (review R6).
+        #expect(f.kind(of: t) == .payment && f.summary.byCurrency[""]?.gross == 100)
+        #expect(f.summary.currencyUnstated == [t.id] && !f.isComplete(.schedule))
     }
 
     @Test("A whole engagement survives a JSON round-trip")

@@ -48,25 +48,66 @@ public enum FAKind: String, Codable, CaseIterable, Sendable {
 
 public enum FAMoney {
 
-    /// The currency an amount is written in, from its symbol or code ("" when it states none).
+    static let isoCodes = "USD|EUR|GBP|INR|JPY|CNY|AUD|CAD|CHF|SGD|AED|HKD|NZD|ZAR|SEK|NOK|DKK|SAR|BRL|MXN"
+
+    /// The currency an amount is written in ("" when it states none, or states it ambiguously).
+    /// Review R6: an explicit ISO code wins ("CAD $1,000" is CAD); a prefixed dollar names its
+    /// currency (CA$, C$, A$, NZ$, HK$, S$, US$); ₹/Rs, € and £ are unambiguous; a bare "$" is NOT
+    /// assumed to be US dollars — the row stays "currency not stated" until the person says.
     public static func currency(of text: String) -> String {
-        if text.contains("₹") || text.range(of: #"\b(?:INR|Rs\.?|RS\.?)(?=\s?\d)"#, options: .regularExpression) != nil { return "INR" }
+        if let r = text.range(of: #"\b(?:"# + isoCodes + #")\b"#, options: .regularExpression) { return String(text[r]) }
+        let prefixed: [(String, String)] = [("US$", "USD"), ("CA$", "CAD"), ("C$", "CAD"), ("A$", "AUD"), ("AU$", "AUD"),
+                                            ("NZ$", "NZD"), ("HK$", "HKD"), ("S$", "SGD"), ("SG$", "SGD"), ("R$", "BRL"), ("MX$", "MXN")]
+        for (p, code) in prefixed where text.contains(p) { return code }
+        if text.contains("₹") || text.range(of: #"\b(?:Rs\.?|RS\.?)(?=\s?\d)"#, options: .regularExpression) != nil { return "INR" }
         if text.contains("€") { return "EUR" }
         if text.contains("£") { return "GBP" }
-        if text.contains("$") { return "USD" }
-        // An ISO code written in capitals next to the amount; never an arbitrary three-letter word.
-        if let r = text.range(of: #"\b(?:USD|EUR|GBP|INR|JPY|CNY|AUD|CAD|CHF|SGD|AED|HKD|NZD|ZAR|SEK|NOK|DKK|SAR|BRL|MXN)\b"#, options: .regularExpression) { return String(text[r]) }
+        if text.contains("¥") { return "" }      // JPY or CNY: ambiguous
         return ""
     }
 
-    /// The amount as an exact Decimal: symbols, codes, grouping separators and spaces removed;
-    /// "(1,000)" or "-1,000" is negative. Nil when the text holds no number.
+    /// True when the amount uses "$" (or "¥") without saying which currency.
+    public static func currencyIsAmbiguous(_ text: String) -> Bool {
+        currency(of: text).isEmpty && (text.contains("$") || text.contains("¥"))
+    }
+
+    /// The amount as an exact Decimal, or nil when the text is not ONE plain amount. Review R6: the
+    /// whole token must parse — currency marks and spaces aside, only digits, one decimal separator
+    /// and grouping separators; "1,234.56" and "1.234,56" are both read correctly; "1.5 million",
+    /// "2 lakh", "5k" or any other word make it unreadable instead of being silently dropped.
+    /// "(1,000)" or "-1,000" is negative.
     public static func value(of text: String) -> Decimal? {
-        var t = text.trimmingCharacters(in: .whitespaces)
-        let negative = t.hasPrefix("-") || t.hasPrefix("−") || (t.hasPrefix("(") && t.hasSuffix(")"))
-        t = t.replacingOccurrences(of: #"(?i)\brs\."#, with: "", options: .regularExpression)
-        t = t.replacingOccurrences(of: #"[^0-9.]"#, with: "", options: .regularExpression)
-        guard !t.isEmpty, t.filter({ $0 == "." }).count <= 1, let d = Decimal(string: t, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        t = t.replacingOccurrences(of: #"\b(?:"# + isoCodes + #")\b"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?:US|CA|C|A|AU|NZ|HK|S|SG|R|MX)\$"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?i)\brs\.?"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"[₹$€£¥\s\x{00A0}]"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: "/-", with: "")          // "₹1,000/-"
+        var negative = false
+        if t.hasPrefix("(") && t.hasSuffix(")") { negative = true; t = String(t.dropFirst().dropLast()) }
+        if t.hasPrefix("-") || t.hasPrefix("−") { negative = true; t = String(t.dropFirst()) }
+        guard !t.isEmpty, t.range(of: #"^[0-9][0-9.,]*$"#, options: .regularExpression) != nil else { return nil }
+        let dots = t.filter { $0 == "." }.count, commas = t.filter { $0 == "," }.count
+        var plain: String
+        if dots > 0 && commas > 0 {
+            // The separator that comes last is the decimal one.
+            let lastDot = t.lastIndex(of: ".")!, lastComma = t.lastIndex(of: ",")!
+            plain = lastDot > lastComma ? t.replacingOccurrences(of: ",", with: "")
+                                        : t.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
+        } else if commas > 0 {
+            let tail = t.split(separator: ",", omittingEmptySubsequences: false).last ?? ""
+            // "1,000" / "12,34,567" group; "12,5" is a decimal comma.
+            plain = (commas == 1 && tail.count != 3 && tail.count <= 2) ? t.replacingOccurrences(of: ",", with: ".") : t.replacingOccurrences(of: ",", with: "")
+        } else if dots > 1 {
+            plain = t.replacingOccurrences(of: ".", with: "")    // "1.234.567"
+        } else {
+            // "1.234" is 1234 in European notation and 1.234 in English: ambiguous, so unreadable
+            // until the person writes it unambiguously. "0.125" and "12.50" are plain decimals.
+            if dots == 1, let tail = t.split(separator: ".").last, tail.count == 3, !t.hasPrefix("0.") { return nil }
+            plain = t
+        }
+        guard plain.filter({ $0 == "." }).count <= 1, plain.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
+              let d = Decimal(string: plain, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
         return negative ? -d : d
     }
 
@@ -109,7 +150,12 @@ public struct FAScheduleSummary: Equatable, Sendable {
     public var unclassified: [UUID] = []
     public var notMovements: [UUID] = []
     public var duplicateCopies: [(row: UUID, of: UUID)] = []
+    /// Look alike but carry no transaction reference: COUNTED, flagged for the person to decide.
+    public var possibleDuplicates: [(row: UUID, of: UUID)] = []
     public var unreadable: [UUID] = []
+    /// Movements whose currency is not stated (or stated ambiguously): counted under "currency not
+    /// stated", and they block an approved schedule.
+    public var currencyUnstated: [UUID] = []
 
     public static func == (a: Self, b: Self) -> Bool {
         a.byCurrency == b.byCurrency && a.unclassified == b.unclassified && a.notMovements == b.notMovements
@@ -122,5 +168,8 @@ public struct FAReconciliationResult: Equatable, Sendable {
     public let id: UUID
     public let expectedClosing: Decimal?
     public let stated: Decimal?
-    public var difference: Decimal? { expectedClosing.flatMap { e in stated.map { $0 - e } } }
+    /// Why this reconciliation cannot be relied on (unknown account or currency, unreadable balance,
+    /// movements of the account that could not be placed). Empty: it can.
+    public var unresolved: [String] = []
+    public var difference: Decimal? { unresolved.isEmpty ? expectedClosing.flatMap { e in stated.map { $0 - e } } : nil }
 }

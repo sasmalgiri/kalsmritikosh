@@ -134,7 +134,12 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
             // An INDIRECT method must be justified (direct tracing not possible).
             return method?.family == "Direct" || !methodJustification.trimmed.isEmpty
         // Every row sourced AND classified: an amount mention is not yet a movement of money.
-        case .schedule:   return !schedule.isEmpty && schedule.allSatisfy { $0.isComplete && kind(of: $0) != .unclassified }
+        // Every row sourced AND classified, every movement's amount readable and currency stated, and
+        // every statement reconciliation resolvable (review R6).
+        case .schedule:
+            let s = summary
+            return !schedule.isEmpty && schedule.allSatisfy { $0.isComplete && kind(of: $0) != .unclassified }
+                && s.unreadable.isEmpty && s.currencyUnstated.isEmpty && reconcile().allSatisfy { $0.unresolved.isEmpty }
         case .opinion:    return !findings.isEmpty && !opinion.trimmed.isEmpty && certaintyDeclared
         }
     }
@@ -160,8 +165,14 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
             if !k.isMovement { s.notMovements.append(t.id); continue }
             guard let v = t.amountDecimal else { s.unreadable.append(t.id); continue }
             let key = t.identity(kind: k)
-            if t.confirmedDistinct != true, let first = seen[key] { s.duplicateCopies.append((t.id, first)); continue }
+            if t.confirmedDistinct != true, let first = seen[key] {
+                // Review R6: excluded as a copy only when both carry the same transaction reference;
+                // look-alikes without one are counted and flagged for the person to decide.
+                if !(t.reference ?? "").trimmed.isEmpty { s.duplicateCopies.append((t.id, first)); continue }
+                s.possibleDuplicates.append((t.id, first))
+            }
             seen[key] = seen[key] ?? t.id
+            if t.effectiveCurrency.isEmpty { s.currencyUnstated.append(t.id) }
             var tot = s.byCurrency[t.effectiveCurrency] ?? .init()
             let m = v.magnitude
             if k.isOutflow { tot.gross += m } else if k.isReturn { tot.returned += m } else if k == .receipt { tot.receipts += m }
@@ -170,26 +181,52 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
         return s
     }
 
-    /// Each reconciliation: opening + money in − money out for that account in its period, against
-    /// the stated closing balance. Duplicate copies, candidates and non-movements are excluded.
+    /// Each reconciliation: opening + money in − money out for THAT account, in THAT currency, in that
+    /// period, against the stated closing balance (review R6). Accounts match by their exact identifier
+    /// (not a substring of a payer or payee); only movements in the statement's currency count. Anything
+    /// that cannot be placed — no account on the statement, no currency, an unreadable balance, an
+    /// invalid period, a movement of the account with no currency or in another currency, a movement in
+    /// the period naming no account — is listed as unresolved, and the difference is then not given.
     public func reconcile() -> [FAReconciliationResult] {
-        let excluded = Set(summary.duplicateCopies.map(\.row))
+        let sum = summary
+        let excluded = Set(sum.duplicateCopies.map(\.row))
         return (reconciliations ?? []).map { r in
-            guard let opening = FAMoney.value(of: r.opening) else {
-                return FAReconciliationResult(id: r.id, expectedClosing: nil, stated: FAMoney.value(of: r.closing))
-            }
-            var bal = opening
-            let acct = r.account.trimmed.lowercased()
+            var unresolved: [String] = []
+            let acct = Self.accountKey(r.account)
+            let cur: String = {
+                let c = r.currency.trimmed.uppercased()
+                return c.isEmpty ? (FAMoney.currency(of: r.opening).isEmpty ? FAMoney.currency(of: r.closing) : FAMoney.currency(of: r.opening)) : c
+            }()
+            if acct.isEmpty { unresolved.append("the statement names no account") }
+            if cur.isEmpty { unresolved.append("the statement's currency is not stated") }
+            if r.periodStart.isEmpty || r.periodEnd.isEmpty || r.periodStart > r.periodEnd { unresolved.append("the period is not valid") }
+            let opening = FAMoney.value(of: r.opening), stated = FAMoney.value(of: r.closing)
+            if opening == nil { unresolved.append("the opening balance cannot be read") }
+            var bal = opening ?? 0
+            var noAccount = 0, noCurrency = 0, otherCurrency = 0
             for t in schedule where !excluded.contains(t.id) && t.date >= r.periodStart && t.date <= r.periodEnd {
                 let k = kind(of: t)
                 guard k.isMovement, let v = t.amountDecimal?.magnitude else { continue }
-                let from = t.account.trimmed.lowercased() == acct || t.payer.lowercased().contains(acct)
-                let to = t.payee.lowercased().contains(acct)
-                if k == .receipt || k.isReturn { if from || to { bal += v } }
-                else if from { bal -= v } else if to { bal += v }
+                let rowAcct = Self.accountKey(t.account)
+                if rowAcct.isEmpty { noAccount += 1; continue }
+                guard rowAcct == acct else { continue }
+                let rc = t.effectiveCurrency
+                if rc.isEmpty { noCurrency += 1; continue }
+                guard rc == cur else { otherCurrency += 1; continue }
+                if k == .receipt || k.isReturn { bal += v } else { bal -= v }
             }
-            return FAReconciliationResult(id: r.id, expectedClosing: bal, stated: FAMoney.value(of: r.closing))
+            if noAccount > 0 { unresolved.append("\(noAccount) movement(s) in this period name no account") }
+            if noCurrency > 0 { unresolved.append("\(noCurrency) movement(s) of this account state no currency") }
+            if otherCurrency > 0 { unresolved.append("\(otherCurrency) movement(s) of this account are in another currency") }
+            return FAReconciliationResult(id: r.id, expectedClosing: opening == nil ? nil : bal, stated: stated, unresolved: unresolved)
         }
+    }
+
+    /// "#2210", "2210", "Acct 2210" → "2210"-style key: lower-cased, spaces and a leading "#" removed.
+    static func accountKey(_ s: String) -> String {
+        var k = s.trimmed.lowercased().replacingOccurrences(of: " ", with: "")
+        while k.hasPrefix("#") { k.removeFirst() }
+        return k
     }
 
     /// Gaps between one account's reconciled periods ("2026-02-01 – 2026-02-28"), so a missing
@@ -263,14 +300,17 @@ public enum FAReportRenderer {
         if !s.unclassified.isEmpty { out += "\n_Not in the totals — amount mentions not yet classified as movements: \(s.unclassified.map(row).joined(separator: ", "))._\n" }
         if !s.notMovements.isEmpty { out += "_Not in the totals — invoices, claims, reserves, balances or quotations: \(s.notMovements.map(row).joined(separator: ", "))._\n" }
         if !s.duplicateCopies.isEmpty { out += "_Counted once — the same transaction in another document: \(s.duplicateCopies.map { "\(row($0.row)) (= \(row($0.of)))" }.joined(separator: ", "))._\n" }
-        if !s.unreadable.isEmpty { out += "_Not in the totals — amount unreadable: \(s.unreadable.map(row).joined(separator: ", "))._\n" }
+        if !s.unreadable.isEmpty { out += "_Not in the totals — amount unreadable (write it as one plain amount): \(s.unreadable.map(row).joined(separator: ", "))._\n" }
+        if !s.currencyUnstated.isEmpty { out += "_Currency not stated (a bare \u{201C}$\u{201D} is not assumed to be US dollars): \(s.currencyUnstated.map(row).joined(separator: ", ")) — totalled separately until stated._\n" }
+        if !s.possibleDuplicates.isEmpty { out += "_Counted, but they look like the same transaction and carry no reference to tell: \(s.possibleDuplicates.map { "\(row($0.row)) (≈ \(row($0.of)))" }.joined(separator: ", "))._\n" }
         out += "\nEvery amount above drills to its source document.\n"
         let results = f.reconcile()
         if !results.isEmpty {
             out += "\n### Reconciliation\n\n| Account | Period | Opening | Expected closing | Stated closing | Difference | Statement |\n|---|---|---|---|---|---|---|\n"
             for (r, res) in zip(f.reconciliations ?? [], results) {
                 let e = res.expectedClosing.map(FAMoney.format) ?? "—", st = res.stated.map(FAMoney.format) ?? "—"
-                let d = res.difference.map { $0 == 0 ? "reconciles" : "**\(FAMoney.format($0)) unexplained**" } ?? "—"
+                let d = !res.unresolved.isEmpty ? "not reconcilable: \(res.unresolved.joined(separator: "; "))"
+                    : (res.difference.map { $0 == 0 ? "reconciles" : "**\(FAMoney.format($0)) unexplained**" } ?? "—")
                 out += "| \(r.account.orDashFA) | \(r.periodStart.orDashFA) – \(r.periodEnd.orDashFA) | \(r.opening.orDashFA) | \(e) | \(st) | \(d) | \(r.sourceDoc.orDashFA) |\n"
             }
             out += "\n_An unexplained difference is a gap in the schedule or the statements — not, by itself, a loss or an irregularity._\n"
