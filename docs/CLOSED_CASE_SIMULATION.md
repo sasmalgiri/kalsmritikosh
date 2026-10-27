@@ -122,6 +122,7 @@ from them before the run; each later set skips all earlier ones):
 | 6 (seed 9191) | 9c9e18ae | 932 | 95.9 % / 2.0 % wrong | **98.5 % / 0.5 % wrong** |
 | 7 (seed 1212) | 2c43272c | 928 | 94.0 % / 3.8 % wrong | **96.8 % / 1.7 % wrong** |
 | Enron, 8 unused mailboxes (seed 5555) | f73c5a94 | 224 | 87.9 % / 9.8 % wrong | 92.4 % / 6.2 % wrong |
+| 8 (seed 3131) — candidate code after the final-brief §3 fixes | a68e64d5 (rules) · 2e7d54e6 (Claude) | 914 | 93.9 % / 3.4 % wrong | **96.8 % / 1.5 % wrong** |
 
 Honest reading: Claude mode on chronology is **96.8–98.5 %** on the last two clean sets (wrong
 0.5–1.7 %); rules-only 94–96 %. **Not yet 99 %.** The two clean sets differ by 1.7 points, so one set
