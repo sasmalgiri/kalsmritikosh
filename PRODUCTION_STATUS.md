@@ -1,9 +1,10 @@
 # PRODUCTION_STATUS
 
 ```
-Audit date:            2026-10-26 (Implementation Brief execution — ~/Downloads/Investigations_Made_Easy_Complete_Implementation_Brief.md)
-Current branch:        investigations-next (PR #169 open; pushed through ac671a71 — later commits local, see git log)
-Latest schema version: 157
+Audit date:            2026-10-27 — FINAL completion brief (~/Downloads/Investigations_Made_Easy_Final_Product_Instructions.md)
+                       replaces the implementation brief. Authoritative record: docs/FINAL_BRIEF_EXECUTION.md
+Current branch:        investigations-next (PR #169 open)
+Latest schema version: 158 (v158 studio_records — studio work in the encrypted ledger)
 Verification state:    every item below is UNIT VERIFIED at most (its suites pass locally on the stated
                        commit). Nothing here is integration-verified in the GUI, runtime-witnessed by the
                        owner, or release-verified. Exact-commit CI has not run on these commits yet.
