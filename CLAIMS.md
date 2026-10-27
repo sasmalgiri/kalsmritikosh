@@ -81,6 +81,7 @@ Proof kinds:
 | `privacy.exports-local` | `never uploaded` | ci:sensitive-export |
 | `privacy.online-opt-in` | `Online mode is off unless you turn it on` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
 | `privacy.consent-before-send` | `nothing is sent until you agree` | grep:OutboundConsentSheet:Kalsmritikosh |
+| `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState.swift |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
 | `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |
 | `privacy.purchase-by-apple` | `handled by Apple through the App Store` | grep:Transaction.currentEntitlements:Kalsmritikosh/App/Store/Purchase.swift |
