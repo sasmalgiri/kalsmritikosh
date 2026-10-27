@@ -1862,6 +1862,15 @@ public struct SettingsView: View {
         Task {
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Investigations Made Easy-Complete-Backup-\(stamp)")
+            // Review R5: every open studio's pending writes land in the ledger first; a change that
+            // failed to save would be missing from the backup, so the backup waits for it.
+            guard await StudioStorage.flushAll() else {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup not made: a studio change has not been saved yet. Choose Retry in that studio, then back up again."
+                }
+                return
+            }
             let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("kalsmritikosh-cbackup-\(UUID().uuidString)", isDirectory: true)
             defer { try? FileManager.default.removeItem(at: scratch) }
             var opened: [URL] = []
@@ -1912,6 +1921,15 @@ public struct SettingsView: View {
             let dbURL = DatabaseLocations.defaultDatabaseURL
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Investigations Made Easy-Backup-\(stamp)")
+            // Review R5: every open studio's pending writes land in the ledger first; a change that
+            // failed to save would be missing from the backup, so the backup waits for it.
+            guard await StudioStorage.flushAll() else {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup not made: a studio change has not been saved yet. Choose Retry in that studio, then back up again."
+                }
+                return
+            }
             // F18 — a CONSISTENT live snapshot via SQLite's Online Backup API, taken inside the
             // Database actor, instead of "checkpoint, then copy the files": nothing stopped writes
             // between those copies, so a busy ledger could be captured torn. The snapshot is one

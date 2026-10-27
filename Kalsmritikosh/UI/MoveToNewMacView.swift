@@ -153,6 +153,7 @@ struct MoveToNewMacView: View {
             do {
                 try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
                 let snapshot = scratch.appendingPathComponent(dbURL.lastPathComponent)
+                try await StudioStorage.requireAllSaved()   // review R5: no pending studio change left out
                 try await database.backupSnapshot(to: snapshot)
                 _ = try BackupService().createBackup(
                     databaseURL: snapshot, originalURLs: [], destination: dest,

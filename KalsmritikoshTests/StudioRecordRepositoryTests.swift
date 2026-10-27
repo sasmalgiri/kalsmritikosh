@@ -140,6 +140,40 @@ struct StudioRecordRepositoryTests {
         }
     }
 
+    @Test("Review R5: a failed save stays pending and is sent by Retry without another edit; a failed removal is retried; a backup flush refuses while unsaved")
+    @MainActor
+    func failedSaveRetried() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = StudioRecordRepository(database: db)
+        let storage = StudioStorage(studio: "siu", legacyKey: "test.r5.\(UUID().uuidString)")
+        storage.repositoryOverride = repo
+        struct Down: Error {}
+        storage.writeFault = { throw Down() }
+        let m = SIUReferral(title: "Claim R5", now: t0)
+        storage.persist([m], app: nil)
+        await storage.flush()
+        #expect(storage.hasUnsavedChanges && storage.pendingCount == 1)
+        #expect(try await repo.record(id: m.id) == nil)
+        #expect(await StudioStorage.flushAll() == false)          // a backup now would miss it
+        // The fault clears; Retry sends the same unchanged content.
+        storage.writeFault = nil
+        storage.retry(app: nil)
+        await storage.flush()
+        #expect(!storage.hasUnsavedChanges && storage.pendingCount == 0 && storage.problem == nil)
+        #expect(try await repo.record(id: m.id) != nil)
+        // A failed removal is not forgotten either.
+        storage.writeFault = { throw Down() }
+        storage.persist([SIUReferral](), app: nil)
+        await storage.flush()
+        #expect(storage.hasUnsavedChanges)
+        #expect(try await repo.records(studio: "siu").map(\.id) == [m.id])
+        storage.writeFault = nil
+        storage.retry(app: nil)
+        await storage.flush()
+        #expect(try await repo.records(studio: "siu").isEmpty)
+        #expect(await StudioStorage.flushAll())
+    }
+
     @Test("A name is required for every change")
     func actorRequired() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)

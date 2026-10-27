@@ -32,6 +32,11 @@ extension ForensicEngagement: StudioPersisted {}
 extension PrivilegeLog: StudioPersisted {}
 extension RootCauseAnalysis: StudioPersisted {}
 
+/// A copy of the ledger was refused because a studio change has not been saved (review R5).
+struct StudioUnsavedChangesError: LocalizedError {
+    var errorDescription: String? { "A studio change has not been saved yet. Choose Retry in that studio, then try again." }
+}
+
 @MainActor @Observable
 final class StudioStorage {
     let studio: String
@@ -43,15 +48,48 @@ final class StudioStorage {
     /// The case each draft belongs to (nil: not assigned yet).
     private(set) var caseOf: [UUID: UUID] = [:]
 
-    private var known: [UUID: Data] = [:]
+    /// What the ledger is KNOWN to hold (review R5): updated only after a write succeeds.
+    private var committed: [UUID: Data] = [:]
+    /// Writes sent and not yet confirmed, so identical edits are not queued twice.
+    private var inFlight: [UUID: Data] = [:]
+    /// The last full list handed to `persist`, so `retry()` can re-send what failed.
+    private var lastItems: [(UUID, String, Data)] = []
+    /// True while a write has failed and not yet been retried successfully.
+    private(set) var hasUnsavedChanges = false
     private var chain: Task<Void, Never>?
 
-    init(studio: String, legacyKey: String) { self.studio = studio; self.legacyKey = legacyKey }
+    /// Tests: the repository to use instead of the app's, and a fault to inject before each write.
+    var repositoryOverride: StudioRecordRepository?
+    var writeFault: (@Sendable () throws -> Void)?
+
+    /// Every open studio screen, so a backup can flush their pending writes first.
+    private static var live: [WeakStorage] = []
+    private struct WeakStorage { weak var storage: StudioStorage? }
+
+    init(studio: String, legacyKey: String) {
+        self.studio = studio; self.legacyKey = legacyKey
+        Self.live.removeAll { $0.storage == nil }
+        Self.live.append(WeakStorage(storage: self))
+    }
 
     private var actor: String { InvestigatorProfile.name }
 
-    private func repository(_ app: AppState) -> StudioRecordRepository? {
-        guard let db = app.database else {
+    /// Wait for every open studio's pending writes. False when any studio still has a change that
+    /// failed to save — a backup taken then would not hold it, so the caller must say so.
+    /// Throws when a studio change is still unsaved — for every path that copies the ledger.
+    static func requireAllSaved() async throws {
+        guard await flushAll() else { throw StudioUnsavedChangesError() }
+    }
+
+    static func flushAll() async -> Bool {
+        var allSaved = true
+        for w in live { if let s = w.storage { await s.flush(); if s.hasUnsavedChanges { allSaved = false } } }
+        return allSaved
+    }
+
+    private func repository(_ app: AppState?) -> StudioRecordRepository? {
+        if let repositoryOverride { return repositoryOverride }
+        guard let db = app?.database else {
             problem = "The ledger is not open yet, so studio work cannot be loaded or saved. Wait for the app to finish opening."
             return nil
         }
@@ -59,7 +97,7 @@ final class StudioStorage {
     }
 
     /// Import the old store once (if any), then read every live draft of this studio.
-    func load<M: StudioPersisted>(_ type: M.Type, app: AppState) async -> [M] {
+    func load<M: StudioPersisted>(_ type: M.Type, app: AppState?) async -> [M] {
         guard let repo = repository(app) else { return [] }
         do {
             if !(try await repo.hasImportedLegacy(sourceKey: legacyKey)) {
@@ -86,7 +124,7 @@ final class StudioStorage {
             for r in rows {
                 do {
                     out.append(try JSONDecoder().decode(M.self, from: r.payload))
-                    known[r.id] = r.payload
+                    committed[r.id] = Self.canonical(r.payload)
                     if let c = r.caseID { caseOf[r.id] = c }
                 } catch {
                     unreadable += 1
@@ -102,35 +140,72 @@ final class StudioStorage {
         }
     }
 
-    /// Save every draft whose content changed; retract the ones no longer in `items`.
-    func persist<M: StudioPersisted>(_ items: [M], app: AppState) {
-        guard let repo = repository(app) else { return }
+    /// Save every draft whose content differs from what the ledger is known to hold; retract the
+    /// ones no longer in `items`. The known state moves only when a write succeeds (review R5), so a
+    /// failed change stays pending and `retry()` (or the next edit) sends it again.
+    func persist<M: StudioPersisted>(_ items: [M], app: AppState?) {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        var changed: [(UUID, String, Date, Data)] = []
+        var list: [(UUID, String, Data)] = []
         for m in items {
-            do {
-                let data = try encoder.encode(m)
-                if known[m.id] != data { changed.append((m.id, m.title, m.updatedAt, data)); known[m.id] = data }
-            } catch {
-                problem = "A draft could not be saved: \(error.localizedDescription)"
+            do { list.append((m.id, m.title, try encoder.encode(m))) } catch {
+                problem = "A draft could not be prepared for saving: \(error.localizedDescription)"
             }
         }
-        let live = Set(items.map(\.id))
-        let removed = known.keys.filter { !live.contains($0) }
-        for id in removed { known[id] = nil; caseOf[id] = nil }
-        let studio = self.studio, who = actor, previous = chain
+        lastItems = list
+        send(list, app: app)
+    }
+
+    /// Send again whatever has not been confirmed saved.
+    func retry(app: AppState?) { send(lastItems, app: app) }
+
+    private func send(_ list: [(UUID, String, Data)], app: AppState?) {
+        guard let repo = repository(app) else { hasUnsavedChanges = true; return }
+        let changed = list.filter { committed[$0.0] != $0.2 && inFlight[$0.0] != $0.2 }
+        let live = Set(list.map(\.0))
+        let removed = committed.keys.filter { !live.contains($0) }
+        guard !changed.isEmpty || !removed.isEmpty else { return }
+        for c in changed { inFlight[c.0] = c.2 }
+        let studio = self.studio, who = actor, previous = chain, fault = writeFault
         chain = Task { [weak self] in
             await previous?.value
-            do {
-                for (id, title, _, data) in changed {
+            var failure: Error?
+            for (id, title, data) in changed {
+                do {
+                    try fault?()
                     try await repo.save(studio: studio, id: id, title: title, payload: data, actor: who)
-                }
-                for id in removed { try await repo.retract(recordID: id, actor: who) }
-            } catch {
-                KalsmritikoshLog.storage.error("Studio save failed: \(error.localizedDescription, privacy: .public)")
-                self?.problem = "Your last change was NOT saved: \(error.localizedDescription)"
+                    self?.committed[id] = data
+                } catch { failure = error }
+                if self?.inFlight[id] == data { self?.inFlight[id] = nil }
+            }
+            for id in removed {
+                do {
+                    try fault?()
+                    try await repo.retract(recordID: id, actor: who)
+                    self?.committed[id] = nil; self?.caseOf[id] = nil
+                } catch { failure = error }
+            }
+            guard let self else { return }
+            if let failure {
+                KalsmritikoshLog.storage.error("Studio save failed: \(failure.localizedDescription, privacy: .public)")
+                self.hasUnsavedChanges = true
+                self.problem = "A change was NOT saved (\(failure.localizedDescription)). It is kept here — choose Retry, or keep working and it will be sent again."
+            } else if self.hasUnsavedChanges, self.pendingCount == 0 {
+                self.hasUnsavedChanges = false
+                self.problem = nil
             }
         }
+    }
+
+    /// Drafts whose current content the ledger is not yet known to hold.
+    var pendingCount: Int {
+        let live = Set(lastItems.map(\.0))
+        return lastItems.filter { committed[$0.0] != $0.2 }.count + committed.keys.filter { !live.contains($0) }.count
+    }
+
+    static func canonical(_ payload: Data) -> Data {
+        guard let obj = try? JSONSerialization.jsonObject(with: payload),
+              let d = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else { return payload }
+        return d
     }
 
     /// Bind a draft to the case it is being filled from. Returns false (and says why) when the draft
@@ -171,21 +246,33 @@ final class StudioStorage {
 import SwiftUI
 
 extension View {
-    /// The storage notice / problem, above a studio screen.
+    /// The storage notice / problem, above a studio screen, with Retry when a change failed to save.
     func studioStorageBanner(_ storage: StudioStorage) -> some View {
-        safeAreaInset(edge: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                if let p = storage.problem {
+        safeAreaInset(edge: .top, spacing: 0) { StudioStorageBanner(storage: storage) }
+    }
+}
+
+private struct StudioStorageBanner: View {
+    let storage: StudioStorage
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let p = storage.problem {
+                HStack(spacing: 8) {
                     Label(p, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                }
-                if let n = storage.notice {
-                    Label(n, systemImage: "lock.shield").foregroundStyle(.secondary)
+                    if storage.hasUnsavedChanges {
+                        Button("Retry") { storage.retry(app: appState) }.controlSize(.small)
+                    }
                 }
             }
-            .font(.caption)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 24).padding(.vertical, (storage.problem ?? storage.notice) == nil ? 0 : 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if let n = storage.notice {
+                Label(n, systemImage: "lock.shield").foregroundStyle(.secondary)
+            }
         }
+        .font(.caption)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 24).padding(.vertical, (storage.problem ?? storage.notice) == nil ? 0 : 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
