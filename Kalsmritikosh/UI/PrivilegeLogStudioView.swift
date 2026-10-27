@@ -15,7 +15,9 @@ import AppKit
 #endif
 
 public struct PrivilegeLogStudioView: View {
-    @AppStorage("kalsmritikosh.pl.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "privilegeLog", legacyKey: "kalsmritikosh.pl.store")
+    @Environment(AppState.self) private var appState
     @State private var logs: [PrivilegeLog] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -31,11 +33,17 @@ public struct PrivilegeLogStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success = result, let id = activeBinding?.wrappedValue.id {
+                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            }
+        }
     }
 
     // MARK: Persistence
@@ -43,12 +51,9 @@ public struct PrivilegeLogStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([PrivilegeLog].self, from: data) { logs = d }
+        Task { logs = await storage.load(PrivilegeLog.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(logs), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(logs, app: appState) }
     private var activeBinding: Binding<PrivilegeLog>? {
         guard let id = activeID, let idx = logs.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { logs[idx] },
@@ -132,7 +137,7 @@ public struct PrivilegeLogStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Log title", text: p.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: p, message: $fillMessage)
+                StudioFillFromCaseMenu(model: p, message: $fillMessage, bind: { await storage.bind(p.wrappedValue.id, to: $0, app: appState) })
                 Button { gate.run(p) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
                 Button { gate.run(p) { printLog(p.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)

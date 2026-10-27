@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 157
+    public static let latestVersion = 158
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -549,7 +549,11 @@ public enum SchemaMigrations {
             // v156 — corrections to a confirmed statement are linked addenda, never edits.
             "case_statement_addenda": ["id", "interview_id", "case_id", "text", "reason", "sha256", "recorded_by", "recorded_at", "confirmed_by", "confirmed_at"],
             // v157 — when sealing of the rest of a case's history began.
-            "audit_seal_boundaries": ["history", "sealed_from_at", "legacy_count", "created_at"]
+            "audit_seal_boundaries": ["history", "sealed_from_at", "legacy_count", "created_at"],
+            // v158 — professional studio work in the ledger, bound to its case (final brief §3.1).
+            "studio_records": ["id", "studio", "persona", "job_id", "case_id", "workspace_id", "title", "model_version", "revision",
+                               "payload_json", "payload_sha256", "review_state", "origin", "created_by", "created_at",
+                               "updated_by", "updated_at", "retracted_at", "retracted_by"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -762,7 +766,8 @@ public enum SchemaMigrations {
         (154, v154),
         (155, v155),
         (156, v156),
-        (157, v157)
+        (157, v157),
+        (158, v158)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7612,6 +7617,85 @@ public enum SchemaMigrations {
         VALUES ('investigation_case_events', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_case_events), CAST(strftime('%s','now') AS REAL)),
                ('investigation_findings_approvals', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_findings_approvals), CAST(strftime('%s','now') AS REAL)),
                ('investigation_hypothesis_decisions', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_hypothesis_decisions), CAST(strftime('%s','now') AS REAL));
+    """
+
+
+    // MARK: - v158 — studio work in the encrypted ledger, bound to its case (final brief §3.1).
+    //
+    // Privilege logs, workplace investigations, SIU referrals, forensic engagements, fact-check memos,
+    // reasoning analyses and the shell studios used to live as JSON in app preferences — outside the
+    // encrypted ledger, outside backups, and tied to no case. One row per draft here, with its case or
+    // workspace, persona/job, model version, revision, who and when, and review state; every saved
+    // revision and every export snapshot is kept (append-only). Legacy JSON that cannot be decoded is
+    // quarantined byte for byte, never dropped.
+    private static let v158: String = """
+    CREATE TABLE IF NOT EXISTS studio_records (
+        id             TEXT PRIMARY KEY NOT NULL,
+        studio         TEXT NOT NULL,
+        persona        TEXT,
+        job_id         TEXT,
+        case_id        TEXT,
+        workspace_id   TEXT,
+        title          TEXT NOT NULL DEFAULT '',
+        model_version  INTEGER NOT NULL DEFAULT 1,
+        revision       INTEGER NOT NULL DEFAULT 1,
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        review_state   TEXT NOT NULL DEFAULT 'draft' CHECK (review_state IN ('draft','inReview','approved','superseded')),
+        origin         TEXT NOT NULL DEFAULT 'ledger' CHECK (origin IN ('ledger','appStorageImport')),
+        created_by     TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        updated_by     TEXT NOT NULL,
+        updated_at     REAL NOT NULL,
+        retracted_at   REAL,
+        retracted_by   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_records_studio ON studio_records(studio, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_studio_records_case ON studio_records(case_id);
+    CREATE TABLE IF NOT EXISTS studio_record_revisions (
+        record_id      TEXT NOT NULL,
+        revision       INTEGER NOT NULL,
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        reason         TEXT NOT NULL,
+        saved_by       TEXT NOT NULL,
+        saved_at       REAL NOT NULL,
+        PRIMARY KEY (record_id, revision)
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_record_revisions_fixed BEFORE UPDATE ON studio_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS studio_record_exports (
+        id              TEXT PRIMARY KEY NOT NULL,
+        record_id       TEXT NOT NULL,
+        revision        INTEGER NOT NULL,
+        format          TEXT NOT NULL,
+        artifact_sha256 TEXT NOT NULL,
+        snapshot_text   TEXT NOT NULL,
+        exported_by     TEXT NOT NULL,
+        exported_at     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_record_exports_record ON studio_record_exports(record_id, exported_at);
+    CREATE TRIGGER IF NOT EXISTS studio_record_exports_fixed BEFORE UPDATE ON studio_record_exports
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    CREATE TABLE IF NOT EXISTS studio_legacy_imports (
+        source_key        TEXT PRIMARY KEY NOT NULL,
+        imported_count    INTEGER NOT NULL,
+        quarantined_count INTEGER NOT NULL,
+        imported_by       TEXT NOT NULL,
+        imported_at       REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS studio_legacy_quarantine (
+        id            TEXT PRIMARY KEY NOT NULL,
+        source_key    TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        raw_json      TEXT NOT NULL,
+        error         TEXT NOT NULL,
+        captured_at   REAL NOT NULL
+    );
     """
 
 }

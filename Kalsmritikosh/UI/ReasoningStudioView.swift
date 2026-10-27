@@ -32,7 +32,8 @@ struct RCAMarkdownDocument: FileDocument {
 public struct ReasoningStudioView: View {
     @Environment(AppState.self) private var appState
 
-    @AppStorage("kalsmritikosh.rca.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "reasoning", legacyKey: "kalsmritikosh.rca.store")
     @State private var analyses: [RootCauseAnalysis] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -59,10 +60,16 @@ public struct ReasoningStudioView: View {
             }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success = result, let id = activeBinding?.wrappedValue.id {
+                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            }
+        }
     }
 
     // MARK: - Persistence
@@ -70,15 +77,9 @@ public struct ReasoningStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode([RootCauseAnalysis].self, from: data) {
-            analyses = decoded
-        }
+        Task { analyses = await storage.load(RootCauseAnalysis.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(analyses),
-           let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(analyses, app: appState) }
 
     private var activeBinding: Binding<RootCauseAnalysis>? {
         guard let id = activeID, let idx = analyses.firstIndex(where: { $0.id == id }) else { return nil }

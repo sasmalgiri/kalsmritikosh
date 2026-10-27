@@ -17,6 +17,8 @@ struct StudioFillFromCaseMenu<M: CaseBackedStudio>: View {
     @State private var choices: [StudioCaseChoice] = []
     @State private var filling = false
     @Binding var message: String?
+    /// Binds the draft to the chosen case first (final brief §3.1); false stops the fill.
+    var bind: ((StudioCaseChoice) async -> Bool)? = nil
 
     var body: some View {
         Menu {
@@ -39,6 +41,10 @@ struct StudioFillFromCaseMenu<M: CaseBackedStudio>: View {
         filling = true
         Task {
             defer { filling = false }
+            if let bind, !(await bind(choice)) {
+                message = "Not filled: this draft belongs to another case."
+                return
+            }
             guard let facts = await appState.studioCaseFacts(choice, includePrivileged: M.needsPrivilegedSources) else {
                 message = "The case could not be read."
                 return

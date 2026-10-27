@@ -22,7 +22,7 @@ public protocol StudioStageProtocol: CaseIterable, Hashable {
     var systemImage: String { get }
 }
 
-public protocol StudioDeliverable: Codable, Identifiable where ID == UUID {
+public protocol StudioDeliverable: StudioPersisted {
     associatedtype Stage: StudioStageProtocol
     var title: String { get set }
     var updatedAt: Date { get set }
@@ -70,7 +70,8 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     private let config: StudioConfig<M>
     private let stageContent: (Binding<M>, M.Stage, @escaping (M.Stage) -> Void) -> StageContent
 
-    @AppStorage private var storeBlob: String
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage: StudioStorage
     @State private var items: [M] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -89,7 +90,8 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 @ViewBuilder stageContent: @escaping (Binding<M>, M.Stage, @escaping (M.Stage) -> Void) -> StageContent) {
         self.config = config
         self.stageContent = stageContent
-        _storeBlob = AppStorage(wrappedValue: "", config.storeKey)
+        _storage = State(initialValue: StudioStorage(studio: config.storeKey.replacingOccurrences(of: "kalsmritikosh.", with: "").replacingOccurrences(of: ".store", with: ""),
+                                                     legacyKey: config.storeKey))
     }
 
     private var stages: [M.Stage] { Array(M.Stage.allCases) }
@@ -100,6 +102,7 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .alert("Some entries have no source", isPresented: Binding(get: { gatedAction != nil }, set: { if !$0 { gatedAction = nil } })) {
             Button("Mark as my entries and continue") { releaseGate() }
             Button("Cancel", role: .cancel) { gatedAction = nil }
@@ -114,6 +117,7 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 var v = b.wrappedValue
                 StudioAudit.record(&v.history, "Report exported as Markdown")
                 b.wrappedValue = v
+                storage.exported(v.id, format: "markdown", text: activeReport, app: appState)
             }
         }
     }
@@ -123,12 +127,9 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([M].self, from: data) { items = d }
+        Task { items = await storage.load(M.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(items), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(items, app: appState) }
     private var activeBinding: Binding<M>? {
         guard let id = activeID, let idx = items.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { items[idx] },
@@ -339,6 +340,10 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
         filling = true
         Task {
             defer { filling = false }
+            guard await storage.bind(m.wrappedValue.id, to: choice, app: appState) else {
+                fillMessage = "Not filled: this draft belongs to another case."
+                return
+            }
             guard let facts = await appState.studioCaseFacts(choice, includePrivileged: privileged),
                   var cb = m.wrappedValue as? any CaseBackedStudio else {
                 fillMessage = "The case could not be read."

@@ -17,7 +17,9 @@ import AppKit
 #endif
 
 public struct WorkplaceStudioView: View {
-    @AppStorage("kalsmritikosh.wi.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "workplace", legacyKey: "kalsmritikosh.wi.store")
+    @Environment(AppState.self) private var appState
     @State private var cases: [WorkplaceInvestigation] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -38,11 +40,17 @@ public struct WorkplaceStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success = result, let id = activeBinding?.wrappedValue.id {
+                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            }
+        }
     }
 
     // MARK: Persistence
@@ -50,12 +58,9 @@ public struct WorkplaceStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([WorkplaceInvestigation].self, from: data) { cases = d }
+        Task { cases = await storage.load(WorkplaceInvestigation.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(cases), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(cases, app: appState) }
     private var activeBinding: Binding<WorkplaceInvestigation>? {
         guard let id = activeID, let idx = cases.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { cases[idx] },
@@ -140,7 +145,7 @@ public struct WorkplaceStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Case title", text: w.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: w, message: $fillMessage)
+                StudioFillFromCaseMenu(model: w, message: $fillMessage, bind: { await storage.bind(w.wrappedValue.id, to: $0, app: appState) })
                 Button { gate.run(w) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
                 Button { gate.run(w) { printReport(w.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)

@@ -16,7 +16,9 @@ import AppKit
 #endif
 
 public struct JournalistStudioView: View {
-    @AppStorage("kalsmritikosh.jn.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "journalist", legacyKey: "kalsmritikosh.jn.store")
+    @Environment(AppState.self) private var appState
     @State private var memos: [FactCheckMemo] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -32,11 +34,17 @@ public struct JournalistStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: activeReport),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success = result, let id = activeBinding?.wrappedValue.id {
+                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            }
+        }
     }
 
     // MARK: Persistence
@@ -44,12 +52,9 @@ public struct JournalistStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([FactCheckMemo].self, from: data) { memos = d }
+        Task { memos = await storage.load(FactCheckMemo.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(memos), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(memos, app: appState) }
     private var activeBinding: Binding<FactCheckMemo>? {
         guard let id = activeID, let idx = memos.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { memos[idx] },
@@ -132,7 +137,7 @@ public struct JournalistStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Memo title", text: m.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: m, message: $fillMessage)
+                StudioFillFromCaseMenu(model: m, message: $fillMessage, bind: { await storage.bind(m.wrappedValue.id, to: $0, app: appState) })
                 Button { gate.run(m) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
                 Button { gate.run(m) { printMemo(m.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
