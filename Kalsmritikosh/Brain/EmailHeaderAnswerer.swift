@@ -38,8 +38,10 @@ public nonisolated enum EmailHeaderAnswerer {
         let q = question.lowercased()
         // A quoted subject with an email word — or with a sender/recipient/sent word, which only an
         // email has ("Who's the sender listed on "TCO MDIQ …"?", "To whom was "…" addressed?").
+        // "The body of "…"" / "the contents of "…"" / "what was written in "…"" read as an email's
+        // too (a weaker cue: with no email of that subject the pipeline answers, see hasStrongCue).
         if let s = subject(in: question),
-           q.range(of: #"\b(?:e-?mail|message|memo|note)\b|\bsender\b|\brecipients?\b|\baddressed\b|\bsent\b|\bwent out\b|\bcc'?d\b"#, options: .regularExpression) != nil {
+           hasStrongCue(question) || q.range(of: #"\b(?:body|contents?) of\b|\bwhat was (?:in|written in)\b|\bquote the contents\b"#, options: .regularExpression) != nil {
             if q.range(of: #"^\s*(?:to whom|who|which people)\b.*\b(?:received|got|addressed|recipients?|sent to|cc'?d|copied|on the receiving end)\b|\bsent to whom\b|\bto whom\b|\brecipients?\b"#, options: .regularExpression) != nil { return .recipients(subject: s) }
             if q.range(of: #"^\s*(?:who|which person)\b.*\b(?:sent|wrote|sends|authored|sender|from|responsible for sending)\b|\bwho (?:was|is) the sender\b|\bfrom whom\b|\bthe sender\b"#, options: .regularExpression) != nil { return .sender(subject: s) }
             if q.range(of: #"^\s*(?:when|on what (?:date|day)|what (?:date|day|time)|at what time)\b|\b(?:timestamp|send date|sent date|date/time|date and time|send time)\b"#, options: .regularExpression) != nil { return .sentDate(subject: s) }
@@ -78,6 +80,11 @@ public nonisolated enum EmailHeaderAnswerer {
             return .when(from: m[0], to: m[1])
         }
         return nil
+    }
+
+    /// The question names an email by its words, not only by a quoted title.
+    public static func hasStrongCue(_ question: String) -> Bool {
+        question.lowercased().range(of: #"\b(?:e-?mail|message|memo|note)\b|\bsender\b|\brecipients?\b|\baddressed\b|\bsent\b|\bwent out\b|\bcc'?d\b"#, options: .regularExpression) != nil
     }
 
     static func firstMatch(_ pattern: String, _ text: String) -> [String]? {

@@ -140,6 +140,12 @@ struct EmailHeaderAnswererTests {
         #expect(try #require(EmailHeaderAnswerer.answer(.count(from: "Enron Announcements", to: "All Houston"), messages: [houston, otherList])).body.hasPrefix("1 of the emails found"))
         #expect(EmailHeaderAnswerer.parse("How many times did Lorna Brennan send an email to Bill Cordes?") == .count(from: "Lorna Brennan", to: "Bill Cordes"))
         #expect(EmailLoader.exportNameLines(["from": "pete.davis@enron.com", "x-from": "Schedule Crawler<pete.davis@enron.com>"]) == ["X-From: Schedule Crawler<pete.davis@enron.com>"])
+        // A quoted title is not an instruction; "the body of" / "the contents of" a quoted title ask for it.
+        #expect(EmailHeaderAnswerer.parse("Who sent out the email \"What's New on Pipeline Safety Web Site\"?") == .sender(subject: "What's New on Pipeline Safety Web Site"))
+        #expect(RuleIntentDetector.unquoted("who sent \"what's new on pipeline safety\"?").contains("what's new") == false)
+        #expect(EmailHeaderAnswerer.parse("What was in the body of \"Tax Contacts\"?") == .content(subject: "Tax Contacts"))
+        #expect(EmailHeaderAnswerer.parse("Could you summarize or quote the contents of \"Cominco Ltd.\"?") == .content(subject: "Cominco Ltd."))
+        #expect(!EmailHeaderAnswerer.hasStrongCue("What was in the body of \"Tax Contacts\"?"))
         // A long distribution list is its size and first addressees.
         let list = (1...30).map { "person\($0)@enron.com" }.joined(separator: ", ")
         let staff = try #require(EmailHeaderAnswerer.message(objectID: UUID(), text: "From: a.b@enron.com\nTo: \(list)\nSubject: Staff Meeting\nDate: Tue, 1 May 2001 10:00:00 -0700\n\nAgenda."))

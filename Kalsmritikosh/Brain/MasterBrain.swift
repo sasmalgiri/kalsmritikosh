@@ -1898,8 +1898,8 @@ public actor MasterBrain {
         // is wired and the question is temporal-delta shaped. The matcher
         // is intentionally narrow so "new project" / "new supplier" don't
         stageClock.mark("detect")
-        // hijack the regular expert pipeline.
-        let q = question.lowercased()
+        // hijack the regular expert pipeline. A quoted title ("What's New on …") is not the request.
+        let q = RuleIntentDetector.unquoted(question.lowercased())
         let temporalDeltaShape =
             q.contains("what changed")
             || q.contains("changes this week")
@@ -2075,7 +2075,9 @@ public actor MasterBrain {
                     KalsmritikoshLog.brain.error("email answer: content fetch failed: \(String(describing: error), privacy: .public)")
                 }
             }
-            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages, complete: complete, ledgerPairs: ledgerPairs) {
+            // A quoted title with only a weak email cue may be a document's: "no email has it" is not said.
+            if let answered = EmailHeaderAnswerer.answer(ask, messages: messages, complete: complete, ledgerPairs: ledgerPairs),
+               !(answered.refused && !EmailHeaderAnswerer.hasStrongCue(intent.rawQuestion)) {
                 KalsmritikoshLog.brain.info("email answer: \(String(describing: ask).prefix(40), privacy: .public) from \(messages.count, privacy: .public) message(s)")
                 return answered
             }

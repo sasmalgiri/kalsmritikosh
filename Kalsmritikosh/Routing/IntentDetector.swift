@@ -14,7 +14,9 @@ public struct RuleIntentDetector: IntentDetector {
 
     public func detect(question: String) async throws -> UserIntent {
         let q = question.lowercased()
-        let kind = inferKind(q)
+        // A quoted title is not an instruction: the email "What's New on Pipeline Safety Web Site"
+        // is not a request for the week's briefing.
+        let kind = inferKind(Self.unquoted(q))
         let scope = inferScope(question)
         let hints = extractHints(question)
         // G2-TEMPORAL-GRAMMAR — surface a real Timeframe from natural-
@@ -30,6 +32,11 @@ public struct RuleIntentDetector: IntentDetector {
             entityHints: hints,
             rawQuestion: question
         )
+    }
+
+    /// The question with quoted spans emptied.
+    nonisolated static func unquoted(_ q: String) -> String {
+        q.replacingOccurrences(of: #"["“][^"”]*["”]"#, with: "\"\"", options: .regularExpression)
     }
 
     private func inferKind(_ q: String) -> UserIntent.Kind {
