@@ -203,8 +203,7 @@ struct MoveToNewMacView: View {
                     #if canImport(AppKit)
                     if let revealed {
                         Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(revealed, forType: .string)
+                            NSPasteboard.general.copySecret(revealed)
                         }
                     }
                     #endif

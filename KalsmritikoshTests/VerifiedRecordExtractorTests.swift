@@ -125,4 +125,22 @@ struct VerifiedRecordExtractorTests {
         #expect(p.carriesDocuments && p.providerTerms != nil)
     }
 
+
+    @Test("Review L2: the general cloud route is a document send — an unconfirmed or ineligible provider receives nothing")
+    func generalRouteIsADocumentSend() async {
+        let provider = OnlineCloudProvider(outboundLog: nil, knownNames: { [] })
+        let kind = OnlineSettings.kind
+        // On a Mac where the provider is confirmed a send would wait for the consent sheet — nothing to test here.
+        guard OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kind)) != nil else { return }
+        do {
+            _ = try await provider.generate(prompt: "Passage: the payment of ₹1,000 …", options: GenerationOptions(maxTokens: 16, temperature: 0))
+            Issue.record("the general route sent without the document check")
+        } catch let error as OnlineCloudProvider.OnlineError {
+            // Unconfirmed (or OpenAI): refused by the document check before anything else.
+            guard case .notEligibleForDocuments = error else { Issue.record("expected the document refusal, got \(error)"); return }
+        } catch {
+            Issue.record("expected the document refusal, got \(error)")
+        }
+    }
+
 }

@@ -2781,7 +2781,8 @@ public final class AppState {
                     guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
                         throw OnlineCloudProvider.OnlineError.notAvailable
                     }
-                    return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
+                    // The question (and field names) only — no document text.
+                    return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
                 } : nil
             await brain.setQuestionInterpreters(onDevice: onDevice, cloud: cloud)
             // Any wording → one canonical form, the same cascade.
@@ -2792,7 +2793,8 @@ public final class AppState {
                     guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
                         throw OnlineCloudProvider.OnlineError.notAvailable
                     }
-                    return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
+                    // The question (and field names) only — no document text.
+                    return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
                 } : nil
             await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
             // Verified record extraction (Online, AI on): the person's documents go through the Online

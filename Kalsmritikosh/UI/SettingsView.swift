@@ -3299,8 +3299,7 @@ private struct LedgerEncryptionSubsection: View {
                     }
                     if let revealed {
                         Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(revealed, forType: .string)
+                            NSPasteboard.general.copySecret(revealed)
                         }
                     }
                 }
@@ -3333,3 +3332,15 @@ struct InvestigatorProfileSection: View {
     }
 }
 
+#if canImport(AppKit)
+extension NSPasteboard {
+    /// The recovery key on the clipboard: this Mac only (never Universal Clipboard), and marked
+    /// concealed + transient so clipboard managers do not record it.
+    func copySecret(_ secret: String) {
+        prepareForNewContents(with: .currentHostOnly)
+        setString(secret, forType: .string)
+        setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+    }
+}
+#endif

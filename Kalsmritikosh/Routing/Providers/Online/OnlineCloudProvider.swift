@@ -60,7 +60,16 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         }
     }
 
+    /// Review L2 — the general route (any capability resolved to this provider: composing an answer,
+    /// summarising, extracting) may carry document passages, so it is treated as a document send:
+    /// eligible, confirmed provider only, always previewed with the provider's terms.
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
+        try await generateFromDocuments(prompt: prompt, options: options)
+    }
+
+    /// A request that carries only the question (and field names) — the question interpreter and
+    /// rewriter. No document text may be passed here.
+    public func generateQuestionOnly(prompt: String, options: GenerationOptions) async throws -> String {
         try await send(prompt: prompt, options: options, carriesDocuments: false)
     }
 
