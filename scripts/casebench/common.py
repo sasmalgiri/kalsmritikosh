@@ -91,7 +91,9 @@ def value_in(expect, text):
         other = FULL_DATE.findall(text)
         return False, ("other-date:" + other[0]) if other else None
     if "any" in expect:
-        hit = any(v and any(f in b for f in name_forms(v.lower())) for v in expect["any"])
+        # Whole tokens: "8 months" is not inside "18 months", "2-year" not inside "12-year".
+        def has(f): return re.search(r"(?<![a-z0-9])" + re.escape(f) + r"(?![a-z0-9])", b) is not None
+        hit = any(v and any(has(f) for f in name_forms(v.lower())) for v in expect["any"])
         if hit and not any(v and any(affirmed(b, f) for f in name_forms(v.lower())) for v in expect["any"]):
             return False, "negated"
         return hit, None
