@@ -77,6 +77,8 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     @State private var activeID: UUID?
     @State private var stage: M.Stage?
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var showHistory = false
     @Environment(AppState.self) private var appState
     @State private var caseChoices: [StudioCaseChoice] = []
@@ -114,15 +116,15 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                  : "\(gatedFields.count) field(s) need a decision. Some cite a source that does not check out — \(gatedReasons.keys.sorted().prefix(4).map { "\($0): \(gatedReasons[$0] ?? "")" }.joined(separator: "; ")). Marking them as your entries prints them as yours, not as documentary evidence.")
         }
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { result in
-            if case .success = result, let b = activeBinding {
-                var v = b.wrappedValue
-                StudioAudit.record(&v.history, "Report exported as Markdown")
-                b.wrappedValue = v
-                storage.exported(v.id, format: "markdown", text: activeReport, app: appState)
+            // Recorded only after the file was written and read back (the ledger's export log is the
+            // history of what left the app — writing it into the draft would change the approved content).
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
             }
+            exportPackage = nil
         }
     }
 
@@ -220,6 +222,12 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                     .controlSize(.small)
                     .popover(isPresented: $showHistory) { historyPanel(m.wrappedValue) }
                 if m.wrappedValue is any CaseBackedStudio { fillFromCaseMenu(m) }
+                Button { approveNow(m.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(m.wrappedValue.id) ? "Approved" : "Approve",
+                          systemImage: storage.approvedIDs.contains(m.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: m.wrappedValue.id) { await storage.refreshApproval(m.wrappedValue.id, app: appState) }
                 Button { gate(m, "copy") }
                     label: { Label("Copy", systemImage: "doc.on.doc") }.controlSize(.small)
                 Button { gate(m, "export") } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
@@ -295,22 +303,13 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
 
     // MARK: Report actions
 
-    private func recordAndShare(_ m: Binding<M>, _ action: String) {
-        var v = m.wrappedValue
-        StudioAudit.record(&v.history, action)
-        m.wrappedValue = v
-    }
-    private var activeReport: String {
-        guard let b = activeBinding else { return "" }
-        return sealedReport(b.wrappedValue)
-    }
 
     /// Every report that LEAVES the app carries the signed deliverable seal:
     /// content hash, honest stage completion, installation-key signature —
     /// the one shell seals all ten studios.
-    private func sealedReport(_ m: M) -> String {
+    private func sealedReport(_ m: M, approved: Bool = false) -> String {
         let complete = stages.filter { m.isComplete($0) }.count
-        let report = config.render(m, Date())
+        let report = (approved ? "" : StudioStorage.draftBanner) + config.render(m, Date())
         return StudioDeliverableSeal.sealedReport(
             studio: config.name, title: m.title,
             report: report,
@@ -368,10 +367,11 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
 
     /// Run a report action, or hold it until the unsupported fields are resolved.
     private func gate(_ m: Binding<M>, _ action: String) {
-        guard let cb = m.wrappedValue as? any CaseBackedStudio else { perform(m, action); return }
+        guard let cb = m.wrappedValue as? any CaseBackedStudio else { perform(m.wrappedValue, action); return }
         let missing = StudioExportGate.unsupportedFields(cb.gateValues, provenance: cb.provenance)
         let id = m.wrappedValue.id, values = cb.gateValues, provenance = cb.provenance
         let privileged = type(of: cb).needsPrivilegedSources
+        let validated = m.wrappedValue
         Task { @MainActor in
             // References resolve against the draft's own case (final brief §3.2).
             let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
@@ -382,7 +382,9 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 gatedAction = action
                 return
             }
-            perform(m, action)
+            // The exact value that was checked is the one exported (the package refuses if the
+            // screen moved on in the meantime).
+            perform(validated, action)
         }
     }
 
@@ -392,44 +394,58 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
         if var cb = m.wrappedValue as? any CaseBackedStudio {
             var p = cb.provenance
             let marked = gatedFields
-            StudioExportGate.markAsInvestigatorEntries(marked, provenance: &p)
+            StudioExportGate.markAsInvestigatorEntries(marked, unresolved: Set(gatedReasons.keys), provenance: &p)
             cb.provenance = p
             if var updated = cb as? M {
                 StudioAudit.record(&updated.history, "Marked \(marked.count) field(s) as investigator entries (\(gatedReasons.count) whose cited source did not resolve)")
                 m.wrappedValue = updated
             }
         }
-        perform(m, action)
+        perform(m.wrappedValue, action)
     }
 
-    private func perform(_ m: Binding<M>, _ action: String) {
-        switch action {
-        case "copy": recordAndShare(m, "Report copied to clipboard"); copyReport(m.wrappedValue)
-        case "export": showExporter = true
-        #if os(macOS)
-        case "print": recordAndShare(m, "Report printed / saved as PDF"); printReport(m.wrappedValue)
-        #endif
-        default: break
+    /// Report actions on one package (review R2): frozen, rendered and sealed once; the same bytes are
+    /// copied, printed or written, and recorded only after the action completed.
+    private func perform(_ v: M, _ action: String) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealedReport(v, approved: $0) }) else { return }
+            switch action {
+            case "copy":
+                #if os(macOS)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(pkg.text, forType: .string)
+                #endif
+                storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+            case "export":
+                exportPackage = pkg
+                showExporter = true
+            #if os(macOS)
+            case "print":
+                let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+                tv.string = pkg.text
+                tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+                let op = NSPrintOperation(view: tv); op.jobTitle = "\(config.name) — \(v.title)"
+                // A cancelled print dialog records nothing.
+                if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+            default: break
+            }
+        }
+    }
+
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: M) {
+        let cb = v as? any CaseBackedStudio
+        let privileged = cb.map { type(of: $0).needsPrivilegedSources } ?? false
+        Task {
+            let why = await storage.approve(v, provenance: cb?.provenance, values: cb?.gateValues ?? [:], privileged: privileged, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
         }
     }
 
     private var exportFilename: String {
         "\(config.filenamePrefix)-\((activeBinding?.wrappedValue.title ?? "report").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ m: M) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealedReport(m), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ m: M) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealedReport(m)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "\(config.name) — \(m.title)"; op.run()
-    }
-    #endif
 }
 
 // MARK: - Shared stage-editor bits

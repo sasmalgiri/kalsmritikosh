@@ -46,6 +46,8 @@ public struct ReasoningStudioView: View {
     @State private var aiBusy = false
     @State private var aiNote: String?
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
 
     public init() {}
 
@@ -62,13 +64,14 @@ public struct ReasoningStudioView: View {
         .onAppear(perform: load)
         .studioStorageBanner(storage)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { result in
             // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
-            if case .success = result, let id = activeBinding?.wrappedValue.id {
-                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
             }
+            exportPackage = nil
         }
     }
 
@@ -208,10 +211,15 @@ public struct ReasoningStudioView: View {
                 .textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
             statusChip(rca.wrappedValue.approval.status)
             Spacer()
-            Button { showExporter = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
+            Button { approveNow(rca.wrappedValue) } label: {
+                Label(storage.approvedIDs.contains(rca.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(rca.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+            }.controlSize(.small)
+            .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+            .task(id: rca.wrappedValue.id) { await storage.refreshApproval(rca.wrappedValue.id, app: appState) }
+            Button { exportNow(rca.wrappedValue) } label: { Label("Export", systemImage: "square.and.arrow.up") }
                 .controlSize(.small)
             #if os(macOS)
-            Button { printReport(rca.wrappedValue) } label: { Label("Print", systemImage: "printer") }
+            Button { printNow(rca.wrappedValue) } label: { Label("Print", systemImage: "printer") }
                 .controlSize(.small)
                 .help("Print — or choose “Save as PDF” in the print dialog")
             #endif
@@ -570,10 +578,10 @@ public struct ReasoningStudioView: View {
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
 
             HStack(spacing: 10) {
-                Button { copyReport(rca.wrappedValue) } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { showExporter = true } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { copyNow(rca.wrappedValue) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { exportNow(rca.wrappedValue) } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { printReport(rca.wrappedValue) } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { printNow(rca.wrappedValue) } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -714,13 +722,53 @@ public struct ReasoningStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ rca: RootCauseAnalysis) -> String {
+    private func sealed(_ rca: RootCauseAnalysis, approved: Bool = false) -> String {
         let stages = RootCauseAnalysis.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Root-Cause Analysis", title: rca.title,
-            report: RCAReportRenderer.markdown(rca, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + RCAReportRenderer.markdown(rca, generatedAt: Date()),
             stagesComplete: stages.filter { rca.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: RootCauseAnalysis) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: RootCauseAnalysis) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: RootCauseAnalysis) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+            tv.string = pkg.text
+            tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            let op = NSPrintOperation(view: tv); op.jobTitle = "Root-Cause Analysis — \(v.title)"
+            // Recorded only when the print job completed — a cancelled dialog records nothing.
+            if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: RootCauseAnalysis) {
+        Task {
+            let why = await storage.approve(v, provenance: nil, values: [:], privileged: false, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -730,22 +778,6 @@ public struct ReasoningStudioView: View {
         let t = activeBinding?.wrappedValue.title ?? "investigation"
         return "root-cause-\(t.replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ rca: RootCauseAnalysis) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(rca), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ rca: RootCauseAnalysis) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(rca)
-        tv.font = NSFont.systemFont(ofSize: 11)
-        let op = NSPrintOperation(view: tv)
-        op.jobTitle = "Root-Cause Analysis — \(rca.title)"
-        op.run()
-    }
-    #endif
 }
 
 // MARK: - Fishbone diagram (Ishikawa) — drawn, not a placeholder
@@ -838,5 +870,6 @@ struct FishboneDiagram: View {
     ReasoningStudioView()
         .environment(AppState())
         .frame(width: 1040, height: 760)
+
 }
 #endif

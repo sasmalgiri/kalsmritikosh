@@ -23,6 +23,8 @@ public struct PrivilegeLogStudioView: View {
     @State private var activeID: UUID?
     @State private var stage: PrivilegeLog.Stage = .matter
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -36,13 +38,14 @@ public struct PrivilegeLogStudioView: View {
         .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { result in
             // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
-            if case .success = result, let id = activeBinding?.wrappedValue.id {
-                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
             }
+            exportPackage = nil
         }
     }
 
@@ -143,9 +146,14 @@ public struct PrivilegeLogStudioView: View {
                 TextField("Log title", text: p.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
                 StudioFillFromCaseMenu(model: p, message: $fillMessage, bind: { await storage.bind(p.wrappedValue.id, to: $0, app: appState) })
-                Button { gate.run(p) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                Button { approveNow(p.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(p.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(p.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: p.wrappedValue.id) { await storage.refreshApproval(p.wrappedValue.id, app: appState) }
+                Button { gate.run(p) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(p) { printLog(p.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(p) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -281,10 +289,10 @@ public struct PrivilegeLogStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(p) { copyLog(p.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(p) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(p) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(p) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(p) { printLog(p.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(p) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -310,13 +318,53 @@ public struct PrivilegeLogStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ l: PrivilegeLog) -> String {
+    private func sealed(_ l: PrivilegeLog, approved: Bool = false) -> String {
         let stages = PrivilegeLog.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Privilege Log", title: l.title,
-            report: PrivilegeLogRenderer.markdown(l, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + PrivilegeLogRenderer.markdown(l, generatedAt: Date()),
             stagesComplete: stages.filter { l.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: PrivilegeLog) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: PrivilegeLog) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: PrivilegeLog) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+            tv.string = pkg.text
+            tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            let op = NSPrintOperation(view: tv); op.jobTitle = "Privilege Log — \(v.title)"
+            // Recorded only when the print job completed — a cancelled dialog records nothing.
+            if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: PrivilegeLog) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: PrivilegeLog.needsPrivilegedSources, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -325,24 +373,11 @@ public struct PrivilegeLogStudioView: View {
     private var exportFilename: String {
         "privilege-log-\((activeBinding?.wrappedValue.title ?? "log").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyLog(_ l: PrivilegeLog) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(l), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printLog(_ l: PrivilegeLog) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(l)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "Privilege Log — \(l.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("Privilege Log Studio") {
     PrivilegeLogStudioView().frame(width: 1040, height: 760)
+
 }
 #endif

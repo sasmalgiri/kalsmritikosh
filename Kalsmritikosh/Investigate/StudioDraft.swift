@@ -36,6 +36,9 @@ public nonisolated struct StudioFieldProvenance: Codable, Hashable, Sendable {
     public var evidence: [StudioEvidenceRef]
     public var prefilledValue: String?
     public var investigatorEntry: Bool
+    /// Marked as the investigator's entry after its cited source failed to resolve (review R2/R1):
+    /// printed as their entry, and it blocks approval — documentary support cannot be waived by a label.
+    public var relabelledFromUnresolved: Bool?
 
     public init(evidence: [StudioEvidenceRef] = [], prefilledValue: String? = nil, investigatorEntry: Bool = false) {
         self.evidence = evidence; self.prefilledValue = prefilledValue; self.investigatorEntry = investigatorEntry
@@ -87,10 +90,15 @@ public nonisolated enum StudioExportGate {
         return paths
     }
 
-    /// Mark the given fields as investigator entries (the investigator vouches for them).
-    public static func markAsInvestigatorEntries(_ paths: [String], provenance: inout StudioProvenance?) {
+    /// Mark the given fields as investigator entries (the investigator vouches for them). Those in
+    /// `unresolved` had a citation that failed: they are flagged, so approval stays blocked for them.
+    public static func markAsInvestigatorEntries(_ paths: [String], unresolved: Set<String> = [], provenance: inout StudioProvenance?) {
         var p = provenance ?? [:]
-        for path in paths { p[path] = .investigator }
+        for path in paths {
+            var e = StudioFieldProvenance.investigator
+            if unresolved.contains(path) { e.relabelledFromUnresolved = true }
+            p[path] = e
+        }
         provenance = p
     }
 

@@ -33,9 +33,13 @@ public nonisolated enum StudioRecordError: Error, Equatable, LocalizedError {
     case caseNotFound(UUID)
     case caseInAnotherWorkspace(UUID)
     case caseClosed(UUID)
+    case changedSinceValidation(UUID)
+    case unknownRevision(UUID, Int)
 
     public var errorDescription: String? {
         switch self {
+        case .changedSinceValidation: return "The draft changed while it was being checked. Nothing was exported — export again."
+        case .unknownRevision: return "That version of the draft is not in the ledger."
         case .notFound: return "This draft is not in the ledger."
         case .caseNotFound: return "The case this draft belongs to is not in the ledger."
         case .caseInAnotherWorkspace: return "That case belongs to another workspace."
@@ -279,13 +283,45 @@ public actor StudioRecordRepository {
     /// from (a revision is cut first if the content changed since the last one). Call only after the
     /// file was written successfully.
     @discardableResult
-    public func recordExport(recordID: UUID, format: String, text: String, actor: String, at date: Date = Date()) async throws -> StudioRecordExport {
+    /// Review R2: freeze the draft's current content for an export. The content must be exactly what
+    /// was validated (`expectedPayloadSHA256`); a revision is cut if the last one is not this content.
+    /// Returns that revision and whether a current approval covers exactly this content.
+    public func freezeForExport(recordID: UUID, expectedPayloadSHA256: String, actor: String, at date: Date = Date()) async throws -> (revision: Int, approved: Bool) {
+        let who = try Self.clean(actor)
+        return try await database.withSavepoint("studio_freeze_\(Self.token(recordID))") { db -> (Int, Bool) in
+            guard let row = try db.query("SELECT revision, payload_json, payload_sha256, review_state, approved_payload_sha256 FROM studio_records WHERE id = ? LIMIT 1;",
+                                         [.uuid(recordID)]).first else { throw StudioRecordError.notFound(recordID) }
+            let sha = row.string(2) ?? ""
+            guard sha == expectedPayloadSHA256 else { throw StudioRecordError.changedSinceValidation(recordID) }
+            var rev = Int(row.int(0) ?? 1)
+            let last = try db.query("SELECT payload_sha256 FROM studio_record_revisions WHERE record_id = ? ORDER BY revision DESC LIMIT 1;", [.uuid(recordID)]).first?.string(0)
+            if last != sha {
+                rev += 1
+                try Self.cut(db, recordID, rev, row.string(1) ?? "{}", sha, "frozen for export", who, date)
+                try db.exec("UPDATE studio_records SET revision = ? WHERE id = ?;", [.integer(Int64(rev)), .uuid(recordID)])
+            }
+            let approved = row.string(3) == StudioReviewState.approved.rawValue && row.string(4) == sha
+            return (rev, approved)
+        }
+    }
+
+    public func recordExport(recordID: UUID, format: String, text: String, revision frozen: Int? = nil,
+                             actor: String, at date: Date = Date()) async throws -> StudioRecordExport {
         let who = try Self.clean(actor)
         let sha = Self.sha256(Data(text.utf8))
         let exportID = UUID()
         return try await database.withSavepoint("studio_export_\(Self.token(exportID))") { db -> StudioRecordExport in
             guard let row = try db.query("SELECT revision, payload_json, payload_sha256 FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else {
                 throw StudioRecordError.notFound(recordID)
+            }
+            // The export records the revision it was made from (frozen before rendering), not
+            // whatever the draft holds by the time the file was written.
+            if let frozen {
+                guard !(try db.query("SELECT 1 FROM studio_record_revisions WHERE record_id = ? AND revision = ? LIMIT 1;",
+                                     [.uuid(recordID), .integer(Int64(frozen))])).isEmpty else { throw StudioRecordError.unknownRevision(recordID, frozen) }
+                try db.exec("INSERT INTO studio_record_exports (id, record_id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at) VALUES (?,?,?,?,?,?,?,?);",
+                            [.uuid(exportID), .uuid(recordID), .integer(Int64(frozen)), .text(format), .text(sha), .text(text), .text(who), .date(date)])
+                return StudioRecordExport(id: exportID, revision: frozen, format: format, artifactSHA256: sha, snapshot: text, exportedBy: who, exportedAt: date)
             }
             var rev = Int(row.int(0) ?? 1)
             let last = try db.query("SELECT payload_sha256 FROM studio_record_revisions WHERE record_id = ? ORDER BY revision DESC LIMIT 1;", [.uuid(recordID)]).first?.string(0)

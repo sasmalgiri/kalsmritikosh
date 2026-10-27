@@ -24,6 +24,8 @@ public struct JournalistStudioView: View {
     @State private var activeID: UUID?
     @State private var stage: FactCheckMemo.Stage = .story
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -37,13 +39,14 @@ public struct JournalistStudioView: View {
         .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { result in
             // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
-            if case .success = result, let id = activeBinding?.wrappedValue.id {
-                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
             }
+            exportPackage = nil
         }
     }
 
@@ -143,9 +146,14 @@ public struct JournalistStudioView: View {
                 TextField("Memo title", text: m.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
                 StudioFillFromCaseMenu(model: m, message: $fillMessage, bind: { await storage.bind(m.wrappedValue.id, to: $0, app: appState) })
-                Button { gate.run(m) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                Button { approveNow(m.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(m.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(m.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: m.wrappedValue.id) { await storage.refreshApproval(m.wrappedValue.id, app: appState) }
+                Button { gate.run(m) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(m) { printMemo(m.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(m) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -308,10 +316,10 @@ public struct JournalistStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(m) { copyMemo(m.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(m) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(m) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(m) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(m) { printMemo(m.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(m) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -337,13 +345,53 @@ public struct JournalistStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ m: FactCheckMemo) -> String {
+    private func sealed(_ m: FactCheckMemo, approved: Bool = false) -> String {
         let stages = FactCheckMemo.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Journalist Fact-Check", title: m.title,
-            report: FactCheckMemoRenderer.markdown(m, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + FactCheckMemoRenderer.markdown(m, generatedAt: Date()),
             stagesComplete: stages.filter { m.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: FactCheckMemo) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: FactCheckMemo) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: FactCheckMemo) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+            tv.string = pkg.text
+            tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            let op = NSPrintOperation(view: tv); op.jobTitle = "Fact-Check Memo — \(v.title)"
+            // Recorded only when the print job completed — a cancelled dialog records nothing.
+            if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: FactCheckMemo) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: FactCheckMemo.needsPrivilegedSources, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -352,24 +400,11 @@ public struct JournalistStudioView: View {
     private var exportFilename: String {
         "fact-check-\((activeBinding?.wrappedValue.title ?? "memo").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyMemo(_ m: FactCheckMemo) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(m), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printMemo(_ m: FactCheckMemo) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(m)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "Fact-Check Memo — \(m.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("Journalist Studio") {
     JournalistStudioView().frame(width: 1040, height: 760)
+
 }
 #endif

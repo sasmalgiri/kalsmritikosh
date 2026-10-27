@@ -23,6 +23,18 @@ import os
 public protocol StudioPersisted: Codable, Identifiable where ID == UUID {
     var title: String { get }
     var updatedAt: Date { get }
+    var completionFraction: Double { get }
+}
+
+/// Review R2: what one export is — rendered and sealed ONCE, from one frozen revision. The same bytes
+/// go to the file (or clipboard / printer) and into the ledger's export record.
+struct StudioExportPackage: Sendable, Equatable {
+    let recordID: UUID
+    let revision: Int
+    let payloadSHA256: String
+    let approved: Bool
+    let text: String
+    var digest: String { StudioRecordRepository.sha256(Data(text.utf8)) }
 }
 
 extension SIUReferral: StudioPersisted {}
@@ -208,6 +220,102 @@ final class StudioStorage {
         return d
     }
 
+    // MARK: - Exports (review R2)
+
+    /// The banner a report carries when no current approval covers exactly this content.
+    static let draftBanner = "> **DRAFT — not approved.** This version has not been approved; it is not a final work product.\n\n"
+
+    /// Freeze `model` (the exact value that was validated) and render it once. Pending writes land
+    /// first; the draft's stored content must equal `model`, or nothing is exported.
+    func package<M: StudioPersisted>(_ model: M, app: AppState?, render: (_ approved: Bool) -> String) async -> StudioExportPackage? {
+        guard let repo = repository(app) else { return nil }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        do {
+            let data = try encoder.encode(model)
+            await flush()
+            if committed[model.id] != data {
+                // Never write a stale value over newer work: the screen moved on since validation.
+                if let live = lastItems.first(where: { $0.0 == model.id })?.2, live != data {
+                    throw StudioRecordError.changedSinceValidation(model.id)
+                }
+                try writeFault?()
+                try await repo.save(studio: studio, id: model.id, title: model.title, payload: data, actor: actor)
+                committed[model.id] = data
+            }
+            let frozen = try await repo.freezeForExport(recordID: model.id, expectedPayloadSHA256: StudioRecordRepository.sha256(data), actor: actor)
+            return StudioExportPackage(recordID: model.id, revision: frozen.revision, payloadSHA256: StudioRecordRepository.sha256(data),
+                                       approved: frozen.approved, text: render(frozen.approved))
+        } catch {
+            KalsmritikoshLog.storage.error("Studio export not prepared: \(error.localizedDescription, privacy: .public)")
+            problem = "Nothing was exported: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// Record an export that completed: the file at `url` is read back and must hold exactly the
+    /// package's bytes; then those bytes are recorded against the frozen revision.
+    func exported(_ pkg: StudioExportPackage, format: String, writtenTo url: URL?, app: AppState?) {
+        if let url {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let written = try? Data(contentsOf: url), StudioRecordRepository.sha256(written) == pkg.digest else {
+                problem = "The saved file does not match the report that was prepared (its SHA-256 differs), so it was not recorded as an export. Export again."
+                return
+            }
+        }
+        guard let repo = repository(app) else { return }
+        let who = actor, previous = chain
+        chain = Task { [weak self] in
+            await previous?.value
+            do { try await repo.recordExport(recordID: pkg.recordID, format: format, text: pkg.text, revision: pkg.revision, actor: who) } catch {
+                KalsmritikoshLog.storage.error("Studio export record failed: \(error.localizedDescription, privacy: .public)")
+                self?.problem = "The export was written, but its record could not be saved: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Approve the exact current content of `model`. Refused (with the reason) unless every stage is
+    /// complete, every cited source resolves, and no field whose citation failed was relabelled as
+    /// the investigator's own entry (mandatory documentary support cannot be waived by a label).
+    func approve<M: StudioPersisted>(_ model: M, provenance: StudioProvenance?, values: [String: String],
+                                     privileged: Bool, app: AppState) async -> String? {
+        guard model.completionFraction >= 1 else { return "Not approved: every stage must be complete first." }
+        let relabelled = (provenance ?? [:]).filter { $0.value.relabelledFromUnresolved == true }.map(\.key)
+        if !relabelled.isEmpty {
+            return "Not approved: \(relabelled.count) field(s) whose cited source did not check out were marked as your own entries. An approved report needs their documentary support resolved (\(relabelled.sorted().prefix(4).joined(separator: ", ")))."
+        }
+        let context = await app.studioEvidenceContext(caseID: caseOf[model.id], workspaceID: nil, includePrivileged: privileged)
+        let unresolved = await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+        if !unresolved.isEmpty { return "Not approved: \(unresolved.count) field(s) cite a source that does not check out." }
+        guard let repo = repository(app) else { return "Not approved: the ledger is not open." }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        do {
+            let data = try encoder.encode(model)
+            await flush()
+            if committed[model.id] != data {
+                if let live = lastItems.first(where: { $0.0 == model.id })?.2, live != data {
+                    throw StudioRecordError.changedSinceValidation(model.id)
+                }
+                try await repo.save(studio: studio, id: model.id, title: model.title, payload: data, actor: actor)
+                committed[model.id] = data
+            }
+            try await repo.setReviewState(recordID: model.id, .approved, actor: actor)
+            approvedIDs.insert(model.id)
+            return nil
+        } catch {
+            return "Not approved: \(error.localizedDescription)"
+        }
+    }
+
+    /// Drafts whose current approval covers exactly their content (refreshed by `refreshApproval`).
+    private(set) var approvedIDs: Set<UUID> = []
+
+    func refreshApproval(_ id: UUID, app: AppState?) async {
+        guard let repo = repository(app) else { return }
+        await flush()
+        if (try? await repo.approvalIsCurrent(recordID: id)) == true { approvedIDs.insert(id) } else { approvedIDs.remove(id) }
+    }
+
     /// Bind a draft to the case it is being filled from. Returns false (and says why) when the draft
     /// belongs to another case.
     func bind(_ id: UUID, to choice: StudioCaseChoice, app: AppState) async -> Bool {
@@ -223,19 +331,6 @@ final class StudioStorage {
         } catch {
             problem = "The draft could not be assigned to the case: \(error.localizedDescription)"
             return false
-        }
-    }
-
-    /// Record an export that was written successfully.
-    func exported(_ id: UUID, format: String, text: String, app: AppState) {
-        guard let repo = repository(app) else { return }
-        let who = actor, previous = chain
-        chain = Task { [weak self] in
-            await previous?.value
-            do { try await repo.recordExport(recordID: id, format: format, text: text, actor: who) } catch {
-                KalsmritikoshLog.storage.error("Studio export record failed: \(error.localizedDescription, privacy: .public)")
-                self?.problem = "The export was written, but its record could not be saved: \(error.localizedDescription)"
-            }
         }
     }
 

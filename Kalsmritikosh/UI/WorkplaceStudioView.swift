@@ -30,6 +30,8 @@ public struct WorkplaceStudioView: View {
     @State private var newPerson = ""
     @State private var newRecommendation = ""
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -43,13 +45,14 @@ public struct WorkplaceStudioView: View {
         .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { result in
             // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
-            if case .success = result, let id = activeBinding?.wrappedValue.id {
-                storage.exported(id, format: "markdown", text: activeReport, app: appState)
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
             }
+            exportPackage = nil
         }
     }
 
@@ -151,9 +154,14 @@ public struct WorkplaceStudioView: View {
                 TextField("Case title", text: w.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
                 StudioFillFromCaseMenu(model: w, message: $fillMessage, bind: { await storage.bind(w.wrappedValue.id, to: $0, app: appState) })
-                Button { gate.run(w) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                Button { approveNow(w.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(w.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(w.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: w.wrappedValue.id) { await storage.refreshApproval(w.wrappedValue.id, app: appState) }
+                Button { gate.run(w) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(w) { printReport(w.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(w) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -399,10 +407,10 @@ public struct WorkplaceStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(w) { copyReport(w.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(w) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(w) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(w) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(w) { printReport(w.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(w) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -444,13 +452,53 @@ public struct WorkplaceStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ w: WorkplaceInvestigation) -> String {
+    private func sealed(_ w: WorkplaceInvestigation, approved: Bool = false) -> String {
         let stages = WorkplaceInvestigation.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Workplace Investigation", title: w.title,
-            report: WIReportRenderer.markdown(w, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + WIReportRenderer.markdown(w, generatedAt: Date()),
             stagesComplete: stages.filter { w.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: WorkplaceInvestigation) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: WorkplaceInvestigation) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: WorkplaceInvestigation) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+            tv.string = pkg.text
+            tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            let op = NSPrintOperation(view: tv); op.jobTitle = "Workplace Investigation — \(v.title)"
+            // Recorded only when the print job completed — a cancelled dialog records nothing.
+            if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: WorkplaceInvestigation) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: WorkplaceInvestigation.needsPrivilegedSources, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -459,24 +507,11 @@ public struct WorkplaceStudioView: View {
     private var exportFilename: String {
         "hr-investigation-\((activeBinding?.wrappedValue.title ?? "report").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ w: WorkplaceInvestigation) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(w), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ w: WorkplaceInvestigation) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(w)
-        tv.font = NSFont.systemFont(ofSize: 11)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "Workplace Investigation — \(w.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("HR Investigation Studio") {
     WorkplaceStudioView().frame(width: 1040, height: 760)
+
 }
 #endif

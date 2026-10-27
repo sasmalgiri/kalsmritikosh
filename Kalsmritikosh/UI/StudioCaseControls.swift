@@ -76,11 +76,15 @@ final class StudioProvenanceGate {
     /// provenance, privileged sources allowed). Unset, every evidenced field counts as unchecked.
     var resolve: ((UUID, [String: String], StudioProvenance?, Bool) async -> [String: String])?
 
-    /// Run `action` once every filled field is either resolved to a source in the draft's case or
-    /// marked as the investigator's entry; otherwise ask first, with the reason for each field.
-    func run<M: CaseBackedStudio & StudioPersisted>(_ model: Binding<M>, _ action: @escaping () -> Void) {
+    /// Run `action` with the EXACT value that was validated, once every filled field is either
+    /// resolved to a source in the draft's case or marked as the investigator's entry; otherwise ask
+    /// first, with the reason for each field. If the draft changes while it is being checked, nothing
+    /// runs (review R2) — the person exports again.
+    func run<M: CaseBackedStudio & StudioPersisted>(_ model: Binding<M>, _ action: @escaping (M) -> Void) {
         let m = model.wrappedValue
         let missing = StudioExportGate.unsupportedFields(m.gateValues, provenance: m.provenance)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let validated = try? encoder.encode(m)
         checking = true
         Task { @MainActor in
             defer { checking = false }
@@ -90,28 +94,38 @@ final class StudioProvenanceGate {
             } else {
                 unresolved = await StudioEvidenceResolver.unresolved(values: m.gateValues, provenance: m.provenance, context: nil)
             }
-            guard !missing.isEmpty || !unresolved.isEmpty else { action(); return }
+            // The live draft must still be the one that was checked.
+            guard let validated, (try? encoder.encode(model.wrappedValue)) == validated else {
+                notice = "The draft changed while it was being checked, so nothing was done. Try again."
+                isPresented = true
+                return
+            }
+            guard !missing.isEmpty || !unresolved.isEmpty else { action(m); return }
             fields = (missing + unresolved.keys.sorted()).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
             reasons = unresolved
-            pending = action
-            let paths = fields
+            let paths = fields, failed = Set(unresolved.keys)
+            pending = { action(model.wrappedValue) }
             markAll = {
                 var m = model.wrappedValue
                 var p = m.provenance
-                StudioExportGate.markAsInvestigatorEntries(paths, provenance: &p)
+                StudioExportGate.markAsInvestigatorEntries(paths, unresolved: failed, provenance: &p)
                 m.provenance = p
-                StudioAudit.record(&m.history, "Marked \(paths.count) field(s) as investigator entries (\(unresolved.count) whose cited source did not resolve)")
+                StudioAudit.record(&m.history, "Marked \(paths.count) field(s) as investigator entries (\(failed.count) whose cited source did not resolve)")
                 model.wrappedValue = m
             }
             isPresented = true
         }
     }
 
+    /// A message shown instead of the field list (the draft changed during the check).
+    var notice: String?
+
     func confirm() { markAll?(); pending?(); clear() }
-    func clear() { pending = nil; markAll = nil; fields = []; reasons = [:]; isPresented = false }
+    func clear() { pending = nil; markAll = nil; fields = []; reasons = [:]; notice = nil; isPresented = false }
 
     /// The alert's explanation: unsupported fields, then each unresolved source with its reason.
     var explanation: String {
+        if let notice { return notice }
         let plain = fields.filter { reasons[$0] == nil }
         var parts: [String] = []
         if !plain.isEmpty { parts.append("\(plain.count) filled field(s) are neither taken from the case's documents nor marked as your own entry.") }
@@ -127,9 +141,9 @@ final class StudioProvenanceGate {
 extension View {
     /// The alert shown while a report action waits on the provenance gate.
     func studioProvenanceGate(_ gate: StudioProvenanceGate) -> some View {
-        alert("Some entries have no source", isPresented: Binding(get: { gate.isPresented }, set: { if !$0 { gate.clear() } })) {
-            Button("Mark as my entries and continue") { gate.confirm() }
-            Button("Cancel", role: .cancel) { gate.clear() }
+        alert(gate.notice == nil ? "Some entries have no source" : "Nothing was done", isPresented: Binding(get: { gate.isPresented }, set: { if !$0 { gate.clear() } })) {
+            if gate.notice == nil { Button("Mark as my entries and continue") { gate.confirm() } }
+            Button(gate.notice == nil ? "Cancel" : "OK", role: .cancel) { gate.clear() }
         } message: {
             Text(gate.explanation)
         }

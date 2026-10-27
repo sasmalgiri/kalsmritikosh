@@ -233,4 +233,65 @@ struct StudioRecordRepositoryTests {
             try await StudioRecordRepository(database: db).save(studio: "siu", id: UUID(), title: "x", payload: Data("{}".utf8), actor: "  ")
         }
     }
+
+    @Test("Review R2: one package — the recorded snapshot is the written file's bytes; an edit after validation exports nothing; a mismatched file is not recorded; DRAFT unless the approval is current")
+    @MainActor
+    func frozenExportPackage() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = StudioRecordRepository(database: db)
+        let storage = StudioStorage(studio: "siu", legacyKey: "test.r2.\(UUID().uuidString)")
+        storage.repositoryOverride = repo
+        var m = SIUReferral(title: "Claim R2", now: t0)
+        storage.persist([m], app: nil)
+        await storage.flush()
+        let render: (Bool) -> String = { approved in (approved ? "" : StudioStorage.draftBanner) + "Report for \(m.title)" }
+
+        // Not approved → the one rendering carries the DRAFT banner.
+        let draft = try #require(await storage.package(m, app: nil, render: render))
+        #expect(!draft.approved && draft.text.hasPrefix(StudioStorage.draftBanner))
+
+        // The written file is read back; the recorded snapshot is exactly its bytes, against the frozen revision.
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("r2-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(draft.text.utf8).write(to: url)
+        storage.exported(draft, format: "markdown", writtenTo: url, app: nil)
+        await storage.flush()
+        var exports = try await repo.exports(recordID: m.id)
+        #expect(exports.count == 1)
+        #expect(exports.first?.artifactSHA256 == StudioRecordRepository.sha256(try Data(contentsOf: url)))
+        #expect(exports.first?.snapshot == draft.text && exports.first?.revision == draft.revision)
+
+        // A file that does not hold the package's bytes is not recorded.
+        try Data("tampered".utf8).write(to: url)
+        storage.exported(draft, format: "markdown", writtenTo: url, app: nil)
+        await storage.flush()
+        exports = try await repo.exports(recordID: m.id)
+        #expect(exports.count == 1 && storage.problem?.contains("does not match") == true)
+        storage.problem = nil
+
+        // A cancelled print (or any action that did not complete) never calls exported → nothing recorded.
+        _ = try #require(await storage.package(m, app: nil, render: render))
+        #expect(try await repo.exports(recordID: m.id).count == 1)
+
+        // The screen moved on after validation: the validated (stale) value exports nothing and is not written back.
+        let validated = m
+        m.title = "Claim R2 — edited"
+        storage.persist([m], app: nil)
+        await storage.flush()
+        #expect(await storage.package(validated, app: nil, render: render) == nil)
+        #expect(try await repo.record(id: m.id)?.title == "Claim R2 — edited")
+        storage.problem = nil
+
+        // Approved for exactly this content → no banner; any change → DRAFT again.
+        try await repo.setReviewState(recordID: m.id, .approved, actor: "Tester")
+        let final = try #require(await storage.package(m, app: nil, render: render))
+        #expect(final.approved && !final.text.contains("DRAFT"))
+        m.title = "Claim R2 — after approval"
+        storage.persist([m], app: nil)
+        await storage.flush()
+        let again = try #require(await storage.package(m, app: nil, render: render))
+        #expect(!again.approved && again.text.hasPrefix(StudioStorage.draftBanner))
+        #expect(try await repo.approvalIsCurrent(recordID: m.id) == false)
+    }
+
 }
