@@ -149,3 +149,61 @@ public nonisolated enum OnlineRequestBuilder {
         }
     }
 }
+
+// MARK: - Which providers may receive case documents (ship-readiness review L2)
+//
+// Sending a person's documents is not the same decision as sending a question. An opt-in switch is not
+// enough: the provider's own terms decide whether confidential case material may go to it at all. Each
+// provider carries the terms as reviewed on `documentTermsVersion`; the person confirms that their own
+// account is on those terms, and the confirmation lapses when the reviewed terms change. A provider whose
+// terms have not been reviewed for case material receives no documents.
+
+extension OnlineProviderKind {
+
+    /// The date the terms below were reviewed. A confirmation given against an older text lapses.
+    public var documentTermsVersion: String { "2026-10-27" }
+
+    /// false = no document excerpts are sent to this provider in this release.
+    public var mayReceiveDocuments: Bool {
+        switch self {
+        case .anthropic, .gemini: return true
+        case .openai:             return false
+        }
+    }
+
+    /// What the provider does with what it receives, shown in Settings and on every document send.
+    public var documentTerms: String {
+        switch self {
+        case .anthropic:
+            return "Anthropic's commercial API: by default, inputs and outputs are deleted within 30 days, with exceptions for usage-policy enforcement and legal requirements; zero retention needs a separate agreement. Under the commercial terms they are not used for training. This app's publisher receives nothing — that does not mean the provider keeps nothing."
+        case .gemini:
+            return "Google Gemini API: only a PAID (billing-enabled) project. On the unpaid tier Google may use what you send to improve its products, including human review, and asks that sensitive or confidential information not be sent — case documents must not go to an unpaid key. Age, region and permitted-use conditions apply."
+        case .openai:
+            return "OpenAI: its API data-use and retention terms have not been reviewed for case material in this release, so no document text is sent to it. Questions alone may still be sent."
+        }
+    }
+
+    /// What the person confirms before their documents may go to this provider.
+    public var documentAttestation: String {
+        switch self {
+        case .anthropic: return "My Anthropic account is on the commercial API terms, and I may send this case material to it"
+        case .gemini:    return "My Gemini key belongs to a paid (billing-enabled) project, and I may send this case material to it"
+        case .openai:    return ""
+        }
+    }
+}
+
+public nonisolated enum OnlineDocumentEligibility {
+    /// nil when document excerpts may go to `kind` given the recorded confirmation; otherwise why not.
+    public static func refusal(kind: OnlineProviderKind, confirmedTermsVersion: String?) -> String? {
+        guard kind.mayReceiveDocuments else {
+            return "\(kind.displayName) is not reviewed for case documents in this release — no document text was sent."
+        }
+        guard confirmedTermsVersion == kind.documentTermsVersion else {
+            return confirmedTermsVersion == nil
+                ? "Confirm in Settings ▸ Online that your \(kind.displayName) account's terms permit sending case material — no document text was sent."
+                : "The reviewed \(kind.displayName) terms changed since you confirmed them; confirm again in Settings ▸ Online — no document text was sent."
+        }
+        return nil
+    }
+}

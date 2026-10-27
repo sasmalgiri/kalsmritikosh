@@ -49,9 +49,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     public enum OnlineError: Error, LocalizedError {
-        case notAvailable, declined, limitReached(Int)
+        case notAvailable, declined, limitReached(Int), notEligibleForDocuments(String)
         public var errorDescription: String? {
             switch self {
+            case .notEligibleForDocuments(let why): return why
             case .notAvailable:       return "Online mode is not set up (choose a provider, model and key in Settings)."
             case .declined:           return "You chose not to send this to the cloud."
             case .limitReached(let c): return "Today's online limit (\(c) bytes) has been reached."
@@ -60,6 +61,22 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
+        try await send(prompt: prompt, options: options, carriesDocuments: false)
+    }
+
+    /// Review L2 — a request that carries case-document excerpts. Sent only to a provider whose terms
+    /// permit case material and whose terms the person confirmed for their account; always previewed
+    /// with the provider's retention terms (never covered by "don't ask again this session").
+    public func generateFromDocuments(prompt: String, options: GenerationOptions) async throws -> String {
+        let kind = OnlineSettings.kind
+        if let why = OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kind)) {
+            await log(kind, OnlineSettings.model, prompt, prompt.utf8.count, 0, nil, "blocked", "provider not eligible for documents")
+            throw await fail(OnlineError.notEligibleForDocuments(why))
+        }
+        return try await send(prompt: prompt, options: options, carriesDocuments: true)
+    }
+
+    private func send(prompt: String, options: GenerationOptions, carriesDocuments: Bool) async throws -> String {
         let kind = OnlineSettings.kind
         let model = OnlineSettings.model
         guard await isAvailable(), let key = OnlineSettings.apiKey(for: kind) else {
@@ -95,7 +112,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
         // 3. Consent (O-5) — not switchable.
         let preview = OutboundPreview(provider: kind.displayName, model: model, host: kind.host,
-                                      text: shownText, bytes: bytes, maskedCount: mapping.count)
+                                      text: shownText, bytes: bytes, maskedCount: mapping.count,
+                                      carriesDocuments: carriesDocuments,
+                                      providerTerms: carriesDocuments ? kind.documentTerms : nil)
         guard await OutboundConsent.shared.request(preview) else {
             await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)
             throw OnlineError.declined

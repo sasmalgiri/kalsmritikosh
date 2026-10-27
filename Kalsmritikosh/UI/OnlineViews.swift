@@ -20,6 +20,13 @@ struct OutboundConsentSheet: View {
             Text("This text will be sent to \(preview.host) (model \(preview.model)) with your own key. Nothing else leaves your Mac.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if preview.carriesDocuments {
+                Label("This send includes text from your documents.", systemImage: "doc.text")
+                    .font(.caption.weight(.semibold))
+                if let terms = preview.providerTerms {
+                    Text(terms).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
             HStack(spacing: 14) {
                 Text("\(preview.bytes) bytes").font(.caption.monospacedDigit())
                 if preview.maskedCount > 0 {
@@ -36,7 +43,7 @@ struct OutboundConsentSheet: View {
             HStack {
                 Button("Don’t send") { consent.resolve(allow: false) }.keyboardShortcut(.cancelAction)
                 Spacer()
-                if !OnlineSettings.askEveryTime {
+                if !OnlineSettings.askEveryTime, !preview.carriesDocuments {
                     Button("Send and don’t ask again this session") { consent.resolve(allow: true, forSession: true) }
                 }
                 Button("Send") { consent.resolve(allow: true) }.keyboardShortcut(.defaultAction)
@@ -96,6 +103,7 @@ struct OnlineSettingsSection: View {
     @State private var key = ""
     @State private var hasKey = OnlineSettings.apiKey(for: OnlineSettings.kind) != nil
     @State private var askEveryTime = OnlineSettings.askEveryTime
+    @State private var documentTermsConfirmed = OnlineSettings.confirmedDocumentTerms(for: OnlineSettings.kind) == OnlineSettings.kind.documentTermsVersion
     @State private var capText = OnlineSettings.dailyByteCap.map(String.init) ?? ""
     @State private var log: [OutboundLogEntry] = []
     @State private var showLog = false
@@ -110,6 +118,16 @@ struct OnlineSettingsSection: View {
                 OnlineSettings.kind = k
                 model = OnlineSettings.model
                 hasKey = OnlineSettings.apiKey(for: k) != nil
+                documentTermsConfirmed = OnlineSettings.confirmedDocumentTerms(for: k) == k.documentTermsVersion
+            }
+            // Review L2 — whether this provider may receive case documents, on whose terms.
+            Text(kind.documentTerms).font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if kind.mayReceiveDocuments {
+                Toggle(kind.documentAttestation, isOn: Binding(
+                    get: { documentTermsConfirmed },
+                    set: { OnlineSettings.setDocumentTermsConfirmed($0, for: kind); documentTermsConfirmed = $0 }))
+                    .font(.caption)
             }
             TextField("Model name (from your provider)", text: $model)
                 .textFieldStyle(.roundedBorder)

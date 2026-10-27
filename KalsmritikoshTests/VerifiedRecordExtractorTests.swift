@@ -103,4 +103,26 @@ struct VerifiedRecordExtractorTests {
         #expect(try verify("When was Leon Eugene Smith sentenced?", #"{"answer":"x","quote":"Smith pleaded guilty on May 1, 2024, to distribution of fentanyl.","doc":3,"value":"2024-05-01"}"#) == nil)
         #expect(try verify("When was Leon Eugene Smith sentenced?", #"{"answer":null}"#) == nil)
     }
+
+    @Test("Review L2: documents go only to a provider reviewed for case material, after a confirmation against the current terms")
+    func providerEligibility() {
+        // OpenAI is not reviewed for case material: refused even when "confirmed".
+        #expect(OnlineDocumentEligibility.refusal(kind: .openai, confirmedTermsVersion: OnlineProviderKind.openai.documentTermsVersion) != nil)
+        // Eligible providers need the person's confirmation …
+        for kind in [OnlineProviderKind.anthropic, .gemini] {
+            #expect(kind.mayReceiveDocuments && !kind.documentAttestation.isEmpty && !kind.documentTerms.isEmpty)
+            #expect(OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: nil)?.contains("Confirm") == true)
+            // … against the terms as currently reviewed; an older confirmation lapses.
+            #expect(OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: "2020-01-01")?.contains("changed") == true)
+            #expect(OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: kind.documentTermsVersion) == nil)
+        }
+        // The terms shown say what the provider keeps, not only that the publisher receives nothing.
+        #expect(OnlineProviderKind.anthropic.documentTerms.contains("30 days"))
+        #expect(OnlineProviderKind.gemini.documentTerms.contains("PAID") && OnlineProviderKind.gemini.documentTerms.contains("unpaid"))
+        // A document send is always previewed — "don't ask again this session" never covers it.
+        let p = OutboundPreview(provider: "x", model: "m", host: "h", text: "t", bytes: 1, maskedCount: 0,
+                                carriesDocuments: true, providerTerms: OnlineProviderKind.anthropic.documentTerms)
+        #expect(p.carriesDocuments && p.providerTerms != nil)
+    }
+
 }

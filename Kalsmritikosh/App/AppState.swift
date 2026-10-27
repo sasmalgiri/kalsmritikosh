@@ -2804,7 +2804,8 @@ public final class AppState {
                     guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
                         throw OnlineCloudProvider.OnlineError.notAvailable
                     }
-                    return try await provider.generate(prompt: prompt, options: GenerationOptions(maxTokens: 600, temperature: 0))
+                    // Review L2: document excerpts go only to an eligible, confirmed provider.
+                    return try await provider.generateFromDocuments(prompt: prompt, options: GenerationOptions(maxTokens: 600, temperature: 0))
                 } : nil)
             // Emails by exact subject, or sent by one person to another, straight from the ledger.
             let participants = EmailParticipantRepository(database: db)
