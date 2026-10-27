@@ -93,6 +93,7 @@ _60 of 60 product modules built._
 | Import & coverage lifecycle | Retrieval | yes | on | — |
 | Transcribe audio & video | Retrieval | yes | on | — |
 | Understand any wording of a question | Answer composition | yes | on | — |
+| Let your cloud AI read the documents about a person (Online) | Answer composition | yes | off | — |
 | AI writes every answer | Answer composition | yes | on | AI |
 | Story review (approve / correct / reject) | Answer composition | yes | on | — |
 | Actor answers (who did X) | Answer composition | yes | on | — |

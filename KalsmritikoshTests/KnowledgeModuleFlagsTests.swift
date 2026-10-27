@@ -60,6 +60,9 @@ import Foundation
             // NON-deterministic writer into the ledger should be a deliberate
             // choice rather than something a user discovers in their data.
             .inducedSchema,
+            // Final brief §3.5 — the one module that sends document text off the Mac (to the
+            // person's own cloud AI); only the person's explicit choice may turn it on.
+            .onlineRecordReading,
         ]
         for m in KnowledgeModule.allCases where m.implemented {
             if optIn.contains(m) {
