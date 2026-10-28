@@ -1107,6 +1107,13 @@ public actor MasterBrain {
     /// prepends a VERIFIED-FACTS block listing each assertable fact tagged with the
     /// `[C#]` of the chunk whose evidence block produced it (facts whose block isn't
     /// among these chunks are omitted, so the model can't cite a source it can't see).
+    /// A6 — a topic may orient an answer only when every document it was distilled from is among the
+    /// documents the answer already uses (so it adds no out-of-scope or uncleared material). A topic
+    /// with no recorded sources is never used.
+    nonisolated static func topicCovered(_ topic: MemoryObject, by objects: Set<UUID>) -> Bool {
+        !topic.sourceObjectIDs.isEmpty && Set(topic.sourceObjectIDs).isSubset(of: objects)
+    }
+
     nonisolated static func buildEvidencePrompt(
         question: String, chunks: [RetrievedChunk], facts: [GenericFact],
         evaluations: [ClaimEvaluation], topic: MemoryObject? = nil
@@ -1251,9 +1258,9 @@ public actor MasterBrain {
         // in a testable static helper below.
         // A3 — seed the matched topic (module .topicSeededComposers) so the model
         // composes over the topic first. Off ⇒ nil ⇒ prompt unchanged.
-        let seededTopic: MemoryObject? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers) && !toCloud
+        let seededTopic: MemoryObject? = (KnowledgeModuleFlags.isEnabled(.topicSeededComposers) && !toCloud
             ? (try? await memoryRepo?.search(question, limit: 1))?.first
-            : nil
+            : nil).flatMap { Self.topicCovered($0, by: Set(topChunks.map(\.chunk.objectID))) ? $0 : nil }
         let prompt = Self.buildEvidencePrompt(
             question: question, chunks: topChunks, facts: toCloud ? [] : retrieval.genericFacts,
             evaluations: toCloud ? [] : retrieval.claimEvaluations, topic: seededTopic)
@@ -2320,9 +2327,15 @@ public actor MasterBrain {
             // synthesizer as the primary orientation, so the AI answers FROM the
             // topic (deduped/minimized knowledge) and grounds it in the citations.
             // Gated by .topicSeededComposers; nil when off / no match.
-            let topicContext: String? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers)
-                ? (try? await memoryRepo?.search(question, limit: 1))?.first?.narrative
+            // A6 — a topic is distilled knowledge from its source documents; it is used only when every
+            // one of them is among this answer's citations (in scope by construction, and cleared with
+            // them for the cloud). A topic drawn from anything else is not used.
+            let candidateTopic: MemoryObject? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers)
+                ? (try? await memoryRepo?.search(question, limit: 1))?.first
                 : nil
+            let topicContext: String? = candidateTopic.flatMap {
+                Self.topicCovered($0, by: Set(verified.citations.map(\.objectID))) ? $0.narrative : nil
+            }
             synthesizedBody = await AnswerSynthesizer().synthesize(
                 question: question,
                 verifiedBody: verified.body,

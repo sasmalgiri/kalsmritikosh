@@ -154,22 +154,38 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "changed during consent: \(changed)")
             throw await fail(OnlineError.changedDuringConsent(changed))
         }
+        // A6 — the documents themselves are re-cleared at the send boundary: one made privileged,
+        // restricted, moved out of reach or erased while the dialog was open stops the send.
+        if let clearance = options.sourceClearance, let why = await clearance.stillCleared() {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "sources changed during consent")
+            throw await fail(OnlineError.changedDuringConsent(why))
+        }
 
+        // A7 — a cancel during the dialog or the checks: nothing is sent.
+        if Task.isCancelled {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled", "before sending")
+            throw CancellationError()
+        }
         // K8 — what leaves the Mac is recorded BEFORE it leaves: no record, no send.
         do { try await recordPending(kind, model, shownText, mapping.count) }
         catch { throw await fail(OnlineError.logUnavailable) }
 
         // 4–6. Send (with a deadline), log, unmask.
+        var dispatched = false
         do {
             let request = try OnlineRequestBuilder.build(kind: kind, model: model, apiKey: key, system: sendSystem,
                                                          prompt: sendPrompt, maxTokens: options.maxTokens)
+            try Task.checkCancellation()
+            dispatched = true
             let response = try await Self.withDeadline(Self.replyDeadline) { try await NetworkHelperClient.send(request) }
             let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {
-            // The person stopped it: recorded, not reported as a provider failure.
-            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled", nil)
+            // The person stopped it: recorded, not reported as a provider failure. Once dispatched, the
+            // request may already have reached the provider — said so, never "not sent".
+            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled",
+                      dispatched ? "stopped waiting; delivery unknown" : "before sending")
             throw CancellationError()
         } catch {
             await log(kind, model, shownText, bytes, mapping.count, nil, "failed", error.localizedDescription)
@@ -183,14 +199,30 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// Run `op`, failing with `.timedOut` after `deadline` and with `CancellationError` when the caller
     /// is cancelled — even if `op` itself never returns (an XPC reply that never comes).
     static func withDeadline<T: Sendable>(_ deadline: Duration, _ op: @escaping @Sendable () async throws -> T) async throws -> T {
+        // A7 — the work runs in a task this wrapper owns: a timeout or the caller's cancel CANCELS it
+        // (not only stops waiting for it), so the transport sees the cancel and stops.
         let once = DeadlineResume<T>()
+        let work = Task { try await op() }
+        let timer = Task {
+            try? await Task.sleep(for: deadline)
+            guard !Task.isCancelled else { return }
+            work.cancel()
+            once.resume(.failure(OnlineError.timedOut))
+        }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
                 once.attach(c)
-                Task { do { once.resume(.success(try await op())) } catch { once.resume(.failure(error)) } }
-                Task { try? await Task.sleep(for: deadline); once.resume(.failure(OnlineError.timedOut)) }
+                Task {
+                    let result = await work.result
+                    timer.cancel()
+                    once.resume(result)
+                }
             }
-        } onCancel: { once.resume(.failure(CancellationError())) }
+        } onCancel: {
+            work.cancel()
+            timer.cancel()
+            once.resume(.failure(CancellationError()))
+        }
     }
 
     func recordPending(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ masked: Int) async throws {

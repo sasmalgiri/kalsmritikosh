@@ -132,4 +132,100 @@ struct OnlineProviderFailureTests {
         #expect(SendSettings.changed(from: before, to: with { $0.4 = false }, carriesDocuments: false) == nil, "a question-only send does not need document terms")
         #expect(OnlineCloudProvider.OnlineError.changedDuringConsent("Online mode").errorDescription?.contains("Not sent") == true)
     }
+
+    // MARK: - Audit 182c7e4c (A6, A7)
+
+    nonisolated final class Counter: @unchecked Sendable {
+        private let lock = NSLock(); private var n = 0
+        func hit() { lock.withLock { n += 1 } }
+        var value: Int { lock.withLock { n } }
+    }
+
+    @Test("A7: cancelling the caller cancels the work itself — nothing is dispatched after the cancel")
+    func cancelPropagates() async throws {
+        let dispatched = Counter()
+        let task = Task {
+            try await OnlineCloudProvider.withDeadline(.seconds(30)) { () async throws -> Int in
+                try await Task.sleep(for: .milliseconds(300))   // the work honours cancellation
+                dispatched.hit()                                // a late dispatch would count here
+                return 1
+            }
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+        _ = await task.result
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(dispatched.value == 0, "the work kept running after the caller cancelled")
+    }
+
+    @Test("A7: a timeout cancels the work too")
+    func timeoutCancelsWork() async throws {
+        let dispatched = Counter()
+        await #expect(throws: OnlineCloudProvider.OnlineError.self) {
+            _ = try await OnlineCloudProvider.withDeadline(.milliseconds(50)) { () async throws -> Int in
+                try await Task.sleep(for: .milliseconds(300)); dispatched.hit(); return 1
+            }
+        }
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(dispatched.value == 0)
+    }
+
+    @Test("A7: a helper request cancelled before dispatch is never sent; a late reply after cancel is ignored")
+    func helperCallCancel() async throws {
+        let call = HelperCall()
+        call.cancel()
+        let sent = Counter()
+        do {
+            _ = try await withCheckedThrowingContinuation { (c: CheckedContinuation<OutboundHTTPResponse, Error>) in
+                if call.attach(c) { sent.hit() }
+            }
+            Issue.record("a cancelled request returned a reply")
+        } catch { #expect(error is CancellationError) }
+        #expect(sent.value == 0)
+        // A reply arriving after a cancel during the request is dropped (the continuation resumes once).
+        let live = HelperCall()
+        let result: Result<OutboundHTTPResponse, Error> = await withCheckedContinuation { outer in
+            Task {
+                do {
+                    let r = try await withCheckedThrowingContinuation { (c: CheckedContinuation<OutboundHTTPResponse, Error>) in
+                        _ = live.attach(c)
+                        live.cancel()
+                        live.resume(.success(OutboundHTTPResponse(status: 200, body: Data())))   // late reply
+                    }
+                    outer.resume(returning: .success(r))
+                } catch { outer.resume(returning: .failure(error)) }
+            }
+        }
+        if case .failure(let e) = result { #expect(e is CancellationError) } else { Issue.record("the late reply was delivered") }
+    }
+
+    @Test("A6: the send boundary re-clears the exact sources — one made privileged during consent stops it")
+    func sourcesRecheckedAtSend() async {
+        let flipped = Counter()
+        let doc = UUID()
+        let gate = CloudSourceGate(resolve: { _ in
+            .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: flipped.value > 0))
+        }, legacyPrivileged: { [] })
+        let first = await gate.clear([doc], purpose: "answer.synthesis")
+        #expect(first.denied.isEmpty)
+        #expect(await first.clearance.stillCleared() == nil, "unchanged sources still clear")
+        flipped.hit()   // the person marks the document privileged while the dialog is open
+        #expect(await first.clearance.stillCleared()?.contains("changed while you were reviewing") == true)
+        let erased = CloudSourceGate(resolve: { _ in .brokenLineage }, legacyPrivileged: { [] })
+        let c2 = CloudSourceClearance(clearedObjectIDs: [doc], deniedCount: 0, checkedAt: Date(), purpose: "p", gate: erased)
+        #expect(await c2.stillCleared() != nil, "an erased (untraceable) source stops the send")
+        let noGate = CloudSourceClearance(clearedObjectIDs: [doc], deniedCount: 0, checkedAt: Date(), purpose: "p")
+        #expect(await noGate.stillCleared() != nil, "a clearance that cannot be re-checked is refused")
+    }
+
+    @Test("A6: a topic is used only when every document it came from is among the answer's own sources")
+    func topicCoverage() {
+        let a = UUID(), b = UUID()
+        let inScope = MemoryObject(subjectKind: .project, subjectIdentifier: "p", narrative: "n", sourceObjectIDs: [a])
+        let outside = MemoryObject(subjectKind: .project, subjectIdentifier: "p", narrative: "n", sourceObjectIDs: [a, b])
+        let unsourced = MemoryObject(subjectKind: .project, subjectIdentifier: "p", narrative: "n")
+        #expect(MasterBrain.topicCovered(inScope, by: [a]))
+        #expect(!MasterBrain.topicCovered(outside, by: [a]), "a topic drawing on a document outside the answer is not used")
+        #expect(!MasterBrain.topicCovered(unsourced, by: [a]), "a topic with no recorded sources is not used")
+    }
 }

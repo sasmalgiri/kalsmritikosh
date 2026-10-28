@@ -21,6 +21,31 @@ public nonisolated struct CloudSourceClearance: Sendable, Hashable {
     public let deniedCount: Int
     public let checkedAt: Date
     public let purpose: String
+    /// A6 — the gate that issued this clearance, so the send boundary can re-clear exactly these
+    /// sources after the consent dialog (a source made privileged, restricted or erased meanwhile
+    /// stops the send). Not part of equality.
+    public let gate: CloudSourceGate?
+
+    public init(clearedObjectIDs: Set<UUID>, deniedCount: Int, checkedAt: Date, purpose: String, gate: CloudSourceGate? = nil) {
+        self.clearedObjectIDs = clearedObjectIDs; self.deniedCount = deniedCount
+        self.checkedAt = checkedAt; self.purpose = purpose; self.gate = gate
+    }
+
+    public static func == (a: CloudSourceClearance, b: CloudSourceClearance) -> Bool {
+        a.clearedObjectIDs == b.clearedObjectIDs && a.deniedCount == b.deniedCount && a.checkedAt == b.checkedAt && a.purpose == b.purpose
+    }
+    public func hash(into h: inout Hasher) { h.combine(clearedObjectIDs); h.combine(deniedCount); h.combine(checkedAt); h.combine(purpose) }
+
+    /// A6 — re-clear these sources now. Nil when they all still clear; otherwise why not. A clearance
+    /// without its gate cannot be re-checked and is refused.
+    public func stillCleared() async -> String? {
+        guard let gate else { return "the sources could not be re-checked" }
+        let again = await gate.clear(Array(clearedObjectIDs), purpose: purpose)
+        if let reason = again.denied.values.sorted().first {
+            return "\(again.denied.count) source(s) changed while you were reviewing (\(reason))"
+        }
+        return again.clearance.clearedObjectIDs == clearedObjectIDs ? nil : "the sources changed while you were reviewing"
+    }
 }
 
 public nonisolated struct CloudSourceGate: Sendable {
@@ -53,7 +78,7 @@ public nonisolated struct CloudSourceGate: Sendable {
         do { legacy = try await legacyPrivileged() } catch {
             // The privileged list cannot be read: nothing is cleared.
             for id in objectIDs { denied[id] = "the privileged-document list could not be read" }
-            return (CloudSourceClearance(clearedObjectIDs: [], deniedCount: denied.count, checkedAt: Date(), purpose: purpose), denied)
+            return (CloudSourceClearance(clearedObjectIDs: [], deniedCount: denied.count, checkedAt: Date(), purpose: purpose, gate: self), denied)
         }
         for id in Set(objectIDs) {
             if legacy.contains(id) { denied[id] = "privileged"; continue }
@@ -68,6 +93,6 @@ public nonisolated struct CloudSourceGate: Sendable {
                 denied[id] = "the document's protection could not be read"
             }
         }
-        return (CloudSourceClearance(clearedObjectIDs: cleared, deniedCount: denied.count, checkedAt: Date(), purpose: purpose), denied)
+        return (CloudSourceClearance(clearedObjectIDs: cleared, deniedCount: denied.count, checkedAt: Date(), purpose: purpose, gate: self), denied)
     }
 }
