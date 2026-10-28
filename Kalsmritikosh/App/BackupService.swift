@@ -37,6 +37,8 @@ public struct BackupService: Sendable {
         case promotionFailed(String)
         /// W2-7 — the backup's ledger is encrypted with a key this Mac does not hold.
         case encryptedWithAnotherKey
+        /// T2 — the backup was made by a newer version of the app (a newer ledger schema).
+        case newerSchema(backup: Int, supported: Int)
     }
 
     /// Copy the database + originals into `destination`, writing a manifest.
@@ -159,6 +161,10 @@ public struct BackupService: Sendable {
                         ledgerKey: LedgerKey? = LedgerKeychain.load()) throws -> BackupManifest {
         let (manifest, verdict) = try inspect(backupFolder: backupFolder)
         guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
+        // T2 — an older app never restores a newer ledger over the current one; update the app first.
+        guard manifest.schemaVersion <= SchemaMigrations.latestVersion else {
+            throw BackupError.newerSchema(backup: manifest.schemaVersion, supported: SchemaMigrations.latestVersion)
+        }
         guard verdict.unsafe.isEmpty else { throw BackupError.unsafeEntry(verdict.unsafe.joined(separator: ", ")) }
         guard verdict.corrupt.isEmpty else { throw BackupError.damaged(verdict.corrupt) }
         guard verdict.ok else { throw BackupError.restoreIncomplete(missing: verdict.missing) }

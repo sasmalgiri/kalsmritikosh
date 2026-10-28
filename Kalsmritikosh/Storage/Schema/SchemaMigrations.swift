@@ -57,6 +57,12 @@ public enum SchemaMigrations {
     static func migrate(_ database: Database, through targetVersion: Int,
                         fault: MigrationFaultHook? = nil) async throws {
         let current = try await database.currentUserVersion()
+        // T2 — a ledger written by a newer version of the app is never opened by this one: its tables
+        // and rules are not ones this build knows, and writing to it could break them. Nothing is changed.
+        if targetVersion == latestVersion, current > latestVersion {
+            throw DatabaseError.migrationFailed(version: current, message:
+                "This ledger was written by a newer version of the app (schema \(current); this version reads up to \(latestVersion)). Update the app to open it. The ledger was not changed.")
+        }
         // Self-heal a stale counter. Observed in the field: some databases carry
         // a fully-applied latest schema while `user_version` is stuck at an early
         // value. Blindly re-running the pending migrations would fail (bare CREATE
