@@ -84,11 +84,16 @@ public nonisolated enum LegalNotice {
     answers use Apple’s on-device model (part of macOS), and the semantic-search models ship \
     inside the app package — nothing to install and nothing to download. The ledger is \
     encrypted on your Mac, with its key in your Keychain. Online mode is off unless you turn \
-    it on: then, with your own API key, the cloud AI you choose may word an answer — you see \
-    exactly what would be sent, and nothing is sent until you agree. Sync through a folder, if \
+    it on: then, with your own API key, the cloud AI you choose may help understand a question \
+    and, if you allow it, read passages from your documents to word an answer — you see exactly \
+    what would be sent, and nothing is sent until you agree. Document text goes only to a \
+    provider whose terms permit it, after you confirm your account is on those terms, and that \
+    provider keeps what it receives under its own terms. Sync through a folder, if \
     you turn it on, writes your own work into a folder you choose, encrypted with your \
     passphrase; that folder's service moves it. The free trial and the purchase are handled by \
-    Apple through the App Store. You can delete everything by removing the app’s data folder.
+    Apple through the App Store. Removing the app’s data folder deletes the database and the \
+    working files beside it; backups, snapshots, sync folders and exports you made, Keychain \
+    items and Spotlight entries are separate and are removed by you.
     """
 
     public static let termsStatement = """
