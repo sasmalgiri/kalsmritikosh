@@ -50,9 +50,15 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
     public enum OnlineError: Error, LocalizedError {
         case notAvailable, declined, limitReached(Int), notEligibleForDocuments(String), documentsNotCleared
+        /// K8 — no reply within the deadline; nothing was answered.
+        case timedOut
+        /// K8 — the outbound record could not be written, so nothing was sent.
+        case logUnavailable
         public var errorDescription: String? {
             switch self {
             case .notEligibleForDocuments(let why): return why
+            case .timedOut:           return "The provider did not reply in time. Nothing was answered; try again."
+            case .logUnavailable:     return "Not sent: the record of what leaves this Mac could not be written."
             case .documentsNotCleared: return "Not sent: the passages were not checked for privilege and sensitivity before this request was built."
             case .notAvailable:       return "Online mode is not set up (choose a provider, model and key in Settings)."
             case .declined:           return "You chose not to send this to the cloud."
@@ -136,18 +142,51 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             throw OnlineError.declined
         }
 
-        // 4–6. Send, log, unmask.
+        // K8 — what leaves the Mac is recorded BEFORE it leaves: no record, no send.
+        do { try await recordPending(kind, model, shownText, mapping.count) }
+        catch { throw await fail(OnlineError.logUnavailable) }
+
+        // 4–6. Send (with a deadline), log, unmask.
         do {
             let request = try OnlineRequestBuilder.build(kind: kind, model: model, apiKey: key, system: sendSystem,
                                                          prompt: sendPrompt, maxTokens: options.maxTokens)
-            let response = try await NetworkHelperClient.send(request)
+            let response = try await Self.withDeadline(Self.replyDeadline) { try await NetworkHelperClient.send(request) }
             let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
+        } catch is CancellationError {
+            // The person stopped it: recorded, not reported as a provider failure.
+            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled", nil)
+            throw CancellationError()
         } catch {
             await log(kind, model, shownText, bytes, mapping.count, nil, "failed", error.localizedDescription)
             throw await fail(error)
         }
+    }
+
+    /// K8 — the longest the person waits for a reply.
+    static let replyDeadline: Duration = .seconds(120)
+
+    /// Run `op`, failing with `.timedOut` after `deadline` and with `CancellationError` when the caller
+    /// is cancelled — even if `op` itself never returns (an XPC reply that never comes).
+    static func withDeadline<T: Sendable>(_ deadline: Duration, _ op: @escaping @Sendable () async throws -> T) async throws -> T {
+        let once = DeadlineResume<T>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
+                once.attach(c)
+                Task { do { once.resume(.success(try await op())) } catch { once.resume(.failure(error)) } }
+                Task { try? await Task.sleep(for: deadline); once.resume(.failure(OnlineError.timedOut)) }
+            }
+        } onCancel: { once.resume(.failure(CancellationError())) }
+    }
+
+    func recordPending(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ masked: Int) async throws {
+        guard let outboundLog else { throw OnlineError.logUnavailable }
+        let sha = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        try await outboundLog.record(OutboundLogEntry(
+            id: UUID(), sentAt: Date(), provider: kind.rawValue, model: model, host: kind.host,
+            bytesSent: 0, maskedCount: masked, payloadSHA256: sha, payloadText: text, responseBytes: nil,
+            outcome: "sending", detail: nil))
     }
 
     /// Embeddings never leave the Mac: this provider has no `.embedding` capability.
@@ -174,5 +213,29 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         } catch {
             KalsmritikoshLog.routing.error("Outbound log write failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+}
+
+/// Resumes a continuation exactly once, whichever of the reply, the deadline or the cancellation comes
+/// first (a result that arrives before the continuation is attached is kept and delivered on attach).
+final class DeadlineResume<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var pending: Result<T, Error>?
+    private var done = false
+
+    func attach(_ c: CheckedContinuation<T, Error>) {
+        lock.lock()
+        if let pending { done = true; lock.unlock(); c.resume(with: pending); return }
+        continuation = c
+        lock.unlock()
+    }
+
+    func resume(_ r: Result<T, Error>) {
+        lock.lock()
+        guard !done else { lock.unlock(); return }
+        if let c = continuation { done = true; continuation = nil; lock.unlock(); c.resume(with: r); return }
+        if pending == nil { pending = r }
+        lock.unlock()
     }
 }
