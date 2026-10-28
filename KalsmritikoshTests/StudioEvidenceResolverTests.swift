@@ -71,6 +71,12 @@ struct StudioEvidenceResolverTests {
         let usd = StudioEvidenceContext(eligibleSourceVersions: [version], caseObjects: [], documentNames: [:],
                                         blockText: { _ in (self.version, "The wire was USD 1,000 on 5 January.") }, objectText: { _ in nil })
         #expect(await check("₹1,000", StudioEvidenceRef(sourceVersionID: version, blockID: block, quote: "The wire was USD 1,000"), context: usd, path: "schedule.x.amount") != nil)
+        // Review K4: an unqualified number does not confirm a currency-specific field.
+        let bare = StudioEvidenceContext(eligibleSourceVersions: [version], caseObjects: [], documentNames: [:],
+                                         blockText: { _ in (self.version, "The invoice total was 1,000 on 5 January.") }, objectText: { _ in nil })
+        #expect(await check("₹1,000", StudioEvidenceRef(sourceVersionID: version, blockID: block, quote: "The invoice total was 1,000"), context: bare, path: "schedule.x.amount")?.contains("same value and currency") == true)
+        // A field with no currency of its own is supported by the number.
+        #expect(await check("1,000", StudioEvidenceRef(sourceVersionID: version, blockID: block, quote: "The invoice total was 1,000"), context: bare, path: "schedule.x.amount") == nil)
         // The value must match exactly — ₹100 is not ₹1,000.
         #expect(await check("₹100", StudioEvidenceRef(sourceVersionID: version, blockID: block, quote: "Acme paid ₹1,000 to Vendor LLC"), context: context, path: "schedule.x.amount") != nil)
         // An object reference must name the exact version it was read from.

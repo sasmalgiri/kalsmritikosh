@@ -138,7 +138,9 @@ public nonisolated enum StudioEvidenceResolver {
             for token in amountTokens(in: quote) {
                 guard let got = FAMoney.value(of: token), got.magnitude == want.magnitude, (got < 0) == (want < 0) else { continue }
                 let gotCurrency = FAMoney.currency(of: token)
-                if !wantCurrency.isEmpty, !gotCurrency.isEmpty, wantCurrency != gotCurrency { continue }
+                // A field that names its currency is supported only by the same currency: a bare number
+                // (or "$", which names no currency) is not confirmation of "₹" — unknown is not a match.
+                if !wantCurrency.isEmpty, gotCurrency != wantCurrency { continue }
                 return nil
             }
             return "the cited passage does not state this amount (same value and currency)"
