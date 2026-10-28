@@ -815,6 +815,13 @@ struct DiagnosticEndToEndTests {
         """, [.uuid(UUID())])
         let before = (try? await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0)) ?? 0
         #expect((before ?? 0) > 0, "the fixture row did not land, so this proves nothing")
+        // Append-only rows too (v161): a studio draft's revision and export snapshot are the
+        // person's data, and a full erase must not leave them behind.
+        let studio = StudioRecordRepository(database: db)
+        let draftID = UUID()
+        try await studio.save(studio: "siu", id: draftID, title: "x", payload: Data("{}".utf8), actor: "Tester")
+        try await studio.recordExport(recordID: draftID, format: "markdown", text: "report", actor: "Tester")
+        #expect(try await studio.revisions(recordID: draftID).count == 1)
 
         let cleared = await state.deleteAllData()
         #expect(cleared > 0, "no tables were cleared")

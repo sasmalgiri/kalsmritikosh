@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 160
+    public static let latestVersion = 161
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -770,7 +770,8 @@ public enum SchemaMigrations {
         (157, v157),
         (158, v158),
         (159, v159),
-        (160, v160)
+        (160, v160),
+        (161, v161)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7775,6 +7776,34 @@ public enum SchemaMigrations {
               AND NEW.exported_at = OLD.exported_at
               AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
     BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only (content is cleared only by a recorded erasure)'); END;
+    """
+
+
+    // MARK: - v161 — the user's full erase passes the append-only guards (2026-10-28). "Delete all my
+    // data" is the person's deliberate destroy act; the append-only triggers (case_actions v153, studio
+    // revisions/exports v158, studio_erasures v160) made it silently leave those rows behind. Each guard
+    // now stands aside only while a full-erase marker row exists — written and removed inside the one
+    // savepoint of AppState.deleteAllData — so no ordinary delete can pass it.
+    private static let v161: String = """
+    CREATE TABLE IF NOT EXISTS ledger_full_erase (
+        started_at REAL NOT NULL
+    );
+    DROP TRIGGER IF EXISTS case_actions_append_only_delete;
+    CREATE TRIGGER case_actions_append_only_delete BEFORE DELETE ON case_actions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_revisions_kept;
+    CREATE TRIGGER studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_kept;
+    CREATE TRIGGER studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_erasures_kept;
+    CREATE TRIGGER studio_erasures_kept BEFORE DELETE ON studio_erasures
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
     """
 
 }

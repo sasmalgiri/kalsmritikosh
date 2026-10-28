@@ -4171,6 +4171,14 @@ public final class AppState {
         claimProjectionBackfillTask?.cancel()
         claimProjectionBackfillTask = nil
         await claimProjection?.cancel()
+        // Background writers that hold pre-erase content (the idle maintenance scan: topics,
+        // summaries, histories; the idle compression pass) are stopped and awaited, so nothing
+        // erased is written back after the wipe. Compression restarts after the erase.
+        idleMaintenanceScan?.cancel()
+        _ = await idleMaintenanceScan?.value
+        idleMaintenanceScan = nil
+        await compression?.stop()
+        defer { Task { [compression] in await compression?.start() } }
         // 2. Empty every user table. Skip sqlite internals and FTS shadow
         //    tables (those are maintained by triggers on their base tables, so
         //    deleting the base rows cleans the index). FK off during the wipe so
@@ -4178,9 +4186,27 @@ public final class AppState {
         let rows = (try? await db.query(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';",
             [])) ?? []
-        let tables = rows.compactMap { $0.string(0) }
+        let tables = rows.compactMap { $0.string(0) }.filter { $0 != "ledger_full_erase" }
         try? await db.exec("PRAGMA foreign_keys=OFF;", [])
-        for t in tables { try? await db.exec("DELETE FROM \"\(t)\";", []) }
+        // One savepoint: nothing interleaves with the wipe, and the count-back below sees exactly
+        // what the wipe left. The full-erase marker lets the append-only guards stand aside (v161)
+        // for this act only. AFTER DELETE triggers can refill a table already emptied (deleting
+        // chunks writes evidence_revisions), so the pass repeats until every table is empty.
+        let atomicResidue: [EraseResidueRow]? = try? await db.withSavepoint("full_erase") { db in
+            try db.exec("INSERT INTO ledger_full_erase (started_at) VALUES (?);", [.date(Date())])
+            var left: [EraseResidueRow] = []
+            for _ in 0..<3 {
+                for t in tables { try? db.exec("DELETE FROM \"\(t)\";", []) }
+                left = []
+                for t in tables {
+                    let n = (try? db.query("SELECT COUNT(*) FROM \"\(t)\";", []).first?.int(0)).flatMap { $0 }.map { Int($0) } ?? -1
+                    if n != 0 { left.append(EraseResidueRow(table: t, rows: n)) }
+                }
+                if left.isEmpty { break }
+            }
+            try db.exec("DELETE FROM ledger_full_erase;", [])
+            return left
+        }
         try? await db.exec("PRAGMA foreign_keys=ON;", [])
         // 3. Drop the vector-index cache so it rebuilds empty.
         let cache = db.url.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
@@ -4211,7 +4237,14 @@ public final class AppState {
         //    half-erased ledger that reports a clean erase would have the user
         //    re-ingest on top of surviving rows and then wonder why their counts
         //    are wrong.
-        let residue = await Self.eraseResidue(db: db, tables: tables)
+        // The savepoint's own count is the verdict; a savepoint that could not run is re-counted.
+        let residue: [(table: String, rows: Int)]
+        if let atomicResidue {
+            residue = atomicResidue.map { (table: $0.table, rows: $0.rows) }
+                .sorted { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
+        } else {
+            residue = await Self.eraseResidue(db: db, tables: tables)
+        }
         eraseResidue = residue
         newFilesSinceLaunch = 0
         if residue.isEmpty {
@@ -4223,6 +4256,8 @@ public final class AppState {
         }
         return tables.count
     }
+
+    struct EraseResidueRow: Sendable { let table: String; let rows: Int }
 
     /// Tables that still held rows after the last full erase. EMPTY is the
     /// expected state; anything here means the erase did not finish and the
