@@ -100,7 +100,7 @@ struct JobResultWorkflowTests {
         #expect(reopened?.id == review.current?.id)
         // The exported form carries the decisions and sources.
         let md = JobResultMarkdown.render(try #require(review.history.first { $0.state == .superseded && $0.content.review?.completed == true }), title: "Chronology")
-        #expect(md.contains("Decision: accepted — Matches the indictment date") && md.contains("Source:"))
+        #expect(md.contains("Decision: accepted — Matches the indictment date") && md.contains("Source (version "))
     }
 
     @Test("Export re-checks every cited source: a source made privileged after the run stops the export")

@@ -237,26 +237,53 @@ extension AppState {
 }
 
 extension AppState {
+    /// B2 — the cited sources of `refs` that do not resolve in the case for `purpose` (not in its
+    /// current scope, privileged, or above the purpose's sensitivity). One rule for completion and export.
+    public func unresolvedJobRefs(caseID: UUID, refs: [StudioEvidenceRef], purpose: SensitiveUsePurpose = .export) async throws -> [StudioEvidenceRef] {
+        guard let dataLab = investigationDataLab, let cases = investigationCases, let objects else { throw JobResultError.caseGone }
+        guard let c = try await cases.fetch(caseID: caseID) else { throw JobResultError.caseGone }
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: c.caseHeader.workspaceID, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: purpose))
+        let (included, _) = try await dataLab.eligibleSourceVersions(caseID: caseID, access: access)
+        let versions = Set(included)
+        let objectsOK = Set(try await objects.objectIDs(inSourceVersionIDs: versions))
+        return refs.filter { ref in
+            if let v = ref.sourceVersionID, !versions.contains(v) { return true }
+            if let o = ref.objectID, !objectsOK.contains(o) { return true }
+            return false
+        }
+    }
+
+    /// The completion check the review save runs (B2).
+    public func jobResultEvidenceCheck(caseID: UUID) -> JobResultRepository.EvidenceCheck {
+        { [weak self] refs in
+            guard let self else { throw JobResultError.caseGone }
+            return try await self.unresolvedJobRefs(caseID: caseID, refs: refs)
+        }
+    }
+
     /// A1/K5 — a job result is exported only while every source it cites is still cleared for export
     /// in its case (not privileged, not above export sensitivity, still in scope). Nil = clear to export.
     public func jobResultExportCheck(_ record: JobResultRecord) async -> String? {
-        guard let dataLab = investigationDataLab, let cases = investigationCases, let objects else { return "the ledger is not open" }
         do {
-            guard let c = try await cases.fetch(caseID: record.caseID) else { return "its case no longer exists" }
-            let access = SensitiveAccessContext(scope: SensitiveScope(
-                workspaceID: c.caseHeader.workspaceID, maximumSensitivity: .restricted,
-                permitsPrivilegedMaterial: false, purpose: .export))
-            let (included, _) = try await dataLab.eligibleSourceVersions(caseID: record.caseID, access: access)
-            let versions = Set(included)
-            let objectsOK = Set(try await objects.objectIDs(inSourceVersionIDs: versions))
-            let refs = record.content.rows.flatMap(\.refs)
-            let withdrawn = refs.filter { ref in
-                if let v = ref.sourceVersionID { return !versions.contains(v) }
-                if let o = ref.objectID { return !objectsOK.contains(o) }
-                return false
-            }.count
+            let withdrawn = try await unresolvedJobRefs(caseID: record.caseID, refs: record.content.rows.flatMap(\.refs)).count
             return withdrawn == 0 ? nil : "\(withdrawn) cited source(s) are no longer cleared for export (privileged, above export sensitivity, or out of the case)."
-        } catch { return "the sources could not be re-checked (\(error.localizedDescription))" }
+        } catch JobResultError.caseGone { return "its case no longer exists" }
+        catch { return "the sources could not be re-checked (\(error.localizedDescription))" }
+    }
+
+    /// B2 — the one export path for a job result, run AFTER the destination is chosen: the revision
+    /// must still be the case's current one, every cited source is re-checked immediately before the
+    /// write, the text is rendered once, written, read back and only then recorded with its digest.
+    public func exportJobResult(_ record: JobResultRecord, title: String, to url: URL, actor: String) async throws -> JobResultRepository.ExportReceipt {
+        guard let db = database else { throw JobResultError.caseGone }
+        let repo = JobResultRepository(database: db)
+        guard try await repo.latest(caseID: record.caseID, jobID: record.jobID)?.id == record.id else { throw JobResultReviewError.notCurrent }
+        if let why = await jobResultExportCheck(record) { throw JobResultExportError.sourcesWithdrawn(why) }
+        let text = JobResultMarkdown.render(record, title: title)
+        try Data(text.utf8).write(to: url, options: .atomic)
+        return try await repo.recordExport(resultID: record.id, caseID: record.caseID, jobID: record.jobID, text: text, file: url, actor: actor)
     }
 }
 

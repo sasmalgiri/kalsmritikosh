@@ -35,6 +35,23 @@ final class JobResultModel {
     }
 
     var dirty: Bool { current.map { $0.content.rows != rows } ?? false }
+
+    /// B2 — a row the person adds by hand (a document no run turned into a candidate, a missing
+    /// element). It carries no source until the person links one, and prints as their entry.
+    func addManualRow() {
+        var r = JobResultRow(title: "")
+        r.manual = true
+        rows.append(r)
+    }
+
+    /// Link a source to a row by its object id (from "Open source" / the evidence viewer).
+    func link(_ ref: StudioEvidenceRef, toRow i: Int) {
+        guard rows.indices.contains(i) else { return }
+        let old = rows[i]
+        rows[i] = JobResultRow(title: old.title, detail: old.detail, date: old.date, flags: old.flags, refs: old.refs + [ref],
+                               decision: old.decision, note: old.note, fields: old.fields)
+        rows[i].sourced = old.sourced; rows[i].assertions = old.assertions; rows[i].manual = old.manual
+    }
     var undecided: Int { rows.filter { $0.decision == nil }.count }
 
     func load() async {
@@ -46,11 +63,14 @@ final class JobResultModel {
         } catch { problem = "The result could not be read: \(error.localizedDescription)" }
     }
 
+    /// B2 — the app's check that cited sources still resolve (set by the view; nil in previews).
+    var evidenceCheck: JobResultRepository.EvidenceCheck?
+
     func save(complete: Bool, actor: String) async {
         guard let current else { return }
         do {
             try await repo.saveReview(of: current, rows: rows, complete: complete,
-                                      note: complete ? completionNote : nil, actor: actor)
+                                      note: complete ? completionNote : nil, actor: actor, evidenceCheck: evidenceCheck)
             message = complete ? "Completed and saved. Earlier revisions are kept." : "Review saved as a new revision."
             problem = nil
             completionNote = ""
@@ -60,7 +80,7 @@ final class JobResultModel {
 
     func restore(_ old: JobResultRecord, actor: String) async {
         do {
-            try await repo.restore(old, actor: actor)
+            try await repo.restore(old, over: current?.id, actor: actor)
             message = "That revision is current again (saved as a new revision)."
             viewing = nil
             await load()
@@ -107,7 +127,10 @@ struct JobResultView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 560)
-        .task { await model.load() }
+        .task {
+            model.evidenceCheck = appState.jobResultEvidenceCheck(caseID: model.caseID)
+            await model.load()
+        }
         .sheet(item: $source) { opened in
             VStack(spacing: 0) {
                 EvidenceViewer(citation: opened.citation)
@@ -155,7 +178,14 @@ struct JobResultView: View {
         let editable = model.viewing == nil && record.state != .superseded
         let rows = editable ? model.rows : record.content.rows
         VStack(alignment: .leading, spacing: 8) {
-            Label("Result (\(rows.count))", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
+            HStack {
+                Label("Result (\(rows.count))", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
+                Spacer()
+                if editable {
+                    Button("Add a row") { model.addManualRow() }.controlSize(.small)
+                        .help("Record something the run did not produce — a document it did not read, a missing element — as your entry.")
+                }
+            }
             ForEach(rows.indices, id: \.self) { i in
                 rowView(rows[i], index: i, editable: editable)
                     .padding(10)
@@ -177,6 +207,13 @@ struct JobResultView: View {
                 }
             }
             if let detail = row.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+            let current = editable ? model.rows[i] : row
+            if current.manual == true {
+                Text("Your entry — added by hand\(current.refs.isEmpty ? ", no source linked" : "")").font(.caption2).foregroundStyle(.orange)
+            } else if current.changedSourcedValue {
+                Text("Changed from the source (\(current.sourced?["title"].map { "it said: “\($0.prefix(120))”" } ?? "see the cited passage")). Your change prints as your entry; a note saying why is required to complete.")
+                    .font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
             if !row.flags.isEmpty {
                 Text(row.flags.map { "⚑ " + $0 }.joined(separator: "  ")).font(.caption2).foregroundStyle(.orange)
             }
@@ -218,7 +255,12 @@ struct JobResultView: View {
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
             ForEach(spec, id: \.key) { f in
                 GridRow {
-                    Text(f.label + (f.required ? "" : " (optional)")).font(.caption)
+                    let shown = editable ? model.rows[i] : row
+                    let value = shown.fields?[f.key] ?? ""
+                    let invalid = value.isEmpty ? nil : JobFields.invalidReason(f.kind, value)
+                    let entry = !value.isEmpty && shown.personEntries().contains(f.key)
+                    Text(f.label + (f.required ? "" : " (optional)") + (invalid.map { " — \($0)" } ?? "") + (entry ? " · your entry" : ""))
+                        .font(.caption)
                         .foregroundStyle(missing.contains(f.key) ? .orange : .secondary)
                     if editable {
                         let binding = Binding(get: { model.rows[i].fields?[f.key] ?? "" },
@@ -232,6 +274,10 @@ struct JobResultView: View {
                             .labelsHidden().frame(maxWidth: 240)
                         case .date:
                             TextField("yyyy-mm-dd", text: binding).font(.caption).frame(maxWidth: 140)
+                        case .amount:
+                            TextField("1,250.00", text: binding).font(.caption.monospacedDigit()).frame(maxWidth: 160)
+                        case .currency:
+                            TextField("USD", text: binding).font(.caption).frame(maxWidth: 80)
                         case .text:
                             TextField(f.label, text: binding, axis: .vertical).font(.caption)
                         }
@@ -298,22 +344,20 @@ struct JobResultView: View {
         await model.save(complete: true, actor: actor)
     }
 
-    /// Export the current revision as Markdown — after re-checking that every source it cites is still
-    /// cleared for export (a source made privileged or removed since the run stops the export).
+    /// Export the current saved revision as Markdown (B2): unsaved edits refuse; the destination is
+    /// chosen first; then the app re-checks the revision and every cited source immediately before
+    /// writing, renders once, reads the file back and records the export.
     private func export(_ record: JobResultRecord) async {
         #if canImport(AppKit)
-        if let why = await appState.jobResultExportCheck(record) {
-            model.setProblem("Not exported: \(why)")
-            return
-        }
+        guard !model.dirty else { model.setProblem(JobResultExportError.unsavedEdits.localizedDescription); return }
         let panel = NSSavePanel()
         if let md = UTType(filenameExtension: "md") { panel.allowedContentTypes = [md] }
         panel.nameFieldStringValue = "\(model.jobTitle).md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try Data(JobResultMarkdown.render(record, title: model.jobTitle).utf8).write(to: url, options: .atomic)
-            model.setMessage("Exported \(url.lastPathComponent).")
-        } catch { model.setProblem("Export failed: \(error.localizedDescription)") }
+            let receipt = try await appState.exportJobResult(record, title: model.jobTitle, to: url, actor: actor)
+            model.setMessage("Exported \(url.lastPathComponent) (SHA-256 \(receipt.fileSHA256.prefix(12))…, recorded).")
+        } catch { model.setProblem("Not exported: \(error.localizedDescription)") }
         #endif
     }
 }
@@ -331,7 +375,7 @@ extension JobResultModel {
 /// The exported form of a job result: state, review, rows with decisions and sources, limitations.
 nonisolated enum JobResultMarkdown {
     static func render(_ r: JobResultRecord, title: String) -> String {
-        var out = "# \(title)\n\nState: \(r.state.rawValue) · saved \(r.createdAt.formatted()) by \(r.createdBy)\n"
+        var out = "# \(title)\n\nState: \(r.state.rawValue) · revision \(r.id.uuidString) · saved \(r.createdAt.formatted()) by \(r.createdBy)\n"
         if let review = r.content.review {
             out += "\n\(review.completed ? "Completed" : "Reviewed") by \(review.by) on \(review.at.formatted())\(review.note.map { ": \($0)" } ?? "")\n"
             if let d = review.digest { out += "Digest (SHA-256 of the completed rows): \(d)\n" }
@@ -339,16 +383,25 @@ nonisolated enum JobResultMarkdown {
         if !r.content.limitations.isEmpty { out += "\n## Limitations\n" + r.content.limitations.map { "- \($0)" }.joined(separator: "\n") + "\n" }
         out += "\n## Result\n"
         for (i, row) in r.content.rows.enumerated() {
-            out += "\n\(i + 1). \(row.date.map { "\($0) — " } ?? "")\(row.title)\n"
+            let entries = Set(row.assertions ?? row.personEntries())
+            out += "\n\(i + 1). \(row.date.map { "\($0) — " } ?? "")\(row.title)\(entries.contains("title") ? " [reviewer's entry]" : "")\n"
+            if row.manual == true { out += "   Added by the reviewer\(row.refs.isEmpty ? " (no source linked)" : "").\n" }
+            else if row.changedSourcedValue, let said = row.sourced?["title"], said != row.title { out += "   The source-derived text was: \(said)\n" }
             if let d = row.detail { out += "   \(d)\n" }
             if !row.flags.isEmpty { out += "   Flags: \(row.flags.joined(separator: "; "))\n" }
             for (k, v) in (row.fields ?? [:]).sorted(by: { $0.key < $1.key }) where !v.isEmpty {
                 let label = JobFields.specs[r.jobID]?.first { $0.key == k }?.label ?? k
-                out += "   \(label): \(v)\n"
+                let mark = entries.contains(k) ? " [reviewer's entry\(row.sourced?[k].map { "; source-derived value was \($0)" } ?? "")]" : ""
+                out += "   \(label): \(v)\(mark)\n"
             }
             if let dec = row.decision { out += "   Decision: \(dec.rawValue)\(row.note.map { " — \($0)" } ?? "")\n" }
             else if let n = row.note { out += "   Note: \(n)\n" }
-            for ref in row.refs { out += "   Source: “\(ref.quote ?? "")”\n" }
+            for ref in row.refs {
+                // B2 — the exact source: version, object and block identifiers, then the quoted passage.
+                let ids = [ref.sourceVersionID.map { "version \($0.uuidString)" }, ref.objectID.map { "object \($0.uuidString)" },
+                           ref.blockID.map { "block \($0.uuidString)" }].compactMap { $0 }.joined(separator: ", ")
+                out += "   Source (\(ids.isEmpty ? "no locator" : ids)): “\(ref.quote ?? "")”\n"
+            }
         }
         if !r.content.nextActions.isEmpty { out += "\n## Next actions\n" + r.content.nextActions.map { "- \($0)" }.joined(separator: "\n") + "\n" }
         return out

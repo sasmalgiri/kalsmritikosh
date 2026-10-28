@@ -174,6 +174,8 @@ struct JobFamilyExecutorTests {
         case .choice(let options): return options[0]
         case .date: return "2026-06-01"
         case .text: return "recorded by the reviewer"
+        case .amount: return "1,250.00"
+        case .currency: return "USD"
         }
     }
 

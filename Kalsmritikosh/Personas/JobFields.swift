@@ -13,7 +13,9 @@
 import Foundation
 
 public nonisolated struct JobField: Sendable, Hashable, Codable {
-    public enum Kind: Sendable, Hashable, Codable { case text, date, choice([String]) }
+    /// B2 — `.date` is a real calendar day (yyyy-mm-dd), `.amount` one exact amount, `.currency` an
+    /// ISO 4217 code; a nonempty value that does not parse does not complete the field.
+    public enum Kind: Sendable, Hashable, Codable { case text, date, choice([String]), amount, currency }
     public let key: String
     public let label: String
     public let kind: Kind
@@ -125,10 +127,10 @@ public nonisolated enum JobFields {
         m["gen.migration"] = m["fa.analysis"]
         m["res.alternative"] = [F("account", "Account"), F("for", "Supporting evidence"), F("against", "Contrary evidence")]
         // Money.
-        m["law.damages"] = [F("head", "Head of damage"), F("amount", "Amount", prefill: .amount),
-                            F("currency", "Currency", prefill: .currency), F("source", "Source", prefill: .document), F("assumptions", "Assumptions")]
+        m["law.damages"] = [F("head", "Head of damage"), F("amount", "Amount", .amount, prefill: .amount),
+                            F("currency", "Currency", .currency, prefill: .currency), F("source", "Source", prefill: .document), F("assumptions", "Assumptions")]
         m["fa.funds-tracing"] = [F("from", "From account"), F("to", "To account"), F("date", "Date", .date),
-                                 F("amount", "Amount", prefill: .amount), F("currency", "Currency", prefill: .currency),
+                                 F("amount", "Amount", .amount, prefill: .amount), F("currency", "Currency", .currency, prefill: .currency),
                                  F("method", "Tracing method", .choice(["direct", "LIBR", "pro rata", "FIFO"]))]
         m["fa.workpapers"] = [F("calculation", "Calculation"), F("inputs", "Inputs", prefill: .amount)]
         // Disclosure.
@@ -176,7 +178,7 @@ public nonisolated enum JobFields {
                 case .contentHash?: value = (row.refs.first?.sourceVersionID ?? doc?.sourceVersionID).flatMap { evidence?.versionHashes[$0] }
                 case .exhibitNumber?: value = String(format: "EX-%03d", i + 1)
                 case .bates?: value = String(format: "%@-%06d", evidence?.batesPrefix ?? "PROD", i + 1)
-                case .amount?: value = FAMoney.value(of: row.title).map(FAMoney.format) ?? (row.title.rangeOfCharacter(from: .decimalDigits) != nil ? row.title : nil)
+                case .amount?: value = FAMoney.value(of: row.title).map(FAMoney.format)
                 case .currency?: value = { let c = FAMoney.currency(of: row.title); return c.isEmpty ? nil : c }()
                 case .firstSentence?: value = row.refs.first?.quote
                 case .constantOpen?: value = "open"
@@ -194,13 +196,37 @@ public nonisolated enum JobFields {
     public static func missing(job: String, row: JobResultRow) -> [JobField] {
         guard row.decision == .accepted, let spec = specs[job] else { return [] }
         return spec.filter { f in
-            guard f.required else { return false }
             let v = (row.fields?[f.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if v.isEmpty { return true }
-            if case .choice(let options) = f.kind { return !options.contains(v) }
-            return false
+            if v.isEmpty { return f.required }
+            // A value given (required or optional) must be a valid value of its kind.
+            return invalidReason(f.kind, v) != nil
         }
     }
+
+    /// Why a nonempty value is not a valid value of its kind (nil: valid).
+    public static func invalidReason(_ kind: JobField.Kind, _ value: String) -> String? {
+        let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch kind {
+        case .text: return nil
+        case .choice(let options): return options.contains(v) ? nil : "not one of the listed choices"
+        case .date: return isoDay(v) == nil ? "not a calendar date (yyyy-mm-dd)" : nil
+        case .amount: return FAMoney.value(of: v) == nil ? "not one exact amount (e.g. 1,250.00)" : nil
+        case .currency: return Self.currencyCodes.contains(v.uppercased()) && v.count == 3 ? nil : "not an ISO currency code (e.g. USD)"
+        }
+    }
+
+    /// "2026-02-30" is not a day; only a date that round-trips is.
+    public static func isoDay(_ s: String) -> Date? {
+        let parts = s.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+              let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]) else { return nil }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        guard let date = cal.date(from: DateComponents(year: y, month: m, day: d)) else { return nil }
+        let back = cal.dateComponents([.year, .month, .day], from: date)
+        return back.year == y && back.month == m && back.day == d ? date : nil
+    }
+
+    static let currencyCodes: Set<String> = Set(Locale.Currency.isoCurrencies.map { $0.identifier.uppercased() })
 }
 
 // MARK: - Executors that complete by computation

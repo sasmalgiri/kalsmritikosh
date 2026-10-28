@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 164
+    public static let latestVersion = 165
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -797,7 +797,8 @@ public enum SchemaMigrations {
         (161, v161),
         (162, v162),
         (163, v163),
-        (164, v164)
+        (164, v164),
+        (165, v165)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7919,6 +7920,32 @@ public enum SchemaMigrations {
     WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
     BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    """
+
+    // MARK: - v165 — job result exports (completion instructions 2026-10-29, B2). An export of a job
+    // result is recorded only after the file was written and read back: which revision (by its
+    // payload digest), the written bytes' SHA-256 and the exact text. Kept like studio exports —
+    // removed only with its case (ledger_case_erase) or by a full erase.
+    private static let v165: String = """
+    CREATE TABLE IF NOT EXISTS job_result_exports (
+        id             TEXT PRIMARY KEY NOT NULL,
+        result_id      TEXT NOT NULL,
+        case_id        TEXT NOT NULL,
+        job_id         TEXT NOT NULL,
+        result_sha256  TEXT NOT NULL,
+        file_name      TEXT NOT NULL,
+        file_sha256    TEXT NOT NULL,
+        snapshot_text  TEXT NOT NULL,
+        exported_by    TEXT NOT NULL,
+        exported_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_result_exports_result ON job_result_exports(result_id);
+    CREATE TRIGGER IF NOT EXISTS job_result_exports_fixed BEFORE UPDATE ON job_result_exports
+    BEGIN SELECT RAISE(ABORT, 'job_result_exports is a fixed record'); END;
+    CREATE TRIGGER IF NOT EXISTS job_result_exports_kept BEFORE DELETE ON job_result_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'job_result_exports is append-only'); END;
     """
 
 
