@@ -135,7 +135,7 @@ Status by phase of the final completion instructions (§10):
 | K9 | Injection corpus widened to the general route, filenames, OCR, attachments, quoted text and split instructions; legitimate analysis of an injected instruction (§5) | F4 | partial |
 | K10 | Case and person erasure across every dependent store, with shared-evidence and hold handling (§5) | F1 | open |
 | K11 | App-managed vector cache and vault copies protected by default, or a bounded recorded decision (§5) | F1 | open |
-| J1 | JOB_CONTRACTS for all 168 jobs, with result-family executors and per-job assertions (§3) | F2 | open |
+| J1 | JOB_CONTRACTS for all 168 jobs, with result-family executors and per-job assertions (§3) | F2 | **partial**. Contracts done: `docs/JOB_CONTRACTS.md` is generated from `JobContracts.swift`, and `JobContractTests` proves one contract per job, consistent with the outcome matrix. Honest status: 20 studio, 51 service (the shared result is the intended outcome; journey not verified), **97 gap** (the intended result is not produced). The result-family executors for the gaps and per-job assertions are open. |
 | P1–P9 | Persona outcomes and acceptance journeys (§4) | F3 | open |
 | T1 | Barrier-controlled race tests (8 listed, §6) | F4 | open |
 | T2 | Upgrade and recovery tests incl. clean-machine restore (§6) | F4 | open |
