@@ -107,6 +107,12 @@ public nonisolated enum ProceedingAnswerer {
         if q.range(of: #"^(?:did|was|were|has|have|is)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .whether(step))
         }
+        // The same yes/no question behind a courtesy wrapper: "I'm trying to confirm: did X plead
+        // guilty?", "I need to know—did X …", "For the record, can you confirm whether X pleaded
+        // guilty?" (held-out rewordings, dev set 2026-10-28).
+        if q.range(of: #"(?:[:;,—–]|\s-)\s*(?:did|was|were|has|have)\s|\b(?:whether|if)\s+(?!.*\b(?:when|what date|which day)\b)"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .whether(step))
+        }
         return nil
     }
 
@@ -235,7 +241,11 @@ public nonisolated enum ProceedingAnswerer {
             // Brief §8: an absent plea record is not proof there was no plea, and a guilty plea is not
             // "not convicted". Only a verdict reached AT TRIAL answers "did X plead guilty?" with No; a
             // bare "was convicted" (which follows a plea as often as a trial) is reported as what it is.
-            if step == .pleaded, let hit = found.first(where: { $0.1.step == .convicted }) {
+            // A sentence that says the verdict came at trial, from any of the person's documents,
+            // outranks a headline that only says "convicted".
+            let convictions = found.filter { $0.1.step == .convicted }
+            let trialHit = convictions.first { $0.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil }
+            if step == .pleaded, let hit = trialHit ?? convictions.first {
                 let atTrial = hit.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
                 let text = atTrial
                     ? "No — the documents say \(name) was found guilty at trial: \(quote(hit.1.sentence))"

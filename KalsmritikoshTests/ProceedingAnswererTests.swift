@@ -423,4 +423,29 @@ struct ProceedingGapTests {
         #expect(!body.contains("Two men"), "\(body)")
     }
 
+
+    @Test("A yes/no question behind a courtesy wrapper parses as the same question; a trial verdict anywhere outranks a bare 'convicted' headline")
+    func wrappedWhetherAndTrialVerdict() throws {
+        for q in ["I'm trying to confirm: did Jason Lorel Minter plead guilty?",
+                  "I need to know—did Jason Lorel Minter plead guilty?",
+                  "For the record, can you confirm whether Jason Lorel Minter pleaded guilty?",
+                  "I'm trying to verify whether Jason Lorel Minter pled guilty — can you confirm?"] {
+            #expect(ProceedingAnswerer.parse(q) == ProceedingAnswerer.Parsed(person: "Jason Lorel Minter", ask: .whether(.pleaded)), "\(q)")
+        }
+        #expect(ProceedingAnswerer.parse("For the record, when was Jason Lorel Minter sentenced?")?.ask != .whether(.sentenced))
+        let release = """
+        U.S. Department of Justice
+        District of Hawaii
+        FOR IMMEDIATE RELEASE
+        Friday, May 5, 2023
+
+        Kapolei Man Convicted Of Methamphetamine Trafficking
+
+        HONOLULU – Ernesto Hernandez, 41, of Kapolei, was convicted on May 4, 2023, after a four-day trial, when a federal jury found him guilty of possessing methamphetamine with intent to distribute it.
+        """
+        let parsed = try #require(ProceedingAnswerer.parse("Did Ernesto Hernandez plead guilty?"))
+        let body = try #require(ProceedingAnswerer.answer(parsed, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: release)])).body
+        #expect(body.hasPrefix("No — "), "\(body)")
+    }
+
 }
