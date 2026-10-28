@@ -57,9 +57,10 @@ allowed; a wrong refusal is a recall loss, not a "wrong".
 
 1. Freeze the code and scorer: record the commit and the scorer's SHA-256 in the release packet. No
    change to the code, scorer or prompts after this point counts toward the gate.
-2. Generate ho10 with a new seed, skipping every prosecution used in ho1–ho9 (see
-   `~/CaseBench/chain-ho9.sh` for the generator; add ho9's keys to `--skip-keys`).
-3. Run both paths once, build the pack, adjudicate per §3.
+2. Generate and run ho10 once with a new seed, skipping every prosecution used in ho1–ho9 (add ho9's
+   source folder to `$CASEBENCH_HOME/skip-chron`): `scripts/casebench/heldout.sh ho10-chron --generate <seed>`.
+   The driver records the commit, the scorer digest, the host and the command beside the results.
+3. Build the pack (the driver does), adjudicate per §3.
 4. If the gate fails, fix, refreeze and generate **ho11**; ho10 becomes a regression set. A held-out
    set is never re-used to claim the gate.
 

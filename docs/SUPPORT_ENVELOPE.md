@@ -1,6 +1,7 @@
 # Support envelope (F4 / T3) — measured
 
-Measured on 2026-10-28 with `SupportEnvelopeTests.measuredEnvelope` (a booted production app, AI off,
+Measured on 2026-10-28 with `SupportEnvelopeTests.measuredEnvelope` (400 documents by default; the 4,000 run is
+`TEST_RUNNER_SUPPORT_ENVELOPE_SCALE=10`, no source edit) (a booted production app, AI off,
 the evidence-only answer path). Hardware: **Mac16,12 (MacBook Air, Apple M4), 16 GB RAM, 10 cores, macOS
 27.0.1 (26A434)**. The input is generated text memos and emails with names, dates, amounts, quotes and
 causal sentences. Real archives with large PDFs, scans or attachments are slower per document; their

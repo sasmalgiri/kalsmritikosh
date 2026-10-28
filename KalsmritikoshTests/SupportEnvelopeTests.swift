@@ -50,7 +50,7 @@ struct SupportEnvelopeTests {
         return s[min(s.count - 1, Int((Double(s.count - 1) * p).rounded()))]
     }
 
-    @Test("Ingest 400 documents and answer 30 questions; record the measured envelope", .timeLimit(.minutes(20)))
+    @Test("Ingest 400 documents (×SUPPORT_ENVELOPE_SCALE) and answer 30 questions; record the measured envelope", .timeLimit(.minutes(60)))
     func measuredEnvelope() async throws {
         await SharedSettingsLock.shared.acquire()
         defer { Task { await SharedSettingsLock.shared.release() } }
@@ -65,7 +65,10 @@ struct SupportEnvelopeTests {
         defer { try? FileManager.default.removeItem(at: temp) }
         let docs = temp.appendingPathComponent("docs", isDirectory: true)
         try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
-        let memos = 300, emails = 100
+        // The 400-document run is the default; SUPPORT_ENVELOPE_SCALE=10 measures 4,000 (3,000 memos and
+        // 1,000 emails) without a source edit. Record the scale with the result.
+        let scale = max(1, Int(ProcessInfo.processInfo.environment["SUPPORT_ENVELOPE_SCALE"] ?? "") ?? 1)
+        let memos = 300 * scale, emails = 100 * scale
         var inputBytes = 0
         for i in 0..<memos {
             let d = Data(Self.memo(i).utf8); inputBytes += d.count
