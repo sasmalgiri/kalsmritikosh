@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 163
+    public static let latestVersion = 164
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -790,7 +790,8 @@ public enum SchemaMigrations {
         (160, v160),
         (161, v161),
         (162, v162),
-        (163, v163)
+        (163, v163),
+        (164, v164)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7867,5 +7868,52 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_job_results_case_job ON job_results(case_id, job_id, created_at);
     """
+
+    // MARK: - v164 — case and person erasure (final completion instructions K10). One case, or one
+    // person's derived record, can be erased on the person's deliberate act: every case-scoped row is
+    // removed in one savepoint and a content-free erasure record is kept (who, when, why, how much —
+    // never the content; a person is recorded by a SHA-256 of the name, not the name). The append-only
+    // guards on case_actions and studio revisions/exports stand aside only for the case named in the
+    // ledger_case_erase marker, written and removed inside that savepoint. Erasure records cannot be
+    // changed, and are removed only by a full erase.
+    private static let v164: String = """
+    CREATE TABLE IF NOT EXISTS ledger_case_erase (
+        case_id TEXT PRIMARY KEY NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_erasures (
+        id             TEXT PRIMARY KEY NOT NULL,
+        scope          TEXT NOT NULL CHECK (scope IN ('case','person')),
+        case_id        TEXT,
+        subject_sha256 TEXT,
+        reason         TEXT NOT NULL,
+        legal_basis    TEXT,
+        rows_json      TEXT NOT NULL,
+        sources_erased INTEGER NOT NULL DEFAULT 0,
+        sources_kept   INTEGER NOT NULL DEFAULT 0,
+        erased_by      TEXT NOT NULL,
+        erased_at      REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS case_erasures_fixed BEFORE UPDATE ON case_erasures
+    BEGIN SELECT RAISE(ABORT, 'case_erasures is a fixed record'); END;
+    CREATE TRIGGER IF NOT EXISTS case_erasures_kept BEFORE DELETE ON case_erasures
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_erasures is kept'); END;
+    DROP TRIGGER IF EXISTS case_actions_append_only_delete;
+    CREATE TRIGGER case_actions_append_only_delete BEFORE DELETE ON case_actions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_revisions_kept;
+    CREATE TRIGGER studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_kept;
+    CREATE TRIGGER studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    """
+
 
 }

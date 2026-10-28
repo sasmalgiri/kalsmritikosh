@@ -230,6 +230,11 @@ struct CaseOverviewTab: View {
     @State private var closeRationale = ""
     @State private var unresolved = ""
     @State private var stageReason = ""
+    @State private var eraseReason = ""
+    @State private var eraseBasis = ""
+    @State private var eraseDocuments = false
+    @State private var confirmErase = false
+    @State private var eraseStatus: String?
 
     var body: some View {
         let closed = s.caseHeader.status == .closed
@@ -360,6 +365,33 @@ struct CaseOverviewTab: View {
                         Button("Archive") { model.run(appState) { try await $0.file.archive(caseID: model.caseID, actor: model.actor) } }
                     }
                 }
+            }
+            CaseSection(title: "Erase this case",
+                        subtitle: "Removes everything recorded for this case — its work, notes, results and history — and keeps only a record that it was erased (who, when, why; never the content). A legal hold refuses it. Documents another case or workspace uses are always kept.") {
+                TextField("Why erase (required)", text: $eraseReason)
+                TextField("Legal basis (optional)", text: $eraseBasis)
+                Toggle("Also erase the documents only this case uses", isOn: $eraseDocuments)
+                HStack {
+                    if let eraseStatus { Text(eraseStatus).font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                    Button("Erase case…", role: .destructive) { confirmErase = true }
+                        .disabled(eraseReason.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .confirmationDialog("Erase this case permanently?", isPresented: $confirmErase) {
+                Button("Erase", role: .destructive) {
+                    let reason = eraseReason, basis = opt(eraseBasis), docs = eraseDocuments
+                    Task {
+                        do {
+                            let out = try await appState.eraseCase(model.caseID, eraseExclusiveSources: docs, reason: reason,
+                                                                   legalBasis: basis, actor: model.actor)
+                            eraseStatus = out.summary
+                        } catch { eraseStatus = error.localizedDescription }
+                    }
+                }
+            } message: {
+                Text(eraseDocuments ? "The case and the documents only it uses are removed. This cannot be undone."
+                                    : "The case is removed; its documents stay in your library. This cannot be undone.")
             }
         }
         .onAppear { sync() }
