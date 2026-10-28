@@ -122,6 +122,23 @@ public nonisolated enum ProceedingAnswerer {
         return f.string(from: date)
     }
 
+    /// Surnames the texts declare as the same person's ("A B, aka C D", "C D, also known as A B"), lower-cased.
+    static func aliasSurnames(of surname: String, in texts: [String]) -> [String] {
+        let name = #"([A-Z][\w'’-]+(?:\s+[A-Z][\w'’.-]+)*)"#
+        guard let re = try? NSRegularExpression(pattern: name + #",?\s+(?:aka|a/k/a|also known as)\s+"# + name) else { return [] }
+        var out: [String] = []
+        for text in texts {
+            let ns = text as NSString
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let a = ns.substring(with: m.range(at: 1)).split(separator: " ").last.map { $0.lowercased() } ?? ""
+                let b = ns.substring(with: m.range(at: 2)).split(separator: " ").last.map { $0.lowercased() } ?? ""
+                if a == surname, !b.isEmpty, !out.contains(b) { out.append(b) }
+                if b == surname, !a.isEmpty, !out.contains(a) { out.append(a) }
+            }
+        }
+        return out
+    }
+
     static func quote(_ s: String) -> String {
         let t = s.count > 320 ? String(s.prefix(320)) + "…" : s
         return "\u{201C}\(t)\u{201D}"
@@ -265,9 +282,17 @@ public nonisolated enum ProceedingAnswerer {
                     if !candidates.contains(where: { $0.sentence == sent }) { candidates.append(Candidate(sentence: sent, objectID: src.objectID, rank: 2)) }
                 }
             }
+            // A statement of the person's charge names the person: a group lead ("Two men pleaded
+            // guilty …", "… and six others were charged …") gives the case's charges, not necessarily
+            // this person's, and answers only when no sentence naming the person states an offence.
+            // A surname the person's own documents give as an alias ("Christi Romano, aka Christi
+            // Machala") names the person too.
+            let surnames = surname.isEmpty ? [] : [surname] + Self.aliasSurnames(of: surname, in: about.map(\.text))
+            let namesPerson = #"\b(?:"# + surnames.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + #")\b"#
             func score(_ c: Candidate) -> Int {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
+                    + (!surnames.isEmpty && c.sentence.lowercased().range(of: namesPerson, options: .regularExpression) != nil ? 5 : 0)
             }
             // Only a sentence that STATES an offence answers; one that merely mentions a charge does not.
             guard let hit = candidates.filter({ $0.sentence.count > 40 && score($0) >= 10 }).max(by: { score($0) < score($1) }) else {

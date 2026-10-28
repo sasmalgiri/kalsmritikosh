@@ -406,4 +406,21 @@ struct ProceedingGapTests {
         // With the plea and the charge on file, the sentencing has its steps.
         #expect(GapDetector().detectProceedingGaps(texts: [(objectID: UUID(), text: sentencing), (objectID: UUID(), text: plea)]).isEmpty)
     }
+
+    @Test("'Charged with': the sentence naming the person outranks a group lead that gives the case's charges")
+    func chargeNamesThePerson() throws {
+        let text = """
+        U.S. Department of Justice
+        FOR IMMEDIATE RELEASE
+        Tuesday, March 2, 2021
+
+        BOSTON - Two men pleaded guilty yesterday to conspiring to defraud the government in connection with the renovation of a post office.
+        Wael Isreb, 51, of Quincy, pleaded guilty to conspiracy to commit mail fraud and to making false statements.
+        """
+        let parsed = try #require(ProceedingAnswerer.parse("What were the charges against Wael Isreb?"))
+        let body = try #require(ProceedingAnswerer.answer(parsed, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: text)])).body
+        #expect(body.contains("conspiracy to commit mail fraud"), "\(body)")
+        #expect(!body.contains("Two men"), "\(body)")
+    }
+
 }
