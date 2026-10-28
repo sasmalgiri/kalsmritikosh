@@ -24,7 +24,7 @@ Testing cadence (agreed with the owner, 2026-10-28):
 
 ## Exact blockers
 
-0. **Engineering (agent):** outcome-based injection tests against a real model, and re-measuring benign accuracy with the guard on.
+0. **Engineering (agent):** re-measuring benign accuracy with the injection guard on (part of F5's bench runs).
 
 1. **Accuracy (F5):** independent adjudication of the bench answers, then one run on a fresh held-out
    set (ho10), never tuned on. The wrong-answer rate must be ≤1 %. It was measured above that on
