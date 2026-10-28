@@ -26,6 +26,7 @@ of 2026-10-28.
 | Models | Apple Foundation Models where available; the deterministic evidence engine always works with zero models; bundled BGE embedder/reranker |
 | Minimum OS | macOS 15.6, capability-adaptive (GOV-004) |
 | Storage | One SQLCipher-encrypted ledger (AES-256), key in the Keychain; the only approved third-party dependency |
+| Files beside the ledger (K11) | Vector cache sealed with AES-GCM under a key derived from the ledger key (never written without it). Vault copies of originals stay readable files, owner-only (files 0400, folders 0700) in the sandbox container, protected at rest by FileVault — a bounded, recorded decision (see §5, 2026-10-28 K11) |
 | Distribution and price | Mac App Store only; free download, 14-day trial, then **$79 once** (no subscription, no licence server) |
 | Release gate | Every mandatory gate in the final completion instructions (§10) has evidence; ≤ 1 % wrong answers per measured mode/family on fresh held-out material unless the owner explicitly changes the claim |
 
@@ -77,6 +78,8 @@ Hard generative-call budgets (enforced, shared across classifier/experts/planner
 - 1 TB advertised scale (until a recorded run exists).
 
 ## 5. Change-control log
+
+- **2026-10-28 (K11, agent self-ruling under the final completion instructions, for owner review at HOLD 2):** **App-managed files beside the ledger.** (1) The HNSW vector cache (`hnsw-index.bin`) holds every chunk's vector. It is now written only sealed with AES-GCM under a key derived from the ledger key by HKDF-SHA256 (salt per purpose). With no key it is not written, and an unsealed or foreign cache is rebuilt from the ledger, not trusted. (2) **Bounded decision: vault copies are not encrypted by the app.** They are the person's own originals, kept so a citation always reopens the exact bytes. Quick Look, "Open original", DEVONthink and exports must open them as ordinary files, and sealing them would mean decrypting to temporary files. They are owner-only (files 0400, folders 0700; older copies tightened once) inside the sandbox container, protected at rest by FileVault, and removed by full and case erasure. Revisit if managed mode becomes the default or a reviewer requires app-level vault encryption. Crypto inventory adds CryptoKit AES-GCM and HKDF (Apple OS crypto; export answer unchanged).
 
 - **2026-10-28 (final completion instructions, owner):** §0 added as the one current contract: English v1, single user, nine personas / 168 jobs, evidence-only and Private defaults, Online opt-in with provider eligibility for documents, $79 once, Mac App Store. §1's offline-only network row and five-persona row are marked superseded in place (kept as history).
 

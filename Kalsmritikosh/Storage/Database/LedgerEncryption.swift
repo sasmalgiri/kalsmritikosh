@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import CryptoKit
 import Security
 import SQLCipher
 import os
@@ -39,6 +40,13 @@ public struct LedgerKey: Sendable, Equatable {
     }
 
     var hex: String { raw.map { String(format: "%02X", $0) }.joined() }
+
+    /// K11 — a key for one app-managed file beside the ledger (HKDF-SHA256 over the ledger key, salted
+    /// by purpose), so a cache is sealed with the ledger's protection but never with the ledger key itself.
+    public func derivedKey(for purpose: String) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: raw), salt: Data("kalsmritikosh.\(purpose)".utf8),
+                               info: Data("v1".utf8), outputByteCount: 32)
+    }
 
     /// `PRAGMA key = "x'…'";` — a raw 256-bit key (no passphrase derivation).
     var pragmaValue: String { "\"x'\(hex)'\"" }

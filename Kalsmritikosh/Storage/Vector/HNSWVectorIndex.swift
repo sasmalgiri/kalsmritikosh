@@ -44,6 +44,7 @@
 //
 
 import Foundation
+import CryptoKit
 import OSLog
 
 public actor HNSWVectorIndex {
@@ -192,8 +193,10 @@ public actor HNSWVectorIndex {
     /// `false` on any error (file write fail, encoding fail). Safe to
     /// call from any time after `build` completes.
     @discardableResult
-    public func persist(to url: URL) -> Bool {
-        guard warmed else { return false }
+    public func persist(to url: URL, sealedWith key: SymmetricKey?) -> Bool {
+        // K11 — the cache holds every chunk's vector: it is written only sealed (AES-GCM under a key
+        // derived from the ledger key), never in the clear. No key, no file; the graph stays in memory.
+        guard warmed, let key else { return false }
         var data = Data()
         data.reserveCapacity(nodes.count * 512)
 
@@ -224,7 +227,9 @@ public actor HNSWVectorIndex {
         }
 
         do {
-            try data.write(to: url, options: .atomic)
+            guard let sealed = try AES.GCM.seal(data, using: key).combined else { return false }
+            try sealed.write(to: url, options: [.atomic, .completeFileProtection])
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             persistedVectorCount = nodes.count
             KalsmritikoshLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .private) (\(data.count, privacy: .public) bytes)")
             return true
@@ -240,11 +245,12 @@ public actor HNSWVectorIndex {
     /// disagrees with the file — caller should fall back to a fresh
     /// build in those cases.
     @discardableResult
-    public func load(from url: URL, expectedCount: Int) -> Bool {
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+    public func load(from url: URL, expectedCount: Int, sealedWith key: SymmetricKey?) -> Bool {
+        guard let key, FileManager.default.fileExists(atPath: url.path) else { return false }
         let data: Data
-        do { data = try Data(contentsOf: url) } catch {
-            KalsmritikoshLog.storage.error("HNSW: load read failed → \(String(describing: error), privacy: .public)")
+        do { data = try AES.GCM.open(AES.GCM.SealedBox(combined: Data(contentsOf: url)), using: key) } catch {
+            // An unsealed (older) or foreign cache is not trusted: rebuilt from the ledger.
+            KalsmritikoshLog.storage.error("HNSW: cache not opened (rebuilding) → \(String(describing: error), privacy: .public)")
             return false
         }
         let started = Date()

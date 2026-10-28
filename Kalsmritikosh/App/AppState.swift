@@ -1108,6 +1108,8 @@ public final class AppState {
             // Passed to ingest; only copies bytes when managedEvidenceMode is on (default off).
             let evidenceVault = EvidenceVault(
                 root: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+            // K11 — copies stored before owner-only permissions are tightened once, off the boot path.
+            Task.detached(priority: .utility) { await evidenceVault.protectExisting() }
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
             // PERF.2 — durable deferred-enrichment job ledger. Boot recovery below
@@ -2241,6 +2243,8 @@ public final class AppState {
                         .deletingLastPathComponent()
                         .appendingPathComponent("hnsw-index.bin")
                     let liveCount = (try? await vectors.count()) ?? 0
+                    // K11 — the cache is sealed under a key derived from this ledger's key.
+                    let cacheKey = LedgerKeychain.load()?.derivedKey(for: "hnsw-cache")
                     // P9.3 — adaptive scale gate: only hold the in-memory HNSW when
                     // the corpus fits the device's RAM budget. Above the cap, skip
                     // the build; SQLiteVectorStore's memory-bounded path serves
@@ -2251,12 +2255,12 @@ public final class AppState {
                         return HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
                     }
                     if liveCount > 0,
-                       await hnsw.load(from: cacheURL, expectedCount: liveCount) {
+                       await hnsw.load(from: cacheURL, expectedCount: liveCount, sealedWith: cacheKey) {
                         return await hnsw.stats()
                             ?? HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
                     }
                     let stats = await hnsw.build(from: vectors)
-                    _ = await hnsw.persist(to: cacheURL)
+                    _ = await hnsw.persist(to: cacheURL, sealedWith: cacheKey)
                     return stats
                 }()
                 _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm, hnswWarm)
