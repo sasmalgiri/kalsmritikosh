@@ -17,14 +17,14 @@ Testing cadence (agreed with the owner, 2026-10-28):
 | F1 | Shared kernel K1–K11 | **done** (unit/integration), incl. audit A3–A7 fixes; bounded items recorded | K5 studio approvals carry no scope fingerprint (the export re-check covers it); K11 vault encryption is a recorded decision |
 | F2 | All 168 jobs produce their intended result | **done to integration** — 20 studio, 97 executor (contract columns pre-filled, completed by the person; per-job acceptance), 51 service, 0 preparation, 0 gap. The Jobs screen opens, reviews, completes and exports results (A1) | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobFamilyExecutorTests`, `JobResultWorkflowTests` |
 | F3 | Nine persona journeys | service level done (`InvestigationCaseSimulationTests`, 9 personas); **UI journeys open** (tier 3) | — |
-| F4 | Races, recovery, workload | T1 7/8 + 1 partial (`docs/RACE_MATRIX.md`); T2 done except the clean-machine restore; **T3 support envelope open** (tier 3) | `NewerSchemaRefusalTests`, backup suites |
+| F4 | Races, recovery, workload | T1 7/8 + 1 partial (`docs/RACE_MATRIX.md`); T2 done except the clean-machine restore (signed build); T3 measured (`docs/SUPPORT_ENVELOPE.md`) | `NewerSchemaRefusalTests`, backup suites, `SupportEnvelopeTests` |
 | F5 | Independent adjudication, then a fresh ho10 | **open** — needs human adjudicators; ho9 is a regression set (rules 96.6 % right / 1.7 % wrong; Claude 97.2 / 1.5); the ≤1 % wrong target is not met | — |
 | F6 | Legal and distribution pack | prepared; **owner/counsel decisions open** | `docs/DISTRIBUTION_PACK.md`, `docs/LEGAL_REVIEW_PACK.md` |
 | F7 | Pilot, practitioners, release packet | **open** | — |
 
 ## Exact blockers
 
-0. **Engineering (agent):** outcome-based injection tests against a real model; a backup write hitting a full disk; support-envelope measurement (agent-runnable on this hardware).
+0. **Engineering (agent):** outcome-based injection tests against a real model, and re-measuring benign accuracy with the guard on.
 
 1. **Accuracy (F5):** independent adjudication of the bench answers, then one run on a fresh held-out
    set (ho10), never tuned on. The wrong-answer rate must be ≤1 %. It was measured above that on
@@ -36,8 +36,7 @@ Testing cadence (agreed with the owner, 2026-10-28):
    - the Online preview, cancel and privilege behaviour;
    - export-byte and redaction checks;
    - the StoreKit script (`DISTRIBUTION_PACK.md` §6).
-3. **Support envelope (T3):** measured on named hardware — files, pages, emails, chunks, bytes,
-   memory, disk, p50/p95 latency.
+3. **Support envelope (T3):** measured (`docs/SUPPORT_ENVELOPE.md`); larger or scan-heavy archives and other hardware are not claimed.
 4. **Owner/counsel decisions (F6):**
    - the privacy-label answer;
    - Standard EULA plus supplement;
