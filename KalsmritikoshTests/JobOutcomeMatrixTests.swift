@@ -60,9 +60,10 @@ struct JobOutcomeMatrixTests {
 
     static func deliverable(for job: PersonaJob) -> Deliverable? {
         if let d = studioDeliverables[job.id] { return d }
-        if JobExecutorKind.assignments[job.id] == .chronology {
-            return Deliverable(workProduct: "Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed",
-                               verifiedBy: [ChronologyExecutorTests.self], level: "integration: launch persists a typed result")
+        if let kind = JobExecutorKind.assignments[job.id] {
+            return Deliverable(workProduct: Self.executorProduct[kind] ?? kind.rawValue,
+                               verifiedBy: kind == .chronology ? [ChronologyExecutorTests.self] : [JobFamilyExecutorTests.self],
+                               level: "integration: launch persists a typed result")
         }
         switch job.kind {
         case .findings: return Deliverable(workProduct: "generic: case findings report with case-scoped citations", verifiedBy: [InvestigationFindingsServiceTests.self, InvestigationCaseSimulationTests.self], level: "integration: generic service + ledger", jobSpecific: false)
@@ -71,6 +72,30 @@ struct JobOutcomeMatrixTests {
         default: return nil
         }
     }
+
+    /// What each shared executor's persisted result is (reviewed with the executors).
+    static let executorProduct: [JobExecutorKind: String] = [
+        .chronology: "Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed",
+        .deadlines: "Deadline register: stated deadlines with their sentence, unconfirmed, passed/upcoming",
+        .catalogue: "Source catalogue: every document with its dates, names and amounts; unreadable listed, not reviewed",
+        .exhibits: "Exhibit list: numbered exhibits citing exact source versions",
+        .citations: "Citation list: who/what/when per source, incomplete metadata flagged",
+        .records: "Records register: each record with its dates; expiry and renewal dates passed/upcoming",
+        .reminders: "Reminders: every stated date with its sentence, passed/upcoming",
+        .reliability: "Reliability schedule: corroboration per source, conflicts, every source not assessed until graded",
+        .issueMatrix: "Fact–evidence matrix: each stated fact with supporting documents; single-source and conflicting values flagged",
+        .quotes: "Quote book: verbatim quoted or attributed statements with speakers",
+        .interviewPlan: "Interview plan: each named person with the passages to put to them",
+        .causation: "Causal hypotheses: each causal statement as a hypothesis to test, never a finding",
+        .money: "Money schedule: stated amounts, totals per currency only, unreadable and unstated currency left out",
+        .disclosure: "Disclosure review: per document identifier and sensitive-term findings; nothing cleared automatically",
+        .dataTable: "Case data table: every structured value with its source",
+        .publication: "Publication checklist: claims with sources (single-sourced flagged) and reply opportunities",
+        .sameName: "Same-person candidates: name pairs kept separate until a person decides",
+        .actionRegister: "Action register: open items the evidence raises, no owner yet",
+        .actionReview: "Effectiveness review of the current action register, each action not assessed",
+        .methodReadiness: "Method readiness: applicable methods with their inputs, none run",
+    ]
 
     static let advertised: [PersonaJob] = PersonaJobCatalogComposer.allJobs
         .filter { $0.persona != ContentCreatorPersonaPackage.applicationID.rawValue }

@@ -2563,9 +2563,13 @@ public final class AppState {
                 workspaceIntake: workspaceIntake,
                 caseFacts: { [investigationDataLabService, genericFactsRepo, events, objects, entities] caseID, access in
                     // The case's evidence for a shared executor, under the job's own access context.
-                    let (included, _) = try await investigationDataLabService.eligibleSourceVersions(caseID: caseID, access: access)
+                    let (included, withheld) = try await investigationDataLabService.eligibleSourceVersions(caseID: caseID, access: access)
                     let reader = StudioCaseFactsReader(facts: genericFactsRepo, events: events, objects: objects, entities: entities)
-                    return try await reader.read(caseTitle: "", sourceVersionIDs: Set(included))
+                    let facts = try await reader.read(caseTitle: "", sourceVersionIDs: Set(included))
+                    // Each admitted document's text, for the executors that quote it verbatim.
+                    var texts: [UUID: String] = [:]
+                    for doc in facts.documents { texts[doc.objectID] = try await objects.fetchContent(id: doc.objectID) }
+                    return JobEvidence(facts: facts, texts: texts, withheld: withheld)
                 },
                 jobResults: JobResultRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same

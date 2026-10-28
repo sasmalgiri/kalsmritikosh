@@ -11,14 +11,74 @@ import Foundation
 
 /// Which shared executor produces a job's result (jobs without one keep their kind's routing).
 public nonisolated enum JobExecutorKind: String, Sendable {
-    case chronology
+    case chronology, deadlines, catalogue, exhibits, citations, records, reminders, reliability, issueMatrix,
+         quotes, interviewPlan, causation, money, disclosure, dataTable, publication, sameName, actionRegister,
+         actionReview, methodReadiness
 
     /// The jobs each executor serves — only where its result IS the job's intended outcome.
-    public static let assignments: [String: JobExecutorKind] = [
-        "inv.linkage": .chronology, "law.fact-chronology": .chronology, "hr.incident-timeline": .chronology,
-        "siu.loss-chronology": .chronology, "jrn.chronology": .chronology, "res.chronology": .chronology,
-        "ind.personal-chronology": .chronology,
+    public static let assignments: [String: JobExecutorKind] = {
+        var m: [String: JobExecutorKind] = [:]
+        func set(_ k: JobExecutorKind, _ jobs: [String]) { for j in jobs { m[j] = k } }
+        set(.chronology, ["inv.linkage", "law.fact-chronology", "hr.incident-timeline", "siu.loss-chronology", "jrn.chronology",
+                          "res.chronology", "ind.personal-chronology", "ind.career-education", "gen.family-lines"])
+        set(.deadlines, ["law.deadlines"])
+        set(.catalogue, ["res.corpus-catalogue", "jrn.source-vault", "siu.prior-claims", "hr.evidence-register", "res.metadata"])
+        set(.exhibits, ["law.exhibit-binder"])
+        set(.citations, ["res.bibliography", "res.edition", "gen.originals"])
+        set(.records, ["ind.document-versions", "ind.property", "ind.insurance", "ind.applications", "ind.document-vault"])
+        set(.reminders, ["ind.reminders"])
+        set(.reliability, ["inv.source-reliability", "res.source-criticism", "jrn.source-map", "jrn.source-reliability", "ind.doc-reliability",
+                           "law.source-desk", "siu.source-vetting", "fa.doc-reliability", "hr.credibility", "gen.source-analysis"])
+        set(.issueMatrix, ["law.parties-issues", "law.fact-evidence", "law.document-coding", "law.obligations", "siu.red-flags",
+                           "hr.allegations", "gen.evidence-notes"])
+        set(.quotes, ["res.transcription", "jrn.quote-book", "jrn.transcript", "hr.statements"])
+        set(.interviewPlan, ["jrn.interview-plan", "law.witness-profiles", "law.deposition", "siu.euo-prep", "hr.interview-prep"])
+        set(.causation, ["res.alternative", "res.causal", "jrn.causal", "ind.why", "law.causation", "siu.causation", "fa.analysis", "gen.migration"])
+        set(.money, ["law.damages", "fa.funds-tracing", "fa.workpapers"])
+        set(.disclosure, ["ind.health-scope", "ind.secure-share", "law.redaction", "hr.disclosure-review"])
+        set(.dataTable, ["inv.data-lab", "jrn.data-desk"])
+        set(.publication, ["jrn.publication", "jrn.publication-package"])
+        set(.sameName, ["gen.same-person"])
+        set(.actionRegister, ["inv.capa-register", "res.errata", "jrn.correction-history", "jrn.correction-actions", "ind.fix-it",
+                              "law.remediation", "siu.recovery-actions", "fa.recovery", "hr.corrective-actions", "gen.to-do"])
+        set(.actionReview, ["inv.effectiveness-review", "res.errata-review", "jrn.correction-review", "ind.fix-review", "law.remediation-review",
+                            "siu.action-review", "fa.recovery-review", "hr.action-review", "gen.to-do-review"])
+        set(.methodReadiness, ["inv.methods", "res.methods", "jrn.methods", "ind.methods", "law.methods", "fa.methods", "gen.methods"])
+        return m
+    }()
+
+    /// The action register an effectiveness review reads (same persona).
+    public static let reviewedRegister: [String: String] = [
+        "inv.effectiveness-review": "inv.capa-register", "res.errata-review": "res.errata", "jrn.correction-review": "jrn.correction-actions",
+        "ind.fix-review": "ind.fix-it", "law.remediation-review": "law.remediation", "siu.action-review": "siu.recovery-actions",
+        "fa.recovery-review": "fa.recovery", "hr.action-review": "hr.corrective-actions", "gen.to-do-review": "gen.to-do",
     ]
+
+    /// The executor's result for evidence-only kinds (the review and method kinds need more than the
+    /// evidence and are run by the job service).
+    public static func run(_ kind: JobExecutorKind, _ e: JobEvidence) -> JobRun? {
+        switch kind {
+        case .chronology: return ChronologyExecutor.run(e.facts)
+        case .deadlines: return DeadlineExecutor.run(e)
+        case .catalogue: return InventoryExecutor.run(e, style: .catalogue)
+        case .exhibits: return InventoryExecutor.run(e, style: .exhibit)
+        case .citations: return InventoryExecutor.run(e, style: .citation)
+        case .records: return InventoryExecutor.run(e, style: .records)
+        case .reminders: return InventoryExecutor.reminders(e)
+        case .reliability: return ReliabilityExecutor.run(e)
+        case .issueMatrix: return IssueMatrixExecutor.run(e)
+        case .quotes: return StatementExecutor.quotes(e)
+        case .interviewPlan: return StatementExecutor.interviewPlan(e)
+        case .causation: return CausationExecutor.run(e)
+        case .money: return MoneyExecutor.run(e)
+        case .disclosure: return DisclosureExecutor.run(e)
+        case .dataTable: return DataTableExecutor.run(e)
+        case .publication: return PublicationExecutor.run(e)
+        case .sameName: return IdentityCandidateExecutor.run(e)
+        case .actionRegister: return ActionExecutor.register(e)
+        case .actionReview, .methodReadiness: return nil
+        }
+    }
 }
 
 public nonisolated enum ChronologyExecutor {

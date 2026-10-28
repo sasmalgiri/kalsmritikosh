@@ -36,7 +36,7 @@ public actor PersonaJobService {
     private let workspaceIntake: InvestigationWorkspaceIntake?
     /// §3 — shared executors: the case's evidence read under the job's access context, and the store
     /// their typed results are persisted to.
-    public typealias CaseFactsLoader = @Sendable (UUID, SensitiveAccessContext) async throws -> StudioCaseFacts?
+    public typealias CaseFactsLoader = @Sendable (UUID, SensitiveAccessContext) async throws -> JobEvidence?
     private let caseFacts: CaseFactsLoader?
     private let jobResults: JobResultRepository?
 
@@ -121,8 +121,8 @@ public actor PersonaJobService {
             guard let question = context.question, let access = context.access else {
                 throw PersonaJobError.missingContext("ask requires a question and an access context")
             }
-            _ = try await answers.answer(caseID: caseID, question: question, access: access)
-            return PersonaJobLaunch(job: job, summary: "Answered over the case's authorized scope", producedID: caseID)
+            let answer = try await answers.answer(caseID: caseID, question: question, access: access)
+            return try await askLaunch(job, answer: answer.verified, question: question, caseID: caseID, context: context)
 
         case .dataLab:
             guard let dataLab else { throw PersonaJobError.serviceUnavailable(.dataLab) }
@@ -269,11 +269,26 @@ public actor PersonaJobService {
                              caseFacts: CaseFactsLoader, results: JobResultRepository) async throws -> PersonaJobLaunch {
         let caseID = try requireCase(context)
         guard let access = context.access else { throw PersonaJobError.missingContext("\(job.id) requires an access context") }
-        guard let facts = try await caseFacts(caseID, access) else { throw PersonaJobError.missingContext("the case's evidence could not be read") }
-        let run: (state: JobResultState, content: JobResultContent)
+        let run: JobRun
         switch executor {
-        case .chronology: run = ChronologyExecutor.run(facts)
+        case .actionReview:
+            var register: JobResultRecord?
+            if let registerJob = JobExecutorKind.reviewedRegister[job.id] { register = try await results.latest(caseID: caseID, jobID: registerJob) }
+            run = ActionExecutor.review(register: register)
+        case .methodReadiness:
+            guard let methods else { throw PersonaJobError.serviceUnavailable(.methods) }
+            run = Self.methodReadiness(try await methods.recommendedMethods(caseID: caseID))
+        default:
+            guard let evidence = try await caseFacts(caseID, access) else { throw PersonaJobError.missingContext("the case's evidence could not be read") }
+            guard let r = JobExecutorKind.run(executor, evidence) else { throw PersonaJobError.missingContext("\(job.id) has no evidence executor") }
+            run = r
         }
+        return try await persist(run, job: job, caseID: caseID, context: context, results: results)
+    }
+
+    /// Save a run as the job's current result and hand it back as work items.
+    private func persist(_ run: JobRun, job: PersonaJob, caseID: UUID, context: PersonaJobLaunchContext,
+                         results: JobResultRepository) async throws -> PersonaJobLaunch {
         let family = JobContracts.contract(for: job.id)?.family ?? .chronologyLinkage
         let id = try await results.save(caseID: caseID, jobID: job.id, family: family, state: run.state, content: run.content,
                                         actor: context.actor, at: context.at)
@@ -284,6 +299,38 @@ public actor PersonaJobService {
         }
         let summary = "\(run.state.rawValue): \(run.content.rows.count) row(s)" + (run.content.limitations.isEmpty ? "" : " — " + run.content.limitations.joined(separator: " "))
         return PersonaJobLaunch(job: job, summary: summary, producedID: id, items: items)
+    }
+
+    /// §3 — the ask job hands back what was answered (or why it was refused) with its citations, and
+    /// keeps it as the job's result when the result store is wired.
+    private func askLaunch(_ job: PersonaJob, answer v: VerifiedAnswer, question: String, caseID: UUID,
+                           context: PersonaJobLaunchContext) async throws -> PersonaJobLaunch {
+        let text = v.refused ? "Refused: " + (v.refusalReason ?? "the case's documents do not support an answer") : (v.answerText ?? v.body)
+        var rows = [JobResultRow(title: text, detail: "Question: " + question,
+                                 flags: v.refused ? ["refused"] : (v.contradictions.isEmpty ? [] : ["\(v.contradictions.count) conflict(s) shown"]))]
+        rows += v.citations.map { c in JobResultRow(title: String(c.snippet.prefix(300)), flags: ["citation"], refs: [StudioEvidenceRef(objectID: c.objectID, quote: c.snippet)]) }
+        let run: JobRun = (v.refused ? .blocked : .draft,
+                           JobResultContent(rows: rows, limitations: v.refused ? ["No supporting passage in the case's authorised sources."] : [],
+                                            nextActions: ["Read the answer against its citations; the judgement is yours."]))
+        if let jobResults { return try await persist(run, job: job, caseID: caseID, context: context, results: jobResults) }
+        return PersonaJobLaunch(job: job, summary: (v.refused ? "Refused" : "Answered") + " over the case's authorized scope: " + String(text.prefix(160)),
+                                producedID: caseID, items: rows.enumerated().map { PersonaWorkItem(id: "\(caseID.uuidString)#\($0.offset)", title: $0.element.title,
+                                                                                                    objectIDs: $0.element.refs.compactMap(\.objectID)) })
+    }
+
+    /// The case's applicable methods with what each needs and who must review it; running one is the
+    /// person's choice (the run itself is saved by the method engine).
+    nonisolated static func methodReadiness(_ methods: [ProfessionalMethodDefinition]) -> JobRun {
+        guard !methods.isEmpty else {
+            return JobText.blocked("No professional method applies to this case's evidence yet.", "Add evidence to the case, or choose a method from the catalog.")
+        }
+        let rows = methods.map { m in
+            JobResultRow(title: "\(m.label) (v\(m.version))",
+                         detail: "Needs: " + m.requiredInputRoles.map { String(describing: $0) }.joined(separator: ", "),
+                         flags: ["not run"])
+        }
+        return (.draft, JobResultContent(rows: rows, limitations: ["A method's outcome exists only once it is run and reviewed; none is implied here."],
+                                         nextActions: ["Choose a method, select its evidence and run it; an inconclusive run is saved as inconclusive."]))
     }
 
 }
