@@ -90,6 +90,10 @@ private struct KnowledgeListView: View {
     @State private var merging: EntitySummaryRow?
     @State private var merged: [EntitySummaryRow] = []
     @State private var showMerged = false
+    // K10 — erasing one person's derived record.
+    @State private var erasing: EntitySummaryRow?
+    @State private var eraseReason = ""
+    @State private var eraseStatus: String?
 
     var body: some View {
         VStack {
@@ -123,6 +127,28 @@ private struct KnowledgeListView: View {
             }
         }
         .navigationTitle(kind.rawValue.capitalized)
+        .safeAreaInset(edge: .bottom) {
+            if let eraseStatus {
+                Text(eraseStatus).font(.caption).foregroundStyle(.secondary).padding(8)
+            }
+        }
+        .alert("Erase \(erasing?.value ?? "this person")?", isPresented: Binding(get: { erasing != nil }, set: { if !$0 { erasing = nil } })) {
+            TextField("Why erase (required)", text: $eraseReason)
+            Button("Erase", role: .destructive) {
+                guard let row = erasing else { return }
+                let reason = eraseReason
+                Task {
+                    do {
+                        eraseStatus = try await appState.erasePerson(row.id, reason: reason, legalBasis: nil, actor: "user").summary
+                    } catch { eraseStatus = error.localizedDescription }
+                    await refresh()
+                }
+            }
+            .disabled(eraseReason.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel", role: .cancel) { erasing = nil }
+        } message: {
+            Text("Removes everything the ledger derived about this person — the name record, its spellings, mentions, links and case-subject entries — and keeps only a record that it was erased. Original documents are not edited; you'll be told how many still name them. A legal hold refuses it.")
+        }
         .toolbar {
             if !excluded.isEmpty {
                 ToolbarItem {
@@ -196,6 +222,14 @@ private struct KnowledgeListView: View {
                 Task { await reject(row) }
             } label: {
                 Label("Reject (exclude)", systemImage: "eye.slash")
+            }
+            if kind == .person {
+                Button(role: .destructive) {
+                    eraseReason = ""
+                    erasing = row
+                } label: {
+                    Label("Erase this person…", systemImage: "person.crop.circle.badge.xmark")
+                }
             }
         }
     }
