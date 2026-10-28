@@ -17,23 +17,53 @@ public nonisolated enum JobResultError: Error, Equatable, LocalizedError {
 public nonisolated enum JobResultState: String, Codable, Sendable { case draft, blocked, completed, superseded }
 
 public nonisolated struct JobResultRow: Codable, Sendable, Hashable {
-    public let title: String
-    public let detail: String?
+    public var title: String
+    public var detail: String?
     /// ISO day ("2026-01-05"), or nil when the row is undated.
-    public let date: String?
-    public let flags: [String]
+    public var date: String?
+    public var flags: [String]
     public let refs: [StudioEvidenceRef]
-    public init(title: String, detail: String? = nil, date: String? = nil, flags: [String] = [], refs: [StudioEvidenceRef] = []) {
+    /// A1 — the person's decision on this row (accepted / rejected), nil while undecided.
+    public var decision: JobRowDecision?
+    /// A1 — the person's note on this row.
+    public var note: String?
+    public init(title: String, detail: String? = nil, date: String? = nil, flags: [String] = [], refs: [StudioEvidenceRef] = [],
+                decision: JobRowDecision? = nil, note: String? = nil) {
         self.title = title; self.detail = detail; self.date = date; self.flags = flags; self.refs = refs
+        self.decision = decision; self.note = note
     }
 }
 
+public nonisolated enum JobRowDecision: String, Codable, Sendable, Hashable, CaseIterable { case accepted, rejected }
+
+/// A1 — who reviewed a result revision, when, and (for a completion) their note.
+public nonisolated struct JobResultReview: Codable, Sendable, Hashable {
+    public let by: String
+    public let at: Date
+    public let note: String?
+    public let completed: Bool
+}
+
 public nonisolated struct JobResultContent: Codable, Sendable, Hashable {
-    public let rows: [JobResultRow]
+    public var rows: [JobResultRow]
     public let limitations: [String]
     public let nextActions: [String]
-    public init(rows: [JobResultRow], limitations: [String] = [], nextActions: [String] = []) {
-        self.rows = rows; self.limitations = limitations; self.nextActions = nextActions
+    /// A1 — set on a revision the person saved (review or completion); nil on a generated result.
+    public var review: JobResultReview?
+    public init(rows: [JobResultRow], limitations: [String] = [], nextActions: [String] = [], review: JobResultReview? = nil) {
+        self.rows = rows; self.limitations = limitations; self.nextActions = nextActions; self.review = review
+    }
+}
+
+public nonisolated enum JobResultReviewError: Error, Equatable, LocalizedError {
+    case blockedCannotComplete, noteRequired, undecidedRows(Int), notCurrent
+    public var errorDescription: String? {
+        switch self {
+        case .blockedCannotComplete: return "A blocked result cannot be completed: give the job what it is missing and run it again."
+        case .noteRequired: return "Completing a result needs your note (what you checked and why it is complete)."
+        case .undecidedRows(let n): return "\(n) row(s) are still undecided. Accept or reject each one before completing."
+        case .notCurrent: return "This is an earlier revision. Restore it as current first, or review the current one."
+        }
     }
 }
 
@@ -76,6 +106,48 @@ public actor JobResultRepository {
                       .text(String(decoding: payload, as: UTF8.self)), .text(StudioRecordRepository.sha256(payload)), .text(who), .date(date)])
         }
         return id
+    }
+
+    /// A1 — save the person's reviewed revision of the current result (row decisions, notes and
+    /// corrections). It becomes current; every earlier revision stays in the history. Completing
+    /// needs a note, no undecided row, and a result that was not blocked.
+    @discardableResult
+    public func saveReview(of base: JobResultRecord, rows: [JobResultRow], complete: Bool, note: String?,
+                           actor: String, at date: Date = Date()) async throws -> UUID {
+        guard try await latest(caseID: base.caseID, jobID: base.jobID)?.id == base.id else { throw JobResultReviewError.notCurrent }
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if complete {
+            guard base.state != .blocked else { throw JobResultReviewError.blockedCannotComplete }
+            guard let n = trimmedNote, !n.isEmpty else { throw JobResultReviewError.noteRequired }
+            let undecided = rows.filter { $0.decision == nil }.count
+            guard undecided == 0 else { throw JobResultReviewError.undecidedRows(undecided) }
+        }
+        let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
+        var content = JobResultContent(rows: rows, limitations: base.content.limitations, nextActions: base.content.nextActions)
+        content.review = JobResultReview(by: who, at: date, note: trimmedNote?.isEmpty == true ? nil : trimmedNote, completed: complete)
+        let family = JobResultFamily(rawValue: base.family) ?? .chronologyLinkage
+        return try await save(caseID: base.caseID, jobID: base.jobID, family: family,
+                              state: complete ? .completed : (base.state == .blocked ? .blocked : .draft),
+                              content: content, actor: who, at: date)
+    }
+
+    /// A1 — make an earlier revision current again (saved as a new revision; nothing is overwritten).
+    @discardableResult
+    public func restore(_ old: JobResultRecord, actor: String, at date: Date = Date()) async throws -> UUID {
+        var content = old.content
+        content.review = JobResultReview(by: actor, at: date, note: "Restored the revision of \(old.createdAt.formatted())", completed: false)
+        return try await save(caseID: old.caseID, jobID: old.jobID, family: JobResultFamily(rawValue: old.family) ?? .chronologyLinkage,
+                              // A restored revision is reviewed again: a draft (or blocked when it has no rows),
+                              // never the "superseded" or "completed" mark the old revision carries.
+                              state: old.content.rows.isEmpty ? .blocked : .draft, content: content, actor: actor, at: date)
+    }
+
+    /// A1 — the case's current result for every job that has one.
+    public func latestByJob(caseID: UUID) async throws -> [String: JobResultRecord] {
+        let all = try await rows("WHERE case_id = ? AND state <> 'superseded' ORDER BY created_at DESC", [.uuid(caseID)])
+        var out: [String: JobResultRecord] = [:]
+        for r in all where out[r.jobID] == nil { out[r.jobID] = r }
+        return out
     }
 
     /// The case's current result for a job (nil when it was never run).

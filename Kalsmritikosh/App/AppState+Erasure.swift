@@ -161,6 +161,30 @@ extension AppState {
     }
 }
 
+extension AppState {
+    /// A1/K5 — a job result is exported only while every source it cites is still cleared for export
+    /// in its case (not privileged, not above export sensitivity, still in scope). Nil = clear to export.
+    public func jobResultExportCheck(_ record: JobResultRecord) async -> String? {
+        guard let dataLab = investigationDataLab, let cases = investigationCases, let objects else { return "the ledger is not open" }
+        do {
+            guard let c = try await cases.fetch(caseID: record.caseID) else { return "its case no longer exists" }
+            let access = SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: c.caseHeader.workspaceID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export))
+            let (included, _) = try await dataLab.eligibleSourceVersions(caseID: record.caseID, access: access)
+            let versions = Set(included)
+            let objectsOK = Set(try await objects.objectIDs(inSourceVersionIDs: versions))
+            let refs = record.content.rows.flatMap(\.refs)
+            let withdrawn = refs.filter { ref in
+                if let v = ref.sourceVersionID { return !versions.contains(v) }
+                if let o = ref.objectID { return !objectsOK.contains(o) }
+                return false
+            }.count
+            return withdrawn == 0 ? nil : "\(withdrawn) cited source(s) are no longer cleared for export (privileged, above export sensitivity, or out of the case)."
+        } catch { return "the sources could not be re-checked (\(error.localizedDescription))" }
+    }
+}
+
 /// K5 — why a case report was not exported.
 public nonisolated enum ReportExportRefusal: Error, Equatable, LocalizedError {
     case sourcesWithdrawn(Int)

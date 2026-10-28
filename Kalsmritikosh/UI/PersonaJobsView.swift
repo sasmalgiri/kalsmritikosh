@@ -51,9 +51,35 @@ public final class PersonaJobsModel {
         UserDefaults.standard.set(Array(ranJobs).sorted(), forKey: ranKey(caseID))
     }
 
+    /// A1 — each job's current saved result in the active matter (state, size), from the ledger.
+    public private(set) var results: [String: JobResultRecord] = [:]
+    /// A1 — the question typed for each Ask job.
+    public var questions: [String: String] = [:]
+    public let resultsRepository: JobResultRepository?
+
     public init(service: PersonaJobService, catalog: PersonaJobCatalog, workspaces: WorkspaceRepository,
-                cases: InvestigationCaseRepository? = nil) {
+                cases: InvestigationCaseRepository? = nil, results: JobResultRepository? = nil) {
         self.service = service; self.catalog = catalog; self.workspaces = workspaces; self.cases = cases
+        self.resultsRepository = results
+    }
+
+    /// A1 — reload every job's current result for the active matter.
+    public func reloadResults() async {
+        guard let caseID = activeCaseID, let resultsRepository else { results = [:]; return }
+        results = (try? await resultsRepository.latestByJob(caseID: caseID)) ?? [:]
+    }
+
+    /// A1 — what a job card says: the saved result's state, or that a service job ran, or nothing yet.
+    public func status(of job: PersonaJob) -> String? {
+        if let r = results[job.id] {
+            switch r.state {
+            case .draft: return "Draft — \(r.content.rows.count) row(s) to review"
+            case .blocked: return "Blocked — open to see what is missing"
+            case .completed: return "Completed by \(r.content.review?.by ?? r.createdBy)"
+            case .superseded: return nil
+            }
+        }
+        return ranJobs.contains(job.id) ? "Ran (no saved result for this kind of job)" : nil
     }
 
     // JOB-RESUME — matters are durable; the page must let the user return to
@@ -77,6 +103,7 @@ public final class PersonaJobsModel {
         lastError = nil
         loadRanJobs()
         loadWorkLog()
+        Task { await reloadResults() }   // A1 — each job's saved result comes back with the matter
     }
 
     // JOB-LOG (maxmailin pattern) — the work and its results live TOGETHER:
@@ -171,6 +198,7 @@ public final class PersonaJobsModel {
             lastOutcome = out.summary; lastError = nil
             loadRanJobs()
             if let intakeID = intakeJob?.id { markRan(intakeID) }   // intake IS phase 1, done
+            await reloadResults()
             appendLog(jobTitle: "Matter opened", summary: out.summary, at: date)
             await reloadMatters()
         } catch { lastError = "\(error)"; lastOutcome = nil }
@@ -183,14 +211,20 @@ public final class PersonaJobsModel {
         }
         let access = SensitiveAccessContext(scope: SensitiveScope(
             workspaceID: wsID, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .export))
+        // A1 — an Ask job needs the person's question.
+        let question = questions[job.id]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if job.kind == .ask, (question ?? "").isEmpty {
+            lastError = "\(job.title): type the question to ask first."; lastOutcome = nil; return
+        }
         busy = true; defer { busy = false }
         do {
             let out = try await service.launch(job, context: PersonaJobLaunchContext(
-                caseID: caseID, access: access, actor: actor, at: date))
+                caseID: caseID, access: access, actor: actor, question: job.kind == .ask ? question : nil, at: date))
             lastOutcome = "\(job.title): \(out.summary)"; lastError = nil
             markRan(job.id)
             appendLog(jobTitle: job.title, summary: out.summary, at: date)
-        } catch { lastError = "\(job.title): \(error)"; lastOutcome = nil }
+            await reloadResults()
+        } catch { lastError = "\(job.title): \(error.localizedDescription)"; lastOutcome = nil }
     }
 }
 
@@ -201,6 +235,7 @@ public struct PersonaJobsView: View {
     @State private var model: PersonaJobsModel?
     @State private var docJob: PersonaJob?          // JOB-DOC: job whose documentation sheet is open
     @State private var runnerJob: PersonaJob?       // JOB-RUN: job whose guided walkthrough is open
+    @State private var resultJob: PersonaJob?       // A1: job whose saved result is open
     /// SURFACE STYLE switch (Settings): classic fixed Analyze launchers vs the
     /// newer catalog-driven ones. Reactive via the shared FeatureFlags key.
     @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
@@ -215,6 +250,11 @@ public struct PersonaJobsView: View {
                         JobDocumentationDetail(
                             job: job,
                             personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "")
+                    }
+                    .sheet(item: $resultJob, onDismiss: { Task { await model.reloadResults() } }) { job in
+                        if let repo = model.resultsRepository, let caseID = model.activeCaseID {
+                            JobResultView(model: JobResultModel(repo: repo, caseID: caseID, jobID: job.id, jobTitle: job.title), actor: "me")
+                        }
                     }
                     .sheet(item: $runnerJob) { job in
                         // JOB-RUN — guided Previous/Next walkthrough over the job's
@@ -250,7 +290,8 @@ public struct PersonaJobsView: View {
         guard let service = appState.personaJobs, let catalog = appState.personaJobCatalog,
               let ws = appState.workspaces else { return }
         let m = PersonaJobsModel(service: service, catalog: catalog, workspaces: ws,
-                                 cases: appState.investigationCases)
+                                 cases: appState.investigationCases,
+                                 results: appState.database.map { JobResultRepository(database: $0) })
         await m.load()
         model = m
     }
@@ -608,9 +649,31 @@ public struct PersonaJobsView: View {
                                 .help("What this job does, needs, produces, and must not conclude")
                             }
                         }
-                        Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        // A1 — the job's real state: a saved draft, blocked or completed result (not a checkmark).
+                        if let status = model.status(of: job) {
+                            Text(status).font(.caption2.weight(.medium))
+                                .foregroundStyle(model.results[job.id]?.state == .completed ? .green
+                                                 : model.results[job.id]?.state == .blocked ? .orange : .secondary)
+                        }
+                        if job.kind == .ask, model.activeCaseID != nil {
+                            TextField("Question for this case", text: Binding(get: { model.questions[job.id] ?? "" },
+                                                                              set: { model.questions[job.id] = $0 }))
+                                .textFieldStyle(.roundedBorder).font(.caption)
+                        }
                         Spacer(minLength: 0)
                         HStack(spacing: 8) {
+                            if model.activeCaseID != nil {
+                                Button("Run") { Task { await model.run(job, actor: "me", at: Date()) } }
+                                    .controlSize(.small)
+                                    .disabled(model.busy)
+                                    .help("Run this job against the open matter now; its result is saved for review.")
+                                if model.results[job.id] != nil {
+                                    Button("Open result") { resultJob = job }
+                                        .controlSize(.small)
+                                        .help("See every row with its sources, decide and note each, correct, complete or export.")
+                                }
+                            }
                             // ONE action per job (owner decision 2026-08-20): open the
                             // guided Work Center workflow — gated steps, typed fields,
                             // and a numbered document per confirmed step. Replaces the
@@ -638,7 +701,7 @@ public struct PersonaJobsView: View {
                         }
                     }
                     .padding(12)
-                    .frame(height: 130, alignment: .topLeading)
+                    .frame(minHeight: 150, alignment: .topLeading)
                     .background(ran ? Color.green.opacity(0.05) : Color.primary.opacity(0.03),
                                 in: RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10)
