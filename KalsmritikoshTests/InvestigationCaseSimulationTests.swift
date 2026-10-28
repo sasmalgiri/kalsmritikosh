@@ -146,6 +146,8 @@ struct InvestigationCaseSimulationTests {
         let pack = try #require(try InvestigationCasePacks.packs().first { $0.persona == persona }, "no pack for \(persona)")
 
         // The evidence path (AI off) for a deterministic result, in this process's argument domain only.
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
         var settings = previous
         settings["kalsmritikosh.privacy.offlineNoLLM"] = true

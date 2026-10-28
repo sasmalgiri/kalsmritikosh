@@ -81,6 +81,8 @@ struct JobOutcomeMatrixTests {
     @Test("Every advertised job is launched through the production service; docs/JOB_OUTCOME_MATRIX.md is that measurement")
     func matrixIsMeasured() async throws {
         let pack = try #require(try InvestigationCasePacks.packs().first { $0.persona == "investigator" })
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
         var settings = previous
         settings["kalsmritikosh.privacy.offlineNoLLM"] = true
