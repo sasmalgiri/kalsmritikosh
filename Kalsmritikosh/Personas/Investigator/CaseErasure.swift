@@ -15,7 +15,6 @@
 //
 
 import Foundation
-import CryptoKit
 import os
 
 public nonisolated enum CaseErasureError: Error, Equatable, LocalizedError {
@@ -319,7 +318,7 @@ public actor CaseEraser {
             throw Refused(why: "Not erased: the person's record could not be removed. Nothing was deleted.")
         }
         let naming = try count(db, "SELECT COUNT(*) FROM knowledge_objects WHERE instr(lower(content), lower(?)) > 0;", [.text(name)])
-        let subject = SHA256.hash(data: Data(name.lowercased().utf8)).map { String(format: "%02x", $0) }.joined()
+        let subject = StudioRecordRepository.sha256(Data(name.lowercased().utf8))
         try record(db, id: erasureID, scope: "person", caseID: nil, subject: subject, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: 0, kept: 0, actor: actor, at: date)
         var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts, sourcesErased: 0, sourcesKeptShared: 0,
