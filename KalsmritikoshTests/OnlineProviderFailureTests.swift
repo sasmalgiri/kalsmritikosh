@@ -114,4 +114,22 @@ struct OnlineProviderFailureTests {
         #expect(try await log.bytesSentToday() == 0)
         #expect(try await log.recent().first?.outcome == "sending")
     }
+
+    @Test("T1: a change of mode, provider, key, model or document terms while the consent dialog is open voids the consent")
+    func changeDuringConsent() {
+        let before = SendSettings(cloudAllowed: true, kind: .anthropic, model: "m", keyDigest: "k1", documentsEligible: true)
+        #expect(SendSettings.changed(from: before, to: before, carriesDocuments: true) == nil)
+        func with(_ f: (inout (Bool, OnlineProviderKind, String, String?, Bool)) -> Void) -> SendSettings {
+            var v = (true, OnlineProviderKind.anthropic, "m", Optional("k1"), true); f(&v)
+            return SendSettings(cloudAllowed: v.0, kind: v.1, model: v.2, keyDigest: v.3, documentsEligible: v.4)
+        }
+        #expect(SendSettings.changed(from: before, to: with { $0.0 = false }, carriesDocuments: false) == "Online mode")
+        #expect(SendSettings.changed(from: before, to: with { $0.1 = .openai }, carriesDocuments: false) == "the provider")
+        #expect(SendSettings.changed(from: before, to: with { $0.3 = "k2" }, carriesDocuments: false) == "the API key")
+        #expect(SendSettings.changed(from: before, to: with { $0.3 = nil }, carriesDocuments: false) == "the API key")
+        #expect(SendSettings.changed(from: before, to: with { $0.2 = "other" }, carriesDocuments: false) == "the model")
+        #expect(SendSettings.changed(from: before, to: with { $0.4 = false }, carriesDocuments: true) == "the provider's document terms confirmation")
+        #expect(SendSettings.changed(from: before, to: with { $0.4 = false }, carriesDocuments: false) == nil, "a question-only send does not need document terms")
+        #expect(OnlineCloudProvider.OnlineError.changedDuringConsent("Online mode").errorDescription?.contains("Not sent") == true)
+    }
 }

@@ -9,6 +9,11 @@
 
 import Foundation
 
+public nonisolated enum JobResultError: Error, Equatable, LocalizedError {
+    case caseGone
+    public var errorDescription: String? { "The case no longer exists, so this result was not saved." }
+}
+
 public nonisolated enum JobResultState: String, Codable, Sendable { case draft, blocked, completed, superseded }
 
 public nonisolated struct JobResultRow: Codable, Sendable, Hashable {
@@ -57,6 +62,11 @@ public actor JobResultRepository {
         let payload = try enc.encode(content)
         let id = UUID()
         try await database.withSavepoint("job_result_\(id.uuidString.prefix(8))") { db in
+            // T1 — a result that finishes after its case was erased (or never existed) writes nothing:
+            // checked inside the savepoint, so it cannot interleave with an erase.
+            guard try db.query("SELECT 1 FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first != nil else {
+                throw JobResultError.caseGone
+            }
             try db.exec("UPDATE job_results SET state = 'superseded', superseded_by = ? WHERE case_id = ? AND job_id = ? AND state <> 'superseded';",
                         [.uuid(id), .uuid(caseID), .text(jobID)])
             try db.exec("""

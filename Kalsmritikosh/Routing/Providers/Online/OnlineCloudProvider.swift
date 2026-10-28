@@ -54,11 +54,15 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         case timedOut
         /// K8 — the outbound record could not be written, so nothing was sent.
         case logUnavailable
+        /// T1 — Online mode, the provider, its key or model, or the document terms changed while the
+        /// consent dialog was open; the consent was given for a different send.
+        case changedDuringConsent(String)
         public var errorDescription: String? {
             switch self {
             case .notEligibleForDocuments(let why): return why
             case .timedOut:           return "The provider did not reply in time. Nothing was answered; try again."
             case .logUnavailable:     return "Not sent: the record of what leaves this Mac could not be written."
+            case .changedDuringConsent(let what): return "Not sent: \(what) changed while you were reviewing the request. Ask again to review it with the current settings."
             case .documentsNotCleared: return "Not sent: the passages were not checked for privilege and sensitivity before this request was built."
             case .notAvailable:       return "Online mode is not set up (choose a provider, model and key in Settings)."
             case .declined:           return "You chose not to send this to the cloud."
@@ -138,9 +142,17 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                                       text: shownText, bytes: bytes, maskedCount: mapping.count,
                                       carriesDocuments: carriesDocuments,
                                       providerTerms: carriesDocuments ? kind.documentTerms : nil)
+        let beforeConsent = SendSettings.current(kind: kind, model: model, key: key)
         guard await OutboundConsent.shared.request(preview) else {
             await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)
             throw OnlineError.declined
+        }
+        // T1 — the consent covers the send as previewed; if anything it depended on changed while the
+        // dialog was open, nothing is sent.
+        if let changed = SendSettings.changed(from: beforeConsent, to: SendSettings.current(kind: kind, model: model, key: nil),
+                                              carriesDocuments: carriesDocuments) {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "changed during consent: \(changed)")
+            throw await fail(OnlineError.changedDuringConsent(changed))
         }
 
         // K8 — what leaves the Mac is recorded BEFORE it leaves: no record, no send.
@@ -238,5 +250,33 @@ final class DeadlineResume<T: Sendable>: @unchecked Sendable {
         if let c = continuation { done = true; continuation = nil; lock.unlock(); c.resume(with: r); return }
         if pending == nil { pending = r }
         lock.unlock()
+    }
+}
+
+/// T1 — what a consented send depends on, compared before and after the consent dialog.
+nonisolated struct SendSettings: Equatable {
+    let cloudAllowed: Bool
+    let kind: OnlineProviderKind
+    let model: String
+    let keyDigest: String?
+    let documentsEligible: Bool
+
+    /// The settings now. `key` is the key read before the dialog (nil → read it again now).
+    static func current(kind consentedKind: OnlineProviderKind, model consentedModel: String, key: String?) -> SendSettings {
+        let kindNow = OnlineSettings.kind
+        let keyNow = key ?? OnlineSettings.apiKey(for: kindNow)
+        return SendSettings(cloudAllowed: OnlineSettings.cloudAllowed, kind: kindNow, model: OnlineSettings.model,
+                            keyDigest: keyNow.map { SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() },
+                            documentsEligible: OnlineDocumentEligibility.refusal(kind: kindNow, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kindNow)) == nil)
+    }
+
+    /// What changed in a way that voids the consent, or nil.
+    static func changed(from a: SendSettings, to b: SendSettings, carriesDocuments: Bool) -> String? {
+        if !b.cloudAllowed { return "Online mode" }
+        if a.kind != b.kind { return "the provider" }
+        if a.keyDigest != b.keyDigest { return "the API key" }
+        if a.model != b.model { return "the model" }
+        if carriesDocuments && a.documentsEligible && !b.documentsEligible { return "the provider's document terms confirmation" }
+        return nil
     }
 }

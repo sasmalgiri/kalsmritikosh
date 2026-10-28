@@ -81,6 +81,14 @@ struct ChronologyExecutorTests {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let repo = JobResultRepository(database: db)
         let caseID = UUID()
+        // T1 — a result for a case that does not exist (or was erased) is not saved.
+        await #expect(throws: JobResultError.caseGone) {
+            try await repo.save(caseID: caseID, jobID: "inv.linkage", family: .chronologyLinkage, state: .draft,
+                                content: JobResultContent(rows: []), actor: "Tester")
+        }
+        try await db.exec("PRAGMA foreign_keys = OFF;")
+        try await db.exec("INSERT INTO investigation_cases (id, workspace_id, title, revision, actor, created_at, updated_at) VALUES (?,?,?,?,?,?,?);",
+                          [.uuid(caseID), .uuid(UUID()), .text("Case"), .integer(1), .text("Tester"), .date(Date()), .date(Date())])
         let first = try await repo.save(caseID: caseID, jobID: "inv.linkage", family: .chronologyLinkage, state: .draft,
                                         content: JobResultContent(rows: [JobResultRow(title: "A", date: "2026-01-01")]), actor: "Tester")
         let second = try await repo.save(caseID: caseID, jobID: "inv.linkage", family: .chronologyLinkage, state: .draft,
