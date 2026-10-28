@@ -71,8 +71,17 @@ public nonisolated enum ProceedingAnswerer {
         return nil
     }
 
+    /// The question without a leading courtesy wrapper ("I need to confirm: …", "For the record, …",
+    /// "I'm trying to confirm …", "Can you tell me …"), so the anchored patterns below see the question.
+    static func unwrap(_ q: String) -> String {
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i need|can you (?:tell me|confirm|check|let me know)|could you (?:tell me|confirm|check|let me know)|do you know|please (?:tell me|confirm))\s*[:,—–-]?\s*)+"#
+        guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
+        return String(q[r.upperBound...])
+    }
+
     public static func parse(_ question: String) -> Parsed? {
-        let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let full = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let q = unwrap(full)
         // A quoted title names a release, not a person.
         guard !question.contains("\""), !question.contains("“"), let name = person(in: question) else { return nil }
         let step = stepWords.first { q.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil }?.1
@@ -87,7 +96,7 @@ public nonisolated enum ProceedingAnswerer {
             return Parsed(person: name, ask: .documentCount)
         }
         // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
-        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
@@ -101,7 +110,7 @@ public nonisolated enum ProceedingAnswerer {
         }
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
-        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
         }
         if q.range(of: #"^(?:did|was|were|has|have|is)\b"#, options: .regularExpression) != nil {
@@ -110,7 +119,7 @@ public nonisolated enum ProceedingAnswerer {
         // The same yes/no question behind a courtesy wrapper: "I'm trying to confirm: did X plead
         // guilty?", "I need to know—did X …", "For the record, can you confirm whether X pleaded
         // guilty?" (held-out rewordings, dev set 2026-10-28).
-        if q.range(of: #"(?:[:;,—–]|\s-)\s*(?:did|was|were|has|have)\s|\b(?:whether|if)\s+(?!.*\b(?:when|what date|which day)\b)"#, options: .regularExpression) != nil {
+        if full.range(of: #"(?:[:;,—–]|\s-)\s*(?:did|was|were|has|have)\s|\b(?:whether|if)\s+(?!.*\b(?:when|what date|which day)\b)"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .whether(step))
         }
         return nil

@@ -448,4 +448,17 @@ struct ProceedingGapTests {
         #expect(body.hasPrefix("No — "), "\(body)")
     }
 
+
+    @Test("A courtesy wrapper before a when-, sentence- or date-question leaves the same question")
+    func wrappedQuestions() {
+        let p = { (q: String) in ProceedingAnswerer.parse(q) }
+        #expect(p("I need to confirm: when did the sentencing of Kings Daniel Santy take place?")?.ask == .when(.sentenced))
+        #expect(p("I need the sentencing date for Wael Isreb — do you have that on file?")?.ask == .when(.sentenced))
+        #expect(p("I'm trying to confirm the sentence handed down to Nina Bourret — what was it?")?.ask == .sentenceImposed)
+        #expect(p("For the record, when was Nina Bourret sentenced?")?.ask == .when(.sentenced))
+        // Unwrapped questions are unchanged.
+        #expect(p("When was Nina Bourret sentenced?")?.ask == .when(.sentenced))
+        #expect(p("What was Nina Bourret charged with?")?.ask == .chargedWith)
+    }
+
 }
