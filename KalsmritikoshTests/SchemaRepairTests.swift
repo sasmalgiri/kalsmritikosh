@@ -98,7 +98,10 @@ struct SchemaRepairTests {
     @Test("The sentinel names the newest migration's tables")
     func sentinelDerived() {
         let tables = SchemaMigrations.createdTables(inMigration: SchemaMigrations.latestVersion)
-        #expect(!tables.isEmpty)
+        let columns = SchemaMigrations.addedColumns(inMigration: SchemaMigrations.latestVersion)
+        // The newest migration must leave the sentinel something to check: a table or a column.
+        #expect(!tables.isEmpty || !columns.isEmpty)
+        #expect(SchemaMigrations.addedColumns(inMigration: 162).contains { $0.table == "studio_legacy_blobs" && $0.column == "cleared_reason" })
         #expect(SchemaMigrations.createdTables(inMigration: 151).contains("case_profiles"))
     }
 }

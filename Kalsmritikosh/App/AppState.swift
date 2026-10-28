@@ -1000,6 +1000,9 @@ public final class AppState {
                 resolvedDBURL = boot.url
                 ledgerLocationNotice = boot.notice
             }
+            // K2 — a full erase interrupted during its file steps finishes now, before anything reads
+            // the vector cache or the vault.
+            Self.resumePendingFullErase(besideLedgerAt: resolvedDBURL)
             // W2-7 — open the encrypted ledger (creating the key, or converting a plaintext
             // ledger once). Off the main actor: converting a large ledger takes a while.
             var recoveryKey = bootRecoveryKey
@@ -4138,6 +4141,26 @@ public final class AppState {
     /// W2-5 — set when a legal hold refused a destructive action; the UI shows it and clears it.
     public var legalHoldBlock: String?
 
+    static let legalHoldCountSQL = """
+        SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
+        WHERE h.released_at IS NULL AND i.removed_at IS NULL;
+        """
+
+    /// Preferences that hold case content (`docs/DATA_FLOW_INVENTORY.md` L15): the studio stores from
+    /// before the move into the ledger, the self-score questions/answers and per-case job logs. SOP
+    /// drafts and reviews are method authoring, not case content, and stay.
+    nonisolated static let caseContentPreferenceKeys = [
+        "kalsmritikosh.fa.store", "kalsmritikosh.jn.store", "kalsmritikosh.pl.store", "kalsmritikosh.rca.store",
+        "kalsmritikosh.siu.store", "kalsmritikosh.wi.store", "kalsmritikosh.cc.store", "kalsmritikosh.ds.store",
+        "kalsmritikosh.gn.store", "kalsmritikosh.in.store", "kalsmritikosh.rs.store", "kalsmritikosh.selfscore.latest",
+    ]
+    nonisolated static let caseContentPreferencePrefixes = ["kalsmritikosh.jobs.log.", "kalsmritikosh.jobs.ran."]
+    /// The preferences a full erase clears. In the test host (same bundle id as the app) this is a
+    /// separate suite, so a test erase can never remove the owner's real preferences.
+    nonisolated static let erasePreferences: UserDefaults =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            ? (UserDefaults(suiteName: "kalsmritikosh.tests.erase") ?? .standard) : .standard
+
     /// User-initiated FULL ERASE of all ingested + derived data — the global
     /// "Delete all my data" the app was missing. Removes every watched folder
     /// and empties every ledger table; the on-disk vector-index cache and the
@@ -4148,13 +4171,34 @@ public final class AppState {
     @discardableResult
     public func deleteAllData() async -> Int {
         guard let db = database, !deletingAllData else { return 0 }
-        // W2-5 — an active legal hold blocks erasing the ledger.
-        if let held = try? await db.query("""
-            SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
-            WHERE h.released_at IS NULL AND i.removed_at IS NULL;
-            """, []).first?.int(0), held > 0 {
+        // W2-5 — an active legal hold blocks erasing the ledger. Fail closed (K2): a hold check that
+        // cannot be read is not "no hold".
+        let held: Int
+        do { held = Int(try await db.query(Self.legalHoldCountSQL, []).first?.int(0) ?? 0) } catch {
+            legalHoldBlock = "Not erased: the legal-hold check could not be read (\(error.localizedDescription)). Nothing was deleted."
+            KalsmritikoshLog.app.error("Erase refused: legal-hold check unreadable: \(error.localizedDescription, privacy: .public)")
+            return 0
+        }
+        if held > 0 {
             legalHoldBlock = "Not erased: \(held) document\(held == 1 ? " is" : "s are") under a legal hold. Release the hold first (Tools → Legal production)."
             KalsmritikoshLog.app.notice("Erase refused: \(held, privacy: .public) documents under legal hold")
+            return 0
+        }
+        // The table inventory must be read before anything is touched: an unreadable inventory is an
+        // incomplete erase, never an empty one.
+        let tables: [String]
+        do {
+            tables = try await db.query(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';", [])
+                .compactMap { $0.string(0) }.filter { $0 != "ledger_full_erase" }
+        } catch {
+            eraseResidue = [(table: "table inventory (unreadable: \(error.localizedDescription))", rows: -1)]
+            KalsmritikoshLog.app.fault("FULL ERASE NOT STARTED — the table inventory could not be read")
+            return 0
+        }
+        guard !tables.isEmpty else {
+            eraseResidue = [(table: "table inventory (empty)", rows: -1)]
+            KalsmritikoshLog.app.fault("FULL ERASE NOT STARTED — the table inventory is empty")
             return 0
         }
         deletingAllData = true
@@ -4179,82 +4223,121 @@ public final class AppState {
         idleMaintenanceScan = nil
         await compression?.stop()
         defer { Task { [compression] in await compression?.start() } }
-        // 2. Empty every user table. Skip sqlite internals and FTS shadow
-        //    tables (those are maintained by triggers on their base tables, so
-        //    deleting the base rows cleans the index). FK off during the wipe so
-        //    parent/child delete order doesn't matter.
-        let rows = (try? await db.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';",
-            [])) ?? []
-        let tables = rows.compactMap { $0.string(0) }.filter { $0 != "ledger_full_erase" }
+        // Open studio screens: their pending writes are dropped and they write nothing more until
+        // reopened — a queued save must not recreate an erased draft (K2 writer barrier).
+        await StudioStorage.invalidateAllForErase()
+
+        // 2. Empty every user table in one savepoint. Nothing interleaves with the wipe, and the
+        //    count-back sees exactly what the wipe left. The legal-hold check is repeated INSIDE the
+        //    destructive boundary: a hold placed meanwhile rolls the whole wipe back. The full-erase
+        //    marker lets the append-only guards stand aside (v161) for this act only. AFTER DELETE
+        //    triggers can refill an emptied table (deleting chunks writes evidence_revisions), so the
+        //    pass repeats until every table is empty. FK off so delete order does not matter.
+        struct HoldArrived: Error { let count: Int }
         try? await db.exec("PRAGMA foreign_keys=OFF;", [])
-        // One savepoint: nothing interleaves with the wipe, and the count-back below sees exactly
-        // what the wipe left. The full-erase marker lets the append-only guards stand aside (v161)
-        // for this act only. AFTER DELETE triggers can refill a table already emptied (deleting
-        // chunks writes evidence_revisions), so the pass repeats until every table is empty.
-        let atomicResidue: [EraseResidueRow]? = try? await db.withSavepoint("full_erase") { db in
-            try db.exec("INSERT INTO ledger_full_erase (started_at) VALUES (?);", [.date(Date())])
-            var left: [EraseResidueRow] = []
-            for _ in 0..<3 {
-                for t in tables { try? db.exec("DELETE FROM \"\(t)\";", []) }
-                left = []
-                for t in tables {
-                    let n = (try? db.query("SELECT COUNT(*) FROM \"\(t)\";", []).first?.int(0)).flatMap { $0 }.map { Int($0) } ?? -1
-                    if n != 0 { left.append(EraseResidueRow(table: t, rows: n)) }
+        let atomicResidue: [EraseResidueRow]?
+        do {
+            atomicResidue = try await db.withSavepoint("full_erase") { db in
+                let heldNow = Int(try db.query(AppState.legalHoldCountSQL, []).first?.int(0) ?? 0)
+                if heldNow > 0 { throw HoldArrived(count: heldNow) }
+                try db.exec("INSERT INTO ledger_full_erase (started_at) VALUES (?);", [.date(Date())])
+                var left: [EraseResidueRow] = []
+                for _ in 0..<3 {
+                    for t in tables { try? db.exec("DELETE FROM \"\(t)\";", []) }
+                    left = []
+                    for t in tables {
+                        let n = (try? db.query("SELECT COUNT(*) FROM \"\(t)\";", []).first?.int(0)).flatMap { $0 }.map { Int($0) } ?? -1
+                        if n != 0 { left.append(EraseResidueRow(table: t, rows: n)) }
+                    }
+                    if left.isEmpty { break }
                 }
-                if left.isEmpty { break }
+                try db.exec("DELETE FROM ledger_full_erase;", [])
+                return left
             }
-            try db.exec("DELETE FROM ledger_full_erase;", [])
-            return left
+        } catch let hold as HoldArrived {
+            try? await db.exec("PRAGMA foreign_keys=ON;", [])
+            legalHoldBlock = "Not erased: a legal hold was placed while the erase was starting (\(hold.count) document\(hold.count == 1 ? "" : "s")). Nothing was deleted."
+            KalsmritikoshLog.app.notice("Erase rolled back: a legal hold arrived during the erase")
+            return 0
+        } catch {
+            KalsmritikoshLog.app.error("Full-erase savepoint failed: \(error.localizedDescription, privacy: .public)")
+            atomicResidue = nil
         }
         try? await db.exec("PRAGMA foreign_keys=ON;", [])
-        // 3. Drop the vector-index cache so it rebuilds empty.
-        let cache = db.url.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
-        try? FileManager.default.removeItem(at: cache)
-        // 4. Remove the managed-evidence vault (EV-005) — the content-addressed byte
-        //    copies made while managed mode was on. Without this, "Delete all my data"
-        //    left original bytes behind in the container. Same root as boot wiring
-        //    (<db dir>/EvidenceVault); blobs are chmod 444, but unlinking depends on
-        //    the parent directory, so removing the tree succeeds. Recreated on demand.
-        let vaultRoot = db.url.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true)
-        try? FileManager.default.removeItem(at: vaultRoot)
+        // 3. Managed files beside the ledger (vector-index cache, managed-evidence vault): removed
+        //    under an operation record, then checked. A database savepoint cannot make file deletion
+        //    atomic; the record lets an interrupted removal finish at the next launch, and anything
+        //    that is still there is reported, never assumed gone.
+        let fileResidue = Self.removeManagedFiles(besideLedgerAt: db.url)
+        // 4. Preferences that hold case content.
+        let defaults = Self.erasePreferences
+        for key in Self.caseContentPreferenceKeys { defaults.removeObject(forKey: key) }
+        for key in defaults.dictionaryRepresentation().keys where Self.caseContentPreferencePrefixes.contains(where: { key.hasPrefix($0) }) {
+            defaults.removeObject(forKey: key)
+        }
         // 5. Return the freed pages to the filesystem. Without VACUUM the
         //    emptied knowledge.sqlite keeps its full pre-erase size on disk
         //    (owner witness: 121 MB with every table at 0 rows), which reads
         //    as "my data wasn't deleted" — a promise breach for an erase.
         try? await db.exec("VACUUM;", [])
 
-        // 6. P4.3 — PROVE IT. Everything above is `try? await db.exec(DELETE)`,
-        //    so a table that failed to empty produced no error and was counted
-        //    as cleared anyway. The function then returned the number of DELETE
-        //    statements ATTEMPTED and called it "tables cleared". For the one
-        //    operation in this app a user cannot undo and cannot inspect, that
-        //    is the worst place in the codebase to infer success from the
-        //    absence of a thrown error.
-        //
-        //    So count the rows back. A residue is reported, logged as a fault,
-        //    and left VISIBLE rather than folded into the success number — a
-        //    half-erased ledger that reports a clean erase would have the user
-        //    re-ingest on top of surviving rows and then wonder why their counts
-        //    are wrong.
-        // The savepoint's own count is the verdict; a savepoint that could not run is re-counted.
-        let residue: [(table: String, rows: Int)]
+        // 6. P4.3 — PROVE IT. Count the rows back; a residue is reported, logged as a fault and left
+        //    VISIBLE rather than folded into the success number. The savepoint's own count is the
+        //    verdict; a savepoint that could not run is re-counted. Files that survived are residue too.
+        var residue: [(table: String, rows: Int)]
         if let atomicResidue {
             residue = atomicResidue.map { (table: $0.table, rows: $0.rows) }
-                .sorted { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
         } else {
             residue = await Self.eraseResidue(db: db, tables: tables)
         }
+        residue += fileResidue.map { (table: "file: \($0)", rows: -1) }
+        residue.sort { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
         eraseResidue = residue
         newFilesSinceLaunch = 0
         if residue.isEmpty {
-            KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY (user-initiated full erase)")
+            KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY, managed files removed (user-initiated full erase)")
         } else {
-            let detail = residue.map { "\($0.table)=\($0.rows)" }.joined(separator: ", ")
             let residueCount = residue.count
-            KalsmritikoshLog.app.fault("FULL ERASE INCOMPLETE — \(residueCount, privacy: .public) table(s) still hold rows after the wipe: \(detail, privacy: .public)")
+            KalsmritikoshLog.app.fault("FULL ERASE INCOMPLETE — \(residueCount, privacy: .public) item(s) still hold data after the wipe")
         }
         return tables.count
+    }
+
+    /// The operation record of a full erase's file steps (beside the ledger).
+    nonisolated static let fullEraseRecordName = "full-erase-pending.json"
+
+    /// Remove the app-managed files beside the ledger under an operation record; returns the names
+    /// still present afterwards. Safe to call again: an interrupted removal finishes on the next call.
+    @discardableResult
+    nonisolated static func removeManagedFiles(besideLedgerAt ledgerURL: URL) -> [String] {
+        let dir = ledgerURL.deletingLastPathComponent()
+        let targets = ["hnsw-index.bin", "EvidenceVault"]
+        let fm = FileManager.default
+        let record = dir.appendingPathComponent(fullEraseRecordName)
+        if let data = try? JSONSerialization.data(withJSONObject: ["targets": targets, "startedAt": Date().timeIntervalSince1970]) {
+            do { try data.write(to: record, options: .atomic) } catch {
+                KalsmritikoshLog.app.error("Full-erase operation record not written: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        var left: [String] = []
+        for name in targets {
+            let url = dir.appendingPathComponent(name)
+            guard fm.fileExists(atPath: url.path) else { continue }
+            do { try fm.removeItem(at: url) } catch {
+                KalsmritikoshLog.app.error("Full erase could not remove \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+            if fm.fileExists(atPath: url.path) { left.append(name) }
+        }
+        if left.isEmpty { try? fm.removeItem(at: record) }
+        return left
+    }
+
+    /// At launch: finish the file steps of a full erase that was interrupted.
+    nonisolated static func resumePendingFullErase(besideLedgerAt ledgerURL: URL) {
+        let record = ledgerURL.deletingLastPathComponent().appendingPathComponent(fullEraseRecordName)
+        guard FileManager.default.fileExists(atPath: record.path) else { return }
+        let left = removeManagedFiles(besideLedgerAt: ledgerURL)
+        KalsmritikoshLog.app.notice("Resumed an interrupted full erase: \(left.isEmpty ? "files removed" : "still present: " + left.joined(separator: ", "), privacy: .public)")
     }
 
     struct EraseResidueRow: Sendable { let table: String; let rows: Int }

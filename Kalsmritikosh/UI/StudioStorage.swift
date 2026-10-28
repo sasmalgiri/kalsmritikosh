@@ -93,6 +93,26 @@ final class StudioStorage {
         guard await flushAll() else { throw StudioUnsavedChangesError() }
     }
 
+    /// K2 writer barrier: after a full erase, every open studio drops its pending writes and writes
+    /// nothing more until it is loaded again — a queued save must not recreate an erased draft.
+    static func invalidateAllForErase() async {
+        for w in live {
+            guard let s = w.storage else { continue }
+            await s.flush()
+            s.erasedGeneration = true
+            s.committed = [:]
+            s.lastItems = []
+            s.hasUnsavedChanges = false
+            s.approvedIDs = []
+            s.caseOf = [:]
+            s.problem = nil
+            s.notice = "All data was erased. Close and reopen this studio; nothing shown here is saved any more."
+        }
+    }
+
+    /// Set by a full erase; cleared by the next load.
+    private(set) var erasedGeneration = false
+
     static func flushAll() async -> Bool {
         var allSaved = true
         for w in live { if let s = w.storage { await s.flush(); if s.hasUnsavedChanges { allSaved = false } } }
@@ -111,6 +131,7 @@ final class StudioStorage {
     /// Import the old store once (if any), then read every live draft of this studio.
     func load<M: StudioPersisted>(_ type: M.Type, app: AppState?) async -> [M] {
         guard let repo = repository(app) else { return [] }
+        erasedGeneration = false
         do {
             if !(try await repo.hasImportedLegacy(sourceKey: legacyKey)) {
                 let blob = UserDefaults.standard.string(forKey: legacyKey) ?? ""
@@ -156,6 +177,7 @@ final class StudioStorage {
     /// ones no longer in `items`. The known state moves only when a write succeeds (review R5), so a
     /// failed change stays pending and `retry()` (or the next edit) sends it again.
     func persist<M: StudioPersisted>(_ items: [M], app: AppState?) {
+        guard !erasedGeneration else { return }   // K2: nothing erased is written back
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         var list: [(UUID, String, Data)] = []
         for m in items {
@@ -345,8 +367,8 @@ final class StudioStorage {
             lastItems.removeAll { $0.0 == id }
             approvedIDs.remove(id)
             var note = "Erased: the draft, \(r.revisionsCleared) earlier version(s) and \(r.exportsCleared) export snapshot(s) no longer hold its content; the erasure itself is recorded."
-            if r.legacyOriginalsHolding > 0 {
-                note += " A copy remains in \(r.legacyOriginalsHolding) captured original store(s) from before the move into the ledger."
+            if r.legacyOriginalsCleared > 0 {
+                note += " \(r.legacyOriginalsCleared) captured store(s) from before the move into the ledger held a copy and were cleared too."
             }
             notice = note + " " + StudioErasureResult.outsideTheLedger
             return nil

@@ -121,8 +121,9 @@ public nonisolated struct StudioErasureResult: Sendable, Equatable {
     public let revisionsCleared: Int
     public let exportsCleared: Int
     public let quarantineCleared: Int
-    /// Captured legacy preference stores that still hold a copy of this draft (kept byte for byte, R4).
-    public let legacyOriginalsHolding: Int
+    /// Captured legacy preference stores that held a copy of this draft and were cleared (K3). Their
+    /// other elements live on in the ledger (imported) or in quarantine.
+    public let legacyOriginalsCleared: Int
     /// Copies outside the ledger the app cannot erase — the person removes them.
     public static let outsideTheLedger = "Files you exported, backups and snapshots you made, and sync folders keep their own copies; remove those yourself."
 }
@@ -320,7 +321,10 @@ public actor StudioRecordRepository {
                   ON o.source_key = q.source_key AND o.element_index = q.element_index
                 WHERE o.record_id = ? AND q.raw_json <> '';
                 """, id).first?.int(0) ?? 0)
-            let legacy = Int(try db.query("SELECT COUNT(DISTINCT source_key) FROM studio_legacy_outcomes WHERE record_id = ?;", id).first?.int(0) ?? 0)
+            let legacy = Int(try db.query("""
+                SELECT COUNT(*) FROM studio_legacy_blobs WHERE raw_blob <> ''
+                  AND source_key IN (SELECT DISTINCT source_key FROM studio_legacy_outcomes WHERE record_id = ?);
+                """, id).first?.int(0) ?? 0)
             // The erasure is recorded first: the append-only triggers allow clearing content only then.
             try db.exec("""
                 INSERT INTO studio_erasures (id, record_id, case_id, reason, legal_basis, payload_sha256, revisions_cleared,
@@ -338,12 +342,16 @@ public actor StudioRecordRepository {
                     AND o.source_key = studio_legacy_quarantine.source_key AND o.element_index = studio_legacy_quarantine.element_index);
                 """, [.uuid(recordID)])
             try db.exec("""
+                UPDATE studio_legacy_blobs SET raw_blob = '', cleared_reason = ?, cleared_at = ?
+                WHERE raw_blob <> '' AND source_key IN (SELECT DISTINCT source_key FROM studio_legacy_outcomes WHERE record_id = ?);
+                """, [.text("erasure \(erasureID.uuidString) of draft \(recordID.uuidString): \(why)"), .date(date), .uuid(recordID)])
+            try db.exec("""
                 UPDATE studio_records SET payload_json = '', title = '', review_state = 'draft', approved_payload_sha256 = NULL,
                     erased_at = ?, retracted_at = COALESCE(retracted_at, ?), retracted_by = COALESCE(retracted_by, ?),
                     updated_by = ?, updated_at = MAX(updated_at, ?) WHERE id = ?;
                 """, [.date(date), .date(date), .text(who), .text(who), .date(date), .uuid(recordID)])
             return StudioErasureResult(erasureID: erasureID, revisionsCleared: revisions, exportsCleared: exports,
-                                       quarantineCleared: quarantine, legacyOriginalsHolding: legacy)
+                                       quarantineCleared: quarantine, legacyOriginalsCleared: legacy)
         }
     }
 
@@ -512,9 +520,14 @@ public actor StudioRecordRepository {
 
     /// The exact stored text of an old preference store, and whether it still matches its digest.
     public func legacyBlob(sourceKey: String) async throws -> (raw: String, intact: Bool)? {
-        guard let r = try await database.query("SELECT raw_blob, sha256 FROM studio_legacy_blobs WHERE source_key = ? LIMIT 1;", [.text(sourceKey)]).first,
+        try await legacyBlobState(sourceKey: sourceKey).map { ($0.raw, $0.intact) }
+    }
+
+    /// The captured store with its state: `clearedReason` is set when an erasure cleared it (K3).
+    public func legacyBlobState(sourceKey: String) async throws -> (raw: String, intact: Bool, clearedReason: String?)? {
+        guard let r = try await database.query("SELECT raw_blob, sha256, cleared_reason FROM studio_legacy_blobs WHERE source_key = ? LIMIT 1;", [.text(sourceKey)]).first,
               let raw = r.string(0), let sha = r.string(1) else { return nil }
-        return (raw, Self.sha256(Data(raw.utf8)) == sha)
+        return (raw, Self.sha256(Data(raw.utf8)) == sha, r.string(2))
     }
 
     /// Every element's recorded outcome, in order.

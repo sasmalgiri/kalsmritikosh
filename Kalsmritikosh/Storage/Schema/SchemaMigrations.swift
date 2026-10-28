@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 161
+    public static let latestVersion = 162
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -125,6 +125,18 @@ public enum SchemaMigrations {
         return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
             .map { ns.substring(with: $0.range(at: 1)) }
             .filter { !$0.hasSuffix("__new") && !$0.contains("__v") }
+    }
+
+    /// The (table, column) pairs a migration adds with `ALTER TABLE … ADD COLUMN …` — so a migration that
+    /// only adds columns still gives the self-heal sentinel something to check (v162, 2026-10-28).
+    static func addedColumns(inMigration version: Int) -> [(table: String, column: String)] {
+        guard let sql = migrationSQL(for: version),
+              let re = try? NSRegularExpression(pattern: #"ALTER\s+TABLE\s+"?([A-Za-z_][A-Za-z0-9_]*)"?\s+ADD\s+COLUMN\s+"?([A-Za-z_][A-Za-z0-9_]*)"?"#,
+                                                options: [.caseInsensitive]) else { return [] }
+        let ns = sql as NSString
+        return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
+            .map { (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range(at: 2))) }
+            .filter { !$0.0.hasSuffix("__new") && !$0.0.contains("__v") }
     }
 
     /// A migration is safe to re-run when every top-level statement is a `CREATE … IF NOT EXISTS`
@@ -563,6 +575,11 @@ public enum SchemaMigrations {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
             guard !rows.isEmpty else { return false }
         }
+        // …and every column it adds (a column-only newest migration has no table to check).
+        for (table, column) in addedColumns(inMigration: latestVersion) {
+            let rows = try await database.query("PRAGMA table_info(\(table));", [])
+            guard rows.contains(where: { $0.string(1) == column }) else { return false }
+        }
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
             let actual = Set(rows.compactMap { $0.string(1) })
@@ -771,7 +788,8 @@ public enum SchemaMigrations {
         (158, v158),
         (159, v159),
         (160, v160),
-        (161, v161)
+        (161, v161),
+        (162, v162)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7804,6 +7822,25 @@ public enum SchemaMigrations {
     CREATE TRIGGER studio_erasures_kept BEFORE DELETE ON studio_erasures
     WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
     BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    """
+
+
+    // MARK: - v162 — erasure reaches the captured pre-ledger store (final completion instructions K3). A
+    // studio erasure used to count the captured preference stores (v159) still holding the draft and leave
+    // them. The store's content may now be cleared — only after a recorded erasure of a draft that store
+    // held — keeping its SHA-256, size and capture time, with the reason. Its other elements are not lost:
+    // each was imported into the ledger or kept byte for byte in quarantine.
+    private static let v162: String = """
+    ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_reason TEXT;
+    ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_at REAL;
+    DROP TRIGGER IF EXISTS studio_legacy_blobs_fixed;
+    CREATE TRIGGER studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
+    WHEN NOT (NEW.raw_blob = '' AND NEW.source_key = OLD.source_key AND NEW.sha256 = OLD.sha256
+              AND NEW.byte_count = OLD.byte_count AND NEW.captured_at = OLD.captured_at
+              AND NEW.cleared_reason IS NOT NULL AND NEW.cleared_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM studio_erasures e JOIN studio_legacy_outcomes o ON o.record_id = e.record_id
+                          WHERE o.source_key = OLD.source_key))
+    BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured (cleared only by a recorded erasure)'); END;
     """
 
 }

@@ -328,7 +328,7 @@ struct StudioRecordRepositoryTests {
         try await db.exec("UPDATE legal_holds SET released_at = ? WHERE id = ?;", [.real(2), .uuid(hold)])
 
         let r = try await repo.erase(recordID: a.id, reason: "Subject's request of 1 Oct", legalBasis: "GDPR Art. 17", actor: "Tester")
-        #expect(r.revisionsCleared >= 2 && r.exportsCleared == 1 && r.quarantineCleared == 1 && r.legacyOriginalsHolding == 1)
+        #expect(r.revisionsCleared >= 2 && r.exportsCleared == 1 && r.quarantineCleared == 1 && r.legacyOriginalsCleared == 1)
         // Nothing of the content is left in the ledger tables; the rows (dates, fingerprints) are.
         #expect(try await repo.revisions(recordID: a.id).count >= 2)
         #expect(try await repo.payload(recordID: a.id, revision: 1) == Data())
@@ -336,6 +336,15 @@ struct StudioRecordRepositoryTests {
         #expect(try await repo.record(id: a.id)?.title == "")
         #expect(try await db.query("SELECT COUNT(*) FROM studio_legacy_quarantine WHERE source_key = 'k.l4' AND raw_json <> '';", []).first?.int(0) == 0)
         #expect(try await repo.records(studio: "siu").isEmpty)
+        // K3: the captured pre-ledger store that held the draft is cleared, with the reason; its digest stays.
+        let kept = try #require(try await repo.legacyBlobState(sourceKey: "k.l4"))
+        #expect(kept.raw.isEmpty && !kept.intact && kept.clearedReason?.contains("Subject's request") == true)
+        // A captured store with no erasure behind it still cannot be changed.
+        let otherBlob = String(decoding: try JSONEncoder().encode([SIUReferral(title: "Unrelated", now: t0)]), as: UTF8.self)
+        _ = try await repo.importLegacy(studio: "siu", sourceKey: "k.other", blob: otherBlob, actor: "Tester", at: t0, decode: legacyElement)
+        await #expect(throws: (any Error).self) {
+            try await db.exec("UPDATE studio_legacy_blobs SET raw_blob = '', cleared_reason = 'x', cleared_at = 1 WHERE source_key = 'k.other';", [])
+        }
         // The erasure itself is recorded and cannot be changed.
         let log = try await repo.erasures(recordID: a.id)
         #expect(log.count == 1 && log[0].legalBasis == "GDPR Art. 17" && log[0].erasedBy == "Tester")
