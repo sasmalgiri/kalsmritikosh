@@ -75,6 +75,12 @@ struct JobOutcomeMatrixTests {
     func deliverableIDsAreReal() {
         let ids = Set(Self.advertised.map(\.id))
         for id in Self.studioDeliverables.keys { #expect(ids.contains(id), "\(id) is not an advertised job") }
+        // K7: every studio's saved identity names a real persona and (when given) one of its jobs.
+        let all = Dictionary(PersonaJobCatalogComposer.allJobs.map { ($0.id, $0.persona) }, uniquingKeysWith: { a, _ in a })
+        for (studio, identity) in StudioStorage.identities {
+            if let job = identity.jobID { #expect(all[job] == identity.persona, "\(studio): \(job) is not a job of \(identity.persona)") }
+            #expect(PersonaJobCatalogComposer.allJobs.contains { $0.persona == identity.persona }, "\(studio): unknown persona")
+        }
         #expect(Self.advertised.count == 168)
     }
 

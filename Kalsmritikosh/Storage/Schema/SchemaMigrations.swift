@@ -7833,6 +7833,9 @@ public enum SchemaMigrations {
     private static let v162: String = """
     ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_reason TEXT;
     ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_at REAL;
+    -- K5: the scope an export was authorised against (a digest of the case's accessible source
+    -- versions at the moment of the final check).
+    ALTER TABLE studio_record_exports ADD COLUMN scope_fingerprint TEXT;
     DROP TRIGGER IF EXISTS studio_legacy_blobs_fixed;
     CREATE TRIGGER studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
     WHEN NOT (NEW.raw_blob = '' AND NEW.source_key = OLD.source_key AND NEW.sha256 = OLD.sha256

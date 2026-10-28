@@ -34,6 +34,8 @@ struct StudioExportPackage: Sendable, Equatable {
     let payloadSHA256: String
     let approved: Bool
     let text: String
+    /// K5 — digest of the case's accessible source versions at the final check (nil: not checked).
+    var scopeFingerprint: String? = nil
     var digest: String { StudioRecordRepository.sha256(Data(text.utf8)) }
 }
 
@@ -72,6 +74,8 @@ final class StudioStorage {
 
     /// Tests: the repository to use instead of the app's, and a fault to inject before each write.
     var repositoryOverride: StudioRecordRepository?
+    /// Test hook: the evidence context the final export check uses (else the app's).
+    var evidenceContextOverride: ((UUID?) async -> StudioEvidenceContext?)?
     var writeFault: (@Sendable () throws -> Void)?
 
     /// Every open studio screen, so a backup can flush their pending writes first.
@@ -91,6 +95,24 @@ final class StudioStorage {
     /// Throws when a studio change is still unsaved — for every path that copies the ledger.
     static func requireAllSaved() async throws {
         guard await flushAll() else { throw StudioUnsavedChangesError() }
+    }
+
+    /// K7 — the persona and catalog job each studio's drafts belong to (saved on every record).
+    static let identities: [String: (persona: String, jobID: String?)] = [
+        "siu": ("com.kalsmritikosh.persona.siu", "siu.referral-report"),
+        "forensic": ("com.kalsmritikosh.persona.forensicaccountant", "fa.expert-report"),
+        "journalist": ("com.kalsmritikosh.persona.journalist", "jrn.claim-board"),
+        "workplace": ("com.kalsmritikosh.persona.compliance", "hr.findings-memo"),
+        "privilegeLog": ("com.kalsmritikosh.persona.lawyer", "law.privilege"),
+        "reasoning": ("com.kalsmritikosh.persona.investigator", "inv.causal-analysis"),
+        "rs": ("com.kalsmritikosh.persona.researcher", "res.protocol"),
+        "gn": ("com.kalsmritikosh.persona.genealogist", "gen.proof-argument"),
+        "in": ("com.kalsmritikosh.persona.individual", "ind.emergency-pack"),
+        "ds": ("com.kalsmritikosh.persona.individual", "ind.applications"),
+        "cc": ("com.kalsmritikosh.persona.contentcreator", nil),
+    ]
+    private var identity: (persona: String?, jobID: String?) {
+        Self.identities[studio].map { ($0.persona, $0.jobID) } ?? (nil, nil)
     }
 
     /// K2 writer barrier: after a full erase, every open studio drops its pending writes and writes
@@ -206,7 +228,7 @@ final class StudioStorage {
             for (id, title, data) in changed {
                 do {
                     try fault?()
-                    try await repo.save(studio: studio, id: id, title: title, payload: data, actor: who)
+                    try await repo.save(studio: studio, id: id, title: title, payload: data, persona: identity.persona, jobID: identity.jobID, actor: who)
                     self?.committed[id] = data
                 } catch { failure = error }
                 if self?.inFlight[id] == data { self?.inFlight[id] = nil }
@@ -249,8 +271,34 @@ final class StudioStorage {
 
     /// Freeze `model` (the exact value that was validated) and render it once. Pending writes land
     /// first; the draft's stored content must equal `model`, or nothing is exported.
-    func package<M: StudioPersisted>(_ model: M, app: AppState?, render: (_ approved: Bool) -> String) async -> StudioExportPackage? {
+    /// What the final check before output re-authorises: the draft's provenance and gate values.
+    struct ExportAuthorisation {
+        let provenance: StudioProvenance?
+        let values: [String: String]
+        let privileged: Bool
+    }
+
+    func package<M: StudioPersisted>(_ model: M, app: AppState?, authorise: ExportAuthorisation? = nil,
+                                     render: (_ approved: Bool) -> String) async -> StudioExportPackage? {
         guard let repo = repository(app) else { return nil }
+        // K5 — re-authorise immediately before output: every cited source must still resolve in the
+        // draft's case under the current access policy (a source that became privileged or left the
+        // case since the person pressed Export stops the export). The scope it was checked against
+        // is recorded with the export.
+        var fingerprint: String?
+        if let authorise, app != nil || evidenceContextOverride != nil {
+            let context: StudioEvidenceContext?
+            if let evidenceContextOverride { context = await evidenceContextOverride(caseOf[model.id]) }
+            else { context = await app?.studioEvidenceContext(caseID: caseOf[model.id], workspaceID: nil, includePrivileged: authorise.privileged) }
+            let unresolved = await StudioEvidenceResolver.unresolved(values: authorise.values, provenance: authorise.provenance, context: context)
+            if !unresolved.isEmpty {
+                problem = "Nothing was exported: \(unresolved.count) cited source(s) no longer check out (\(unresolved.keys.sorted().prefix(3).joined(separator: ", "))) — the case or its access changed. Check the draft and export again."
+                return nil
+            }
+            if let context {
+                fingerprint = StudioRecordRepository.sha256(Data(context.eligibleSourceVersions.map(\.uuidString).sorted().joined(separator: ",").utf8))
+            }
+        }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         do {
             let data = try encoder.encode(model)
@@ -261,12 +309,12 @@ final class StudioStorage {
                     throw StudioRecordError.changedSinceValidation(model.id)
                 }
                 try writeFault?()
-                try await repo.save(studio: studio, id: model.id, title: model.title, payload: data, actor: actor)
+                try await repo.save(studio: studio, id: model.id, title: model.title, payload: data, persona: identity.persona, jobID: identity.jobID, actor: actor)
                 committed[model.id] = data
             }
             let frozen = try await repo.freezeForExport(recordID: model.id, expectedPayloadSHA256: StudioRecordRepository.sha256(data), actor: actor)
             return StudioExportPackage(recordID: model.id, revision: frozen.revision, payloadSHA256: StudioRecordRepository.sha256(data),
-                                       approved: frozen.approved, text: render(frozen.approved))
+                                       approved: frozen.approved, text: render(frozen.approved), scopeFingerprint: fingerprint)
         } catch {
             KalsmritikoshLog.storage.error("Studio export not prepared: \(error.localizedDescription, privacy: .public)")
             problem = "Nothing was exported: \(error.localizedDescription)"
@@ -289,7 +337,7 @@ final class StudioStorage {
         let who = actor, previous = chain
         chain = Task { [weak self] in
             await previous?.value
-            do { try await repo.recordExport(recordID: pkg.recordID, format: format, text: pkg.text, revision: pkg.revision, actor: who) } catch {
+            do { try await repo.recordExport(recordID: pkg.recordID, format: format, text: pkg.text, revision: pkg.revision, scopeFingerprint: pkg.scopeFingerprint, actor: who) } catch {
                 KalsmritikoshLog.storage.error("Studio export record failed: \(error.localizedDescription, privacy: .public)")
                 self?.problem = "The export was written, but its record could not be saved: \(error.localizedDescription)"
             }
@@ -300,8 +348,14 @@ final class StudioStorage {
     /// complete, every cited source resolves, and no field whose citation failed was relabelled as
     /// the investigator's own entry (mandatory documentary support cannot be waived by a label).
     func approve<M: StudioPersisted>(_ model: M, provenance: StudioProvenance?, values: [String: String],
-                                     privileged: Bool, app: AppState) async -> String? {
+                                     privileged: Bool, mandatory: [String] = [], app: AppState) async -> String? {
         guard model.completionFraction >= 1 else { return "Not approved: every stage must be complete first." }
+        // K6: a field the work product must rest on a document for cannot be approved as the
+        // investigator's own entry.
+        let undocumented = StudioMandatoryEvidence.missing(values: values, provenance: provenance, patterns: mandatory)
+        if !undocumented.isEmpty {
+            return "Not approved: \(undocumented.count) field(s) must come from the case's documents, not be typed in (\(undocumented.prefix(4).joined(separator: ", ")))."
+        }
         let relabelled = (provenance ?? [:]).filter { $0.value.relabelledFromUnresolved == true }.map(\.key)
         if !relabelled.isEmpty {
             return "Not approved: \(relabelled.count) field(s) whose cited source did not check out were marked as your own entries. An approved report needs their documentary support resolved (\(relabelled.sorted().prefix(4).joined(separator: ", ")))."
@@ -318,7 +372,7 @@ final class StudioStorage {
                 if let live = lastItems.first(where: { $0.0 == model.id })?.2, live != data {
                     throw StudioRecordError.changedSinceValidation(model.id)
                 }
-                try await repo.save(studio: studio, id: model.id, title: model.title, payload: data, actor: actor)
+                try await repo.save(studio: studio, id: model.id, title: model.title, payload: data, persona: identity.persona, jobID: identity.jobID, actor: actor)
                 committed[model.id] = data
             }
             try await repo.setReviewState(recordID: model.id, .approved, actor: actor)

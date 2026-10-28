@@ -76,6 +76,9 @@ public nonisolated struct StudioRecord: Sendable, Identifiable, Hashable {
     public let createdAt: Date
     public let updatedBy: String
     public let updatedAt: Date
+    /// The persona and catalog job this draft belongs to (K7).
+    public var persona: String? = nil
+    public var jobID: String? = nil
 }
 
 public nonisolated struct StudioRecordRevision: Sendable, Hashable {
@@ -94,6 +97,8 @@ public nonisolated struct StudioRecordExport: Sendable, Hashable {
     public let snapshot: String
     public let exportedBy: String
     public let exportedAt: Date
+    /// K5 — digest of the case's accessible source versions when the export was authorised.
+    public var scopeFingerprint: String? = nil
 }
 
 /// What one legacy element decodes to (the caller's model knows how).
@@ -175,11 +180,11 @@ public actor StudioRecordRepository {
     }
 
     public func exports(recordID: UUID) async throws -> [StudioRecordExport] {
-        try await database.query("SELECT id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at FROM studio_record_exports WHERE record_id = ? ORDER BY exported_at, id;",
+        try await database.query("SELECT id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at, scope_fingerprint FROM studio_record_exports WHERE record_id = ? ORDER BY exported_at, id;",
                                  [.uuid(recordID)]).compactMap { r in
             guard let id = r.uuid(0), let rev = r.int(1), let f = r.string(2), let sha = r.string(3), let snap = r.string(4),
                   let by = r.string(5), let at = r.date(6) else { return nil }
-            return StudioRecordExport(id: id, revision: Int(rev), format: f, artifactSHA256: sha, snapshot: snap, exportedBy: by, exportedAt: at)
+            return StudioRecordExport(id: id, revision: Int(rev), format: f, artifactSHA256: sha, snapshot: snap, exportedBy: by, exportedAt: at, scopeFingerprint: r.string(7))
         }
     }
 
@@ -249,10 +254,11 @@ public actor StudioRecordRepository {
             }
             try db.exec("""
                 UPDATE studio_records SET title = ?, payload_json = ?, payload_sha256 = ?, revision = ?, model_version = ?,
-                    case_id = COALESCE(case_id, ?), workspace_id = COALESCE(workspace_id, ?), updated_by = ?, updated_at = ?
+                    case_id = COALESCE(case_id, ?), workspace_id = COALESCE(workspace_id, ?),
+                    persona = COALESCE(persona, ?), job_id = COALESCE(job_id, ?), updated_by = ?, updated_at = ?
                 WHERE id = ?;
                 """, [.text(title), .text(json), .text(sha), .integer(Int64(rev)), .integer(Int64(modelVersion)),
-                      Self.opt(caseID), Self.opt(workspaceID), .text(who), .date(date), .uuid(id)])
+                      Self.opt(caseID), Self.opt(workspaceID), .optionalText(persona), .optionalText(jobID), .text(who), .date(date), .uuid(id)])
             return rev
         }
     }
@@ -408,7 +414,7 @@ public actor StudioRecordRepository {
     }
 
     public func recordExport(recordID: UUID, format: String, text: String, revision frozen: Int? = nil,
-                             actor: String, at date: Date = Date()) async throws -> StudioRecordExport {
+                             scopeFingerprint: String? = nil, actor: String, at date: Date = Date()) async throws -> StudioRecordExport {
         let who = try Self.clean(actor)
         let sha = Self.sha256(Data(text.utf8))
         let exportID = UUID()
@@ -421,9 +427,9 @@ public actor StudioRecordRepository {
             if let frozen {
                 guard !(try db.query("SELECT 1 FROM studio_record_revisions WHERE record_id = ? AND revision = ? LIMIT 1;",
                                      [.uuid(recordID), .integer(Int64(frozen))])).isEmpty else { throw StudioRecordError.unknownRevision(recordID, frozen) }
-                try db.exec("INSERT INTO studio_record_exports (id, record_id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at) VALUES (?,?,?,?,?,?,?,?);",
-                            [.uuid(exportID), .uuid(recordID), .integer(Int64(frozen)), .text(format), .text(sha), .text(text), .text(who), .date(date)])
-                return StudioRecordExport(id: exportID, revision: frozen, format: format, artifactSHA256: sha, snapshot: text, exportedBy: who, exportedAt: date)
+                try db.exec("INSERT INTO studio_record_exports (id, record_id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at, scope_fingerprint) VALUES (?,?,?,?,?,?,?,?,?);",
+                            [.uuid(exportID), .uuid(recordID), .integer(Int64(frozen)), .text(format), .text(sha), .text(text), .text(who), .date(date), .optionalText(scopeFingerprint)])
+                return StudioRecordExport(id: exportID, revision: frozen, format: format, artifactSHA256: sha, snapshot: text, exportedBy: who, exportedAt: date, scopeFingerprint: scopeFingerprint)
             }
             var rev = Int(row.int(0) ?? 1)
             let last = try db.query("SELECT payload_sha256 FROM studio_record_revisions WHERE record_id = ? ORDER BY revision DESC LIMIT 1;", [.uuid(recordID)]).first?.string(0)
@@ -432,9 +438,9 @@ public actor StudioRecordRepository {
                 try Self.cut(db, recordID, rev, row.string(1) ?? "{}", row.string(2) ?? "", "exported", who, date)
                 try db.exec("UPDATE studio_records SET revision = ? WHERE id = ?;", [.integer(Int64(rev)), .uuid(recordID)])
             }
-            try db.exec("INSERT INTO studio_record_exports (id, record_id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at) VALUES (?,?,?,?,?,?,?,?);",
-                        [.uuid(exportID), .uuid(recordID), .integer(Int64(rev)), .text(format), .text(sha), .text(text), .text(who), .date(date)])
-            return StudioRecordExport(id: exportID, revision: rev, format: format, artifactSHA256: sha, snapshot: text, exportedBy: who, exportedAt: date)
+            try db.exec("INSERT INTO studio_record_exports (id, record_id, revision, format, artifact_sha256, snapshot_text, exported_by, exported_at, scope_fingerprint) VALUES (?,?,?,?,?,?,?,?,?);",
+                        [.uuid(exportID), .uuid(recordID), .integer(Int64(rev)), .text(format), .text(sha), .text(text), .text(who), .date(date), .optionalText(scopeFingerprint)])
+            return StudioRecordExport(id: exportID, revision: rev, format: format, artifactSHA256: sha, snapshot: text, exportedBy: who, exportedAt: date, scopeFingerprint: scopeFingerprint)
         }
     }
 
@@ -568,7 +574,7 @@ public actor StudioRecordRepository {
 
     private static let columns = """
         SELECT id, studio, case_id, workspace_id, title, model_version, revision, payload_json, payload_sha256, review_state, origin,
-               created_by, created_at, updated_by, updated_at FROM studio_records
+               created_by, created_at, updated_by, updated_at, persona, job_id FROM studio_records
         """
 
     private static func decode(_ r: SQLRow) -> StudioRecord? {
@@ -577,7 +583,8 @@ public actor StudioRecordRepository {
         return StudioRecord(id: id, studio: studio, caseID: r.uuid(2), workspaceID: r.uuid(3), title: r.string(4) ?? "",
                             modelVersion: Int(r.int(5) ?? 1), revision: Int(r.int(6) ?? 1), payload: Data(json.utf8), payloadSHA256: sha,
                             reviewState: StudioReviewState(rawValue: r.string(9) ?? "") ?? .draft, importedFromDevice: r.string(10) == "appStorageImport",
-                            createdBy: createdBy, createdAt: createdAt, updatedBy: updatedBy, updatedAt: updatedAt)
+                            createdBy: createdBy, createdAt: createdAt, updatedBy: updatedBy, updatedAt: updatedAt,
+                            persona: r.string(15), jobID: r.string(16))
     }
 
     /// Review R3: the parent case exists, belongs to `workspaceID` when one is given, and — for an

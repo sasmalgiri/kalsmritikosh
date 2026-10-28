@@ -22,6 +22,9 @@ struct KalsmritikoshApp: App {
         ? AppState(bookmarks: BookmarkStore(ephemeral: true))
         : AppState()
 
+    /// K7 — on Quit, pending studio writes finish (or the person is asked) before the app exits.
+    @NSApplicationDelegateAdaptor(AppTerminationGuard.self) private var terminationGuard
+
     /// N-6 — the menu-bar panel's switch (the module's own persisted key).
     @AppStorage("kalsmritikosh.product.menuBarAsk") private var menuBarAskOn = false
 
@@ -133,3 +136,38 @@ struct KalsmritikoshApp: App {
         NotificationCenter.default.post(name: .kalsmritikoshPaletteEntry, object: id)
     }
 }
+
+/// K7 — pending studio saves are written before the app quits. Edits are saved as they happen, but a
+/// write still in flight at Quit used to be abandoned; one that failed is now named, not lost silently.
+final class AppTerminationGuard: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // The test host quits at the runner's request; it must never wait on a dialog.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return .terminateNow }
+        Task { @MainActor in
+            let saved = await Self.flushWithin(seconds: 5)
+            if saved {
+                sender.reply(toApplicationShouldTerminate: true)
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = "A studio change has not been saved"
+            alert.informativeText = "One or more studio changes could not be written to the ledger. If you quit now, they are lost. Cancel to go back and choose Retry."
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Quit Anyway")
+            sender.reply(toApplicationShouldTerminate: alert.runModal() == .alertSecondButtonReturn)
+        }
+        return .terminateLater
+    }
+
+    /// True when every open studio's writes landed within the time allowed.
+    @MainActor static func flushWithin(seconds: Double) async -> Bool {
+        await withTaskGroup(of: Bool?.self) { group in
+            group.addTask { @MainActor in await StudioStorage.flushAll() }
+            group.addTask { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? false
+        }
+    }
+}
+

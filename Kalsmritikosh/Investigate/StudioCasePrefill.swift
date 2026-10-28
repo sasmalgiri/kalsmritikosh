@@ -14,6 +14,8 @@ import Foundation
 
 extension PrivilegeLog: CaseBackedStudio {
     public static var needsPrivilegedSources: Bool { true }
+    /// Each logged document is described from the document itself.
+    public static var mandatoryEvidence: [String] { ["entries.*.date", "entries.*.author", "entries.*.recipients", "entries.*.docType"] }
 
     public var gateValues: [String: String] {
         var v = ["caption": caption, "producingParty": producingParty, "requestingParty": requestingParty, "preparedBy": preparedBy]
@@ -69,6 +71,8 @@ extension PrivilegeLog: CaseBackedStudio {
 // MARK: - Compliance / HR — workplace investigation report
 
 extension WorkplaceInvestigation: CaseBackedStudio {
+    /// The documentary evidence register names real sources.
+    public static var mandatoryEvidence: [String] { ["evidence.*.source"] }
     public var gateValues: [String: String] {
         var v = ["mandate": mandate, "investigator": investigator, "methodologyNote": methodologyNote, "submittedTo": submittedTo]
         for x in parties { v["parties.\(x.id.uuidString).name"] = x.name }
@@ -111,6 +115,8 @@ extension WorkplaceInvestigation: CaseBackedStudio {
 // MARK: - SIU — referral
 
 extension SIUReferral: CaseBackedStudio {
+    /// Claim identifiers and the loss chronology come from the claim file.
+    public static var mandatoryEvidence: [String] { ["claimNumber", "policyNumber", "chronology.*.date", "chronology.*.event"] }
     public var gateValues: [String: String] {
         var v = ["claimNumber": claimNumber, "insured": insured, "policyNumber": policyNumber, "lossDate": lossDate,
                  "lossType": lossType, "claimedAmount": claimedAmount, "investigator": investigator]
@@ -150,6 +156,8 @@ extension SIUReferral: CaseBackedStudio {
 // MARK: - Forensic accountant — materials + transaction schedule
 
 extension ForensicEngagement: CaseBackedStudio {
+    /// Every schedule line rests on a record: its date, amount and source document.
+    public static var mandatoryEvidence: [String] { ["schedule.*.date", "schedule.*.amount", "schedule.*.sourceDoc"] }
     public var gateValues: [String: String] {
         var v = ["scope": scope, "preparedFor": preparedFor, "expert": expert, "qualifications": qualifications,
                  "methodJustification": methodJustification]

@@ -333,14 +333,14 @@ public struct PrivilegeLogStudioView: View {
 
     private func exportNow(_ v: PrivilegeLog) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: PrivilegeLog.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             exportPackage = pkg
             showExporter = true
         }
     }
     private func copyNow(_ v: PrivilegeLog) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: PrivilegeLog.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(pkg.text, forType: .string)
@@ -350,7 +350,7 @@ public struct PrivilegeLogStudioView: View {
     }
     private func printNow(_ v: PrivilegeLog) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: PrivilegeLog.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
             tv.string = pkg.text
@@ -364,7 +364,7 @@ public struct PrivilegeLogStudioView: View {
     /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
     private func approveNow(_ v: PrivilegeLog) {
         Task {
-            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: PrivilegeLog.needsPrivilegedSources, app: appState)
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: PrivilegeLog.needsPrivilegedSources, mandatory: PrivilegeLog.mandatoryEvidence, app: appState)
             storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
         }
     }

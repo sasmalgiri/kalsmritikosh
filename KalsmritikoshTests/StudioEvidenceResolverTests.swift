@@ -99,4 +99,21 @@ struct StudioEvidenceResolverTests {
         #expect(StudioExportGate.status(of: "₹1,200", provenance: p["f"]) == .investigatorEntry)
         #expect(await StudioEvidenceResolver.unresolved(values: ["f": "₹1,200"], provenance: p, context: nil).isEmpty)
     }
+
+    @Test("K6: a mandatory documentary field typed or edited by hand blocks approval; empty and non-mandatory fields do not")
+    func mandatoryEvidence() {
+        let patterns = ForensicEngagement.mandatoryEvidence
+        #expect(StudioMandatoryEvidence.matches("schedule.ABC.amount", "schedule.*.amount"))
+        #expect(!StudioMandatoryEvidence.matches("schedule.ABC.payee", "schedule.*.amount"))
+        let ref = StudioEvidenceRef(sourceVersionID: version, blockID: block, quote: "Acme paid ₹1,000 to Vendor LLC")
+        let p: StudioProvenance = ["schedule.r1.amount": .fromCase("₹1,000", [ref]), "schedule.r2.amount": .fromCase("₹1,000", [ref])]
+        let values = ["schedule.r1.amount": "₹1,000",        // documentary
+                      "schedule.r2.amount": "₹1,200",        // edited: now the investigator's entry
+                      "schedule.r3.amount": "₹5,000",        // typed with no source
+                      "schedule.r4.amount": "",              // empty: nothing asserted
+                      "schedule.r1.payee": "Vendor LLC"]     // not mandatory
+        #expect(StudioMandatoryEvidence.missing(values: values, provenance: p, patterns: patterns) == ["schedule.r2.amount", "schedule.r3.amount"])
+        #expect(StudioMandatoryEvidence.missing(values: values, provenance: p, patterns: []).isEmpty)
+    }
+
 }

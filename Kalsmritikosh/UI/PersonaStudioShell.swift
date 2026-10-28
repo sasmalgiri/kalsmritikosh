@@ -41,10 +41,32 @@ public protocol CaseBackedStudio {
     mutating func prefill(from facts: StudioCaseFacts)
     /// A privilege log needs the privileged sources (it describes them; it never prints them).
     static var needsPrivilegedSources: Bool { get }
+    /// K6 — field paths whose content must be documentary (a resolved case source) before the work
+    /// product can be approved; `*` matches one path segment ("schedule.*.amount"). A filled field
+    /// here that is the investigator's own entry blocks approval.
+    static var mandatoryEvidence: [String] { get }
 }
 
 extension CaseBackedStudio {
     public static var needsPrivilegedSources: Bool { false }
+    public static var mandatoryEvidence: [String] { [] }
+}
+
+public nonisolated enum StudioMandatoryEvidence {
+    public static func matches(_ path: String, _ pattern: String) -> Bool {
+        let a = path.split(separator: "."), b = pattern.split(separator: ".")
+        guard a.count == b.count else { return false }
+        return zip(a, b).allSatisfy { $0.1 == "*" || $0.0 == $0.1 }
+    }
+
+    /// Filled mandatory fields that are not documentary evidence.
+    public static func missing(values: [String: String], provenance: StudioProvenance?, patterns: [String]) -> [String] {
+        values.keys.sorted().filter { path in
+            guard patterns.contains(where: { matches(path, $0) }),
+                  !(values[path] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            return StudioExportGate.status(of: values[path] ?? "", provenance: provenance?[path]) != .evidenced
+        }
+    }
 }
 
 // MARK: - Configuration
@@ -428,7 +450,9 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     /// copied, printed or written, and recorded only after the action completed.
     private func perform(_ v: M, _ action: String) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealedReport(v, approved: $0) }) else { return }
+            let cb = v as? any CaseBackedStudio
+            let authorise = cb.map { StudioStorage.ExportAuthorisation(provenance: $0.provenance, values: $0.gateValues, privileged: type(of: $0).needsPrivilegedSources) }
+            guard let pkg = await storage.package(v, app: appState, authorise: authorise, render: { sealedReport(v, approved: $0) }) else { return }
             switch action {
             case "copy":
                 #if os(macOS)
@@ -458,7 +482,8 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
         let cb = v as? any CaseBackedStudio
         let privileged = cb.map { type(of: $0).needsPrivilegedSources } ?? false
         Task {
-            let why = await storage.approve(v, provenance: cb?.provenance, values: cb?.gateValues ?? [:], privileged: privileged, app: appState)
+            let mandatory = cb.map { type(of: $0).mandatoryEvidence } ?? []
+            let why = await storage.approve(v, provenance: cb?.provenance, values: cb?.gateValues ?? [:], privileged: privileged, mandatory: mandatory, app: appState)
             storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
         }
     }

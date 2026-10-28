@@ -390,14 +390,14 @@ public struct SIUStudioView: View {
 
     private func exportNow(_ v: SIUReferral) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             exportPackage = pkg
             showExporter = true
         }
     }
     private func copyNow(_ v: SIUReferral) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(pkg.text, forType: .string)
@@ -407,7 +407,7 @@ public struct SIUStudioView: View {
     }
     private func printNow(_ v: SIUReferral) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
             tv.string = pkg.text
@@ -421,7 +421,7 @@ public struct SIUStudioView: View {
     /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
     private func approveNow(_ v: SIUReferral) {
         Task {
-            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources, app: appState)
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources, mandatory: SIUReferral.mandatoryEvidence, app: appState)
             storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
         }
     }

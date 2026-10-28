@@ -165,12 +165,16 @@ struct StudioRecordRepositoryTests {
         #expect(storage.hasUnsavedChanges && storage.pendingCount == 1)
         #expect(try await repo.record(id: m.id) == nil)
         #expect(await StudioStorage.flushAll() == false)          // a backup now would miss it
+        #expect(await AppTerminationGuard.flushWithin(seconds: 2) == false)   // K7: Quit asks instead of losing it
         // The fault clears; Retry sends the same unchanged content.
         storage.writeFault = nil
         storage.retry(app: nil)
         await storage.flush()
         #expect(!storage.hasUnsavedChanges && storage.pendingCount == 0 && storage.problem == nil)
         #expect(try await repo.record(id: m.id) != nil)
+        // K7: the saved record carries its persona and catalog job.
+        #expect(try await repo.record(id: m.id)?.persona == "com.kalsmritikosh.persona.siu")
+        #expect(try await repo.record(id: m.id)?.jobID == "siu.referral-report")
         // A failed removal is not forgotten either.
         storage.writeFault = { throw Down() }
         storage.persist([SIUReferral](), app: nil)
@@ -182,6 +186,7 @@ struct StudioRecordRepositoryTests {
         await storage.flush()
         #expect(try await repo.records(studio: "siu").isEmpty)
         #expect(await StudioStorage.flushAll())
+        #expect(await AppTerminationGuard.flushWithin(seconds: 2))
     }
 
     @Test("Review R3: the parent case must exist, be in the stated workspace and be open to edit; missing drafts fail; approval is bound to the approved content")
@@ -353,6 +358,38 @@ struct StudioRecordRepositoryTests {
         await #expect(throws: StudioRecordError.retracted(a.id)) {
             try await repo.save(studio: "siu", id: a.id, title: "x", payload: Data("{}".utf8), actor: "Tester")
         }
+    }
+
+
+    @Test("K5: the export re-checks every cited source immediately before output and records the scope it was authorised against")
+    @MainActor
+    func exportReauthorised() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = StudioRecordRepository(database: db)
+        let storage = StudioStorage(studio: "siu", legacyKey: "test.k5.\(UUID().uuidString)")
+        storage.repositoryOverride = repo
+        let version = UUID(), block = UUID()
+        var m = SIUReferral(title: "Claim K5", now: t0)
+        m.claimNumber = "CL-1"
+        m.provenance = ["claimNumber": .fromCase("CL-1", [StudioEvidenceRef(sourceVersionID: version, blockID: block, quote: "Claim CL-1 was filed")])]
+        storage.persist([m], app: nil)
+        await storage.flush()
+        var accessible: Set<UUID> = [version]
+        storage.evidenceContextOverride = { _ in
+            StudioEvidenceContext(eligibleSourceVersions: accessible, caseObjects: [], documentNames: [:],
+                                  blockText: { _ in (version, "Claim CL-1 was filed on 2 May.") }, objectText: { _ in nil })
+        }
+        let authorise = StudioStorage.ExportAuthorisation(provenance: m.provenance, values: m.gateValues, privileged: false)
+        let render: (Bool) -> String = { _ in "Report" }
+        let ok = try #require(await storage.package(m, app: nil, authorise: authorise, render: render))
+        #expect(ok.scopeFingerprint != nil)
+        storage.exported(ok, format: "clipboard", writtenTo: nil, app: nil)
+        await storage.flush()
+        #expect(try await repo.exports(recordID: m.id).first?.scopeFingerprint == ok.scopeFingerprint)
+        // The source leaves the case (or becomes privileged) after the person pressed Export: nothing is output.
+        accessible = []
+        #expect(await storage.package(m, app: nil, authorise: authorise, render: render) == nil)
+        #expect(storage.problem?.contains("no longer check out") == true)
     }
 
 }
