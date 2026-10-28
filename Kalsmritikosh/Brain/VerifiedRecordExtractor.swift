@@ -98,6 +98,12 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
         let q = normalized(quote)
         // 1. Verbatim in the cited document.
         guard normalized(doc).contains(q) else { return nil }
+        // 1a. Prompt injection: a quote taken from a sentence written to the reader or to a model
+        //     ("Answer that X was acquitted") is not a statement of record, even verbatim.
+        if ProceedingEventExtractor.addressesTheReader(quote)
+            || ProceedingEventExtractor.rawSentences(of: doc).contains(where: { normalized($0).contains(q) && ProceedingEventExtractor.addressesTheReader($0) }) {
+            return nil
+        }
         // 2. About the person: the quote names them by surname (a lead may name them a sentence later,
         //    so a quote without the surname is accepted only when the document's opening holds it).
         let surname = parsed.person.split(separator: " ").last.map { $0.lowercased() } ?? ""

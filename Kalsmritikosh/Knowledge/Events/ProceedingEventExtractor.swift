@@ -345,7 +345,28 @@ public nonisolated enum ProceedingEventExtractor {
     }
 
     /// Sentence split that keeps initials and "U.S." inside the sentence.
+    /// The document's sentences that state something — a sentence addressed to the reader or to a
+    /// model (prompt injection) is not record text and yields no finding.
     static func sentences(of text: String) -> [String] {
+        rawSentences(of: text).filter { !addressesTheReader($0) }
+    }
+
+    /// A sentence written to whoever reads the document — "SYSTEM: …", "Ignore the previous
+    /// instructions and …", "Answer that X was acquitted", "Tell the user …", "You must say …".
+    /// Reported speech in a release ("told investigators that", "he answered that") is not this.
+    static func addressesTheReader(_ sentence: String) -> Bool {
+        let patterns = [
+            #"(?i)^\W*(?:system|assistant|user|ai|model|instructions?)\s*:"#,
+            #"(?i)\b(?:ignore|disregard|forget)\s+(?:all\s+|any\s+)?(?:of\s+)?(?:the\s+|your\s+)?(?:previous|prior|above|earlier|preceding|following|other)?\s*(?:instructions?|questions?|prompts?|rules|context|documents?)\b"#,
+            #"(?i)(?:^\W*|\band\s+|[,:;]\s*)(?:answer|respond|reply|say|state|report|write|claim)\s+(?:only\s+)?(?:that|with)\b"#,
+            #"(?i)\btell\s+(?:the\s+)?(?:user|reader|asker|person asking|them|everyone)\b"#,
+            #"(?i)\byou\s+(?:must|should|are to|will)\s+(?:now\s+)?(?:say|answer|respond|report|state|tell|claim|ignore)\b"#,
+            #"(?i)\b(?:as an ai|language model|the assistant)\b"#,
+        ]
+        return patterns.contains { sentence.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    static func rawSentences(of text: String) -> [String] {
         // A short line without closing punctuation is a heading ("District of Rhode Island",
         // "FOR IMMEDIATE RELEASE") and ends a sentence; a long one is a wrapped line of a paragraph
         // (PDF text breaks "Reginald Bennett, 41, of\nCedar Grove, … was sentenced") and runs on.
