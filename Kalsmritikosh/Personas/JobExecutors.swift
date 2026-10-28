@@ -47,6 +47,15 @@ public nonisolated enum JobExecutorKind: String, Sendable {
         return m
     }()
 
+    /// Audit A2 — the jobs whose executor result, once the person reviews it (decisions, notes,
+    /// corrections, completion), IS the contract's required result. Every other assigned job only
+    /// PREPARES material for its contract (status `.preparation`) until its full result is built.
+    public static let contractMet: Set<String> = [
+        "law.fact-chronology", "hr.incident-timeline", "jrn.chronology", "ind.personal-chronology", "ind.career-education",
+        "siu.loss-chronology", "res.corpus-catalogue", "hr.evidence-register", "ind.reminders", "jrn.source-reliability",
+        "ind.doc-reliability", "law.source-desk", "siu.source-vetting", "fa.doc-reliability", "gen.evidence-notes", "jrn.quote-book",
+    ]
+
     /// The action register an effectiveness review reads (same persona).
     public static let reviewedRegister: [String: String] = [
         "inv.effectiveness-review": "inv.capa-register", "res.errata-review": "res.errata", "jrn.correction-review": "jrn.correction-actions",

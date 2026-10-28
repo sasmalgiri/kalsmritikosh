@@ -61,9 +61,10 @@ struct JobOutcomeMatrixTests {
     static func deliverable(for job: PersonaJob) -> Deliverable? {
         if let d = studioDeliverables[job.id] { return d }
         if let kind = JobExecutorKind.assignments[job.id] {
-            return Deliverable(workProduct: Self.executorProduct[kind] ?? kind.rawValue,
-                               verifiedBy: kind == .chronology ? [ChronologyExecutorTests.self] : [JobFamilyExecutorTests.self],
-                               level: "integration: launch persists a typed result")
+            let met = JobExecutorKind.contractMet.contains(job.id)
+            return Deliverable(workProduct: (met ? "" : "preparation only: ") + (Self.executorProduct[kind] ?? kind.rawValue),
+                               verifiedBy: kind == .chronology ? [ChronologyExecutorTests.self, JobResultWorkflowTests.self] : [JobFamilyExecutorTests.self, JobResultWorkflowTests.self],
+                               level: met ? "integration: contract result, reviewed and completed by the person" : "integration: prepares material; contract result not produced yet")
         }
         switch job.kind {
         case .findings: return Deliverable(workProduct: "generic: case findings report with case-scoped citations", verifiedBy: [InvestigationFindingsServiceTests.self, InvestigationCaseSimulationTests.self], level: "integration: generic service + ledger", jobSpecific: false)
@@ -183,6 +184,7 @@ struct JobOutcomeMatrixTests {
             }
             let d = Self.deliverable(for: job)
             if let d { counts[JobExecutorKind.assignments[job.id] != nil ? "executor" : (d.jobSpecific ? "specific" : "generic"), default: 0] += 1 }
+            if JobExecutorKind.assignments[job.id] != nil, !JobExecutorKind.contractMet.contains(job.id) { counts["preparation", default: 0] += 1 }
             let persona = job.persona.replacingOccurrences(of: "com.kalsmritikosh.persona.", with: "")
             rows.append("| \(persona) | `\(job.id)` | \(job.title) | \(job.kind.rawValue) | \(outcome) | "
                         + "\(d?.workProduct ?? "none: generic \(job.kind.rawValue) rows") | "
@@ -211,7 +213,8 @@ struct JobOutcomeMatrixTests {
         | Launch returned a summary only | \(counts["summary", default: 0]) |
         | Launch failed closed / errored | \(counts["failed", default: 0]) |
         | Job-specific work product (studio) with a verifying suite | \(counts["specific", default: 0]) |
-        | Job's typed result persisted by a shared executor at launch | \(counts["executor", default: 0]) |
+        | Job's contract result produced by a shared executor (reviewed and completed by the person) | \(counts["executor", default: 0] - counts["preparation", default: 0]) |
+        | Shared executor prepares material only; contract result not produced yet | \(counts["preparation", default: 0]) |
         | Generic kind work product (findings, closure, custody) with a verifying suite | \(counts["generic", default: 0]) |
         | Generic kind rows only, no work product | \(Self.advertised.count - counts["specific", default: 0] - counts["generic", default: 0] - counts["executor", default: 0]) |
 

@@ -56,7 +56,8 @@ struct JobFamilyExecutorTests {
     @Test("Every assigned job has a contract of status executor in its declared family")
     func assignmentsMatchContracts() {
         for (job, _) in JobExecutorKind.assignments {
-            #expect(JobContracts.contract(for: job)?.status == .executor, "\(job)")
+            let status = JobContracts.contract(for: job)?.status
+            #expect(status == (JobExecutorKind.contractMet.contains(job) ? .executor : .preparation), "\(job)")
         }
         for (review, register) in JobExecutorKind.reviewedRegister {
             #expect(JobExecutorKind.assignments[review] == .actionReview && JobExecutorKind.assignments[register] == .actionRegister)
@@ -165,5 +166,30 @@ struct JobFamilyExecutorTests {
         let review = ActionExecutor.review(register: record)
         #expect(review.state == .draft && review.content.rows.count == reg.content.rows.count)
         #expect(review.content.rows.allSatisfy { $0.flags == ["effectiveness not assessed"] })
+    }
+
+    /// A2 — the acceptance check for every job whose contract the executor meets: on the fixture case
+    /// it produces a reviewable draft whose rows each cite a source, the person can decide each row,
+    /// and the completed revision is saved (the contract's human step).
+    @Test("Every contract-met job: a sourced draft the person can decide and complete", arguments: Array(JobExecutorKind.contractMet).sorted())
+    func contractMetAcceptance(_ job: String) async throws {
+        let kind = try #require(JobExecutorKind.assignments[job])
+        let (e, _, _) = Self.fixture()
+        let run = try #require(JobExecutorKind.run(kind, e))
+        #expect(run.state == .draft, "\(job) did not produce a draft on the fixture")
+        #expect(!run.content.rows.isEmpty && run.content.rows.allSatisfy { !$0.refs.isEmpty }, "\(job): every row cites its source")
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let caseID = UUID()
+        try await db.exec("PRAGMA foreign_keys = OFF;")
+        try await db.exec("INSERT INTO investigation_cases (id, workspace_id, title, revision, actor, created_at, updated_at) VALUES (?,?,?,?,?,?,?);",
+                          [.uuid(caseID), .uuid(UUID()), .text("Case"), .integer(1), .text("T"), .date(Date()), .date(Date())])
+        let repo = JobResultRepository(database: db)
+        let family = try #require(JobContracts.contract(for: job)?.family)
+        try await repo.save(caseID: caseID, jobID: job, family: family, state: run.state, content: run.content, actor: "T")
+        let current = try #require(try await repo.latest(caseID: caseID, jobID: job))
+        let decided = current.content.rows.map { r -> JobResultRow in var r = r; r.decision = .accepted; r.note = "checked"; return r }
+        try await repo.saveReview(of: current, rows: decided, complete: true, note: "Reviewed against the sources", actor: "Reviewer")
+        let done = try #require(try await repo.latest(caseID: caseID, jobID: job))
+        #expect(done.state == .completed && done.content.review?.by == "Reviewer" && done.content.rows.allSatisfy { $0.decision == .accepted })
     }
 }
