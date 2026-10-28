@@ -37,6 +37,8 @@ public struct BackupService: Sendable {
         case promotionFailed(String)
         /// W2-7 — the backup's ledger is encrypted with a key this Mac does not hold.
         case encryptedWithAnotherKey
+        /// T2 — the destination volume does not have room for the backup (nothing was written).
+        case insufficientSpace(needed: Int64, available: Int64)
         /// T2 — the backup was made by a newer version of the app (a newer ledger schema).
         case newerSchema(backup: Int, supported: Int)
     }
@@ -52,6 +54,21 @@ public struct BackupService: Sendable {
         schemaVersion: Int,
         nowEpoch: Double,
         coverage: BackupCoverage = .ledgerOnly
+    ) throws -> BackupManifest {
+        try Self.checkSpace(for: [databaseURL] + originalURLs, at: destination)
+        return try Self.staged(destination) { staging in
+            try writeBackup(databaseURL: databaseURL, originalURLs: originalURLs, destination: staging,
+                            schemaVersion: schemaVersion, nowEpoch: nowEpoch, coverage: coverage)
+        }
+    }
+
+    private func writeBackup(
+        databaseURL: URL,
+        originalURLs: [URL],
+        destination: URL,
+        schemaVersion: Int,
+        nowEpoch: Double,
+        coverage: BackupCoverage
     ) throws -> BackupManifest {
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -83,6 +100,48 @@ public struct BackupService: Sendable {
         let json = try JSONEncoder().encode(manifest)
         try json.write(to: destination.appendingPathComponent(Self.manifestName))
         return manifest
+    }
+
+    // MARK: - T2 — a backup write that fails never damages the backup already there
+
+    /// Write the backup into a staging folder beside `destination` and move it into place only when
+    /// every file and the manifest are written. A failure part-way (a full disk, an unreadable file)
+    /// removes the staging folder and leaves whatever was at `destination` exactly as it was.
+    static func staged(_ destination: URL, _ write: (URL) throws -> BackupManifest) throws -> BackupManifest {
+        let fm = FileManager.default
+        let parent = destination.deletingLastPathComponent()
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        let token = UUID().uuidString
+        let staging = parent.appendingPathComponent(".\(destination.lastPathComponent).writing-\(token)", isDirectory: true)
+        let aside = parent.appendingPathComponent(".\(destination.lastPathComponent).replaced-\(token)", isDirectory: true)
+        defer { try? fm.removeItem(at: staging) }
+        let manifest = try write(staging)
+        let hadPrevious = fm.fileExists(atPath: destination.path)
+        if hadPrevious { try fm.moveItem(at: destination, to: aside) }
+        do { try fm.moveItem(at: staging, to: destination) } catch {
+            if hadPrevious { try? fm.moveItem(at: aside, to: destination) }   // put the previous backup back
+            throw error
+        }
+        if hadPrevious { try? fm.removeItem(at: aside) }
+        return manifest
+    }
+
+    /// Refuse before writing anything when the destination volume cannot hold the backup.
+    static func checkSpace(for inputs: [URL], at destination: URL) throws {
+        let needed = inputs.reduce(Int64(0)) { sum, url in
+            sum + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        var probe = destination
+        while !FileManager.default.fileExists(atPath: probe.path), probe.pathComponents.count > 1 { probe.deleteLastPathComponent() }
+        guard let available = try? probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+        else { return }   // capacity unknown: the staged write still protects the previous backup
+        try requireSpace(needed: needed, available: available)
+    }
+
+    static func requireSpace(needed: Int64, available: Int64) throws {
+        // Room for the copies plus the manifest and a margin.
+        let margin = max(Int64(1 << 20), needed / 20)
+        if available < needed + margin { throw BackupError.insufficientSpace(needed: needed + margin, available: available) }
     }
 
     /// Validate a backup folder against its manifest WITHOUT copying — the
@@ -257,6 +316,15 @@ public struct BackupService: Sendable {
     /// takes it with the online backup API).
     @discardableResult
     public func createCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
+                                     destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
+        try Self.checkSpace(for: [databaseSnapshot] + originals.map(\.url), at: destination)
+        return try Self.staged(destination) { staging in
+            try writeCompleteBackup(databaseSnapshot: databaseSnapshot, originals: originals, notIncluded: notIncluded,
+                                    destination: staging, schemaVersion: schemaVersion, nowEpoch: nowEpoch)
+        }
+    }
+
+    private func writeCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
                                      destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
         let fm = FileManager.default
         try fm.createDirectory(at: destination.appendingPathComponent("originals", isDirectory: true), withIntermediateDirectories: true)
