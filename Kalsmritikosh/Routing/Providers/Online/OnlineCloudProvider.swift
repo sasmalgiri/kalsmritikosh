@@ -95,7 +95,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             await log(kind, OnlineSettings.model, "", prompt.utf8.count, 0, nil, "blocked", "provider not eligible for documents")
             throw await fail(OnlineError.notEligibleForDocuments(why))
         }
-        return try await send(prompt: prompt, options: options, carriesDocuments: true)
+        // K9 — document text reaches the model with any instruction it carries defanged.
+        return try await send(prompt: PromptInjectionGuard().defang(prompt), options: options, carriesDocuments: true)
     }
 
     private func send(prompt: String, options: GenerationOptions, carriesDocuments: Bool) async throws -> String {

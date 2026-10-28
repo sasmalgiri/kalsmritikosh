@@ -100,7 +100,8 @@ public actor CapabilityRegistry {
             // Skip providers currently cooling down after repeated
             // failures — don't pay their timeout again.
             if let until = cooldownUntil[candidate.id], until > now { continue }
-            if await candidate.isAvailable() { return candidate }
+            // K9 — every prompt to a resolved provider passes the injection guard.
+            if await candidate.isAvailable() { return InjectionGuardedProvider(base: candidate) }
         }
         throw ModelProviderError.noProviderForSpec(spec: spec)
     }

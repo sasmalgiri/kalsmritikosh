@@ -87,8 +87,11 @@ public struct AnswerSynthesizer: Sendable {
         // (8,192 for the macOS 27 model), and a larger window carries more
         // findings and evidence in the same proportion.
         let scale = max(1, min(4, provider.manifest.contextWindow / 4_096))
-        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500 * scale)
-        let evidence = Self.evidenceBlock(citations, maxTokens: 800 * scale)
+        // K9 — findings and evidence carry document text: every disguised instruction in them is
+        // defanged before it reaches a prompt (the words stay readable as quoted content).
+        let injectionGuard = PromptInjectionGuard()
+        let boundedFindings = injectionGuard.defang(TokenBudget.clamp(findings, maxTokens: 1_500 * scale))
+        let evidence = injectionGuard.defang(Self.evidenceBlock(citations, maxTokens: 800 * scale))
         // Topic-first (owner request 2026-09-20): when a distilled topic matches,
         // give it to the model as the PRIMARY orientation so the answer is drawn
         // from the deduped/minimized knowledge — while every stated fact must still
@@ -115,7 +118,7 @@ public struct AnswerSynthesizer: Sendable {
             )
             if !perspectives.isEmpty {
                 councilBlock = "\n\nSpecialist perspectives (advisory — still ground every statement in the findings/evidence above):\n"
-                    + perspectives.map { "• \($0.title): \($0.text)" }.joined(separator: "\n")
+                    + injectionGuard.defang(perspectives.map { "• \($0.title): \($0.text)" }.joined(separator: "\n"))
             }
         }
 
