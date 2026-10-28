@@ -74,7 +74,7 @@ public nonisolated enum ProceedingAnswerer {
     /// The question without a leading courtesy wrapper ("I need to confirm: …", "For the record, …",
     /// "I'm trying to confirm …", "Can you tell me …"), so the anchored patterns below see the question.
     static func unwrap(_ q: String) -> String {
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i(?:'m|’m| am) looking to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say)|do you know|please (?:tell me|confirm|specify|clarify))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|provide|give me)|do you know|please (?:tell me|confirm|specify|clarify))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -96,7 +96,7 @@ public nonisolated enum ProceedingAnswerer {
             return Parsed(person: name, ask: .documentCount)
         }
         // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
-        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b|^(?:exactly\s+)?what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\b(?:details?|specifics?)\s+(?:on|of|about)\s+(?:the\s+)?sentence\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
@@ -265,7 +265,7 @@ public nonisolated enum ProceedingAnswerer {
                 let text = "The documents that name \(name) don't report a verdict. They say \(name) pleaded guilty: \(quote(hit.1.sentence))"
                 return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.6))
             }
-            return refuse("The documents that name \(name) don't say whether \(name) was \(step.phrase).")
+            return refuse("The documents that name \(name) don't say whether \(name) " + (step == .pleaded ? "pleaded guilty." : "was \(step.phrase)."))
         case .sentenceImposed:
             guard let hit = found.first(where: { $0.1.step == .sentenced && $0.1.detail != nil }) else {
                 return refuse("The documents that name \(name) don't state a sentence for \(name).")

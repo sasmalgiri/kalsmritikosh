@@ -466,4 +466,27 @@ struct ProceedingGapTests {
         #expect(p("What was Nina Bourret charged with?")?.ask == .chargedWith)
     }
 
+
+    @Test("'She pleaded guilty …' in a release about one defendant is that defendant's plea; sentence questions behind wrappers")
+    func pronounLedStepAndSentenceWording() throws {
+        let release = """
+        U.S. Department of Justice
+        District of Montana
+        FOR IMMEDIATE RELEASE
+        Tuesday, July 30, 2013
+
+        Billings Woman Sentenced for Embezzlement
+
+        BILLINGS – Sophia Beltz, 34, of Billings, was sentenced today to 18 months in prison for embezzling from her employer. She pleaded guilty on April 30, 2013.
+        """
+        let parsed = try #require(ProceedingAnswerer.parse("Did Sophia Beltz enter a guilty plea at any point?"))
+        let body = try #require(ProceedingAnswerer.answer(parsed, sources: [ProceedingAnswerer.Source(objectID: UUID(), text: release)])).body
+        #expect(body.hasPrefix("Yes"), "\(body)")
+        let p = { (q: String) in ProceedingAnswerer.parse(q)?.ask }
+        #expect(p("Could you clarify exactly what sentence Mike Marty Hernandez received?") == .sentenceImposed)
+        #expect(p("Could you pull up the details on the sentence Susan M. Ruhe received?") == .sentenceImposed)
+        #expect(p("Could you provide details on the sentence that Bobby Joseph Stallworth received?") == .sentenceImposed)
+        #expect(p("I'm trying to find out exactly what sentence Sohaib Akhter received — can you pull that?") == .sentenceImposed)
+    }
+
 }

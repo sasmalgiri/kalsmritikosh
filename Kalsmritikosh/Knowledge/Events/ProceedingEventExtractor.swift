@@ -117,9 +117,19 @@ public nonisolated enum ProceedingEventExtractor {
            all[(i + 1)..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
+        // "She pleaded guilty on April 30, 2013." — in a release about one defendant, a sentence whose
+        // subject is "He"/"She" and whose verb is a court step is about that defendant (held-out
+        // chronology 9 review, 2026-10-28). "He sentenced Smith …" (the judge) does not match.
+        var leads = Set([descriptiveLead].compactMap { $0 })
+        if introductions <= 1 {
+            for (i, sentence) in all.enumerated()
+            where sentence.range(of: #"^\W*(?:He|She)\s+(?:was|were|has|had|is|pleaded|pled|pleads|later|then|also|previously)\b"#, options: .regularExpression) != nil {
+                leads.insert(i)
+            }
+        }
         for (index, sentence) in all.enumerated() {
             let s = sentence.lowercased()
-            guard index == descriptiveLead || surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
+            guard leads.contains(index) || surnames.contains(where: { s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }) else { continue }
             // Where the person is named in the sentence (by any of their surnames, or the descriptive lead).
             // A surname right after a DIFFERENT given name is someone else ("The brother, Charles Stanley,
             // … was sentenced" is not David Stanley's sentence — closed-case simulation 2026-10-26).
@@ -132,7 +142,7 @@ public nonisolated enum ProceedingEventExtractor {
                     return r
                 }
             }
-            if index != descriptiveLead, named.isEmpty { continue }
+            if !leads.contains(index), named.isEmpty { continue }
             for step in Step.allCases {
                 guard let r = s.range(of: step.pattern, options: .regularExpression) else { continue }
                 // "pleaded guilty … to an information charging him with …" reports the plea; the charge is
@@ -145,7 +155,7 @@ public nonisolated enum ProceedingEventExtractor {
                 // The step is the person's when they are named before it ("Romano … was sentenced"), or
                 // right after it ("sentenced Kalomi Kambui, 41, to 18 months") — not when the name only
                 // follows it in an attribution ("… was sentenced today, announced U.S. Attorney Peter F. Neronha").
-                if index != descriptiveLead {
+                if !leads.contains(index) {
                     // "Steed's co-defendant Upchurch was sentenced …" — the step is the other person's.
                     let before = named.contains { m in
                         guard m.lowerBound < r.lowerBound else { return false }
