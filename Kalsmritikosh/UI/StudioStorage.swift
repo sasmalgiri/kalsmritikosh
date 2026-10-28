@@ -157,6 +157,30 @@ final class StudioStorage {
         return allSaved
     }
 
+    /// B1 — before ONE case is erased: wait for every studio's writes, then answer whether any change
+    /// that may belong to that case (bound to it, or not yet bound to any case) is still unsaved.
+    /// Unsaved work for other cases, or for another ledger, does not block this case's erase.
+    static func flushAll(forCase caseID: UUID?, in database: Database) async -> Bool {
+        var allSaved = true
+        for w in live {
+            guard let s = w.storage else { continue }
+            if let other = s.repositoryOverride?.database, other !== database { continue }
+            await s.flush()
+            if s.hasUnsavedChanges, s.hasUnsavedWork(touching: caseID) { allSaved = false }
+        }
+        return allSaved
+    }
+
+    /// An edit or removal not yet confirmed saved, on a draft of this case or of no case yet.
+    /// nil: any case.
+    func hasUnsavedWork(touching caseID: UUID?) -> Bool {
+        guard let caseID else { return pendingCount > 0 }
+        let liveIDs = Set(lastItems.map(\.0))
+        let edited = lastItems.contains { committed[$0.0] != $0.2 && (caseOf[$0.0] == nil || caseOf[$0.0] == caseID) }
+        let retracted = committed.keys.contains { !liveIDs.contains($0) && (caseOf[$0] == nil || caseOf[$0] == caseID) }
+        return edited || retracted
+    }
+
     private func repository(_ app: AppState?) -> StudioRecordRepository? {
         if let repositoryOverride { return repositoryOverride }
         guard let db = app?.database else {

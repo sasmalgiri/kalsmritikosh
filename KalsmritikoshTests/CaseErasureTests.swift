@@ -283,12 +283,151 @@ struct CaseErasureTests {
         let gone = UUID()
         let ledgerURL = f.temp.appendingPathComponent("case.sqlite")
         let recordGone = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: gone)
-        AppState.writeCaseEraseRecord(recordGone, vault: [orphan, kept], dropVectorCache: false)
+        try AppState.writeCaseEraseRecord(recordGone, vault: [orphan, kept], dropVectorCache: false)
         let recordLive = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: f.caseB)
-        AppState.writeCaseEraseRecord(recordLive, vault: [orphan], dropVectorCache: false)
+        try AppState.writeCaseEraseRecord(recordLive, vault: [orphan], dropVectorCache: false)
         await AppState.resumePendingCaseErasures(besideLedgerAt: ledgerURL, database: f.db)
         #expect(await vault.contains(orphan) == false, "the erased case's copy is removed")
         #expect(await vault.contains(kept), "a copy a remaining version uses is never removed")
         #expect(!FileManager.default.fileExists(atPath: recordGone.path) && !FileManager.default.fileExists(atPath: recordLive.path))
+    }
+
+    // MARK: - B1 — fail-closed preparation and file steps
+
+    static func caseRows(_ f: Fixture) async throws -> Int {
+        try await count(f.db, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)])
+    }
+
+    @Test("B1: a studio change that would not save stops the case erase before anything is deleted; work for another ledger does not")
+    @MainActor
+    func failedSaveStopsErase() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        struct Down: Error {}
+        // A studio on another ledger with a failed save: not this erase's concern.
+        let elsewhere = StudioStorage(studio: "siu", legacyKey: "test.b1o.\(UUID().uuidString)")
+        elsewhere.repositoryOverride = StudioRecordRepository(database: try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion))
+        elsewhere.writeFault = { throw Down() }
+        elsewhere.persist([SIUReferral(title: "Other ledger", now: Date())], app: nil)
+        await elsewhere.flush()
+        // A studio on this ledger with an unsaved draft not yet bound to any case: it may be this case's.
+        let here = StudioStorage(studio: "siu", legacyKey: "test.b1h.\(UUID().uuidString)")
+        here.repositoryOverride = StudioRecordRepository(database: f.db)
+        here.writeFault = { throw Down() }
+        here.persist([SIUReferral(title: "Unsaved here", now: Date())], app: nil)
+        await here.flush()
+        #expect(here.hasUnsavedChanges && elsewhere.hasUnsavedChanges)
+        await #expect(throws: CaseErasureError.self) {
+            _ = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: nil, actor: "Tester")
+        }
+        #expect(try await Self.caseRows(f) == 1, "nothing was erased")
+        #expect(here.hasUnsavedChanges, "the unsaved change is kept, not discarded")
+        // Once it saves, the erase proceeds; the other ledger's failure never blocked it.
+        here.writeFault = nil
+        here.retry(app: nil)
+        await here.flush()
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil && out.fileResidue.isEmpty)
+        #expect(try await Self.caseRows(f) == 0)
+        elsewhere.writeFault = nil
+    }
+
+    @Test("B1: an erase plan that cannot be written stops the erase; the case and its documents are untouched")
+    func unwritablePlanStopsErase() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let ledgerURL = await f.db.url
+        // A folder where the plan file must go makes the atomic write fail.
+        let record = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: f.caseA)
+        try FileManager.default.createDirectory(at: record.appendingPathComponent("block"), withIntermediateDirectories: true)
+        let before = try await Self.count(f.db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.exclusiveFile)])
+        do {
+            _ = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: nil, actor: "Tester")
+            Issue.record("the erase must refuse without a durable plan")
+        } catch let e as CaseErasureError {
+            if case .preparationFailed = e {} else { Issue.record("unexpected \(e)") }
+        }
+        #expect(try await Self.caseRows(f) == 1)
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.exclusiveFile)]) == before)
+    }
+
+    @Test("B1: an unreadable or corrupt erase plan is reported as unfinished and kept; no file is removed")
+    func corruptPlanKept() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let ledgerURL = await f.db.url
+        let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+        let orphan = try await vault.store(Data("copy of an erased document b1".utf8))
+        let gone = UUID()
+        let record = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: gone)
+        try Data("{not json".utf8).write(to: record)
+        let pending = await AppState.resumePendingCaseErasures(besideLedgerAt: ledgerURL, database: f.db)
+        #expect(pending[gone.uuidString]?.first?.contains("could not be read") == true, "\(pending)")
+        #expect(FileManager.default.fileExists(atPath: record.path), "the record stays for a retry")
+        let has1 = await vault.contains(orphan)
+        #expect(has1)
+        // Missing record (removed by hand between steps): also unfinished, not success.
+        try FileManager.default.removeItem(at: record)
+        let left = await AppState.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: f.db)
+        #expect(!left.isEmpty)
+    }
+
+    @Test("B1: when the shared-use check cannot be answered, the vault copy and the plan are kept and named")
+    func sharedCheckFailureKeepsFile() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let ledgerURL = await f.db.url
+        let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+        let copy = try await vault.store(Data("perhaps shared b1".utf8))
+        let record = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: UUID())
+        try AppState.writeCaseEraseRecord(record, vault: [copy], dropVectorCache: false)
+        struct ReadFailed: Error {}
+        let left = await AppState.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: f.db,
+                                                       isUsed: { _ in throw ReadFailed() })
+        #expect(left.count == 1 && left[0].contains("could not check"))
+        let has2 = await vault.contains(copy)
+        #expect(has2, "a copy whose use is unknown is never removed")
+        #expect(FileManager.default.fileExists(atPath: record.path))
+        // The next attempt, with the ledger answering, finishes the work.
+        let again = await AppState.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: f.db)
+        let has3 = await vault.contains(copy)
+        #expect(again.isEmpty && !has3 && !FileManager.default.fileExists(atPath: record.path))
+    }
+
+    @Test("B1: a crash after the ledger commit, before the file steps, resumes at launch; shared evidence survives")
+    func crashBetweenCommitAndFilesResumes() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let ledgerURL = await f.db.url
+        let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+        // A vault copy for each of case A's documents: the exclusive one and the one case B shares.
+        let exclusiveCopy = try await vault.store(Data("exclusive original b1".utf8))
+        let sharedCopy = try await vault.store(Data("shared original b1".utf8))
+        try await f.db.exec("PRAGMA foreign_keys = OFF;")
+        try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(exclusiveCopy), .uuid(f.exclusiveFile)])
+        try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(sharedCopy), .uuid(f.sharedFile)])
+        try await f.db.exec("PRAGMA foreign_keys = ON;")
+        let cache = ledgerURL.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
+        try Data("cache".utf8).write(to: cache)
+        // The app's steps up to the commit; then the "crash": no file step runs.
+        let answers = try #require(await f.state.investigationAnswers)
+        let versions = try await answers.scopeContext(caseID: f.caseA).scope.authorizedSourceVersionIDs
+        let candidates = try await CaseEraser(database: f.db).vaultCandidates(sourceVersionIDs: Set(versions))
+        #expect(Set(candidates) == [exclusiveCopy, sharedCopy])
+        let record = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: f.caseA)
+        try AppState.writeCaseEraseRecord(record, vault: candidates, dropVectorCache: true)
+        let report = try await CaseEraser(database: f.db).erase(caseID: f.caseA, sourceVersionIDs: Set(versions), eraseExclusiveSources: true,
+                                                                reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(report.refused == nil && report.sourcesErased == 1 && report.sourcesKeptShared == 1)
+        let has4 = await vault.contains(exclusiveCopy)
+        #expect(has4, "the crash left the copy behind")
+        // Next launch.
+        let pending = await AppState.resumePendingCaseErasures(besideLedgerAt: ledgerURL, database: f.db)
+        #expect(pending.isEmpty, "\(pending)")
+        let has5 = await vault.contains(exclusiveCopy)
+        #expect(!has5, "the erased document's copy is removed")
+        let has6 = await vault.contains(sharedCopy)
+        #expect(has6, "the copy case B still uses survives")
+        #expect(!FileManager.default.fileExists(atPath: cache.path) && !FileManager.default.fileExists(atPath: record.path))
     }
 }

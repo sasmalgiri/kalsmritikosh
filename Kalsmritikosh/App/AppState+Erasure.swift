@@ -41,27 +41,48 @@ extension AppState {
         guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CaseErasureError.blankReason }
         guard !actor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CaseErasureError.blankActor }
         let versions = try await answers.scopeContext(caseID: caseID).scope.authorizedSourceVersionIDs
-        // A4 — writers are flushed (pending saves are kept and written), never discarded, before the
-        // erase decides. A refused erase leaves every studio as it was.
-        _ = await StudioStorage.flushAll()
-        // A5 — the files this erase may remove are recorded BEFORE the ledger commits, so a crash
-        // between the commit and the file removal is finished at the next launch.
-        let record = Self.caseEraseRecordURL(besideLedgerAt: db.url, caseID: caseID)
-        let candidates = eraseExclusiveSources ? (try? await CaseEraser(database: db).vaultCandidates(sourceVersionIDs: Set(versions))) ?? [] : []
-        Self.writeCaseEraseRecord(record, vault: candidates, dropVectorCache: eraseExclusiveSources)
-        let report = try await CaseEraser(database: db).erase(caseID: caseID, sourceVersionIDs: Set(versions),
-                                                             eraseExclusiveSources: eraseExclusiveSources,
-                                                             reason: reason, legalBasis: legalBasis, actor: actor)
+        // A4/B1 — writers are flushed (pending saves are kept and written), never discarded, before the
+        // erase decides. A change for this case (or for no case yet) that would not save stops the
+        // erase before anything is deleted; a refused erase leaves every studio as it was.
+        guard await StudioStorage.flushAll(forCase: caseID, in: db) else {
+            throw CaseErasureError.preparationFailed("a studio change that may belong to this case has not been saved. Choose Retry in that studio, then erase again")
+        }
+        // A5/B1 — the files this erase may remove are recorded BEFORE the ledger commits, so a crash
+        // between the commit and the file removal is finished at the next launch. Without that plan
+        // (unreadable candidates, unwritable record) nothing is deleted.
+        let ledgerURL = db.url
+        let record = Self.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: caseID)
+        let candidates: [String]
+        do {
+            candidates = eraseExclusiveSources ? try await CaseEraser(database: db).vaultCandidates(sourceVersionIDs: Set(versions)) : []
+            try Self.writeCaseEraseRecord(record, vault: candidates, dropVectorCache: eraseExclusiveSources)
+        } catch {
+            KalsmritikoshLog.app.error("Case erasure not started, plan not saved: \(error.localizedDescription, privacy: .public)")
+            throw CaseErasureError.preparationFailed("its file plan could not be saved (\(error.localizedDescription))")
+        }
+        let report: CaseErasureReport
+        do {
+            report = try await CaseEraser(database: db).erase(caseID: caseID, sourceVersionIDs: Set(versions),
+                                                         eraseExclusiveSources: eraseExclusiveSources,
+                                                         reason: reason, legalBasis: legalBasis, actor: actor)
+        } catch {
+            // The erase rolled back; the plan is dropped only when the case is known to still exist
+            // (else the next launch decides, from the ledger, whether there is anything to finish).
+            if await Self.caseExists(caseID.uuidString, in: db) == true { try? FileManager.default.removeItem(at: record) }
+            throw error
+        }
         guard report.refused == nil else {
             try? FileManager.default.removeItem(at: record)
             return ErasureOutcome(report: report, fileResidue: [])
         }
         await StudioStorage.invalidate(forErasedCase: caseID)
-        var residue = await Self.finishCaseEraseFiles(record: record, ledgerURL: db.url, database: db, only: report.vaultAddresses)
+        let residue = await Self.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: db,
+                                                      only: report.vaultAddresses, dropCache: report.sourcesErased > 0)
         if report.sourcesErased > 0, let hnsw = hnswIndex, let vectors = vectorStore {
             // The live index still held the erased chunks' vectors: rebuild it from the ledger.
             _ = await hnsw.build(from: vectors)
-        } else if report.sourcesErased == 0 { residue = [] }
+        }
+        pendingErasureWork[caseID.uuidString] = residue.isEmpty ? nil : residue
         let defaults = Self.erasePreferences
         for key in defaults.dictionaryRepresentation().keys where key.contains(caseID.uuidString) || key.contains(caseID.uuidString.lowercased()) {
             defaults.removeObject(forKey: key)
@@ -72,7 +93,9 @@ extension AppState {
     /// Erase one person's derived record (their documents are not edited; see the report).
     public func erasePerson(_ entityID: UUID, reason: String, legalBasis: String?, actor: String) async throws -> ErasureOutcome {
         guard let db = database else { throw CaseErasureError.entityNotFound }
-        _ = await StudioStorage.flushAll()
+        guard await StudioStorage.flushAll(forCase: nil, in: db) else {
+            throw CaseErasureError.preparationFailed("a studio change has not been saved. Choose Retry in that studio, then erase again")
+        }
         let report = try await CaseEraser(database: db).erasePerson(entityID: entityID, reason: reason, legalBasis: legalBasis, actor: actor)
         return ErasureOutcome(report: report, fileResidue: [])
     }
@@ -83,51 +106,103 @@ extension AppState {
         ledgerURL.deletingLastPathComponent().appendingPathComponent(".case-erase-\(caseID.uuidString).json")
     }
 
-    nonisolated static func writeCaseEraseRecord(_ url: URL, vault: [String], dropVectorCache: Bool) {
-        guard let data = try? JSONSerialization.data(withJSONObject: ["vault": vault, "dropVectorCache": dropVectorCache,
-                                                                     "startedAt": Date().timeIntervalSince1970]) else { return }
-        do { try data.write(to: url, options: .atomic) } catch {
-            KalsmritikoshLog.app.error("Case-erase operation record not written: \(error.localizedDescription, privacy: .public)")
-        }
+    /// B1 — throws when the plan cannot be made durable; the caller then deletes nothing.
+    nonisolated static func writeCaseEraseRecord(_ url: URL, vault: [String], dropVectorCache: Bool) throws {
+        let data = try JSONSerialization.data(withJSONObject: ["vault": vault, "dropVectorCache": dropVectorCache,
+                                                               "startedAt": Date().timeIntervalSince1970])
+        try data.write(to: url, options: .atomic)
     }
 
     /// Remove the recorded vault copies that no remaining source version uses (and the vector cache,
-    /// when recorded), then drop the record — or keep it, naming what is left, for the next launch.
-    nonisolated static func finishCaseEraseFiles(record: URL, ledgerURL: URL, database: Database, only: [String]? = nil) async -> [String] {
-        guard let data = try? Data(contentsOf: record),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+    /// when recorded and asked), then drop the record — or keep it, naming what is left, for the next
+    /// launch. B1: an unreadable record and an unanswerable "is this copy still used?" are unfinished
+    /// work, never success; the file and the record are kept.
+    nonisolated static func finishCaseEraseFiles(record: URL, ledgerURL: URL, database: Database, only: [String]? = nil,
+                                                 dropCache: Bool = true,
+                                                 isUsed: (@Sendable (String) async throws -> Bool)? = nil) async -> [String] {
+        let obj: [String: Any]
+        do {
+            let data = try Data(contentsOf: record)
+            guard let o = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            obj = o
+        } catch {
+            KalsmritikoshLog.app.error("Case-erase operation record unreadable: \(error.localizedDescription, privacy: .public)")
+            return ["the file steps of an erasure (\(record.lastPathComponent)) could not be read; the record is kept and nothing was removed"]
+        }
         let recorded = (obj["vault"] as? [String]) ?? []
         let hashes = only.map { Set($0).intersection(recorded).union($0) }.map(Array.init) ?? recorded
         var left: [String] = []
         let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
-        for hash in hashes {
-            // Never remove a copy a remaining version still uses.
-            let used = (try? await database.query("SELECT 1 FROM source_versions WHERE lower(content_hash) = lower(?) LIMIT 1;", [.text(hash)]).first) != nil
+        for hash in hashes.sorted() {
+            // Never remove a copy a remaining version still uses — nor one whose use cannot be checked.
+            let used: Bool
+            do {
+                if let isUsed { used = try await isUsed(hash) } else {
+                    used = try await database.query("SELECT 1 FROM source_versions WHERE lower(content_hash) = lower(?) LIMIT 1;", [.text(hash)]).first != nil
+                }
+            } catch {
+                KalsmritikoshLog.app.error("Case erasure: shared-use check failed, copy kept: \(error.localizedDescription, privacy: .public)")
+                left.append("vault copy \(hash.prefix(12))… (kept: could not check whether another document uses it)")
+                continue
+            }
             guard !used, await vault.contains(hash) else { continue }
             do { try await vault.remove(hash) } catch {
                 KalsmritikoshLog.app.error("Case erasure: vault copy not removed: \(error.localizedDescription, privacy: .public)")
             }
             if await vault.contains(hash) { left.append("vault copy \(hash.prefix(12))…") }
         }
-        if (obj["dropVectorCache"] as? Bool) == true { left += dropVectorCache(besideLedgerAt: ledgerURL) }
-        if left.isEmpty { try? FileManager.default.removeItem(at: record) }
+        if dropCache, (obj["dropVectorCache"] as? Bool) == true { left += dropVectorCache(besideLedgerAt: ledgerURL) }
+        if left.isEmpty {
+            do { try FileManager.default.removeItem(at: record) } catch {
+                KalsmritikoshLog.app.error("Case-erase record not removed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         return left
     }
 
+    /// Whether a case row exists; nil when the ledger could not answer.
+    nonisolated static func caseExists(_ caseID: String, in database: Database) async -> Bool? {
+        do {
+            return try await database.query("SELECT 1 FROM investigation_cases WHERE id = ? OR id = ? LIMIT 1;",
+                                            [.text(caseID), .text(caseID.lowercased())]).first != nil
+        } catch {
+            KalsmritikoshLog.app.error("Case-existence check failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     /// At launch, after the ledger opens: finish any case erasure whose file steps were interrupted.
-    nonisolated static func resumePendingCaseErasures(besideLedgerAt ledgerURL: URL, database: Database) async {
+    /// Returns the unfinished work per case (shown in Settings and retried at the next launch).
+    @discardableResult
+    nonisolated static func resumePendingCaseErasures(besideLedgerAt ledgerURL: URL, database: Database) async -> [String: [String]] {
         let dir = ledgerURL.deletingLastPathComponent()
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        var pending: [String: [String]] = [:]
+        let names: [String]
+        do { names = try FileManager.default.contentsOfDirectory(atPath: dir.path) } catch {
+            KalsmritikoshLog.app.error("Erasure records not listed: \(error.localizedDescription, privacy: .public)")
+            return ["?": ["the folder holding unfinished erasures could not be read"]]
+        }
         for name in names where name.hasPrefix(".case-erase-") && name.hasSuffix(".json") {
             let record = dir.appendingPathComponent(name)
-            // The case still existing means its erase never committed: nothing to finish.
             let caseID = String(name.dropFirst(".case-erase-".count).dropLast(".json".count))
-            if (try? await database.query("SELECT 1 FROM investigation_cases WHERE id = ? OR id = ? LIMIT 1;", [.text(caseID), .text(caseID.lowercased())]).first) != nil {
-                try? FileManager.default.removeItem(at: record); continue
+            switch await caseExists(caseID, in: database) {
+            case .some(true):
+                // The case still exists: its erase never committed, so there is nothing to finish.
+                try? FileManager.default.removeItem(at: record)
+            case .none:
+                // Unknown: keep the record and every file; retried next launch.
+                pending[caseID] = ["could not check whether this erasure finished; its files are kept"]
+            case .some(false):
+                let left = await finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: database)
+                if !left.isEmpty {
+                    pending[caseID] = left
+                    KalsmritikoshLog.app.error("Case erasure files still pending: \(left.joined(separator: ", "), privacy: .public)")
+                }
             }
-            let left = await finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: database)
-            if !left.isEmpty { KalsmritikoshLog.app.error("Case erasure files still pending: \(left.joined(separator: ", "), privacy: .public)") }
         }
+        return pending
     }
 
     /// The vector cache holds every chunk's vector; after documents are erased it is dropped and rebuilt.

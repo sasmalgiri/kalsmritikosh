@@ -703,6 +703,8 @@ public final class AppState {
     public private(set) var proactiveContradictionCount: Int = 0
     /// Schema objects the boot check could not add to this ledger (brief §11) — shown in Settings, never only logged.
     public private(set) var schemaUnrepaired: [String] = []
+    /// B1 — erasure file steps not finished (per case id): kept on disk, retried at launch, shown in Settings.
+    public internal(set) var pendingErasureWork: [String: [String]] = [:]
 
     // MARK: - Header search hand-off
     /// A query typed into the always-visible header search box. SearchView
@@ -1038,7 +1040,7 @@ public final class AppState {
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
             // A5 — a case erasure interrupted between its ledger commit and its file steps finishes now.
-            await Self.resumePendingCaseErasures(besideLedgerAt: resolvedDBURL, database: db)
+            pendingErasureWork = await Self.resumePendingCaseErasures(besideLedgerAt: resolvedDBURL, database: db)
             // Add anything an older upgrade left out (only adds; once per schema version).
             await SchemaConformance.checkAtBoot(db)
             do { schemaUnrepaired = try await SchemaConformance.unrepaired(db) } catch {

@@ -19,8 +19,11 @@ import os
 
 public nonisolated enum CaseErasureError: Error, Equatable, LocalizedError {
     case blankActor, blankReason, caseNotFound, entityNotFound
+    /// B1 — a step that must succeed before anything is deleted did not (nothing was erased).
+    case preparationFailed(String)
     public var errorDescription: String? {
         switch self {
+        case .preparationFailed(let why): return "Nothing was erased: \(why)."
         case .blankActor: return "An erasure needs the name of the person making it."
         case .blankReason: return "An erasure needs a reason."
         case .caseNotFound: return "That case no longer exists."

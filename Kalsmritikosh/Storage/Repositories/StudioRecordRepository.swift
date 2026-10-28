@@ -146,7 +146,7 @@ public actor StudioRecordRepository {
     /// A new revision is cut at most this often while editing (every keystroke updates the head row).
     public static let revisionInterval: TimeInterval = 300
 
-    private let database: Database
+    let database: Database
     public init(database: Database) { self.database = database }
 
     // MARK: - Read
