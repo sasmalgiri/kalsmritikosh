@@ -37,20 +37,23 @@
 </div></nav>
 <div class="wrap">
   <h1 data-claims-exempt="heading">Privacy Policy</h1>
-  <div class="date" data-claims-exempt="narrative">Last updated: 18 October 2026 · Publisher: Eco Sanskriti Innovation · Contact: sasmalgiri@gmail.com</div>
+  <div class="date" data-claims-exempt="narrative">Last updated: 27 October 2026 · Publisher: Eco Sanskriti Innovation · Contact: sasmalgiri@gmail.com</div>
 
   <div class="box" data-claim="privacy.never-leaves privacy.nothing-collected"><strong>The short version.</strong> Investigations Made Easy is a private, on-device application.
   <strong>In Private mode — the default — your documents, the knowledge built from them, your questions, and the answers never leave your Mac.</strong>
-  We do not operate servers that receive your content, in any mode. We do not have accounts, tracking, ads, analytics, or telemetry.
-  The App Store privacy label (as declared) is <em>Data Not Collected</em>.</div>
+  We run no servers that receive your content, in any mode. We do not have accounts, tracking, ads, analytics, or telemetry.
+  If you turn on Online mode, what you approve goes from your Mac to the AI provider you chose, which keeps it under its own terms (below).</div>
 
   <h2 data-claims-exempt="heading">What the app processes, and where</h2>
   <ul>
     <li data-claim="privacy.no-copy"><strong>Your files.</strong> You select folders/files. The app reads them <strong>in place</strong> on your Mac to
       build a local index (a single on-device database). Files are not copied to us or anyone else.</li>
     <li data-claim="privacy.local-only"><strong>Derived data</strong> (text excerpts, entities, dates, relationships, embeddings, summaries, answers) is
-      stored <strong>only</strong> in the app's local database inside your user Library container. Deleting the app or
-      using the in-app "Delete data" removes it. If you enabled the optional managed-evidence copies or made exports, delete those from your disk as well.</li>
+      stored in the app's encrypted local database inside your user Library container. A few working files stay beside it
+      without the database's encryption (your Mac's FileVault still applies): a search-index cache of embeddings, import receipts,
+      captured items waiting to be read, diagnostics, and — if you turn them on — managed copies of originals and Spotlight entries.
+      Removing the app's data removes those beside the database; backups, snapshots, sync folders and exports you made, the Keychain
+      items and the Spotlight entries are separate, and you remove them yourself.</li>
     <li data-claim="privacy.no-cloud-model"><strong>AI models run on-device.</strong> Reasoning and embedding models execute locally; in Private mode your content is never
       sent to a cloud model.</li>
     <li data-claim="privacy.encrypted-at-rest"><strong>Encrypted at rest.</strong> The local database is encrypted on your Mac (AES-256, through Apple's CommonCrypto).
@@ -69,6 +72,12 @@
   question and the names of the fields your documents hold — never document text. <strong>Letting your cloud AI read the documents
   about a person</strong> (off until you turn it on) sends up to eight of the documents that name that person, up to 7,000 characters
   of each; material marked privileged is never sent. Every send is shown to you first and recorded.</p>
+  <p data-claim="privacy.provider-terms">Document text goes only to a provider whose terms permit case material — Claude on Anthropic's
+  commercial API, or a <strong>paid</strong> Gemini project — after you confirm your account is on those terms; no document text
+  goes to OpenAI in this release. The provider keeps what it receives under its own terms: Anthropic's commercial API deletes
+  inputs and outputs within 30 days by default, with stated exceptions; Google's unpaid Gemini tier may use content and have it
+  reviewed by people, which is why case documents are not sent to an unpaid key. The app shows these terms with every send of
+  document text, and asks every time.</p>
   <p data-claim="privacy.consent-before-send">When an answer would be worded by that provider, the app first shows you exactly what would be sent —
   passages from your documents and your question, the destination and its size — and nothing is sent until you agree.
   You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first. The text goes

@@ -9,9 +9,12 @@
       required-reason APIs we call, and (c) whether we use any
       tracking domains.
 
-      Kalsmritikosh runs entirely on-device. The Release build has
-      no network entitlement and registers no network provider; no
-      user data is ever transmitted off the Mac. All on-disk data
+      Private mode (the default) runs entirely on-device. The main
+      app has no network entitlement; the embedded network helper
+      (KalsmritikoshNetworkHelper) can reach only the three Online
+      providers, and only when the person turns Online mode on and
+      approves each send. See docs/DATA_FLOW_INVENTORY.md — the one
+      source for every privacy statement. All on-disk data
       is owned by the user and lives in the app sandbox container
       (~/Library/Containers/<bundle-id>/Data) or in user-selected
       folders accessed via security-scoped bookmarks.
@@ -27,15 +30,13 @@
 
     <!--
       Personal-data categories the app collects (= sends off-device).
-      The v1 CONSUMER RELEASE registers ONLY on-device providers (no
-      cloud and no network-backed LLM provider of any kind — enforced
-      in AppState/ReleaseCapabilityProfile), and the Release build has
-      the outgoing-network sandbox entitlement DISABLED, so NO user
-      content, files, questions, or answers ever leave the Mac — the
-      release binary has no network egress at all. Therefore it
-      collects NOTHING and this array is empty, matching
-      PRIVACY_DATA_FLOW.md and the App Store nutrition label
-      ("Data Not Collected").
+      OPEN DECISION (review L1, 2026-10-27): the publisher receives
+      nothing, but Online mode, when the person turns it on, sends the
+      question and, if allowed, document passages to the third-party
+      AI provider they chose. Whether that must be declared here (and
+      on the App Store label) is an owner/counsel decision recorded in
+      docs/DATA_FLOW_INVENTORY.md §4. The array stays empty until that
+      decision is made; it is NOT a finding that nothing leaves the Mac.
     -->
     <key>NSPrivacyCollectedDataTypes</key>
     <array/>

@@ -71,15 +71,16 @@ Proof kinds:
 | `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
-| `privacy.nothing-collected` | `Data Not Collected` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
+| `privacy.nothing-collected` | `no servers that receive your content` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.no-upload` | `Nothing is uploaded, ever` | ci:sensitive-export |
 | `privacy.offline` | `Works fully offline` | ci:sensitive-export |
 | `privacy.no-copy` | `not copied to us` | ci:sensitive-export |
-| `privacy.local-only` | `stored only in the app's local database` | ci:sensitive-export |
+| `privacy.local-only` | `stored in the app's encrypted local database` | ci:sensitive-export |
 | `privacy.no-cloud-model` | `never sent to a cloud model` | ci:sensitive-export |
 | `privacy.no-cloud` | `no cloud` | ci:sensitive-export |
 | `privacy.exports-local` | `never uploaded` | ci:sensitive-export |
 | `privacy.online-opt-in` | `Online mode is off unless you turn it on` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
+| `privacy.provider-terms` | `goes to OpenAI in this release` | grep:mayReceiveDocuments:Kalsmritikosh/Routing/Providers/Online/OnlineProviderKind.swift |
 | `privacy.consent-before-send` | `nothing is sent until you agree` | grep:OutboundConsentSheet:Kalsmritikosh |
 | `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState.swift |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
