@@ -323,8 +323,16 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             if caseChoices.isEmpty {
                 Text("No open cases")
             } else {
-                ForEach(caseChoices) { c in
-                    Button(c.title) { fill(m, from: c) }
+                Section("Fill from") {
+                    ForEach(caseChoices) { c in
+                        Button(c.title) { fill(m, from: c) }
+                    }
+                }
+                // Review step 5: a draft can belong to a case without anything being filled from it.
+                Section("Assign to case without filling") {
+                    ForEach(caseChoices) { c in
+                        Button(c.title) { assign(m, to: c) }
+                    }
                 }
             }
         } label: {
@@ -335,6 +343,16 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
         .task { caseChoices = await appState.studioCaseChoices() }
         .guidance(GuidanceTip("Fill from case",
                               what: "Fills the empty fields from the case's own documents. Each filled field keeps the source it came from; anything you type or change is marked as your entry."))
+    }
+
+    private func assign(_ m: Binding<M>, to choice: StudioCaseChoice) {
+        filling = true
+        Task {
+            defer { filling = false }
+            fillMessage = await storage.bind(m.wrappedValue.id, to: choice, app: appState)
+                ? "Assigned to \u{201C}\(choice.title)\u{201D}; nothing was filled. Its sources are now checked against that case."
+                : "Not assigned: this draft belongs to another case."
+        }
     }
 
     private func fill(_ m: Binding<M>, from choice: StudioCaseChoice) {

@@ -326,7 +326,7 @@ final class StudioStorage {
             caseOf[id] = choice.id
             return true
         } catch StudioRecordError.boundToAnotherCase {
-            problem = "This draft belongs to another case, so it was not filled from \u{201C}\(choice.title)\u{201D}. Start a new draft for that case."
+            problem = "This draft belongs to another case, so it was not assigned to or filled from \u{201C}\(choice.title)\u{201D}. Start a new draft for that case."
             return false
         } catch {
             problem = "The draft could not be assigned to the case: \(error.localizedDescription)"

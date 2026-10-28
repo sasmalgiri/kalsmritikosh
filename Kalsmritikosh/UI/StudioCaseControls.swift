@@ -25,7 +25,15 @@ struct StudioFillFromCaseMenu<M: CaseBackedStudio>: View {
             if choices.isEmpty {
                 Text("No open cases")
             } else {
-                ForEach(choices) { c in Button(c.title) { fill(c) } }
+                Section("Fill from") {
+                    ForEach(choices) { c in Button(c.title) { fill(c) } }
+                }
+                // Review step 5: a draft can belong to a case without anything being filled from it.
+                if bind != nil {
+                    Section("Assign to case without filling") {
+                        ForEach(choices) { c in Button(c.title) { assign(c) } }
+                    }
+                }
             }
         } label: {
             Label(filling ? "Filling…" : "Fill from case", systemImage: "tray.and.arrow.down")
@@ -35,6 +43,17 @@ struct StudioFillFromCaseMenu<M: CaseBackedStudio>: View {
         .task { choices = await appState.studioCaseChoices() }
         .guidance(GuidanceTip("Fill from case",
                               what: "Fills the empty fields from the case's own documents. Each filled field keeps the source it came from; anything you type or change is marked as your entry."))
+    }
+
+    private func assign(_ choice: StudioCaseChoice) {
+        guard let bind else { return }
+        filling = true
+        Task {
+            defer { filling = false }
+            message = await bind(choice)
+                ? "Assigned to \u{201C}\(choice.title)\u{201D}; nothing was filled. Its sources are now checked against that case."
+                : "Not assigned: this draft belongs to another case."
+        }
     }
 
     private func fill(_ choice: StudioCaseChoice) {
