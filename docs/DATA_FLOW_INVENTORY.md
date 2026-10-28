@@ -67,7 +67,12 @@ erasure. "Removing the app's data folder" does not reach everything in the list:
 - sync, backup, snapshot and export locations
 - the shared-folder files
 
-A governed erasure procedure, with legal hold as a separate state, is open (review L4).
+**Erasure of studio work (v160):** Erase, with a required reason and an optional basis, clears the draft's
+content, every revision, every export snapshot and any quarantined legacy copy. The rows stay, with dates and
+SHA-256s, and the erasure is recorded: who, when, why and on what basis. Erasure is refused while a legal hold
+(`legal_holds`) covers the draft or its case; releasing the hold is itself recorded. The captured pre-ledger
+preference store (R4) still holds a copy of migrated drafts, and the erasure reports how many such stores.
+Erasure of documents, chunks, indexes and the vault for a person or case is not built yet (review L4).
 
 ## 4. Open decisions (owner / counsel)
 

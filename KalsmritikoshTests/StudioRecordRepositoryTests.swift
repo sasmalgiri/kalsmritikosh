@@ -294,4 +294,56 @@ struct StudioRecordRepositoryTests {
         #expect(try await repo.approvalIsCurrent(recordID: m.id) == false)
     }
 
+
+    @Test("Review L4: erasure clears content (draft, versions, exports, quarantined copy) and records itself; a legal hold on the draft or its case refuses it; content cannot be cleared without a recorded erasure")
+    func governedErasure() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = StudioRecordRepository(database: db)
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+        let (caseID, _) = try await makeCase(db)
+        // A draft that came from the old store (conflicting duplicate → one quarantined copy).
+        let a = SIUReferral(title: "Claim L4", now: t0)
+        var a2 = a; a2.claimNumber = "OTHER"
+        let blob = String(decoding: try JSONEncoder().encode([a, a2]), as: UTF8.self)
+        _ = try await repo.importLegacy(studio: "siu", sourceKey: "k.l4", blob: blob, actor: "Tester", at: t0, decode: legacyElement)
+        try await repo.bind(recordID: a.id, caseID: caseID, workspaceID: nil, actor: "Tester")
+        var edited = a; edited.claimNumber = "N-1"
+        try await repo.save(studio: "siu", id: a.id, title: a.title, payload: try enc.encode(edited), actor: "Tester",
+                            at: t0.addingTimeInterval(StudioRecordRepository.revisionInterval + 1))
+        try await repo.recordExport(recordID: a.id, format: "markdown", text: "Report N-1", actor: "Tester")
+
+        // Content cannot be cleared behind the repository's back.
+        await #expect(throws: (any Error).self) { try await db.exec("UPDATE studio_record_revisions SET payload_json = '' WHERE record_id = ?;", [.uuid(a.id)]) }
+        await #expect(throws: (any Error).self) { try await db.exec("UPDATE studio_record_exports SET snapshot_text = '' WHERE record_id = ?;", [.uuid(a.id)]) }
+        // A reason is required.
+        await #expect(throws: StudioRecordError.reasonRequired) { _ = try await repo.erase(recordID: a.id, reason: "  ", legalBasis: nil, actor: "Tester") }
+
+        // A hold on the CASE refuses the erasure; releasing it allows it.
+        let hold = UUID()
+        try await db.exec("INSERT INTO legal_holds (id, name, created_at) VALUES (?, ?, ?);", [.uuid(hold), .text("Litigation"), .real(1)])
+        try await db.exec("INSERT INTO legal_hold_items (hold_id, object_id, created_at) VALUES (?, ?, ?);", [.uuid(hold), .uuid(caseID), .real(1)])
+        await #expect(throws: StudioRecordError.onLegalHold(hold)) {
+            _ = try await repo.erase(recordID: a.id, reason: "Subject's request of 1 Oct", legalBasis: "GDPR Art. 17", actor: "Tester")
+        }
+        try await db.exec("UPDATE legal_holds SET released_at = ? WHERE id = ?;", [.real(2), .uuid(hold)])
+
+        let r = try await repo.erase(recordID: a.id, reason: "Subject's request of 1 Oct", legalBasis: "GDPR Art. 17", actor: "Tester")
+        #expect(r.revisionsCleared >= 2 && r.exportsCleared == 1 && r.quarantineCleared == 1 && r.legacyOriginalsHolding == 1)
+        // Nothing of the content is left in the ledger tables; the rows (dates, fingerprints) are.
+        #expect(try await repo.revisions(recordID: a.id).count >= 2)
+        #expect(try await repo.payload(recordID: a.id, revision: 1) == Data())
+        #expect(try await repo.exports(recordID: a.id).map(\.snapshot) == [""])
+        #expect(try await repo.record(id: a.id)?.title == "")
+        #expect(try await db.query("SELECT COUNT(*) FROM studio_legacy_quarantine WHERE source_key = 'k.l4' AND raw_json <> '';", []).first?.int(0) == 0)
+        #expect(try await repo.records(studio: "siu").isEmpty)
+        // The erasure itself is recorded and cannot be changed.
+        let log = try await repo.erasures(recordID: a.id)
+        #expect(log.count == 1 && log[0].legalBasis == "GDPR Art. 17" && log[0].erasedBy == "Tester")
+        await #expect(throws: (any Error).self) { try await db.exec("DELETE FROM studio_erasures;", []) }
+        // An erased draft is not edited back into existence.
+        await #expect(throws: StudioRecordError.retracted(a.id)) {
+            try await repo.save(studio: "siu", id: a.id, title: "x", payload: Data("{}".utf8), actor: "Tester")
+        }
+    }
+
 }

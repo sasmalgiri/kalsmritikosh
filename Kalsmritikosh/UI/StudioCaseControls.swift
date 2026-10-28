@@ -168,3 +168,52 @@ extension View {
         }
     }
 }
+
+/// Review L4 — Remove keeps a draft in the record; Erase removes its content, with a reason, and is
+/// refused while a legal hold covers the draft or its case.
+struct StudioEraseButton: View {
+    static let removeHelp = "Remove from the list. The draft stays in the record (with its versions and exports); use Erase to remove its content."
+    let storage: StudioStorage
+    let id: UUID
+    let onErased: () -> Void
+    @Environment(AppState.self) private var appState
+    @State private var asking = false
+    @State private var reason = ""
+    @State private var basis = ""
+    @State private var refusal: String?
+    @State private var working = false
+
+    var body: some View {
+        Button { asking = true } label: { Label("Erase…", systemImage: "xmark.bin").labelStyle(.iconOnly) }
+            .buttonStyle(.plain).foregroundStyle(.secondary)
+            .help("Erase this draft's content — every version and export snapshot — keeping only a record that it was erased, by whom and why.")
+            .popover(isPresented: $asking) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Erase this draft").font(.headline)
+                    Text("Its content, every earlier version and every export snapshot are cleared from the ledger. What stays: the dates, the fingerprints and the record of this erasure. Not possible while a legal hold covers the draft or its case. " + StudioErasureResult.outsideTheLedger)
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    TextField("Reason (required) — e.g. the person's request and its date", text: $reason).textFieldStyle(.roundedBorder)
+                    TextField("Basis (optional) — e.g. the law or policy relied on", text: $basis).textFieldStyle(.roundedBorder)
+                    if let refusal { Text(refusal).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+                    HStack {
+                        Spacer()
+                        Button("Cancel") { asking = false }
+                        Button("Erase", role: .destructive) {
+                            working = true
+                            Task {
+                                defer { working = false }
+                                if let why = await storage.erase(id, reason: reason, legalBasis: basis, app: appState) {
+                                    refusal = why
+                                } else {
+                                    asking = false
+                                    onErased()
+                                }
+                            }
+                        }
+                        .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || working)
+                    }
+                }
+                .padding(14).frame(width: 380)
+            }
+    }
+}

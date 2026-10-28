@@ -155,7 +155,9 @@ public struct ReasoningStudioView: View {
                 Text("Updated \(rca.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { delete(rca) } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { delete(rca) } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: rca.id) { delete(rca) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                     .help("Delete this investigation")
                 Button("Open") { activeID = rca.id; stage = firstIncompleteStage(rca) }

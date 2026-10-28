@@ -334,6 +334,28 @@ final class StudioStorage {
         }
     }
 
+    /// Review L4 — erase a draft's content (not just remove it). nil on success, else why not. The
+    /// caller then drops the draft from its list; nothing more is sent for it.
+    func erase(_ id: UUID, reason: String, legalBasis: String?, app: AppState?) async -> String? {
+        guard let repo = repository(app) else { return "The ledger is not open." }
+        await flush()
+        do {
+            let r = try await repo.erase(recordID: id, reason: reason, legalBasis: legalBasis, actor: actor)
+            committed.removeValue(forKey: id)
+            lastItems.removeAll { $0.0 == id }
+            approvedIDs.remove(id)
+            var note = "Erased: the draft, \(r.revisionsCleared) earlier version(s) and \(r.exportsCleared) export snapshot(s) no longer hold its content; the erasure itself is recorded."
+            if r.legacyOriginalsHolding > 0 {
+                note += " A copy remains in \(r.legacyOriginalsHolding) captured original store(s) from before the move into the ledger."
+            }
+            notice = note + " " + StudioErasureResult.outsideTheLedger
+            return nil
+        } catch {
+            KalsmritikoshLog.storage.error("Studio erasure refused: \(error.localizedDescription, privacy: .public)")
+            return error.localizedDescription
+        }
+    }
+
     /// Waits for every pending write (tests, and before a backup).
     func flush() async { await chain?.value }
 }

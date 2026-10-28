@@ -116,7 +116,9 @@ public struct SIUStudioView: View {
                 Text("Updated \(r.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { referrals.removeAll { $0.id == r.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { referrals.removeAll { $0.id == r.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: r.id) { referrals.removeAll { $0.id == r.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = r.id; stage = firstIncomplete(r) }
                     .buttonStyle(.bordered).controlSize(.small)

@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 159
+    public static let latestVersion = 160
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -553,7 +553,8 @@ public enum SchemaMigrations {
             // v158 — professional studio work in the ledger, bound to its case (final brief §3.1).
             "studio_records": ["id", "studio", "persona", "job_id", "case_id", "workspace_id", "title", "model_version", "revision",
                                "payload_json", "payload_sha256", "review_state", "origin", "created_by", "created_at",
-                               "updated_by", "updated_at", "retracted_at", "retracted_by"]
+                               "updated_by", "updated_at", "retracted_at", "retracted_by",
+                               "approved_payload_sha256", "erased_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -768,7 +769,8 @@ public enum SchemaMigrations {
         (156, v156),
         (157, v157),
         (158, v158),
-        (159, v159)
+        (159, v159),
+        (160, v160)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7728,6 +7730,51 @@ public enum SchemaMigrations {
     ALTER TABLE studio_records ADD COLUMN approved_payload_sha256 TEXT;
     ALTER TABLE studio_records ADD COLUMN approved_by TEXT;
     ALTER TABLE studio_records ADD COLUMN approved_at REAL;
+    """
+
+
+    // MARK: - v160 — governed erasure of studio work (ship-readiness review L4). Retraction keeps a
+    // draft; erasure removes its content. An erasure is a recorded act (who, when, why, on what basis)
+    // and is refused while a legal hold (v145 legal_holds / legal_hold_items, on the draft or its case)
+    // is active — enforced in StudioRecordRepository.erase. Revision and export rows stay (their dates
+    // and SHA-256s say that something existed and was erased); only their content may be cleared, and
+    // only when a recorded erasure for that draft exists. Rows are still never deleted.
+    private static let v160: String = """
+    CREATE TABLE IF NOT EXISTS studio_erasures (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        record_id          TEXT NOT NULL,
+        case_id            TEXT,
+        reason             TEXT NOT NULL,
+        legal_basis        TEXT,
+        payload_sha256     TEXT NOT NULL,
+        revisions_cleared  INTEGER NOT NULL,
+        exports_cleared    INTEGER NOT NULL,
+        quarantine_cleared INTEGER NOT NULL,
+        legacy_originals   INTEGER NOT NULL,
+        erased_by          TEXT NOT NULL,
+        erased_at          REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_erasures_record ON studio_erasures(record_id);
+    CREATE TRIGGER IF NOT EXISTS studio_erasures_fixed BEFORE UPDATE ON studio_erasures
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_erasures_kept BEFORE DELETE ON studio_erasures
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    ALTER TABLE studio_records ADD COLUMN erased_at REAL;
+    DROP TRIGGER IF EXISTS studio_record_revisions_fixed;
+    CREATE TRIGGER studio_record_revisions_fixed BEFORE UPDATE ON studio_record_revisions
+    WHEN NOT (NEW.payload_json = '' AND NEW.record_id = OLD.record_id AND NEW.revision = OLD.revision
+              AND NEW.payload_sha256 = OLD.payload_sha256 AND NEW.reason = OLD.reason
+              AND NEW.saved_by = OLD.saved_by AND NEW.saved_at = OLD.saved_at
+              AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only (content is cleared only by a recorded erasure)'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_fixed;
+    CREATE TRIGGER studio_record_exports_fixed BEFORE UPDATE ON studio_record_exports
+    WHEN NOT (NEW.snapshot_text = '' AND NEW.id = OLD.id AND NEW.record_id = OLD.record_id
+              AND NEW.revision = OLD.revision AND NEW.format = OLD.format
+              AND NEW.artifact_sha256 = OLD.artifact_sha256 AND NEW.exported_by = OLD.exported_by
+              AND NEW.exported_at = OLD.exported_at
+              AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only (content is cleared only by a recorded erasure)'); END;
     """
 
 }

@@ -118,7 +118,9 @@ public struct ForensicStudioView: View {
                 Text("\(e.schedule.count) transaction(s) · \(e.method?.name ?? "no method")")
                     .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 Spacer()
-                Button(role: .destructive) { engagements.removeAll { $0.id == e.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { engagements.removeAll { $0.id == e.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: e.id) { engagements.removeAll { $0.id == e.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = e.id; stage = firstIncomplete(e) }
                     .buttonStyle(.bordered).controlSize(.small)

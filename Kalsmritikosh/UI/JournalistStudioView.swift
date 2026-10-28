@@ -113,7 +113,9 @@ public struct JournalistStudioView: View {
                 Text("\(m.claims.count) claim(s) · \(flagged) to run as alleged")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { memos.removeAll { $0.id == m.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { memos.removeAll { $0.id == m.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: m.id) { memos.removeAll { $0.id == m.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = m.id; stage = firstIncomplete(m) }
                     .buttonStyle(.bordered).controlSize(.small)

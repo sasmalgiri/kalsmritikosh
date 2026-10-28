@@ -121,7 +121,9 @@ public struct WorkplaceStudioView: View {
                 Text("\(c.allegations.count) allegation(s) · \(c.evidence.count) evidence")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { cases.removeAll { $0.id == c.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { cases.removeAll { $0.id == c.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: c.id) { cases.removeAll { $0.id == c.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = c.id; stage = firstIncomplete(c) }
                     .buttonStyle(.bordered).controlSize(.small)

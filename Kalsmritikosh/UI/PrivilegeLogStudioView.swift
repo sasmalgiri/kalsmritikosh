@@ -113,7 +113,9 @@ public struct PrivilegeLogStudioView: View {
             HStack {
                 Text("\(l.entries.count) withheld document(s)").font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { logs.removeAll { $0.id == l.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { logs.removeAll { $0.id == l.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: l.id) { logs.removeAll { $0.id == l.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = l.id; stage = firstIncomplete(l) }
                     .buttonStyle(.bordered).controlSize(.small)

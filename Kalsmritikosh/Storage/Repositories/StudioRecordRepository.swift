@@ -35,11 +35,15 @@ public nonisolated enum StudioRecordError: Error, Equatable, LocalizedError {
     case caseClosed(UUID)
     case changedSinceValidation(UUID)
     case unknownRevision(UUID, Int)
+    case onLegalHold(UUID)
+    case reasonRequired
 
     public var errorDescription: String? {
         switch self {
         case .changedSinceValidation: return "The draft changed while it was being checked. Nothing was exported — export again."
         case .unknownRevision: return "That version of the draft is not in the ledger."
+        case .onLegalHold: return "This draft (or its case) is under a legal hold, so it cannot be erased. Release the hold first, with its reason."
+        case .reasonRequired: return "An erasure needs a reason (for example the person's request and its date)."
         case .notFound: return "This draft is not in the ledger."
         case .caseNotFound: return "The case this draft belongs to is not in the ledger."
         case .caseInAnotherWorkspace: return "That case belongs to another workspace."
@@ -109,6 +113,27 @@ public nonisolated struct StudioLegacyImportResult: Sendable, Equatable {
     public var elementCount: Int = 0
     public var outcomeCount: Int = 0
     public var everyElementAccounted: Bool { outcomeCount == elementCount }
+}
+
+/// What one erasure cleared, and what it could not reach (review L4).
+public nonisolated struct StudioErasureResult: Sendable, Equatable {
+    public let erasureID: UUID
+    public let revisionsCleared: Int
+    public let exportsCleared: Int
+    public let quarantineCleared: Int
+    /// Captured legacy preference stores that still hold a copy of this draft (kept byte for byte, R4).
+    public let legacyOriginalsHolding: Int
+    /// Copies outside the ledger the app cannot erase — the person removes them.
+    public static let outsideTheLedger = "Files you exported, backups and snapshots you made, and sync folders keep their own copies; remove those yourself."
+}
+
+public nonisolated struct StudioErasure: Sendable, Equatable {
+    public let id: UUID
+    public let recordID: UUID
+    public let reason: String
+    public let legalBasis: String?
+    public let erasedBy: String
+    public let erasedAt: Date
 }
 
 public actor StudioRecordRepository {
@@ -258,6 +283,75 @@ public actor StudioRecordRepository {
         try await database.withSavepoint("studio_retract_\(Self.token(recordID))") { db in
             try db.exec("UPDATE studio_records SET retracted_at = ?, retracted_by = ? WHERE id = ? AND retracted_at IS NULL;",
                         [.date(date), .text(who), .uuid(recordID)])
+        }
+    }
+
+    // MARK: - Erasure (review L4)
+
+    /// Erase a draft's content: its current payload, every revision's payload, every export snapshot
+    /// and any quarantined legacy copy are cleared; the rows stay (dates and SHA-256s), with a
+    /// recorded erasure saying who, when, why and on what basis. Refused while a legal hold on the
+    /// draft or its case is active. Retraction is not erasure: `retract` keeps everything.
+    public func erase(recordID: UUID, reason: String, legalBasis: String?, actor: String, at date: Date = Date()) async throws -> StudioErasureResult {
+        let who = try Self.clean(actor)
+        let why = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !why.isEmpty else { throw StudioRecordError.reasonRequired }
+        let basis = legalBasis?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let erasureID = UUID()
+        return try await database.withSavepoint("studio_erase_\(Self.token(recordID))") { db in
+            guard let row = try db.query("SELECT case_id, payload_sha256, erased_at FROM studio_records WHERE id = ? LIMIT 1;", [.uuid(recordID)]).first else {
+                throw StudioRecordError.notFound(recordID)
+            }
+            let caseID = row.uuid(0)
+            var held: [SQLValue] = [.uuid(recordID)]
+            if let caseID { held.append(.uuid(caseID)) }
+            let marks = held.map { _ in "?" }.joined(separator: ", ")
+            if let hold = try db.query("""
+                SELECT h.id FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id AND h.released_at IS NULL
+                WHERE i.removed_at IS NULL AND i.object_id IN (\(marks)) LIMIT 1;
+                """, held).first?.uuid(0) {
+                throw StudioRecordError.onLegalHold(hold)
+            }
+            let id: [SQLValue] = [.uuid(recordID)]
+            let revisions = Int(try db.query("SELECT COUNT(*) FROM studio_record_revisions WHERE record_id = ? AND payload_json <> '';", id).first?.int(0) ?? 0)
+            let exports = Int(try db.query("SELECT COUNT(*) FROM studio_record_exports WHERE record_id = ? AND snapshot_text <> '';", id).first?.int(0) ?? 0)
+            let quarantine = Int(try db.query("""
+                SELECT COUNT(*) FROM studio_legacy_quarantine q JOIN studio_legacy_outcomes o
+                  ON o.source_key = q.source_key AND o.element_index = q.element_index
+                WHERE o.record_id = ? AND q.raw_json <> '';
+                """, id).first?.int(0) ?? 0)
+            let legacy = Int(try db.query("SELECT COUNT(DISTINCT source_key) FROM studio_legacy_outcomes WHERE record_id = ?;", id).first?.int(0) ?? 0)
+            // The erasure is recorded first: the append-only triggers allow clearing content only then.
+            try db.exec("""
+                INSERT INTO studio_erasures (id, record_id, case_id, reason, legal_basis, payload_sha256, revisions_cleared,
+                    exports_cleared, quarantine_cleared, legacy_originals, erased_by, erased_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, [.uuid(erasureID), .uuid(recordID), caseID.map { .uuid($0) } ?? .null, .text(why),
+                      basis.flatMap { $0.isEmpty ? nil : SQLValue.text($0) } ?? .null, .text(row.string(1) ?? ""),
+                      .integer(Int64(revisions)), .integer(Int64(exports)), .integer(Int64(quarantine)), .integer(Int64(legacy)),
+                      .text(who), .date(date)])
+            try db.exec("UPDATE studio_record_revisions SET payload_json = '' WHERE record_id = ?;", [.uuid(recordID)])
+            try db.exec("UPDATE studio_record_exports SET snapshot_text = '' WHERE record_id = ?;", [.uuid(recordID)])
+            try db.exec("""
+                UPDATE studio_legacy_quarantine SET raw_json = '' WHERE EXISTS (
+                  SELECT 1 FROM studio_legacy_outcomes o WHERE o.record_id = ?
+                    AND o.source_key = studio_legacy_quarantine.source_key AND o.element_index = studio_legacy_quarantine.element_index);
+                """, [.uuid(recordID)])
+            try db.exec("""
+                UPDATE studio_records SET payload_json = '', title = '', review_state = 'draft', approved_payload_sha256 = NULL,
+                    erased_at = ?, retracted_at = COALESCE(retracted_at, ?), retracted_by = COALESCE(retracted_by, ?),
+                    updated_by = ?, updated_at = MAX(updated_at, ?) WHERE id = ?;
+                """, [.date(date), .date(date), .text(who), .text(who), .date(date), .uuid(recordID)])
+            return StudioErasureResult(erasureID: erasureID, revisionsCleared: revisions, exportsCleared: exports,
+                                       quarantineCleared: quarantine, legacyOriginalsHolding: legacy)
+        }
+    }
+
+    public func erasures(recordID: UUID) async throws -> [StudioErasure] {
+        try await database.query("SELECT id, reason, legal_basis, erased_by, erased_at FROM studio_erasures WHERE record_id = ? ORDER BY erased_at;",
+                                 [.uuid(recordID)]).compactMap { r in
+            guard let id = r.uuid(0), let why = r.string(1), let by = r.string(3), let at = r.date(4) else { return nil }
+            return StudioErasure(id: id, recordID: recordID, reason: why, legalBasis: r.string(2), erasedBy: by, erasedAt: at)
         }
     }
 
