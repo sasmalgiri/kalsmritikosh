@@ -49,10 +49,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     public enum OnlineError: Error, LocalizedError {
-        case notAvailable, declined, limitReached(Int), notEligibleForDocuments(String)
+        case notAvailable, declined, limitReached(Int), notEligibleForDocuments(String), documentsNotCleared
         public var errorDescription: String? {
             switch self {
             case .notEligibleForDocuments(let why): return why
+            case .documentsNotCleared: return "Not sent: the passages were not checked for privilege and sensitivity before this request was built."
             case .notAvailable:       return "Online mode is not set up (choose a provider, model and key in Settings)."
             case .declined:           return "You chose not to send this to the cloud."
             case .limitReached(let c): return "Today's online limit (\(c) bytes) has been reached."
@@ -64,7 +65,13 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// summarising, extracting) may carry document passages, so it is treated as a document send:
     /// eligible, confirmed provider only, always previewed with the provider's terms.
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
-        try await generateFromDocuments(prompt: prompt, options: options)
+        // K1: the general route may carry passages; it is sent only when its sources were cleared
+        // (`CloudSourceGate`) before the prompt was assembled.
+        guard options.sourceClearance != nil else {
+            await log(OnlineSettings.kind, OnlineSettings.model, "", prompt.utf8.count, 0, nil, "blocked", "sources not cleared")
+            throw await fail(OnlineError.documentsNotCleared)
+        }
+        return try await generateFromDocuments(prompt: prompt, options: options)
     }
 
     /// A request that carries only the question (and field names) — the question interpreter and
@@ -79,7 +86,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     public func generateFromDocuments(prompt: String, options: GenerationOptions) async throws -> String {
         let kind = OnlineSettings.kind
         if let why = OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kind)) {
-            await log(kind, OnlineSettings.model, prompt, prompt.utf8.count, 0, nil, "blocked", "provider not eligible for documents")
+            await log(kind, OnlineSettings.model, "", prompt.utf8.count, 0, nil, "blocked", "provider not eligible for documents")
             throw await fail(OnlineError.notEligibleForDocuments(why))
         }
         return try await send(prompt: prompt, options: options, carriesDocuments: true)

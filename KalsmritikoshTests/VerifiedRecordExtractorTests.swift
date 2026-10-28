@@ -132,8 +132,16 @@ struct VerifiedRecordExtractorTests {
         let kind = OnlineSettings.kind
         // On a Mac where the provider is confirmed a send would wait for the consent sheet — nothing to test here.
         guard OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kind)) != nil else { return }
+        // K1: without a source clearance the general route is refused before anything else.
         do {
             _ = try await provider.generate(prompt: "Passage: the payment of ₹1,000 …", options: GenerationOptions(maxTokens: 16, temperature: 0))
+            Issue.record("the general route sent without a source clearance")
+        } catch let error as OnlineCloudProvider.OnlineError {
+            guard case .documentsNotCleared = error else { Issue.record("expected the clearance refusal, got \(error)"); return }
+        } catch { Issue.record("expected the clearance refusal, got \(error)") }
+        let cleared = CloudSourceClearance(clearedObjectIDs: [UUID()], deniedCount: 0, checkedAt: Date(), purpose: "test")
+        do {
+            _ = try await provider.generate(prompt: "Passage: the payment of ₹1,000 …", options: GenerationOptions(maxTokens: 16, temperature: 0, sourceClearance: cleared))
             Issue.record("the general route sent without the document check")
         } catch let error as OnlineCloudProvider.OnlineError {
             // Unconfirmed (or OpenAI): refused by the document check before anything else.

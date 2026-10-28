@@ -124,10 +124,10 @@ Status by phase of the final completion instructions (§10):
 
 | ID | Requirement (instructions §) | Phase | State |
 |---|---|---|---|
-| K1 | Source ownership, sensitivity and privilege filter before prompt assembly on every document-bearing cloud route (§5) | F1 | open |
-| K2 | Full erase fails closed: hold check, table inventory and file removal; writer barrier; operation record (§5) | F1 | open |
-| K3 | Studio erasure clears the legacy raw-store copy, or records a retention restriction (§1.3) | F1 | open |
-| K4 | An explicit-currency field is not supported by a number of unknown currency (§1.4) | F1 | open |
+| K1 | Source ownership, sensitivity and privilege filter before prompt assembly on every document-bearing cloud route (§5) | F1 | **unit-verified**. A `CloudSourceGate` runs on answer synthesis, the chunk fallback and record reading. The registry no longer sends undeclared specs (background, ingest, experts, summaries) to the cloud. The provider refuses uncleared requests. Case ownership comes from case-scoped retrieval upstream. Not signed-app-verified. |
+| K2 | Full erase fails closed: hold check, table inventory and file removal; writer barrier; operation record (§5) | F1 | **unit/integration-verified** (`DiagnosticEndToEndTests.eraseFailsClosedOnHolds`, `.eraseFilesPreferencesAndWriters`). Open: barriers for ingestion, imports and in-flight model completions beyond the ones stopped; a test with a hold arriving mid-erase under a barrier (T1). |
+| K3 | Studio erasure clears the legacy raw-store copy, or records a retention restriction (§1.3) | F1 | **unit-verified** (v162; `StudioRecordRepositoryTests.governedErasure`) |
+| K4 | An explicit-currency field is not supported by a number of unknown currency (§1.4) | F1 | **unit-verified** (`StudioEvidenceResolverTests.typedSupport`) |
 | K5 | One artifact service for studio and case reports: approval bound to sources, policy and scope; re-authorisation at output; redaction (§5) | F1 | partial: studio frozen package done |
 | K6 | Mandatory documentary findings are not satisfied by human-entry labels (§5) | F1 | partial: relabelled failed citations block approval |
 | K7 | Pending saves flushed at quit and interruption; persona and job IDs saved on every record (§5) | F1 | open |

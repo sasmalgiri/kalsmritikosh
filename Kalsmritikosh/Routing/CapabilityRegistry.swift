@@ -244,10 +244,18 @@ public actor CapabilityRegistry {
     /// Online mode, this build bundles the network helper, and the online-answers
     /// module is on — and only for text generation (embeddings never leave the Mac).
     /// In Private mode this is always false, so cloud manifests never resolve.
+    /// K1 — and only for a spec that says it may go to the cloud (`privacy: .cloud`), as this type's
+    /// contract states: a background, ingest or expert call that never declared it cannot reach the
+    /// cloud just because Online mode is on.
     private func cloudEligible(manifest: ModelManifest, spec: CapabilitySpec) -> Bool {
-        manifest.privacyLevel == .cloud
+        Self.cloudEligible(providerPrivacy: manifest.privacyLevel, spec: spec, cloudAllowed: OnlineSettings.cloudAllowed)
+    }
+
+    nonisolated static func cloudEligible(providerPrivacy: PrivacyLevel, spec: CapabilitySpec, cloudAllowed: Bool) -> Bool {
+        providerPrivacy == .cloud
+            && spec.privacy == .cloud
             && spec.requires.contains(.textGeneration)
-            && OnlineSettings.cloudAllowed
+            && cloudAllowed
     }
 
     private func score(
