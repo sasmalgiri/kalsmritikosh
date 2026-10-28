@@ -456,6 +456,11 @@ struct ProceedingGapTests {
         #expect(p("I need the sentencing date for Wael Isreb — do you have that on file?")?.ask == .when(.sentenced))
         #expect(p("I'm trying to confirm the sentence handed down to Nina Bourret — what was it?")?.ask == .sentenceImposed)
         #expect(p("For the record, when was Nina Bourret sentenced?")?.ask == .when(.sentenced))
+        for q in ["Can you specify what Serhat Gumrukcu was charged with?", "Could you specify the charges filed against Serhat Gumrukcu?",
+                  "I'm looking to find out exactly what Serhat Gumrukcu was charged with.", "I'd like to know what Serhat Gumrukcu was charged with.",
+                  "Can you tell me exactly what Serhat Gumrukcu was charged with?", "Can you clarify what Serhat Gumrukcu was charged with?"] {
+            #expect(p(q)?.ask == .chargedWith, "\(q)")
+        }
         // Unwrapped questions are unchanged.
         #expect(p("When was Nina Bourret sentenced?")?.ask == .when(.sentenced))
         #expect(p("What was Nina Bourret charged with?")?.ask == .chargedWith)

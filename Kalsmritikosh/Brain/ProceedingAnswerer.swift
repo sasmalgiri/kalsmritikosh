@@ -74,7 +74,7 @@ public nonisolated enum ProceedingAnswerer {
     /// The question without a leading courtesy wrapper ("I need to confirm: …", "For the record, …",
     /// "I'm trying to confirm …", "Can you tell me …"), so the anchored patterns below see the question.
     static func unwrap(_ q: String) -> String {
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i need|can you (?:tell me|confirm|check|let me know)|could you (?:tell me|confirm|check|let me know)|do you know|please (?:tell me|confirm))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i(?:'m|’m| am) looking to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say)|do you know|please (?:tell me|confirm|specify|clarify))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -105,7 +105,7 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
         // "What were the charges brought against X?", "What exact charges were filed against X?"
-        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b|^(?:exactly\s+)?what\b.*\b(?:charged with|indicted (?:for|on))\b|^(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*charges?\s+(?:that were\s+)?(?:filed|brought|laid|lodged)\s+against\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .chargedWith)
         }
         guard let step else { return nil }
