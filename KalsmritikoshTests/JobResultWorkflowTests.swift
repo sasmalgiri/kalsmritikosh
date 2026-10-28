@@ -122,7 +122,7 @@ struct JobResultWorkflowTests {
         #expect(await f.state.jobResultExportCheck(record)?.contains("no longer cleared") == true)
     }
 
-    @Test("A method job's completion saves each accepted method as a real method run in the case")
+    @Test("A method job's completion saves the run with the person's selected inputs, steps and outcome; it reopens unchanged; a retry never makes a second run")
     func methodRunsSaved() async throws {
         let f = try await CaseErasureTests.boot()
         defer { try? FileManager.default.removeItem(at: f.temp) }
@@ -135,11 +135,30 @@ struct JobResultWorkflowTests {
         var rows = record.content.rows
         #expect(rows.first?.fields?["methodID"] != nil, "each method row names its method")
         rows[0].decision = .accepted
+        // Inputs that name no case document are refused, and no run is made.
+        rows[0].fields?["inputs"] = "the blue folder"
+        let refused = await f.state.startMethodRuns(caseID: f.caseA, rows: rows, actor: "Tester")
+        #expect(refused.runs.isEmpty && refused.problems.first?.contains("Inputs selected") == true)
+        // The person's worksheet: one named input document, two steps, an outcome.
+        rows[0].fields?["inputs"] = "investigator-press-release.txt"
+        rows[0].fields?["steps"] = "Listed every causal statement; Checked each against the release"
+        rows[0].fields?["outcome"] = "supports"
         let (runs, problems) = await f.state.startMethodRuns(caseID: f.caseA, rows: rows, actor: "Tester")
         #expect(problems.isEmpty, "\(problems)")
         let runID = try #require(runs[0])
         #expect(try await f.db.query("SELECT COUNT(*) FROM case_method_runs WHERE case_id = ? AND method_run_id = ?;", [.uuid(f.caseA), .uuid(runID)]).first?.int(0) == 1,
                 "the run is saved in the case's method engine")
+        let methods = try #require(await f.state.investigationMethods)
+        let saved = try await methods.worksheet(runID: runID)
+        #expect(saved.steps == ["Listed every causal statement", "Checked each against the release"])
+        #expect(saved.outcome?.hasPrefix("Outcome: supports") == true && saved.evidence.count == 1, "only the selected input is the run's evidence")
+        // A retry (the run id is on the row) reuses the run and adds nothing twice; it reopens unchanged.
+        rows[0].fields?["run"] = runID.uuidString
+        let again = await f.state.startMethodRuns(caseID: f.caseA, rows: rows, actor: "Tester")
+        #expect(again.runs[0] == runID && again.problems.isEmpty)
+        let reopened = try await methods.worksheet(runID: runID)
+        #expect(reopened.steps == saved.steps && reopened.outcome == saved.outcome && reopened.evidence == saved.evidence)
+        #expect(try await f.db.query("SELECT COUNT(*) FROM case_method_runs WHERE case_id = ?;", [.uuid(f.caseA)]).first?.int(0) == 1, "no second run")
     }
 
     @MainActor

@@ -67,7 +67,10 @@ public nonisolated enum JobFields {
                                  F("amounts", "Amounts", prefill: .amount), F("source", "Source", prefill: .document)]
         m["res.metadata"] = [F("series", "Series"), F("item", "Item metadata", prefill: .rowDetail), F("provenance", "Provenance")]
         m["law.exhibit-binder"] = [F("exhibit", "Exhibit", prefill: .exhibitNumber), F("description", "Description", prefill: .document),
-                                   F("version", "Source version", prefill: .sourceVersion), F("bates", "Bates", prefill: .bates)]
+                                   F("version", "Source version", prefill: .sourceVersion),
+                                   // B3 — numbered from document order: a PROPOSAL. Production assigns the final
+                                   // numbers (the ledger records ranges per run, not per document).
+                                   F("bates", "Bates (proposed — production assigns the final number)", prefill: .bates)]
         m["law.document-coding"] = [F("issues", "Issue codes"), F("relevance", "Relevance", .choice(["relevant", "not relevant", "needs review"])),
                                     F("privilege", "Privilege", .choice(["none", "privileged", "partly privileged"]))]
         m["res.bibliography"] = [F("author", "Author", prefill: .names), F("title", "Title", prefill: .document),
@@ -129,9 +132,15 @@ public nonisolated enum JobFields {
         // Money.
         m["law.damages"] = [F("head", "Head of damage"), F("amount", "Amount", .amount, prefill: .amount),
                             F("currency", "Currency", .currency, prefill: .currency), F("source", "Source", prefill: .document), F("assumptions", "Assumptions")]
+        // B3 — a sourced MANUAL tracing workpaper: the person links the two accounts, classifies the
+        // transfer, says how duplicates and reversals were handled and whether it reconciles, and states
+        // the method they applied. The app does not compute LIBR/FIFO/pro-rata allocations.
         m["fa.funds-tracing"] = [F("from", "From account"), F("to", "To account"), F("date", "Date", .date),
                                  F("amount", "Amount", .amount, prefill: .amount), F("currency", "Currency", .currency, prefill: .currency),
-                                 F("method", "Tracing method", .choice(["direct", "LIBR", "pro rata", "FIFO"]))]
+                                 F("classification", "Classification", .choice(["transfer", "payment", "receipt", "fee", "unknown"])),
+                                 F("duplicates", "Duplicates and reversals", .choice(["none found", "duplicate excluded", "reversal netted", "kept separate — distinct payment"])),
+                                 F("reconciled", "Reconciles to", .choice(["statement balance", "other workpaper", "does not reconcile"])),
+                                 F("method", "Tracing method (applied by you)", .choice(["direct", "LIBR", "pro rata", "FIFO"]))]
         m["fa.workpapers"] = [F("calculation", "Calculation"), F("inputs", "Inputs", prefill: .amount)]
         // Disclosure.
         m["ind.health-scope"] = [F("record", "Record", prefill: .document), F("sensitivity", "Sensitivity", .choice(["ordinary", "sensitive", "highly sensitive"])),
@@ -203,6 +212,58 @@ public nonisolated enum JobFields {
         }
     }
 
+    /// B3 — the job's own completion rules across fields and rows (empty when the result may be
+    /// completed). Negative outcomes are valid; what is refused is a completion that contradicts the
+    /// contract's acceptance scenario.
+    public static func completionProblems(job: String, rows: [JobResultRow]) -> [String] {
+        let accepted = rows.filter { $0.decision == .accepted }
+        var out: [String] = []
+        func note(_ r: JobResultRow) -> Bool { !(r.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        // An item that must rest on a source cannot be accepted without one (a hand-added row is
+        // the reviewer's entry until a source is linked).
+        if ["hr.evidence-register", "siu.prior-claims", "law.obligations", "law.exhibit-binder"].contains(job),
+           accepted.contains(where: { $0.refs.isEmpty }) {
+            out.append("An item without a source cannot be accepted here: link its source, or reject it")
+        }
+        switch job {
+        case "law.redaction":
+            if accepted.contains(where: { $0.fields?["check"] != "produced file" }) {
+                out.append("A text-only snapshot check cannot complete redaction validation: check the produced file itself, or reject the snapshot row")
+            }
+            if accepted.contains(where: { $0.fields?["check"] == "produced file" && $0.fields?["outcome"] != "passed" }) {
+                out.append("A failed or incomplete file check cannot be accepted: re-produce the file and check it again, or reject the row")
+            }
+            if !rows.contains(where: { $0.fields?["check"] == "produced file" }) {
+                out.append("No produced file has been checked")
+            }
+        case "hr.interview-prep":
+            if accepted.contains(where: { $0.fields?["opportunity"] == "not yet" }) {
+                out.append("Every allegation must be put to the respondent before completion (Response opportunity: given)")
+            }
+        case "jrn.publication", "jrn.publication-package":
+            let cleared = accepted.contains { $0.fields?["cleared"] == "cleared" }
+            let openReplies = rows.filter { $0.title.hasPrefix("Reply opportunity") && $0.decision != .accepted }
+            if cleared && !openReplies.isEmpty {
+                out.append("Publication cannot be cleared while \(openReplies.count) reply request(s) are not made (accept each Reply opportunity row once requested)")
+            }
+        case "fa.funds-tracing":
+            if accepted.contains(where: { ($0.fields?["from"] ?? "") == ($0.fields?["to"] ?? "") && !($0.fields?["from"] ?? "").isEmpty }) {
+                out.append("A transfer links two different accounts")
+            }
+        case "hr.disclosure-review":
+            if accepted.contains(where: { $0.fields?["endorsement"] == "yes" && $0.fields?["present"] != "present" && !note($0) }) {
+                out.append("An endorsement without a clear disclosure needs your note on what must change (it is flagged against the instrument version)")
+            }
+        default:
+            // Action registers: an action marked done needs its closure note.
+            if JobFields.specs[job]?.contains(where: { $0.key == "status" && $0.label == "Status" && $0.prefill == .constantOpen }) == true,
+               accepted.contains(where: { $0.fields?["status"] == "done" && !note($0) }) {
+                out.append("An action marked done needs a closure note")
+            }
+        }
+        return out
+    }
+
     /// Why a nonempty value is not a valid value of its kind (nil: valid).
     public static func invalidReason(_ kind: JobField.Kind, _ value: String) -> String? {
         let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -268,15 +329,14 @@ public nonisolated enum DataAnalysisExecutor {
     }
 }
 
-/// `law.redaction` — validation of PRODUCED bytes: every export recorded for the case (the exact
-/// snapshot that was written) is re-read for the identifiers the case's documents contain, through
-/// every leak channel (exact, case, collapsed spacing, markup or punctuation interruption).
+/// `law.redaction` — validation of PRODUCED files (B3). The result the contract needs is a check of
+/// the actual file: the person chooses each produced file, its bytes are hashed and every channel it
+/// carries is checked (`ProducedFileRedactionCheck`: PDF text layer, metadata, annotations, OCR of
+/// image pages; attachments reported). A run over the case's recorded export snapshots is a
+/// TEXT-ONLY pre-check, labelled so, and cannot complete the job.
 public nonisolated enum RedactionValidationExecutor {
-    public static func run(_ e: JobEvidence) -> JobRun {
-        guard !e.exports.isEmpty else {
-            return JobText.blocked("No produced export is recorded for this case, so there is nothing to validate.",
-                                   "Produce the set (Document production or a studio export), then run this job.")
-        }
+    /// The identifiers the case's own documents contain — what a produced file must not reveal.
+    public static func protectedTerms(_ e: JobEvidence) -> [String] {
         var terms: [String] = []
         for doc in e.facts.documents {
             let text = e.texts[doc.objectID] ?? ""
@@ -286,18 +346,41 @@ public nonisolated enum RedactionValidationExecutor {
                 terms += re.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range) }
             }
         }
-        terms = Array(Set(terms)).sorted()
+        return Array(Set(terms)).sorted()
+    }
+
+    public static func run(_ e: JobEvidence) -> JobRun {
+        guard !e.facts.documents.isEmpty else {
+            return JobText.blocked("The case has no documents, so there are no protected identifiers to check a production for.",
+                                   "Add the case's documents, then check the produced files.")
+        }
+        let terms = protectedTerms(e)
         let verifier = RedactionVerifier()
         let rows = e.exports.map { export -> JobResultRow in
             let leaks = verifier.leaks(in: export.text, protectedTerms: terms, artifact: export.title)
             let channels = Set(leaks.map(\.channel.rawValue)).sorted()
             return JobResultRow(title: export.title,
-                                detail: leaks.isEmpty ? "Clean: none of \(terms.count) identifier(s) recoverable from the produced text."
-                                                      : "\(leaks.count) identifier(s) recoverable (\(channels.joined(separator: ", "))).",
-                                flags: leaks.isEmpty ? ["text check passed"] : ["redaction failed"])
+                                detail: leaks.isEmpty ? "Text-only pre-check: none of \(terms.count) identifier(s) in the recorded snapshot text."
+                                                      : "\(leaks.count) identifier(s) recoverable from the snapshot text (\(channels.joined(separator: ", "))).",
+                                flags: [leaks.isEmpty ? "text-only pre-check passed — not a check of the file" : "redaction failed"],
+                                fields: ["check": "text-only snapshot"])
         }
         return (.draft, JobResultContent(rows: rows,
-                                         limitations: ["Checked: the produced text of each export. Image OCR and file metadata are checked by the production tool when it writes PDFs; a text snapshot has neither."],
-                                         nextActions: ["Re-produce any export that failed, then run this job again."]))
+                                         limitations: ["The produced FILES are not checked yet: choose each one with “Check a produced file…”. A snapshot row checks only the recorded text (no PDF text layer, OCR, metadata or attachments) and cannot complete this job."]
+                                            + (rows.isEmpty ? ["No export snapshot is recorded for this case; check the produced files directly."] : []),
+                                         nextActions: ["Check each produced file; re-produce any that fails, then check it again."]))
+    }
+
+    /// One row per checked file: its identity (name, SHA-256), what was checked and what was not.
+    public static func row(for c: ProducedFileRedactionCheck, terms: Int) -> JobResultRow {
+        var flags: [String] = []
+        if !c.leaks.isEmpty { flags.append("redaction failed") }
+        if !c.notChecked.isEmpty { flags.append("incomplete check") }
+        if c.passed { flags.append("file check passed") }
+        let detail = (c.leaks.isEmpty ? "No protected identifier (of \(terms)) found" : "\(c.leaks.count) leak(s): \(c.leaks.joined(separator: "; "))")
+            + ". Checked: \(c.checked.joined(separator: ", "))." + (c.notChecked.isEmpty ? "" : " Not checked: \(c.notChecked.joined(separator: "; ")).")
+        return JobResultRow(title: c.fileName, detail: detail, flags: flags,
+                            fields: ["check": "produced file", "sha256": c.sha256, "coverage": c.checked.joined(separator: ", "),
+                                     "notChecked": c.notChecked.joined(separator: "; "), "outcome": c.passed ? "passed" : (c.leaks.isEmpty ? "incomplete" : "failed")])
     }
 }

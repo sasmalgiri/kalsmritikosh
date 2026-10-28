@@ -181,6 +181,10 @@ struct JobResultView: View {
             HStack {
                 Label("Result (\(rows.count))", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
                 Spacer()
+                if editable, model.jobID == "law.redaction" {
+                    Button("Check a produced file…") { Task { await checkProducedFile() } }.controlSize(.small)
+                        .help("Choose the file you produced; its own bytes are checked (text layer, metadata, annotations, OCR).")
+                }
                 if editable {
                     Button("Add a row") { model.addManualRow() }.controlSize(.small)
                         .help("Record something the run did not produce — a document it did not read, a missing element — as your entry.")
@@ -334,6 +338,20 @@ struct JobResultView: View {
         .padding(12)
     }
 
+    /// B3 — validate an actual produced file and add its check as a row.
+    private func checkProducedFile() async {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let row = try await appState.checkProducedFile(caseID: model.caseID, at: url)
+            model.rows.append(row)
+            model.setMessage("Checked \(url.lastPathComponent). Save your review to keep the check.")
+        } catch { model.setProblem(error.localizedDescription) }
+        #endif
+    }
+
     /// Complete — a method job first saves each accepted method as a run in the case's method engine.
     private func complete() async {
         if model.jobID.hasSuffix(".methods") {
@@ -382,10 +400,13 @@ nonisolated enum JobResultMarkdown {
         }
         if !r.content.limitations.isEmpty { out += "\n## Limitations\n" + r.content.limitations.map { "- \($0)" }.joined(separator: "\n") + "\n" }
         out += "\n## Result\n"
-        for (i, row) in r.content.rows.enumerated() {
+        // Rejected rows are not part of the result; they are listed apart so nothing is hidden.
+        let included = r.content.rows.filter { $0.decision != .rejected }
+        let rejected = r.content.rows.filter { $0.decision == .rejected }
+        for (i, row) in included.enumerated() {
             let entries = Set(row.assertions ?? row.personEntries())
             out += "\n\(i + 1). \(row.date.map { "\($0) — " } ?? "")\(row.title)\(entries.contains("title") ? " [reviewer's entry]" : "")\n"
-            if row.manual == true { out += "   Added by the reviewer\(row.refs.isEmpty ? " (no source linked)" : "").\n" }
+            if row.manual == true { out += "   Added by the reviewer\(row.refs.isEmpty ? " (no source linked — unproven)" : "").\n" }
             else if row.changedSourcedValue, let said = row.sourced?["title"], said != row.title { out += "   The source-derived text was: \(said)\n" }
             if let d = row.detail { out += "   \(d)\n" }
             if !row.flags.isEmpty { out += "   Flags: \(row.flags.joined(separator: "; "))\n" }
@@ -402,6 +423,9 @@ nonisolated enum JobResultMarkdown {
                            ref.blockID.map { "block \($0.uuidString)" }].compactMap { $0 }.joined(separator: ", ")
                 out += "   Source (\(ids.isEmpty ? "no locator" : ids)): “\(ref.quote ?? "")”\n"
             }
+        }
+        if !rejected.isEmpty {
+            out += "\n## Not included (rejected by the reviewer)\n" + rejected.map { "- \($0.title)\($0.note.map { " — \($0)" } ?? "")" }.joined(separator: "\n") + "\n"
         }
         if !r.content.nextActions.isEmpty { out += "\n## Next actions\n" + r.content.nextActions.map { "- \($0)" }.joined(separator: "\n") + "\n" }
         return out

@@ -288,25 +288,62 @@ extension AppState {
 }
 
 extension AppState {
-    /// A method job's completion saves each accepted method as an actual MethodRun in the case (the
-    /// shared method engine), with the case's authorised source versions as its evidence. Returns the
-    /// run id per row index; a method the engine refuses is reported, not silently skipped.
+    /// B3 — a method job's completion saves each accepted method as an actual MethodRun in the case
+    /// (the shared method engine): its evidence is the case documents the person named as inputs
+    /// (exact source versions), its steps and outcome are the person's worksheet. A row that already
+    /// has a run reuses it (a failed or retried completion never makes a second run). Returns the run
+    /// id per row index; a method the engine refuses, or inputs that name no case document, is
+    /// reported, never silently skipped.
     public func startMethodRuns(caseID: UUID, rows: [JobResultRow], actor: String) async -> (runs: [Int: UUID], problems: [String]) {
         guard let methods = investigationMethods, let answers = investigationAnswers else { return ([:], ["The method engine is not available."]) }
         var runs: [Int: UUID] = [:], problems: [String] = []
         let versions = (try? await answers.scopeContext(caseID: caseID).scope.authorizedSourceVersionIDs) ?? []
-        let specs = versions.sorted { $0.uuidString < $1.uuidString }.enumerated().map {
-            InvestigationMethodEvidenceSpec(targetKind: .sourceVersion, targetID: $0.element, ordinal: $0.offset)
+        // Each authorised version's document name, to resolve the inputs the person named.
+        var names: [UUID: String] = [:]
+        for v in versions {
+            if let n = try? await database?.query("SELECT f.url FROM source_versions sv JOIN files f ON f.id = sv.logical_source_id WHERE sv.id = ?;", [.uuid(v)]).first?.string(0) {
+                names[v] = (URL(string: n)?.lastPathComponent ?? (n as NSString).lastPathComponent).removingPercentEncoding ?? n
+            }
         }
-        for (i, row) in rows.enumerated() where row.decision == .accepted && row.fields?["run"] == nil {
+        for (i, row) in rows.enumerated() where row.decision == .accepted {
             guard let methodID = row.fields?["methodID"] else { continue }
+            let inputs = row.fields?["inputs"] ?? ""
+            let chosen = names.filter { !$0.value.isEmpty && inputs.localizedCaseInsensitiveContains($0.value) }.keys.sorted { $0.uuidString < $1.uuidString }
+            guard !chosen.isEmpty else {
+                problems.append("\(row.title): name at least one of the case's documents under Inputs selected"); continue
+            }
+            let steps = (row.fields?["steps"] ?? "").split(whereSeparator: { $0 == "\n" || $0 == ";" })
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             do {
-                let run = try await methods.startMethod(caseID: caseID, methodDefinitionID: methodID, evidenceSpecs: specs,
-                                                        createdBy: actor, now: Date())
-                runs[i] = run.run.id
+                let runID: UUID
+                if let existing = row.fields?["run"].flatMap(UUID.init(uuidString:)) { runID = existing } else {
+                    let specs = chosen.enumerated().map { InvestigationMethodEvidenceSpec(targetKind: .sourceVersion, targetID: $0.element, ordinal: $0.offset) }
+                    runID = try await methods.startMethod(caseID: caseID, methodDefinitionID: methodID, evidenceSpecs: specs,
+                                                          createdBy: actor, now: Date()).run.id
+                }
+                runs[i] = runID
+                _ = try await methods.recordWorksheet(caseID: caseID, runID: runID, steps: steps, outcome: row.fields?["outcome"] ?? "inconclusive",
+                                                      inputs: inputs, actor: actor, now: Date())
             } catch { problems.append("\(row.title): \(error.localizedDescription)") }
         }
         return (runs, problems)
+    }
+}
+
+extension AppState {
+    /// B3 — check one produced file for the case's protected identifiers (its own bytes: hash, PDF
+    /// text layer, metadata, annotations, OCR of image pages). Returns the result row to add.
+    public func checkProducedFile(caseID: UUID, at url: URL) async throws -> JobResultRow {
+        guard let service = personaJobs, let cases = investigationCases,
+              let c = try await cases.fetch(caseID: caseID) else { throw JobResultError.caseGone }
+        let access = SensitiveAccessContext(scope: SensitiveScope(workspaceID: c.caseHeader.workspaceID, maximumSensitivity: .restricted,
+                                                                  permitsPrivilegedMaterial: false, purpose: .export))
+        guard let evidence = try await service.evidence(caseID: caseID, access: access) else { throw JobResultError.caseGone }
+        let terms = RedactionValidationExecutor.protectedTerms(evidence)
+        let check = try await Task.detached { try ProducedFileRedactionCheck.check(fileAt: url, protectedTerms: terms) }.value
+        var row = RedactionValidationExecutor.row(for: check, terms: terms.count)
+        row.sourced = row.generatedValues
+        return row
     }
 }
 

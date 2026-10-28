@@ -29,10 +29,12 @@ struct JobResultIntegrityTests {
         #expect(JobFields.invalidReason(.currency, "dollars") != nil)
         #expect(JobFields.invalidReason(.currency, "inr") == nil)
         var row = JobResultRow(title: "Transfer", decision: .accepted,
-                               fields: ["from": "A-1", "to": "B-2", "date": "2026-13-01", "amount": "lots", "currency": "ZZZ", "method": "direct"])
+                               fields: ["from": "A-1", "to": "B-2", "date": "2026-13-01", "amount": "lots", "currency": "ZZZ", "method": "direct",
+                                        "classification": "payment", "duplicates": "none found", "reconciled": "statement balance"])
         let bad = Set(JobFields.missing(job: "fa.funds-tracing", row: row).map(\.key))
         #expect(bad == ["date", "amount", "currency"])
-        row.fields = ["from": "A-1", "to": "B-2", "date": "2026-01-05", "amount": "9,000.00", "currency": "USD", "method": "direct"]
+        row.fields = ["from": "A-1", "to": "B-2", "date": "2026-01-05", "amount": "9,000.00", "currency": "USD", "method": "direct",
+                      "classification": "payment", "duplicates": "none found", "reconciled": "statement balance"]
         #expect(JobFields.missing(job: "fa.funds-tracing", row: row).isEmpty)
         // An optional field, when given, must be valid too.
         let doc = JobResultRow(title: "Passport", decision: .accepted,
@@ -103,7 +105,7 @@ struct JobResultIntegrityTests {
         #expect(done.content.rows.last?.assertions?.contains("title") == true)
         let md = JobResultMarkdown.render(done, title: "Reliability")
         #expect(md.contains("Reliable — confirmed by phone [reviewer's entry]") && md.contains("The source-derived text was: \(said)"))
-        #expect(md.contains("Added by the reviewer (no source linked)"))
+        #expect(md.contains("Added by the reviewer (no source linked — unproven)"))
         #expect(md.contains("version ") && md.contains("object "), "exported sources carry their exact identifiers")
     }
 

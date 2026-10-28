@@ -104,7 +104,7 @@ public nonisolated struct JobResultContent: Codable, Sendable, Hashable {
 
 public nonisolated enum JobResultReviewError: Error, Equatable, LocalizedError {
     case blockedCannotComplete, noteRequired, undecidedRows(Int), notCurrent, missingFields(row: Int, fields: [String])
-    case caseClosed, unresolvedEvidence(Int), correctionNeedsReason(row: Int)
+    case caseClosed, unresolvedEvidence(Int), correctionNeedsReason(row: Int), ruleViolated(String)
     public var errorDescription: String? {
         switch self {
         case .blockedCannotComplete: return "A blocked result cannot be completed: give the job what it is missing and run it again."
@@ -114,6 +114,7 @@ public nonisolated enum JobResultReviewError: Error, Equatable, LocalizedError {
         case .missingFields(let row, let fields): return "Row \(row + 1) is accepted but still needs a valid: \(fields.joined(separator: ", "))."
         case .caseClosed: return "The case is closed, so its results can be read and exported but not changed. Reopen the case to edit."
         case .unresolvedEvidence(let n): return "\(n) cited source(s) no longer resolve in this case (removed, privileged or above its sensitivity). Re-run the job, or reject those rows."
+        case .ruleViolated(let why): return why + "."
         case .correctionNeedsReason(let row): return "Row \(row + 1) changes what its source states. Add a note saying why, or reject the row."
         }
     }
@@ -217,6 +218,7 @@ public actor JobResultRepository {
                     throw JobResultReviewError.correctionNeedsReason(row: i)
                 }
             }
+            if let rule = JobFields.completionProblems(job: base.jobID, rows: rows).first { throw JobResultReviewError.ruleViolated(rule) }
             if let evidenceCheck {
                 let unresolved = try await evidenceCheck(rows.filter { $0.decision == .accepted }.flatMap(\.refs))
                 if !unresolved.isEmpty { throw JobResultReviewError.unresolvedEvidence(unresolved.count) }

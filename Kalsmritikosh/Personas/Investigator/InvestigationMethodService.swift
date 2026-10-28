@@ -163,4 +163,41 @@ public actor InvestigationMethodService {
         try await methodRuns.linkCase(caseID, methodRunID: run.id, phaseKind: phaseKind, at: now)
         return InvestigationMethodRun(caseID: caseID, scope: scope, run: run)
     }
+
+    // MARK: - B3 — a method job's worksheet, saved into the run
+
+    /// Save what the person did in a method run: each step as a node and the outcome as a finding,
+    /// on the existing run (a retry adds to the same run, never a second one). The run is then
+    /// STARTED with its worksheet recorded — completing it in the method engine (validation, human
+    /// review) is a separate act this does not claim.
+    public func recordWorksheet(caseID: UUID, runID: UUID, steps: [String], outcome: String, inputs: String,
+                                actor: String, now: Date) async throws -> MethodRun {
+        guard try await cases.fetch(caseID: caseID) != nil else { throw InvestigationMethodError.caseNotFound(caseID) }
+        guard var run = try await methodRuns.run(id: runID) else { throw MethodPersistenceError.runNotFound(runID) }
+        let existing = try await methodRuns.nodes(runID: runID).filter { $0.nodeDefinitionKey.hasPrefix("worksheet.step.") }
+        for (i, step) in steps.enumerated() where i >= existing.count {
+            run = try await methodRuns.addNode(MethodNode(methodRunID: runID, nodeDefinitionKey: "worksheet.step.\(i + 1)",
+                                                          nodeKind: MethodNodeKind(rawValue: "step"), label: step,
+                                                          body: "Recorded by \(actor)", ordinal: i, createdAt: now, updatedAt: now),
+                                               expectedRevision: run.revision, now: now)
+        }
+        let findings = try await methodRuns.findings(runID: runID).filter { $0.findingKind.rawValue == "worksheetOutcome" }
+        if findings.isEmpty {
+            let support: MethodFindingSupportStatus = outcome == "supports" ? .supported : outcome == "contradicts" ? .contradicted : .unsupported
+            run = try await methodRuns.addFinding(MethodFinding(methodRunID: runID, statement: "Outcome: \(outcome). Inputs: \(inputs)",
+                                                                findingKind: MethodFindingKind(rawValue: "worksheetOutcome"),
+                                                                supportStatus: support, createdAt: now),
+                                                  expectedRevision: run.revision, now: now)
+        }
+        return run
+    }
+
+    /// The saved worksheet of a run: its steps, outcome statement and evidence (reopened unchanged).
+    public func worksheet(runID: UUID) async throws -> (steps: [String], outcome: String?, evidence: [UUID]) {
+        let steps = try await methodRuns.nodes(runID: runID).filter { $0.nodeDefinitionKey.hasPrefix("worksheet.step.") }
+            .sorted { $0.ordinal < $1.ordinal }.map(\.label)
+        let outcome = try await methodRuns.findings(runID: runID).first { $0.findingKind.rawValue == "worksheetOutcome" }?.statement
+        let evidence = try await methodRuns.evidenceLinks(runID: runID).sorted { $0.ordinal < $1.ordinal }.map(\.targetID)
+        return (steps, outcome, evidence)
+    }
 }

@@ -62,7 +62,29 @@ public nonisolated enum JobExecutorKind: String, Sendable {
         ]
         let computed: Set<String> = ["inv.data-lab", "jrn.data-desk", "law.redaction"]
         return direct.union(computed).union(Set(JobFields.specs.keys)).intersection(Set(assignments.keys))
+            .subtracting(reopened.keys)
     }()
+
+    /// B3 (completion instructions 2026-10-29) — jobs whose fields and draft rows exist but whose
+    /// contract acceptance scenario the result does not yet meet: reopened as preparation, with why.
+    public static let reopened: [String: String] = [
+        "law.parties-issues": "the matrix lists stated facts; parties (and their name forms, merged only by a person) are not listed",
+        "res.chronology": "dates are single days; an uncertain date's range is not represented",
+        "ind.career-education": "a dated list; a gap between dates is not shown as a gap",
+        "law.document-coding": "coding is recorded, but a document coded privileged is not yet withheld from production by this result",
+        "hr.statements": "quotes are listed per witness; the point-by-point comparison of two accounts of one meeting is not built",
+        "fa.workpapers": "figures are listed; tracing every report figure to its workpaper is not built",
+        "jrn.source-map": "sources are listed; grouping outlets that repeat one wire story into one source family is not built",
+        "jrn.source-vault": "the vault lists sources; keeping a protected source's name out of exports and AI payloads is not enforced by this result",
+        "res.transcription": "quotes are listed; a translation linked to its original and transcription is not built",
+        "res.alternative": "causal sentences are listed; two opposing accounts, each supported by cited sources, are not built",
+        "res.edition": "a citation inventory with fields, not an annotated edition whose annotations each link to a passage",
+        "gen.family-lines": "a dated timeline, not a lineage chart; relationships (and unproven ones) are not drawn",
+        "law.witness-profiles": "a person list with interview fields; a witness's inconsistent statements are not quoted side by side",
+        "law.deposition": "questions are free text; each question is not linked to its document passage",
+        "siu.euo-prep": "questions are free text; each question is not linked to its document passage",
+        "inv.data-lab": "one fixed grouping/count/total; the person cannot define filters or transforms of the analysis yet",
+    ]
 
     /// The action register an effectiveness review reads (same persona).
     public static let reviewedRegister: [String: String] = [

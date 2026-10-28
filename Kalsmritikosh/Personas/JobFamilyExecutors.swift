@@ -24,10 +24,14 @@ public nonisolated struct JobEvidence: Sendable {
     /// The case's produced exports (the exact snapshot text written), for redaction validation.
     public let exports: [(title: String, text: String)]
     public let batesPrefix: String
+    /// B3 — admitted source versions that a newer version of the same document replaces.
+    public let replacedVersions: Set<UUID>
     public init(facts: StudioCaseFacts, texts: [UUID: String] = [:], withheld: Int = 0, now: Date = Date(),
-                versionHashes: [UUID: String] = [:], exports: [(title: String, text: String)] = [], batesPrefix: String = "PROD") {
+                versionHashes: [UUID: String] = [:], exports: [(title: String, text: String)] = [], batesPrefix: String = "PROD",
+                replacedVersions: Set<UUID> = []) {
         self.facts = facts; self.texts = texts; self.withheld = withheld; self.now = now
         self.versionHashes = versionHashes; self.exports = exports; self.batesPrefix = batesPrefix
+        self.replacedVersions = replacedVersions
     }
 }
 
@@ -128,7 +132,10 @@ public nonisolated enum InventoryExecutor {
             if !amounts.isEmpty { parts.append("Amounts: " + amounts.prefix(6).joined(separator: ", ")) }
             let title: String
             switch style {
-            case .exhibit: title = String(format: "EX-%03d  ", i + 1) + doc.name
+            case .exhibit:
+                title = String(format: "EX-%03d  ", i + 1) + doc.name
+                // B3 — an exhibit cites its exact version; one a newer version replaces is flagged.
+                if let v = doc.sourceVersionID, e.replacedVersions.contains(v) { flags.append("replaced by a newer version") }
             case .citation:
                 // A citation needs who and when; a missing element is flagged, never invented.
                 if days.isEmpty || names.isEmpty { flags.append("citation metadata incomplete"); incomplete += 1 }

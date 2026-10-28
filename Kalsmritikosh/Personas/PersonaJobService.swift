@@ -38,6 +38,12 @@ public actor PersonaJobService {
     /// their typed results are persisted to.
     public typealias CaseFactsLoader = @Sendable (UUID, SensitiveAccessContext) async throws -> JobEvidence?
     private let caseFacts: CaseFactsLoader?
+
+    /// B3 — the case's evidence as the executors see it (for checks run outside a job launch, such
+    /// as validating a produced file against the case's protected identifiers).
+    public func evidence(caseID: UUID, access: SensitiveAccessContext) async throws -> JobEvidence? {
+        try await caseFacts?(caseID, access)
+    }
     private let jobResults: JobResultRepository?
 
     public init(catalog: PersonaJobCatalog,

@@ -196,46 +196,8 @@ struct JobFamilyExecutorTests {
         }
     }
 
-    /// The acceptance check for EVERY assigned job: on the fixture case it produces a sourced draft;
-    /// the contract's fields are pre-filled where the ledger states them; completion is refused while
-    /// an accepted row lacks a required field; once the person records them the completed revision is
-    /// saved with its reviewer and a frozen digest.
-    @Test("Every assigned job: a draft whose contract fields the person completes", arguments: Array(JobExecutorKind.contractMet).sorted())
-    func contractMetAcceptance(_ job: String) async throws {
-        let kind = try #require(JobExecutorKind.assignments[job])
-        let (e, _, _) = Self.fixture()
-        let raw = try #require(Self.rows(for: job, kind: kind, e))
-        #expect(raw.state == .draft, "\(job) did not produce a draft on the fixture")
-        let prefilled = JobFields.prefill(job: job, rows: raw.content.rows, evidence: e)
-        #expect(!prefilled.isEmpty, "\(job) produced no rows")
-        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
-        let caseID = UUID()
-        try await db.exec("PRAGMA foreign_keys = OFF;")
-        try await db.exec("INSERT INTO investigation_cases (id, workspace_id, title, revision, actor, created_at, updated_at) VALUES (?,?,?,?,?,?,?);",
-                          [.uuid(caseID), .uuid(UUID()), .text("Case"), .integer(1), .text("T"), .date(Date()), .date(Date())])
-        let repo = JobResultRepository(database: db)
-        let family = try #require(JobContracts.contract(for: job)?.family)
-        try await repo.save(caseID: caseID, jobID: job, family: family, state: raw.state,
-                            content: JobResultContent(rows: prefilled, limitations: raw.content.limitations), actor: "T")
-        let current = try #require(try await repo.latest(caseID: caseID, jobID: job))
-        var decided = current.content.rows.map { r -> JobResultRow in var r = r; r.decision = .accepted; return r }
-        let spec = JobFields.specs[job] ?? []
-        let personFields = spec.filter { $0.required && $0.prefill == nil }
-        if !personFields.isEmpty {
-            await #expect(throws: JobResultReviewError.self, "\(job): completed without the person's fields") {
-                try await repo.saveReview(of: current, rows: decided, complete: true, note: "n", actor: "Reviewer")
-            }
-        }
-        for i in decided.indices {
-            var f = decided[i].fields ?? [:]
-            for field in spec where field.required && JobFields.missing(job: job, row: decided[i]).contains(field) { f[field.key] = Self.personValue(field) }
-            decided[i].fields = f
-            #expect(JobFields.missing(job: job, row: decided[i]).isEmpty, "\(job) row \(i) still incomplete")
-        }
-        try await repo.saveReview(of: current, rows: decided, complete: true, note: "Reviewed against the sources", actor: "Reviewer")
-        let done = try #require(try await repo.latest(caseID: caseID, jobID: job))
-        #expect(done.state == .completed && done.content.review?.by == "Reviewer" && done.content.review?.digest?.count == 64)
-    }
+    // The per-job acceptance check is `JobAcceptanceScenarioTests` (B3): each job against its own
+    // written acceptance scenario, with realistic reviewer entries.
 
     @Test("Pre-fill states what the ledger knows: hashes, exhibit and Bates numbers, amounts and currencies")
     func prefillFromLedger() {
@@ -252,20 +214,20 @@ struct JobFamilyExecutorTests {
         #expect(money.first { $0.title == "$2.75 million" }?.fields?["currency"] == nil, "an unstated currency is never filled in")
     }
 
-    @Test("Data analysis is computed and reproducible; redaction validation reads the produced bytes")
+    @Test("Data analysis is computed and reproducible; a snapshot redaction check is labelled text-only")
     func computedResults() {
         let (e, _, _) = Self.fixture()
         let a1 = DataAnalysisExecutor.run(e), a2 = DataAnalysisExecutor.run(e)
         #expect(a1.content == a2.content, "the same sources give the same analysis")
         #expect(a1.content.rows.contains { $0.title.hasPrefix("amount:") && ($0.detail ?? "").contains("INR 1,000.00") })
         #expect(a1.content.limitations.contains { $0.hasPrefix("Query:") })
-        #expect(RedactionValidationExecutor.run(e).state == .blocked, "no produced export, nothing to validate")
+        #expect(RedactionValidationExecutor.run(Self.empty).state == .blocked, "no documents, nothing to protect")
         let produced = JobEvidence(facts: e.facts, texts: e.texts, exports: [
             (title: "Clean production", text: "Contact [REDACTED] or [REDACTED]."),
             (title: "Leaky production", text: "Contact asha.rao@exa<b>mple.com</b> please."),
         ])
         let r = RedactionValidationExecutor.run(produced)
-        #expect(r.content.rows.first { $0.title == "Clean production" }?.flags == ["text check passed"])
+        #expect(r.content.rows.first { $0.title == "Clean production" }?.flags == ["text-only pre-check passed — not a check of the file"])
         #expect(r.content.rows.first { $0.title == "Leaky production" }?.flags == ["redaction failed"])
     }
 

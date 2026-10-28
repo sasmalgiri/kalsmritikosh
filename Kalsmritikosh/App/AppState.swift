@@ -2590,7 +2590,13 @@ public final class AppState {
                             guard let text = r.string(3) else { return nil }
                             return (title: "\(r.string(0) ?? "Export") (\(r.string(1) ?? "file"), \(r.date(2)?.formatted() ?? ""))", text: text)
                         }
-                    return JobEvidence(facts: facts, texts: texts, withheld: withheld, versionHashes: hashes, exports: exports)
+                    // B3 — versions a newer version of the same document replaces (an exhibit is flagged).
+                    var replaced: Set<UUID> = []
+                    for v in included where try await db.query("SELECT 1 FROM source_versions WHERE supersedes = ? LIMIT 1;", [.uuid(v)]).first != nil {
+                        replaced.insert(v)
+                    }
+                    return JobEvidence(facts: facts, texts: texts, withheld: withheld, versionHashes: hashes, exports: exports,
+                                       replacedVersions: replaced)
                 },
                 jobResults: JobResultRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
