@@ -82,6 +82,11 @@ public nonisolated enum InvestigationFindingsError: Error, Sendable, Equatable {
     case blankPolicyJustification          // "not applicable" must say why
 }
 
+/// K5 — the same plain sentence wherever the error is shown (`localizedDescription`).
+extension InvestigationFindingsError: LocalizedError {
+    public nonisolated var errorDescription: String? { description }
+}
+
 extension InvestigationFindingsError: CustomStringConvertible {
     public nonisolated var description: String {
         switch self {

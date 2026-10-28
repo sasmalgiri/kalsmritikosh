@@ -570,9 +570,21 @@ public final class WorkProductHandoffModel {
         return try exporter.data(for: doc, format: exportFormat, redaction: redactionPolicy)
     }
 
-    /// Render the built findings and write them to a user-chosen file.
-    public func export(to url: URL) {
-        guard let doc = exportableDocument() else { lastError = "Build findings first."; return }
+    /// K5 — the check run immediately before a case report leaves the app (set by the app): the
+    /// findings are still this case's, its scope is unchanged, the receipt is intact, and every source
+    /// they use is still cleared for export. Nil only where no ledger is wired (previews).
+    public var exportCheck: (@Sendable (InvestigationFindings) async throws -> Void)?
+
+    /// Render the built findings and write them to a user-chosen file — after the export check.
+    public func export(to url: URL) async {
+        guard let f = built, let doc = exportableDocument() else { lastError = "Build findings first."; return }
+        if let exportCheck {
+            do { try await exportCheck(f) } catch {
+                lastError = "Not exported: \(error.localizedDescription) Rebuild the findings to export the case as it is now."
+                lastOutcome = nil
+                return
+            }
+        }
         do {
             _ = try exporter.write(doc, format: exportFormat, to: url, redaction: redactionPolicy)
             lastOutcome = "Exported \(exportFormat.displayName) → \(url.lastPathComponent)"; lastError = nil
@@ -1000,7 +1012,7 @@ public struct WorkProductHandoffView: View {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(title).\(model.exportFormat.fileExtension)"
         panel.canCreateDirectories = true
-        if panel.runModal() == .OK, let url = panel.url { model.export(to: url) }
+        if panel.runModal() == .OK, let url = panel.url { Task { await model.export(to: url) } }
     }
 
     @ViewBuilder
@@ -1076,6 +1088,7 @@ public struct WorkProductHandoffView: View {
                                                  governance: appState.governanceEvents,
                                                  approvalTxn: appState.approvalTransactions,
                                                  phaseObservation: appState.phaseObservation)
+        m.exportCheck = appState.findingsExportCheck()
         await m.load(caseID: id)
         model = m
     }

@@ -77,4 +77,35 @@ extension AppState {
         }
         return FileManager.default.fileExists(atPath: url.path) ? ["vector cache"] : []
     }
+
+    // MARK: - K5 — case report export re-authorisation
+
+    /// The check a case report export runs immediately before writing: the findings are this case's,
+    /// the scope is unchanged and the receipt intact (`requireCurrent`), and every source the findings
+    /// use is still cleared for export (a source labelled privileged, or above export sensitivity,
+    /// since the build stops the export).
+    public func findingsExportCheck() -> (@Sendable (InvestigationFindings) async throws -> Void)? {
+        guard let findings = investigationFindings, let dataLab = investigationDataLab, let cases = investigationCases else { return nil }
+        return { f in
+            try await findings.requireCurrent(f, caseID: f.caseID)
+            guard let record = try await cases.fetch(caseID: f.caseID) else { throw InvestigationFindingsError.caseNotFound(f.caseID) }
+            let access = SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: record.caseHeader.workspaceID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export))
+            let (included, _) = try await dataLab.eligibleSourceVersions(caseID: f.caseID, access: access)
+            let withdrawn = Set(f.authorizedSourceVersionIDs).subtracting(included)
+            if !withdrawn.isEmpty { throw ReportExportRefusal.sourcesWithdrawn(withdrawn.count) }
+        }
+    }
+}
+
+/// K5 — why a case report was not exported.
+public nonisolated enum ReportExportRefusal: Error, Equatable, LocalizedError {
+    case sourcesWithdrawn(Int)
+    public var errorDescription: String? {
+        switch self {
+        case .sourcesWithdrawn(let n):
+            return "\(n) source(s) these findings use are no longer cleared for export (privileged, or above export sensitivity)."
+        }
+    }
 }

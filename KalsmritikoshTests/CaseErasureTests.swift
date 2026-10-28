@@ -147,4 +147,25 @@ struct CaseErasureTests {
         let rec = try #require(try await f.db.query("SELECT subject_sha256, rows_json FROM case_erasures WHERE scope = 'person';", []).first)
         #expect(rec.string(0)?.count == 64 && !(rec.string(1) ?? "").contains(name))
     }
+
+    @Test("K5: a case report exports only while it is current — a source labelled privileged after the build stops the export")
+    func caseReportExportReauthorised() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let findings = try #require(await f.state.investigationFindings)
+        let ws = try #require(try await f.db.query("SELECT workspace_id FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)]).first?.string(0).flatMap(UUID.init(uuidString:)))
+        let access = SensitiveAccessContext(scope: SensitiveScope(workspaceID: ws, maximumSensitivity: .restricted,
+                                                                  permitsPrivilegedMaterial: false, purpose: .export))
+        let built = try await findings.buildFindings(caseID: f.caseA, access: access, actor: "Tester", at: Date())
+        let check = try #require(await f.state.findingsExportCheck())
+        try await check(built)   // current: passes
+
+        // A cited source is labelled privileged after the build.
+        let version = try #require(built.authorizedSourceVersionIDs.first)
+        _ = try await SensitiveScopeRepository(database: f.db).assign(
+            target: SensitiveScopeTarget(kind: .sourceVersion, id: version), sensitivity: .confidential,
+            authority: .userConfirmed(actorID: "Tester", confirmationID: UUID(), privileged: true), reason: "privileged advice")
+        await #expect(throws: ReportExportRefusal.sourcesWithdrawn(1)) { try await check(built) }
+        #expect(ReportExportRefusal.sourcesWithdrawn(1).errorDescription?.contains("no longer cleared for export") == true)
+    }
 }
