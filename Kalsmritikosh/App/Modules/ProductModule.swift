@@ -435,6 +435,9 @@ nonisolated public enum ModuleInvariant: String, CaseIterable, Sendable {
 /// Thread-safe, nonisolated accessor over UserDefaults (FeatureFlags convention).
 nonisolated public enum ProductModuleFlags {
 
+    /// Modules built but outside the locked v1 contract (single user, no team features).
+    public nonisolated static let outOfV1Scope: Set<ProductModule> = [.teamReview]
+
     public nonisolated static func isEnabled(_ m: ProductModule) -> Bool {
         disabledReason(m) == nil && storedOrDefault(m)
     }
@@ -444,6 +447,9 @@ nonisolated public enum ProductModuleFlags {
     public nonisolated static func disabledReason(_ m: ProductModule) -> String? {
         let s = m.spec
         guard s.implemented else { return "Coming in a later build (\(s.planID))" }
+        // F6 listing audit — the v1 contract is single-user (SHIP_DECISIONS §0): team features are
+        // not offered in this version, even as a preview.
+        if outOfV1Scope.contains(m) { return "Not part of this version (single-user)" }
         if s.preview, !showPreviewFeatures { return "Preview — not yet verified; turn on “Show preview features” to try it" }
         if s.requiresOnline {
             if !ConnectivityMode.onlineAvailableInThisBuild { return "Online mode is not available in this build" }

@@ -45,22 +45,27 @@
       Required-reason API declarations (per
       https://developer.apple.com/documentation/bundleresources/privacy_manifest_files/describing_use_of_required_reason_api).
 
-      File timestamp APIs — we read mtime / ctime from user-selected
-      files to detect changes during incremental ingest.
-      Reason: C617.1 — Inside app or group container.
+      File timestamp APIs — we read modification/creation dates of
+      (a) files the person chose (folders granted through the open panel,
+      kept as security-scoped bookmarks) to detect changes during
+      incremental ingest — reason 3B52.1; and (b) files inside our own
+      container (the ledger, caches) — reason C617.1.
 
-      System boot time — we read this via mach_task_basic_info in
-      LiveMetrics to display process memory usage in the Live tab.
-      Reason: 35F9.1 — Measure time spent in the app.
+      Disk space — before downloading an optional on-device model we
+      check the volume has room for it
+      (volumeAvailableCapacityForImportantUsage).
+      Reason: 85F4.1 — Check there is enough space to write files.
 
-      Disk space — we read the SQLite DB file size via
-      FileManager.attributesOfItem for the Live tab's "DB on disk"
-      readout.
-      Reason: E174.1 — Display free space to the user.
+      User defaults — we persist the app's own preferences (selected
+      tab, feature flags) via UserDefaults.
+      Reason: CA92.1 — Read/write the app's own defaults.
+      The app also writes one switch ("Share and capture" on/off) to
+      the app group shared with its own Share extension.
+      Reason: 1C8F.1 — Defaults shared within the same app group.
 
-      User defaults — we persist UI preferences (selected tab,
-      feature flags) via UserDefaults.
-      Reason: CA92.1 — Read/write defaults from the same app group.
+      (System boot time is not declared: no boot-time API is called.
+      LiveMetrics reads the process's own memory via
+      mach_task_basic_info, which is not a required-reason API.)
     -->
     <key>NSPrivacyAccessedAPITypes</key>
     <array>
@@ -69,15 +74,8 @@
             <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
             <key>NSPrivacyAccessedAPITypeReasons</key>
             <array>
+                <string>3B52.1</string>
                 <string>C617.1</string>
-            </array>
-        </dict>
-        <dict>
-            <key>NSPrivacyAccessedAPIType</key>
-            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
-            <key>NSPrivacyAccessedAPITypeReasons</key>
-            <array>
-                <string>35F9.1</string>
             </array>
         </dict>
         <dict>
@@ -85,7 +83,7 @@
             <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
             <key>NSPrivacyAccessedAPITypeReasons</key>
             <array>
-                <string>E174.1</string>
+                <string>85F4.1</string>
             </array>
         </dict>
         <dict>
@@ -94,6 +92,7 @@
             <key>NSPrivacyAccessedAPITypeReasons</key>
             <array>
                 <string>CA92.1</string>
+                <string>1C8F.1</string>
             </array>
         </dict>
     </array>
