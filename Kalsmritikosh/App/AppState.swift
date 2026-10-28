@@ -4174,7 +4174,9 @@ public final class AppState {
     /// separate suite, so a test erase can never remove the owner's real preferences.
     nonisolated static let erasePreferences: UserDefaults =
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            ? (UserDefaults(suiteName: "kalsmritikosh.tests.erase") ?? .standard) : .standard
+            // Per process: CI runs test hosts in parallel processes, and one host's erase must not
+            // clear the preferences another host's test just wrote.
+            ? (UserDefaults(suiteName: "kalsmritikosh.tests.erase.\(ProcessInfo.processInfo.processIdentifier)") ?? .standard) : .standard
 
     /// User-initiated FULL ERASE of all ingested + derived data — the global
     /// "Delete all my data" the app was missing. Removes every watched folder
