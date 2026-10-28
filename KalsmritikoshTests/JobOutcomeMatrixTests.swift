@@ -60,6 +60,10 @@ struct JobOutcomeMatrixTests {
 
     static func deliverable(for job: PersonaJob) -> Deliverable? {
         if let d = studioDeliverables[job.id] { return d }
+        if JobExecutorKind.assignments[job.id] == .chronology {
+            return Deliverable(workProduct: "Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed",
+                               verifiedBy: [ChronologyExecutorTests.self], level: "integration: launch persists a typed result")
+        }
         switch job.kind {
         case .findings: return Deliverable(workProduct: "generic: case findings report with case-scoped citations", verifiedBy: [InvestigationFindingsServiceTests.self, InvestigationCaseSimulationTests.self], level: "integration: generic service + ledger", jobSpecific: false)
         case .closure: return Deliverable(workProduct: "generic: closure decision and reopen record", verifiedBy: [InvestigationClosureServiceTests.self], level: "integration: generic service + ledger", jobSpecific: false)
@@ -129,7 +133,11 @@ struct JobOutcomeMatrixTests {
             let outcome: String
             do {
                 let l = try await service.launch(job, context: ctx)
-                if !l.items.isEmpty {
+                if JobExecutorKind.assignments[job.id] != nil {
+                    // A shared executor reports its own state and size ("draft: 12 row(s)", "blocked: …").
+                    outcome = "result " + String(l.summary.prefix(90)).replacingOccurrences(of: "|", with: "/")
+                    counts[l.items.isEmpty ? "record" : "rows", default: 0] += 1
+                } else if !l.items.isEmpty {
                     let cited = l.items.filter { !$0.sourceVersionIDs.isEmpty || !$0.objectIDs.isEmpty }.count
                     outcome = "\(l.items.count) case row(s), \(cited) with sources"
                     counts["rows", default: 0] += 1
@@ -149,7 +157,7 @@ struct JobOutcomeMatrixTests {
                 counts["failed", default: 0] += 1
             }
             let d = Self.deliverable(for: job)
-            if let d { counts[d.jobSpecific ? "specific" : "generic", default: 0] += 1 }
+            if let d { counts[JobExecutorKind.assignments[job.id] != nil ? "executor" : (d.jobSpecific ? "specific" : "generic"), default: 0] += 1 }
             let persona = job.persona.replacingOccurrences(of: "com.kalsmritikosh.persona.", with: "")
             rows.append("| \(persona) | `\(job.id)` | \(job.title) | \(job.kind.rawValue) | \(outcome) | "
                         + "\(d?.workProduct ?? "none: generic \(job.kind.rawValue) rows") | "
@@ -178,8 +186,9 @@ struct JobOutcomeMatrixTests {
         | Launch returned a summary only | \(counts["summary", default: 0]) |
         | Launch failed closed / errored | \(counts["failed", default: 0]) |
         | Job-specific work product (studio) with a verifying suite | \(counts["specific", default: 0]) |
+        | Job's typed result persisted by a shared executor at launch | \(counts["executor", default: 0]) |
         | Generic kind work product (findings, closure, custody) with a verifying suite | \(counts["generic", default: 0]) |
-        | Generic kind rows only, no work product | \(Self.advertised.count - counts["specific", default: 0] - counts["generic", default: 0]) |
+        | Generic kind rows only, no work product | \(Self.advertised.count - counts["specific", default: 0] - counts["generic", default: 0] - counts["executor", default: 0]) |
 
         | Persona | Job | Title | Kind | Launch outcome (measured) | Work product | Verified by | Level |
         |---|---|---|---|---|---|---|---|

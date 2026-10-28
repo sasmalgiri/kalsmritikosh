@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 162
+    public static let latestVersion = 163
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -789,7 +789,8 @@ public enum SchemaMigrations {
         (159, v159),
         (160, v160),
         (161, v161),
-        (162, v162)
+        (162, v162),
+        (163, v163)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7844,6 +7845,27 @@ public enum SchemaMigrations {
               AND EXISTS (SELECT 1 FROM studio_erasures e JOIN studio_legacy_outcomes o ON o.record_id = e.record_id
                           WHERE o.source_key = OLD.source_key))
     BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured (cleared only by a recorded erasure)'); END;
+    """
+
+
+    // MARK: - v163 — persisted job results (final completion instructions §3). A job that runs a
+    // shared executor saves its typed result here: draft (generated, awaiting the person), blocked
+    // (an input is missing — the reason is in the payload), completed (accepted), superseded (a later
+    // run replaced it). Each run is a new row; earlier rows stay, marked superseded.
+    private static let v163: String = """
+    CREATE TABLE IF NOT EXISTS job_results (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        job_id         TEXT NOT NULL,
+        family         TEXT NOT NULL,
+        state          TEXT NOT NULL CHECK (state IN ('draft','blocked','completed','superseded')),
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        created_by     TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        superseded_by  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_results_case_job ON job_results(case_id, job_id, created_at);
     """
 
 }

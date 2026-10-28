@@ -203,13 +203,18 @@ public nonisolated struct StudioCaseFacts: Sendable {
     public let named: [StudioCaseValue]
     /// Amounts the documents state, each with the sentence it appears in.
     public let statedAmounts: [StudioCaseValue]
+    /// Calendar dates the documents state with an explicit year, each titled by the sentence it
+    /// appears in — what a document dates even when no ledger event was recognised there.
+    /// Relative dates ("today", "this morning") are never here: they resolve to the reading day.
+    public let statedDates: [StudioCaseEvent]
 
     public init(caseTitle: String, parties: [StudioCaseValue], dates: [StudioCaseValue], amounts: [StudioCaseValue],
                 identifiers: [StudioCaseValue], documents: [StudioCaseDocument], events: [StudioCaseEvent],
-                allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = []) {
+                allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = [],
+                statedDates: [StudioCaseEvent] = []) {
         self.caseTitle = caseTitle; self.parties = parties; self.dates = dates; self.amounts = amounts
         self.identifiers = identifiers; self.documents = documents; self.events = events; self.allFacts = allFacts
-        self.named = named; self.statedAmounts = statedAmounts
+        self.named = named; self.statedAmounts = statedAmounts; self.statedDates = statedDates
     }
 
     public static let empty = StudioCaseFacts(caseTitle: "", parties: [], dates: [], amounts: [], identifiers: [],
@@ -283,12 +288,21 @@ public actor StudioCaseFactsReader {
         return candidates.max { $0.count < $1.count }
     }
 
-    /// Names and amounts from the ledger's entities for each case document, kept only when the
-    /// document's text states them verbatim (so every line can be checked against its quote).
-    func namesAndAmounts(objectIDs: Set<UUID>, versionOf: [UUID: UUID] = [:]) async throws -> (named: [StudioCaseValue], amounts: [StudioCaseValue]) {
-        guard let entities else { return ([], []) }
-        var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = []
-        var seenNames = Set<String>(), seenAmounts = Set<String>()
+    /// A date entity's day, only when its text names an explicit year ("March 3, 2009"); a relative
+    /// date ("today") resolves to the reading day and is not evidence of when anything happened.
+    nonisolated static func statedDay(raw: String, normalized: String?) -> Date? {
+        guard raw.range(of: #"\b(1[5-9]|20)\d{2}\b"#, options: .regularExpression) != nil,
+              let n = normalized?.uppercased() else { return nil }
+        return ISO8601DateFormatter().date(from: n)
+    }
+
+    /// Names, amounts and explicit dates from the ledger's entities for each case document, kept only
+    /// when the document's text states them verbatim (so every line can be checked against its quote).
+    func namesAndAmounts(objectIDs: Set<UUID>, versionOf: [UUID: UUID] = [:]) async throws
+        -> (named: [StudioCaseValue], amounts: [StudioCaseValue], dates: [StudioCaseEvent]) {
+        guard let entities else { return ([], [], []) }
+        var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = [], dates: [StudioCaseEvent] = []
+        var seenNames = Set<String>(), seenAmounts = Set<String>(), seenDates = Set<String>()
         for id in objectIDs.sorted(by: { $0.uuidString < $1.uuidString }).prefix(60) {
             guard let content = try await objects.fetchContent(id: id) else { continue }
             for e in try await entities.findByMentionSource(id) where e.qualityTier != .t3 {
@@ -305,11 +319,15 @@ public actor StudioCaseFactsReader {
                 case .money:
                     guard v.rangeOfCharacter(from: .decimalDigits) != nil, seenAmounts.insert(v.lowercased()).inserted else { continue }
                     amounts.append(StudioCaseValue(value: v, label: "amount", refs: [ref]))
+                case .date:
+                    guard let day = Self.statedDay(raw: v, normalized: e.normalizedValue),
+                          seenDates.insert(id.uuidString + "|" + quote).inserted else { continue }
+                    dates.append(StudioCaseEvent(date: day, title: quote, refs: [ref]))
                 default: continue
                 }
             }
         }
-        return (Array(named.prefix(40)), Array(amounts.prefix(40)))
+        return (Array(named.prefix(40)), Array(amounts.prefix(40)), Array(dates.prefix(200)))
     }
 
     nonisolated static let partyFields: Set<String> = ["plaintiff", "defendant", "petitioner", "respondent", "appellant",
@@ -350,10 +368,10 @@ public actor StudioCaseFactsReader {
         let documents = objectIDs.sorted { (names[$0] ?? "") < (names[$1] ?? "") }
             .map { StudioCaseDocument(objectID: $0, sourceVersionID: versionOf[$0], name: names[$0] ?? "Document", date: nil) }
 
-        let (named, stated) = try await namesAndAmounts(objectIDs: objectIDs, versionOf: versionOf)
+        let (named, stated, statedDates) = try await namesAndAmounts(objectIDs: objectIDs, versionOf: versionOf)
         return StudioCaseFacts(caseTitle: caseTitle, parties: parties, dates: dates, amounts: amounts,
                                identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all,
-                               named: named, statedAmounts: stated)
+                               named: named, statedAmounts: stated, statedDates: statedDates)
     }
 }
 

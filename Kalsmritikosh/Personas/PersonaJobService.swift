@@ -34,6 +34,11 @@ public actor PersonaJobService {
     private let linkage: InvestigationLinkageService?
     private let capa: InvestigationCAPAService?
     private let workspaceIntake: InvestigationWorkspaceIntake?
+    /// §3 — shared executors: the case's evidence read under the job's access context, and the store
+    /// their typed results are persisted to.
+    public typealias CaseFactsLoader = @Sendable (UUID, SensitiveAccessContext) async throws -> StudioCaseFacts?
+    private let caseFacts: CaseFactsLoader?
+    private let jobResults: JobResultRepository?
 
     public init(catalog: PersonaJobCatalog,
                 cases: InvestigationCaseRepository?,
@@ -51,7 +56,9 @@ public actor PersonaJobService {
                 causal: InvestigationCausalService? = nil,
                 linkage: InvestigationLinkageService? = nil,
                 capa: InvestigationCAPAService? = nil,
-                workspaceIntake: InvestigationWorkspaceIntake? = nil) {
+                workspaceIntake: InvestigationWorkspaceIntake? = nil,
+                caseFacts: CaseFactsLoader? = nil,
+                jobResults: JobResultRepository? = nil) {
         self.catalog = catalog
         self.cases = cases; self.answers = answers; self.subjectDossier = subjectDossier
         self.identityResolution = identityResolution; self.analysis = analysis; self.reliability = reliability
@@ -59,6 +66,8 @@ public actor PersonaJobService {
         self.findings = findings; self.dataLab = dataLab
         self.methods = methods; self.causal = causal; self.linkage = linkage; self.capa = capa
         self.workspaceIntake = workspaceIntake
+        self.caseFacts = caseFacts
+        self.jobResults = jobResults
     }
 
     // MARK: - Discovery
@@ -83,6 +92,10 @@ public actor PersonaJobService {
         guard catalog.latestApplication(id: appID) != nil else { throw PersonaJobError.unknownPersona(job.persona) }
         guard jobs(forPersona: appID).contains(where: { $0.id == job.id && $0.kind == job.kind }) else {
             throw PersonaJobError.unknownJob(job.id)
+        }
+        // §3 — a job with a shared executor produces its own typed, persisted result.
+        if let executor = JobExecutorKind.assignments[job.id], let caseFacts, let jobResults {
+            return try await runExecutor(executor, job: job, context: context, caseFacts: caseFacts, results: jobResults)
         }
         switch job.kind {
 
@@ -249,4 +262,32 @@ public actor PersonaJobService {
         guard let caseID = context.caseID else { throw PersonaJobError.missingContext("this job requires a caseID") }
         return caseID
     }
+
+    // MARK: - Shared executors (§3)
+
+    private func runExecutor(_ executor: JobExecutorKind, job: PersonaJob, context: PersonaJobLaunchContext,
+                             caseFacts: CaseFactsLoader, results: JobResultRepository) async throws -> PersonaJobLaunch {
+        let caseID = try requireCase(context)
+        guard let access = context.access else { throw PersonaJobError.missingContext("\(job.id) requires an access context") }
+        guard let facts = try await caseFacts(caseID, access) else { throw PersonaJobError.missingContext("the case's evidence could not be read") }
+        let run: (state: JobResultState, content: JobResultContent)
+        switch executor {
+        case .chronology: run = ChronologyExecutor.run(facts)
+        }
+        let family = JobContracts.contract(for: job.id)?.family ?? .chronologyLinkage
+        let id = try await results.save(caseID: caseID, jobID: job.id, family: family, state: run.state, content: run.content,
+                                        actor: context.actor, at: context.at)
+        let items = run.content.rows.enumerated().map { i, row in
+            PersonaWorkItem(id: "\(id.uuidString)#\(i)", title: [row.date, row.title].compactMap { $0 }.joined(separator: " — "),
+                            detail: ([row.detail] + row.flags.map { "⚑ " + $0 }).compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
+                            sourceVersionIDs: row.refs.compactMap(\.sourceVersionID), objectIDs: row.refs.compactMap(\.objectID))
+        }
+        let summary = "\(run.state.rawValue): \(run.content.rows.count) row(s)" + (run.content.limitations.isEmpty ? "" : " — " + run.content.limitations.joined(separator: " "))
+        return PersonaJobLaunch(job: job, summary: summary, producedID: id, items: items)
+    }
+
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

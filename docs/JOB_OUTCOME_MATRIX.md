@@ -17,8 +17,9 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | Launch returned a summary only | 0 |
 | Launch failed closed / errored | 0 |
 | Job-specific work product (studio) with a verifying suite | 20 |
+| Job's typed result persisted by a shared executor at launch | 7 |
 | Generic kind work product (findings, closure, custody) with a verifying suite | 23 |
-| Generic kind rows only, no work product | 125 |
+| Generic kind rows only, no work product | 118 |
 
 | Persona | Job | Title | Kind | Launch outcome (measured) | Work product | Verified by | Level |
 |---|---|---|---|---|---|---|---|
@@ -32,7 +33,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | investigator | `inv.source-reliability` | Source reliability | sourceReliability | 1 case row(s), 1 with sources | none: generic sourceReliability rows | — | not verified |
 | investigator | `inv.contradiction-gap` | Contradiction & gap desk | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | investigator | `inv.causal-analysis` | Causal analysis | causalAnalysis | 3 case row(s), 0 with sources | Root-cause analysis report (Reasoning Studio) | RootCauseAnalysisTests | unit: work product renders |
-| investigator | `inv.linkage` | Timeline & link analysis | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| investigator | `inv.linkage` | Timeline & link analysis | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | investigator | `inv.capa-register` | CAPA register | capaRegister | 2 case row(s), 0 with sources | none: generic capaRegister rows | — | not verified |
 | investigator | `inv.effectiveness-review` | Effectiveness review | effectivenessReview | 2 case row(s), 0 with sources | none: generic effectivenessReview rows | — | not verified |
 | investigator | `inv.evidence-custody` | Chain of custody | evidenceCustody | 1 case row(s), 1 with sources | generic: chain-of-custody log | InvestigationCustodyServiceTests | integration: generic service + ledger |
@@ -46,7 +47,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | researcher | `res.source-criticism` | Source criticism | sourceReliability | 1 case row(s), 1 with sources | none: generic sourceReliability rows | — | not verified |
 | researcher | `res.screening` | Screening (include / exclude) | analysis | record produced | Systematic review: protocol, PRISMA flow from screening decisions, extraction, GRADE per outcome | PersonaDeliverables2Tests | unit: work product renders |
 | researcher | `res.extraction` | Extraction & coding | analysis | record produced | Systematic review: protocol, PRISMA flow from screening decisions, extraction, GRADE per outcome | PersonaDeliverables2Tests | unit: work product renders |
-| researcher | `res.chronology` | Chronology & periodisation | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| researcher | `res.chronology` | Chronology & periodisation | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | researcher | `res.prosopography` | Prosopography | subjectDossier | record produced | none: generic subjectDossier rows | — | not verified |
 | researcher | `res.interpretation` | Interpretation comparison | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | researcher | `res.alternative` | Alternative histories | dataLab | 1 case row(s), 1 with sources | none: generic dataLab rows | — | not verified |
@@ -65,7 +66,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | journalist | `jrn.interview-plan` | Interview plan | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | journalist | `jrn.quote-book` | Quote book | analysis | record produced | none: generic analysis rows | — | not verified |
 | journalist | `jrn.transcript` | Transcript correction | analysis | record produced | none: generic analysis rows | — | not verified |
-| journalist | `jrn.chronology` | Tick-tock (timeline) | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| journalist | `jrn.chronology` | Tick-tock (timeline) | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | journalist | `jrn.fact-verification` | Fact verification | contradictionGap | record produced | Fact-check memo (claim table, reply log, checks) | FactCheckMemoTests | unit: work product renders |
 | journalist | `jrn.reporting-gap` | Open questions | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | journalist | `jrn.right-of-reply` | Right of reply | subjectDossier | record produced | Reply log: each adverse claim put to each affected subject | FactCheckMemoTests | unit: policy enforced |
@@ -91,7 +92,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | individual | `ind.reminders` | Important dates & renewals | analysis | record produced | none: generic analysis rows | — | not verified |
 | individual | `ind.emergency-pack` | Emergency binder (ICE) | findings | 1 case row(s), 1 with sources | Family / emergency binder | PersonaDeliverables2Tests | unit: work product renders |
 | individual | `ind.secure-share` | Share safely (redacted) | findings | 1 case row(s), 1 with sources | generic: case findings report with case-scoped citations | InvestigationFindingsServiceTests, InvestigationCaseSimulationTests | integration: generic service + ledger |
-| individual | `ind.personal-chronology` | Personal chronology | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| individual | `ind.personal-chronology` | Personal chronology | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | individual | `ind.legacy-archive` | Legacy binder | findings | 1 case row(s), 1 with sources | Family / emergency binder | PersonaDeliverables2Tests | unit: work product renders |
 | individual | `ind.ask` | Ask my records | ask | record produced | none: generic ask rows | — | not verified |
 | individual | `ind.methods` | Guided methods | methods | 6 case row(s), 0 with sources | none: generic methods rows | — | not verified |
@@ -105,7 +106,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | individual | `ind.close-matter` | Close a matter | closure | record produced | generic: closure decision and reopen record | InvestigationClosureServiceTests | integration: generic service + ledger |
 | lawyer | `law.matter-intake` | Matter intake | caseIntake | record produced | none: generic caseIntake rows | — | not verified |
 | lawyer | `law.parties-issues` | Parties & issues | subjectDossier | record produced | none: generic subjectDossier rows | — | not verified |
-| lawyer | `law.fact-chronology` | Case chronology | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| lawyer | `law.fact-chronology` | Case chronology | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | lawyer | `law.fact-evidence` | Fact–evidence matrix | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | lawyer | `law.witness-profiles` | Witness profiles | subjectDossier | record produced | none: generic subjectDossier rows | — | not verified |
 | lawyer | `law.document-coding` | Document coding | analysis | record produced | none: generic analysis rows | — | not verified |
@@ -130,7 +131,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | siu | `siu.red-flags` | Red-flag worksheet | analysis | record produced | none: generic analysis rows | — | not verified |
 | siu | `siu.claimant-workup` | Claimant workup | subjectDossier | record produced | none: generic subjectDossier rows | — | not verified |
 | siu | `siu.identity` | Identity resolution | identityResolution | record produced | none: generic identityResolution rows | — | not verified |
-| siu | `siu.loss-chronology` | Loss chronology & links | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| siu | `siu.loss-chronology` | Loss chronology & links | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | siu | `siu.prior-claims` | Prior-claims register | dataLab | 1 case row(s), 1 with sources | none: generic dataLab rows | — | not verified |
 | siu | `siu.statements` | Statement comparison | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | siu | `siu.source-vetting` | Source vetting | sourceReliability | 1 case row(s), 1 with sources | none: generic sourceReliability rows | — | not verified |
@@ -162,7 +163,7 @@ No job is verified end to end through the UI or the signed app, and none is prac
 | compliance | `hr.allegations` | Allegation worksheet | analysis | record produced | none: generic analysis rows | — | not verified |
 | compliance | `hr.parties` | Party profiles | subjectDossier | record produced | none: generic subjectDossier rows | — | not verified |
 | compliance | `hr.name-resolution` | Name resolution | identityResolution | record produced | none: generic identityResolution rows | — | not verified |
-| compliance | `hr.incident-timeline` | Incident timeline | linkage | 3 case row(s), 0 with sources | none: generic linkage rows | — | not verified |
+| compliance | `hr.incident-timeline` | Incident timeline | linkage | result draft: 1 row(s) | Sourced chronology (persisted job result): dated rows, disputed dates flagged, undated documents listed | ChronologyExecutorTests | integration: launch persists a typed result |
 | compliance | `hr.evidence-register` | Documentary evidence register | dataLab | 1 case row(s), 1 with sources | none: generic dataLab rows | — | not verified |
 | compliance | `hr.statements` | Statement comparison | contradictionGap | record produced | none: generic contradictionGap rows | — | not verified |
 | compliance | `hr.credibility` | Credibility assessment | sourceReliability | 1 case row(s), 1 with sources | none: generic sourceReliability rows | — | not verified |

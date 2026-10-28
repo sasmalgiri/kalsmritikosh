@@ -2560,7 +2560,14 @@ public final class AppState {
                 causal: investigationCausalService,
                 linkage: investigationLinkageService,
                 capa: investigationCAPAService,
-                workspaceIntake: workspaceIntake)
+                workspaceIntake: workspaceIntake,
+                caseFacts: { [investigationDataLabService, genericFactsRepo, events, objects, entities] caseID, access in
+                    // The case's evidence for a shared executor, under the job's own access context.
+                    let (included, _) = try await investigationDataLabService.eligibleSourceVersions(caseID: caseID, access: access)
+                    let reader = StudioCaseFactsReader(facts: genericFactsRepo, events: events, objects: objects, entities: entities)
+                    return try await reader.read(caseTitle: "", sourceVersionIDs: Set(included))
+                },
+                jobResults: JobResultRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
