@@ -1,3 +1,7 @@
+> **SUPERSEDED 2026-10-28 (review L6).** This draft still lists Meta Llama (not shipped) and omits SQLCipher. The notices
+> that ship are `Kalsmritikosh/Resources/THIRD_PARTY_NOTICES.txt` (BGE models MIT, SQLCipher 4.19.0 BSD, SQLite public
+> domain); the repository copy is `THIRD_PARTY_NOTICES.md` at the root.
+
 # Third-Party Notices — Kalsmritikosh
 
 > **DRAFT — verify each license obligation before publication.** Bundle the full

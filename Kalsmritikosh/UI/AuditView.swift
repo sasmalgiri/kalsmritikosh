@@ -205,7 +205,7 @@ public struct AuditView: View {
             let extra = v.unsealedCount > 0 ? " (\(v.unsealedCount) just-recorded event\(v.unsealedCount == 1 ? "" : "s") pending the next seal)" : ""
             integrityStatus = "Intact — \(v.sealedCount) event\(v.sealedCount == 1 ? "" : "s") verified, none altered\(extra)."
         } else if let seq = v.missingEventSeq {
-            integrityStatus = "BROKEN — a sealed event (position \(seq)) is missing from the ledger. The record was tampered with."
+            integrityStatus = "BROKEN — a sealed event (position \(seq)) is missing from the ledger. The record was changed or damaged after it was sealed."
         } else if let seq = v.firstBrokenSeq {
             integrityStatus = "BROKEN — the chain fails at position \(seq). An event was altered or reordered after it was sealed."
         }

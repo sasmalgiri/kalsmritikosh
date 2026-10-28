@@ -72,7 +72,7 @@ what differs. The report headers currently cite the US instrument.
    standards; civil-law "intime conviction" / free evaluation should join it.
 4. **Non-English deliverables** — hardcopies render in English only.
 
-**Verdict:** the *procedures* cover the world; the *citations* cover the US +
+**Verdict:** the *procedures* are written to be jurisdiction-neutral (not reviewed jurisdiction by jurisdiction); the *citations* cover the US +
 international bodies. Items 1–3 above are the path from "US-cited, globally
 correct" to "locally cited everywhere" — each is an amendment (new sutra
 versions), exactly the change process built for this.
