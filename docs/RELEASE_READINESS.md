@@ -18,13 +18,17 @@ Testing cadence (agreed with the owner, 2026-10-28):
 | F2 | All 168 jobs produce their intended result | **done to integration** — 20 studio, 97 executor (contract columns pre-filled, completed by the person; per-job acceptance), 51 service, 0 preparation, 0 gap. The Jobs screen opens, reviews, completes and exports results (A1) | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobFamilyExecutorTests`, `JobResultWorkflowTests` |
 | F3 | Nine persona journeys | service level done (`InvestigationCaseSimulationTests`, 9 personas); **UI journeys open** (tier 3) | — |
 | F4 | Races, recovery, workload | T1 7/8 + 1 partial (`docs/RACE_MATRIX.md`); T2 done except the clean-machine restore (signed build); T3 measured (`docs/SUPPORT_ENVELOPE.md`) | `NewerSchemaRefusalTests`, backup suites, `SupportEnvelopeTests` |
-| F5 | Independent adjudication, then a fresh ho10 | **open** — needs human adjudicators; ho9 is a regression set (rules 96.6 % right / 1.7 % wrong; Claude 97.2 / 1.5); the ≤1 % wrong target is not met | — |
-| F6 | Legal and distribution pack | prepared; **owner/counsel decisions open** | `docs/DISTRIBUTION_PACK.md`, `docs/LEGAL_REVIEW_PACK.md` |
+| F5 | Independent adjudication, then a fresh ho10 | **open** — needs human adjudicators; ho9 is a regression set (rules 96.6 % right / 1.7 % wrong; Claude 97.2 / 1.5); the ≤1 % wrong target is not met. Protocol and blinded packs prepared (ho9-claude-prev 126 items, ho9-rules-prev 132) | `docs/ADJUDICATION_PROTOCOL.md`, `scripts/casebench/adjudication_pack.py` |
+| F6 | Legal and distribution pack | prepared, incl. a supplemental-terms draft for counsel; **owner/counsel decisions open** | `docs/DISTRIBUTION_PACK.md`, `docs/LEGAL_REVIEW_PACK.md`, `docs/legal/SUPPLEMENTAL_TERMS_DRAFT.md` |
 | F7 | Pilot, practitioners, release packet | **open** | — |
 
 ## Exact blockers
 
-0. **Engineering (agent):** re-measuring benign accuracy with the injection guard on (part of F5's bench runs).
+0. **Bench re-run (owner, in Terminal):** benign accuracy with the injection guard on is not yet
+   re-measured. The ho9 re-run cannot start from the agent's session: every test-runner launch fails
+   with "Pseudo Terminal Setup Error, Errno 1 (Operation not permitted)", with or without the shell
+   sandbox. Run `~/CaseBench/chain-ho9g2.sh` from Terminal, then score with `scripts/casebench/ccsscore.py`
+   and build the packs with `scripts/casebench/adjudication_pack.py` (`docs/ADJUDICATION_PROTOCOL.md`).
 
 1. **Accuracy (F5):** independent adjudication of the bench answers, then one run on a fresh held-out
    set (ho10), never tuned on. The wrong-answer rate must be ≤1 %. It was measured above that on
@@ -52,5 +56,6 @@ Testing cadence (agreed with the owner, 2026-10-28):
   the chronology as "date stated in text", but documents without either produce no chronology rows.
 - Job executors produce drafts for a person to review. They never grade, conclude, total across
   currencies or clear anything for disclosure on their own.
-- Saved answers that quoted later-erased documents are not purged by case erasure.
+- Erasure reaches what the app holds on the Mac. It does not reach external originals, backups,
+  snapshots, sync folders, exports or Keychain items.
 - Vault copies of originals rely on FileVault for encryption at rest.

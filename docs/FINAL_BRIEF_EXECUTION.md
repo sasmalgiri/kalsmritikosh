@@ -116,7 +116,7 @@ Status by phase of the final completion instructions (§10):
 | F2 Job contracts (168) | not started; the outcome matrix only classifies (20 specialist mappings / 23 generic products / 125 generic rows) |
 | F3 Persona journeys | not started (only the per-persona case simulations exist) |
 | F4 Races, recovery, workload | partial: the threat model, an injection guard and the atomic erase are done; race, recovery and workload tests are not |
-| F5 Accuracy | not met. ho9 on `f685315c`: rules 96.6 % right / 1.7 % wrong, Claude 97.2 % / 1.5 %. No adjudication yet; no fresh set for the current code. |
+| F5 Accuracy | not met. ho9 on `f685315c`: rules 96.6 % right / 1.7 % wrong, Claude 97.2 % / 1.5 %. No adjudication yet; no fresh set for the current code. Prepared: the adjudication protocol (`docs/ADJUDICATION_PROTOCOL.md`) and blinded packs from the ho9 runs (`scripts/casebench/adjudication_pack.py`: claude 126 items, rules 132). The ho9 re-run with the injection guard on is blocked in the agent session (test-runner launch fails: Pseudo Terminal Setup Error, Errno 1); it is run from Terminal. |
 | F6 Legal and distribution | prepared in part (inventory, legal pack); the answer sheet, required-reason fixes, EULA, name search, crypto inventory and StoreKit script are open |
 | F7 Acceptance and release packet | not started |
 

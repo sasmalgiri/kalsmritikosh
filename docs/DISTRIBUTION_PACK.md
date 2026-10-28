@@ -69,7 +69,8 @@ lacks (`LEGAL_REVIEW_PACK.md` §2). The supplement must be a single text, used b
 - the developer's name, address, telephone and email.
 
 Open: governing law and forum (India on the site, none in the app); consumer-law limits on the cap
-in launch markets — *counsel*.
+in launch markets — *counsel*. A draft of the supplement for counsel, reconciling the in-app text
+with the site, is in `docs/legal/SUPPLEMENTAL_TERMS_DRAFT.md` (not in force).
 
 ## 4. Name search — preliminary, counsel to clear
 
