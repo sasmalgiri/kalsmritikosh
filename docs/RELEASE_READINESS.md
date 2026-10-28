@@ -15,7 +15,7 @@ Testing cadence (agreed with the owner, 2026-10-28):
 |---|---|---|---|
 | F0 | One execution record; SHIP_DECISIONS current | done | SHIP_DECISIONS §0, FINAL_BRIEF_EXECUTION |
 | F1 | Shared kernel K1–K11 | **done** (unit/integration), incl. audit A3–A7 fixes; bounded items recorded | K5 studio approvals carry no scope fingerprint (the export re-check covers it); K11 vault encryption is a recorded decision |
-| F2 | All 168 jobs produce their intended result | **partial** — 20 studio, 16 executor (contract met), **81 preparation** (material only; result not built), 51 service, 0 gap. The Jobs screen opens, reviews, completes and exports results (A1) | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobFamilyExecutorTests`, `JobResultWorkflowTests` |
+| F2 | All 168 jobs produce their intended result | **done to integration** — 20 studio, 97 executor (contract columns pre-filled, completed by the person; per-job acceptance), 51 service, 0 preparation, 0 gap. The Jobs screen opens, reviews, completes and exports results (A1) | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobFamilyExecutorTests`, `JobResultWorkflowTests` |
 | F3 | Nine persona journeys | service level done (`InvestigationCaseSimulationTests`, 9 personas); **UI journeys open** (tier 3) | — |
 | F4 | Races, recovery, workload | T1 7/8 + 1 partial (`docs/RACE_MATRIX.md`); T2 done except the clean-machine restore; **T3 support envelope open** (tier 3) | `NewerSchemaRefusalTests`, backup suites |
 | F5 | Independent adjudication, then a fresh ho10 | **open** — needs human adjudicators; ho9 is a regression set (rules 96.6 % right / 1.7 % wrong; Claude 97.2 / 1.5); the ≤1 % wrong target is not met | — |
@@ -24,7 +24,7 @@ Testing cadence (agreed with the owner, 2026-10-28):
 
 ## Exact blockers
 
-0. **Engineering (agent):** build the full contract results of the 81 preparation jobs, connecting existing engines where they exist (the method engine, the redaction verifier, forensic tracing, the identity decisions); outcome-based injection tests; a backup write hitting a full disk; support-envelope measurement (agent-runnable on this hardware).
+0. **Engineering (agent):** outcome-based injection tests against a real model; a backup write hitting a full disk; support-envelope measurement (agent-runnable on this hardware).
 
 1. **Accuracy (F5):** independent adjudication of the bench answers, then one run on a fresh held-out
    set (ho10), never tuned on. The wrong-answer rate must be ≤1 %. It was measured above that on

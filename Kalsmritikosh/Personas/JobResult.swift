@@ -27,10 +27,13 @@ public nonisolated struct JobResultRow: Codable, Sendable, Hashable {
     public var decision: JobRowDecision?
     /// A1 — the person's note on this row.
     public var note: String?
+    /// The contract fields of this row (`JobFields.specs`): pre-filled where the ledger states them,
+    /// recorded by the person otherwise.
+    public var fields: [String: String]?
     public init(title: String, detail: String? = nil, date: String? = nil, flags: [String] = [], refs: [StudioEvidenceRef] = [],
-                decision: JobRowDecision? = nil, note: String? = nil) {
+                decision: JobRowDecision? = nil, note: String? = nil, fields: [String: String]? = nil) {
         self.title = title; self.detail = detail; self.date = date; self.flags = flags; self.refs = refs
-        self.decision = decision; self.note = note
+        self.decision = decision; self.note = note; self.fields = fields
     }
 }
 
@@ -42,6 +45,8 @@ public nonisolated struct JobResultReview: Codable, Sendable, Hashable {
     public let at: Date
     public let note: String?
     public let completed: Bool
+    /// The SHA-256 of the completed rows, frozen at completion (a publication package's digest).
+    public var digest: String?
 }
 
 public nonisolated struct JobResultContent: Codable, Sendable, Hashable {
@@ -56,13 +61,14 @@ public nonisolated struct JobResultContent: Codable, Sendable, Hashable {
 }
 
 public nonisolated enum JobResultReviewError: Error, Equatable, LocalizedError {
-    case blockedCannotComplete, noteRequired, undecidedRows(Int), notCurrent
+    case blockedCannotComplete, noteRequired, undecidedRows(Int), notCurrent, missingFields(row: Int, fields: [String])
     public var errorDescription: String? {
         switch self {
         case .blockedCannotComplete: return "A blocked result cannot be completed: give the job what it is missing and run it again."
         case .noteRequired: return "Completing a result needs your note (what you checked and why it is complete)."
         case .undecidedRows(let n): return "\(n) row(s) are still undecided. Accept or reject each one before completing."
         case .notCurrent: return "This is an earlier revision. Restore it as current first, or review the current one."
+        case .missingFields(let row, let fields): return "Row \(row + 1) is accepted but still needs: \(fields.joined(separator: ", "))."
         }
     }
 }
@@ -121,14 +127,40 @@ public actor JobResultRepository {
             guard let n = trimmedNote, !n.isEmpty else { throw JobResultReviewError.noteRequired }
             let undecided = rows.filter { $0.decision == nil }.count
             guard undecided == 0 else { throw JobResultReviewError.undecidedRows(undecided) }
+            // The contract's columns: every accepted row carries every required field.
+            for (i, row) in rows.enumerated() {
+                let missing = JobFields.missing(job: base.jobID, row: row)
+                if !missing.isEmpty { throw JobResultReviewError.missingFields(row: i, fields: missing.map(\.label)) }
+            }
         }
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         var content = JobResultContent(rows: rows, limitations: base.content.limitations, nextActions: base.content.nextActions)
         content.review = JobResultReview(by: who, at: date, note: trimmedNote?.isEmpty == true ? nil : trimmedNote, completed: complete)
+        if complete {
+            // Frozen at completion: the digest of exactly the rows that were completed.
+            let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+            content.review?.digest = StudioRecordRepository.sha256(try enc.encode(rows))
+        }
         let family = JobResultFamily(rawValue: base.family) ?? .chronologyLinkage
-        return try await save(caseID: base.caseID, jobID: base.jobID, family: family,
-                              state: complete ? .completed : (base.state == .blocked ? .blocked : .draft),
-                              content: content, actor: who, at: date)
+        let id = try await save(caseID: base.caseID, jobID: base.jobID, family: family,
+                                state: complete ? .completed : (base.state == .blocked ? .blocked : .draft),
+                                content: content, actor: who, at: date)
+        // An action reviewed as not effective reopens it in its register (a new revision there).
+        if complete, let registerJob = JobExecutorKind.reviewedRegister[base.jobID],
+           let register = try await latest(caseID: base.caseID, jobID: registerJob) {
+            let ineffective = Set(rows.filter { $0.fields?["verdict"] == "not effective" }.map(\.title))
+            if !ineffective.isEmpty {
+                var reopened = register.content
+                reopened.rows = register.content.rows.map { r in
+                    guard ineffective.contains(r.title) else { return r }
+                    var r = r; var f = r.fields ?? [:]; f["status"] = "reopened"; r.fields = f; r.decision = nil; return r
+                }
+                reopened.review = JobResultReview(by: who, at: date, note: "Reopened \(ineffective.count) action(s) reviewed as not effective", completed: false)
+                try await save(caseID: base.caseID, jobID: registerJob, family: JobResultFamily(rawValue: register.family) ?? .actionEffectivenessClosure,
+                               state: .draft, content: reopened, actor: who, at: date)
+            }
+        }
+        return id
     }
 
     /// A1 — make an earlier revision current again (saved as a new revision; nothing is overwritten).

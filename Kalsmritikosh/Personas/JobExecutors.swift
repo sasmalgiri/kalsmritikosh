@@ -13,7 +13,7 @@ import Foundation
 public nonisolated enum JobExecutorKind: String, Sendable {
     case chronology, deadlines, catalogue, exhibits, citations, records, reminders, reliability, issueMatrix,
          quotes, interviewPlan, causation, money, disclosure, dataTable, publication, sameName, actionRegister,
-         actionReview, methodReadiness
+         actionReview, methodReadiness, dataAnalysis, redactionValidation
 
     /// The jobs each executor serves — only where its result IS the job's intended outcome.
     public static let assignments: [String: JobExecutorKind] = {
@@ -22,21 +22,23 @@ public nonisolated enum JobExecutorKind: String, Sendable {
         set(.chronology, ["inv.linkage", "law.fact-chronology", "hr.incident-timeline", "siu.loss-chronology", "jrn.chronology",
                           "res.chronology", "ind.personal-chronology", "ind.career-education", "gen.family-lines"])
         set(.deadlines, ["law.deadlines"])
-        set(.catalogue, ["res.corpus-catalogue", "jrn.source-vault", "siu.prior-claims", "hr.evidence-register", "res.metadata"])
+        set(.catalogue, ["res.corpus-catalogue", "jrn.source-vault", "siu.prior-claims", "hr.evidence-register", "res.metadata",
+                         "law.document-coding"])
         set(.exhibits, ["law.exhibit-binder"])
         set(.citations, ["res.bibliography", "res.edition", "gen.originals"])
         set(.records, ["ind.document-versions", "ind.property", "ind.insurance", "ind.applications", "ind.document-vault"])
         set(.reminders, ["ind.reminders"])
         set(.reliability, ["inv.source-reliability", "res.source-criticism", "jrn.source-map", "jrn.source-reliability", "ind.doc-reliability",
                            "law.source-desk", "siu.source-vetting", "fa.doc-reliability", "hr.credibility", "gen.source-analysis"])
-        set(.issueMatrix, ["law.parties-issues", "law.fact-evidence", "law.document-coding", "law.obligations", "siu.red-flags",
+        set(.issueMatrix, ["law.parties-issues", "law.fact-evidence", "law.obligations", "siu.red-flags",
                            "hr.allegations", "gen.evidence-notes"])
         set(.quotes, ["res.transcription", "jrn.quote-book", "jrn.transcript", "hr.statements"])
         set(.interviewPlan, ["jrn.interview-plan", "law.witness-profiles", "law.deposition", "siu.euo-prep", "hr.interview-prep"])
         set(.causation, ["res.alternative", "res.causal", "jrn.causal", "ind.why", "law.causation", "siu.causation", "fa.analysis", "gen.migration"])
         set(.money, ["law.damages", "fa.funds-tracing", "fa.workpapers"])
-        set(.disclosure, ["ind.health-scope", "ind.secure-share", "law.redaction", "hr.disclosure-review"])
-        set(.dataTable, ["inv.data-lab", "jrn.data-desk"])
+        set(.disclosure, ["ind.health-scope", "ind.secure-share", "hr.disclosure-review"])
+        set(.redactionValidation, ["law.redaction"])
+        set(.dataAnalysis, ["inv.data-lab", "jrn.data-desk"])
         set(.publication, ["jrn.publication", "jrn.publication-package"])
         set(.sameName, ["gen.same-person"])
         set(.actionRegister, ["inv.capa-register", "res.errata", "jrn.correction-history", "jrn.correction-actions", "ind.fix-it",
@@ -50,11 +52,17 @@ public nonisolated enum JobExecutorKind: String, Sendable {
     /// Audit A2 — the jobs whose executor result, once the person reviews it (decisions, notes,
     /// corrections, completion), IS the contract's required result. Every other assigned job only
     /// PREPARES material for its contract (status `.preparation`) until its full result is built.
-    public static let contractMet: Set<String> = [
-        "law.fact-chronology", "hr.incident-timeline", "jrn.chronology", "ind.personal-chronology", "ind.career-education",
-        "siu.loss-chronology", "res.corpus-catalogue", "hr.evidence-register", "ind.reminders", "jrn.source-reliability",
-        "ind.doc-reliability", "law.source-desk", "siu.source-vetting", "fa.doc-reliability", "gen.evidence-notes", "jrn.quote-book",
-    ]
+    public static let contractMet: Set<String> = {
+        // Contract met: the 16 whose reviewed rows are the result; every job whose contract columns are
+        // recorded through fields (`JobFields.specs`); and the two computed results.
+        let direct: Set<String> = [
+            "law.fact-chronology", "hr.incident-timeline", "jrn.chronology", "ind.personal-chronology", "ind.career-education",
+            "siu.loss-chronology", "res.corpus-catalogue", "hr.evidence-register", "ind.reminders", "jrn.source-reliability",
+            "ind.doc-reliability", "law.source-desk", "siu.source-vetting", "fa.doc-reliability", "gen.evidence-notes", "jrn.quote-book",
+        ]
+        let computed: Set<String> = ["inv.data-lab", "jrn.data-desk", "law.redaction"]
+        return direct.union(computed).union(Set(JobFields.specs.keys)).intersection(Set(assignments.keys))
+    }()
 
     /// The action register an effectiveness review reads (same persona).
     public static let reviewedRegister: [String: String] = [
@@ -85,6 +93,8 @@ public nonisolated enum JobExecutorKind: String, Sendable {
         case .publication: return PublicationExecutor.run(e)
         case .sameName: return IdentityCandidateExecutor.run(e)
         case .actionRegister: return ActionExecutor.register(e)
+        case .dataAnalysis: return DataAnalysisExecutor.run(e)
+        case .redactionValidation: return RedactionValidationExecutor.run(e)
         case .actionReview, .methodReadiness: return nil
         }
     }

@@ -19,8 +19,15 @@ public nonisolated struct JobEvidence: Sendable {
     /// Case sources the job's access context does not admit (they are never read).
     public let withheld: Int
     public let now: Date
-    public init(facts: StudioCaseFacts, texts: [UUID: String] = [:], withheld: Int = 0, now: Date = Date()) {
+    /// Each admitted source version's content hash (SHA-256), for vault, citation and custody fields.
+    public let versionHashes: [UUID: String]
+    /// The case's produced exports (the exact snapshot text written), for redaction validation.
+    public let exports: [(title: String, text: String)]
+    public let batesPrefix: String
+    public init(facts: StudioCaseFacts, texts: [UUID: String] = [:], withheld: Int = 0, now: Date = Date(),
+                versionHashes: [UUID: String] = [:], exports: [(title: String, text: String)] = [], batesPrefix: String = "PROD") {
         self.facts = facts; self.texts = texts; self.withheld = withheld; self.now = now
+        self.versionHashes = versionHashes; self.exports = exports; self.batesPrefix = batesPrefix
     }
 }
 

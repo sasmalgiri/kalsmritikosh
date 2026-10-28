@@ -269,7 +269,7 @@ public actor PersonaJobService {
                              caseFacts: CaseFactsLoader, results: JobResultRepository) async throws -> PersonaJobLaunch {
         let caseID = try requireCase(context)
         guard let access = context.access else { throw PersonaJobError.missingContext("\(job.id) requires an access context") }
-        let run: JobRun
+        var run: JobRun
         switch executor {
         case .actionReview:
             var register: JobResultRecord?
@@ -281,7 +281,12 @@ public actor PersonaJobService {
         default:
             guard let evidence = try await caseFacts(caseID, access) else { throw PersonaJobError.missingContext("the case's evidence could not be read") }
             guard let r = JobExecutorKind.run(executor, evidence) else { throw PersonaJobError.missingContext("\(job.id) has no evidence executor") }
-            run = r
+            run = (r.state, JobResultContent(rows: JobFields.prefill(job: job.id, rows: r.content.rows, evidence: evidence),
+                                             limitations: r.content.limitations, nextActions: r.content.nextActions))
+        }
+        if executor == .actionReview || executor == .methodReadiness {
+            run = (run.state, JobResultContent(rows: JobFields.prefill(job: job.id, rows: run.content.rows, evidence: nil),
+                                               limitations: run.content.limitations, nextActions: run.content.nextActions))
         }
         return try await persist(run, job: job, caseID: caseID, context: context, results: results)
     }
@@ -327,10 +332,10 @@ public actor PersonaJobService {
         let rows = methods.map { m in
             JobResultRow(title: "\(m.label) (v\(m.version))",
                          detail: "Needs: " + m.requiredInputRoles.map { String(describing: $0) }.joined(separator: ", "),
-                         flags: ["not run"])
+                         flags: ["not run"], fields: ["methodID": m.id.rawValue])
         }
         return (.draft, JobResultContent(rows: rows, limitations: ["A method's outcome exists only once it is run and reviewed; none is implied here."],
-                                         nextActions: ["Choose a method, select its evidence and run it; an inconclusive run is saved as inconclusive."]))
+                                         nextActions: ["Accept the method(s) you ran, record inputs, steps and outcome; completing saves each as a method run in the case."]))
     }
 
 }

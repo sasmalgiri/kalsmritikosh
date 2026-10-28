@@ -64,7 +64,7 @@ struct JobOutcomeMatrixTests {
             let met = JobExecutorKind.contractMet.contains(job.id)
             return Deliverable(workProduct: (met ? "" : "preparation only: ") + (Self.executorProduct[kind] ?? kind.rawValue),
                                verifiedBy: kind == .chronology ? [ChronologyExecutorTests.self, JobResultWorkflowTests.self] : [JobFamilyExecutorTests.self, JobResultWorkflowTests.self],
-                               level: met ? "integration: contract result, reviewed and completed by the person" : "integration: prepares material; contract result not produced yet")
+                               level: met ? "integration: contract result — executor pre-fills, the person completes the contract fields" : "integration: prepares material; contract result not produced yet")
         }
         switch job.kind {
         case .findings: return Deliverable(workProduct: "generic: case findings report with case-scoped citations", verifiedBy: [InvestigationFindingsServiceTests.self, InvestigationCaseSimulationTests.self], level: "integration: generic service + ledger", jobSpecific: false)

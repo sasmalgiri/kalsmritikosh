@@ -185,6 +185,29 @@ extension AppState {
     }
 }
 
+extension AppState {
+    /// A method job's completion saves each accepted method as an actual MethodRun in the case (the
+    /// shared method engine), with the case's authorised source versions as its evidence. Returns the
+    /// run id per row index; a method the engine refuses is reported, not silently skipped.
+    public func startMethodRuns(caseID: UUID, rows: [JobResultRow], actor: String) async -> (runs: [Int: UUID], problems: [String]) {
+        guard let methods = investigationMethods, let answers = investigationAnswers else { return ([:], ["The method engine is not available."]) }
+        var runs: [Int: UUID] = [:], problems: [String] = []
+        let versions = (try? await answers.scopeContext(caseID: caseID).scope.authorizedSourceVersionIDs) ?? []
+        let specs = versions.sorted { $0.uuidString < $1.uuidString }.enumerated().map {
+            InvestigationMethodEvidenceSpec(targetKind: .sourceVersion, targetID: $0.element, ordinal: $0.offset)
+        }
+        for (i, row) in rows.enumerated() where row.decision == .accepted && row.fields?["run"] == nil {
+            guard let methodID = row.fields?["methodID"] else { continue }
+            do {
+                let run = try await methods.startMethod(caseID: caseID, methodDefinitionID: methodID, evidenceSpecs: specs,
+                                                        createdBy: actor, now: Date())
+                runs[i] = run.run.id
+            } catch { problems.append("\(row.title): \(error.localizedDescription)") }
+        }
+        return (runs, problems)
+    }
+}
+
 /// K5 — why a case report was not exported.
 public nonisolated enum ReportExportRefusal: Error, Equatable, LocalizedError {
     case sourcesWithdrawn(Int)

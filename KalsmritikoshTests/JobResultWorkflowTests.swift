@@ -73,6 +73,10 @@ struct JobResultWorkflowTests {
         review.rows[0].note = "Matches the indictment date"
         review.rows[0].title += " (checked)"
         for i in review.rows.indices.dropFirst() { review.rows[i].decision = .rejected }
+        // The contract's columns the ledger could not state are recorded by the person.
+        for f in JobFields.missing(job: chronology.id, row: review.rows[0]) {
+            var d = review.rows[0].fields ?? [:]; d[f.key] = "Recorded by the reviewer"; review.rows[0].fields = d
+        }
         review.completionNote = ""
         await review.save(complete: true, actor: "Tester")
         #expect(review.problem?.contains("note") == true, "completion needs the person's note")
@@ -116,5 +120,25 @@ struct JobResultWorkflowTests {
             target: SensitiveScopeTarget(kind: .sourceVersion, id: version), sensitivity: .confidential,
             authority: .userConfirmed(actorID: "Tester", confirmationID: UUID(), privileged: true), reason: "privileged")
         #expect(await f.state.jobResultExportCheck(record)?.contains("no longer cleared") == true)
+    }
+
+    @Test("A method job's completion saves each accepted method as a real method run in the case")
+    func methodRunsSaved() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let ws = try #require(try await f.db.query("SELECT workspace_id FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)]).first?.string(0).flatMap(UUID.init(uuidString:)))
+        let service = try #require(await f.state.personaJobs)
+        let job = try #require(PersonaJobCatalogComposer.allJobs.first { $0.id == "inv.methods" })
+        let access = SensitiveAccessContext(scope: SensitiveScope(workspaceID: ws, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .export))
+        _ = try await service.launch(job, context: PersonaJobLaunchContext(caseID: f.caseA, access: access, actor: "Tester", at: Date()))
+        let record = try #require(try await JobResultRepository(database: f.db).latest(caseID: f.caseA, jobID: job.id))
+        var rows = record.content.rows
+        #expect(rows.first?.fields?["methodID"] != nil, "each method row names its method")
+        rows[0].decision = .accepted
+        let (runs, problems) = await f.state.startMethodRuns(caseID: f.caseA, rows: rows, actor: "Tester")
+        #expect(problems.isEmpty, "\(problems)")
+        let runID = try #require(runs[0])
+        #expect(try await f.db.query("SELECT COUNT(*) FROM case_method_runs WHERE case_id = ? AND method_run_id = ?;", [.uuid(f.caseA), .uuid(runID)]).first?.int(0) == 1,
+                "the run is saved in the case's method engine")
     }
 }

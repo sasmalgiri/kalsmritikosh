@@ -190,6 +190,9 @@ struct JobResultView: View {
                     }
                 }
             }
+            if let spec = JobFields.specs[model.jobID] {
+                fieldsView(spec, row: row, index: i, editable: editable)
+            }
             if editable {
                 HStack {
                     Picker("Decision", selection: Binding(get: { model.rows[i].decision }, set: { model.rows[i].decision = $0 })) {
@@ -206,6 +209,39 @@ struct JobResultView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The contract's columns for this row: pre-filled where the ledger states them, recorded here otherwise.
+    @ViewBuilder
+    private func fieldsView(_ spec: [JobField], row: JobResultRow, index i: Int, editable: Bool) -> some View {
+        let missing = Set(JobFields.missing(job: model.jobID, row: editable ? model.rows[i] : row).map(\.key))
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+            ForEach(spec, id: \.key) { f in
+                GridRow {
+                    Text(f.label + (f.required ? "" : " (optional)")).font(.caption)
+                        .foregroundStyle(missing.contains(f.key) ? .orange : .secondary)
+                    if editable {
+                        let binding = Binding(get: { model.rows[i].fields?[f.key] ?? "" },
+                                              set: { v in var d = model.rows[i].fields ?? [:]; d[f.key] = v; model.rows[i].fields = d })
+                        switch f.kind {
+                        case .choice(let options):
+                            Picker(f.label, selection: binding) {
+                                Text("—").tag("")
+                                ForEach(options, id: \.self) { Text($0).tag($0) }
+                            }
+                            .labelsHidden().frame(maxWidth: 240)
+                        case .date:
+                            TextField("yyyy-mm-dd", text: binding).font(.caption).frame(maxWidth: 140)
+                        case .text:
+                            TextField(f.label, text: binding, axis: .vertical).font(.caption)
+                        }
+                    } else {
+                        Text(row.fields?[f.key] ?? "—").font(.caption)
+                    }
+                }
+            }
+        }
+        .padding(.leading, 4)
     }
 
     @ViewBuilder
@@ -240,7 +276,7 @@ struct JobResultView: View {
                     Button("Save review") { Task { await model.save(complete: false, actor: actor) } }
                         .disabled(!model.dirty)
                     TextField("Completion note (required to complete)", text: $model.completionNote).frame(maxWidth: 280)
-                    Button("Mark completed") { Task { await model.save(complete: true, actor: actor) } }
+                    Button("Mark completed") { Task { await complete() } }
                         .buttonStyle(.borderedProminent)
                         .disabled(record.state == .blocked || model.undecided > 0
                                   || model.completionNote.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -250,6 +286,16 @@ struct JobResultView: View {
             }
         }
         .padding(12)
+    }
+
+    /// Complete — a method job first saves each accepted method as a run in the case's method engine.
+    private func complete() async {
+        if model.jobID.hasSuffix(".methods") {
+            let (runs, problems) = await appState.startMethodRuns(caseID: model.caseID, rows: model.rows, actor: actor)
+            for (i, id) in runs { var d = model.rows[i].fields ?? [:]; d["run"] = id.uuidString; model.rows[i].fields = d }
+            if !problems.isEmpty { model.setProblem("Method runs not saved: " + problems.joined(separator: "; ")); return }
+        }
+        await model.save(complete: true, actor: actor)
     }
 
     /// Export the current revision as Markdown — after re-checking that every source it cites is still
@@ -288,6 +334,7 @@ nonisolated enum JobResultMarkdown {
         var out = "# \(title)\n\nState: \(r.state.rawValue) · saved \(r.createdAt.formatted()) by \(r.createdBy)\n"
         if let review = r.content.review {
             out += "\n\(review.completed ? "Completed" : "Reviewed") by \(review.by) on \(review.at.formatted())\(review.note.map { ": \($0)" } ?? "")\n"
+            if let d = review.digest { out += "Digest (SHA-256 of the completed rows): \(d)\n" }
         }
         if !r.content.limitations.isEmpty { out += "\n## Limitations\n" + r.content.limitations.map { "- \($0)" }.joined(separator: "\n") + "\n" }
         out += "\n## Result\n"
@@ -295,6 +342,10 @@ nonisolated enum JobResultMarkdown {
             out += "\n\(i + 1). \(row.date.map { "\($0) — " } ?? "")\(row.title)\n"
             if let d = row.detail { out += "   \(d)\n" }
             if !row.flags.isEmpty { out += "   Flags: \(row.flags.joined(separator: "; "))\n" }
+            for (k, v) in (row.fields ?? [:]).sorted(by: { $0.key < $1.key }) where !v.isEmpty {
+                let label = JobFields.specs[r.jobID]?.first { $0.key == k }?.label ?? k
+                out += "   \(label): \(v)\n"
+            }
             if let dec = row.decision { out += "   Decision: \(dec.rawValue)\(row.note.map { " — \($0)" } ?? "")\n" }
             else if let n = row.note { out += "   Note: \(n)\n" }
             for ref in row.refs { out += "   Source: “\(ref.quote ?? "")”\n" }
