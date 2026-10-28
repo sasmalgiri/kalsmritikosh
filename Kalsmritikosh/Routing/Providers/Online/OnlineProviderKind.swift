@@ -158,7 +158,7 @@ public nonisolated enum OnlineRequestBuilder {
 // account is on those terms, and the confirmation lapses when the reviewed terms change. A provider whose
 // terms have not been reviewed for case material receives no documents.
 
-extension OnlineProviderKind {
+nonisolated extension OnlineProviderKind {
 
     /// The date the terms below were reviewed. A confirmation given against an older text lapses.
     public var documentTermsVersion: String { "2026-10-27" }
