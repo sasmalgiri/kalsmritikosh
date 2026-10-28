@@ -1,6 +1,6 @@
 # Data-flow inventory — the one source for privacy statements
 
-Version 1 · 2026-10-27 · derived from the code at `investigations-next` (after eea25503) · ship-readiness review L1.
+Version 2 · 2026-10-28 · derived from the code at `investigations-next` (after the completeness audit of 182c7e4c, A1–A8) · supersedes version 1 (2026-10-27), kept in git history.
 
 Every privacy statement must agree with this file: the in-app privacy text (`LegalNotice.privacyStatement`), the
 public pages (`docs/privacy.html`, `docs/terms.html`), `PrivacyInfo.xcprivacy`, `LEGAL_READINESS.md`,
@@ -40,15 +40,15 @@ The terms the app shows live in `OnlineProviderKind.documentTerms`, reviewed 202
 
 | # | What | Where | Protection | When |
 |---|---|---|---|---|
-| L1 | Copies of originals (managed vault) | `EvidenceVault/` beside the ledger, read-only | **Not encrypted** by the app (FileVault applies) | `managedEvidenceMode`, off by default |
-| L2 | Vector index cache: quantised chunk embeddings and chunk ids | `hnsw-index.bin` beside the ledger | Not encrypted | Automatic |
+| L1 | Copies of originals (managed vault) | `EvidenceVault/` beside the ledger; files 0400, folders 0700 (owner-only) | **Not encrypted** by the app. FileVault protects them only where the person has it on (not verified by the app). A recorded, bounded decision: SHIP_DECISIONS §5 K11 | `managedEvidenceMode`, off by default |
+| L2 | Vector index cache: quantised chunk embeddings and chunk ids | `hnsw-index.bin` beside the ledger, mode 0600 | **Encrypted**: AES-GCM under a key derived (HKDF-SHA256) from the ledger key; never written without that key; an unsealed or foreign cache is rebuilt, not read | Automatic |
 | L3 | Captured / shared items and their custody log | `Intake/<date>/`, the App Group `Inbox/` until drained | Not encrypted | When capture is used (`captureExtensions` off by default; on in the "standalone" preset) |
 | L4 | Import receipts: file names, hashes, errors, sometimes paths | `Receipts/` beside the ledger | Signed, not encrypted | `signedReceipts` |
 | L5 | Exports: studio reports, case reports, proof bundles, CSVs | Where the person saves them | Not encrypted (they are the deliverable) | Person's action |
 | L6 | Backups | Where the person chooses | Ledger encrypted with the ledger key. In a *complete* backup, **originals and the source map are not encrypted**. | Person's action |
 | L7 | Companion snapshot | Where the person chooses | Ledger re-encrypted with an export passphrase. Originals, manifest file names and the source map are not encrypted. | Person's action |
 | L8 | Folder sync: notes, tags, highlights, in-app files | The person's chosen folder (that folder's service moves it) | AES-GCM with a passphrase-derived key, signed. `store.json` and `devices/<id>.json` (device id and the **Mac's name**) are plaintext. | `folderSync`, off by default; on in the "standalone" preset |
-| L9 | Team review (preview feature): case name, member name, document names, coding, notes | A shared folder | Signed and hash-chained, not encrypted | Hidden unless preview features are shown |
+| L9 | Team review: case name, member name, document names, coding, notes | A shared folder | Signed and hash-chained, not encrypted | **Not available in v1** (single-user contract): it cannot be switched on, even as a preview (`ProductModuleFlags.outOfV1Scope`) |
 | L10 | Spotlight: file name and the first 240 characters of a document (up to 2,000) | The macOS index | System | `spotlightIndex`, off by default; on in the "standalone" preset. Turning it off removes the items. |
 | L11 | Temporary files during import (unzipped office files, renders, email attachments, archive members) | `$TMPDIR` | Not encrypted | Automatic |
 | L12 | DEVONthink hand-off: question, answer, citations as Markdown | `$TMPDIR/kalsmritikosh-devonthink/`, then DEVONthink | Not encrypted | Person's action (module on by default) |
@@ -72,7 +72,42 @@ content, every revision, every export snapshot and any quarantined legacy copy. 
 SHA-256s, and the erasure is recorded: who, when, why and on what basis. Erasure is refused while a legal hold
 (`legal_holds`) covers the draft or its case; releasing the hold is itself recorded. The captured pre-ledger
 preference store (R4) still holds a copy of migrated drafts, and the erasure reports how many such stores.
-Erasure of documents, chunks, indexes and the vault for a person or case is not built yet (review L4).
+**Case erasure (v164, K10 + audit A3–A5):** Case file › Erase this case, with a required reason. It is refused, with
+nothing deleted, when a legal hold covers the case, one of its drafts, documents or source versions, or when a hold notice
+is unreleased. It removes every case-scoped row, and the case's drafts are erased as recorded studio erasures, including
+their captured legacy stores. When asked, it also removes the documents no other case or workspace uses, with:
+- every row derived from them;
+- the saved answers and topics that quote them;
+- their vault copies (recorded before the commit and finished at the next launch if interrupted);
+- the vector cache and the live index.
+
+Shared documents are kept and reported.
+
+**Person erasure:** Knowledge › People › Erase this person. It removes the person's entity record, aliases, mentions,
+links, case-subject rows and the facts provably theirs. Facts that a same-name person could share are kept and reported as
+ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
+answers, topics, conversation turns.
+
+Both keep a fixed erasure record: who, when, the reason as written, the legal basis, and row counts. A person is recorded
+by a SHA-256 of the lower-cased name. **A hash of a name and a free-text reason are not anonymous by themselves**: a
+reason should not repeat the erased content.
+
+Not reached by any erasure: external originals, backups, snapshots, sync folders, exports and Keychain items. The person
+removes those.
+
+## 3a. Online sends — what is checked (audit A6–A8)
+
+- Every document-derived part of an Online payload is authorised before prompt assembly (CloudSourceGate).
+  That covers citations, passages, and a saved topic, which is used only when every document it came from is among
+  the answer's own sources.
+- The exact sources are re-cleared at the send boundary after the consent dialog: one made privileged, restricted,
+  untraceable or erased meanwhile stops the send. So do a change of mode, provider, key, model or document terms.
+- Cancelling before dispatch sends nothing. Cancelling after dispatch stops the wait and the helper connection, but the
+  provider may already have received the request; the log records "delivery unknown".
+- Injected instructions in documents are **mitigated, not prevented**. Known disguised patterns and chat-role markers
+  are defanged on every route; this is one layer, tested against a finite corpus of patterns, not proof that an
+  arbitrary instruction cannot influence a model. The evidence gate (answers must be supported by cited passages) is
+  the second layer.
 
 ## 4. Open decisions (owner / counsel)
 

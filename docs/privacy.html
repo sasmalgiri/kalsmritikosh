@@ -49,9 +49,11 @@
     <li data-claim="privacy.no-copy"><strong>Your files.</strong> You select folders/files. The app reads them <strong>in place</strong> on your Mac to
       build a local index (a single on-device database). Files are not copied to us or anyone else.</li>
     <li data-claim="privacy.local-only"><strong>Derived data</strong> (text excerpts, entities, dates, relationships, embeddings, summaries, answers) is
-      stored in the app's encrypted local database inside your user Library container. A few working files stay beside it
-      without the database's encryption (your Mac's FileVault still applies): a search-index cache of embeddings, import receipts,
-      captured items waiting to be read, diagnostics, and — if you turn them on — managed copies of originals and Spotlight entries.
+      stored in the app's encrypted local database inside your user Library container. The search-index cache of embeddings
+      beside it is encrypted too, with a key derived from the database key. A few working files stay beside it without the
+      database's encryption (protected by your Mac's FileVault only if you have it turned on): import receipts, captured items
+      waiting to be read, diagnostics, and — if you turn them on — managed copies of originals (readable only by your user
+      account) and Spotlight entries.
       Removing the app's data removes those beside the database; backups, snapshots, sync folders and exports you made, the Keychain
       items and the Spotlight entries are separate, and you remove them yourself.</li>
     <li data-claim="privacy.no-cloud-model"><strong>AI models run on-device.</strong> Reasoning and embedding models execute locally; in Private mode your content is never

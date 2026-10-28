@@ -1,6 +1,6 @@
 # Distribution pack (final completion instructions F6 / G1)
 
-Prepared 2026-10-28 on `investigations-next`. Each item is either **done**, or a prepared
+Prepared 2026-10-28 on `investigations-next`; revised the same day after the completeness audit of 182c7e4c. Each item is either **done**, or a prepared
 **decision for the owner or counsel** with the facts it rests on. Nothing here is legal advice; the
 items marked *counsel* need a qualified reviewer (see `docs/LEGAL_REVIEW_PACK.md`).
 
@@ -15,14 +15,32 @@ Facts (source: `docs/DATA_FLOW_INVENTORY.md`, code-checked):
   logs it. Privileged and restricted passages are refused before prompt assembly (K1). Online mode
   connects through the embedded network helper only.
 
-| Question | Recommended answer | Basis |
-|---|---|---|
-| Do you or your third-party partners collect data from this app? | **No — Data Not Collected** | Apple: "collect" means transmitting data off the device in a way that lets *you and/or your third-party partners* access it beyond what is needed to service the request in real time. The publisher has no access, and there is no partner SDK. The provider is the person's own account, contacted at their request with per-send consent, like a user-configured mail server. |
-| Tracking | **No** | `NSPrivacyTracking` false; no tracking domains |
-| Alternative if counsel disagrees | Declare **Other User Content** and **Search History** as *collected, linked to the user, not used for tracking*, purpose **App Functionality**, with a note that it applies only when Online mode is on | The conservative reading treats the user-chosen provider as a third party |
+**No recommendation is made here (revised after the 2026-10-28 completeness audit).** The earlier
+"Data Not Collected" recommendation is withdrawn. That the publisher receives nothing, that the key is
+the user's own, and that there is no partner SDK does not settle Apple's analysis. Apple asks whether
+data is transmitted off the device and kept beyond servicing the request, by the developer *or a
+third party*. Providers can retain API content under their own terms: Anthropic's commercial retention
+policy, and Gemini's paid-tier logging for specified purposes.
 
-Owner/counsel to choose. The privacy manifest's `NSPrivacyCollectedDataTypes` stays empty, and is
-documented as an open decision, until they do.
+The determination needs, per provider (Anthropic, OpenAI, Gemini), the facts below:
+
+| Fact to map | Current state (from code) |
+|---|---|
+| What content can be sent | The question; with "Use cloud for case documents" on and a confirmed eligible provider, cited passages and verified findings. Never privileged or restricted sources (K1/A6). |
+| Categories (Apple's list) | Other User Content (document passages, questions); possibly Search History (questions) |
+| Linked to identity? | The request carries the user's own API key, so it is linked to their provider account |
+| Purpose | App Functionality (answer composition / extraction) only; no tracking, no advertising |
+| Retention at the provider | Per the provider's terms for the user's account tier (to be recorded per provider, with the terms version) |
+| Configuration | Off by default; Online mode plus per-send consent; per-provider document-terms confirmation |
+| Restrictions to review | Each provider's age, region and business/professional-use terms, especially for the Individual persona |
+
+The two outcomes for the owner and counsel to choose between, with App Review clarification if needed:
+- **(a) Data Not Collected**, with the reasoning recorded against these facts.
+- **(b) Other User Content (+ Search History)** collected, linked, App Functionality, applying only when
+  Online mode is used.
+
+The privacy manifest's `NSPrivacyCollectedDataTypes` stays empty, and is documented as an open
+decision, until they decide.
 
 ## 2. Required-reason APIs — done
 
@@ -75,7 +93,9 @@ algorithm. It protects the person's own data and authenticates records.
 | Vector cache at rest (K11) | CryptoKit AES-GCM, key by HKDF-SHA256 from the ledger key | `HNSWVectorIndex`, `LedgerKey.derivedKey` |
 | Content addresses, hashes, receipts | CryptoKit SHA-256, HMAC-SHA256 | throughout |
 | Signed receipts / conformance seals | CryptoKit P-256 ECDSA | `ConformanceSeal`, receipts |
-| Team-review logs (out of v1 scope, disabled) and DKIM checks | CryptoKit Curve25519 / Ed25519 signatures | `TeamCase`, `ForensicSignals` |
+| Team-review logs (not available in v1) and DKIM checks | CryptoKit Curve25519 / Ed25519 signatures | `TeamCase`, `ForensicSignals` |
+| Folder sync (optional) | CryptoKit AES-GCM, key derived from the person's passphrase; entries signed | Sync (`folderSync`, off by default) |
+| Companion snapshot (optional) | SQLCipher re-encryption of the ledger copy with a passphrase the person sets at export | `CompanionSnapshot` |
 | Keys | Keychain (`SecItem`), `SecRandomCopyBytes`, `SecKeyCreate*` | `LedgerKeychain` |
 | Online mode transport | HTTPS via URLSession in the network helper | `NetworkHelperClient` |
 
@@ -122,3 +142,11 @@ Record each step's result in the release packet.
 - The StoreKit script (§6) and the signed-archive checks run on the signed build.
 - The final approved legal texts are wired into `LegalNotice`, and `scripts/generate-kalverify.sh` is
   regenerated in the same change.
+
+## 9. Security claims — wording
+
+Injected instructions in documents are **mitigated, not prevented**. The guard defangs known disguised
+patterns and chat-role markers on every model route, and is tested against a finite corpus of patterns.
+The second layer is the evidence gate: answers must be supported by cited passages. Do not describe the
+guard as neutralising arbitrary instructions. Outcome-based adversarial testing against real models,
+and re-measurement of benign accuracy after the guard, are part of F5.
