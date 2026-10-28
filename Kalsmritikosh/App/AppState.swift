@@ -2418,7 +2418,8 @@ public final class AppState {
                 // (sensitivity is enforced downstream in ExpertContext for base and recovered items alike).
                 scopedRecall: SourceScopedRetriever.ScopedRecall(
                     chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
-                    events: events, entities: entities, relationships: relationships))
+                    events: events, entities: entities, relationships: relationships),
+                objectVersions: { try await objects.sourceVersionsByObject(inSourceVersionIDs: $0) })
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.

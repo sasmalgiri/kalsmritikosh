@@ -68,6 +68,9 @@ public actor InvestigationAnswerService {
     private let artifacts: CasePhaseArtifactRepository?
     /// F08 — scope-restricted keyword recall so a small case is not crowded out by the global corpus.
     private let scopedRecall: SourceScopedRetriever.ScopedRecall?
+    /// B4 — each document in a set of source versions → its versions among them (the ledger's
+    /// object↔version map). With it, a case answer's cloud sends are bound to the case's scope.
+    private let objectVersions: (@Sendable (Set<UUID>) async throws -> [UUID: Set<UUID>])?
 
     public init(cases: InvestigationCaseRepository,
                 resolver: CaseRetrievalScopeResolver,
@@ -75,8 +78,10 @@ public actor InvestigationAnswerService {
                 evidence: EvidenceStore,
                 makeBrain: @escaping @Sendable (any Retriever) -> MasterBrain,
                 artifacts: CasePhaseArtifactRepository? = nil,
-                scopedRecall: SourceScopedRetriever.ScopedRecall? = nil) {
+                scopedRecall: SourceScopedRetriever.ScopedRecall? = nil,
+                objectVersions: (@Sendable (Set<UUID>) async throws -> [UUID: Set<UUID>])? = nil) {
         self.scopedRecall = scopedRecall
+        self.objectVersions = objectVersions
         self.cases = cases
         self.resolver = resolver
         self.baseRetriever = baseRetriever
@@ -97,6 +102,18 @@ public actor InvestigationAnswerService {
         return InvestigationScopeContext(caseID: caseID, workspaceID: record.caseHeader.workspaceID,
                                          status: record.caseHeader.status, scope: scope,
                                          caseRevision: record.caseHeader.revision, fingerprint: fingerprint)
+    }
+
+    /// B4 — the binding a case answer's cloud sends carry: re-resolved at the send boundary, it
+    /// names the documents the case may use NOW and their authorised versions (an erased case throws,
+    /// so nothing is sent). Without the object↔version map the scope is empty: no document may go.
+    public func cloudScope(caseID: UUID) -> CloudScopeBinding {
+        let objectVersions = self.objectVersions
+        return CloudScopeBinding(scopeID: caseID) { [self] in
+            guard let objectVersions else { return [:] }
+            let context = try await self.scopeContext(caseID: caseID)
+            return try await objectVersions(context.scope.authorizedSourceVersionIDs)
+        }
     }
 
     /// The case-scoped retriever for a case — the SHARED retriever wrapped so every retrieval pass is
@@ -124,6 +141,7 @@ public actor InvestigationAnswerService {
         let context = try await scopeContext(caseID: caseID)
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
         let brain = makeBrain(scoped)
+        await brain.setCloudScope(cloudScope(caseID: caseID))
         // NINTH/TENTH AUDIT — consume the lifecycle STREAM and require the
         // COMMIT PROOF: `.verifiedFinal` carries the ledger answer ID only
         // when `lockVerifiedFinal` actually succeeded (a degraded no-ledger

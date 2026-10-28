@@ -31,10 +31,30 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
     private let outboundLog: OutboundLogRepository?
     private let knownNames: @Sendable () async -> [String]
+    private let seams: Seams
 
-    public init(outboundLog: OutboundLogRepository?, knownNames: @escaping @Sendable () async -> [String]) {
+    /// What the send reads from outside the actor: the Online settings, the person's consent and the
+    /// transport. Live: OnlineSettings, the consent dialog and the network helper. Tests pass their
+    /// own (a settings snapshot, a scripted consent, a transport spy) so the real send path runs
+    /// without touching the owner's settings or the network.
+    public struct Seams: Sendable {
+        public var settings: @Sendable () -> OnlineSnapshot
+        public var consent: @Sendable (OutboundPreview) async -> Bool
+        public var transport: @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse
+        public init(settings: @escaping @Sendable () -> OnlineSnapshot,
+                    consent: @escaping @Sendable (OutboundPreview) async -> Bool,
+                    transport: @escaping @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse) {
+            self.settings = settings; self.consent = consent; self.transport = transport
+        }
+        public static let live = Seams(settings: { OnlineSnapshot.current() },
+                                       consent: { await OutboundConsent.shared.request($0) },
+                                       transport: { try await NetworkHelperClient.send($0) })
+    }
+
+    public init(outboundLog: OutboundLogRepository?, knownNames: @escaping @Sendable () async -> [String], seams: Seams = .live) {
         self.outboundLog = outboundLog
         self.knownNames = knownNames
+        self.seams = seams
         self.manifest = ModelManifest(
             id: "provider.online.byok",
             displayName: "Your cloud AI (Online mode)",
@@ -44,8 +64,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     public func isAvailable() async -> Bool {
-        OnlineSettings.cloudAllowed && OnlineSettings.apiKey(for: OnlineSettings.kind) != nil
-            && !OnlineSettings.model.isEmpty
+        let s = seams.settings()
+        return s.cloudAllowed && s.apiKey != nil && !s.model.isEmpty
     }
 
     public enum OnlineError: Error, LocalizedError {
@@ -78,7 +98,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         // K1: the general route may carry passages; it is sent only when its sources were cleared
         // (`CloudSourceGate`) before the prompt was assembled.
         guard options.sourceClearance != nil else {
-            await log(OnlineSettings.kind, OnlineSettings.model, "", prompt.utf8.count, 0, nil, "blocked", "sources not cleared")
+            let s = seams.settings()
+            await log(s.kind, s.model, "", prompt.utf8.count, 0, nil, "blocked", "sources not cleared")
             throw await fail(OnlineError.documentsNotCleared)
         }
         return try await generateFromDocuments(prompt: prompt, options: options)
@@ -94,9 +115,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// permit case material and whose terms the person confirmed for their account; always previewed
     /// with the provider's retention terms (never covered by "don't ask again this session").
     public func generateFromDocuments(prompt: String, options: GenerationOptions) async throws -> String {
-        let kind = OnlineSettings.kind
-        if let why = OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kind)) {
-            await log(kind, OnlineSettings.model, "", prompt.utf8.count, 0, nil, "blocked", "provider not eligible for documents")
+        let s = seams.settings()
+        let kind = s.kind
+        if let why = OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: s.confirmedDocumentTerms) {
+            await log(kind, s.model, "", prompt.utf8.count, 0, nil, "blocked", "provider not eligible for documents")
             throw await fail(OnlineError.notEligibleForDocuments(why))
         }
         // K9 — document text reaches the model with any instruction it carries defanged.
@@ -104,9 +126,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     private func send(prompt: String, options: GenerationOptions, carriesDocuments: Bool) async throws -> String {
-        let kind = OnlineSettings.kind
-        let model = OnlineSettings.model
-        guard await isAvailable(), let key = OnlineSettings.apiKey(for: kind) else {
+        let settings = seams.settings()
+        let kind = settings.kind
+        let model = settings.model
+        guard await isAvailable(), let key = settings.apiKey else {
             throw await fail(OnlineError.notAvailable)
         }
 
@@ -129,7 +152,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         let bytes = shownText.utf8.count
 
         // 2. Daily limit (I-8).
-        if ProductModuleFlags.isEnabled(.leastDataOnline), let cap = OnlineSettings.dailyByteCap {
+        if ProductModuleFlags.isEnabled(.leastDataOnline), let cap = settings.dailyByteCap {
             let used = (try? await outboundLog?.bytesSentToday()) ?? 0
             if used + bytes > cap {
                 await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "daily limit")
@@ -142,14 +165,14 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                                       text: shownText, bytes: bytes, maskedCount: mapping.count,
                                       carriesDocuments: carriesDocuments,
                                       providerTerms: carriesDocuments ? kind.documentTerms : nil)
-        let beforeConsent = SendSettings.current(kind: kind, model: model, key: key)
-        guard await OutboundConsent.shared.request(preview) else {
+        let beforeConsent = SendSettings(settings)
+        guard await seams.consent(preview) else {
             await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)
             throw OnlineError.declined
         }
         // T1 — the consent covers the send as previewed; if anything it depended on changed while the
         // dialog was open, nothing is sent.
-        if let changed = SendSettings.changed(from: beforeConsent, to: SendSettings.current(kind: kind, model: model, key: nil),
+        if let changed = SendSettings.changed(from: beforeConsent, to: SendSettings(seams.settings()),
                                               carriesDocuments: carriesDocuments) {
             await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "changed during consent: \(changed)")
             throw await fail(OnlineError.changedDuringConsent(changed))
@@ -177,7 +200,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                                                          prompt: sendPrompt, maxTokens: options.maxTokens)
             try Task.checkCancellation()
             dispatched = true
-            let response = try await Self.withDeadline(Self.replyDeadline) { try await NetworkHelperClient.send(request) }
+            let response = try await Self.withDeadline(Self.replyDeadline) { [seams] in try await seams.transport(request) }
             let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
@@ -293,13 +316,16 @@ nonisolated struct SendSettings: Equatable {
     let keyDigest: String?
     let documentsEligible: Bool
 
-    /// The settings now. `key` is the key read before the dialog (nil → read it again now).
-    static func current(kind consentedKind: OnlineProviderKind, model consentedModel: String, key: String?) -> SendSettings {
-        let kindNow = OnlineSettings.kind
-        let keyNow = key ?? OnlineSettings.apiKey(for: kindNow)
-        return SendSettings(cloudAllowed: OnlineSettings.cloudAllowed, kind: kindNow, model: OnlineSettings.model,
-                            keyDigest: keyNow.map { SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() },
-                            documentsEligible: OnlineDocumentEligibility.refusal(kind: kindNow, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kindNow)) == nil)
+    init(cloudAllowed: Bool, kind: OnlineProviderKind, model: String, keyDigest: String?, documentsEligible: Bool) {
+        self.cloudAllowed = cloudAllowed; self.kind = kind; self.model = model; self.keyDigest = keyDigest
+        self.documentsEligible = documentsEligible
+    }
+
+    /// The settings of a snapshot, the key reduced to its digest.
+    init(_ s: OnlineSnapshot) {
+        self.init(cloudAllowed: s.cloudAllowed, kind: s.kind, model: s.model,
+                  keyDigest: s.apiKey.map { SHA256.hash(data: Data($0.utf8)).map { String(format: "%02x", $0) }.joined() },
+                  documentsEligible: OnlineDocumentEligibility.refusal(kind: s.kind, confirmedTermsVersion: s.confirmedDocumentTerms) == nil)
     }
 
     /// What changed in a way that voids the consent, or nil.
@@ -310,5 +336,26 @@ nonisolated struct SendSettings: Equatable {
         if a.model != b.model { return "the model" }
         if carriesDocuments && a.documentsEligible && !b.documentsEligible { return "the provider's document terms confirmation" }
         return nil
+    }
+}
+
+/// The Online settings a send reads, taken at one moment.
+public nonisolated struct OnlineSnapshot: Sendable, Equatable {
+    public var cloudAllowed: Bool
+    public var kind: OnlineProviderKind
+    public var model: String
+    public var apiKey: String?
+    public var confirmedDocumentTerms: String?
+    public var dailyByteCap: Int?
+    public init(cloudAllowed: Bool, kind: OnlineProviderKind, model: String, apiKey: String?,
+                confirmedDocumentTerms: String?, dailyByteCap: Int?) {
+        self.cloudAllowed = cloudAllowed; self.kind = kind; self.model = model; self.apiKey = apiKey
+        self.confirmedDocumentTerms = confirmedDocumentTerms; self.dailyByteCap = dailyByteCap
+    }
+    public static func current() -> OnlineSnapshot {
+        let kind = OnlineSettings.kind
+        return OnlineSnapshot(cloudAllowed: OnlineSettings.cloudAllowed, kind: kind, model: OnlineSettings.model,
+                              apiKey: OnlineSettings.apiKey(for: kind), confirmedDocumentTerms: OnlineSettings.confirmedDocumentTerms(for: kind),
+                              dailyByteCap: OnlineSettings.dailyByteCap)
     }
 }

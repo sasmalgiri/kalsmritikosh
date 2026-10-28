@@ -45,10 +45,11 @@ public final class PersonaJobsModel {
         guard let caseID = activeCaseID else { ranJobs = []; return }
         ranJobs = Set(UserDefaults.standard.stringArray(forKey: ranKey(caseID)) ?? [])
     }
-    private func markRan(_ jobID: String) {
-        guard let caseID = activeCaseID else { return }
-        ranJobs.insert(jobID)
-        UserDefaults.standard.set(Array(ranJobs).sorted(), forKey: ranKey(caseID))
+    private func markRan(_ jobID: String, in caseID: UUID) {
+        var ran = Set(UserDefaults.standard.stringArray(forKey: ranKey(caseID)) ?? [])
+        ran.insert(jobID)
+        UserDefaults.standard.set(Array(ran).sorted(), forKey: ranKey(caseID))
+        if caseID == activeCaseID { ranJobs = ran }
     }
 
     /// A1 — each job's current saved result in the active matter (state, size), from the ledger.
@@ -66,7 +67,9 @@ public final class PersonaJobsModel {
     /// A1 — reload every job's current result for the active matter.
     public func reloadResults() async {
         guard let caseID = activeCaseID, let resultsRepository else { results = [:]; return }
-        results = (try? await resultsRepository.latestByJob(caseID: caseID)) ?? [:]
+        let loaded = (try? await resultsRepository.latestByJob(caseID: caseID)) ?? [:]
+        // A reload that finishes after a matter switch is dropped (the newer matter's reload wins).
+        if caseID == activeCaseID { results = loaded }
     }
 
     /// A1 — what a job card says: the saved result's state, or that a service job ran, or nothing yet.
@@ -128,12 +131,13 @@ public final class PersonaJobsModel {
         }
         workLog = entries
     }
-    private func appendLog(jobTitle: String, summary: String, at date: Date) {
-        guard let caseID = activeCaseID else { return }
-        workLog.append(MatterLogEntry(jobTitle: jobTitle, summary: summary, at: date))
-        if let data = try? JSONEncoder().encode(workLog) {
+    private func appendLog(jobTitle: String, summary: String, at date: Date, in caseID: UUID) {
+        var log = (UserDefaults.standard.data(forKey: logKey(caseID)).flatMap { try? JSONDecoder().decode([MatterLogEntry].self, from: $0) }) ?? []
+        log.append(MatterLogEntry(jobTitle: jobTitle, summary: summary, at: date))
+        if let data = try? JSONEncoder().encode(log) {
             UserDefaults.standard.set(data, forKey: logKey(caseID))
         }
+        if caseID == activeCaseID { workLog = log }
     }
 
     /// The persona-neutral intake job (the one job that opens a matter) for the selected persona.
@@ -197,9 +201,9 @@ public final class PersonaJobsModel {
             activeMatterTitle = title
             lastOutcome = out.summary; lastError = nil
             loadRanJobs()
-            if let intakeID = intakeJob?.id { markRan(intakeID) }   // intake IS phase 1, done
+            if let intakeID = intakeJob?.id, let c = out.producedID { markRan(intakeID, in: c) }   // intake IS phase 1, done
             await reloadResults()
-            appendLog(jobTitle: "Matter opened", summary: out.summary, at: date)
+            if let c = out.producedID { appendLog(jobTitle: "Matter opened", summary: out.summary, at: date, in: c) }
             await reloadMatters()
         } catch { lastError = "\(error)"; lastOutcome = nil }
     }
@@ -220,11 +224,22 @@ public final class PersonaJobsModel {
         do {
             let out = try await service.launch(job, context: PersonaJobLaunchContext(
                 caseID: caseID, access: access, actor: actor, question: job.kind == .ask ? question : nil, at: date))
-            lastOutcome = "\(job.title): \(out.summary)"; lastError = nil
-            markRan(job.id)
-            appendLog(jobTitle: job.title, summary: out.summary, at: date)
-            await reloadResults()
-        } catch { lastError = "\(job.title): \(error.localizedDescription)"; lastOutcome = nil }
+            // T1 race 1 — the result belongs to the matter it was asked in (the service saved it
+            // there). If the person switched matters meanwhile, it is logged under the asking matter
+            // and never shown as the open matter's result.
+            markRan(job.id, in: caseID)
+            appendLog(jobTitle: job.title, summary: out.summary, at: date, in: caseID)
+            if caseID == activeCaseID {
+                lastOutcome = "\(job.title): \(out.summary)"; lastError = nil
+                await reloadResults()
+            } else {
+                lastOutcome = "\(job.title) finished for another matter; its result is saved there."; lastError = nil
+            }
+        } catch {
+            lastError = caseID == activeCaseID ? "\(job.title): \(error.localizedDescription)"
+                                               : "\(job.title) (another matter): \(error.localizedDescription)"
+            lastOutcome = nil
+        }
     }
 }
 

@@ -125,8 +125,12 @@ public actor MasterBrain {
     /// K1 — the source gate every cloud-bound prompt passes; nil (no label source wired) means no
     /// route asks for the cloud.
     private var cloudGate: CloudSourceGate? {
-        sensitiveScope.map { CloudSourceGate(sensitiveScope: $0, objects: objects) }
+        sensitiveScope.map { CloudSourceGate(sensitiveScope: $0, objects: objects).bound(to: cloudScope) }
     }
+    /// B4 — the asking case's scope: every cloud clearance this brain issues is bound to it, so the
+    /// send boundary re-checks that each document is still in the case, at the same version.
+    private var cloudScope: CloudScopeBinding?
+    public func setCloudScope(_ binding: CloudScopeBinding?) { cloudScope = binding }
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -2160,6 +2164,7 @@ public actor MasterBrain {
                 if let sensitiveScope {
                     // The same gate as every cloud route (K1): label, legacy privileged flag, cloud ceiling.
                     let gate = CloudSourceGate(sensitiveScope: sensitiveScope, objects: objects, localCeiling: access.scope.maximumSensitivity)
+                        .bound(to: self.cloudScope)
                     let cleared = await gate.clear(sources.map(\.objectID), purpose: "record.reading").clearance.clearedObjectIDs
                     cloudSources = sources.filter { cleared.contains($0.objectID) }
                 } else if let policy = sensitivePolicy {

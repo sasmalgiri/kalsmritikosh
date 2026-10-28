@@ -141,4 +141,32 @@ struct JobResultWorkflowTests {
         #expect(try await f.db.query("SELECT COUNT(*) FROM case_method_runs WHERE case_id = ? AND method_run_id = ?;", [.uuid(f.caseA), .uuid(runID)]).first?.int(0) == 1,
                 "the run is saved in the case's method engine")
     }
+
+    @MainActor
+    @Test("T1 race 1: a job still running when the person switches matters is saved and logged under the matter it was asked in, never shown under the new one")
+    func lateResultAfterMatterSwitch() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let m = try await Self.model(f.state)
+        await m.select(persona: ApplicationDefinitionID(rawValue: "com.kalsmritikosh.persona.investigator"))
+        let ws = try #require(try await f.db.query("SELECT workspace_id FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)]).first?.string(0).flatMap(UUID.init(uuidString:)))
+        m.selectedWorkspace = ws
+        await m.reloadMatters()
+        let a = try #require(m.openMatters.first { $0.id == f.caseA })
+        m.openMatter(a)
+        await m.reloadResults()
+        let job = try #require(m.jobs.first { $0.id == "inv.linkage" })
+        let run = Task { await m.run(job, actor: "Tester", at: Date()) }
+        await Task.yield()
+        // The person opens another matter (case B, another workspace) while the job runs.
+        let bRecord = try #require(try await f.state.investigationCases?.fetch(caseID: f.caseB))
+        m.openMatter(bRecord.caseHeader)
+        await run.value
+        #expect(m.activeCaseID == f.caseB)
+        let savedForA = try await JobResultRepository(database: f.db).latest(caseID: f.caseA, jobID: job.id)
+        #expect(savedForA != nil, "the result is saved under the matter it was asked in")
+        await m.reloadResults()
+        #expect(m.results[job.id]?.id != savedForA?.id, "it is never shown as the new matter's result")
+        #expect(m.lastOutcome?.contains("another matter") == true, "\(m.lastOutcome ?? "")")
+    }
 }
