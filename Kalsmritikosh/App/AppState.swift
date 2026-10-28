@@ -1037,6 +1037,8 @@ public final class AppState {
             }
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
+            // A5 — a case erasure interrupted between its ledger commit and its file steps finishes now.
+            await Self.resumePendingCaseErasures(besideLedgerAt: resolvedDBURL, database: db)
             // Add anything an older upgrade left out (only adds; once per schema version).
             await SchemaConformance.checkAtBoot(db)
             do { schemaUnrepaired = try await SchemaConformance.unrepaired(db) } catch {

@@ -43,6 +43,14 @@ public nonisolated struct CaseErasureReport: Sendable, Equatable {
     public let sourcesKeptInLibrary: Int
     /// For a person: the documents whose text still names them (their originals are not edited).
     public let documentsStillNaming: Int
+    /// A5 — for a person: everything else that still names them and is not erased by this act
+    /// (studio drafts, saved answers, topics, conversation turns), by kind → count.
+    public var stillNamedIn: [String: Int] = [:]
+    /// A3 — facts carrying the name that could not be tied to this person alone (a same-name person
+    /// is mentioned in their documents, or their sources cannot be resolved): kept, not erased.
+    public var ambiguousFactsKept: Int = 0
+    /// A5 — saved answers removed because they cited erased documents.
+    public var answersRemoved: Int = 0
     /// The content addresses of vault copies that belonged only to the erased documents.
     public let vaultAddresses: [String]
 
@@ -74,6 +82,17 @@ public actor CaseEraser {
     ]
 
     struct Refused: Error { let why: String }
+
+    /// A5 — the vault addresses of the case's documents (read before the erase, so the file step can be
+    /// recorded before the ledger commits; the file step itself re-checks that no remaining version uses one).
+    public func vaultCandidates(sourceVersionIDs: Set<UUID>) async throws -> [String] {
+        guard !sourceVersionIDs.isEmpty else { return [] }
+        let ids = Array(sourceVersionIDs)
+        return try await database.query("""
+            SELECT DISTINCT lower(content_hash) FROM source_versions WHERE logical_source_id IN
+              (SELECT logical_source_id FROM source_versions WHERE id IN (\(ids.map { _ in "?" }.joined(separator: ","))));
+            """, ids.map { .uuid($0) }).compactMap { $0.string(0) }
+    }
 
     // MARK: - Case
 
@@ -112,13 +131,17 @@ public actor CaseEraser {
             "SELECT DISTINCT logical_source_id FROM source_versions WHERE id IN (\(vMarks));", vBinds).compactMap { $0.string(0) }
 
         // 1. Holds — inside the destructive boundary, so a hold placed meanwhile refuses the erase.
+        //    A4: every supported hold target — the case itself, its studio drafts, its source versions,
+        //    its files and their knowledge objects — plus unreleased hold notices for the case.
         let held: Int
         let notices: Int
         do {
-            held = try heldCount(db, logical: logical)
+            var targets = [caseID.uuidString] + versions.map(\.uuidString) + logical
+            targets += try db.query("SELECT id FROM studio_records WHERE case_id = ?;", [.uuid(caseID)]).compactMap { $0.string(0) }
+            held = try heldCount(db, targets: targets, logical: logical)
             notices = Int(try db.query("SELECT COUNT(*) FROM case_hold_notices WHERE case_id = ? AND released_at IS NULL;", [.uuid(caseID)]).first?.int(0) ?? 0)
         } catch { throw Refused(why: "Not erased: the legal-hold check could not be read (\(error.localizedDescription)). Nothing was deleted.") }
-        if held > 0 { throw Refused(why: "Not erased: \(held) of the case's documents are under a legal hold. Release the hold first. Nothing was deleted.") }
+        if held > 0 { throw Refused(why: "Not erased: the case, one of its drafts or \(held == 1 ? "one of its documents" : "its documents") is under a legal hold. Release the hold first. Nothing was deleted.") }
         if notices > 0 { throw Refused(why: "Not erased: the case has \(notices) unreleased legal-hold notice(s). Release them first. Nothing was deleted.") }
 
         // 2. Which of the case's documents another case or workspace uses.
@@ -141,6 +164,32 @@ public actor CaseEraser {
             if try columns(db, t).contains("case_id") { caseTables.append(t) }
         }
         var counts: [String: Int] = [:]
+        // A5 — each of the case's studio drafts is erased the way a single draft is: recorded in
+        // studio_erasures (kept, content-free), its quarantined copy and the captured pre-ledger store
+        // that held it cleared (the store's guard allows that only after a recorded erasure).
+        for row in try db.query("SELECT id, payload_sha256 FROM studio_records WHERE case_id = ?;", [.uuid(caseID)]) {
+            guard let rid = row.string(0) else { continue }
+            try db.exec("""
+                INSERT INTO studio_erasures (id, record_id, case_id, reason, legal_basis, payload_sha256, revisions_cleared,
+                    exports_cleared, quarantine_cleared, legacy_originals, erased_by, erased_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?);
+                """, [.uuid(UUID()), .text(rid), .uuid(caseID), .text("case erasure: \(reason)"),
+                      legalBasis.map { .text($0) } ?? .null, .text(row.string(1) ?? ""), .text(actor), .date(date)])
+            try db.exec("""
+                UPDATE studio_legacy_quarantine SET raw_json = '' WHERE EXISTS (
+                  SELECT 1 FROM studio_legacy_outcomes o WHERE o.record_id = ?
+                    AND o.source_key = studio_legacy_quarantine.source_key AND o.element_index = studio_legacy_quarantine.element_index);
+                """, [.text(rid)])
+            let legacy = try count(db, """
+                SELECT COUNT(*) FROM studio_legacy_blobs WHERE raw_blob <> ''
+                  AND source_key IN (SELECT DISTINCT source_key FROM studio_legacy_outcomes WHERE record_id = ?);
+                """, [.text(rid)])
+            try db.exec("""
+                UPDATE studio_legacy_blobs SET raw_blob = '', cleared_reason = ?, cleared_at = ?
+                WHERE raw_blob <> '' AND source_key IN (SELECT DISTINCT source_key FROM studio_legacy_outcomes WHERE record_id = ?);
+                """, [.text("case erasure \(erasureID.uuidString): \(reason)"), .date(date), .text(rid)])
+            if legacy > 0 { counts["studio_legacy_blobs", default: 0] += legacy }
+        }
         for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
@@ -156,8 +205,10 @@ public actor CaseEraser {
 
         // 4. The documents only this case used, when asked: every row derived from them.
         var vault: [String] = []
+        var answersRemoved = 0
         if eraseExclusive && !exclusive.isEmpty {
             vault = try vaultAddressesOnlyUsedBy(db, logical: exclusive)
+            answersRemoved = try eraseDerivedProse(db, logical: exclusive, tables: Set(tables), counts: &counts)
             for (t, n) in try eraseSources(db, logical: exclusive, tables: tables) { counts[t, default: 0] += n }
         }
 
@@ -177,9 +228,11 @@ public actor CaseEraser {
         try db.exec("DELETE FROM ledger_case_erase WHERE case_id = ?;", [.uuid(caseID)])
         try record(db, id: erasureID, scope: "case", caseID: caseID, subject: nil, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: eraseExclusive ? exclusive.count : 0, kept: shared.count, actor: actor, at: date)
-        return CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts,
-                                 sourcesErased: eraseExclusive ? exclusive.count : 0, sourcesKeptShared: shared.count,
-                                 sourcesKeptInLibrary: eraseExclusive ? 0 : exclusive.count, documentsStillNaming: 0, vaultAddresses: vault)
+        var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts,
+                                       sourcesErased: eraseExclusive ? exclusive.count : 0, sourcesKeptShared: shared.count,
+                                       sourcesKeptInLibrary: eraseExclusive ? 0 : exclusive.count, documentsStillNaming: 0, vaultAddresses: vault)
+        report.answersRemoved = answersRemoved
+        return report
     }
 
     // MARK: - Person
@@ -217,14 +270,29 @@ public actor CaseEraser {
         let binds = ids.map { SQLValue.text($0) }
         let held: Int
         do {
-            held = Int(try db.query("""
-                SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
-                WHERE h.released_at IS NULL AND i.removed_at IS NULL
-                  AND i.object_id IN (SELECT source_object_id FROM entity_mentions WHERE entity_id IN (\(marks)));
-                """, binds).first?.int(0) ?? 0)
+            // A4 — the person's documents (by object, file and version) and the cases they are a subject of.
+            let objects = try db.query("SELECT DISTINCT source_object_id FROM entity_mentions WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+            var targets = objects
+            if !objects.isEmpty {
+                let om = objects.map { _ in "?" }.joined(separator: ",")
+                let ob = objects.map { SQLValue.text($0) }
+                let files = try db.query("SELECT DISTINCT file_id FROM knowledge_objects WHERE id IN (\(om));", ob).compactMap { $0.string(0) }
+                targets += files
+                if !files.isEmpty {
+                    let fm = files.map { _ in "?" }.joined(separator: ",")
+                    targets += try db.query("SELECT id FROM source_versions WHERE logical_source_id IN (\(fm));", files.map { .text($0) }).compactMap { $0.string(0) }
+                }
+            }
+            targets += try db.query("SELECT DISTINCT case_id FROM investigation_subjects WHERE canonical_entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+            targets += try db.query("SELECT DISTINCT case_id FROM case_people WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+            held = try heldCount(db, targets: targets, logical: [])
         } catch { throw Refused(why: "Not erased: the legal-hold check could not be read (\(error.localizedDescription)). Nothing was deleted.") }
-        if held > 0 { throw Refused(why: "Not erased: \(held) document(s) naming this person are under a legal hold. Nothing was deleted.") }
+        if held > 0 { throw Refused(why: "Not erased: a document naming this person, or a case they are part of, is under a legal hold. Nothing was deleted.") }
 
+        // A3 — facts are erased only when they are provably this person's: linked by subject, or naming
+        // them in documents where only this person (no same-name person) is mentioned. Anything else
+        // carrying the name is kept and reported as ambiguous.
+        let (theirFacts, ambiguous) = try personFacts(db, ids: ids, name: name)
         let tables = Set(try userTables(db))
         var counts: [String: Int] = [:]
         var steps: [(String, String, [SQLValue])] = [
@@ -238,7 +306,9 @@ public actor CaseEraser {
             steps.append((t, "\(c) IN (\(marks))", binds))
         }
         steps.append(("entity_cooccurrences", "entity_a IN (\(marks)) OR entity_b IN (\(marks))", binds + binds))
-        steps.append(("generic_facts", "lower(value) = lower(?)", [.text(name)]))
+        if !theirFacts.isEmpty {
+            steps.append(("generic_facts", "id IN (\(theirFacts.map { _ in "?" }.joined(separator: ",")))", theirFacts.map { .text($0) }))
+        }
         steps.append(("entities", "id IN (\(marks))", binds))
         for (t, w, b) in steps where tables.contains(t) {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE \(w);", b)
@@ -252,8 +322,20 @@ public actor CaseEraser {
         let subject = SHA256.hash(data: Data(name.lowercased().utf8)).map { String(format: "%02x", $0) }.joined()
         try record(db, id: erasureID, scope: "person", caseID: nil, subject: subject, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: 0, kept: 0, actor: actor, at: date)
-        return CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts, sourcesErased: 0, sourcesKeptShared: 0,
-                                 sourcesKeptInLibrary: 0, documentsStillNaming: naming, vaultAddresses: [])
+        var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts, sourcesErased: 0, sourcesKeptShared: 0,
+                                       sourcesKeptInLibrary: 0, documentsStillNaming: naming, vaultAddresses: [])
+        report.ambiguousFactsKept = ambiguous
+        // A5 — the complete inventory of what still names them.
+        for (kind, sql) in [("studio drafts", "SELECT COUNT(*) FROM studio_records WHERE instr(lower(payload_json), lower(?)) > 0"),
+                            ("saved answers", "SELECT COUNT(*) FROM answers WHERE instr(lower(body), lower(?)) > 0"),
+                            ("topics", "SELECT COUNT(*) FROM memory_objects WHERE instr(lower(narrative), lower(?)) > 0"),
+                            ("conversation turns", "SELECT COUNT(*) FROM conversation_turns WHERE instr(lower(body), lower(?)) > 0"),
+                            ("facts kept as ambiguous", "")] where !sql.isEmpty {
+            let n = (try? count(db, sql + ";", [.text(name)])) ?? 0
+            if n > 0 { report.stillNamedIn[kind] = n }
+        }
+        if ambiguous > 0 { report.stillNamedIn["facts kept as ambiguous"] = ambiguous }
+        return report
     }
 
     // MARK: - Helpers (inside the savepoint)
@@ -271,15 +353,98 @@ public actor CaseEraser {
         Int(try db.query(sql, binds).first?.int(0) ?? 0)
     }
 
-    static func heldCount(_ db: isolated Database, logical: [String]) throws -> Int {
-        guard !logical.isEmpty else { return 0 }
-        let marks = logical.map { _ in "?" }.joined(separator: ",")
-        let binds = logical.map { SQLValue.text($0) }
+    /// Active hold items on any of `targets` (ids of cases, drafts, source versions, files or knowledge
+    /// objects), or on a knowledge object of the `logical` files.
+    static func heldCount(_ db: isolated Database, targets: [String], logical: [String]) throws -> Int {
+        let all = Array(Set(targets + targets.map { $0.uppercased() } + targets.map { $0.lowercased() }))
+        var clauses: [String] = []
+        var binds: [SQLValue] = []
+        if !all.isEmpty { clauses.append("i.object_id IN (\(all.map { _ in "?" }.joined(separator: ",")))"); binds += all.map { .text($0) } }
+        if !logical.isEmpty {
+            clauses.append("i.object_id IN (SELECT id FROM knowledge_objects WHERE file_id IN (\(logical.map { _ in "?" }.joined(separator: ","))))")
+            binds += logical.map { .text($0) }
+        }
+        guard !clauses.isEmpty else { return 0 }
         return try count(db, """
             SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
-            WHERE h.released_at IS NULL AND i.removed_at IS NULL
-              AND (i.object_id IN (\(marks)) OR i.object_id IN (SELECT id FROM knowledge_objects WHERE file_id IN (\(marks))));
-            """, binds + binds)
+            WHERE h.released_at IS NULL AND i.removed_at IS NULL AND (\(clauses.joined(separator: " OR ")));
+            """, binds)
+    }
+
+    /// A3 — the ids of the name-carrying facts that are provably this person's, and how many others
+    /// carry the name but are kept (a same-name person is mentioned in their documents, or their source
+    /// cannot be resolved).
+    static func personFacts(_ db: isolated Database, ids: [String], name: String) throws -> ([String], Int) {
+        let marks = ids.map { _ in "?" }.joined(separator: ",")
+        let binds = ids.map { SQLValue.text($0) }
+        var theirs = try db.query("SELECT id FROM generic_facts WHERE subject_id IN (\(marks));", binds).compactMap { $0.string(0) }
+        let mine = Set(try db.query("SELECT DISTINCT source_object_id FROM entity_mentions WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) })
+        // Documents where another person with the same name is mentioned.
+        let namesakes = Set(try db.query("""
+            SELECT DISTINCT m.source_object_id FROM entity_mentions m JOIN entities e ON e.id = m.entity_id
+            WHERE e.id NOT IN (\(marks)) AND (e.merged_into IS NULL OR e.merged_into NOT IN (\(marks)))
+              AND lower(e.value) = lower(?);
+            """, binds + binds + [.text(name)]).compactMap { $0.string(0) })
+        var ambiguous = 0
+        let candidates = try db.query("SELECT id, source_blocks_json FROM generic_facts WHERE lower(value) = lower(?) AND (subject_id IS NULL OR subject_id NOT IN (\(marks)));",
+                                      [.text(name)] + binds)
+        for row in candidates {
+            guard let id = row.string(0) else { continue }
+            let blocks = (row.string(1).flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) }) ?? []
+            var objects = Set<String>()
+            for b in blocks {
+                objects.formUnion(try db.query("""
+                    SELECT ko.id FROM evidence_blocks eb JOIN source_versions sv ON sv.id = eb.source_version_id
+                    JOIN knowledge_objects ko ON ko.file_id = sv.logical_source_id WHERE eb.id = ? OR eb.id = ?;
+                    """, [.text(b), .text(b.uppercased())]).compactMap { $0.string(0) })
+            }
+            if !objects.isEmpty, objects.isSubset(of: mine), objects.isDisjoint(with: namesakes) { theirs.append(id) } else { ambiguous += 1 }
+        }
+        return (Array(Set(theirs)), ambiguous)
+    }
+
+    /// A5 — saved answers that cite the documents (their prose quotes them) and topics distilled from
+    /// them: removed with the documents. Returns the number of answers removed.
+    static func eraseDerivedProse(_ db: isolated Database, logical: [String], tables: Set<String>, counts: inout [String: Int]) throws -> Int {
+        let lMarks = logical.map { _ in "?" }.joined(separator: ",")
+        let lBinds = logical.map { SQLValue.text($0) }
+        let objects = try db.query("SELECT id FROM knowledge_objects WHERE file_id IN (\(lMarks));", lBinds).compactMap { $0.string(0) }
+        guard !objects.isEmpty else { return 0 }
+        let oMarks = objects.map { _ in "?" }.joined(separator: ",")
+        let oBinds = objects.map { SQLValue.text($0) }
+        var answers: [String] = []
+        if tables.contains("answer_claims") && tables.contains("claim_evidence") {
+            answers = try db.query("""
+                SELECT DISTINCT c.answer_id FROM answer_claims c JOIN claim_evidence e ON e.claim_id = c.id WHERE e.object_id IN (\(oMarks));
+                """, oBinds).compactMap { $0.string(0) }
+        }
+        if !answers.isEmpty {
+            let aMarks = answers.map { _ in "?" }.joined(separator: ",")
+            let aBinds = answers.map { SQLValue.text($0) }
+            for (t, c) in [("conversation_turns", "answer_ledger_id"), ("answer_revision_events", "answer_id"), ("answer_revisions", "answer_id"),
+                           ("answer_claims", "answer_id"), ("answers", "id")] where tables.contains(t) {
+                let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE \(c) IN (\(aMarks));", aBinds)
+                try db.exec("DELETE FROM \"\(t)\" WHERE \(c) IN (\(aMarks));", aBinds)
+                if n > 0 { counts[t, default: 0] += n }
+            }
+        }
+        if tables.contains("memory_objects") {
+            var topics = Set<String>()
+            for o in objects {
+                topics.formUnion(try db.query("SELECT id FROM memory_objects WHERE instr(upper(source_object_ids_json), upper(?)) > 0;", [.text(o)]).compactMap { $0.string(0) })
+            }
+            if !topics.isEmpty {
+                let tm = topics.map { _ in "?" }.joined(separator: ",")
+                let tb = topics.map { SQLValue.text($0) }
+                for (t, c) in [("memory_changes", "memory_object_id"), ("memory_objects", "id")] where tables.contains(t) {
+                    if t != "memory_objects", !(try columns(db, t)).contains(c) { continue }
+                    let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE \(c) IN (\(tm));", tb)
+                    try db.exec("DELETE FROM \"\(t)\" WHERE \(c) IN (\(tm));", tb)
+                    if n > 0 { counts[t, default: 0] += n }
+                }
+            }
+        }
+        return answers.count
     }
 
     /// Content addresses of the documents' versions that no remaining version shares.

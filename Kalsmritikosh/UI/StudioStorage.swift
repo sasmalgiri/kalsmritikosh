@@ -132,6 +132,22 @@ final class StudioStorage {
         }
     }
 
+    /// A4 — after ONE case was erased: only the studios holding that case's drafts stop writing; every
+    /// other studio, and every other case's pending save, is untouched. (Called only after the erase
+    /// succeeded; a refused erase changes nothing.)
+    static func invalidate(forErasedCase caseID: UUID) async {
+        for w in live {
+            guard let s = w.storage, s.caseOf.values.contains(caseID) else { continue }
+            for (record, c) in s.caseOf where c == caseID {
+                s.committed[record] = nil
+                s.caseOf[record] = nil
+            }
+            s.erasedGeneration = true
+            s.hasUnsavedChanges = false
+            s.notice = "This case was erased. Close and reopen this studio; its drafts for that case are gone."
+        }
+    }
+
     /// Set by a full erase; cleared by the next load.
     private(set) var erasedGeneration = false
 
