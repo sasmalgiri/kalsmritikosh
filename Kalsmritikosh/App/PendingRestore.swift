@@ -18,6 +18,14 @@ import os
 nonisolated enum PendingRestore {
     static let bookmarkKey = "pendingRestoreBackupBookmark"
 
+    /// Where the schedule is kept. The test host keeps it in a suite of its own per process: CI runs
+    /// test hosts in parallel processes sharing the app's defaults, and one host's restore must
+    /// never consume another's schedule (nor the owner's).
+    static let store: UserDefaults = {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else { return .standard }
+        return UserDefaults(suiteName: "kalsmritikosh.tests.pendingRestore.\(ProcessInfo.processInfo.processIdentifier)") ?? .standard
+    }()
+
     enum Outcome: Sendable, Equatable {
         case none
         case restored(String)
@@ -32,7 +40,7 @@ nonisolated enum PendingRestore {
             let (_, verdict) = try BackupService().inspect(backupFolder: backupFolder)
             guard verdict.ok else { return "This backup did not verify, so it was not scheduled for restore." }
             let bookmark = try backupFolder.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-            UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
+            store.set(bookmark, forKey: bookmarkKey)
             return nil
         } catch {
             KalsmritikoshLog.storage.error("Restore not scheduled: \(error.localizedDescription, privacy: .public)")
@@ -40,13 +48,13 @@ nonisolated enum PendingRestore {
         }
     }
 
-    static var isScheduled: Bool { UserDefaults.standard.data(forKey: bookmarkKey) != nil }
+    static var isScheduled: Bool { store.data(forKey: bookmarkKey) != nil }
 
-    static func cancel() { UserDefaults.standard.removeObject(forKey: bookmarkKey) }
+    static func cancel() { store.removeObject(forKey: bookmarkKey) }
 
     /// Run a scheduled restore into the folder that holds `databaseURL`. Call before the ledger opens.
     static func performIfScheduled(databaseURL: URL, recoveryKey: LedgerKey?, nowEpoch: Double = Date().timeIntervalSince1970) async -> Outcome {
-        guard let data = UserDefaults.standard.data(forKey: bookmarkKey) else { return .none }
+        guard let data = store.data(forKey: bookmarkKey) else { return .none }
         var stale = false
         guard let folder = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) else {
             cancel()

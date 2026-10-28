@@ -195,7 +195,9 @@ public struct BackupService: Sendable {
                 catch LedgerEncryptionError.wrongKey { throw BackupError.encryptedWithAnotherKey }
             }
         }
-        if let problem = Database.quickCheck(fileAt: stagedDB, key: ledgerKey) {
+        // A plaintext backup (made before ledger encryption) is checked without a key; the next
+        // launch encrypts it once, like any plaintext ledger.
+        if let problem = Database.quickCheck(fileAt: stagedDB, key: LedgerFileState.of(stagedDB) == .encrypted ? ledgerKey : nil) {
             throw BackupError.databaseUnusable(problem)
         }
 
@@ -297,7 +299,8 @@ public struct BackupService: Sendable {
         guard manifest.coverage == .complete || manifest.coverage == .ledgerWithSomeOriginals,
               let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
         let map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
-        let db = try Database(url: targetFolder.appendingPathComponent(dbEntry.relativePath), key: ledgerKey)
+        let restoredDB = targetFolder.appendingPathComponent(dbEntry.relativePath)
+        let db = try Database(url: restoredDB, key: LedgerFileState.of(restoredDB) == .encrypted ? ledgerKey : nil)
         for (fileID, rel) in map.originals {
             guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
             let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL

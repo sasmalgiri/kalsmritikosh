@@ -82,7 +82,9 @@ struct CompleteBackupTests {
         let data = try scratch("pdata")
         let live = data.appendingPathComponent("knowledge.sqlite")
         try Data("the current ledger".utf8).write(to: live)
-        let outcome = await PendingRestore.performIfScheduled(databaseURL: live, recoveryKey: nil, nowEpoch: 42)
+        // A plaintext (pre-encryption) backup restores whatever key this Mac holds — here a key that
+        // never encrypted it, as on any Mac that already has an encrypted ledger.
+        let outcome = await PendingRestore.performIfScheduled(databaseURL: live, recoveryKey: LedgerKey.random(), nowEpoch: 42)
         guard case .restored(let note) = outcome else { Issue.record("not restored: \(outcome)"); return }
         #expect(note.contains("1 original file(s)"))
         #expect(!PendingRestore.isScheduled)
