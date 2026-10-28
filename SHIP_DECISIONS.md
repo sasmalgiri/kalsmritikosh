@@ -9,21 +9,41 @@ in the change-control log at the bottom**.
 
 Every technical number here must name its verification evidence, or be marked *unverified*.
 
+## 0. CURRENT contract (2026-10-28) — read this first
+
+This table is the contract in force. The sections below keep their dated history; where an older row differs
+(for example the offline-only network row or the five-persona row in §1), **this table wins**, as recorded in the
+change-control log (§5). Source: owner decisions 2026-10-15 … 2026-10-28 and the final completion instructions
+of 2026-10-28.
+
+| Area | Current decision |
+|---|---|
+| Product | **Investigations Made Easy**: a single-user investigation workspace (no team or enterprise features in v1) |
+| Language | **English only** for v1 (2026-10-23; supersedes the 2026-10-16 multi-language set) |
+| Personas | **Nine active**: Investigator, Lawyer, HR/Compliance, Forensic accountant, Insurance SIU, Journalist, Researcher/Historian, Genealogist, Individual/Family. **168 advertised jobs.** Content Creator stays hidden. |
+| Answers | **Evidence-only by default**; AI options are off until the person switches them on (2026-10-24) |
+| Connection modes | **Private (default): no network.** **Online (opt-in, the person's own API key)**: questions to the chosen provider. Document text only to providers whose terms are reviewed for case material (Claude commercial API, paid Gemini project), after the person's recorded account confirmation; never to OpenAI in this release. One network helper, three provider hosts. See `docs/DATA_FLOW_INVENTORY.md`. |
+| Models | Apple Foundation Models where available; the deterministic evidence engine always works with zero models; bundled BGE embedder/reranker |
+| Minimum OS | macOS 15.6, capability-adaptive (GOV-004) |
+| Storage | One SQLCipher-encrypted ledger (AES-256), key in the Keychain; the only approved third-party dependency |
+| Distribution and price | Mac App Store only; free download, 14-day trial, then **$79 once** (no subscription, no licence server) |
+| Release gate | Every mandatory gate in the final completion instructions (§10) has evidence; ≤ 1 % wrong answers per measured mode/family on fresh held-out material unless the owner explicitly changes the claim |
+
 ---
 
 ## 1. Locked product contract (v1)
 
 | Area | Decision | Implication |
 |---|---|---|
-| **Reasoning model** | **Apple Foundation Models where available; deterministic evidence engine always works with zero model.** No bundled Llama, no Ollama, no cloud in the release build. | Release ships no third-party LLM weights. On a Mac where Foundation Models is unavailable, the app is honestly deterministic-only (search, timelines, matrices, contradictions, gaps, deterministic reports) and must not claim "AI answers" it cannot produce. Optional downloaded local GGUF is a **v1.x** possibility, gated on the §6 checks — **not** in v1. |
+| **Reasoning model** | **Apple Foundation Models where available; deterministic evidence engine always works with zero model.** No bundled Llama, no Ollama. *(Cloud: superseded by §0 — Online is opt-in with the person's own key.)* | Release ships no third-party LLM weights. On a Mac where Foundation Models is unavailable, the app is honestly deterministic-only (search, timelines, matrices, contradictions, gaps, deterministic reports) and must not claim "AI answers" it cannot produce. Optional downloaded local GGUF is a **v1.x** possibility, gated on the §6 checks — **not** in v1. |
 | **Embedding model** | **Bundled BGE-small-en-v1.5 (MIT), 384-dim Core ML (~130 MB).** | Fixed dimension corpus-wide; reuses the existing BGE tokenizer/reranker infra. NLEmbedding remains only as a clearly-labelled degraded fallback. A re-embedding migration re-vectorizes on model change. |
 | **Minimum OS** | **macOS 15.6, capability-adaptive (GOV-004).** | Requires `MACOSX_DEPLOYMENT_TARGET = 15.6` uniformly in pbxproj. Foundation Models is runtime-gated (`#if canImport` + `if #available(macOS 26, *)`); on macOS 15.6–25 the app runs honestly deterministic-only and must present that mode clearly. The offline/no-network-provider release contract is unchanged and OS-independent. |
-| **Network / privacy** | **No network provider in the release build.** | `PrivacyGate` filters all cloud providers out of capability resolution; the only network code path (Routing/Providers) is compiled out or unreachable in release. Fully offline. Ollama/MLX/Cloud stay compiled but dev/internal-only (`#if DEBUG`). |
+| **Network / privacy** | *SUPERSEDED by §0 (Online opt-in, 2026-10-15/24).* Was: **No network provider in the release build.** | `PrivacyGate` filters all cloud providers out of capability resolution; the only network code path (Routing/Providers) is compiled out or unreachable in release. Fully offline. Ollama/MLX/Cloud stay compiled but dev/internal-only (`#if DEBUG`). |
 | **Advertised scale** | **"Tested to <N> GB" only — where N is a recorded owner-hardware run.** | No 100 GB / 1 TB marketing claim until a real run is recorded (§ship gates). The disk-backed/sharded ANN (task P9.3) remains the scale engineering item; until it and a measured run exist, copy states only the tested figure. |
 | **Distribution** | **Mac App Store only.** | Apple payment + review; App Sandbox mandatory (already configured). No DMG/notarization path at launch, no license server. |
 | **Pricing** | **Free download, 14-day trial, then $79 once — unlocks everything for good** (2026-10-18; superseded the earlier $29–49 band). | Pro tier deferred to v1.x. |
 | **Launch claim** | **Early access — "works with mixed document collections."** | Never "understands every document"; never list a format that has not passed the declared matrix; never claim universal AI answers where no reasoning provider can resolve. |
-| **Personas** | **Five lenses over one engine:** Lawyer, Investigator, Journalist, Researcher/Historian, Individual. | Persona changes terminology/work-cards/defaults only — never evidence, truth state, confidence, contradiction logic or source independence. No sixth persona before release. |
+| **Personas** | *SUPERSEDED by §0 (nine personas, 168 jobs).* Was: **Five lenses over one engine:** Lawyer, Investigator, Journalist, Researcher/Historian, Individual. | Persona changes terminology/work-cards/defaults only — never evidence, truth state, confidence, contradiction logic or source independence. No sixth persona before release. |
 | **Evidence vocabulary** | One vocabulary across storage/UI/exports: `DIRECTLY_OBSERVED`, `SOURCE_ASSERTED`, `DETERMINISTICALLY_DERIVED`, `INFERRED`, `CONTRADICTED`, `UNSUPPORTED`, `MISSING_EVIDENCE`, `HUMAN_CONFIRMED`, `HUMAN_CORRECTED`, `HUMAN_REJECTED`. | Model text is never primary evidence; human-confirmed is not automatically proven; contradictions show both sides; missing evidence states searched scope. |
 
 ## 2. Answer modes (both share one evidence ledger and truth rules)
@@ -57,6 +77,8 @@ Hard generative-call budgets (enforced, shared across classifier/experts/planner
 - 1 TB advertised scale (until a recorded run exists).
 
 ## 5. Change-control log
+
+- **2026-10-28 (final completion instructions, owner):** §0 added as the one current contract: English v1, single user, nine personas / 168 jobs, evidence-only and Private defaults, Online opt-in with provider eligibility for documents, $79 once, Mac App Store. §1's offline-only network row and five-persona row are marked superseded in place (kept as history).
 
 - **2026-10-26 (Implementation Brief, owner instruction "complete our product first then test it and ready it for ship"; agent self-rulings under the brief, for owner review at HOLD 2):** product rules now enforced in code (execution record in PRODUCTION_STATUS.md): (1) **a hypothesis is confirmed by a human's written reasons** — rationale, how contrary evidence was weighed, alternatives considered — never by a for/against majority; copies of one document count once. (2) **Every findings approval declares a decision policy** — a named standard of proof, or a justified "no standard applies"; findings built for another case, under a changed scope, or with a receipt that no longer matches are refused. (3) **A closure pins only the case's approved findings run**; closing without findings stays allowed (declined/referred). (4) **Case evidence references must resolve**: an in-scope source version, an exhibit on the case register, or a labelled investigator note; unresolved stored references are listed for repair, never rewritten. (5) **A confirmed statement is never edited**; corrections are linked addenda. (6) **Case history is sealed**: case actions, scope membership, approvals and hypothesis decisions are in the audit chain (v153/v157). (7) **"Did X plead guilty?" is answered "No" only on a verdict at trial**; a bare conviction is reported as such. (8) Bench truth corrected rather than tuning the app to it: Enron counts use any To recipient, one email per subject+date; plea "No" labels without trial wording are excluded and counted. §3 gates below remain unchecked — none of this is release verification.
 

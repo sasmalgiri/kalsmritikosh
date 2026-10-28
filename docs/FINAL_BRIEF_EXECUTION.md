@@ -1,17 +1,29 @@
 # Final brief — authoritative execution record
 
-Governing instruction: `Investigations_Made_Easy_Final_Product_Instructions.md` (owner, 2026-10-27; audit of
-development head e7351775). It replaces the earlier implementation brief. This file is the one execution record
-the brief asks for (§2, §18.1): every requirement, its state, the evidence, and what remains. No overall
-"percent complete" is given — the brief forbids it.
+Governing instruction (from 2026-10-28): **`Investigations_Made_Easy_Final_Completion_Instructions_2026-10-28.md`** (owner; review of
+`957f066b`). It updates the final product instructions of 2026-10-27 and the ship-readiness review of 61ad7820, whose findings
+remain recorded below (§A2, §A3). This file is the one execution record: every requirement, its state, the evidence and what
+remains. No overall "percent complete" is given.
 
-**States** (brief §2): *implemented* (code exists) · *unit-verified* (focused automated tests pass locally) ·
-*integration-verified* (exercised through the real service + ledger path) · *signed-app-verified* (owner, on
-the signed build) · *practitioner-reviewed* (a professional in that field reviewed the work product).
-Nothing below is signed-app-verified or practitioner-reviewed: the agent cannot run the signed app, press
-buttons in it, or recruit practitioners. Those are owner-operated and listed in §C.
+**States:**
+- *implemented*: the code exists.
+- *unit-verified*: focused automated tests pass.
+- *integration-verified*: exercised through the real service and ledger path.
+- *signed-app-verified*: checked on the signed distribution build.
+- *practitioner-reviewed*: a professional in that field reviewed the work product.
 
-Branch `investigations-next`, PR #169. Commits since the reviewed head are listed against each item.
+Nothing below is signed-app-verified or practitioner-reviewed.
+
+**Baseline (F0):**
+- `957f066b` passed all seven CI jobs (run 40669296571: release build, full unit target, migration matrix, sensitive exports, report/receipt integrity, parsers, architecture guards).
+- Later commits are listed against each item; each needs its own CI run.
+
+**Measurement identities:**
+- ho8: rules on `a68e64d5`, Claude on `2e7d54e6`.
+- ho9: both modes on `f685315c` (`docs/measurements/ho9/`).
+- ho9 has since informed development, so it is now a **regression set**, not held-out evidence. No figure above applies to later code.
+
+Branch `investigations-next`, PR #169 (open, not reviewed).
 
 ## A. Priority defects and integration gaps (brief §3) — partially closed
 
@@ -65,19 +77,68 @@ remaining items in each row's *Remains* column are still open.
 | §16 | Exact-commit holdouts per mode; separate metrics; human adjudication | measured on the candidate code, target not met | **Held-out chronology 9** (`docs/measurements/ho9/`: generated after the fixes, seed 4747, 60 new prosecutions, n = 932, code `f685315c`). Questions, answers, scores and provenance are committed. **Rules 96.6 % right / 1.7 % wrong; Claude 97.2 % / 1.5 %.** On answerable questions only, both modes get 1.7 % wrong (rules 96.3 % right, Claude 96.8 %). The gain over ho8 (rules 93.9 % / 3.4 %) came from fixes found on the *dev* set ho7: charge sentences that name the person (plus aliases), courtesy-wrapped questions, and trial verdicts preferred over "convicted" headlines. Dev ho7 moved 94.0 % / 3.8 % → 95.8 % / 2.4 %. | **≤ 1 % wrong not met in either mode.** No human adjudication yet; the dev review found scoring-truth disagreements among the "wrong" charge answers. Other answer families (email, finance) are not held-out-measured. |
 | §17 | Threat model across originals/derived/indexes/studio/logs/exports/backups; prompt-injection tests; supported workload definition | partial | **`docs/THREAT_MODEL.md` v1** covers assets, actors and surfaces T1–T13, each with its control, the test that exercises it, and the gap. Still open: a prompt-injection corpus (none yet), the case race tests, provider failure tests, plaintext caches beside the ledger (vector cache, vault), public log interpolations, and a measured supported-workload envelope. |
 
-## C. Owner-operated checks (the agent cannot perform these)
+## C. Checks that need the signed build, an account or a person
 
-1. Run the signed app: clean install, upgrade from an existing ledger (confirm studio drafts move into the ledger and the notice appears), Fill from case binding, a studio export, and the evidence-check alert.
-2. Clean-machine restore of a complete backup with the recovery key; confirm a partial backup is labelled partial.
-3. Private mode network capture (no app/helper traffic); one Online question with `onlineRecordReading` off (no document text in the preview) and on (preview shows the excerpts).
-4. Five-user core pilot (≥ 4 finish unaided) and one specialist session + work-product review per advertised persona.
-5. Purchases, restore, trial expiry, entitlements; privacy/terms legal review; name/trademark clearance; App Store metadata.
-6. Rotate the Claude API key used for benchmarking (`~/CaseBench/.anthropic-key`).
-7. Merge PR #169 once CI is green on the candidate commit.
+The automatable parts are to be scripted and run on a Mac runner where possible (instructions §9). They are not owner-only just because the agent cannot press buttons.
 
-## D. Readiness
+1. **Signed build checks:**
+   - clean install and upgrade;
+   - studio drafts moved into the ledger;
+   - Fill from case and Assign;
+   - export byte verification;
+   - the evidence-check alert;
+   - Private-mode network capture;
+   - Online preview, cancel and document confirmation;
+   - companions, clipper and sync;
+   - keyboard and VoiceOver.
+2. **Recovery:** clean-machine restore of a complete backup with the recovery key; a partial backup labelled partial.
+3. **Purchases:** real StoreKit purchase, restore, trial expiry, refund/revocation and offline entitlement. Unit hosts bypass the paywall, so they cannot prove this.
+4. **Pilot and practitioners:** five-user core pilot (≥ 4 finish unaided); a specialist session and work-product review per persona.
+5. **Owner/counsel decisions** (each prepared by the agent first):
+   - privacy label and manifest values;
+   - EULA choice;
+   - publisher identity, address and rights;
+   - trademark advice;
+   - encryption classification;
+   - lawful basis for Online case processing;
+   - App Review 5.1.1(viii)/(ix) applicability.
+6. Independent adjudication of every wrong benchmark answer, plus a blinded sample of the right ones.
+7. Rotate the benchmark API key through the provider account.
 
-Not ready to declare. Every mandatory gate in brief §19 is open at least in part: the per-persona journeys,
-the shared approval pipeline (case reports, scope re-authorisation, redaction), exact-commit accuracy within the
-≤ 1 % wrong target (not met: 3.4 % rules, 1.5 % Claude), legal findings L1–L6, signed-app verification, and
-usability and practitioner review. The review findings R1–R6 are fixed to unit level; the §3 rows remain partial.
+## D. Readiness — not ready
+
+Status by phase of the final completion instructions (§10):
+
+| Phase | State |
+|---|---|
+| F0 Baseline and record | done: `957f066b` CI green; SHIP_DECISIONS §0 states the current contract; this record updated |
+| F1 Shared kernel | in progress; see §E |
+| F2 Job contracts (168) | not started; the outcome matrix only classifies (20 specialist mappings / 23 generic products / 125 generic rows) |
+| F3 Persona journeys | not started (only the per-persona case simulations exist) |
+| F4 Races, recovery, workload | partial: the threat model, an injection guard and the atomic erase are done; race, recovery and workload tests are not |
+| F5 Accuracy | not met. ho9 on `f685315c`: rules 96.6 % right / 1.7 % wrong, Claude 97.2 % / 1.5 %. No adjudication yet; no fresh set for the current code. |
+| F6 Legal and distribution | prepared in part (inventory, legal pack); the answer sheet, required-reason fixes, EULA, name search, crypto inventory and StoreKit script are open |
+| F7 Acceptance and release packet | not started |
+
+## E. Open requirements (IDs)
+
+| ID | Requirement (instructions §) | Phase | State |
+|---|---|---|---|
+| K1 | Source ownership, sensitivity and privilege filter before prompt assembly on every document-bearing cloud route (§5) | F1 | open |
+| K2 | Full erase fails closed: hold check, table inventory and file removal; writer barrier; operation record (§5) | F1 | open |
+| K3 | Studio erasure clears the legacy raw-store copy, or records a retention restriction (§1.3) | F1 | open |
+| K4 | An explicit-currency field is not supported by a number of unknown currency (§1.4) | F1 | open |
+| K5 | One artifact service for studio and case reports: approval bound to sources, policy and scope; re-authorisation at output; redaction (§5) | F1 | partial: studio frozen package done |
+| K6 | Mandatory documentary findings are not satisfied by human-entry labels (§5) | F1 | partial: relabelled failed citations block approval |
+| K7 | Pending saves flushed at quit and interruption; persona and job IDs saved on every record (§5) | F1 | open |
+| K8 | Provider failure handling: 401/403, 429, timeout, refusal, malformed, cancel, stale consent, logging failure (§5) | F1/F4 | open |
+| K9 | Injection corpus widened to the general route, filenames, OCR, attachments, quoted text and split instructions; legitimate analysis of an injected instruction (§5) | F4 | partial |
+| K10 | Case and person erasure across every dependent store, with shared-evidence and hold handling (§5) | F1 | open |
+| K11 | App-managed vector cache and vault copies protected by default, or a bounded recorded decision (§5) | F1 | open |
+| J1 | JOB_CONTRACTS for all 168 jobs, with result-family executors and per-job assertions (§3) | F2 | open |
+| P1–P9 | Persona outcomes and acceptance journeys (§4) | F3 | open |
+| T1 | Barrier-controlled race tests (8 listed, §6) | F4 | open |
+| T2 | Upgrade and recovery tests incl. clean-machine restore (§6) | F4 | open |
+| T3 | Measured support envelope on named hardware (§6) | F4 | open |
+| M1 | Adjudication, then a fresh held-out set, then other answer families (§7) | F5 | open |
+| G1 | Privacy answer sheet and manifests; required-reason fixes; EULA; name search; crypto inventory; StoreKit script; listing audit (§8) | F6 | open |
