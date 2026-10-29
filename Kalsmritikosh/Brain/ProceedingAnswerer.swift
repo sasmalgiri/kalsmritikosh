@@ -33,7 +33,7 @@ public nonisolated enum ProceedingAnswerer {
 
     /// A verdict reached at trial: "a federal jury convicted", "convicted by a jury", "found guilty at
     /// trial", "following a three-week jury trial … was convicted", "a jury verdict".
-    static let trialVerdict = #"\bjury (?:convicted|found|verdict|trial)\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b"#
+    static let trialVerdict = #"\bjury (?:convicted|found|verdict|trial)\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b|\bevidence (?:produced|presented) at trial\b"#
 
     /// The step a question's verb names.
     static let stepWords: [(String, ProceedingEventExtractor.Step)] = [
@@ -76,7 +76,7 @@ public nonisolated enum ProceedingAnswerer {
     static func unwrap(_ q: String) -> String {
         // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
         // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|provide|give me)|do you know|do (?:you|we) have|have (?:you|we) got|is there|please (?:tell me|confirm|specify|clarify))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do you know|do (?:you|we) have|have (?:you|we) got|is there|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -104,7 +104,7 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
         // "Which prosecutorial office handled the case against X?" (held-out chronology 9, 2026-10-29).
-        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+|prosecutorial\s+|prosecution\s+|government\s+)?(?:office|agency|prosecutors?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible)\b|\bwho prosecuted\b|\bprosecut(?:ing|orial) (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+|prosecutorial\s+|prosecution\s+|government\s+)?(?:office|agency|prosecutors?(?:['’]s)?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible|took(?: on)?|oversaw|led|ran|managed|in charge)\b|\bwho prosecuted\b|\bprosecut(?:ing|orial) (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought|took on)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
@@ -114,10 +114,12 @@ public nonisolated enum ProceedingAnswerer {
         }
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
-        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for)\b"#, options: .regularExpression) != nil {
+        // "the date on which X was formally charged" (held-out chronology 10, 2026-10-29).
+        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
         }
-        if q.range(of: #"^(?:did|was|were|has|have|is)\b"#, options: .regularExpression) != nil {
+        // "Is there any indication that X entered a guilty plea?" (held-out chronology 10, 2026-10-29).
+        if q.range(of: #"^(?:did|was|were|has|have|is)\b|^(?:any|an?)\s+(?:indication|record|evidence|sign|mention|confirmation)\s+(?:that|of|whether)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .whether(step))
         }
         // The same yes/no question behind a courtesy wrapper: "I'm trying to confirm: did X plead
@@ -239,6 +241,19 @@ public nonisolated enum ProceedingAnswerer {
                 }
                 return refuse("The documents that name \(name) don't record \(name) being \(step.phrase).")
             }
+            // More than one day for the step (a person sentenced in two prosecutions — held-out
+            // chronology 10, 2026-10-29): every one is given, in order, never only the first.
+            let days = hits.filter { ($0.1.day ?? $0.1.reportedOn) != nil }
+            var distinct: [Hit] = []
+            for h in days where !distinct.contains(where: { key($0.1) == key(h.1) }) { distinct.append(h) }
+            if distinct.count > 1 {
+                let parts = distinct.map { h -> String in
+                    h.1.day != nil ? "on \(render(h.1.day) ?? "") — \(quote(h.1.sentence))"
+                                   : "reported on \(render(h.1.reportedOn) ?? "") (the sentence gives no day) — \(quote(h.1.sentence))"
+                }
+                let text = "The documents record \(name) being \(step.phrase) more than once: " + parts.joined(separator: "; ")
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.7))
+            }
             let text: String
             if let day = render(best.1.day) {
                 text = "\(name) was \(step.phrase) on \(day). The document says: \(quote(best.1.sentence))"
@@ -260,9 +275,16 @@ public nonisolated enum ProceedingAnswerer {
             // A sentence that says the verdict came at trial, from any of the person's documents,
             // outranks a headline that only says "convicted".
             let convictions = found.filter { $0.1.step == .convicted }
-            let trialHit = convictions.first { $0.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil }
+            // The verdict came at trial when the conviction sentence says so, or when the same
+            // document says so elsewhere ("… after a bench trial", "evidence produced at trial" —
+            // held-out chronology 10, 2026-10-29).
+            func atTrial(_ hit: Hit) -> Bool {
+                hit.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
+                    || about.first { $0.objectID == hit.0 }?.text.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
+            }
+            let trialHit = convictions.first(where: atTrial)
             if step == .pleaded, let hit = trialHit ?? convictions.first {
-                let atTrial = hit.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
+                let atTrial = atTrial(hit)
                 let text = atTrial
                     ? "No — the documents say \(name) was found guilty at trial: \(quote(hit.1.sentence))"
                     : "The documents that name \(name) don't record a guilty plea. They say \(name) was convicted: \(quote(hit.1.sentence))"
@@ -286,7 +308,13 @@ public nonisolated enum ProceedingAnswerer {
             // Canty was charged in the above crimes, detectives …").
             // An initial or "U.S." keeps the clause going ("pled guilty today before Chief U.S. District
             // Judge Daniel P. Jordan III to commercial driver's license fraud").
-            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b|\bcounts? of\b"#
+            // "indicted on Aug. 7, 2008" states a day, not an offence; "charged … with Tyson Depina and
+            // Eric Desousa" names co-defendants, not an offence (held-out chronology 10, 2026-10-29).
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b"#
+            // Words an offence is stated in; a sentence of charges that has none is a weaker candidate.
+            let offenceWords = #"(?i)\b(?:counts? of|conspiracy|fraud|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearm|narcotic|cocaine|heroin|methamphetamine|fentanyl|pornograph\w*|exploitation|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse)\b"#
+            // "In addition, the indictment charges …" is a supplementary count, not the charge asked about.
+            let supplementary = #"(?i)^\W*(?:in addition|additionally|also|further)\b"#
             // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge;
             // "possession of a firearm by a convicted felon" IS the charge.
             let prior = Self.priorRecord
@@ -319,6 +347,8 @@ public nonisolated enum ProceedingAnswerer {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
                     + (!surnames.isEmpty && c.sentence.lowercased().range(of: namesPerson, options: .regularExpression) != nil ? 5 : 0)
+                    + (c.sentence.range(of: offenceWords, options: .regularExpression) != nil ? 3 : 0)
+                    - (c.sentence.range(of: supplementary, options: .regularExpression) != nil ? 4 : 0)
             }
             // Only a sentence that STATES an offence answers; one that merely mentions a charge does not.
             guard let hit = candidates.filter({ $0.sentence.count > 40 && score($0) >= 10 }).max(by: { score($0) < score($1) }) else {

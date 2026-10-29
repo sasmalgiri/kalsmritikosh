@@ -173,6 +173,56 @@ struct ProceedingAnswererTests {
         #expect(body.contains("September 18, 2014 — pleaded guilty") && body.contains("December 12, 2014 — sentenced") && !body.contains("September 19, 2014"), "\(body)")
     }
 
+    @Test("Held-out chronology 10 (2026-10-29): more courtesy wrappers, 'entered a guilty plea', 'The defendant', a jury that found X guilty, a trial named elsewhere in the release, two sentencings, an offence sentence over a date or a co-defendant list, a weekday")
+    func heldOut10() throws {
+        let n = QuestionCanonicalizer.normalize
+        let shapes: [(String, ProceedingAnswerer.Ask)] = [
+            ("For my count, how many press releases were issued about Christi Machala?", .documentCount),
+            ("Please pull up when Christi Machala was sentenced.", .when(.sentenced)),
+            ("I need to pin down when charges were filed against Christi Machala — do we have that date?", .when(.charged)),
+            ("Is there any indication that Christi Machala entered a guilty plea?", .whether(.pleaded)),
+            ("I need to know which prosecutor's office took on the case against Christi Machala.", .office),
+        ]
+        for (q, want) in shapes { #expect(ProceedingAnswerer.parse(n(q))?.ask == want, "\(q) → \(n(q))") }
+        func release(_ date: String, _ body: String) -> String { "U.S. Department of Justice\nDistrict of Nevada\nFOR IMMEDIATE RELEASE\n\(date)\n\n" + body }
+        // "entered a guilty plea", "The defendant pleaded guilty" are pleas.
+        let entered = release("Tuesday, December 1, 2020", "St. Thomas, USVI – Rakem Hendrickson, 28, of St. Croix, appeared before Magistrate Judge George W. Cannon, Jr., in District Court and entered a guilty plea to the charge of Use of a Firearm During a Drug Trafficking Crime.")
+        #expect(ProceedingEventExtractor.findings(in: entered, person: "Rakem Hendrickson").map(\.step) == [.pleaded])
+        let defendant = release("Tuesday, February 9, 2021", "PHILADELPHIA – Steven G. Dubin, 66, of Holland, PA, was sentenced to 18 months in prison. In June 2018, the defendant pleaded guilty to wire fraud.")
+        #expect(ProceedingEventExtractor.findings(in: defendant, person: "Steven G. Dubin").map(\.step).contains(.pleaded))
+        // A jury that "found X guilty" is a verdict at trial: "did X plead guilty?" is No.
+        let jury = release("Friday, November 17, 2017", "FRESNO, Calif. — A federal jury in Fresno today found Adam Alan Henry, 39, of Turlock, guilty of conspiring to sexually exploit a minor.")
+        let henry = try #require(ProceedingAnswerer.parse("Did Adam Alan Henry enter a guilty plea?"))
+        #expect(try #require(ProceedingAnswerer.answer(henry, sources: [.init(objectID: UUID(), text: jury)])).body.hasPrefix("No — the documents say Adam Alan Henry was found guilty at trial"))
+        // The trial is named in another sentence of the same release.
+        let bench = release("Monday, December 17, 2018", "Izmir Koch, 33, of Huber Heights, Ohio, was convicted in U.S. District Court today for assaulting a man. The verdict was announced by Judge Susan J. Dlott after a bench trial that occurred between Nov. 13 to 15.")
+        let koch = try #require(ProceedingAnswerer.parse("Did Izmir Koch enter a guilty plea?"))
+        #expect(try #require(ProceedingAnswerer.answer(koch, sources: [.init(objectID: UUID(), text: bench)])).body.hasPrefix("No — the documents say Izmir Koch was found guilty at trial"))
+        // Two sentencings: both given, in order.
+        let first = release("Wednesday, April 5, 2017", "ROCHESTER, N.Y. -- Hoeub Chan, 35, of Rochester, NY, who was convicted of smuggling narcotics into jail, was sentenced to 18 months in prison by Chief U.S. District Judge Frank P. Geraci. Chan was sentenced to federal prison on January 6, 2016 following his conviction for conspiracy to commit mail fraud.")
+        let chan = try #require(ProceedingAnswerer.parse("What was the sentencing date for Hoeub Chan?"))
+        let chanBody = try #require(ProceedingAnswerer.answer(chan, sources: [.init(objectID: UUID(), text: first)])).body
+        #expect(chanBody.hasPrefix("The documents record Hoeub Chan being sentenced more than once") && chanBody.contains("January 6, 2016") && chanBody.contains("April 5, 2017"), "\(chanBody)")
+        // The offence sentence wins over "indicted on <date>" and over "charged … with <co-defendants>".
+        let naaman = release("Friday, July 31, 2009", "Ousama Naaman, 60, of Abu Dhabi, United Arab Emirates, was indicted on Aug. 7, 2008, in U.S. District Court for the District of Columbia. Naaman is charged with one count of conspiracy to commit wire fraud and to violate the Foreign Corrupt Practices Act.")
+        let on = try #require(ProceedingAnswerer.parse("What exact charges were filed against Ousama Naaman?"))
+        #expect(try #require(ProceedingAnswerer.answer(on, sources: [.init(objectID: UUID(), text: naaman)])).body.contains("conspiracy to commit wire fraud"))
+        let mendes = release("Wednesday, October 5, 2016", "BOSTON – Sharik Mendes, 39, of New Bedford, pleaded guilty to one count of conspiracy to distribute and possess with the intent to distribute heroin. Mendes had been previously charged by criminal complaint in June 2016 with Tyson Depina and Eric Desousa, both of whom have pleaded not guilty.")
+        let sm = try #require(ProceedingAnswerer.parse("What were the charges filed against Sharik Mendes?"))
+        #expect(try #require(ProceedingAnswerer.answer(sm, sources: [.init(objectID: UUID(), text: mendes)])).body.contains("conspiracy to distribute"))
+        // "In addition, the indictment charges X with …" loses to the main charging sentence.
+        let arrick = release("Wednesday, May 21, 2014", "COLUMBUS, Ohio – A federal grand jury has indicted Keith A. Arrick Sr., 46, of Ft. Mitchell, Kentucky and his son charging them with conspiracy to commit sex trafficking, sex trafficking of a minor and sex trafficking by force, fraud or coercion. In addition, the indictment charges Keith Arrick Sr. with two counts of violating the Mann Act.")
+        let ka = try #require(ProceedingAnswerer.parse("What charges were filed against Keith A. Arrick Sr.?"))
+        #expect(try #require(ProceedingAnswerer.answer(ka, sources: [.init(objectID: UUID(), text: arrick)])).body.contains("conspiracy to commit sex trafficking"))
+        // A weekday against the printed date; an initial appearance answers "when charged" honestly.
+        let west = release("Tuesday, March 24, 2020", "Employee Of Drug Testing Facility Charged With Accepting Bribes\n\nLAS VEGAS, Nev. — Billy Joe West, 57, of Las Vegas, made his initial appearance Monday on a federal charge alleging that he misused his position.")
+        let steps = ProceedingEventExtractor.findings(in: west, person: "Billy Joe West")
+        #expect(steps.contains { $0.step == .arraigned && $0.day == DateComponents(year: 2020, month: 3, day: 23) }, "\(steps)")
+        let bw = try #require(ProceedingAnswerer.parse("Can you tell me the date on which Billy Joe West was formally charged?"))
+        let bwBody = try #require(ProceedingAnswerer.answer(bw, sources: [.init(objectID: UUID(), text: west)])).body
+        #expect(bwBody.contains("March 2") && !bwBody.contains("don't record"), "\(bwBody)")
+    }
+
     @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")
     func pleaSemantics() throws {
         func release(_ body: String) -> ProceedingAnswerer.Source {

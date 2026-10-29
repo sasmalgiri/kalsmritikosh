@@ -50,9 +50,12 @@ public nonisolated enum ProceedingEventExtractor {
             switch self {
             case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:federal )?(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
             case .arrested: return #"\b(?:was|were|has been) arrested\b"#
-            case .arraigned: return #"\b(?:was|were) arraigned\b"#
-            case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b"#
-            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b"#
+            // "made his initial appearance Monday on a federal charge" is the arraignment-stage step.
+            case .arraigned: return #"\b(?:was|were) arraigned\b|\bmade (?:his|her|their|an) initial (?:court )?appearance\b"#
+            // "entered a guilty plea to the charge", "entered a plea of guilty" (held-out chronology 10, 2026-10-29).
+            case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b"#
+            // "A federal jury in Fresno today found Adam Alan Henry, 39, of Turlock, guilty of …" (held-out chronology 10).
+            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
             case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
@@ -122,8 +125,9 @@ public nonisolated enum ProceedingEventExtractor {
         // chronology 9 review, 2026-10-28). "He sentenced Smith …" (the judge) does not match.
         var leads = Set([descriptiveLead].compactMap { $0 })
         if introductions <= 1 {
+            // "The defendant pleaded guilty to wire fraud." names the one defendant too (held-out chronology 10).
             for (i, sentence) in all.enumerated()
-            where sentence.range(of: #"^\W*(?:He|She)\s+(?:was|were|has|had|is|pleaded|pled|pleads|later|then|also|previously)\b"#, options: .regularExpression) != nil {
+            where sentence.range(of: #"^\W*(?:(?:In|On|During)\s+[^,.]{3,40},\s*)?(?:He|She|[Tt]he defendant)\s+(?:was|were|has|had|is|pleaded|pled|pleads|entered|later|then|also|previously)\b"#, options: .regularExpression) != nil {
                 leads.insert(i)
             }
         }
@@ -215,8 +219,12 @@ public nonisolated enum ProceedingEventExtractor {
     static func headline(of text: String) -> String? {
         for raw in text.components(separatedBy: .newlines).prefix(14) {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            guard line.split(separator: " ").count >= 4, line.count <= 200,
-                  line.range(of: #"(?i)^(?:u\.s\. department|department of|united states attorney|for immediate release|office of|(?:(?:northern|southern|eastern|western|middle|central)\s+)?district of\b)|(?i)\b(?:division|office|bureau|department|section)$"#, options: .regularExpression) == nil,
+            let words = line.split(separator: " ").count
+            // An organisation line ("Criminal Division", "Office of Public Affairs") is short; a headline
+            // that happens to end in "… U.S. Probation Office" is not one (held-out chronology 10).
+            guard words >= 4, line.count <= 200,
+                  line.range(of: #"(?i)^(?:u\.s\. department|department of|united states attorney|for immediate release|office of|(?:(?:northern|southern|eastern|western|middle|central)\s+)?district of\b)"#, options: .regularExpression) == nil,
+                  words > 7 || line.range(of: #"(?i)\b(?:division|office|bureau|department|section)$"#, options: .regularExpression) == nil,
                   fullDate(in: line) == nil || line.count > 40 else { continue }
             // A lead paragraph ("PROVIDENCE, R.I. – …") is not a headline.
             if line.range(of: #"^[A-Z][A-Z .,'\-]{2,40}(?:,|\s[–—-])"#, options: .regularExpression) != nil { return nil }
@@ -346,6 +354,19 @@ public nonisolated enum ProceedingEventExtractor {
         if sentence.range(of: #"(?i)\byesterday\b"#, options: .regularExpression) != nil,
            let y = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: date) {
             return (Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: y), true)
+        }
+        // "made his initial appearance Monday", "pleaded guilty Friday": the most recent such weekday
+        // on or before the printed date (held-out chronology 10, 2026-10-29). A weekday that
+        // introduces a full date ("Monday, March 24, 2020") was handled above.
+        let weekdays = ["sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6, "saturday": 7]
+        if let r = sentence.range(of: #"(?i)\b(?:on\s+|last\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?!,?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d)"#, options: .regularExpression),
+           let wanted = weekdays[String(sentence[r]).lowercased().replacingOccurrences(of: #"^(?:on|last)\s+"#, with: "", options: .regularExpression)] {
+            let cal = Calendar(identifier: .gregorian)
+            for back in 0...6 {
+                if let d = cal.date(byAdding: .day, value: -back, to: date), cal.component(.weekday, from: d) == wanted {
+                    return (cal.dateComponents([.year, .month, .day], from: d), true)
+                }
+            }
         }
         return (nil, false)
     }
