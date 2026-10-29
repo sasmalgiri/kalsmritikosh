@@ -73,13 +73,71 @@ struct CaseBenchRunner {
         let modelCallsByPurpose: [String: Int]
     }
 
-    static var env: [String: String] { ProcessInfo.processInfo.environment }
+    /// The run's settings: the process environment, or — for a bundled pack run — the pack's
+    /// settings (`BundledPack.overrides`), which stand in for the TEST_RUNNER_* variables.
+    static var env: [String: String] { ProcessInfo.processInfo.environment.merging(BundledPack.overrides) { _, pack in pack } }
+
+    /// A bundled pack (`scripts/casebench/pack_local.py`): the shards and settings of one bench run,
+    /// packed into a single JSON resource because the sandboxed Xcode test host can read neither
+    /// ~/CaseBench nor TEST_RUNNER_* variables. Materialised into the temporary folder and run
+    /// exactly as an environment-driven run; each shard result is attached to the test result.
+    enum BundledPack {
+        nonisolated(unsafe) static var overrides: [String: String] = [:]
+        struct File: Decodable { let name: String; let b64: String }
+        struct Case: Decodable { let `case`: String; let files: [File] }
+        struct Shard: Decodable { let name: String; let truth: String; let cases: [Case] }
+        struct Pack: Decodable { let set: String; let env: [String: String]; let shards: [Shard] }
+
+        static func url() -> URL? {
+            let bundle = Bundle(for: Marker.self)
+            if let u = bundle.url(forResource: "casebench-pack", withExtension: "json") { return u }
+            guard let root = bundle.resourceURL, let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
+            while let u = e.nextObject() as? URL { if u.lastPathComponent == "casebench-pack.json" { return u } }
+            return nil
+        }
+
+        /// Materialise the pack: returns the cases root and the results folder.
+        static func materialise(_ packURL: URL) throws -> (cases: URL, results: URL, set: String, shards: Int) {
+            let pack = try JSONDecoder().decode(Pack.self, from: Data(contentsOf: packURL))
+            let base = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-pack-\(UUID().uuidString)", isDirectory: true)
+            let cases = base.appendingPathComponent("cases", isDirectory: true), results = base.appendingPathComponent("results", isDirectory: true)
+            try FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
+            for s in pack.shards {
+                let dir = cases.appendingPathComponent(s.name, isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try s.truth.write(to: dir.appendingPathComponent("truth.jsonl"), atomically: true, encoding: .utf8)
+                for c in s.cases {
+                    let folder = dir.appendingPathComponent(c.case, isDirectory: true)
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    for f in c.files { try (Data(base64Encoded: f.b64) ?? Data()).write(to: folder.appendingPathComponent(f.name)) }
+                }
+            }
+            overrides = pack.env
+            return (cases, results, pack.set, pack.shards.count)
+        }
+    }
+    private final class Marker {}
 
     @Test("Run every shard under CASEBENCH_DIR")
     func runShards() async throws {
-        guard let root = Self.env["CASEBENCH_DIR"] else { return }   // owner-run only
-        let out = URL(fileURLWithPath: Self.env["CASEBENCH_OUT"] ?? root + "/../results", isDirectory: true)
+        var bundled: (cases: URL, results: URL, set: String, shards: Int)?
+        if ProcessInfo.processInfo.environment["CASEBENCH_DIR"] == nil, let pack = BundledPack.url() {
+            bundled = try BundledPack.materialise(pack)
+        }
+        defer { if let b = bundled { try? FileManager.default.removeItem(at: b.cases.deletingLastPathComponent()) } }
+        guard let root = bundled?.cases.path ?? Self.env["CASEBENCH_DIR"] else { return }   // owner-run only
+        let out = bundled?.results ?? URL(fileURLWithPath: Self.env["CASEBENCH_OUT"] ?? root + "/../results", isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        defer {
+            // A bundled run hands its results back through the test result (the sandboxed host's
+            // folders are not readable from outside): one attachment per shard.
+            if let b = bundled, let files = try? FileManager.default.contentsOfDirectory(at: out, includingPropertiesForKeys: nil) {
+                for f in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where f.pathExtension == "jsonl" {
+                    if let data = try? Data(contentsOf: f) { Attachment.record(data, named: f.lastPathComponent) }
+                }
+                Attachment.record(Data("set: \(b.set)\nshards: \(b.shards)\nsettings: \(BundledPack.overrides.sorted { $0.key < $1.key })\n".utf8), named: "MEASUREMENT-pack.txt")
+            }
+        }
         let maxShards = Int(Self.env["CASEBENCH_MAX_SHARDS"] ?? "") ?? .max
         let embed = Self.env["CASEBENCH_EMBED"] != "0"
         let askEvery = max(1, Int(Self.env["CASEBENCH_ASK_EVERY"] ?? "") ?? 1)
