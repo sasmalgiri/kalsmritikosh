@@ -202,7 +202,22 @@ struct ProceedingAnswererTests {
         let first = release("Wednesday, April 5, 2017", "ROCHESTER, N.Y. -- Hoeub Chan, 35, of Rochester, NY, who was convicted of smuggling narcotics into jail, was sentenced to 18 months in prison by Chief U.S. District Judge Frank P. Geraci. Chan was sentenced to federal prison on January 6, 2016 following his conviction for conspiracy to commit mail fraud.")
         let chan = try #require(ProceedingAnswerer.parse("What was the sentencing date for Hoeub Chan?"))
         let chanBody = try #require(ProceedingAnswerer.answer(chan, sources: [.init(objectID: UUID(), text: first)])).body
-        #expect(chanBody.hasPrefix("The documents record Hoeub Chan being sentenced more than once") && chanBody.contains("January 6, 2016") && chanBody.contains("April 5, 2017"), "\(chanBody)")
+        #expect(chanBody.hasPrefix("Hoeub Chan was sentenced on January 6, 2016 and again on April 5, 2017") && chanBody.count < 600, "\(chanBody)")
+        // A step every release re-reports on its own printed day is one step, not several.
+        let again = release("Friday, April 26, 2024", "Estes Carter Thompson III, 36, of Charlotte, N.C., was charged with one count of attempted sexual exploitation of children.")
+        let again2 = release("Thursday, January 18, 2024", "Estes Carter Thompson III, 36, of Charlotte, N.C., was charged with one count of attempted sexual exploitation of children.")
+        let ect = try #require(ProceedingAnswerer.parse("When was Estes Carter Thompson III charged?"))
+        #expect(try #require(ProceedingAnswerer.answer(ect, sources: [.init(objectID: UUID(), text: again), .init(objectID: UUID(), text: again2)])).body.hasPrefix("The document dated January 18, 2024 reports"))
+        // "… agents of Innospec Inc. On March 18, 2010, Innospec pleaded guilty …" is Innospec's plea, not Naaman's charge.
+        let innospec = release("Thursday, December 22, 2011", "Naaman and his companies were the Iraqi agents of Innospec Inc. On March 18, 2010, Innospec pleaded guilty to a 12-count indictment charging wire fraud in connection with its payment of kickbacks. Ousama Naaman, 62, of Abu Dhabi, is charged with one count of conspiracy to commit wire fraud.")
+        let onInnospec = try #require(ProceedingAnswerer.parse("What exact charges were filed against Ousama Naaman?"))
+        #expect(try #require(ProceedingAnswerer.answer(onInnospec, sources: [.init(objectID: UUID(), text: innospec)])).body.contains("conspiracy to commit wire fraud"))
+        // Two documents stating offences with no word in common: two prosecutions (or two people of one name) — both given.
+        let meth = release("Thursday, January 8, 2026", "United States Attorney Lesley A. Woods announced that Andrew Juarez, 38, of Hastings, Nebraska, was sentenced on January 8, 2026, for one count of conspiracy to distribute more than 50 grams of methamphetamine.")
+        let travel = release("Tuesday, March 3, 2020", "Andrew Juarez, 29, of El Paso, Texas, pleaded guilty today to traveling with the intent to engage in illicit sexual conduct with a nine-year-old girl.")
+        let aj = try #require(ProceedingAnswerer.parse("What were the specific charges brought against Andrew Juarez?"))
+        let ajBody = try #require(ProceedingAnswerer.answer(aj, sources: [.init(objectID: UUID(), text: meth), .init(objectID: UUID(), text: travel)])).body
+        #expect(ajBody.hasPrefix("The documents state more than one charge for Andrew Juarez") && ajBody.contains("methamphetamine") && ajBody.contains("illicit sexual conduct"), "\(ajBody)")
         // The offence sentence wins over "indicted on <date>" and over "charged … with <co-defendants>".
         let naaman = release("Friday, July 31, 2009", "Ousama Naaman, 60, of Abu Dhabi, United Arab Emirates, was indicted on Aug. 7, 2008, in U.S. District Court for the District of Columbia. Naaman is charged with one count of conspiracy to commit wire fraud and to violate the Foreign Corrupt Practices Act.")
         let on = try #require(ProceedingAnswerer.parse("What exact charges were filed against Ousama Naaman?"))

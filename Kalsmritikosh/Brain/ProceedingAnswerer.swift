@@ -243,15 +243,26 @@ public nonisolated enum ProceedingAnswerer {
             }
             // More than one day for the step (a person sentenced in two prosecutions — held-out
             // chronology 10, 2026-10-29): every one is given, in order, never only the first.
-            let days = hits.filter { ($0.1.day ?? $0.1.reportedOn) != nil }
+            // Days the sentences STATE are distinct occurrences; a step every release re-reports on its
+            // own printed day is one step, not several. With a stated day on record, the latest
+            // report of the step from a day more than a month away is a further occurrence (a second
+            // prosecution's sentencing reported "today").
             var distinct: [Hit] = []
-            for h in days where !distinct.contains(where: { key($0.1) == key(h.1) }) { distinct.append(h) }
+            for h in hits where h.1.day != nil && !distinct.contains(where: { key($0.1) == key(h.1) }) { distinct.append(h) }
+            if !distinct.isEmpty, let reported = hits.filter({ $0.1.day == nil && $0.1.reportedOn != nil }).max(by: { key($0.1) < key($1.1) }),
+               let reportedDate = Calendar(identifier: .gregorian).date(from: reported.1.reportedOn ?? DateComponents()),
+               distinct.allSatisfy({ d in
+                   guard let stated = d.1.day.flatMap({ Calendar(identifier: .gregorian).date(from: $0) }) else { return false }
+                   return abs(stated.timeIntervalSince(reportedDate)) > 30 * 86_400
+               }) {
+                distinct.append(reported)
+                distinct.sort { key($0.1) < key($1.1) }
+            }
             if distinct.count > 1 {
-                let parts = distinct.map { h -> String in
-                    h.1.day != nil ? "on \(render(h.1.day) ?? "") — \(quote(h.1.sentence))"
-                                   : "reported on \(render(h.1.reportedOn) ?? "") (the sentence gives no day) — \(quote(h.1.sentence))"
-                }
-                let text = "The documents record \(name) being \(step.phrase) more than once: " + parts.joined(separator: "; ")
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }
+                let when = distinct.map { h in h.1.day != nil ? (render(h.1.day) ?? "") : "\(render(h.1.reportedOn) ?? "") (the day it was reported)" }
+                let text = "\(name) was \(step.phrase) on " + when.joined(separator: " and again on ")
+                    + " — the documents record more than one. They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
                 return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.7))
             }
             let text: String
@@ -312,7 +323,7 @@ public nonisolated enum ProceedingAnswerer {
             // Eric Desousa" names co-defendants, not an offence (held-out chronology 10, 2026-10-29).
             let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b"#
             // Words an offence is stated in; a sentence of charges that has none is a weaker candidate.
-            let offenceWords = #"(?i)\b(?:counts? of|conspiracy|fraud|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearm|narcotic|cocaine|heroin|methamphetamine|fentanyl|pornograph\w*|exploitation|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse)\b"#
+            let offenceWords = #"(?i)\b(?:counts? of|conspir\w*|fraud\w*|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearms?|guns?|ammunition|weapons?|narcotics?|cocaine|heroin|methamphetamine|fentanyl|marijuana|pornograph\w*|exploit\w*|sexual\w*|minor|child\w*|prostitution|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse|threat\w*|counterfeit\w*|forg\w*|stolen|identity theft|wire|mail|bank|tax|immigration|alien|hate crime|civil rights|espionage|terror\w*|corrupt\w*)\b"#
             // "In addition, the indictment charges …" is a supplementary count, not the charge asked about.
             let supplementary = #"(?i)^\W*(?:in addition|additionally|also|further)\b"#
             // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge;
@@ -343,16 +354,47 @@ public nonisolated enum ProceedingAnswerer {
             // Machala") names the person too.
             let surnames = surname.isEmpty ? [] : [surname] + Self.aliasSurnames(of: surname, in: about.map(\.text))
             let namesPerson = #"\b(?:"# + surnames.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + #")\b"#
+            // "… agents of Innospec Inc. On March 18, 2010, Innospec pleaded guilty to …" (two sentences a
+            // text conversion ran together): the party right before the verb is someone else.
+            let subjectStop: Set<String> = ["he", "she", "they", "defendant", "defendants", "who", "which", "and", "also", "later", "then", "each", "both",
+                                            "attorney", "court", "judge", "jury", "district", "office", "u.s.", "united", "states", "mr.", "ms.", "mrs.", "dr."]
+            func otherSubject(_ sentence: String) -> Bool {
+                guard let re = try? NSRegularExpression(pattern: #"([A-Z][\w.&'-]+)\s+(?:(?:has|have|had)\s+)?(?:pleaded|pled|pleads|was charged|is charged|were charged|was indicted|were indicted|was convicted)\b"#),
+                      let m = re.firstMatch(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)), let r = Range(m.range(at: 1), in: sentence) else { return false }
+                let subject = String(sentence[r]).lowercased().trimmingCharacters(in: .punctuationCharacters)
+                let tokens = Set(parsed.person.lowercased().split(separator: " ").map { $0.trimmingCharacters(in: .punctuationCharacters) })
+                return !subjectStop.contains(subject) && !tokens.contains(subject) && !surnames.contains(subject)
+            }
             func score(_ c: Candidate) -> Int {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
                     + (!surnames.isEmpty && c.sentence.lowercased().range(of: namesPerson, options: .regularExpression) != nil ? 5 : 0)
                     + (c.sentence.range(of: offenceWords, options: .regularExpression) != nil ? 3 : 0)
                     - (c.sentence.range(of: supplementary, options: .regularExpression) != nil ? 4 : 0)
+                    - (otherSubject(c.sentence) ? 9 : 0)
             }
             // Only a sentence that STATES an offence answers; one that merely mentions a charge does not.
-            guard let hit = candidates.filter({ $0.sentence.count > 40 && score($0) >= 10 }).max(by: { score($0) < score($1) }) else {
+            let stating = candidates.filter { $0.sentence.count > 40 && score($0) >= 10 }
+            guard let hit = stating.max(by: { score($0) < score($1) }) else {
                 return refuse("The documents that name \(name) don't state what \(name) was charged with.")
+            }
+            // Two documents stating offences with no word in common are two prosecutions (or two people
+            // of one name — held-out chronology 10, 2026-10-29): both are given, never only one.
+            func offenceSet(_ s: String) -> Set<String> {
+                guard let re = try? NSRegularExpression(pattern: offenceWords) else { return [] }
+                let ns = s as NSString
+                return Set(re.matches(in: s, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range).lowercased() })
+            }
+            var bestPerDocument: [Candidate] = []
+            for c in stating.sorted(by: { score($0) > score($1) }) where !bestPerDocument.contains(where: { $0.objectID == c.objectID }) { bestPerDocument.append(c) }
+            let hitSet = offenceSet(hit.sentence)
+            let other = bestPerDocument.first { $0.objectID != hit.objectID && !hitSet.isEmpty && offenceSet($0.sentence).isDisjoint(with: hitSet) && !offenceSet($0.sentence).isEmpty }
+            if let other {
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 220 ? String(s.prefix(220)) + "…" : s) + "\u{201D}" }
+                let text = "The documents state more than one charge for \(name) (two prosecutions, or two people of that name): " + short(hit.sentence) + " / " + short(other.sentence)
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                      citations: [hit, other].map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.sentence.prefix(200))) },
+                                      confidence: Confidence(0.65))
             }
             let text = "The documents say: \(quote(hit.sentence))"
             return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
