@@ -18,6 +18,7 @@ Nothing below is signed-app-verified or practitioner-reviewed.
 **Baseline (F0):**
 - `957f066b` passed all seven CI jobs (run 40669296571: release build, full unit target, migration matrix, sensitive exports, report/receipt integrity, parsers, architecture guards).
 - `dffcd712` (B1–B6 head: c6f688bf, e126a9a3, 2b2982f6, cbb998d2, d942b995, de2ffed7, 68447384, dffcd712) passed all seven CI jobs (run 40823020086, 2026-10-29). The run before it (40774444703, on 68447384) was red on one test only, `ConformanceBundleTests.cliFixture`: CI runs each batch on two test hosts and the fixture's fixed temporary path raced; dffcd712 gives each host its own parent directory.
+- `eac38eb5` (release-block directive item 1, §E2: the sixteen reopened jobs built) passed all seven CI jobs (run 40862841271, 2026-10-29).
 - Later commits are listed against each item; each needs its own CI run.
 
 **Measurement identities:**
