@@ -43,6 +43,67 @@ struct JobAcceptanceScenarioTests {
                            exports: [], batesPrefix: "ACME", replacedVersions: [a.sourceVersionID!])
     }
 
+    /// The case each of the sixteen former "preparation" jobs is checked on: the realistic case plus
+    /// what its own scenario needs (two accounts of one meeting, a wire story in two outlets, a
+    /// parish register, an exported report, a spanned event, a tenure and a gap, a confirmed merge).
+    static func evidence(for job: String) -> JobEvidence {
+        let base = evidence()
+        let f = base.facts
+        func doc(_ name: String) -> StudioCaseDocument { StudioCaseDocument(objectID: UUID(), sourceVersionID: UUID(), name: name, date: nil) }
+        func r(_ d: StudioCaseDocument, _ q: String) -> StudioEvidenceRef { StudioEvidenceRef(sourceVersionID: d.sourceVersionID, objectID: d.objectID, quote: q) }
+        func with(docs: [(StudioCaseDocument, String)] = [], named: [StudioCaseValue] = [], dates: [StudioCaseEvent] = [], amounts: [StudioCaseValue] = [],
+                  events: [StudioCaseEvent] = [], exports: [(title: String, text: String)] = [], merged: [MergedIdentity] = []) -> JobEvidence {
+            var texts = base.texts
+            var hashes = base.versionHashes
+            for (d, t) in docs { texts[d.objectID] = t; hashes[d.sourceVersionID!] = String(repeating: "c", count: 64) }
+            let facts = StudioCaseFacts(caseTitle: f.caseTitle, parties: f.parties, dates: f.dates, amounts: f.amounts, identifiers: f.identifiers,
+                                        documents: f.documents + docs.map(\.0), events: f.events + events, allFacts: f.allFacts,
+                                        named: f.named + named, statedAmounts: f.statedAmounts + amounts, statedDates: f.statedDates + dates)
+            return JobEvidence(facts: facts, texts: texts, withheld: base.withheld, now: base.now, versionHashes: hashes, exports: exports,
+                               batesPrefix: base.batesPrefix, replacedVersions: base.replacedVersions, mergedIdentities: merged)
+        }
+        switch job {
+        case "hr.statements":
+            let s1 = doc("asha-statement.txt"), s2 = doc("vikram-statement.txt")
+            let a1 = "Asha Rao said the meeting about the payment was held on March 3, 2026.", a2 = "Asha Rao said the payment of ₹1,000 was approved at the meeting."
+            let v1 = "Vikram Rao said the meeting about the payment was held on March 2, 2026.", v2 = "Vikram Rao said the payment of ₹1,000 was approved at the meeting."
+            return with(docs: [(s1, a1 + " " + a2), (s2, v1 + " " + v2)],
+                        dates: [StudioCaseEvent(date: day("2026-03-03"), title: a1, refs: [r(s1, a1)]), StudioCaseEvent(date: day("2026-03-02"), title: v1, refs: [r(s2, v1)])])
+        case "law.witness-profiles":
+            let w1 = doc("first-interview.txt"), w2 = doc("second-interview.txt")
+            let q1 = "Asha Rao said the payment was approved on March 3, 2026.", q2 = "Asha Rao said the payment was approved on March 4, 2026."
+            return with(docs: [(w1, "From: Asha Rao\n" + q1), (w2, q2)],
+                        dates: [StudioCaseEvent(date: day("2026-03-03"), title: q1, refs: [r(w1, q1)]), StudioCaseEvent(date: day("2026-03-04"), title: q2, refs: [r(w2, q2)])])
+        case "fa.workpapers":
+            return with(exports: [(title: "Loss report", text: "The loss was ₹1,000 and the adviser fee was ₹5,000.")])
+        case "jrn.source-map":
+            let wire = "The regulator confirmed on Tuesday that the refinery's licence had been suspended pending a safety review of the plant."
+            let o1 = doc("outlet-a.txt"), o2 = doc("outlet-b.txt")
+            return with(docs: [(o1, "Outlet A reports from the capital. " + wire + " Analysts expect an appeal."), (o2, "Outlet B, evening edition. " + wire + " Unions welcomed the decision.")])
+        case "res.chronology":
+            return with(events: [StudioCaseEvent(date: day("1770-01-01"), title: "Famine in the province", refs: [r(f.documents[0], "the famine years")],
+                                                 endDate: day("1772-12-31"), precision: .year)])
+        case "ind.career-education":
+            let cv = doc("cv.txt")
+            let j1 = "Asha Rao joined Acme Ltd on January 10, 2015.", l1 = "Asha Rao left Acme Ltd on March 1, 2016.", j2 = "Asha Rao joined Beta Works on September 1, 2019."
+            return with(docs: [(cv, [j1, l1, j2].joined(separator: " "))],
+                        dates: [StudioCaseEvent(date: day("2015-01-10"), title: j1, refs: [r(cv, j1)]), StudioCaseEvent(date: day("2016-03-01"), title: l1, refs: [r(cv, l1)]),
+                                StudioCaseEvent(date: day("2019-09-01"), title: j2, refs: [r(cv, j2)])])
+        case "gen.family-lines":
+            let g = doc("parish-register.txt")
+            let b = "Meera Rao, daughter of Asha Rao, was born on May 2, 1990.", m = "Meera Rao married Dev Sharma on June 1, 2015."
+            return with(docs: [(g, b + " " + m)],
+                        named: [StudioCaseValue(value: "Meera Rao", label: "person", refs: [r(g, b)]), StudioCaseValue(value: "Dev Sharma", label: "person", refs: [r(g, m)])],
+                        dates: [StudioCaseEvent(date: day("1990-05-02"), title: b, refs: [r(g, b)]), StudioCaseEvent(date: day("2015-06-01"), title: m, refs: [r(g, m)])])
+        case "law.parties-issues":
+            let b = f.documents[1]
+            return with(named: [StudioCaseValue(value: "A. Rao", label: "person", refs: [r(b, "A. Rao")])],
+                        merged: [MergedIdentity(canonical: "Asha Rao", aliases: ["A. Rao"], decidedBy: "Counsel", decidedAt: day("2026-05-01"))])
+        default:
+            return base
+        }
+    }
+
     /// What a reviewer records for each contract column — realistic, typed, never a placeholder.
     static func value(_ f: JobField, job: String, row: Int) -> String {
         switch f.kind {
@@ -186,6 +247,90 @@ struct JobAcceptanceScenarioTests {
         }
         // Redaction: the file check — `producedFileRedaction`.
         m["law.redaction"] = { r, _ in expect(r.content.rows.allSatisfy { $0.fields?["check"] == "text-only snapshot" }, "a snapshot check not labelled text-only") }
+
+        // Release-block directive 2026-10-29 item 1 — the sixteen former preparation jobs, each on its own scenario.
+        m["law.parties-issues"] = { r, _ in
+            let asha = r.content.rows.first { $0.title == "Asha Rao" }
+            return expect(asha?.flags.contains("merged by a person") == true && (asha?.detail ?? "").contains("A. Rao") && (asha?.detail ?? "").contains("Counsel"), "a confirmed merge is not one party with both name forms and who merged them")
+                + expect(!r.content.rows.contains { $0.title == "A. Rao" }, "the merged name form is still a separate party")
+                + expect(r.content.rows.contains { $0.title == "Vikram Rao" && $0.flags.contains { $0.hasPrefix(PartiesIssuesExecutor.lookalike) } }, "an unmerged look-alike was not kept separate and flagged")
+                + expect(r.content.rows.contains { $0.title == "Issue: invoicenumber" && $0.flags.contains { $0.hasPrefix("disputed between documents") } }, "a disputed issue not shown as disputed")
+        }
+        m["res.chronology"] = { r, _ in
+            let famine = r.content.rows.first { $0.title == "Famine in the province" }
+            return expect(famine?.flags.contains("uncertain date — range kept: 1770-01-01 – 1772-12-31") == true && famine?.fields?["period"] == "1770-01-01 – 1772-12-31", "an uncertain date lost its range")
+                + expect(allCited(r), "a row without a source")
+        }
+        m["ind.career-education"] = { r, _ in
+            let gap = r.content.rows.first { $0.flags.contains("gap — no document covers this period") }
+            return expect(gap?.title.contains("2016-03-01 to 2019-09-01") == true && !(gap?.refs.isEmpty ?? true), "the gap between leaving and the next post is not shown as a gap with its bounding sources")
+                + expect(r.content.rows.filter { $0.flags.contains("gap — no document covers this period") }.count == 1, "a tenure (joined … left) was shown as a gap")
+        }
+        m["law.document-coding"] = { r, e in
+            expect(r.content.rows.count == e.facts.documents.count && allCited(r) && r.content.rows.allSatisfy { $0.flags.contains("not coded — relevance and privilege are the reviewer's") }, "a document coded by the app, or one not listed")
+                + expect(r.content.limitations.contains { $0.contains("withheld from every production") }, "the result does not say that a privilege code withholds from production")
+        }
+        m["hr.statements"] = { r, _ in
+            let asha = r.content.rows.first { $0.fields?["witness"] == "Asha Rao" && !$0.flags.contains("silent") }
+            let vikram = r.content.rows.first { $0.fields?["witness"] == "Vikram Rao" && $0.fields?["point"] == asha?.fields?["point"] }
+            return expect(asha != nil && vikram != nil && vikram?.flags.contains("silent") == false, "the two accounts of the meeting are not on the same point")
+                + expect(asha?.flags.contains { $0.hasPrefix("differs from Vikram Rao on date: 2026-03-03 vs 2026-03-02") } == true, "the differing meeting date is not shown as a difference")
+                + expect(asha?.flags.contains { $0.hasPrefix("agrees with Vikram Rao on amount ₹1,000") } == true, "the agreed amount is not shown as agreement")
+                + expect(asha?.fields?["comparison"] == "differs" && vikram?.fields?["comparison"] == "differs", "the point-by-point comparison is not recorded")
+                + expect(allCited(r), "a statement row without its quote's source")
+        }
+        m["law.witness-profiles"] = { r, _ in
+            let inc = r.content.rows.first { $0.title.hasPrefix("Inconsistency — Asha Rao") }
+            return expect(inc?.refs.count == 2 && (inc?.detail ?? "").contains("March 3, 2026") && (inc?.detail ?? "").contains("March 4, 2026"), "the witness's two inconsistent statements are not both quoted with their sources")
+                + expect(r.content.rows.first { $0.title == "Asha Rao" }?.fields?["documents"]?.contains("authored: first-interview.txt") == true, "a document the witness authored is not listed as authored")
+        }
+        for j in ["law.deposition", "siu.euo-prep"] {
+            m[j] = { r, _ in
+                expect(allCited(r) && r.content.rows.contains { $0.title.hasPrefix("Put to Asha Rao") }, "a question without its document passage")
+                    + expect(r.content.rows.contains { $0.title.hasPrefix("Disputed point: invoicenumber") && $0.refs.count == 2 }, "a disputed point does not show both sources")
+                    + expect(r.content.rows.allSatisfy { !($0.fields?["questions"] ?? "").isEmpty }, "a row whose question field is not tied to the passage")
+            }
+        }
+        m["fa.workpapers"] = { r, _ in
+            expect(r.content.rows.contains { $0.title == "Report figure ₹1,000 — Loss report" && $0.flags.contains("traces to WP-001") && !$0.refs.isEmpty }, "a report figure a workpaper states does not trace to it")
+                + expect(r.content.rows.contains { $0.title == "Report figure ₹5,000 — Loss report" && $0.flags.contains(WorkpaperExecutor.untraced) }, "a report figure no workpaper states is not flagged untraced")
+        }
+        m["jrn.source-map"] = { r, _ in
+            let a = r.content.rows.first { $0.title == "outlet-a.txt" }, b = r.content.rows.first { $0.title == "outlet-b.txt" }, memo = r.content.rows.first { $0.title == "memo.txt" }
+            return expect(a?.fields?["family"] != nil && a?.fields?["family"] == b?.fields?["family"], "two outlets repeating one wire story are not one source family")
+                + expect(a?.flags.contains { $0.hasPrefix("repeats text of outlet-b.txt") } == true, "the repeated text is not flagged")
+                + expect(memo?.fields?["family"] != a?.fields?["family"] && memo?.flags.contains("not assessed") == true, "an unrelated source joined the family, or was assessed by the app")
+        }
+        m["jrn.source-vault"] = { r, e in
+            let pre = JobFields.prefill(job: "jrn.source-vault", rows: r.content.rows, evidence: e)
+            return expect(pre.first { $0.title == "memo.txt" }?.fields?["hash"] == String(repeating: "a", count: 64), "an original's hash is not recorded")
+                + expect(r.content.rows.allSatisfy { $0.flags.contains("protection not recorded") && $0.fields?["protected"] == nil }, "a source's protection decided by the app")
+                + expect(r.content.limitations.contains { $0.contains("kept out of every job-result and studio export") && $0.contains("cloud AI request") }, "the result does not state the protection it enforces")
+        }
+        m["res.transcription"] = { r, _ in
+            expect(allCited(r) && r.content.rows.allSatisfy { $0.fields?["original"] == $0.title && !($0.fields?["lineage"] ?? "").isEmpty }, "a passage without its original, source or lineage")
+        }
+        m["res.alternative"] = { r, _ in
+            let accounts = r.content.rows.filter { $0.title.hasPrefix("Account: invoicenumber") }
+            return expect(accounts.count == 2 && accounts.allSatisfy { !$0.refs.isEmpty && !($0.fields?["for"] ?? "").isEmpty && !($0.fields?["against"] ?? "").isEmpty }, "two opposing accounts are not both built with supporting and contrary sources")
+                + expect(accounts.allSatisfy { $0.flags.contains { $0.hasPrefix("opposing account:") } }, "an account does not name its opposite")
+        }
+        m["res.edition"] = { r, _ in
+            expect(allCited(r) && r.content.rows.allSatisfy { $0.fields?["text"] == $0.title && ($0.fields?["lineage"] ?? "").contains("version") }, "a passage without its exact source version")
+        }
+        m["gen.family-lines"] = { r, _ in
+            let daughter = r.content.rows.first { $0.title == "Meera Rao — daughter of — Asha Rao" }
+            let chart = LineageChart.mermaid(rows: r.content.rows) ?? ""
+            return expect(daughter != nil && !(daughter?.refs.isEmpty ?? true), "a stated kinship is not drawn with its source")
+                + expect(r.content.rows.contains { $0.title == "Meera Rao — married — Dev Sharma" }, "a marriage stated by the register is not drawn")
+                + expect(chart.contains("-->") && !chart.contains("-.->"), "a sourced relationship drawn as unproven")
+                + expect(r.content.rows.contains { $0.flags.contains("vital event") && $0.date == "1990-05-02" }, "a birth is not on the timeline")
+        }
+        m["inv.data-lab"] = { r, e in
+            expect(allCited(r), "a computed or table row without its source")
+                + expect(r.content.rows.first?.title.hasPrefix("Analysis:") == true && r.content.rows.contains { $0.title.hasPrefix("Field amount") && ($0.detail ?? "").contains("INR 2,000.00") }, "the transaction amounts of two documents are not totalled with their sources")
+                + expect(ConfigurableAnalysisExecutor.run(e).content == r.content, "re-running the analysis gave a different result")
+        }
         return m
     }()
 
@@ -202,7 +347,7 @@ struct JobAcceptanceScenarioTests {
           arguments: Array(JobExecutorKind.contractMet).sorted())
     func scenario(_ job: String) async throws {
         let kind = try #require(JobExecutorKind.assignments[job])
-        let e = Self.evidence()
+        let e = Self.evidence(for: job)
         let raw = try #require(JobFamilyExecutorTests.rows(for: job, kind: kind, e))
         let failures = (Self.scenarios[job]?(raw, e)) ?? ["no scenario"]
         #expect(failures.isEmpty, "\(job) — \(JobContracts.contract(for: job)?.acceptance ?? ""): \(failures)")

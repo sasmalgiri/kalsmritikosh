@@ -330,6 +330,27 @@ public actor JobResultRepository {
         try await rows("WHERE case_id = ? AND job_id = ? ORDER BY created_at DESC", [.uuid(caseID), .text(jobID)])
     }
 
+    /// Release-block directive item 1 — the documents every case's CURRENT document coding withholds
+    /// from production (coded privileged or partly privileged; a rejected row codes nothing).
+    public func codedPrivilegedObjectIDs() async throws -> Set<UUID> {
+        var out = Set<UUID>()
+        for r in try await rows("WHERE job_id = 'law.document-coding' AND state <> 'superseded'", []) {
+            out.formUnion(DocumentCodingProduction.withheld(in: r.content.rows))
+        }
+        return out
+    }
+
+    /// The protected identities every case's CURRENT source vault records (all cases when `caseID`
+    /// is nil): the names kept out of exports and masked in cloud sends.
+    public func protectedIdentityNames(caseID: UUID? = nil) async throws -> [String] {
+        let records: [JobResultRecord]
+        if let caseID { records = try await rows("WHERE case_id = ? AND job_id = 'jrn.source-vault' AND state <> 'superseded'", [.uuid(caseID)]) }
+        else { records = try await rows("WHERE job_id = 'jrn.source-vault' AND state <> 'superseded'", []) }
+        var out: [String] = []
+        for r in records { for n in ProtectedIdentities.names(in: r.content.rows) where !out.contains(n) { out.append(n) } }
+        return out
+    }
+
     private func rows(_ clause: String, _ params: [SQLValue]) async throws -> [JobResultRecord] {
         try await database.query("SELECT id, case_id, job_id, family, state, payload_json, created_by, created_at FROM job_results \(clause);", params)
             .compactMap { r in

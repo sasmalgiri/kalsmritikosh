@@ -284,6 +284,14 @@ public actor PersonaJobService {
         case .methodReadiness:
             guard let methods else { throw PersonaJobError.serviceUnavailable(.methods) }
             run = Self.methodReadiness(try await methods.recommendedMethods(caseID: caseID))
+        case .configurableAnalysis:
+            // inv.data-lab — the analysis the person defined on the previous result's "Analysis" row
+            // (filter, grouping, total) is applied to this run; the earlier run stays in the history.
+            guard let evidence = try await caseFacts(caseID, access) else { throw PersonaJobError.missingContext("the case's evidence could not be read") }
+            let query = DataAnalysisQuery.from(rows: try await results.latest(caseID: caseID, jobID: job.id)?.content.rows ?? [])
+            let r = ConfigurableAnalysisExecutor.run(evidence, query: query)
+            run = (r.state, JobResultContent(rows: JobFields.prefill(job: job.id, rows: r.content.rows, evidence: evidence),
+                                             limitations: r.content.limitations, nextActions: r.content.nextActions))
         default:
             guard let evidence = try await caseFacts(caseID, access) else { throw PersonaJobError.missingContext("the case's evidence could not be read") }
             guard let r = JobExecutorKind.run(executor, evidence) else { throw PersonaJobError.missingContext("\(job.id) has no evidence executor") }

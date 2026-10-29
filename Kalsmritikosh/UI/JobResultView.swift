@@ -424,6 +424,10 @@ nonisolated enum JobResultMarkdown {
                 out += "   Source (\(ids.isEmpty ? "no locator" : ids)): “\(ref.quote ?? "")”\n"
             }
         }
+        // gen.family-lines — the lineage chart of the included rows: solid = sourced, dashed = unproven.
+        if r.jobID == "gen.family-lines", let chart = LineageChart.mermaid(rows: included) {
+            out += "\n## Lineage chart\nA dashed line is a relationship without a source (\(LineageChart.unprovenLabel)).\n\n```mermaid\n\(chart)\n```\n"
+        }
         if !rejected.isEmpty {
             out += "\n## Not included (rejected by the reviewer)\n" + rejected.map { "- \($0.title)\($0.note.map { " — \($0)" } ?? "")" }.joined(separator: "\n") + "\n"
         }

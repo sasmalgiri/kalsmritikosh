@@ -15,7 +15,7 @@ Testing cadence (agreed with the owner, 2026-10-28):
 |---|---|---|---|
 | F0 | One execution record; SHIP_DECISIONS current | done | SHIP_DECISIONS §0, FINAL_BRIEF_EXECUTION |
 | F1 | Shared kernel K1–K11 | **done** (unit/integration), incl. audit A3–A7 and B1 (erasure fails closed), B2 (job-result integrity), B4 (case-scoped cloud sends); bounded items recorded | K5 studio approvals carry no scope fingerprint (the export re-check covers it); K11 vault encryption is a recorded decision |
-| F2 | All 168 jobs produce their intended result | **not met for 16 jobs** — 20 studio, 81 executor (each checked against its own acceptance scenario), 51 service, **16 preparation** (reopened by B3 with reasons), 0 gap | `docs/JOB_CONTRACTS.md`, `JobAcceptanceScenarioTests`, `JobExecutorKind.reopened` |
+| F2 | All 168 jobs produce their intended result | **met to integration level** — 20 studio, 97 executor (each checked against its own acceptance scenario; the 16 B3 had reopened now have their own executors, scenarios, completion rules and enforcement — FINAL_BRIEF_EXECUTION §E2), 51 service, 0 preparation, 0 gap. Open: UI journeys on the signed build; practitioner review of each deliverable | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobAcceptanceScenarioTests`, `JobDeliverableTests` |
 | F3 | Nine persona journeys | service level done (`InvestigationCaseSimulationTests`, 9 personas); **UI journeys open** (tier 3) | — |
 | F4 | Races, recovery, workload | T1 8/8 (`docs/RACE_MATRIX.md`); T2 done except the clean-machine restore (signed build); T3 measured on one Mac and bounded (`docs/SUPPORT_ENVELOPE.md`) | `NewerSchemaRefusalTests`, backup suites, `SupportEnvelopeTests` |
 | F5 | Independent adjudication, then a fresh ho10 | **open** — ho9 is a regression set; its rates (rules 1.7 % wrong, Claude 1.5 %, on `f685315c`) fail the ≤1 % gate and do not describe the current code. Protocol and blinded packs prepared (ho9-claude-prev 126 items, ho9-rules-prev 132) | `docs/ADJUDICATION_PROTOCOL.md`, `scripts/casebench/adjudication_pack.py` |
@@ -24,9 +24,12 @@ Testing cadence (agreed with the owner, 2026-10-28):
 
 ## Exact blockers
 
-0. **Jobs reopened (F2):** 16 jobs are preparation, each with its reason (`JobExecutorKind.reopened`): their
-   deliverable (comparison, lineage chart, annotated edition, linked questions, figure tracing, source
-   families, protected-name exclusion, filters, date ranges and gaps, parties) is not built yet.
+0. ~~**Jobs reopened (F2):** 16 jobs are preparation~~ — **closed 2026-10-29** (release-block directive item 1): each
+   deliverable (statement comparison, lineage chart, annotated edition, source-linked questions, figure tracing,
+   source families, protected-name exclusion in exports and cloud sends, coding that withholds from production,
+   analysis filters, date ranges and gaps, parties with human merges) is built, with its acceptance scenario and
+   rules (`JobAcceptanceScenarioTests`, `JobDeliverableTests`; FINAL_BRIEF_EXECUTION §E2). Signed-build journeys
+   and practitioner review of each remain under 3 and 4 below.
 1. **Bench re-run (in Terminal):** benign accuracy on the corrected build is not re-measured. The driver is
    versioned: `scripts/casebench/heldout.sh ho9-chron --tag -b6` (regression), then adjudication
    (`docs/ADJUDICATION_PROTOCOL.md`), then `--generate <new seed>` for ho10, once. The agent's session

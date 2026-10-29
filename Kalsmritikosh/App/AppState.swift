@@ -1356,7 +1356,10 @@ public final class AppState {
                         LIMIT 3000;
                         """, [])) ?? []
                     return rows.compactMap { $0.string(0) }
-                })
+                },
+                // Protected source identities (jrn.source-vault): masked in every send, whatever the
+                // PII-masking setting; a send in which one survives is refused.
+                protectedNames: { [db] in (try? await JobResultRepository(database: db).protectedIdentityNames()) ?? [] })
             self.onlineProvider = online
             await capabilities.register(online)
 
@@ -2595,8 +2598,17 @@ public final class AppState {
                     for v in included where try await db.query("SELECT 1 FROM source_versions WHERE supersedes = ? LIMIT 1;", [.uuid(v)]).first != nil {
                         replaced.insert(v)
                     }
+                    // The case's confirmed (unreversed) identity merges: the only way two name forms
+                    // become one party in a result (law.parties-issues).
+                    let decisions = try await InvestigationIdentityDecisionRepository(database: db).decisions(caseID: caseID)
+                    var merged: [MergedIdentity] = []
+                    for pair in MergedIdentity.confirmedPairs(decisions) {
+                        guard let winner = try await entities.find(byID: pair.winner)?.value,
+                              let loser = try await entities.find(byID: pair.loser)?.value else { continue }
+                        merged.append(MergedIdentity(canonical: winner, aliases: [loser], decidedBy: pair.actor, decidedAt: pair.at))
+                    }
                     return JobEvidence(facts: facts, texts: texts, withheld: withheld, versionHashes: hashes, exports: exports,
-                                       replacedVersions: replaced)
+                                       replacedVersions: replaced, mergedIdentities: MergedIdentity.grouped(merged))
                 },
                 jobResults: JobResultRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same

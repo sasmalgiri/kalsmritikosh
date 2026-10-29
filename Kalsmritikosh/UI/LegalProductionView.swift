@@ -27,6 +27,12 @@ extension AppState {
         if let tag, !tag.isEmpty, let tagged = try? await tagsRepository?.subjects(taggedWith: tag, kind: .object) {
             ids.formUnion(tagged)
         }
+        // Release-block directive item 1 — a document coded privileged or partly privileged in a case's
+        // document-coding result (law.document-coding) is withheld: slip sheet and privilege-log line,
+        // never its text or native. The coding controls the production, not only the review codes.
+        if let coded = try? await JobResultRepository(database: database).codedPrivilegedObjectIDs() {
+            ids.formUnion(coded); privileged.formUnion(coded)
+        }
         guard !ids.isEmpty else { return [] }
         var out: [ProductionDocument] = []
         let list = Array(ids)

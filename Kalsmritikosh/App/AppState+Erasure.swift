@@ -281,7 +281,15 @@ extension AppState {
         let repo = JobResultRepository(database: db)
         guard try await repo.latest(caseID: record.caseID, jobID: record.jobID)?.id == record.id else { throw JobResultReviewError.notCurrent }
         if let why = await jobResultExportCheck(record) { throw JobResultExportError.sourcesWithdrawn(why) }
-        let text = JobResultMarkdown.render(record, title: title)
+        // Release-block directive item 1 — a protected source's name (jrn.source-vault) never appears
+        // in an export: scrubbed from the rendered text and verified gone; a name that survives stops
+        // the export (nothing is written).
+        let protected = try await repo.protectedIdentityNames()
+        let scrubbed = ProtectedIdentities.scrub(JobResultMarkdown.render(record, title: title), names: protected)
+        guard scrubbed.leaks.isEmpty else {
+            throw JobResultExportError.sourcesWithdrawn("\(scrubbed.leaks.count) protected source identity(ies) would remain recoverable in the file; nothing was written")
+        }
+        let text = scrubbed.text
         try Data(text.utf8).write(to: url, options: .atomic)
         return try await repo.recordExport(resultID: record.id, caseID: record.caseID, jobID: record.jobID, text: text, file: url, actor: actor)
     }

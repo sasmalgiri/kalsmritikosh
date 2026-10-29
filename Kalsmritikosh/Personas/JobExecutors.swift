@@ -13,32 +13,49 @@ import Foundation
 public nonisolated enum JobExecutorKind: String, Sendable {
     case chronology, deadlines, catalogue, exhibits, citations, records, reminders, reliability, issueMatrix,
          quotes, interviewPlan, causation, money, disclosure, dataTable, publication, sameName, actionRegister,
-         actionReview, methodReadiness, dataAnalysis, redactionValidation
+         actionReview, methodReadiness, dataAnalysis, redactionValidation,
+         // Release-block directive 2026-10-29 item 1 — the deliverables of the sixteen reopened jobs.
+         partiesIssues, periodChronology, careerChronology, documentCoding, statementComparison, witnessProfile,
+         sourcedQuestions, workpaperTrace, sourceFamilies, sourceVault, transcriptionLineage, alternativeAccounts,
+         annotatedEdition, lineage, configurableAnalysis
 
     /// The jobs each executor serves — only where its result IS the job's intended outcome.
     public static let assignments: [String: JobExecutorKind] = {
         var m: [String: JobExecutorKind] = [:]
         func set(_ k: JobExecutorKind, _ jobs: [String]) { for j in jobs { m[j] = k } }
         set(.chronology, ["inv.linkage", "law.fact-chronology", "hr.incident-timeline", "siu.loss-chronology", "jrn.chronology",
-                          "res.chronology", "ind.personal-chronology", "ind.career-education", "gen.family-lines"])
+                          "ind.personal-chronology"])
+        set(.periodChronology, ["res.chronology"])
+        set(.careerChronology, ["ind.career-education"])
+        set(.lineage, ["gen.family-lines"])
         set(.deadlines, ["law.deadlines"])
-        set(.catalogue, ["res.corpus-catalogue", "jrn.source-vault", "siu.prior-claims", "hr.evidence-register", "res.metadata",
-                         "law.document-coding"])
+        set(.catalogue, ["res.corpus-catalogue", "siu.prior-claims", "hr.evidence-register", "res.metadata"])
+        set(.documentCoding, ["law.document-coding"])
+        set(.sourceVault, ["jrn.source-vault"])
         set(.exhibits, ["law.exhibit-binder"])
-        set(.citations, ["res.bibliography", "res.edition", "gen.originals"])
+        set(.citations, ["res.bibliography", "gen.originals"])
+        set(.annotatedEdition, ["res.edition"])
         set(.records, ["ind.document-versions", "ind.property", "ind.insurance", "ind.applications", "ind.document-vault"])
         set(.reminders, ["ind.reminders"])
-        set(.reliability, ["inv.source-reliability", "res.source-criticism", "jrn.source-map", "jrn.source-reliability", "ind.doc-reliability",
+        set(.reliability, ["inv.source-reliability", "res.source-criticism", "jrn.source-reliability", "ind.doc-reliability",
                            "law.source-desk", "siu.source-vetting", "fa.doc-reliability", "hr.credibility", "gen.source-analysis"])
-        set(.issueMatrix, ["law.parties-issues", "law.fact-evidence", "law.obligations", "siu.red-flags",
-                           "hr.allegations", "gen.evidence-notes"])
-        set(.quotes, ["res.transcription", "jrn.quote-book", "jrn.transcript", "hr.statements"])
-        set(.interviewPlan, ["jrn.interview-plan", "law.witness-profiles", "law.deposition", "siu.euo-prep", "hr.interview-prep"])
-        set(.causation, ["res.alternative", "res.causal", "jrn.causal", "ind.why", "law.causation", "siu.causation", "fa.analysis", "gen.migration"])
-        set(.money, ["law.damages", "fa.funds-tracing", "fa.workpapers"])
+        set(.sourceFamilies, ["jrn.source-map"])
+        set(.issueMatrix, ["law.fact-evidence", "law.obligations", "siu.red-flags", "hr.allegations", "gen.evidence-notes"])
+        set(.partiesIssues, ["law.parties-issues"])
+        set(.quotes, ["jrn.quote-book", "jrn.transcript"])
+        set(.statementComparison, ["hr.statements"])
+        set(.transcriptionLineage, ["res.transcription"])
+        set(.interviewPlan, ["jrn.interview-plan", "hr.interview-prep"])
+        set(.witnessProfile, ["law.witness-profiles"])
+        set(.sourcedQuestions, ["law.deposition", "siu.euo-prep"])
+        set(.causation, ["res.causal", "jrn.causal", "ind.why", "law.causation", "siu.causation", "fa.analysis", "gen.migration"])
+        set(.alternativeAccounts, ["res.alternative"])
+        set(.money, ["law.damages", "fa.funds-tracing"])
+        set(.workpaperTrace, ["fa.workpapers"])
         set(.disclosure, ["ind.health-scope", "ind.secure-share", "hr.disclosure-review"])
         set(.redactionValidation, ["law.redaction"])
-        set(.dataAnalysis, ["inv.data-lab", "jrn.data-desk"])
+        set(.dataAnalysis, ["jrn.data-desk"])
+        set(.configurableAnalysis, ["inv.data-lab"])
         set(.publication, ["jrn.publication", "jrn.publication-package"])
         set(.sameName, ["gen.same-person"])
         set(.actionRegister, ["inv.capa-register", "res.errata", "jrn.correction-history", "jrn.correction-actions", "ind.fix-it",
@@ -67,24 +84,10 @@ public nonisolated enum JobExecutorKind: String, Sendable {
 
     /// B3 (completion instructions 2026-10-29) — jobs whose fields and draft rows exist but whose
     /// contract acceptance scenario the result does not yet meet: reopened as preparation, with why.
-    public static let reopened: [String: String] = [
-        "law.parties-issues": "the matrix lists stated facts; parties (and their name forms, merged only by a person) are not listed",
-        "res.chronology": "dates are single days; an uncertain date's range is not represented",
-        "ind.career-education": "a dated list; a gap between dates is not shown as a gap",
-        "law.document-coding": "coding is recorded, but a document coded privileged is not yet withheld from production by this result",
-        "hr.statements": "quotes are listed per witness; the point-by-point comparison of two accounts of one meeting is not built",
-        "fa.workpapers": "figures are listed; tracing every report figure to its workpaper is not built",
-        "jrn.source-map": "sources are listed; grouping outlets that repeat one wire story into one source family is not built",
-        "jrn.source-vault": "the vault lists sources; keeping a protected source's name out of exports and AI payloads is not enforced by this result",
-        "res.transcription": "quotes are listed; a translation linked to its original and transcription is not built",
-        "res.alternative": "causal sentences are listed; two opposing accounts, each supported by cited sources, are not built",
-        "res.edition": "a citation inventory with fields, not an annotated edition whose annotations each link to a passage",
-        "gen.family-lines": "a dated timeline, not a lineage chart; relationships (and unproven ones) are not drawn",
-        "law.witness-profiles": "a person list with interview fields; a witness's inconsistent statements are not quoted side by side",
-        "law.deposition": "questions are free text; each question is not linked to its document passage",
-        "siu.euo-prep": "questions are free text; each question is not linked to its document passage",
-        "inv.data-lab": "one fixed grouping/count/total; the person cannot define filters or transforms of the analysis yet",
-    ]
+    /// Empty since the release-block directive of 2026-10-29 (item 1): each of the sixteen jobs B3 had
+    /// reopened now has its own executor (`JobDeliverableExecutors.swift`) and acceptance scenario.
+    /// A job whose result falls short of its contract again goes back here, with the reason.
+    public static let reopened: [String: String] = [:]
 
     /// The action register an effectiveness review reads (same persona).
     public static let reviewedRegister: [String: String] = [
@@ -117,6 +120,22 @@ public nonisolated enum JobExecutorKind: String, Sendable {
         case .actionRegister: return ActionExecutor.register(e)
         case .dataAnalysis: return DataAnalysisExecutor.run(e)
         case .redactionValidation: return RedactionValidationExecutor.run(e)
+        case .partiesIssues: return PartiesIssuesExecutor.run(e)
+        case .periodChronology: return PeriodChronologyExecutor.run(e)
+        case .careerChronology: return CareerExecutor.run(e)
+        case .documentCoding: return DocumentCodingExecutor.run(e)
+        case .statementComparison: return StatementComparisonExecutor.run(e)
+        case .witnessProfile: return WitnessProfileExecutor.run(e)
+        case .sourcedQuestions: return SourcedQuestionsExecutor.run(e)
+        case .workpaperTrace: return WorkpaperExecutor.run(e)
+        case .sourceFamilies: return SourceFamilyExecutor.run(e)
+        case .sourceVault: return SourceVaultExecutor.run(e)
+        case .transcriptionLineage: return TranscriptionExecutor.run(e)
+        case .alternativeAccounts: return AlternativeAccountsExecutor.run(e)
+        case .annotatedEdition: return AnnotatedEditionExecutor.run(e)
+        case .lineage: return LineageExecutor.run(e)
+        // The person's saved query is applied by the job service (`PersonaJobService.runExecutor`).
+        case .configurableAnalysis: return ConfigurableAnalysisExecutor.run(e)
         case .actionReview, .methodReadiness: return nil
         }
     }

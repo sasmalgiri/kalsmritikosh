@@ -62,8 +62,12 @@ struct JobOutcomeMatrixTests {
         if let d = studioDeliverables[job.id] { return d }
         if let kind = JobExecutorKind.assignments[job.id] {
             let met = JobExecutorKind.contractMet.contains(job.id)
+            let suites: [Any.Type]
+            if kind == .chronology { suites = [ChronologyExecutorTests.self, JobResultWorkflowTests.self] }
+            else if Self.deliverableKinds.contains(kind) { suites = [JobAcceptanceScenarioTests.self, JobDeliverableTests.self] }
+            else { suites = [JobFamilyExecutorTests.self, JobResultWorkflowTests.self] }
             return Deliverable(workProduct: (met ? "" : "preparation only: ") + (Self.executorProduct[kind] ?? kind.rawValue),
-                               verifiedBy: kind == .chronology ? [ChronologyExecutorTests.self, JobResultWorkflowTests.self] : [JobFamilyExecutorTests.self, JobResultWorkflowTests.self],
+                               verifiedBy: suites,
                                level: met ? "integration: contract result — executor pre-fills, the person completes the contract fields" : "integration: prepares material; contract result not produced yet")
         }
         switch job.kind {
@@ -73,6 +77,12 @@ struct JobOutcomeMatrixTests {
         default: return nil
         }
     }
+
+    /// The executors of the sixteen jobs the release-block directive (2026-10-29, item 1) completed.
+    static let deliverableKinds: Set<JobExecutorKind> = [
+        .partiesIssues, .periodChronology, .careerChronology, .documentCoding, .statementComparison, .witnessProfile, .sourcedQuestions,
+        .workpaperTrace, .sourceFamilies, .sourceVault, .transcriptionLineage, .alternativeAccounts, .annotatedEdition, .lineage, .configurableAnalysis,
+    ]
 
     /// What each shared executor's persisted result is (reviewed with the executors).
     static let executorProduct: [JobExecutorKind: String] = [
@@ -96,6 +106,21 @@ struct JobOutcomeMatrixTests {
         .actionRegister: "Action register: open items the evidence raises, no owner yet",
         .actionReview: "Effectiveness review of the current action register, each action not assessed",
         .methodReadiness: "Method readiness: applicable methods with their inputs, none run",
+        .partiesIssues: "Parties and issues: one row per name form (merged only by a confirmed human merge, recorded), issues with disputed values kept",
+        .periodChronology: "Periodised chronology: an event dated to a year, decade or span keeps its range",
+        .careerChronology: "Career and education chronology: dated entries, a gap over 180 days shown as a gap",
+        .documentCoding: "Document coding table whose privileged / partly privileged codes withhold the document from production",
+        .statementComparison: "Statement comparison: points × witnesses with verbatim quotes; agrees/differs on dates and amounts, silent",
+        .witnessProfile: "Witness profile: statements quoted, documents authored/received/naming, inconsistent statements both quoted",
+        .sourcedQuestions: "Examination outline: every question tied to its passage; disputed points with both sources",
+        .workpaperTrace: "Workpapers: stated amounts as workpapers; every report figure traced to one or flagged untraced",
+        .sourceFamilies: "Source map: outlets sharing identical long sentences grouped as one source family",
+        .sourceVault: "Source vault: hashed originals, protected identities kept out of exports and cloud sends",
+        .transcriptionLineage: "Transcription: each passage with its original, transcription, translation and lineage on one row",
+        .alternativeAccounts: "Alternative accounts: each value the documents dispute as an account with its supporting and contrary sources",
+        .annotatedEdition: "Annotated edition: source passages verbatim with exact version; annotations only on passages",
+        .lineage: "Lineage: kinship stated by sources, vital events, Mermaid chart with unsourced relationships dashed",
+        .configurableAnalysis: "Data analysis: the person's filter, grouping and total over the case table; every row cited; re-run reproducible",
     ]
 
     static let advertised: [PersonaJob] = PersonaJobCatalogComposer.allJobs

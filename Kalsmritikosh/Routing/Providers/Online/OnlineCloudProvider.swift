@@ -31,6 +31,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
     private let outboundLog: OutboundLogRepository?
     private let knownNames: @Sendable () async -> [String]
+    /// Release-block directive item 1 — the protected source identities recorded in the ledger's
+    /// source vaults (jrn.source-vault). Always masked, whatever the PII-masking setting; a request in
+    /// which one would still be recoverable after masking is not sent.
+    private let protectedNames: @Sendable () async -> [String]
     private let seams: Seams
 
     /// What the send reads from outside the actor: the Online settings, the person's consent and the
@@ -51,9 +55,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                                        transport: { try await NetworkHelperClient.send($0) })
     }
 
-    public init(outboundLog: OutboundLogRepository?, knownNames: @escaping @Sendable () async -> [String], seams: Seams = .live) {
+    public init(outboundLog: OutboundLogRepository?, knownNames: @escaping @Sendable () async -> [String],
+                protectedNames: @escaping @Sendable () async -> [String] = { [] }, seams: Seams = .live) {
         self.outboundLog = outboundLog
         self.knownNames = knownNames
+        self.protectedNames = protectedNames
         self.seams = seams
         self.manifest = ModelManifest(
             id: "provider.online.byok",
@@ -70,6 +76,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
     public enum OnlineError: Error, LocalizedError {
         case notAvailable, declined, limitReached(Int), notEligibleForDocuments(String), documentsNotCleared
+        /// A protected source identity (jrn.source-vault) would still be recoverable after masking.
+        case protectedIdentity(Int)
         /// K8 — no reply within the deadline; nothing was answered.
         case timedOut
         /// K8 — the outbound record could not be written, so nothing was sent.
@@ -84,6 +92,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             case .logUnavailable:     return "Not sent: the record of what leaves this Mac could not be written."
             case .changedDuringConsent(let what): return "Not sent: \(what) changed while you were reviewing the request. Ask again to review it with the current settings."
             case .documentsNotCleared: return "Not sent: the passages were not checked for privilege and sensitivity before this request was built."
+            case .protectedIdentity(let n): return "Not sent: \(n) protected source identity(ies) would still be recoverable in the request after masking."
             case .notAvailable:       return "Online mode is not set up (choose a provider, model and key in Settings)."
             case .declined:           return "You chose not to send this to the cloud."
             case .limitReached(let c): return "Today's online limit (\(c) bytes) has been reached."
@@ -133,12 +142,16 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             throw await fail(OnlineError.notAvailable)
         }
 
-        // 1. Masking (N-10).
+        // 1. Masking (N-10) — and, whatever the setting, the protected source identities of the
+        //    ledger's source vaults (release-block directive item 1).
         var sendPrompt = prompt
         var sendSystem = options.systemPrompt
         var mapping: [String: String] = [:]
-        if ProductModuleFlags.isEnabled(.onlinePIIMasking) {
-            let masker = OnlinePIIMasker(names: await knownNames())
+        let protected = await protectedNames()
+        var maskNames = protected
+        if ProductModuleFlags.isEnabled(.onlinePIIMasking) { maskNames += await knownNames() }
+        if !maskNames.isEmpty {
+            let masker = OnlinePIIMasker(names: maskNames)
             let p = masker.mask(prompt)
             sendPrompt = p.text
             mapping = p.mapping
@@ -150,6 +163,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         }
         let shownText = [sendSystem, sendPrompt].compactMap { $0 }.joined(separator: "\n\n")
         let bytes = shownText.utf8.count
+        // A protected identity that survives masking (split by markup, spacing or case) stops the send.
+        let survivors = RedactionVerifier().leaks(in: shownText, protectedTerms: protected, artifact: "request")
+        if !survivors.isEmpty {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "protected source identity")
+            throw await fail(OnlineError.protectedIdentity(survivors.count))
+        }
 
         // 2. Daily limit (I-8).
         if ProductModuleFlags.isEnabled(.leastDataOnline), let cap = settings.dailyByteCap {

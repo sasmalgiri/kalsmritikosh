@@ -353,8 +353,19 @@ final class StudioStorage {
                 committed[model.id] = data
             }
             let frozen = try await repo.freezeForExport(recordID: model.id, expectedPayloadSHA256: StudioRecordRepository.sha256(data), actor: actor)
+            // Release-block directive item 1 — a protected source's name (jrn.source-vault) never appears
+            // in a studio export either: scrubbed and verified gone, else nothing is exported.
+            var text = render(frozen.approved)
+            if let db = app?.database {
+                let scrubbed = ProtectedIdentities.scrub(text, names: try await JobResultRepository(database: db).protectedIdentityNames())
+                guard scrubbed.leaks.isEmpty else {
+                    problem = "Nothing was exported: \(scrubbed.leaks.count) protected source identity(ies) would remain recoverable in the file."
+                    return nil
+                }
+                text = scrubbed.text
+            }
             return StudioExportPackage(recordID: model.id, revision: frozen.revision, payloadSHA256: StudioRecordRepository.sha256(data),
-                                       approved: frozen.approved, text: render(frozen.approved), scopeFingerprint: fingerprint)
+                                       approved: frozen.approved, text: text, scopeFingerprint: fingerprint)
         } catch {
             KalsmritikoshLog.storage.error("Studio export not prepared: \(error.localizedDescription, privacy: .public)")
             problem = "Nothing was exported: \(error.localizedDescription)"

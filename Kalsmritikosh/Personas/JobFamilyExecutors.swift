@@ -26,12 +26,26 @@ public nonisolated struct JobEvidence: Sendable {
     public let batesPrefix: String
     /// B3 — admitted source versions that a newer version of the same document replaces.
     public let replacedVersions: Set<UUID>
+    /// The identity merges a person confirmed in this case (identity resolution; reversible). The
+    /// only way two name forms become one party (law.parties-issues).
+    public let mergedIdentities: [MergedIdentity]
     public init(facts: StudioCaseFacts, texts: [UUID: String] = [:], withheld: Int = 0, now: Date = Date(),
                 versionHashes: [UUID: String] = [:], exports: [(title: String, text: String)] = [], batesPrefix: String = "PROD",
-                replacedVersions: Set<UUID> = []) {
+                replacedVersions: Set<UUID> = [], mergedIdentities: [MergedIdentity] = []) {
         self.facts = facts; self.texts = texts; self.withheld = withheld; self.now = now
         self.versionHashes = versionHashes; self.exports = exports; self.batesPrefix = batesPrefix
-        self.replacedVersions = replacedVersions
+        self.replacedVersions = replacedVersions; self.mergedIdentities = mergedIdentities
+    }
+}
+
+/// A confirmed, unreversed human merge: the surviving name and the name forms merged into it.
+public nonisolated struct MergedIdentity: Sendable, Hashable {
+    public let canonical: String
+    public let aliases: [String]
+    public let decidedBy: String
+    public let decidedAt: Date
+    public init(canonical: String, aliases: [String], decidedBy: String, decidedAt: Date) {
+        self.canonical = canonical; self.aliases = aliases; self.decidedBy = decidedBy; self.decidedAt = decidedAt
     }
 }
 

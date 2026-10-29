@@ -182,11 +182,20 @@ public nonisolated struct StudioCaseDocument: Sendable, Hashable {
     public let date: Date?
 }
 
-/// A dated event in the case.
+/// A dated event in the case. An event the document dates only to a year, a decade or a span keeps
+/// that uncertainty: `precision` says how exact `date` is, and `endDate` closes a stated range
+/// (res.chronology: "an uncertain date keeps its range").
 public nonisolated struct StudioCaseEvent: Sendable, Hashable {
     public let date: Date
     public let title: String
     public let refs: [StudioEvidenceRef]
+    public let endDate: Date?
+    public let precision: DatePrecision
+    public init(date: Date, title: String, refs: [StudioEvidenceRef], endDate: Date? = nil, precision: DatePrecision = .day) {
+        self.date = date; self.title = title; self.refs = refs; self.endDate = endDate; self.precision = precision
+    }
+    /// True when the document does not date the event to one day (coarser precision, or a range).
+    public var isUncertain: Bool { endDate != nil || precision.rawValue < DatePrecision.day.rawValue }
 }
 
 /// Everything a studio can be pre-filled from, read once from the case's ledger.
@@ -362,7 +371,8 @@ public actor StudioCaseFactsReader {
             .sorted { $0.date < $1.date }
             .map { StudioCaseEvent(date: $0.date, title: $0.title,
                                    refs: [StudioEvidenceRef(sourceVersionID: versionOf[$0.sourceObjectID], objectID: $0.sourceObjectID,
-                                                            quote: String(($0.summary ?? $0.title).prefix(200)))]) }
+                                                            quote: String(($0.summary ?? $0.title).prefix(200)))],
+                                   endDate: $0.endDate, precision: $0.datePrecision) }
 
         let names = try await objects.sourceFilenames(for: objectIDs)
         let documents = objectIDs.sorted { (names[$0] ?? "") < (names[$1] ?? "") }

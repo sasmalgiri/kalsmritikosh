@@ -62,6 +62,9 @@ public nonisolated enum JobFields {
                                  F("verdict", "Verdict", .choice(["effective", "not effective"]))]
         // Inventories, registers, vaults.
         m["jrn.source-vault"] = [F("hash", "SHA-256", prefill: .contentHash), F("protected", "Protected identity", .choice(["no", "yes"])),
+                                 // The protected source's name(s), “;”-separated: kept out of every export and masked in every
+                                 // cloud send of this ledger (`ProtectedIdentities`). Required once protected = yes (completion rule).
+                                 F("identity", "Protected identity's name (kept out of exports and AI payloads)", required: false),
                                  F("access", "Access log note")]
         m["siu.prior-claims"] = [F("claim", "Claim"), F("date", "Date", .date, prefill: .rowDate), F("insurer", "Insurer"),
                                  F("amounts", "Amounts", prefill: .amount), F("source", "Source", prefill: .document)]
@@ -110,7 +113,8 @@ public nonisolated enum JobFields {
                                F("stance", "Evidence", .choice(["supports", "contradicts", "neutral"]))]
         // Statements and interviews.
         m["res.transcription"] = [F("original", "Original", prefill: .rowTitle), F("transcription", "Transcription"),
-                                  F("translation", "Translation", required: false), F("codes", "Codes")]
+                                  F("translation", "Translation (beside its transcription — never instead of it)", required: false), F("codes", "Codes"),
+                                  F("lineage", "Lineage (original → transcription → translation)", prefill: .sourceVersion)]
         m["jrn.transcript"] = [F("speaker", "Speaker (corrected)", prefill: .names), F("timecode", "Timecode", required: false),
                                F("correction", "Correction log", required: false)]
         m["hr.statements"] = [F("point", "Point"), F("witness", "Witness", prefill: .names),
@@ -119,9 +123,10 @@ public nonisolated enum JobFields {
                                    F("status", "Status", .choice(["planned", "asked", "answered", "no response"]))]
         m["law.witness-profiles"] = [F("statements", "Statements", prefill: .rowDetail), F("documents", "Documents authored or received"),
                                      F("inconsistencies", "Inconsistencies")]
-        m["law.deposition"] = [F("topic", "Topic", prefill: .rowDetail), F("questions", "Questions (each tied to its passage)"),
+        m["law.deposition"] = [F("topic", "Topic", prefill: .rowDetail), F("questions", "Question (tied to its cited passage)", prefill: .rowTitle),
                                F("disputed", "Disputed points", required: false), F("exhibits", "Exhibits", required: false)]
-        m["siu.euo-prep"] = interview
+        m["siu.euo-prep"] = [F("topics", "Topic", prefill: .rowDetail), F("questions", "Question (tied to its cited passage)", prefill: .rowTitle),
+                             F("documents", "Documents to put", required: false, prefill: .document)]
         m["hr.interview-prep"] = interview + [F("opportunity", "Response opportunity", .choice(["given", "not yet"]))]
         // Causation and hypotheses.
         for j in ["res.causal", "law.causation", "jrn.causal", "ind.why", "siu.causation"] { m[j] = causal }
@@ -158,8 +163,13 @@ public nonisolated enum JobFields {
         m["gen.same-person"] = [F("identifiers", "Identifiers compared"), F("conflicts", "Conflicts", required: false),
                                 F("conclusion", "Conclusion", .choice(["same person", "different people", "undecided"]))]
         m["inv.linkage"] = [F("entities", "Linked entities", prefill: .names), F("edge", "Link (who–what)", required: false)]
-        m["res.chronology"] = [F("period", "Period")]
-        m["gen.family-lines"] = [F("person", "Person", prefill: .names), F("relationship", "Relationship"), F("relative", "Related person")]
+        m["res.chronology"] = [F("period", "Period"), F("dated", "Dated (precision or range, from the document)", required: false)]
+        m["gen.family-lines"] = [F("person", "Person", prefill: .names), F("relationship", "Relationship"),
+                                 F("relative", "Related person (empty for a vital event)", required: false)]
+        // inv.data-lab — the person's analysis definition, recorded on the "Analysis" row and applied on the next run.
+        m["inv.data-lab"] = [F("filter", "Filter (label = value · label contains text · document = name)", required: false),
+                             F("groupBy", "Group by (label · document)", required: false),
+                             F("total", "Total (the label whose amounts are summed per currency)", required: false)]
         for j in ["inv.methods", "res.methods", "jrn.methods", "ind.methods", "law.methods", "fa.methods", "gen.methods"] {
             m[j] = [F("method", "Method", prefill: .methodID), F("inputs", "Inputs selected"), F("steps", "Steps taken"),
                     F("outcome", "Outcome", .choice(["supports", "contradicts", "inconclusive"]))]
@@ -253,6 +263,34 @@ public nonisolated enum JobFields {
         case "hr.disclosure-review":
             if accepted.contains(where: { $0.fields?["endorsement"] == "yes" && $0.fields?["present"] != "present" && !note($0) }) {
                 out.append("An endorsement without a clear disclosure needs your note on what must change (it is flagged against the instrument version)")
+            }
+        // Release-block directive item 1 — each reopened job's own scenario rule.
+        case "law.deposition", "siu.euo-prep":
+            if accepted.contains(where: { $0.refs.isEmpty }) {
+                out.append("Each question links to a document passage: link the source of every accepted question, or reject it")
+            }
+        case "fa.workpapers":
+            if accepted.contains(where: { $0.flags.contains(WorkpaperExecutor.untraced) }) {
+                out.append("A report figure that traces to no workpaper cannot be accepted: add the workpaper with its source, or reject the figure")
+            }
+        case "res.transcription":
+            if accepted.contains(where: { !($0.fields?["translation"] ?? "").isEmpty && ($0.fields?["transcription"] ?? "").isEmpty }) {
+                out.append("A translation needs the transcription it was made from (Transcription), so the lineage original → transcription → translation is kept")
+            }
+            if accepted.contains(where: { !($0.fields?["translation"] ?? "").isEmpty && $0.refs.isEmpty }) {
+                out.append("A translation must link to its original passage: link the source, or reject the row")
+            }
+        case "jrn.source-vault":
+            if accepted.contains(where: { $0.fields?["protected"] == "yes" && ProtectedIdentities.names(in: [$0]).isEmpty }) {
+                out.append("A protected source needs its identity recorded (Protected identity's name) so it is kept out of exports and AI payloads")
+            }
+        case "res.edition":
+            if accepted.contains(where: { !($0.fields?["annotation"] ?? "").isEmpty && $0.refs.isEmpty }) {
+                out.append("An annotation must link to its source passage: link the passage, or reject the row")
+            }
+        case "law.document-coding":
+            if accepted.contains(where: { DocumentCodingProduction.withholdingCodes.contains($0.fields?["privilege"] ?? "") && $0.refs.isEmpty }) {
+                out.append("A privilege code withholds a document from production, so the row must cite the document it codes")
             }
         default:
             // Action registers: an action marked done needs its closure note.
