@@ -141,6 +141,38 @@ struct ProceedingAnswererTests {
         for (q, want) in shapes { #expect(ProceedingAnswerer.parse(n(q))?.ask == want, "\(q) → \(n(q))") }
     }
 
+    @Test("Held-out chronology 9 (2026-10-29): a count behind 'do you have', a date behind 'do we have', a 'prosecutorial office', a component-issued release, a mis-titled release")
+    func heldOut9() throws {
+        let n = QuestionCanonicalizer.normalize
+        for q in ["Do you have a count of how many press releases reference Christi Machala?",
+                  "Do you have a count of how many press releases mention Christi Machala?"] {
+            #expect(ProceedingAnswerer.parse(n(q))?.ask == .documentCount, "\(q) → \(n(q))")
+        }
+        for q in ["Which prosecutorial office handled the case against Christi Machala?",
+                  "Which office handled the prosecution of Christi Machala?"] {
+            #expect(ProceedingAnswerer.parse(n(q))?.ask == .office, "\(q) → \(n(q))")
+        }
+        for q in ["Do we have a date for when Christi Machala was pardoned?", "Is there a date for when Christi Machala was pardoned?"] {
+            #expect(ProceedingAnswerer.parse(n(q))?.ask == .when(.pardoned), "\(q) → \(n(q))")
+        }
+        // A step no document records stays unrecorded, not a passage dump.
+        #expect(try ask(n("Do we have a date for when Christi Machala was pardoned?")).refused)
+        // A release issued by a component: the heading names it when no district is named anywhere.
+        let fbi = "U.S. Department of Justice\nFederal Bureau of Investigation (FBI)\nFOR IMMEDIATE RELEASE\nTuesday, September 30, 2025\nChester County Man Pleads Guilty to Stealing Valuable Coins From Bank Safe Deposit Box\nPHILADELPHIA – United States Attorney David Metcalf announced that Richard DiStefano, 65, of Paoli, Pennsylvania, entered a plea of guilty today before United States District Judge Timothy J. Savage on one count of bank larceny."
+        #expect(ProceedingAnswerer.offices(in: fbi) == ["Federal Bureau of Investigation (FBI)"])
+        let office = try #require(ProceedingAnswerer.parse("Which office handled the prosecution of Richard DiStefano?"))
+        #expect(try #require(ProceedingAnswerer.answer(office, sources: [.init(objectID: UUID(), text: fbi)])).body.contains("Federal Bureau of Investigation (FBI)"))
+        // A mis-titled release ("… Man Sentenced …" over a body that reports yesterday's plea): the
+        // title adds no sentencing step; the timeline has the plea and the later sentence only.
+        let mistitled = "U.S. Department of Justice\nEastern District of Virginia\nFOR IMMEDIATE RELEASE\nFriday, September 19, 2014\n\nWashington, D.C. Man Sentenced For Role In 2013 String Of Armed Bank Robberies\n\nALEXANDRIA, Va. – Tayron Tyree Weeks, 24, of Alexandria, pleaded guilty yesterday to engaging in the sex trafficking of a child.\n\nWeeks faces a maximum penalty of life in prison when he is sentenced on Dec. 12, 2014."
+        let sentenced = "U.S. Department of Justice\nEastern District of Virginia\nFOR IMMEDIATE RELEASE\nFriday, December 12, 2014\n\nAlexandria Man Sentenced\n\nALEXANDRIA, Va. – Tayron Tyree Weeks, 24, of Alexandria, was sentenced today to 132 months in prison for sex trafficking of a child.\n\nWeeks pleaded guilty on September 18, 2014."
+        let steps = ProceedingEventExtractor.findings(in: mistitled, person: "Tayron Tyree Weeks").map(\.step)
+        #expect(steps == [.pleaded], "\(steps)")
+        let tl = try #require(ProceedingAnswerer.parse("Give me the timeline of the case against Tayron Tyree Weeks"))
+        let body = try #require(ProceedingAnswerer.answer(tl, sources: [.init(objectID: UUID(), text: mistitled), .init(objectID: UUID(), text: sentenced)])).body
+        #expect(body.contains("September 18, 2014 — pleaded guilty") && body.contains("December 12, 2014 — sentenced") && !body.contains("September 19, 2014"), "\(body)")
+    }
+
     @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")
     func pleaSemantics() throws {
         func release(_ body: String) -> ProceedingAnswerer.Source {

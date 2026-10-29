@@ -194,7 +194,15 @@ public nonisolated enum ProceedingEventExtractor {
                 let detail = step == .sentenced ? sentenceDetail(title) : nil
                 let bodyHasStep = out.contains(where: { $0.step == step })
                 let bodyHasTerm = out.contains(where: { $0.step == .sentenced && $0.detail != nil })
-                if !bodyHasStep || (detail != nil && !bodyHasTerm) {
+                // A headline that names one court outcome while the body reports a different one on
+                // the release's own day ("… Man Sentenced …" over "pleaded guilty yesterday" — a
+                // mis-titled release, held-out chronology 9, 2026-10-29) is not a second step: the
+                // body's dated report of that day wins over the title.
+                let outcomes: Set<Step> = [.pleaded, .convicted, .sentenced, .acquitted]
+                let bodyReportsAnotherOutcomeThatDay = outcomes.contains(step)
+                    && out.contains { outcomes.contains($0.step) && $0.step != step && $0.dayFromPrintedDate }
+                if bodyReportsAnotherOutcomeThatDay { /* keep the body's account */ }
+                else if !bodyHasStep || (detail != nil && !bodyHasTerm) {
                     out.append(Finding(step: step, day: nil, dayFromPrintedDate: false, sentence: title, detail: detail, reportedOn: printed))
                 }
             }

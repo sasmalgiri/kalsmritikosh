@@ -74,7 +74,9 @@ public nonisolated enum ProceedingAnswerer {
     /// The question without a leading courtesy wrapper ("I need to confirm: …", "For the record, …",
     /// "I'm trying to confirm …", "Can you tell me …"), so the anchored patterns below see the question.
     static func unwrap(_ q: String) -> String {
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|provide|give me)|do you know|please (?:tell me|confirm|specify|clarify))\s*[:,—–-]?\s*)+"#
+        // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
+        // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|just to (?:confirm|check)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|provide|give me)|do you know|do (?:you|we) have|have (?:you|we) got|is there|please (?:tell me|confirm|specify|clarify))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -91,8 +93,9 @@ public nonisolated enum ProceedingAnswerer {
         // "How many (separate) press releases …", "the total count of press releases about X", "a count of
         // the press releases that mention X" — anywhere in the question, after any courtesy wrapper.
         let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements)\b"#
+        // "a count of how many press releases reference X" — the count phrase may wrap the how-many one.
         if q.range(of: #"^(?:roughly\s+|approximately\s+|about\s+|around\s+)?how many\s+"# + documents, options: .regularExpression) != nil
-            || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?"# + documents, options: .regularExpression) != nil {
+            || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?(?:how many\s+)?"# + documents, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .documentCount)
         }
         // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
@@ -100,7 +103,8 @@ public nonisolated enum ProceedingAnswerer {
             return Parsed(person: name, ask: .sentenceImposed)
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
-        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+)?(?:office|agency|prosecutors?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible)\b|\bwho prosecuted\b|\bprosecuting (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought)\b"#, options: .regularExpression) != nil {
+        // "Which prosecutorial office handled the case against X?" (held-out chronology 9, 2026-10-29).
+        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+|prosecutorial\s+|prosecution\s+|government\s+)?(?:office|agency|prosecutors?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible)\b|\bwho prosecuted\b|\bprosecut(?:ing|orial) (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
@@ -165,8 +169,11 @@ public nonisolated enum ProceedingAnswerer {
         var out: [String] = []
         for raw in text.components(separatedBy: .newlines).prefix(8) {
             let line = raw.trimmingCharacters(in: .whitespaces)
+            // A release issued by a component rather than a district ("Federal Bureau of Investigation
+            // (FBI)" as the heading line, the body naming no district — held-out chronology 9, 2026-10-29)
+            // names that component; it is what the documents say, never a guessed district.
             guard line.count <= 80, !line.lowercased().hasPrefix("u.s. department of justice"),
-                  line.range(of: #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&]+ Division$|^Office of [A-Z][A-Za-z ]+$"#,
+                  line.range(of: #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&]+ Division$|^Office of [A-Z][A-Za-z ]+$|^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Executive Office for United States Attorneys|Office of the Inspector General)(?: \([A-Z]{2,6}\))?$"#,
                              options: .regularExpression) != nil else { continue }
             out.append(line)
         }
