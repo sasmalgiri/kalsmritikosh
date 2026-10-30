@@ -15,6 +15,7 @@
 //  ledger with the folder registered, so the same case can be walked through the UI. Absent from release.
 //
 
+#if DEBUG   // App Store completion §5 — the acceptance fixture and its launch argument are compiled out of Release
 import Foundation
 import CoreGraphics
 import os
@@ -89,7 +90,6 @@ public nonisolated enum AcceptanceCaseFixture {
     }
 }
 
-#if DEBUG
 /// DEBUG-only GUI checkpoint: `--acceptance-case` boots against a disposable ledger with the
 /// acceptance case's folder (minus the later document) registered as its only root, so the UI
 /// journey starts from a clean workspace that already holds the case's documents. The later document

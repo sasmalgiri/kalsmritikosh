@@ -1,13 +1,26 @@
 # Release candidate — Investigations Made Easy v1 (candidate packet, not a release)
 
-Prepared 2026-10-30; **superseded the same day** by the investigator workflow review's changes (FINAL_BRIEF_EXECUTION
-§E5): product code changed after `da42fb08`, so by the freeze rule in §5 the candidate below is no longer the one to
-sign. The next candidate is the head of `investigations-next` after the review's commits (see §1a); its unsigned
-Release digests are recorded there when the build is made. The owner's verdict of 2026-10-29 ("not yet — do not ship
-publicly") stands until the gates in `docs/RELEASE_READINESS.md` are met. Rows marked *owner* or *people* are filled
-by them, not by the agent.
+One current section, then the historical candidates. A product-code change after a packet makes a new candidate (§5).
+Unsigned digests identify compiled code and are supporting evidence only; the submitted artifact is the signed, uploaded
+build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
+`bash scripts/release-check.sh` — currently **BLOCKED**.
 
-## 1a. The superseding candidate (after the workflow review)
+## Current candidate (2026-10-30, after the App Store completion instructions §2–§4)
+
+| Field | Value |
+|---|---|
+| Branch / PR | `investigations-next`, PR #169 (open) |
+| Code commits since the last green head `4147e106` | `60c7421e` (§2 citation verification + §3 lossless handoffs, schema v168) · `a738c56b` (§4 one output service) · the §1/§5 commit that adds this section (Release excludes the acceptance fixture; gate manifest) |
+| Schema | **v168** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
+| Hosted CI | **not yet run on these commits** — the last green head is `4147e106` (run 41051769092, seven jobs). Pushed in one batch with the next code change (Actions budget). |
+| Unsigned Release digests | **not yet built for this tree** — produced at freeze with the command in §6 and recorded here |
+| Signed Distribution build | none — *owner*: archive from the frozen commit in Xcode, record the archive's identifiers and the upload |
+| Contracts | 168 jobs: 20 studio, 97 executor, 51 service (`docs/JOB_CONTRACTS.md`) |
+| Gates | `ci/release-gates.json`; evidence and approval records under `release/approvals/` |
+
+## Historical candidates (superseded — digests and defects kept for the record)
+
+### 1a. The superseding candidate (after the workflow review)
 
 | Field | Value |
 |---|---|
@@ -16,7 +29,7 @@ by them, not by the agent.
 | Unsigned Release digests | §2a below, built from the working tree at `d014d2e7` |
 | Hosted CI | **all seven jobs green on `4147e106`** (run 41051769092, 2026-10-30: architecture-guards, migration-matrix, parser-fixtures, sensitive-export, report-receipt-integrity, release-build, build-and-test) |
 
-## 2a. Build digests of the superseding candidate (unsigned Release, this Mac, tree at `d014d2e7`)
+### 2a. Build digests of the superseding candidate (unsigned Release, this Mac, tree at `d014d2e7`)
 
 | Artifact | SHA-256 |
 |---|---|
@@ -27,7 +40,7 @@ by them, not by the agent.
 
 Same command as §6. The *owner* records the signed Distribution build's digests beside these.
 
-## 1. The candidate
+### 1. The candidate (da42fb08, 2026-10-30 morning)
 
 | Field | Value |
 |---|---|
@@ -40,7 +53,7 @@ Same command as §6. The *owner* records the signed Distribution build's digests
 | Schema | v165 (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin) |
 | Contracts | 168 jobs: 20 studio, 97 executor, 51 service, 0 preparation, 0 gap (`docs/JOB_CONTRACTS.md`) |
 
-## 2. Build digests (unsigned Release, this Mac)
+### 2. Build digests (unsigned Release, this Mac)
 
 | Artifact | SHA-256 |
 |---|---|
@@ -56,20 +69,21 @@ the bundle. The *owner* records the signed digests beside these.
 
 | Gate | Evidence | State |
 |---|---|---|
-| Engineering CI | `.github/workflows/build-and-guard.yml`, run 41002107045 | green on da42fb08 (the packet commit) |
+| Engineering CI | `.github/workflows/build-and-guard.yml` | green on `4147e106` (run 41051769092); **not yet run on the current candidate's commits** |
 | Advertised functionality | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobAcceptanceScenarioTests` (97 scenarios), `JobDeliverableTests` | met to integration level |
 | Accuracy | `docs/FINAL_BRIEF_EXECUTION.md` §E3; `~/CaseBench/ho{9..13}-chron/MEASUREMENT-rules.txt`, `score-rules*.txt`; adjudication packs `~/CaseBench/adjudication/ho{9..13}-rules-*` | **not met by the automatic scorer** (fresh sets 1.1 %–1.7 % wrong); *people*: adjudicate; one more fresh draw after the ho13 fixes |
-| Signed-build checks | `docs/evidence/ui-journeys-2026-10-30/JOURNEYS.md` (development build, sample archive) | journeys done on the development build; *owner*: the Distribution build, install/upgrade/restore, exports through the UI, StoreKit, accessibility |
+| Signed-build checks | `docs/evidence/ui-journeys-2026-10-30/JOURNEYS.md`, `…-2026-10-30b/JOURNEYS.md` (development build) | journeys and the acceptance case done on the development build **before §2–§4**; *agent*: re-check on the current code; *owner*: the Distribution build, install/upgrade/restore, exports through the UI, StoreKit, accessibility |
 | Legal / distribution | `docs/DISTRIBUTION_PACK.md`, `docs/LEGAL_REVIEW_PACK.md`, `docs/legal/SUPPLEMENTAL_TERMS_DRAFT.md`, `docs/legal/DECISION_MEMO.md` | prepared with recommended defaults; *counsel + owner* decide and record in `SHIP_DECISIONS.md` |
 | Practitioner / pilot | `docs/PRACTITIONER_REVIEW_AGENT.md` | agent pass only; *people*: one practitioner per persona, pilot users |
-| Records | `docs/FINAL_BRIEF_EXECUTION.md`, `docs/RELEASE_READINESS.md`, `SHIP_DECISIONS.md`, `PRODUCTION_STATUS.md` | reconciled to this commit |
+| Records | `docs/FINAL_BRIEF_EXECUTION.md` §E6 (the one current table), `docs/RELEASE_READINESS.md`, `SHIP_DECISIONS.md`, `PRODUCTION_STATUS.md` | reconciled 2026-10-30 |
+| Output routes | `docs/OUTPUT_ROUTES_INVENTORY.md`, `CaseOutputServiceTests` | 24 routes inventoried; case routes through one service; two recorded gaps |
 
-## 4. Known open defects carried by the candidate
+## 4. Known open defects carried by the current candidate
 
-- Launch window can open taller than the screen on a 956-pt display (journey D1); cause not found.
-- Command palette shows a "Home" row for "Professional Jobs" (journey D2).
-- Export through the UI not exercised in a journey (save panel); covered by tests only.
-- Data-lab result shows the three analysis fields on every row, not only the Analysis row.
+- First screen restores the last visited screen, so a fresh launch may open on Cases (journey D-5; Home is one toolbar press away).
+- Export through the UI not yet exercised in a journey on the current code (save panel); covered by `CaseOutputServiceTests`.
+- Ask's copy-answer button (archive Q&A, outside cases) does not scrub protected source identities (`docs/OUTPUT_ROUTES_INVENTORY.md` route 20).
+- Historical (fixed): launch window taller than the screen (D1, fitted); palette "Home" row (D2, rows keyed by entry id); Data Lab three fields on every row (I8).
 
 ## 5. Freeze rule
 

@@ -1,3 +1,9 @@
+> **HISTORICAL (2026-10-30).** This folder's submission instructions were written for the v1.0 release-closure
+> packet (schema v119 era). The current candidate packet is `docs/RELEASE_CANDIDATE.md`; the one current requirement
+> table is `docs/FINAL_BRIEF_EXECUTION.md` §E6; the release gates are `ci/release-gates.json` (`bash scripts/release-check.sh`);
+> approval records go under `release/approvals/`. The listing (`APP_STORE_LISTING.md`), the live legal pages and the
+> attributions remain the sources named in `docs/DISTRIBUTION_PACK.md`. Do not fill `RELEASE_EVIDENCE_v1.md` for the current candidate.
+
 # Release deliverables (owner-hostable / submittable)
 
 All the **non-code** release artifacts, drafted to match the locked contract in

@@ -18,9 +18,21 @@ import TipKit
 struct KalsmritikoshApp: App {
     /// §1.1 — in sample-archive mode the folder store is in-memory only, so
     /// the user's saved folders are neither loaded nor overwritten.
-    @State private var appState = (SampleArchiveMode.isActive || CommandLine.arguments.contains("--acceptance-case"))
-        ? AppState(bookmarks: BookmarkStore(ephemeral: true))   // the acceptance-case fixture (DEBUG) must not touch the saved folders either
+    @State private var appState = KalsmritikoshApp.ephemeralFolderStoreRequested
+        ? AppState(bookmarks: BookmarkStore(ephemeral: true))
         : AppState()
+
+    /// The saved folders are neither loaded nor overwritten in sample-archive mode, nor (DEBUG only)
+    /// under the acceptance-case fixture. The fixture's launch argument is not read in Release
+    /// (App Store completion §5).
+    private static var ephemeralFolderStoreRequested: Bool {
+        if SampleArchiveMode.isActive { return true }
+        #if DEBUG
+        return AcceptanceCaseGUIFixture.isRequested
+        #else
+        return false
+        #endif
+    }
 
     /// K7 — on Quit, pending studio writes finish (or the person is asked) before the app exits.
     @NSApplicationDelegateAdaptor(AppTerminationGuard.self) private var terminationGuard

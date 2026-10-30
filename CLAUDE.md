@@ -7,7 +7,11 @@ specialist experts behind an evidence gate — fully on-device.
 
 This is NOT a chat-with-files RAG app. The intelligence lives in the database, not the model.
 
-## Authority chain (updated 2026-07-22, GOV-002)
+## Authority chain (updated 2026-10-30)
+The current completion mandate is the owner's
+`Investigations_Made_Easy_App_Store_Completion_Instructions_2026-10-30.md` (outside the repo); its execution
+record is `docs/FINAL_BRIEF_EXECUTION.md` §E6, the candidate packet `docs/RELEASE_CANDIDATE.md`, the gates
+`ci/release-gates.json` (`bash scripts/release-check.sh`). Below it, the older chain (GOV-002, 2026-07-22) applies:
 The active plan is the **Production Readiness Instruction Pack** and the repo backlog, not
 the legacy `TASKS.md`. Authority order:
 1. `01_MASTER_PRODUCTION_DIRECTIVE.md` + `03_LOCKED_PRODUCT_CONTRACT_AND_MOAT.md` (in the pack)

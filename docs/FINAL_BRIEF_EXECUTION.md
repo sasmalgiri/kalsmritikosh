@@ -1,19 +1,22 @@
 # Final brief — authoritative execution record
 
-Governing instruction (from 2026-10-29): **`Investigations_Made_Easy_Current_Completion_Instructions_2026-10-29.md`** (owner; review of
-`0ce29931`, B1–B6, §E1 below). It replaces, as the current instruction, `Investigations_Made_Easy_Final_Completion_Instructions_2026-10-28.md`
-(review of `957f066b`). It updates the final product instructions of 2026-10-27 and the ship-readiness review of 61ad7820, whose findings
+Governing instruction (from 2026-10-30): **`Investigations_Made_Easy_App_Store_Completion_Instructions_2026-10-30.md`** (owner;
+review of `4147e106`, fourteen sections, §E6 below is its one current table). It supersedes, as the working plan,
+`Investigations_Made_Easy_Current_Completion_Instructions_2026-10-29.md` (B1–B6, §E1) and the Investigator Workflow Review of
+2026-10-30 (I1–I9, §E5 — kept as the historical explanation of those changes, with their credit and evidence). Earlier:
+`Investigations_Made_Easy_Final_Completion_Instructions_2026-10-28.md` (review of `957f066b`). It updates the final product instructions of 2026-10-27 and the ship-readiness review of 61ad7820, whose findings
 remain recorded below (§A2, §A3). This file is the one execution record: every requirement, its state, the evidence and what
 remains. No overall "percent complete" is given.
 
-**States:**
+**States (the 2026-10-30 instruction's vocabulary; older sections use the earlier names in brackets):**
 - *implemented*: the code exists.
-- *unit-verified*: focused automated tests pass.
-- *integration-verified*: exercised through the real service and ledger path.
-- *signed-app-verified*: checked on the signed distribution build.
-- *practitioner-reviewed*: a professional in that field reviewed the work product.
+- *unit-tested* (unit-verified): focused automated tests pass.
+- *integration-tested* (integration-verified): exercised through the real service and ledger path.
+- *development-UI-tested*: driven through the development-signed Debug build's UI on a disposable ledger.
+- *distribution-tested* (signed-app-verified): checked on the Mac App Store / TestFlight build.
+- *independently reviewed* (practitioner-reviewed): a person other than the agent — adjudicator, practitioner, user, counsel — reviewed it and a record is retained.
 
-Nothing below is signed-app-verified or practitioner-reviewed.
+Nothing below is distribution-tested or independently reviewed. Release status: **BLOCKED** (`bash scripts/release-check.sh`).
 
 **Baseline (F0):**
 - `957f066b` passed all seven CI jobs (run 40669296571: release build, full unit target, migration matrix, sensitive exports, report/receipt integrity, parsers, architecture guards).
@@ -220,6 +223,30 @@ Distribution build. An agent's self-review is not a practitioner review.
 | Case | One realistic acceptance case | Bundled fixture `AcceptanceSupplierPayment` (10 documents) + `AcceptanceCaseFixture` (unreadable scan generated; DEBUG `--acceptance-case` boots a disposable ledger with an ephemeral folder store); the case runs through the production services; the case-facts reader no longer drops later mentions of an amount (a real defect found by the case); the evidence register flags a document that refers to an attachment; failed parses are listed by name with stage and reason and count toward the live indicator | `bcb9af60`, `517e9ae5`, `d014d2e7` | `AcceptanceCaseTests.supplierPaidTwice` (12 numbered expectations) | runs b and c, 50 screenshots | The later document (innocent explanation) needs a folder picker in the UI — added in the test, not the journey; closing-balance figures are read whole only after the grouping fix |
 
 **UI defects found by the walk-throughs and their state.** Run b found D-1 (ACH new analysis could not add evidence), D-2 (failed parse counted but not listed; indicator stuck), D-3 (fixture registered folders in the real store, five duplicates), D-4 (no Open passage), D-5 (first screen Cases), D-6 (stale Next list), D-7 (Decision label vertical), D-8 (amount with trailing comma, Indian grouping split). Run c confirmed D-1, D-3, D-4, D-6, D-7 fixed and D-2's row fixed; the trailing-comma amount, the unread closing balance and the live indicator are fixed in `d014d2e7` (unit-tested: `TransactionDomainPackTests`, `PaymentAnswerTests`, `AcceptanceCaseTests`) and are **not yet re-verified through the UI**. D-5 stands as a limitation. The five stray folder roots were removed from the persisted store.
+
+## E6. App Store completion instructions (2026-10-30) — the one current table
+
+Columns as the instruction asks: requirement, implementation commit, test case, actual artifact/build, outcome (state vocabulary
+above), remaining limitation, responsible person, evidence location. Commits after `4147e106` need their own hosted CI run; the
+gate command is `bash scripts/release-check.sh` over `ci/release-gates.json`; human gates are retained records under
+`release/approvals/` (format in its README), never generated.
+
+| § | Requirement | Commit | Test case | Artifact / build | Outcome | Remaining limitation | Responsible | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| 1 | One baseline and evidence table; stale release docs reconciled; candidate packet consolidated; gate manifest + release-check command | this commit (after `a738c56b`) | `scripts/release-check.sh` (runs guards, claims gate, schema pin, Release-excludes-debug-args; reads evidence and approval records) | — | implemented | push + hosted CI on the new head still to run (batched with the next code push, Actions budget) | agent | this table; `docs/RELEASE_CANDIDATE.md` §Current; `release/README.md`, `release/RELEASE_EVIDENCE_v1.md` marked historical; `ci/release-gates.json` |
+| 2 | Citation verification: one verified-evidence meaning (allegation links, ACH citations, report items, handoffs); revalidation at adverse finding and export; exhibit vs documentary vs note; legacy links unverified; exception waives only the response | `60c7421e` (schema v168) | `CaseFileTests.verifiedPassagesGateAdverseFindings` (real ingested passage; fabricated quote, absent block, wrong version, out-of-case source, withdrawn exhibit, legacy identifier-only link, scope change after linking), `CaseNextStepsTests`, `AcceptanceCaseTests` (carried links verified), `ACHAnalysisTests.reportDistinguishesStates`, `ACHRepositoryTests.citationRoundTrips` | development build only | integration-tested | the §E5 UI evidence predates this change — the grid chip ("verified passage / unverified — reason") and the ACH citation chip are not yet UI-checked; the block picker still selects a version, the quote is pinned to its block by verification | agent (UI re-check), then people | `CaseEvidenceVerifier.swift`; `CaseFileService.verify/linkEvidence/reverifyLinks/decide` |
+| 3 | Lossless truthful handoffs: every citation; persisted revision + ledger digest; explicit review state (accepted / completed / undecided / rejected); superseded origins visible; intentional repeats only | `60c7421e` | `CaseFileTests.reviewedRowHandsOffIntoTheCase` (two-source disagreement, rejected refused, forged record refused, undecided prints provisional, superseded after a new run, duplicate refused, report prints the distinction), `AcceptanceCaseTests` | development build only | integration-tested | handoff of a row with no citation carries no passage (stated); the findings composer is unchanged | agent (UI re-check) | `JobResultHandoff.swift`; `CaseFileDocuments.caseFileReport` sections "Reviewed results included" / "Provisional material included" |
+| 4 | One output authorisation/protection service for every output route; freeze → revalidate after the dialog → protect → atomic write → read back → record; pending record on log failure; print/clipboard honest; drafts labelled | `a738c56b` | `CaseOutputServiceTests` (3 tests, 10 acceptance points incl. protected name in free text, source privileged / removed with the panel open, custody unreadable, altered file, record failure + resume, binary document) | development build only | integration-tested | routes 14 (findings export: own check, no case output record) and 20 (Ask copy outside cases) recorded as gaps in `docs/OUTPUT_ROUTES_INVENTORY.md`; the full export journey through the save panel is not yet UI-exercised | agent (UI export journey) | `CaseOutputService.swift`; `docs/OUTPUT_ROUTES_INVENTORY.md` (24 routes) |
+| 5 | UI re-check of `d014d2e7` fixes; later document via the real picker; full export journey; test isolation (preferences, legacy ACH store, bookmarks, credentials); fresh-profile Home vs returning user; acceptance-only arguments out of Release; the five-folder incident recorded | this commit (Release excludes the fixture and its argument: `scripts/release-check-debug-args.sh`) | — | — | partly implemented | UI re-check, picker journey, export journey, isolation audit and fresh-profile check still to do | agent | §E5 (incident recorded there: five stray roots, removed once; not to be repeated) |
+| 6 | 168 jobs reachable in the distributed UI; per-persona start-to-export journeys with persona fixtures; boundaries explicit; scale re-measure | — | `JobAcceptanceScenarioTests` (97 executor scenarios), `InvestigationCaseSimulationTests` (9 personas, service level), `PersonaJobsModelTests.discoversAndEnumerates` | development build (journeys of 2026-10-30, before §2–§4) | integration-tested; development-UI-tested on earlier code | journeys on the current code and on the Distribution build; scale re-measure after §2–§4 (`SupportEnvelopeTests`) | agent, then owner (Distribution build) | `docs/evidence/ui-journeys-2026-10-30/`, `docs/SUPPORT_ENVELOPE.md` |
+| 7 | Accuracy: ho9–13 regression only on frozen code; independent adjudication; `docs/ADJUDICATION_PROTOCOL.md` corrected; fresh ho14; ≤1 % wrong per mode/family; non-chronology families; route validation; errors ≠ successes | — | bench harness (`scripts/casebench/`) | last measured on `89d0f16e`-era code (ho13 1.7 % wrong, automatic scorer) | measured, gate not met | re-run on the frozen candidate; ho14 draw; adjudication is a person's | agent (runs, packs), adjudicator (people) | §E3; `~/CaseBench/` |
+| 8 | Real Mac App Store archive via Xcode (signed), validated, uploaded; TestFlight | — | — | none | **BLOCKED** | needs the owner's signing identity and App Store Connect account on this Mac; the agent can prepare the archive scheme and the checklist | owner | `release/approvals/distribution-archive.md` (absent) |
+| 9 | Distribution-build acceptance table | — | — | none | BLOCKED (depends on §8) | — | owner + agent | `ci/release-gates.json` gates `persona-journeys-distribution`, `testflight` |
+| 10 | Real StoreKit: trial, purchase, restore, refund on the Distribution build | — | `StoreKit` unit/sandbox scripts in `docs/DISTRIBUTION_PACK.md` | none | BLOCKED (depends on §8) | — | owner | `release/approvals/storekit.md` (absent) |
+| 11 | Legal, privacy and product claims: one decision sheet; contradictions (DISTRIBUTION_PACK vs DECISION_MEMO vs APP_STORE_LISTING "Data Not Collected"; Marketing draft) resolved | — | `scripts/check-claims.sh` | — | prepared with recommended defaults | counsel + owner decisions; decision sheet to be consolidated (§11 work item) | counsel, owner | `docs/legal/DECISION_MEMO.md`, `docs/DISTRIBUTION_PACK.md`, `release/APP_STORE_LISTING.md` |
+| 12 | Five-user and practitioner evaluation (real people) | — | — | — | BLOCKED | the agent's practitioner-style review (`docs/PRACTITIONER_REVIEW_AGENT.md`) is not independent | owner recruits; practitioners | `release/approvals/practitioner-review.md`, `user-evaluation.md` (absent) |
+| 13 | Submission assembled as a finished deliverable | — | — | none | BLOCKED (depends on §8–§12) | — | owner | — |
+| 14 | Handoff package + owner action sheet + exact status | — | `scripts/release-check.sh` | — | in progress | — | agent | this file; `docs/RELEASE_READINESS.md` |
 
 ## E. Open requirements (IDs)
 
