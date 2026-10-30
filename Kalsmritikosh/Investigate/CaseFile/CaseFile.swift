@@ -185,8 +185,19 @@ public nonisolated struct CaseAllegation: Identifiable, Sendable, Equatable {
     public var decidedBy: String?
     public var decidedAt: Date?
     public let createdAt: Date
+    /// I4 — the respondent's account or explanation, as put to them (nil: no response recorded).
+    public var response: String?
+    /// I4 — why an adverse finding was recorded without a response (an explicit, justified exception).
+    public var exceptionNote: String?
     /// "A1", "A2" … — how the report and the grid refer to it.
     public var label: String { "A\(sequence)" }
+
+    public init(id: UUID, caseID: UUID, sequence: Int, text: String, disposition: AllegationDisposition, rationale: String?,
+                decidedBy: String?, decidedAt: Date?, createdAt: Date, response: String? = nil, exceptionNote: String? = nil) {
+        self.id = id; self.caseID = caseID; self.sequence = sequence; self.text = text; self.disposition = disposition
+        self.rationale = rationale; self.decidedBy = decidedBy; self.decidedAt = decidedAt; self.createdAt = createdAt
+        self.response = response; self.exceptionNote = exceptionNote
+    }
 }
 
 public nonisolated struct AllegationEvidence: Identifiable, Sendable, Equatable {
@@ -198,6 +209,47 @@ public nonisolated struct AllegationEvidence: Identifiable, Sendable, Equatable 
     public let note: String?
     public let addedBy: String
     public let createdAt: Date
+    /// I4 — the exact passage: its quotation and locator (block, object) within the source version.
+    public let quote: String?
+    public let blockID: UUID?
+    public let objectID: UUID?
+    /// I5 — where it came from when carried over from a reviewed result ("job:<job>:<result>:row:<n>").
+    public let origin: String?
+
+    public init(id: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance, note: String?, addedBy: String,
+                createdAt: Date, quote: String? = nil, blockID: UUID? = nil, objectID: UUID? = nil, origin: String? = nil) {
+        self.id = id; self.allegationID = allegationID; self.evidenceRef = evidenceRef; self.label = label; self.stance = stance
+        self.note = note; self.addedBy = addedBy; self.createdAt = createdAt
+        self.quote = quote; self.blockID = blockID; self.objectID = objectID; self.origin = origin
+    }
+
+    /// A documentary link (a source version or a physical exhibit), as opposed to the investigator's own note.
+    public var isDocumentary: Bool {
+        switch CaseEvidenceReference.parse(evidenceRef) {
+        case .sourceVersion, .exhibit: return true
+        case .investigatorNote, .unresolved: return false
+        }
+    }
+    /// The passage can be opened directly (it names a document).
+    public var opensPassage: Bool { objectID != nil }
+}
+
+/// I5 — one item the person selected for (or excluded from) the final case report: the cited text
+/// with its passage and the reviewed result revision it came from, never retyped.
+public nonisolated struct CaseReportItem: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let caseID: UUID
+    public let allegationID: UUID?
+    public let text: String
+    public let quote: String?
+    public let evidenceRef: String?
+    public let origin: String?
+    public let included: Bool
+    public let exclusionReason: String?
+    public let addedBy: String
+    public let createdAt: Date
+    public let decidedBy: String?
+    public let decidedAt: Date?
 }
 
 // MARK: - Journal and chronology
@@ -216,6 +268,15 @@ public nonisolated struct CaseJournalEntry: Identifiable, Sendable, Equatable {
     public let evidenceRef: String?
     public let author: String
     public let createdAt: Date
+    /// I4/I5 — the exact passage quoted, and the reviewed result it was carried from.
+    public let quote: String?
+    public let origin: String?
+
+    public init(id: UUID, caseID: UUID, kind: CaseJournalKind, eventDate: Date?, text: String, evidenceRef: String?, author: String,
+                createdAt: Date, quote: String? = nil, origin: String? = nil) {
+        self.id = id; self.caseID = caseID; self.kind = kind; self.eventDate = eventDate; self.text = text; self.evidenceRef = evidenceRef
+        self.author = author; self.createdAt = createdAt; self.quote = quote; self.origin = origin
+    }
 }
 
 // MARK: - People, contacts, interviews, credibility
@@ -446,9 +507,13 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
     case caseClosed
     /// The record changed since it was read; reload and try again.
     case staleRecord(String, UUID)
+    /// I4 — an adverse finding needs documentary evidence and the response put to the respondent
+    /// (or an explicit, justified exception); a typed disposition on notes alone is refused.
+    case adverseFindingUnsupported(String)
 
     public var errorDescription: String? {
         switch self {
+        case .adverseFindingUnsupported(let why): return "An adverse finding can't be recorded yet: \(why)."
         case .blank(let f): return "\(f) can't be empty."
         case .caseNotFound: return "The case was not found."
         case .notFound(let what, _): return "The \(what) was not found."

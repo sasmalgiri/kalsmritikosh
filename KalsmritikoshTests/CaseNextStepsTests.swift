@@ -48,6 +48,7 @@ struct CaseNextStepsTests {
         try await f.file.attest(interviewID: iv, caseID: f.caseID, attestedBy: "Sam Witness", actor: "Ada")
         #expect(try await !steps().contains("attest-\(iv)"))
 
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "Says the shouting was a fire drill.", actor: "Ada")
         try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two accounts and the rota", actor: "Ada")
         #expect(try await steps().contains("findings"))
         // A failed custody read and broken references lead the list.

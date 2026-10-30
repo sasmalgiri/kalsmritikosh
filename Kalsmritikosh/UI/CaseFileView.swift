@@ -449,6 +449,11 @@ struct CasePlanTab: View {
     @State private var gridRef: [UUID: String] = [:]
     @State private var gridStance: [UUID: GridStance] = [:]
     @State private var gridNote: [UUID: String] = [:]
+    /// I4 — the exact passage quoted for a new link, the respondent's response, and an exception.
+    @State private var gridQuote: [UUID: String] = [:]
+    @State private var responseText: [UUID: String] = [:]
+    @State private var exceptionText: [UUID: String] = [:]
+    @State private var openedPassage: OpenedSource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -486,6 +491,12 @@ struct CasePlanTab: View {
             }
         }
         .onAppear { plan = s.profile.plan }
+        .sheet(item: $openedPassage) { opened in
+            VStack(spacing: 0) {
+                EvidenceViewer(citation: opened.citation)
+                HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
+            }
+        }
     }
 
     private func planField(_ title: String, _ kp: WritableKeyPath<CasePlan, String?>) -> some View {
@@ -508,31 +519,67 @@ struct CasePlanTab: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(st.label) (\(items.count))").font(.caption.bold()).foregroundStyle(st == .supports ? .green : (st == .contradicts ? .red : .secondary))
                         ForEach(items) { e in
-                            HStack {
-                                Text("• \(e.label ?? model.label(for: e.evidenceRef))").font(.callout)
-                                if let n = e.note { Text("— \(n)").font(.caption).foregroundStyle(.secondary) }
-                                Spacer()
-                                Button("Remove") {
-                                    model.run(appState) { try await $0.file.retractAllegationEvidence(caseID: model.caseID, id: e.id, actor: model.actor) }
-                                }.buttonStyle(.borderless).font(.caption)
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack {
+                                    Text("• \(e.label ?? model.label(for: e.evidenceRef))").font(.callout)
+                                    if !e.isDocumentary {
+                                        Text("investigator's note").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                            .background(.orange.opacity(0.18), in: Capsule())
+                                            .help("Your own entry, not a document. A finding cannot rest on notes alone.")
+                                    }
+                                    if let n = e.note { Text("— \(n)").font(.caption).foregroundStyle(.secondary) }
+                                    Spacer()
+                                    if e.opensPassage, let o = e.objectID {
+                                        Button("Open passage") { openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: o, snippet: e.quote ?? "")) }
+                                            .buttonStyle(.borderless).font(.caption)
+                                            .help("Open the exact passage this link points at.")
+                                    }
+                                    Button("Remove") {
+                                        model.run(appState) { try await $0.file.retractAllegationEvidence(caseID: model.caseID, id: e.id, actor: model.actor) }
+                                    }.buttonStyle(.borderless).font(.caption)
+                                }
+                                if let q = e.quote {
+                                    Text("“\(q)”").font(.caption).foregroundStyle(.secondary).lineLimit(3).padding(.leading, 12)
+                                }
+                                if let origin = e.origin {
+                                    Text("From a reviewed result: \(origin)").font(.caption2).foregroundStyle(.tertiary).padding(.leading, 12)
+                                }
                             }
                         }
                     }
                 }
             }
-            HStack {
-                EvidencePicker(title: "Evidence", ref: Binding(get: { gridRef[a.id] ?? "" }, set: { gridRef[a.id] = $0 })).frame(maxWidth: 320)
-                Picker("", selection: Binding(get: { gridStance[a.id] ?? .supports }, set: { gridStance[a.id] = $0 })) {
-                    ForEach(GridStance.allCases) { Text($0.label).tag($0) }
-                }.labelsHidden().frame(width: 120)
-                TextField("Why", text: Binding(get: { gridNote[a.id] ?? "" }, set: { gridNote[a.id] = $0 }))
-                Button("Link") {
-                    let ref = gridRef[a.id] ?? "", st = gridStance[a.id] ?? .supports, note = opt(gridNote[a.id] ?? "")
-                    let label = model.label(for: ref)
-                    model.run(appState) { try await $0.file.addAllegationEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, actor: model.actor) }
-                    gridRef[a.id] = ""; gridNote[a.id] = ""
-                }.disabled((gridRef[a.id] ?? "").isEmpty)
+            // I4 — link a passage: the source, the stance, the quoted words and why.
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    EvidencePicker(title: "Evidence", ref: Binding(get: { gridRef[a.id] ?? "" }, set: { gridRef[a.id] = $0 })).frame(maxWidth: 320)
+                    Picker("", selection: Binding(get: { gridStance[a.id] ?? .supports }, set: { gridStance[a.id] = $0 })) {
+                        ForEach(GridStance.allCases) { Text($0.label).tag($0) }
+                    }.labelsHidden().frame(width: 120)
+                    TextField("Why", text: Binding(get: { gridNote[a.id] ?? "" }, set: { gridNote[a.id] = $0 }))
+                    Button("Link") {
+                        let ref = gridRef[a.id] ?? "", st = gridStance[a.id] ?? .supports, note = opt(gridNote[a.id] ?? "")
+                        let quote = opt(gridQuote[a.id] ?? "")
+                        let label = model.label(for: ref)
+                        let passage = UUID(uuidString: ref).map { StudioEvidenceRef(sourceVersionID: $0, quote: quote) }
+                        model.run(appState) { try await $0.file.addAllegationEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, passage: passage, actor: model.actor) }
+                        gridRef[a.id] = ""; gridNote[a.id] = ""; gridQuote[a.id] = ""
+                    }.disabled((gridRef[a.id] ?? "").isEmpty)
+                }
+                TextField("Quote the exact passage (optional — makes the link reopenable to the words)", text: Binding(get: { gridQuote[a.id] ?? "" }, set: { gridQuote[a.id] = $0 }), axis: .vertical)
+                    .lineLimit(1...3).font(.caption)
             }
+            // I4 — the response put to the respondent; an adverse finding needs it or an exception.
+            HStack {
+                TextField(a.response == nil ? "Response put to the respondent (their account or explanation)" : "Response: \(a.response ?? "")",
+                          text: Binding(get: { responseText[a.id] ?? "" }, set: { responseText[a.id] = $0 }), axis: .vertical).lineLimit(1...3)
+                Button("Record response") {
+                    let r = responseText[a.id] ?? ""
+                    model.run(appState) { try await $0.file.recordResponse(allegationID: a.id, caseID: model.caseID, response: r, actor: model.actor) }
+                    responseText[a.id] = ""
+                }.disabled((responseText[a.id] ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let r = a.response { Text("Response: “\(r)”").font(.caption).foregroundStyle(.secondary) }
             HStack {
                 Picker("Finding", selection: Binding(get: { decisions[a.id]?.0 ?? a.disposition }, set: { decisions[a.id] = ($0, decisions[a.id]?.1 ?? a.rationale ?? "") })) {
                     ForEach(AllegationDisposition.allCases) { Text($0.label).tag($0) }
@@ -540,10 +587,17 @@ struct CasePlanTab: View {
                 TextField("Rationale", text: Binding(get: { decisions[a.id]?.1 ?? a.rationale ?? "" }, set: { decisions[a.id] = (decisions[a.id]?.0 ?? a.disposition, $0) }))
                 Button("Record finding") {
                     let d = decisions[a.id] ?? (a.disposition, a.rationale ?? "")
-                    model.run(appState) { try await $0.file.decide(allegationID: a.id, caseID: model.caseID, disposition: d.0, rationale: d.1, actor: model.actor) }
+                    let ex = opt(exceptionText[a.id] ?? "")
+                    model.run(appState) { try await $0.file.decide(allegationID: a.id, caseID: model.caseID, disposition: d.0, rationale: d.1, exception: ex, actor: model.actor) }
                 }
             }
-            if let by = a.decidedBy { Text("Recorded by \(by) on \(CaseFileDocuments.d(a.decidedAt))").font(.caption).foregroundStyle(.secondary) }
+            if (decisions[a.id]?.0 ?? a.disposition) == .substantiated, a.response == nil {
+                TextField("Exception — why this adverse finding is recorded without the respondent's response", text: Binding(get: { exceptionText[a.id] ?? a.exceptionNote ?? "" }, set: { exceptionText[a.id] = $0 }), axis: .vertical)
+                    .lineLimit(1...3).font(.caption)
+                Text("An adverse finding needs a documentary passage that supports it and the response put to the respondent, or this exception. A typed note is your own entry, not evidence.")
+                    .font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
+            if let by = a.decidedBy { Text("Recorded by \(by) on \(CaseFileDocuments.d(a.decidedAt))" + (a.exceptionNote.map { " · exception: \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary) }
             Divider()
         }
     }

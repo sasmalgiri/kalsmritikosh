@@ -108,13 +108,24 @@ public actor CaseFileRepository {
 
     public func allegations(caseID: UUID) async throws -> [CaseAllegation] {
         (try await database.query("""
-            SELECT id, case_id, sequence, text, disposition, rationale, decided_by, decided_at, created_at
+            SELECT id, case_id, sequence, text, disposition, rationale, decided_by, decided_at, created_at, response, exception_note
             FROM case_allegations WHERE case_id = ? ORDER BY sequence;
             """, [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let text = r.string(3),
                   let d = r.string(4).flatMap(AllegationDisposition.init(rawValue:)), let created = r.date(8) else { return nil }
             return CaseAllegation(id: id, caseID: c, sequence: Int(seq), text: text, disposition: d, rationale: r.string(5),
-                                  decidedBy: r.string(6), decidedAt: r.date(7), createdAt: created)
+                                  decidedBy: r.string(6), decidedAt: r.date(7), createdAt: created,
+                                  response: r.string(9), exceptionNote: r.string(10))
+        }
+    }
+
+    /// I4 — record the response put to the respondent (their account or explanation of the allegation),
+    /// or that none was obtained and why. Recorded in the case log; an adverse finding needs it.
+    public func recordResponse(allegationID: UUID, caseID: UUID, response: String, actor: String, at date: Date = Date()) async throws {
+        let text = try Self.clean(response, "The response")
+        try await write("cf_resp", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "responseRecorded", detail: text, at: date) { db in
+            try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
+            try db.exec("UPDATE case_allegations SET response = ? WHERE id = ? AND case_id = ?;", [.text(text), .uuid(allegationID), .uuid(caseID)])
         }
     }
 
@@ -130,42 +141,69 @@ public actor CaseFileRepository {
         return id
     }
 
-    /// A person records the disposition. Anything but `pending` needs a rationale.
+    /// A person records the disposition. Anything but `pending` needs a rationale. An ADVERSE finding
+    /// (substantiated) also needs (I4) at least one documentary link that supports it — a source
+    /// passage or an exhibit, not the investigator's own note — and the response put to the
+    /// respondent, unless an explicit `exception` says why the finding is recorded without one.
     public func decide(allegationID: UUID, caseID: UUID, disposition: AllegationDisposition, rationale: String?,
-                       actor: String, at date: Date = Date()) async throws {
+                       exception: String? = nil, actor: String, at date: Date = Date()) async throws {
         let actor = try Self.clean(actor, "Actor")
         let why = rationale?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let exceptionNote = Self.blankToNil(exception)
         if disposition != .pending { _ = try Self.clean(why ?? "", "The rationale") }
         try await write("cf_dec", caseID: caseID, actor: actor, action: "allegationDecided",
-                        detail: "\(disposition.label): \(why ?? "")", at: date) { db in
+                        detail: "\(disposition.label): \(why ?? "")" + (exceptionNote.map { " (exception: \($0))" } ?? ""), at: date) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
-            try db.exec("UPDATE case_allegations SET disposition = ?, rationale = ?, decided_by = ?, decided_at = ? WHERE id = ? AND case_id = ?;",
+            if disposition == .substantiated {
+                let links = try db.query("SELECT evidence_ref, stance FROM case_allegation_evidence WHERE allegation_id = ? AND removed_at IS NULL;", [.uuid(allegationID)])
+                let documentary = links.contains { r in
+                    guard r.string(1) == GridStance.supports.rawValue, let ref = r.string(0) else { return false }
+                    switch CaseEvidenceReference.parse(ref) { case .sourceVersion, .exhibit: return true; default: return false }
+                }
+                guard documentary else {
+                    throw CaseFileError.adverseFindingUnsupported("link at least one source passage or exhibit that supports it — a typed note is your own entry, not evidence")
+                }
+                let response = try db.query("SELECT response FROM case_allegations WHERE id = ?;", [.uuid(allegationID)]).first?.string(0)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard (response?.isEmpty == false) || exceptionNote != nil else {
+                    throw CaseFileError.adverseFindingUnsupported("record the response put to the respondent, or state the exception that justifies deciding without one")
+                }
+            }
+            try db.exec("UPDATE case_allegations SET disposition = ?, rationale = ?, decided_by = ?, decided_at = ?, exception_note = ? WHERE id = ? AND case_id = ?;",
                         [.text(disposition.rawValue), .optionalText(why), disposition == .pending ? .null : .text(actor),
-                         disposition == .pending ? .null : .date(date), .uuid(allegationID), .uuid(caseID)])
+                         disposition == .pending ? .null : .date(date), .optionalText(exceptionNote), .uuid(allegationID), .uuid(caseID)])
         }
     }
 
     public func allegationEvidence(caseID: UUID) async throws -> [AllegationEvidence] {
         (try await database.query("""
-            SELECT e.id, e.allegation_id, e.evidence_ref, e.label, e.stance, e.note, e.added_by, e.created_at
+            SELECT e.id, e.allegation_id, e.evidence_ref, e.label, e.stance, e.note, e.added_by, e.created_at, e.quote, e.block_id, e.object_id, e.origin
             FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id
             WHERE a.case_id = ? AND e.removed_at IS NULL ORDER BY e.created_at;
             """, [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let a = r.uuid(1), let ref = r.string(2),
                   let st = r.string(4).flatMap(GridStance.init(rawValue:)), let by = r.string(6), let at = r.date(7) else { return nil }
-            return AllegationEvidence(id: id, allegationID: a, evidenceRef: ref, label: r.string(3), stance: st, note: r.string(5), addedBy: by, createdAt: at)
+            return AllegationEvidence(id: id, allegationID: a, evidenceRef: ref, label: r.string(3), stance: st, note: r.string(5), addedBy: by, createdAt: at,
+                                      quote: r.string(8), blockID: r.uuid(9), objectID: r.uuid(10), origin: r.string(11))
         }
     }
 
+    /// Link evidence to an allegation. `passage` (I4) pins the exact quotation and locator inside the
+    /// source version; `origin` (I5) names the reviewed result row it was carried from. The reference
+    /// itself must resolve in THIS case's scope.
     public func addAllegationEvidence(caseID: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance,
-                                      note: String?, actor: String, at date: Date = Date()) async throws {
+                                      note: String?, passage: StudioEvidenceRef? = nil, origin: String? = nil,
+                                      actor: String, at date: Date = Date()) async throws {
         let ref = try Self.clean(evidenceRef, "The evidence")
         let actor = try Self.clean(actor, "Actor")
-        try await write("cf_grid", caseID: caseID, actor: actor, action: "gridLinked", detail: "\(stance.rawValue) \(label ?? ref)", at: date) { db in
+        let quote = Self.blankToNil(passage?.quote)
+        try await write("cf_grid", caseID: caseID, actor: actor, action: "gridLinked", detail: "\(stance.rawValue) \(label ?? ref)" + (quote.map { " — “\($0.prefix(80))”" } ?? ""), at: date) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
             try Self.requireResolvable(db, ref, caseID: caseID)
-            try db.exec("INSERT INTO case_allegation_evidence (id, allegation_id, evidence_ref, label, stance, note, added_by, created_at) VALUES (?,?,?,?,?,?,?,?);",
-                        [.uuid(UUID()), .uuid(allegationID), .text(ref), .optionalText(label), .text(stance.rawValue), .optionalText(note), .text(actor), .date(date)])
+            try db.exec("""
+                INSERT INTO case_allegation_evidence (id, allegation_id, evidence_ref, label, stance, note, added_by, created_at, quote, block_id, object_id, origin)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .uuid(allegationID), .text(ref), .optionalText(label), .text(stance.rawValue), .optionalText(note), .text(actor), .date(date),
+                      .optionalText(quote), passage?.blockID.map { .uuid($0) } ?? .null, passage?.objectID.map { .uuid($0) } ?? .null, .optionalText(origin)])
         }
     }
 
@@ -179,29 +217,79 @@ public actor CaseFileRepository {
     // MARK: - Journal + manual chronology
 
     public func journal(caseID: UUID, kind: CaseJournalKind? = nil) async throws -> [CaseJournalEntry] {
-        var sql = "SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at FROM case_journal WHERE case_id = ? AND removed_at IS NULL"
+        var sql = "SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin FROM case_journal WHERE case_id = ? AND removed_at IS NULL"
         var b: [SQLValue] = [.uuid(caseID)]
         if let kind { sql += " AND entry_kind = ?"; b.append(.text(kind.rawValue)) }
         sql += " ORDER BY COALESCE(event_date, created_at), created_at;"
         return (try await database.query(sql, b)).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(2).flatMap(CaseJournalKind.init(rawValue:)),
                   let text = r.string(4), let author = r.string(6), let at = r.date(7) else { return nil }
-            return CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at)
+            return CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at,
+                                    quote: r.string(8), origin: r.string(9))
         }
     }
 
     @discardableResult
     public func addJournal(caseID: UUID, kind: CaseJournalKind, text: String, eventDate: Date?, evidenceRef: String?,
-                           actor: String, at date: Date = Date()) async throws -> UUID {
+                           quote: String? = nil, origin: String? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, kind == .note ? "The note" : "The chronology entry")
         let actor = try Self.clean(actor, "Actor")
         let id = UUID()
         try await write("cf_jr", caseID: caseID, actor: actor, action: kind == .note ? "noteAdded" : "chronologyAdded", detail: text, at: date) { db in
             if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
-            try db.exec("INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at) VALUES (?,?,?,?,?,?,?,?);",
-                        [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date)])
+            try db.exec("INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin) VALUES (?,?,?,?,?,?,?,?,?,?);",
+                        [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date),
+                         .optionalText(Self.blankToNil(quote)), .optionalText(origin)])
         }
         return id
+    }
+
+    // MARK: - I5: the final report's explicit selection
+
+    public func reportItems(caseID: UUID) async throws -> [CaseReportItem] {
+        (try await database.query("""
+            SELECT id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at
+            FROM case_report_items WHERE case_id = ? ORDER BY created_at;
+            """, [.uuid(caseID)])).compactMap { r in
+            guard let id = r.uuid(0), let c = r.uuid(1), let text = r.string(3), let by = r.string(9), let at = r.date(10) else { return nil }
+            return CaseReportItem(id: id, caseID: c, allegationID: r.uuid(2), text: text, quote: r.string(4), evidenceRef: r.string(5), origin: r.string(6),
+                                  included: (r.int(7) ?? 1) != 0, exclusionReason: r.string(8), addedBy: by, createdAt: at, decidedBy: r.string(11), decidedAt: r.date(12))
+        }
+    }
+
+    /// Select a cited item for the final report (included), or record it as excluded with the reason.
+    /// The item carries its passage and the reviewed result it came from; nothing is retyped.
+    @discardableResult
+    public func addReportItem(caseID: UUID, allegationID: UUID?, text: String, quote: String?, evidenceRef: String?, origin: String?,
+                              included: Bool = true, exclusionReason: String? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+        let text = try Self.clean(text, "The report item")
+        let actor = try Self.clean(actor, "Actor")
+        let reason = Self.blankToNil(exclusionReason)
+        if !included { _ = try Self.clean(reason ?? "", "The exclusion reason") }
+        let id = UUID()
+        try await write("cf_rep", caseID: caseID, actor: actor, action: included ? "reportItemIncluded" : "reportItemExcluded",
+                        detail: text + (reason.map { " — excluded: \($0)" } ?? ""), at: date) { db in
+            if let allegationID { try Self.requireInCase(db, "allegation", allegationID, caseID: caseID) }
+            if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
+            try db.exec("""
+                INSERT INTO case_report_items (id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(id), .uuid(caseID), allegationID.map { .uuid($0) } ?? .null, .text(text), .optionalText(Self.blankToNil(quote)), .optionalText(evidenceRef),
+                      .optionalText(origin), .integer(included ? 1 : 0), .optionalText(reason), .text(actor), .date(date), .text(actor), .date(date)])
+        }
+        return id
+    }
+
+    /// Change an item's selection: exclude it with the reason, or include it again. Recorded, never deleted.
+    public func setReportItem(caseID: UUID, id: UUID, included: Bool, reason: String?, actor: String, at date: Date = Date()) async throws {
+        let actor = try Self.clean(actor, "Actor")
+        let why = Self.blankToNil(reason)
+        if !included { _ = try Self.clean(why ?? "", "The exclusion reason") }
+        try await write("cf_repx", caseID: caseID, actor: actor, action: included ? "reportItemIncluded" : "reportItemExcluded", detail: why, at: date) { db in
+            try Self.requireInCase(db, "report item", id, caseID: caseID)
+            try db.exec("UPDATE case_report_items SET included = ?, exclusion_reason = ?, decided_by = ?, decided_at = ? WHERE id = ? AND case_id = ?;",
+                        [.integer(included ? 1 : 0), .optionalText(included ? nil : why), .text(actor), .date(date), .uuid(id), .uuid(caseID)])
+        }
     }
 
     public func retractJournal(caseID: UUID, id: UUID, actor: String, at date: Date = Date()) async throws {
@@ -714,6 +802,7 @@ public actor CaseFileRepository {
         case "allegation": sql = "SELECT 1 FROM case_allegations WHERE id = ? AND case_id = ?"
         case "evidence link": sql = "SELECT 1 FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id WHERE e.id = ? AND a.case_id = ? AND e.removed_at IS NULL"
         case "journal entry": sql = "SELECT 1 FROM case_journal WHERE id = ? AND case_id = ? AND removed_at IS NULL"
+        case "report item": sql = "SELECT 1 FROM case_report_items WHERE id = ? AND case_id = ?"
         case "person": sql = "SELECT 1 FROM case_people WHERE id = ? AND case_id = ? AND removed_at IS NULL"
         case "interview": sql = "SELECT 1 FROM case_interviews WHERE id = ? AND case_id = ?"
         case "exhibit": sql = "SELECT 1 FROM case_exhibits WHERE id = ? AND case_id = ? AND withdrawn_at IS NULL"
@@ -766,6 +855,12 @@ public actor CaseFileRepository {
                 }
             }
         }
+    }
+
+    /// A trimmed string, or nil when blank.
+    private static func blankToNil(_ s: String?) -> String? {
+        guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+        return t
     }
 
     private static func clean(_ s: String, _ field: String) throws -> String {

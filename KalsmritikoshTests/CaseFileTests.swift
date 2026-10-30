@@ -80,6 +80,11 @@ struct CaseFileTests {
         let source = try #require(try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID).first)
         try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: source, label: "Email 4 March",
                                                stance: .supports, note: "Names the date", actor: "Ada")
+        // I4 — an adverse finding needs the response put to the respondent (or an explicit exception).
+        await #expect(throws: CaseFileError.adverseFindingUnsupported("record the response put to the respondent, or state the exception that justifies deciding without one")) {
+            try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two witnesses and the email agree", actor: "Ada")
+        }
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "Denies shouting; says voices were raised by both.", actor: "Ada")
         try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two witnesses and the email agree", actor: "Ada")
         let list = try await f.file.allegations(caseID: f.caseID)
         #expect(list.first?.label == "A1")
@@ -221,6 +226,111 @@ struct CaseFileTests {
         #expect(rows.count == 2)
         #expect(rows.first?.title == "Urgent case")
         #expect(rows.first?.overdueTasks == 1 && rows.first?.severity == .critical)
+    }
+
+    // MARK: Investigator workflow review 2026-10-30, I4 + I5
+
+    @Test("I4: an evidence link carries the exact passage; an adverse finding needs a documentary passage that supports it and the response (or an explicit exception); the report tells a reviewed documentary finding from a typed disposition")
+    func passageLevelEvidenceAndAdverseFindingGate() async throws {
+        let f = try await Self.fixture()
+        let a = try await f.file.addAllegation(caseID: f.caseID, text: "The supplier was paid twice", actor: "Ada")
+        // Notes alone cannot substantiate.
+        try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: "note:Two invoices in the folder", label: nil, stance: .supports, note: nil, actor: "Ada")
+        await #expect(throws: CaseFileError.adverseFindingUnsupported("link at least one source passage or exhibit that supports it — a typed note is your own entry, not evidence")) {
+            try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Obvious", actor: "Ada")
+        }
+        // A passage: version + block + quote, opened from the allegation without searching again.
+        let source = try #require(try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID).first)
+        let block = UUID(), object = UUID()
+        try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: source, label: "Bank statement, 3 March", stance: .supports,
+                                               note: "The debit", passage: StudioEvidenceRef(sourceVersionID: UUID(uuidString: source), objectID: object, blockID: block, quote: "Debit 10,000.00 Dalmia Traders"),
+                                               actor: "Ada")
+        let grid = try await f.file.allegationEvidence(caseID: f.caseID)
+        let link = try #require(grid.first { $0.evidenceRef == source })
+        #expect(link.quote == "Debit 10,000.00 Dalmia Traders" && link.blockID == block && link.objectID == object && link.isDocumentary && link.opensPassage)
+        #expect(grid.first { $0.evidenceRef.hasPrefix("note:") }?.isDocumentary == false)
+        // Documentary support, but no response yet.
+        await #expect(throws: CaseFileError.adverseFindingUnsupported("record the response put to the respondent, or state the exception that justifies deciding without one")) {
+            try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two payments, one invoice", actor: "Ada")
+        }
+        // An explicit exception is recorded with the finding.
+        try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two payments, one invoice",
+                                exception: "Respondent left the organisation; two written requests unanswered", actor: "Ada")
+        var al = try #require(try await f.file.allegations(caseID: f.caseID).first)
+        #expect(al.disposition == .substantiated && al.exceptionNote == "Respondent left the organisation; two written requests unanswered" && al.response == nil)
+        // A response recorded later shows in the report; a non-adverse finding needs none.
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "The second payment was a refund reversal.", actor: "Ada")
+        al = try #require(try await f.file.allegations(caseID: f.caseID).first)
+        #expect(al.response == "The second payment was a refund reversal.")
+        let b = try await f.file.addAllegation(caseID: f.caseID, text: "The approval was forged", actor: "Ada")
+        try await f.file.decide(allegationID: b, caseID: f.caseID, disposition: .unsubstantiated, rationale: "No document shows it", actor: "Ada")
+        let s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
+        let report = CaseFileDocuments.caseFileReport(s, by: "Ada")
+        #expect(report.contains("— “Debit 10,000.00 Dalmia Traders” — The debit [\(source); block \(block.uuidString.prefix(8))]"))
+        #expect(report.contains("(investigator's note)"))
+        #expect(report.contains("Response: “The second payment was a refund reversal.”"))
+        #expect(report.contains("**Unsubstantiated** — decided by Ada on") && report.contains("typed disposition: no documentary evidence supports it"))
+        #expect(report.contains("## Unresolved questions and limitations"))
+        #expect(!report.contains("A1 was decided without a recorded response"), "the response was recorded after the decision")
+    }
+
+    @Test("I5: a reviewed result row is carried to an allegation, the chronology and the report with the same passage and revision identity — no retyping; excluded material keeps its reason")
+    func reviewedRowHandsOffIntoTheCase() async throws {
+        let f = try await Self.fixture()
+        let a = try await f.file.addAllegation(caseID: f.caseID, text: "The approval was given on 3 March", actor: "Ada")
+        let source = try #require(try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID).first)
+        let version = try #require(UUID(uuidString: source))
+        let results = JobResultRepository(database: f.db)
+        let quote = "Vikram Rao said the meeting about the payment was held on March 2, 2026."
+        let row1 = JobResultRow(title: "Point 1: meeting · payment — Vikram Rao", detail: "“\(quote)”", date: "2026-03-02",
+                                flags: ["verbatim", "differs from Asha Rao on date: 2026-03-02 vs 2026-03-03"],
+                                refs: [StudioEvidenceRef(sourceVersionID: version, objectID: UUID(), quote: quote)],
+                                fields: ["point": "Point 1", "witness": "Vikram Rao", "comparison": "differs"])
+        var row2 = JobResultRow(title: "Point 1: meeting · payment — Asha Rao", detail: "“Asha Rao said the meeting was held on March 3, 2026.”", refs: [])
+        row2.note = "Duplicate of the attested statement already in the case"
+        let id = try await results.save(caseID: f.caseID, jobID: "hr.statements", family: .interviewsQuotes, state: .draft,
+                                        content: JobResultContent(rows: [row1, row2]), actor: "Ada")
+        let record = try #require(try await results.latest(caseID: f.caseID, jobID: "hr.statements"))
+        #expect(record.id == id)
+        // To the allegation, as a contradicting passage; to the chronology; into the report.
+        try await JobResultHandoff.addToAllegation(record, row: 0, allegationID: a, stance: .contradicts, note: "Vikram's date differs", file: f.file, actor: "Ada")
+        try await JobResultHandoff.addToChronology(record, row: 0, file: f.file, actor: "Ada")
+        try await JobResultHandoff.addToReport(record, row: 0, include: true, allegationID: a, file: f.file, actor: "Ada")
+        // Excluding needs the reason (the row's note); a row with no source cannot be evidence.
+        try await JobResultHandoff.addToReport(record, row: 1, include: false, file: f.file, actor: "Ada")
+        await #expect(throws: JobResultHandoffError.noSource) {
+            try await JobResultHandoff.addToAllegation(record, row: 1, allegationID: a, stance: .supports, note: nil, file: f.file, actor: "Ada")
+        }
+        var noNote = record.content.rows[1]; noNote.note = nil
+        let bare = JobResultRecord(id: record.id, caseID: record.caseID, jobID: record.jobID, family: record.family, state: record.state,
+                                   content: JobResultContent(rows: [row1, noNote]), createdBy: record.createdBy, createdAt: record.createdAt)
+        await #expect(throws: JobResultHandoffError.reasonRequired) {
+            try await JobResultHandoff.addToReport(bare, row: 1, include: false, file: f.file, actor: "Ada")
+        }
+        // The respondent's explanation, then the report: the same text, passage and origin everywhere.
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "Asha says the diary shows the 3rd; Vikram was reading an earlier draft.", actor: "Ada")
+        let origin = JobResultHandoff.origin(jobID: "hr.statements", resultID: record.id, row: 0)
+        let s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
+        let link = try #require(s.grid.first { $0.allegationID == a })
+        #expect(link.stance == .contradicts && link.quote == quote && link.origin == origin && link.evidenceRef == source && link.label == JobResultHandoff.text(of: row1))
+        let chron = try #require(s.journal.first { $0.kind == .chronology })
+        #expect(chron.quote == quote && chron.origin == origin && chron.evidenceRef == source && chron.text == JobResultHandoff.text(of: row1))
+        #expect(chron.eventDate == JobResultHandoff.date(of: row1) && JobResultHandoff.date(of: row1) != nil)
+        #expect(JobResultHandoff.text(of: row1) == row1.title, "a detail that only repeats the quote is not carried twice")
+        let included = s.reportItems.filter(\.included), excluded = s.reportItems.filter { !$0.included }
+        #expect(included.count == 1 && included[0].quote == quote && included[0].origin == origin && included[0].allegationID == a)
+        #expect(excluded.count == 1 && excluded[0].exclusionReason == "Duplicate of the attested statement already in the case")
+        let report = CaseFileDocuments.caseFileReport(s, by: "Ada")
+        #expect(report.contains("Contradicts:\n- \(JobResultHandoff.text(of: row1)) — “\(quote)” — Vikram's date differs [\(source)] (from \(origin))"))
+        #expect(report.contains("## Reviewed results included in this report\n- \(JobResultHandoff.text(of: row1)) — “\(quote)” [\(source)] (from \(origin)) · A1"))
+        #expect(report.contains("## Material excluded from this report\n- \(JobResultHandoff.text(of: row2)) — excluded: Duplicate of the attested statement already in the case"))
+        #expect(report.contains("Response: “Asha says the diary shows the 3rd"))
+        #expect(report.contains("- \(CaseFileDocuments.d(chron.eventDate)): \(JobResultHandoff.text(of: row1)) — “\(quote)” [\(source)] (from \(origin))"))
+        // Excluding an included item later keeps it, with the reason, and is in the log.
+        try await f.file.setReportItem(caseID: f.caseID, id: included[0].id, included: false, reason: "Superseded by the attested statement", actor: "Ada")
+        let after = try await f.file.reportItems(caseID: f.caseID)
+        #expect(after.filter(\.included).isEmpty && after.first { $0.id == included[0].id }?.exclusionReason == "Superseded by the attested statement")
+        #expect(try await f.file.actions(caseID: f.caseID).filter { $0.action == "reportItemExcluded" }.count == 2)
     }
 
     @Test("Documents carry what was recorded; every change is in the action log")

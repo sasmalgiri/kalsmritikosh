@@ -35,13 +35,15 @@ public nonisolated struct CaseFileSnapshot: Sendable {
                 tasks: [CaseTaskItem], journal: [CaseJournalEntry], people: [CasePerson], contacts: [CaseContact],
                 interviews: [CaseInterview], credibility: [CredibilityNote], exhibits: [CaseExhibit], holds: [CaseHoldNotice],
                 redactions: [CaseRedaction], batches: [CaseReviewBatch], conflicts: [CaseConflictCheck], actions: [CaseAction],
-                custody: [CustodyManifestEntry], addenda: [StatementAddendum] = []) {
+                custody: [CustodyManifestEntry], addenda: [StatementAddendum] = [], reportItems: [CaseReportItem] = []) {
         self.caseHeader = caseHeader; self.profile = profile; self.allegations = allegations; self.grid = grid; self.tasks = tasks
         self.journal = journal; self.people = people; self.contacts = contacts; self.interviews = interviews
         self.credibility = credibility; self.exhibits = exhibits; self.holds = holds; self.redactions = redactions
         self.batches = batches; self.conflicts = conflicts; self.actions = actions; self.custody = custody
-        self.addenda = addenda
+        self.addenda = addenda; self.reportItems = reportItems
     }
+    /// I5 — the final report's explicit selection (included and excluded items with reasons).
+    public let reportItems: [CaseReportItem]
 
     public func person(_ id: UUID?) -> CasePerson? { id.flatMap { pid in people.first { $0.id == pid } } }
 }
@@ -58,7 +60,8 @@ extension CaseFileService {
             credibility: try await file.credibility(caseID: caseID), exhibits: try await file.exhibits(caseID: caseID, includeWithdrawn: true),
             holds: try await file.holdNotices(caseID: caseID), redactions: try await file.redactions(caseID: caseID),
             batches: try await file.reviewBatches(caseID: caseID), conflicts: try await file.conflictChecks(caseID: caseID),
-            actions: try await file.actions(caseID: caseID), custody: custody, addenda: try await file.addenda(caseID: caseID))
+            actions: try await file.actions(caseID: caseID), custody: custody, addenda: try await file.addenda(caseID: caseID),
+            reportItems: try await file.reportItems(caseID: caseID))
     }
 }
 
@@ -223,22 +226,60 @@ public nonisolated enum CaseFileDocuments {
         if let x = p.plan.notes { o += "- Notes: \(x)\n" }
 
         o += "\n## Allegations and findings\n"
+        o += "_Established, disputed and unknown are kept apart: a finding rests on the documentary passages linked below; an investigator's note is the investigator's own entry; a pending allegation is unresolved._\n"
         if s.allegations.isEmpty { o += "No allegations recorded.\n" }
         for a in s.allegations {
-            o += "\n### \(a.label). \(a.text)\n\n**\(a.disposition.label)**" + (a.decidedBy.map { " — decided by \($0) on \(d(a.decidedAt))" } ?? "") + "\n"
-            if let r = a.rationale { o += "\n\(r)\n" }
             let ev = s.grid.filter { $0.allegationID == a.id }
+            let documentary = ev.filter { $0.isDocumentary && $0.stance == .supports }.count
+            o += "\n### \(a.label). \(a.text)\n\n**\(a.disposition.label)**" + (a.decidedBy.map { " — decided by \($0) on \(d(a.decidedAt))" } ?? "")
+            if a.disposition == .pending { o += " — unresolved" }
+            else if documentary == 0 { o += " — typed disposition: no documentary evidence supports it" }
+            o += "\n"
+            if let r = a.rationale { o += "\n\(r)\n" }
+            o += "\nResponse: " + (a.response.map { "“\($0)”" } ?? (a.exceptionNote.map { "none — exception: \($0)" } ?? "none recorded")) + "\n"
             for st in GridStance.allCases {
                 let items = ev.filter { $0.stance == st }
                 guard !items.isEmpty else { continue }
-                o += "\n\(st.label):\n" + items.map { "- \($0.label ?? $0.evidenceRef)" + ($0.note.map { " — \($0)" } ?? "") + " [\($0.evidenceRef)]" }.joined(separator: "\n") + "\n"
+                o += "\n\(st.label):\n" + items.map { e -> String in
+                    var line = "- \(e.label ?? e.evidenceRef)"
+                    if !e.isDocumentary { line += " (investigator's note)" }
+                    if let q = e.quote { line += " — “\(q)”" }
+                    if let n = e.note { line += " — \(n)" }
+                    line += " [\(e.evidenceRef)" + (e.blockID.map { "; block \($0.uuidString.prefix(8))" } ?? "") + "]"
+                    if let origin = e.origin { line += " (from \(origin))" }
+                    return line
+                }.joined(separator: "\n") + "\n"
+            }
+            if ev.contains(where: { $0.stance == .contradicts }) == false, a.disposition != .pending {
+                o += "\nNothing contrary is linked; absence of contrary evidence is not proof.\n"
             }
         }
 
         let chron = s.journal.filter { $0.kind == .chronology }
         if !chron.isEmpty {
-            o += "\n## Chronology (investigator entries)\n" + chron.map { "- \(d($0.eventDate)): \($0.text)" + ($0.evidenceRef.map { " [\($0)]" } ?? "") }.joined(separator: "\n") + "\n"
+            o += "\n## Chronology (investigator entries)\n" + chron.map { e -> String in
+                "- \(d(e.eventDate)): \(e.text)" + (e.quote.map { " — “\($0)”" } ?? "") + (e.evidenceRef.map { " [\($0)]" } ?? "") + (e.origin.map { " (from \($0))" } ?? "")
+            }.joined(separator: "\n") + "\n"
         }
+
+        let included = s.reportItems.filter(\.included), excluded = s.reportItems.filter { !$0.included }
+        if !included.isEmpty {
+            o += "\n## Reviewed results included in this report\n" + included.map { i -> String in
+                "- \(i.text)" + (i.quote.map { " — “\($0)”" } ?? "") + (i.evidenceRef.map { " [\($0)]" } ?? "") + (i.origin.map { " (from \($0))" } ?? "")
+                    + (i.allegationID.flatMap { id in s.allegations.first { $0.id == id }?.label }.map { " · \($0)" } ?? "")
+            }.joined(separator: "\n") + "\n"
+        }
+        if !excluded.isEmpty {
+            o += "\n## Material excluded from this report\n" + excluded.map { i -> String in
+                "- \(i.text)" + (i.evidenceRef.map { " [\($0)]" } ?? "") + " — excluded: \(i.exclusionReason ?? "no reason recorded")" + (i.decidedBy.map { " (\($0), \(d(i.decidedAt)))" } ?? "")
+            }.joined(separator: "\n") + "\n"
+        }
+        let unresolved = s.allegations.filter { $0.disposition == .pending }
+        o += "\n## Unresolved questions and limitations\n"
+        o += unresolved.isEmpty ? "- Every allegation has a recorded disposition.\n" : unresolved.map { "- \($0.label) \($0.text) — unresolved" }.joined(separator: "\n") + "\n"
+        let noResponse = s.allegations.filter { $0.disposition == .substantiated && $0.response == nil }
+        for a in noResponse { o += "- \(a.label) was decided without a recorded response" + (a.exceptionNote.map { " (exception: \($0))" } ?? "") + ".\n" }
+        o += "- This report states what the linked passages support; it reaches no conclusion beyond them, and the chronology entries are the investigator's.\n"
 
         if let named { o += namedInDocuments(named) }
         if !s.people.isEmpty {

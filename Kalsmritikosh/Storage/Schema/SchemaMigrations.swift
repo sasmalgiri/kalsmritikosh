@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 166
+    public static let latestVersion = 167
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -799,7 +799,8 @@ public enum SchemaMigrations {
         (163, v163),
         (164, v164),
         (165, v165),
-        (166, v166)
+        (166, v166),
+        (167, v167)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7969,5 +7970,30 @@ public enum SchemaMigrations {
     DROP TABLE ach_cells;
     ALTER TABLE ach_cells__v166 RENAME TO ach_cells;
     CREATE INDEX IF NOT EXISTS idx_ach_cells_analysis ON ach_cells(analysis_id);
+    """
+
+    // MARK: - v167 — passage-level case evidence and reviewed-result handoffs (investigator workflow
+    // review 2026-10-30, I4/I5). An allegation's evidence link and a chronology entry carry the exact
+    // passage (quote, block, object) beside the source version, and the reviewed job-result row they
+    // came from (origin), so a reviewer opens the passage from the allegation or the report without
+    // searching the document again. An allegation records the response put to the respondent and,
+    // for an adverse finding without one, the explicit exception. The final report's selection is
+    // explicit: case_report_items lists what is included and what is excluded with the reason.
+    private static let v167: String = """
+    ALTER TABLE case_allegation_evidence ADD COLUMN quote TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN block_id TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN object_id TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN origin TEXT;
+    ALTER TABLE case_journal ADD COLUMN quote TEXT;
+    ALTER TABLE case_journal ADD COLUMN origin TEXT;
+    ALTER TABLE case_allegations ADD COLUMN response TEXT;
+    ALTER TABLE case_allegations ADD COLUMN exception_note TEXT;
+    CREATE TABLE IF NOT EXISTS case_report_items (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, allegation_id TEXT,
+        text TEXT NOT NULL, quote TEXT, evidence_ref TEXT, origin TEXT,
+        included INTEGER NOT NULL DEFAULT 1, exclusion_reason TEXT,
+        added_by TEXT NOT NULL, created_at REAL NOT NULL, decided_by TEXT, decided_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_items_case ON case_report_items(case_id, created_at);
     """
 }

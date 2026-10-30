@@ -86,6 +86,51 @@ final class JobResultModel {
             await load()
         } catch { problem = error.localizedDescription }
     }
+
+    // MARK: I5 — carry a reviewed row into the case file (no retyping)
+
+    /// The case file (set by the view; nil in previews) and the case's allegations to add rows to.
+    var caseFile: CaseFileRepository?
+    private(set) var allegations: [CaseAllegation] = []
+
+    func loadAllegations() async {
+        guard let caseFile else { allegations = []; return }
+        allegations = (try? await caseFile.allegations(caseID: caseID)) ?? []
+    }
+
+    /// The row's saved revision: a handoff carries the SAVED row, so unsaved edits are refused.
+    private func savedRecord() -> JobResultRecord? {
+        guard let current else { return nil }
+        if dirty { problem = "Save your review first — what is carried into the case is the saved revision."; return nil }
+        return current
+    }
+
+    func addToAllegation(row i: Int, allegationID: UUID, stance: GridStance, actor: String) async {
+        guard let caseFile, let record = savedRecord() else { return }
+        do {
+            try await JobResultHandoff.addToAllegation(record, row: i, allegationID: allegationID, stance: stance, note: nil, file: caseFile, actor: actor)
+            let label = allegations.first { $0.id == allegationID }?.label ?? "the allegation"
+            message = "Row \(i + 1) linked to \(label) as “\(stance.label)” with its passage and this revision's identity."; problem = nil
+        } catch { problem = error.localizedDescription; message = nil }
+    }
+
+    func addToChronology(row i: Int, actor: String) async {
+        guard let caseFile, let record = savedRecord() else { return }
+        do {
+            try await JobResultHandoff.addToChronology(record, row: i, file: caseFile, actor: actor)
+            message = "Row \(i + 1) added to the case chronology as your entry, quoting its passage."; problem = nil
+        } catch { problem = error.localizedDescription; message = nil }
+    }
+
+    func addToReport(row i: Int, include: Bool, actor: String) async {
+        guard let caseFile, let record = savedRecord() else { return }
+        do {
+            try await JobResultHandoff.addToReport(record, row: i, include: include, file: caseFile, actor: actor)
+            message = include ? "Row \(i + 1) selected for the case report (same text, passage and revision)."
+                              : "Row \(i + 1) recorded as excluded from the case report, with your note as the reason."
+            problem = nil
+        } catch { problem = error.localizedDescription; message = nil }
+    }
 }
 
 struct JobResultView: View {
@@ -129,7 +174,9 @@ struct JobResultView: View {
         .frame(minWidth: 720, minHeight: 560)
         .task {
             model.evidenceCheck = appState.jobResultEvidenceCheck(caseID: model.caseID)
+            model.caseFile = appState.caseFiles?.file
             await model.load()
+            await model.loadAllegations()
         }
         .sheet(item: $source) { opened in
             VStack(spacing: 0) {
@@ -244,12 +291,51 @@ struct JobResultView: View {
                     .pickerStyle(.segmented).frame(maxWidth: 320)
                     TextField("Your note", text: Binding(get: { model.rows[i].note ?? "" },
                                                          set: { model.rows[i].note = $0.isEmpty ? nil : $0 }))
+                    if model.caseFile != nil { handoffMenu(row: row, index: i) }
                 }
             } else if row.decision != nil || row.note != nil {
                 Text([row.decision.map { $0.rawValue.capitalized }, row.note].compactMap { $0 }.joined(separator: " — "))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// I5 — carry the SAVED row into the case file: to an allegation (with stance), to the chronology,
+    /// or into the report's explicit selection. The same text, passage and revision identity travel.
+    private func handoffMenu(row: JobResultRow, index i: Int) -> some View {
+        let hasSource = JobResultHandoff.passage(of: row) != nil
+        return Menu {
+            if model.allegations.isEmpty {
+                Text("No allegation in the case file yet — frame the question there first.")
+            } else {
+                ForEach(model.allegations) { a in
+                    Menu("Add to \(a.label) — \(a.text.prefix(48))\(a.text.count > 48 ? "…" : "")") {
+                        ForEach(GridStance.allCases) { st in
+                            Button("As “\(st.label)”") { Task { await model.addToAllegation(row: i, allegationID: a.id, stance: st, actor: actor) } }
+                        }
+                    }
+                    .disabled(!hasSource)
+                }
+            }
+            Divider()
+            Button("Add to chronology") { Task { await model.addToChronology(row: i, actor: actor) } }
+            Button("Include in report") { Task { await model.addToReport(row: i, include: true, actor: actor) } }
+            Button("Exclude from report (reason = your note)") { Task { await model.addToReport(row: i, include: false, actor: actor) } }
+                .disabled((row.note ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+            if !hasSource {
+                Divider()
+                Text("No source version cited — this row can go to the chronology or the report as your entry, not to an allegation as evidence.")
+            }
+            if model.dirty {
+                Divider()
+                Text("Save your review first; the saved revision is what is carried over.")
+            }
+        } label: {
+            Label("Add to case…", systemImage: "arrow.right.doc.on.clipboard")
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .help("Carry this reviewed row into the case file without retyping: to an allegation as a passage-level link, to the chronology, or into the report's selection.")
+        .accessibilityIdentifier("result.row.\(i).handoff")
     }
 
     /// The contract's columns for this row: pre-filled where the ledger states them, recorded here otherwise.
