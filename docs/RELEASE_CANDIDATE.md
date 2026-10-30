@@ -14,7 +14,7 @@ by them, not by the agent.
 | Commits | `db5d75d5` (I3) · `0a741ac7` (I6, I7) · `585bb2a4` (I1) · `00590051` (I2) · `22f8d9d9` (I4, I5) · `9aa8f479` (I8) · `25091949` (I9) · `bcb9af60` (acceptance case) · `517e9ae5` (UI-journey fixes) · `4ca1e1a3` (run c records) · `d014d2e7` (amount pattern, ingest indicator) — last code change `d014d2e7`; records commits follow it |
 | Schema | v167 (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin) — v166 ACH unassessed cells + citations, v167 passage-level case evidence, allegation response/exception, report items |
 | Unsigned Release digests | §2a below, built from the working tree at `d014d2e7` |
-| Hosted CI | run on the pushed head (one push, all seven jobs) — result recorded in the records commit after it |
+| Hosted CI | **all seven jobs green on `4147e106`** (run 41051769092, 2026-10-30: architecture-guards, migration-matrix, parser-fixtures, sensitive-export, report-receipt-integrity, release-build, build-and-test) |
 
 ## 2a. Build digests of the superseding candidate (unsigned Release, this Mac, tree at `d014d2e7`)
 
