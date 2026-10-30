@@ -58,7 +58,7 @@ public struct EmailLoader: StreamingIngestor {
     ///      tested by smoke; the per-thread KOs produce richer
     ///      memory_objects at the cost of slightly larger chunks.
     public nonisolated static var threadCoalescingEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+        AppDefaults.store.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     }
 
     public nonisolated init() {}

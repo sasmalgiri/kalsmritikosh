@@ -280,7 +280,7 @@ public enum KnowledgeModuleFlags {
         // Dependency gate — each prerequisite must be EFFECTIVELY enabled (recursive).
         for dep in m.dependsOn where !isEnabled(dep) { return false }
         // Stored preference, else the code default.
-        let d = UserDefaults.standard
+        let d = AppDefaults.store
         if d.object(forKey: m.storageKey) == nil { return m.defaultEnabled }
         return d.bool(forKey: m.storageKey)
     }
@@ -302,7 +302,7 @@ public enum KnowledgeModuleFlags {
 
     /// `defaults` is the store the preference is written to — the standard one in the app; tests
     /// pass their own, because parallel test hosts share the standard domain.
-    public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool, defaults: UserDefaults = .standard) {
+    public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool, defaults: UserDefaults = AppDefaults.store) {
         defaults.set(on, forKey: m.storageKey)
     }
 

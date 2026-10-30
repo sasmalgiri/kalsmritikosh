@@ -324,7 +324,7 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .cases
+    @State private var selection: Destination? = RootView.launchDestination(restored: nil)
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
@@ -442,14 +442,21 @@ public struct RootView: View {
            !history.isEmpty {
             navHistory = history
             if let entry = history.current { applyNavEntry(entry) }
-        } else if let dest = selection {
-            // Fresh session — seed the history with the launch surface.
+        } else {
+            // Fresh profile (no saved session): Home, which leads with "Start an investigation" and
+            // "Resume a case" (I9; App Store completion §5). A returning person resumes above.
+            let dest = Self.launchDestination(restored: nil)
+            selection = dest
             navHistory.navigate(to: AppNavigationEntry(
                 destination: Self.navBucket(for: dest),
                 contextKind: "surface",
                 contextID: dest.rawValue))
         }
     }
+
+    /// The first screen: the restored session's surface for a returning person, Home for a fresh
+    /// profile. Pure, so the rule is testable without a window.
+    nonisolated static func launchDestination(restored: Destination?) -> Destination { restored ?? .home }
 
     /// Coarse mapping of every UI surface into the closed SHELL-001
     /// destination vocabulary; the EXACT surface rides in contextID.

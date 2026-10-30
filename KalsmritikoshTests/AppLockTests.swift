@@ -17,9 +17,9 @@ import Foundation
     /// Runs `body` with the app-lock module switched as given, restoring the stored choice.
     private func withAppLock(_ on: Bool, _ body: () async throws -> Void) async rethrows {
         let key = "kalsmritikosh.product.\(ProductModule.appLock.rawValue)"
-        let prior = UserDefaults.standard.object(forKey: key)
+        let prior = AppDefaults.store.object(forKey: key)
         ProductModuleFlags.setEnabled(.appLock, on)
-        defer { UserDefaults.standard.set(prior, forKey: key) }
+        defer { AppDefaults.store.set(prior, forKey: key) }
         try await body()
     }
 

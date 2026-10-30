@@ -468,17 +468,17 @@ nonisolated public enum ProductModuleFlags {
 
     /// Preview features (built, not yet verified on real data/hardware) are hidden unless this is on.
     public nonisolated static var showPreviewFeatures: Bool {
-        get { UserDefaults.standard.bool(forKey: showPreviewKey) }
-        set { UserDefaults.standard.set(newValue, forKey: showPreviewKey) }
+        get { AppDefaults.store.bool(forKey: showPreviewKey) }
+        set { AppDefaults.store.set(newValue, forKey: showPreviewKey) }
     }
 
     public nonisolated static func setEnabled(_ m: ProductModule, _ on: Bool) {
-        UserDefaults.standard.set(on, forKey: m.storageKey)
+        AppDefaults.store.set(on, forKey: m.storageKey)
         if m == .captureExtensions { ShareInbox.mirrorSwitch() }   // the Share extension reads the copy
     }
 
     private nonisolated static func storedOrDefault(_ m: ProductModule) -> Bool {
-        let d = UserDefaults.standard
+        let d = AppDefaults.store
         if d.object(forKey: m.storageKey) == nil { return m.spec.defaultEnabled }
         return d.bool(forKey: m.storageKey)
     }
