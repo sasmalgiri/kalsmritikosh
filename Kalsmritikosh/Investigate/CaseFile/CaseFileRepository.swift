@@ -275,7 +275,10 @@ public actor CaseFileRepository {
     }
 
     public func retractAllegationEvidence(caseID: UUID, id: UUID, actor: String, at date: Date = Date()) async throws {
-        try await write("cf_gridx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "gridUnlinked", detail: nil, at: date) { db in
+        // UI journey run e (E-1): the log row says WHAT was unlinked, not only that something was.
+        let row = try await database.query("SELECT COALESCE(label, evidence_ref), stance, quote FROM case_allegation_evidence WHERE id = ? LIMIT 1;", [.uuid(id)]).first
+        let detail = row.map { "\($0.string(1) ?? "") \($0.string(0) ?? "")" + (($0.string(2)).map { " — “\($0.prefix(80))”" } ?? "") }
+        try await write("cf_gridx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "gridUnlinked", detail: detail, at: date) { db in
             try Self.requireInCase(db, "evidence link", id, caseID: caseID)
             try db.exec("UPDATE case_allegation_evidence SET removed_at = ? WHERE id = ?;", [.date(date), .uuid(id)])
         }
