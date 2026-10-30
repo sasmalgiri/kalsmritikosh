@@ -139,6 +139,26 @@ struct JobResultView: View {
     @State var model: JobResultModel
     @State private var source: OpenedSource?
     let actor: String
+    /// I8 — re-run the job with the saved query (the data lab); nil where the opener offers none.
+    var onRerun: (() async -> Void)? = nil
+
+    // I8 — compact review state: table or cards, a text filter, unresolved-only, the selected row.
+    @State private var useTable: Bool?
+    @State private var filterText = ""
+    @State private var unresolvedOnly = false
+    @State private var selectedRow: Int?
+    @State private var tableSort: [KeyPathComparator<ResultTableItem>] = []
+
+    /// One table line: the row's index and what the columns show.
+    struct ResultTableItem: Identifiable {
+        let id: Int
+        let date: String
+        let title: String
+        let detail: String
+        let decision: String
+        let sources: Int
+        let flags: Int
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -224,10 +244,18 @@ struct JobResultView: View {
     private func rowsSection(_ record: JobResultRecord) -> some View {
         let editable = model.viewing == nil && record.state != .superseded
         let rows = editable ? model.rows : record.content.rows
+        let table = useTable ?? JobResultTable.prefersTable(jobID: model.jobID, rowCount: rows.count)
+        let shown = JobResultTable.visible(rows: rows, text: filterText, unresolvedOnly: unresolvedOnly)
         VStack(alignment: .leading, spacing: 8) {
+            if editable { queryEditor(rows) }
             HStack {
                 Label("Result (\(rows.count))", systemImage: "list.bullet.rectangle").font(.subheadline.weight(.semibold))
+                if shown.count != rows.count { Text("· \(shown.count) shown").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
+                Picker("Layout", selection: Binding(get: { table }, set: { useTable = $0 })) {
+                    Text("Table").tag(true); Text("Cards").tag(false)
+                }.pickerStyle(.segmented).labelsHidden().frame(width: 140)
+                    .help("Table: one line per row with the selected row's sources and review in the pane below. Cards: every row in full.")
                 if editable, model.jobID == "law.redaction" {
                     Button("Check a produced file…") { Task { await checkProducedFile() } }.controlSize(.small)
                         .help("Choose the file you produced; its own bytes are checked (text layer, metadata, annotations, OCR).")
@@ -237,10 +265,112 @@ struct JobResultView: View {
                         .help("Record something the run did not produce — a document it did not read, a missing element — as your entry.")
                 }
             }
-            ForEach(rows.indices, id: \.self) { i in
-                rowView(rows[i], index: i, editable: editable)
-                    .padding(10)
-                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+            HStack(spacing: 10) {
+                TextField("Filter rows (title, detail, flags, fields)", text: $filterText).textFieldStyle(.roundedBorder).frame(maxWidth: 360)
+                    .accessibilityIdentifier("result.filter")
+                Toggle("Unresolved only", isOn: $unresolvedOnly).toggleStyle(.checkbox)
+                    .help("Show only rows without a decision — your place in a long review.")
+                    .accessibilityIdentifier("result.unresolvedOnly")
+                Spacer()
+                if editable, table, JobResultTable.bulkAllowed(jobID: model.jobID), !shown.isEmpty {
+                    Button("Accept shown (\(shown.count))") { for i in shown { model.rows[i].decision = .accepted } }.controlSize(.small)
+                        .help("These rows restate source values, so one decision over the rows shown is safe; each row still records its own decision.")
+                    Button("Reject shown (\(shown.count))") { for i in shown { model.rows[i].decision = .rejected } }.controlSize(.small)
+                }
+            }
+            if shown.isEmpty {
+                Text(unresolvedOnly ? "Every row has a decision." : "No row matches the filter.").font(.callout).foregroundStyle(.secondary).padding(.vertical, 12)
+            } else if table {
+                compactTable(rows, shown: shown, editable: editable)
+            } else {
+                ForEach(shown, id: \.self) { i in
+                    rowView(rows[i], index: i, editable: editable)
+                        .padding(10)
+                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    /// I8 — the data lab's query, once, above the result: edit the three fields on the Analysis row,
+    /// save, and re-run with them. Other jobs show nothing here.
+    @ViewBuilder
+    private func queryEditor(_ rows: [JobResultRow]) -> some View {
+        if ["inv.data-lab", "jrn.data-desk"].contains(model.jobID),
+           let i = rows.firstIndex(where: { $0.title.hasPrefix(ConfigurableAnalysisExecutor.analysisTitle) }),
+           let spec = JobFields.specs[model.jobID] {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Query (applies to the whole result)", systemImage: "line.3.horizontal.decrease.circle").font(.subheadline.weight(.semibold))
+                Text(rows[i].detail ?? "").font(.caption).foregroundStyle(.secondary)
+                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+                    ForEach(spec, id: \.key) { f in
+                        GridRow {
+                            Text(f.label).font(.caption).foregroundStyle(.secondary)
+                            TextField(f.label, text: Binding(get: { model.rows[i].fields?[f.key] ?? "" },
+                                                             set: { v in var d = model.rows[i].fields ?? [:]; d[f.key] = v; model.rows[i].fields = d }))
+                                .font(.caption).frame(maxWidth: 420)
+                                .accessibilityIdentifier("result.query.\(f.key)")
+                        }
+                    }
+                }
+                HStack {
+                    if let onRerun {
+                        Button("Save query and re-run") {
+                            Task {
+                                await model.save(complete: false, actor: actor)
+                                guard model.problem == nil else { return }
+                                await onRerun()
+                                await model.load()
+                                model.setMessage("Re-run with the saved query; the earlier run stays in the history.")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                        .disabled(rows.firstIndex(where: { $0.title.hasPrefix(ConfigurableAnalysisExecutor.analysisTitle) }) == nil)
+                        .accessibilityIdentifier("result.query.rerun")
+                    } else {
+                        Text("Save the review, then run the job again from its card to apply the query.").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                }
+            }
+            .padding(10)
+            .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    /// I8 — one line per row; the selected row's sources, fields and review sit in the pane below,
+    /// so a row can be compared with its source without scrolling the whole result.
+    @ViewBuilder
+    private func compactTable(_ rows: [JobResultRow], shown: [Int], editable: Bool) -> some View {
+        let items: [ResultTableItem] = shown.map { i in
+            let r = rows[i]
+            return ResultTableItem(id: i, date: r.date ?? "", title: r.title, detail: r.detail ?? "",
+                                   decision: r.decision.map { $0.rawValue.capitalized } ?? "—", sources: r.refs.count, flags: r.flags.count)
+        }
+        let sorted = tableSort.isEmpty ? items : items.sorted(using: tableSort)
+        VStack(alignment: .leading, spacing: 8) {
+            Table(sorted, selection: $selectedRow, sortOrder: $tableSort) {
+                TableColumn("#") { Text("\($0.id + 1)").monospacedDigit() }.width(36)
+                TableColumn("Decision", value: \.decision) { Text($0.decision).foregroundStyle($0.decision == "—" ? .orange : .secondary) }.width(90)
+                TableColumn("Date", value: \.date) { Text($0.date).monospacedDigit() }.width(96)
+                TableColumn("Row", value: \.title) { Text($0.title).lineLimit(1) }
+                TableColumn("Detail", value: \.detail) { Text($0.detail).lineLimit(1).foregroundStyle(.secondary) }
+                TableColumn("Sources", value: \.sources) { Text("\($0.sources)").monospacedDigit() }.width(60)
+                TableColumn("Flags", value: \.flags) { Text($0.flags == 0 ? "" : "⚑ \($0.flags)").foregroundStyle(.orange) }.width(60)
+            }
+            .frame(minHeight: 180, idealHeight: CGFloat(min(items.count, 12)) * 26 + 32, maxHeight: 360)
+            .accessibilityIdentifier("result.table")
+            if let i = selectedRow, rows.indices.contains(i) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Row \(i + 1) of \(rows.count)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    rowView(rows[i], index: i, editable: editable)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityIdentifier("result.selectedRow")
+            } else {
+                Text("Select a row to see its sources, fields and review here.").font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -278,7 +408,10 @@ struct JobResultView: View {
                     }
                 }
             }
-            if let spec = JobFields.specs[model.jobID] {
+            // I8 — fields shown by row kind: the data lab's query fields live on its Analysis row (edited
+            // once, above), not on every table row.
+            if let spec = JobFields.specs[model.jobID], JobResultTable.fieldsApply(jobID: model.jobID, row: row),
+               !(["inv.data-lab", "jrn.data-desk"].contains(model.jobID) && editable) {
                 fieldsView(spec, row: row, index: i, editable: editable)
             }
             if editable {

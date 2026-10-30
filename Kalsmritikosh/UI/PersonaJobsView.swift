@@ -434,7 +434,8 @@ public struct PersonaJobsView: View {
                     }
                     .sheet(item: $resultJob, onDismiss: { Task { await model.reloadResults() } }) { job in
                         if let repo = model.resultsRepository, let caseID = model.activeCaseID {
-                            JobResultView(model: JobResultModel(repo: repo, caseID: caseID, jobID: job.id, jobTitle: job.title), actor: "me")
+                            JobResultView(model: JobResultModel(repo: repo, caseID: caseID, jobID: job.id, jobTitle: job.title), actor: "me",
+                                          onRerun: { await model.run(job, actor: "me", at: Date()) })
                         }
                     }
                     .sheet(item: $runnerJob) { job in
