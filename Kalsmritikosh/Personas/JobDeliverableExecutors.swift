@@ -230,9 +230,15 @@ public nonisolated enum CareerExecutor {
 
     public static func run(_ e: JobEvidence) -> JobRun {
         let f = e.facts
+        // A career or education entry is about a person: the sentence names one, or speaks as or of
+        // one ("I joined …", "She graduated …"). "We expect the certified material on …" is not an
+        // entry (UI journey 2026-10-30, sample archive).
+        func aboutAPerson(_ s: String) -> Bool {
+            !JobText.names(in: s, f.named, persons: true).isEmpty || JobText.matches(s, #"\b(?:I|he|she|my|his|her)\b"#)
+        }
         var entries: [(date: Date, title: String, refs: [StudioEvidenceRef])] = []
-        for ev in f.events where JobText.matches(ev.title, words) { entries.append((ev.date, ev.title, ev.refs)) }
-        for d in f.statedDates where JobText.matches(d.title, words) && !entries.contains(where: { $0.title == d.title && $0.date == d.date }) {
+        for ev in f.events where JobText.matches(ev.title, words) && aboutAPerson(ev.title) { entries.append((ev.date, ev.title, ev.refs)) }
+        for d in f.statedDates where JobText.matches(d.title, words) && aboutAPerson(d.title) && !entries.contains(where: { $0.title == d.title && $0.date == d.date }) {
             entries.append((d.date, d.title, d.refs))
         }
         guard !entries.isEmpty else {

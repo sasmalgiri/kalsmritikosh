@@ -199,7 +199,12 @@ public final class PersonaJobsModel {
                 workspaceID: wsID, title: title, actor: actor, at: date))
             activeCaseID = out.producedID
             activeMatterTitle = title
-            lastOutcome = out.summary; lastError = nil
+            // UI journey 2026-10-30: a matter opened in an empty workspace has nothing in scope and every
+            // job blocks; say so here, with the way to fix it, instead of letting each job say it.
+            lastOutcome = out.summary.contains("with 0 source(s)")
+                ? out.summary + " — nothing is in scope yet: add documents to this workspace (Projects → Add sources…), then open the matter again; until then every job will report that the case has no documents."
+                : out.summary
+            lastError = nil
             loadRanJobs()
             if let intakeID = intakeJob?.id, let c = out.producedID { markRan(intakeID, in: c) }   // intake IS phase 1, done
             await reloadResults()
