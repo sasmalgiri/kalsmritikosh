@@ -325,9 +325,13 @@ public nonisolated enum ProceedingAnswerer {
                 distinct.append(t)
             }
             if distinct.count > 1 {
-                let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }
-                let text = "\(name) was sentenced to " + distinct.map { ($0.1.detail ?? "") + (render($0.1.day ?? $0.1.reportedOn).map { " (\($0))" } ?? "") }.joined(separator: " and, in another proceeding, to ")
-                    + " — the documents record more than one sentence. They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                // Terms first, short; the cited sentences carry the full wording.
+                let term = { (d: String) -> String in d.count > 90 ? String(d.prefix(90)) + "…" : d }
+                var text = "\(name) was sentenced to " + distinct.map { term($0.1.detail ?? "") + (render($0.1.day ?? $0.1.reportedOn).map { " (\($0))" } ?? "") }.joined(separator: " and, in another proceeding, to ")
+                    + " — the documents record more than one sentence."
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 120 ? String(s.prefix(120)) + "…" : s) + "\u{201D}" }
+                let quotes = " They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                if text.count + quotes.count < 580 { text += quotes }
                 return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.7))
             }
             let text = "\(name) was sentenced to \(hit.1.detail ?? ""). The document says: \(quote(hit.1.sentence))"
