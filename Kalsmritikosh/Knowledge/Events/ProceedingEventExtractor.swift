@@ -48,14 +48,15 @@ public nonisolated enum ProceedingEventExtractor {
         /// Past-tense wording that reports the step. Matched case-insensitively.
         public var pattern: String {
             switch self {
-            case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:federal )?(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
+            // "charged in a criminal complaint", "charged by a superseding indictment" (held-out chronology 13, 2026-10-30).
+            case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:(?:federal|criminal|superseding|sealed|one-count|two-count|\d+-count) )*(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
             case .arrested: return #"\b(?:was|were|has been) arrested\b"#
             // "made his initial appearance Monday on a federal charge" is the arraignment-stage step.
             case .arraigned: return #"\b(?:was|were) arraigned\b|\bmade (?:his|her|their|an) initial (?:court )?appearance\b"#
             // "entered a guilty plea to the charge", "entered a plea of guilty" (held-out chronology 10, 2026-10-29).
             case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b"#
             // "A federal jury in Fresno today found Adam Alan Henry, 39, of Turlock, guilty of …" (held-out chronology 10).
-            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
+            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
             case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
@@ -269,7 +270,9 @@ public nonisolated enum ProceedingEventExtractor {
         let ns = sentence as NSString
         guard range.location > 0 else { return false }
         let before = ns.substring(to: range.location)
-        guard let m = before.range(of: #"([A-Z][a-z'’\-]+)\s+(?:[A-Z]\.\s+)?$"#, options: .regularExpression) else { return false }
+        // "McKenzie", "DeShawn", "LaToya": a capital inside a given name is still that given name (held-out
+        // chronology 13, 2026-10-30 — "McKenzie McClure" was read as someone other than McKenzie).
+        guard let m = before.range(of: #"((?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’\-]+)\s+(?:[A-Z]\.\s+)?$"#, options: .regularExpression) else { return false }
         let word = String(before[m]).trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).first ?? ""
         let given = word.lowercased()
         let titles: Set<String> = ["mr", "mrs", "ms", "dr", "judge", "justice", "defendant", "officer", "agent", "detective", "sergeant",

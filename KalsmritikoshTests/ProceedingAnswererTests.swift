@@ -306,6 +306,35 @@ struct ProceedingAnswererTests {
         #expect(edwards.contains { $0.step == .pleaded } && !edwards.contains { $0.step == .sentenced }, "\(edwards)")
     }
 
+    @Test("Held-out chronology 13 (2026-10-30): 'do we know exactly when', 'looking for details on what sentence', 'what exactly was the sentence imposed', 'outcome in terms of sentencing', 'charged in a criminal complaint', a document naming the person only by a declared alias")
+    func heldOut13() throws {
+        let n = QuestionCanonicalizer.normalize
+        let shapes: [(String, ProceedingAnswerer.Ask)] = [
+            ("Do we know exactly when Christi Machala was sentenced?", .when(.sentenced)),
+            ("I'm looking for details on what sentence was handed down to Christi Machala.", .sentenceImposed),
+            ("What exactly was the sentence imposed on Christi Machala?", .sentenceImposed),
+            ("What was the outcome in terms of sentencing for Christi Machala?", .sentenceImposed),
+        ]
+        for (q, want) in shapes { #expect(ProceedingAnswerer.parse(n(q))?.ask == want, "\(q) → \(n(q))") }
+        func release(_ date: String, _ body: String) -> String { "U.S. Department of Justice\nMiddle District of Tennessee\nFOR IMMEDIATE RELEASE\n\(date)\n\n" + body }
+        // "arrested late Monday, charged in a criminal complaint" is a charge too.
+        let complaint = release("Tuesday, March 29, 2016", "FRESNO, Calif. — David Ryan Burchard, 38, of Merced, was arrested late Monday, charged in a criminal complaint with distribution of methamphetamine.")
+        let steps = ProceedingEventExtractor.findings(in: complaint, person: "David Ryan Burchard").map(\.step)
+        #expect(steps.contains(.charged) && steps.contains(.arrested), "\(steps)")
+        // A release naming the person only by the alias another release declares is read under that alias.
+        let sentenced = release("Wednesday, July 9, 2025", "NASHVILLE – McKenzie McClure a/k/a Kalvin McClure, 31, of Franklin, Tennessee, was sentenced yesterday to 30 months in federal prison.")
+        let verdict = release("Tuesday, March 4, 2025", "NASHVILLE – A federal jury today convicted McKenzie McClure, 31, of Franklin, Tennessee, of being a felon in possession of a firearm, following a two-day trial.")
+        #expect(ProceedingAnswerer.aliasNames(of: "Kalvin McClure", in: [sentenced]) == ["McKenzie McClure"])
+        #expect("a federal jury today convicted mckenzie mcclure, 31".range(of: ProceedingEventExtractor.Step.convicted.pattern, options: .regularExpression) != nil)
+        #expect(ProceedingEventExtractor.findings(in: verdict, person: "McKenzie McClure").map(\.step) == [.convicted])
+        let km = try #require(ProceedingAnswerer.parse("Did Kalvin McClure enter a guilty plea?"))
+        let kmBody = try #require(ProceedingAnswerer.answer(km, sources: [.init(objectID: UUID(), text: sentenced), .init(objectID: UUID(), text: verdict)])).body
+        #expect(kmBody.hasPrefix("No — the documents say Kalvin McClure was found guilty at trial"), "\(kmBody)")
+        let tl = try #require(ProceedingAnswerer.parse("Give me the timeline of the case against Kalvin McClure"))
+        let tlBody = try #require(ProceedingAnswerer.answer(tl, sources: [.init(objectID: UUID(), text: sentenced), .init(objectID: UUID(), text: verdict)])).body
+        #expect(tlBody.contains("March 4, 2025 — convicted") && tlBody.contains("July 8, 2025 (release dated July 9, 2025) — sentenced"), "\(tlBody)")
+    }
+
     @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")
     func pleaSemantics() throws {
         func release(_ body: String) -> ProceedingAnswerer.Source {

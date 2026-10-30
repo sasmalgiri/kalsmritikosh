@@ -33,7 +33,7 @@ public nonisolated enum ProceedingAnswerer {
 
     /// A verdict reached at trial: "a federal jury convicted", "convicted by a jury", "found guilty at
     /// trial", "following a three-week jury trial … was convicted", "a jury verdict".
-    static let trialVerdict = #"\bjury (?:convicted|found|verdict|trial)\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b|\bevidence (?:produced|presented) at trial\b"#
+    static let trialVerdict = #"\bjury (?:convicted|found|verdict|trial)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b|\bevidence (?:produced|presented) at trial\b"#
 
     /// The step a question's verb names.
     static let stepWords: [(String, ProceedingEventExtractor.Step)] = [
@@ -78,7 +78,7 @@ public nonisolated enum ProceedingAnswerer {
     static func unwrap(_ q: String) -> String {
         // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
         // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do you know|do (?:you|we) have|have (?:you|we) got|is there|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do (?:you|we) know|do (?:you|we) have|have (?:you|we) got|is there|i(?:'m|’m| am) looking for (?:details|information|info|specifics) (?:on|about)|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -103,7 +103,8 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
         // "the punishment or sentence that X received", "the sentence that X ended up getting" (held-out chronology 11).
-        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+){0,3}?(?:sentence|punishment|penalty)\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed|ended up (?:getting|with|receiving)|wound up with)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b|^(?:exactly\s+)?what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\b(?:details?|specifics?)\s+(?:on|of|about)\s+(?:the\s+)?sentence\b"#, options: .regularExpression) != nil {
+        // "What exactly was the sentence imposed on X?", "the outcome in terms of sentencing" (held-out chronology 13).
+        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:exactly\s+|precisely\s+)?(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|\boutcome (?:in terms of|of) (?:the\s+)?sentencing\b|\bsentencing outcome\b|^what\s+sentence\b|^(?:the\s+)?(?:\w+\s+){0,3}?(?:sentence|punishment|penalty)\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed|ended up (?:getting|with|receiving)|wound up with)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b|^(?:exactly\s+)?what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\b(?:details?|specifics?)\s+(?:on|of|about)\s+(?:the\s+)?sentence\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
@@ -207,13 +208,45 @@ public nonisolated enum ProceedingAnswerer {
 
     /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
     /// `complete` is false when the documents searched were capped: a count is then a floor.
+    /// Full names a document declares as the same person's ("McKenzie McClure a/k/a Kalvin McClure"):
+    /// the other form, when one side is the asked name.
+    static func aliasNames(of person: String, in texts: [String]) -> [String] {
+        let name = #"([A-Z][\w'’-]+(?:\s+(?:[A-Z]\.\s+)?[A-Z][\w'’.-]+){1,3})"#
+        guard let re = try? NSRegularExpression(pattern: name + #",?\s+(?:aka|a/k/a|also known as|formerly known as)\s+"# + name) else { return [] }
+        let asked = ProceedingEventExtractor.nameTokens(person)
+        var out: [String] = []
+        for text in texts {
+            let ns = text as NSString
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let a = ns.substring(with: m.range(at: 1)), b = ns.substring(with: m.range(at: 2))
+                if ProceedingEventExtractor.mentionsFully(a.lowercased(), tokens: asked), !out.contains(b) { out.append(b) }
+                if ProceedingEventExtractor.mentionsFully(b.lowercased(), tokens: asked), !out.contains(a) { out.append(a) }
+            }
+        }
+        return out
+    }
+
     public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true) -> VerifiedAnswer? {
-        let about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
+        var about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
+        // A document that names the person only by a declared alias ("McKenzie McClure", when another
+        // release says "McKenzie McClure a/k/a Kalvin McClure") is about them too (held-out chronology 13).
+        let aliases = aliasNames(of: parsed.person, in: about.map(\.text))
+        for alias in aliases {
+            let tokens = ProceedingEventExtractor.nameTokens(alias)
+            for s in sources where !about.contains(where: { $0.objectID == s.objectID }) && ProceedingEventExtractor.mentionsFully(s.text.lowercased(), tokens: tokens) {
+                about.append(s)
+            }
+        }
         // One line per step and day across documents (the sentencing release repeats the plea's day).
         typealias Hit = (UUID, ProceedingEventExtractor.Finding)
         var all: [Hit] = []
         for s in about {
-            for f in ProceedingEventExtractor.findings(in: s.text, person: parsed.person) { all.append((s.objectID, f)) }
+            // Read under the asked name; a document that names the person only by a declared alias is
+            // read under that alias.
+            for n in [parsed.person] + aliases {
+                let fs = ProceedingEventExtractor.findings(in: s.text, person: n)
+                if !fs.isEmpty { for f in fs { all.append((s.objectID, f)) }; break }
+            }
         }
         func sortKey(_ h: Hit) -> String { (h.1.day == nil ? "1" : "0") + key(h.1) }
         all.sort { sortKey($0) < sortKey($1) }
