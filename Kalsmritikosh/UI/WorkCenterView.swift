@@ -1318,23 +1318,46 @@ public struct WorkCenterView: View {
         }
     }
 
+    /// App Store completion §4 — a run report leaves the app through `CaseOutputService`: the
+    /// same protected text is copied or printed; a protected identity that would survive stops it.
     private func copyToClipboard(_ text: String) {
         #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        guard let outputs = appState.caseOutputs else { return }
+        let who = actorName
+        Task { @MainActor in
+            do {
+                let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .clipboard, actor: who, citations: [], text: text)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(pkg.text, forType: .string)
+                _ = await outputs.released(pkg)
+            } catch {
+                KalsmritikoshLog.ui.error("Work Center copy refused: \(error.localizedDescription, privacy: .public)")
+                NSAlert(error: error).runModal()
+            }
+        }
         #endif
     }
 
     #if os(macOS)
     private func printText(_ text: String, jobTitle: String, monospace: Bool) {
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        textView.string = text
-        textView.font = monospace
-            ? NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-            : NSFont.systemFont(ofSize: 11)
-        let operation = NSPrintOperation(view: textView)
-        operation.jobTitle = jobTitle
-        operation.run()
+        guard let outputs = appState.caseOutputs else { return }
+        let who = actorName
+        Task { @MainActor in
+            do {
+                let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .print, actor: who, citations: [], text: text)
+                let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+                textView.string = pkg.text
+                textView.font = monospace
+                    ? NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+                    : NSFont.systemFont(ofSize: 11)
+                let operation = NSPrintOperation(view: textView)
+                operation.jobTitle = jobTitle
+                if operation.run() { _ = await outputs.released(pkg) }
+            } catch {
+                KalsmritikoshLog.ui.error("Work Center print refused: \(error.localizedDescription, privacy: .public)")
+                NSAlert(error: error).runModal()
+            }
+        }
     }
     #endif
 

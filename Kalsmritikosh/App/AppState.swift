@@ -621,6 +621,9 @@ public final class AppState {
     /// Investigations Made Easy (v151) — the case file around each case: intake, triage, stage, plan,
     /// allegations, people, interviews, exhibits, holds, tasks and deadlines (over the one task engine).
     public private(set) var caseFiles: CaseFileService?
+    /// App Store completion §4 — the one door for case content leaving the app (file, clipboard,
+    /// print, share): freeze, revalidate, protect, release, record.
+    public private(set) var caseOutputs: CaseOutputService?
     /// A-6 — Competing-hypotheses (ACH) matrices in the ledger (v152).
     public private(set) var achMatrices: ACHRepository?
     /// Case bench 2026-10-20 — a case opened over a workspace takes in its documents (and their
@@ -2470,6 +2473,15 @@ public final class AppState {
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 evidence: evidenceStoreRepo, custody: custodyRepo, database: db)
+            // App Store completion §4 — every case output route goes through one service; a release
+            // that could not be recorded keeps a pending record beside the ledger and lands at launch.
+            if let caseFiles, let custodyService = self.investigationCustody {
+                let outputs = CaseOutputService(database: db, caseFiles: caseFiles,
+                                                custody: { caseID in try await custodyService.manifest(caseID: caseID) },
+                                                pendingDirectory: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("case-output-pending", isDirectory: true))
+                self.caseOutputs = outputs
+                Task { await outputs.resumePending() }
+            }
             // INV-20 — the case Closure authority, live from boot. A case is CLOSED only by a recorded human
             // decision (never auto-closed); the accepted unresolved items are retained (honest closure); a
             // reopen is a new decision that preserves the prior closure. The closure + case status transition

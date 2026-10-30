@@ -24,6 +24,8 @@ final class CaseFileModel {
     /// What the case documents name and the amounts they state (each with its sentence).
     var named: StudioCaseFacts?
     var error: String?
+    /// §4 — what happened to the last release (exported and recorded, refused, pending record…).
+    var outputNotice: String?
     var busy = false
     /// The custody manifest could not be read: reports must not present an empty custody record.
     var custodyReadFailed = false
@@ -87,6 +89,59 @@ final class CaseFileModel {
     func report(_ e: Error) {
         KalsmritikoshLog.app.error("Case file: \(e.localizedDescription, privacy: .public)")
         error = e.localizedDescription
+    }
+
+    /// App Store completion §4 — the ONE way a case document leaves this screen as a file: the
+    /// destination is chosen first; then `CaseOutputService` freezes the case as it is now
+    /// (re-verified links, every cited source still cleared, protected identities scrubbed, banners),
+    /// writes atomically, reads back and records the digest of the bytes on disk. A cancelled panel
+    /// writes and records nothing; a refusal is recorded with its reason.
+    func exportDocument(_ app: AppState, kind: CaseOutputKind, name: String, ext: String,
+                        render: @escaping @Sendable (CaseFileSnapshot) -> String) {
+        guard let outputs = app.caseOutputs else { error = "The ledger isn't ready yet; nothing was exported."; return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }   // cancelled: nothing written, nothing recorded
+        let caseID = caseID, actor = actor
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let pkg = try await outputs.prepare(caseID: caseID, kind: kind, route: .file, actor: actor, render: render)
+                let receipt = await outputs.write(pkg, to: url)
+                outputNotice = receipt.summary
+                error = receipt.status == .written && receipt.recorded ? nil : receipt.summary
+            } catch {
+                outputNotice = nil
+                report(error)
+            }
+            await load(app)
+        }
+    }
+
+    /// The same door for free text drafted on this screen (a preservation notice).
+    func exportText(_ app: AppState, kind: CaseOutputKind, name: String, ext: String, text: String) {
+        guard let outputs = app.caseOutputs else { error = "The ledger isn't ready yet; nothing was exported."; return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let caseID = caseID, actor = actor
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let pkg = try await outputs.prepareText(caseID: caseID, kind: kind, route: .file, actor: actor, citations: [], text: text)
+                let receipt = await outputs.write(pkg, to: url)
+                outputNotice = receipt.summary
+                error = receipt.status == .written && receipt.recorded ? nil : receipt.summary
+            } catch {
+                outputNotice = nil
+                report(error)
+            }
+            await load(app)
+        }
     }
 
     /// Evidence the person can point at: exhibits first, then every source in scope.
@@ -157,6 +212,9 @@ public struct CaseFileView: View {
             .padding(.horizontal, 20)
             if let e = model.error {
                 Text(e).foregroundStyle(.red).font(.callout).padding(.horizontal, 20).padding(.top, 8)
+            } else if let n = model.outputNotice {
+                Text(n).foregroundStyle(.secondary).font(.callout).padding(.horizontal, 20).padding(.top, 8)
+                    .accessibilityIdentifier("case.output.notice")
             }
             Divider().padding(.top, 10)
             if let s = model.snapshot {
@@ -882,7 +940,10 @@ struct InterviewEditor: View {
                         }
                     }
                     Button("Export statement for signature…") {
-                        CaseFileSave.save(CaseFileDocuments.statement(s, interview: interview, by: model.actor), name: "Statement - \(s.person(interview.personID)?.name ?? "interview")", ext: "md")
+                        let iv = interview, actor = model.actor
+                        model.exportDocument(appState, kind: .statement, name: "Statement - \(s.person(interview.personID)?.name ?? "interview")", ext: "md") { fresh in
+                            CaseFileDocuments.statement(fresh, interview: fresh.interviews.first { $0.id == iv.id } ?? iv, by: actor)
+                        }
                     }
                 }
                 if attested {
@@ -1025,8 +1086,11 @@ struct CaseEvidenceTab: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Export exhibit list…") { CaseFileSave.save(CaseFileDocuments.exhibitListCSV(s), name: "Exhibits - \(s.caseHeader.title)", ext: "csv") }
-                    Button("Export custody report…") { CaseFileSave.save(CaseFileDocuments.custodyReport(s, by: model.actor), name: "Custody - \(s.caseHeader.title)", ext: "md") }
+                    Button("Export exhibit list…") { model.exportDocument(appState, kind: .exhibitList, name: "Exhibits - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.exhibitListCSV($0) } }
+                    Button("Export custody report…") {
+                        let actor = model.actor
+                        model.exportDocument(appState, kind: .custodyReport, name: "Custody - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.custodyReport($0, by: actor) }
+                    }
                         .disabled(model.custodyReadFailed)
                         .help(model.custodyReadFailed ? "The custody record could not be read." : "")
                 }
@@ -1042,7 +1106,7 @@ struct CaseEvidenceTab: View {
                     TextEditor(text: $noticeText).font(.callout).frame(minHeight: 180)
                     HStack {
                         Spacer()
-                        Button("Save notice to send…") { CaseFileSave.save(noticeText, name: "Preservation notice - \(custodian)", ext: "txt") }
+                        Button("Save notice to send…") { model.exportText(appState, kind: .holdNotice, name: "Preservation notice - \(custodian)", ext: "txt", text: noticeText) }
                         Button("Record as issued") {
                             let c = custodian, t = noticeText, rem = Calendar.current.date(byAdding: .day, value: 7, to: Date())
                             let pid = s.people.first { $0.name.caseInsensitiveCompare(c) == .orderedSame }?.id
@@ -1087,7 +1151,7 @@ struct CaseEvidenceTab: View {
                 }
                 ForEach(s.redactions) { r in Text("\(model.label(for: r.sourceRef)) · \(r.location) · \(r.reason) · \(r.redactedBy)").font(.caption) }
                 if !s.redactions.isEmpty {
-                    HStack { Spacer(); Button("Export redaction log…") { CaseFileSave.save(CaseFileDocuments.redactionLogCSV(s), name: "Redactions - \(s.caseHeader.title)", ext: "csv") } }
+                    HStack { Spacer(); Button("Export redaction log…") { model.exportDocument(appState, kind: .redactionLog, name: "Redactions - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.redactionLogCSV($0) } } }
                 }
             }
             CaseSection(title: "Review batches", subtitle: "Split the case's documents into batches; a second person checks each finished batch.") {
@@ -1198,12 +1262,18 @@ struct CaseLogTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            CaseSection(title: "Export", subtitle: "Each export is recorded in the case log.") {
+            CaseSection(title: "Export", subtitle: "Each export is frozen, re-checked against the case's sources and access, scrubbed of protected identities, written, read back and recorded in the case log.") {
                 HStack {
-                    Button("Case file report…") { export(CaseFileDocuments.caseFileReport(s, named: model.named, by: model.actor), "Case file - \(s.caseHeader.title)", "md", "caseFileReport") }
-                    Button("Case log…") { export(CaseFileDocuments.actionLogCSV(s), "Case log - \(s.caseHeader.title)", "csv", "caseLog") }
-                    Button("Exhibit list…") { export(CaseFileDocuments.exhibitListCSV(s), "Exhibits - \(s.caseHeader.title)", "csv", "exhibitList") }
-                    Button("Custody report…") { export(CaseFileDocuments.custodyReport(s, by: model.actor), "Custody - \(s.caseHeader.title)", "md", "custodyReport") }
+                    Button("Case file report…") {
+                        let named = model.named, actor = model.actor
+                        model.exportDocument(appState, kind: .caseFileReport, name: "Case file - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.caseFileReport($0, named: named, by: actor) }
+                    }
+                    Button("Case log…") { model.exportDocument(appState, kind: .caseLog, name: "Case log - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.actionLogCSV($0) } }
+                    Button("Exhibit list…") { model.exportDocument(appState, kind: .exhibitList, name: "Exhibits - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.exhibitListCSV($0) } }
+                    Button("Custody report…") {
+                        let actor = model.actor
+                        model.exportDocument(appState, kind: .custodyReport, name: "Custody - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.custodyReport($0, by: actor) }
+                    }
                 }
             }
             CaseSection(title: "Personal data about someone", subtitle: "For a data-subject request: everything this case file records about one named person. Documents that mention them are found with Search and the person's dossier.") {
@@ -1212,7 +1282,10 @@ struct CaseLogTab: View {
                         Text("Choose").tag("")
                         ForEach(Array(Set(s.people.map(\.name))).sorted(), id: \.self) { Text($0).tag($0) }
                     }.frame(maxWidth: 300)
-                    Button("Export…") { export(CaseFileDocuments.personDataExport(s, name: personName, by: model.actor), "Personal data - \(personName)", "md", "personDataExport") }
+                    Button("Export…") {
+                        let person = personName, actor = model.actor
+                        model.exportDocument(appState, kind: .personDataExport, name: "Personal data - \(personName)", ext: "md") { CaseFileDocuments.personDataExport($0, name: person, by: actor) }
+                    }
                         .disabled(personName.isEmpty)
                 }
             }
@@ -1229,43 +1302,4 @@ struct CaseLogTab: View {
         }
     }
 
-    private func export(_ text: String, _ name: String, _ ext: String, _ action: String) {
-        if model.custodyReadFailed, action == "custodyReport" {
-            let alert = NSAlert()
-            alert.messageText = "The custody record could not be read"
-            alert.informativeText = "A custody report can't be exported until the custody record reads correctly. Nothing was exported."
-            alert.runModal()
-            return
-        }
-        // A case-file report is a working draft, never an approved findings report; a report built
-        // while custody could not be read says so at the top.
-        var body = text
-        if action == "caseFileReport" {
-            body = "> DRAFT case file — not an approved findings report.\n\n" + body
-        }
-        if model.custodyReadFailed, ext == "md" {
-            body = "> INCOMPLETE — the custody record could not be read when this was exported.\n\n" + body
-        }
-        let outcome = CaseFileSave.save(body, name: name, ext: ext)
-        let caseID = model.caseID, actor = model.actor
-        switch outcome {
-        case .saved(let fileName, let sha256):
-            Task {
-                do {
-                    try await appState.caseFiles?.file.logAction(caseID: caseID, action: "exported",
-                                                                 detail: "\(action) · \(fileName) · sha256 \(sha256.prefix(16))", actor: actor)
-                } catch {
-                    KalsmritikoshLog.app.error("Export log failed: \(String(describing: error), privacy: .public)")
-                }
-            }
-        case .failed(let why):
-            Task {
-                do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: "exportFailed", detail: "\(action) · \(why)", actor: actor) } catch {
-                    KalsmritikoshLog.app.error("Export-failure log failed: \(String(describing: error), privacy: .public)")
-                }
-            }
-        case .cancelled:
-            break   // nothing was written; nothing is recorded as exported
-        }
-    }
 }

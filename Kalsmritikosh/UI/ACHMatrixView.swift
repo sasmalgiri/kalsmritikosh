@@ -39,7 +39,6 @@ public struct ACHMatrixView: View {
     @State private var newEvidence = ""
     @State private var newAssumption = ""
     @State private var newIndicator = ""
-    @State private var showExporter = false
     /// The sources in the active analysis's case scope (exact versions with labels), for citations.
     @State private var citationChoices: [(id: UUID, label: String)] = []
     @State private var citationChoicesFor: UUID?
@@ -58,10 +57,6 @@ public struct ACHMatrixView: View {
         }
         .task(id: appState.achMatrices != nil) { await load() }
         .onDisappear { flushSave() }
-        .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
-                      contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
     }
 
     // MARK: Persistence (the ledger)
@@ -265,9 +260,9 @@ public struct ACHMatrixView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Title", text: a.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 320)
                 Spacer()
-                Button { showExporter = true } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                Button { release(a.wrappedValue, route: .file) } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { printReport(a.wrappedValue) } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { release(a.wrappedValue, route: .print) } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -579,8 +574,8 @@ public struct ACHMatrixView: View {
                 .font(.body).frame(minHeight: 80)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { copyReport(a.wrappedValue) } label: { Label("Copy report", systemImage: "doc.on.doc") }
-                Button { showExporter = true } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { release(a.wrappedValue, route: .clipboard) } label: { Label("Copy report", systemImage: "doc.on.doc") }
+                Button { release(a.wrappedValue, route: .file) } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
             }
         }
     }
@@ -634,28 +629,56 @@ public struct ACHMatrixView: View {
 
     // MARK: Output
 
-    private var activeReport: String {
-        guard let b = activeBinding else { return "" }
-        return ACHReportRenderer.markdown(b.wrappedValue, generatedAt: Date())
+    private func exportFilename(_ a: ACHAnalysis) -> String {
+        "ach-\(a.title.replacingOccurrences(of: " ", with: "-").replacingOccurrences(of: "/", with: "-").lowercased()).md"
     }
-    private var exportFilename: String {
-        let t = activeBinding?.wrappedValue.title ?? "ach"
-        return "ach-\(t.replacingOccurrences(of: " ", with: "-").lowercased())"
-    }
-    private func copyReport(_ a: ACHAnalysis) {
+
+    /// App Store completion §4 — copy, print and export all go through `CaseOutputService`: the
+    /// report is rendered once, its citations re-checked against the analysis's case as it is now,
+    /// protected identities scrubbed, and the SAME bytes are copied, printed or written; the release
+    /// is recorded in the case (a cancelled panel or print dialog records nothing).
+    private func release(_ a: ACHAnalysis, route: CaseOutputRoute) {
         #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(ACHReportRenderer.markdown(a, generatedAt: Date()), forType: .string)
+        flushSave()
+        guard let outputs = appState.caseOutputs else { notice = "The ledger isn't open yet; nothing was released."; return }
+        var destination: URL?
+        if route == .file {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = exportFilename(a)
+            panel.canCreateDirectories = true
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            destination = url
+        }
+        let scope = scopes[a.id] ?? caseID
+        let text = ACHReportRenderer.markdown(a, generatedAt: Date())
+        let citations = a.evidence.compactMap(\.citation)
+        let title = a.title, who = actor
+        Task { @MainActor in
+            do {
+                let pkg = try await outputs.prepareText(caseID: scope, kind: .achReport, route: route, actor: who, citations: citations, text: text)
+                switch route {
+                case .file:
+                    guard let destination else { return }
+                    notice = await outputs.write(pkg, to: destination).summary
+                case .clipboard:
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(pkg.text, forType: .string)
+                    notice = "Copied. " + (await outputs.released(pkg).summary)
+                case .print:
+                    let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
+                    tv.string = pkg.text
+                    tv.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+                    let op = NSPrintOperation(view: tv); op.jobTitle = "ACH — \(title)"
+                    if op.run() { notice = "Printed. " + (await outputs.released(pkg).summary) } else { notice = "Print cancelled; nothing was recorded." }
+                case .share:
+                    break
+                }
+            } catch {
+                notice = error.localizedDescription
+            }
+        }
         #endif
     }
-    #if os(macOS)
-    private func printReport(_ a: ACHAnalysis) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = ACHReportRenderer.markdown(a, generatedAt: Date())
-        tv.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "ACH — \(a.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
