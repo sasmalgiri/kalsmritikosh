@@ -77,6 +77,26 @@ public struct CaseCoverageRepository: Sendable {
         return rows.compactMap { r in r.uuid(0).map { (child: $0, relation: r.string(1) ?? "", ordinal: r.int(2).map(Int.init)) } }
     }
 
+    /// A readable name for each source version (the file name it was read from), for scope previews.
+    public func labels(for ids: [UUID]) async throws -> [UUID: String] {
+        let unique = Array(Set(ids))
+        guard !unique.isEmpty else { return [:] }
+        var out: [UUID: String] = [:]
+        for start in stride(from: 0, to: unique.count, by: 400) {
+            let chunk = Array(unique[start..<min(start + 400, unique.count)])
+            let rows = try await database.query(
+                "SELECT id, original_url FROM source_versions WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows {
+                guard let id = r.uuid(0) else { continue }
+                let url = r.string(1).flatMap { URL(string: $0) ?? URL(fileURLWithPath: $0) }
+                let name = url.map { $0.lastPathComponent.removingPercentEncoding ?? $0.lastPathComponent } ?? ""
+                out[id] = name.isEmpty ? "Source \(id.uuidString.prefix(8))" : name
+            }
+        }
+        return out
+    }
+
     /// Whether a container coverage manifest exists for this source version (v87). Absence on a
     /// container source becomes a "container inspection missing" limitation — never a false "0 members".
     public func hasContainerManifest(sourceVersionID: UUID) async throws -> Bool {

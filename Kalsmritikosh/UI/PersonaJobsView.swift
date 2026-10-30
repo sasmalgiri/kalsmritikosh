@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import os
 
 // MARK: - Model (testable, @Observable)
 
@@ -57,11 +58,72 @@ public final class PersonaJobsModel {
     /// A1 — the question typed for each Ask job.
     public var questions: [String: String] = [:]
     public let resultsRepository: JobResultRepository?
+    /// I1 — the explicit, auditable inclusion path (nil: the app has no intake wired; the scope strip hides).
+    private let intake: InvestigationWorkspaceIntake?
 
     public init(service: PersonaJobService, catalog: PersonaJobCatalog, workspaces: WorkspaceRepository,
-                cases: InvestigationCaseRepository? = nil, results: JobResultRepository? = nil) {
+                cases: InvestigationCaseRepository? = nil, results: JobResultRepository? = nil,
+                intake: InvestigationWorkspaceIntake? = nil) {
         self.service = service; self.catalog = catalog; self.workspaces = workspaces; self.cases = cases
         self.resultsRepository = results
+        self.intake = intake
+    }
+
+    // MARK: I1 — documents in the case (scope), reviewed and approved explicitly
+
+    /// What the open matter's workspace holds versus what the case has decided: in scope, excluded,
+    /// and new (undecided). Read-only until the person approves an inclusion.
+    public private(set) var scopePreview: CaseInclusionPreview?
+    /// When the case's scope last changed (a source included or excluded) — results saved before
+    /// then were produced over an earlier scope.
+    public private(set) var lastScopeChange: Date?
+    /// The preview the review sheet is showing (nil: closed).
+    public var inclusionReview: CaseInclusionPreview?
+    public var canReviewScope: Bool { intake != nil && activeCaseID != nil }
+
+    /// Reload the scope summary for the open matter. Reads only; never includes anything.
+    public func refreshScope() async {
+        guard let caseID = activeCaseID else { scopePreview = nil; lastScopeChange = nil; return }
+        if let cases, let record = try? await cases.fetch(caseID: caseID) {
+            let change = record.events.filter { [.sourceIncluded, .sourceExcluded].contains($0.action) }.map(\.occurredAt).max()
+            if caseID == activeCaseID { lastScopeChange = change }
+        }
+        guard let intake else { scopePreview = nil; return }
+        do {
+            let p = try await intake.preview(caseID: caseID)
+            if caseID == activeCaseID { scopePreview = p }
+        } catch {
+            KalsmritikoshLog.ui.error("Scope preview failed: \(error.localizedDescription, privacy: .public)")
+            if caseID == activeCaseID { lastError = "Couldn't read the case's documents: \(error.localizedDescription)" }
+        }
+    }
+
+    /// Open the review: what approval would add, what stays excluded. Nothing is included here.
+    public func reviewNewDocuments() async {
+        await refreshScope()
+        inclusionReview = scopePreview
+    }
+
+    /// Approve the inclusion of the chosen new documents (a subset of the preview's pending list).
+    /// Each inclusion is a recorded case event; excluded sources stay excluded; the case revision
+    /// moves, so approvals bound to the earlier scope are stale from here on.
+    public func approveInclusion(_ approved: Set<UUID>, actor: String, at date: Date) async {
+        guard let caseID = activeCaseID, let intake else { lastError = "Open a matter first."; return }
+        guard !approved.isEmpty else { inclusionReview = nil; return }
+        busy = true; defer { busy = false }
+        do {
+            let (c, included) = try await intake.include(caseID: caseID, approved: approved, actor: actor, at: date)
+            let summary = "\(included) document(s) added to the case's scope (revision \(c.revision)). Results and approvals made before this were produced over the earlier scope — run the jobs again to cover the new documents."
+            appendLog(jobTitle: "Documents added to case", summary: summary, at: date, in: caseID)
+            if caseID == activeCaseID {
+                lastOutcome = summary; lastError = nil
+                inclusionReview = nil
+                await refreshScope()
+                await reloadResults()
+            }
+        } catch {
+            lastError = "Couldn't add the documents: \(error.localizedDescription)"
+        }
     }
 
     /// A1 — reload every job's current result for the active matter.
@@ -72,13 +134,20 @@ public final class PersonaJobsModel {
         if caseID == activeCaseID { results = loaded }
     }
 
+    /// I1 — a saved result produced before the case's scope last changed.
+    public func isFromEarlierScope(_ job: PersonaJob) -> Bool {
+        guard let r = results[job.id], let change = lastScopeChange else { return false }
+        return r.createdAt < change
+    }
+
     /// A1 — what a job card says: the saved result's state, or that a service job ran, or nothing yet.
     public func status(of job: PersonaJob) -> String? {
+        let earlier = isFromEarlierScope(job) ? " · from an earlier scope — run again to cover the documents added since" : ""
         if let r = results[job.id] {
             switch r.state {
-            case .draft: return "Draft — \(r.content.rows.count) row(s) to review"
-            case .blocked: return "Blocked — open to see what is missing"
-            case .completed: return "Completed by \(r.content.review?.by ?? r.createdBy)"
+            case .draft: return "Draft — \(r.content.rows.count) row(s) to review" + earlier
+            case .blocked: return "Blocked — open to see what is missing" + earlier
+            case .completed: return "Completed by \(r.content.review?.by ?? r.createdBy)" + earlier
             case .superseded: return nil
             }
         }
@@ -98,7 +167,9 @@ public final class PersonaJobsModel {
     }
 
     /// Reopen an existing matter: all job runs, phase progress, work log, and
-    /// guided-walkthrough positions come back exactly as left.
+    /// guided-walkthrough positions come back exactly as left. Reopening never widens the case's
+    /// scope: documents added to the workspace since are shown as new, and included only when the
+    /// person approves them (I1).
     public func openMatter(_ matter: InvestigationCase) {
         activeCaseID = matter.id
         activeMatterTitle = matter.title
@@ -106,7 +177,13 @@ public final class PersonaJobsModel {
         lastError = nil
         loadRanJobs()
         loadWorkLog()
-        Task { await reloadResults() }   // A1 — each job's saved result comes back with the matter
+        Task {
+            await reloadResults()   // A1 — each job's saved result comes back with the matter
+            await refreshScope()
+            if let p = scopePreview, p.hasChanges, activeCaseID == matter.id {
+                lastOutcome = "Resumed matter \"\(matter.title)\" — \(p.pending.count) new document(s) in its workspace are not in the case yet. Use “Review new documents” to add them."
+            }
+        }
     }
 
     // JOB-LOG (maxmailin pattern) — the work and its results live TOGETHER:
@@ -165,6 +242,7 @@ public final class PersonaJobsModel {
         selectedPersona = id
         activeCaseID = nil; activeMatterTitle = nil; lastOutcome = nil; lastError = nil
         ranJobs = []
+        scopePreview = nil; lastScopeChange = nil; inclusionReview = nil
         await reloadJobs()
     }
 
@@ -202,12 +280,13 @@ public final class PersonaJobsModel {
             // UI journey 2026-10-30: a matter opened in an empty workspace has nothing in scope and every
             // job blocks; say so here, with the way to fix it, instead of letting each job say it.
             lastOutcome = out.summary.contains("with 0 source(s)")
-                ? out.summary + " — nothing is in scope yet: add documents to this workspace (Projects → Add sources…), then open the matter again; until then every job will report that the case has no documents."
+                ? out.summary + " — nothing is in scope yet: add documents to this workspace (Projects → Add sources…), then come back and use “Review new documents” to bring them into the case; until then every job will report that the case has no documents."
                 : out.summary
             lastError = nil
             loadRanJobs()
             if let intakeID = intakeJob?.id, let c = out.producedID { markRan(intakeID, in: c) }   // intake IS phase 1, done
             await reloadResults()
+            await refreshScope()
             if let c = out.producedID { appendLog(jobTitle: "Matter opened", summary: out.summary, at: date, in: c) }
             await reloadMatters()
         } catch { lastError = "\(error)"; lastOutcome = nil }
@@ -311,7 +390,8 @@ public struct PersonaJobsView: View {
               let ws = appState.workspaces else { return }
         let m = PersonaJobsModel(service: service, catalog: catalog, workspaces: ws,
                                  cases: appState.investigationCases,
-                                 results: appState.database.map { JobResultRepository(database: $0) })
+                                 results: appState.database.map { JobResultRepository(database: $0) },
+                                 intake: appState.investigationWorkspaceIntake)
         await m.load()
         model = m
     }
@@ -392,10 +472,16 @@ public struct PersonaJobsView: View {
                     .tint(Theme.brand)
                 Text("Work down the phases below — the highlighted phase is your next step. Every job stays evidence-cited.")
                     .font(.caption2).foregroundStyle(.secondary)
+                scopeStrip(model)
             }
             .padding(14)
             .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.25), lineWidth: 1))
+            .sheet(item: $model.inclusionReview) { preview in
+                ScopeReviewSheet(preview: preview,
+                                 onApprove: { chosen in Task { await model.approveInclusion(chosen, actor: "me", at: Date()) } },
+                                 onCancel: { model.inclusionReview = nil })
+            }
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
@@ -463,6 +549,43 @@ public struct PersonaJobsView: View {
             .padding(14)
             .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.35), lineWidth: 1))
+        }
+    }
+
+    // I1 — the documents in the case: what is in scope, what is excluded, what is new in the
+    // workspace and not yet in the case. The only way in is the explicit review and approval.
+    @ViewBuilder
+    private func scopeStrip(_ model: PersonaJobsModel) -> some View {
+        if model.canReviewScope {
+            HStack(spacing: 10) {
+                Image(systemName: "doc.on.doc").foregroundStyle(.secondary).imageScale(.small)
+                if let p = model.scopePreview {
+                    Text("Documents: \(p.inScope) in scope" + (p.excluded.isEmpty ? "" : " · \(p.excluded.count) excluded")
+                         + (p.pending.isEmpty ? " · nothing new in the workspace" : " · \(p.pending.count) new in the workspace, not in the case"))
+                        .font(.caption)
+                        .foregroundStyle(p.pending.isEmpty ? .secondary : .primary)
+                        .accessibilityIdentifier("jobs.scope.summary")
+                } else {
+                    Text("Documents: reading the case's scope…").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                let pending = model.scopePreview?.pending.count ?? 0
+                let reviewLabel = Label(pending > 0 ? "Review new documents (\(pending))" : "Review new documents",
+                                        systemImage: "plus.rectangle.on.folder")
+                Group {
+                    if pending > 0 {
+                        Button { Task { await model.reviewNewDocuments() } } label: { reviewLabel }.buttonStyle(.borderedProminent)
+                    } else {
+                        Button { Task { await model.reviewNewDocuments() } } label: { reviewLabel }.buttonStyle(.bordered)
+                    }
+                }
+                .controlSize(.small)
+                .tint(Theme.brand)
+                .disabled(model.busy)
+                .help("See the documents added to this matter's workspace that are not yet in the case, and approve which to include. Reopening the matter never adds them on its own.")
+                .accessibilityIdentifier("jobs.scope.review")
+            }
+            .padding(.top, 4)
         }
     }
 
@@ -801,6 +924,87 @@ private struct JobDocumentationDetail: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - I1: review and approve the documents coming into the case
+
+/// What approving would add to the case, shown before anything is authorised: each new document
+/// (and what it was found inside), ticked by default; what stays excluded; one confirm button that
+/// names the count. Cancel includes nothing.
+struct ScopeReviewSheet: View {
+    let preview: CaseInclusionPreview
+    let onApprove: (Set<UUID>) -> Void
+    let onCancel: () -> Void
+    @State private var chosen: Set<UUID>
+
+    init(preview: CaseInclusionPreview, onApprove: @escaping (Set<UUID>) -> Void, onCancel: @escaping () -> Void) {
+        self.preview = preview; self.onApprove = onApprove; self.onCancel = onCancel
+        _chosen = State(initialValue: Set(preview.pending.map(\.id)))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Add documents to this case").font(.title3.weight(.semibold))
+            Text("The case answers only from documents in its scope. Below is what its workspace holds that the case has not decided on. Nothing is added until you confirm; what you leave unticked stays out, and excluded documents stay excluded.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 14) {
+                Label("\(preview.inScope) in scope now", systemImage: "checkmark.circle").font(.caption)
+                if !preview.excluded.isEmpty { Label("\(preview.excluded.count) excluded (stay excluded)", systemImage: "minus.circle").font(.caption) }
+                Label("\(preview.pending.count) new", systemImage: "plus.circle").font(.caption)
+            }
+            .foregroundStyle(.secondary)
+            if preview.pending.isEmpty {
+                ContentUnavailableView("Nothing new to add", systemImage: "doc.on.doc",
+                                       description: Text("Every document in the workspace is already decided for this case. Add documents to the workspace (Projects → Add sources…) and review again."))
+                    .frame(minHeight: 160)
+            } else {
+                List {
+                    Section("New documents — tick what to include") {
+                        ForEach(preview.pending) { item in
+                            Toggle(isOn: Binding(get: { chosen.contains(item.id) },
+                                                 set: { on in if on { chosen.insert(item.id) } else { chosen.remove(item.id) } })) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.label).font(.callout)
+                                    Text(item.isRoot ? "In the workspace" : "Inside \(item.parentLabel ?? "a workspace document") (attachment, archive member or message)")
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                        }
+                    }
+                    if !preview.excluded.isEmpty {
+                        Section("Excluded — stay excluded") {
+                            ForEach(preview.excluded) { item in
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.label).font(.callout).foregroundStyle(.secondary)
+                                    if let n = item.note { Text(n).font(.caption2).foregroundStyle(.tertiary) }
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(minHeight: 220, maxHeight: 360)
+                HStack {
+                    Button("Tick all") { chosen = Set(preview.pending.map(\.id)) }.controlSize(.small)
+                    Button("Untick all") { chosen = [] }.controlSize(.small)
+                    Spacer()
+                }
+            }
+            Text("After adding, results and approvals saved earlier were produced over the earlier scope; run the jobs again to cover the new documents. Each inclusion is recorded in the case's log.")
+                .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Cancel", role: .cancel) { onCancel() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(chosen.count == 1 ? "Add 1 document to this case" : "Add \(chosen.count) documents to this case") { onApprove(chosen) }
+                    .buttonStyle(.borderedProminent).tint(Theme.brand)
+                    .disabled(chosen.isEmpty)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("jobs.scope.approve")
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 560, idealWidth: 640)
     }
 }
 
