@@ -9,8 +9,15 @@
 //  inconsistencies — reached by trying to DISCONFIRM, not to confirm. The matrix
 //  aids judgment; it never computes a verdict.
 //
-//  Pure Codable value (persists on-device as JSON, no schema migration). The
-//  report renderer is pure text, reused for copy / export / print.
+//  Investigator workflow review 2026-10-30, I3: a cell nobody has rated is UNASSESSED, not
+//  neutral — it carries no information and is shown as such; the matrix reports its rating
+//  coverage; hypotheses with the same score are presented together; and with no
+//  discriminating assessed evidence the analysis states that no preference is established.
+//  An evidence row may carry a structured citation (an exact source version and quote); a row
+//  without one is the investigator's own note and is labelled so.
+//
+//  Pure Codable value; persisted by ACHRepository (schema v152, v166). The report renderer is
+//  pure text, reused for copy / export / print.
 //
 
 import Foundation
@@ -47,6 +54,10 @@ public nonisolated enum ACHConsistency: String, Codable, Sendable, CaseIterable,
         default: return 0
         }
     }
+
+    /// The glyph for a cell nobody has rated. Distinct from N: it says nothing about the evidence.
+    public static let unassessedSymbol = "—"
+    public static let unassessedLabel = "Unassessed"
 }
 
 public nonisolated struct ACHHypothesis: Codable, Identifiable, Hashable, Sendable {
@@ -58,8 +69,44 @@ public nonisolated struct ACHHypothesis: Codable, Identifiable, Hashable, Sendab
 public nonisolated struct ACHEvidence: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID = UUID()
     public var text: String
-    public var source: String = ""   // a document number / citation, optional
-    public init(text: String, source: String = "") { self.text = text; self.source = source }
+    /// Free text: a document number, a note on where it came from. With no `citation` this is the
+    /// investigator's own note, not a source.
+    public var source: String = ""
+    /// A structured citation — an exact source version (and quote) in the case's scope. Optional;
+    /// older rows have none.
+    public var citation: StudioEvidenceRef?
+    public init(text: String, source: String = "", citation: StudioEvidenceRef? = nil) {
+        self.text = text; self.source = source; self.citation = citation
+    }
+    /// True when the row points at an exact source version or passage.
+    public var isCited: Bool { citation?.sourceVersionID != nil || citation?.objectID != nil || citation?.blockID != nil }
+}
+
+/// What the assessed matrix establishes about a preference — descriptive, never a finding.
+public nonisolated enum ACHPreference: Equatable, Sendable {
+    /// No cell has been rated.
+    case noAssessment
+    /// Cells are rated, but no evidence row discriminates between hypotheses (every assessed row
+    /// rates the same across them, or the scores are all equal).
+    case noDiscriminatingEvidence
+    /// Two or more hypotheses share the fewest inconsistency points.
+    case tied([ACHHypothesis], score: Int)
+    /// One hypothesis alone has the fewest inconsistency points, on assessed, diagnostic evidence.
+    case leading(ACHHypothesis, score: Int, runnerUpScore: Int, diagnostic: [ACHEvidence])
+
+    /// The hypothesis the matrix singles out, when it does.
+    public var leading: ACHHypothesis? {
+        if case .leading(let h, _, _, _) = self { return h }
+        return nil
+    }
+    /// Every hypothesis with the fewest points (one when leading, several when tied, none otherwise).
+    public var candidates: [ACHHypothesis] {
+        switch self {
+        case .leading(let h, _, _, _): return [h]
+        case .tied(let hs, _): return hs
+        default: return []
+        }
+    }
 }
 
 public nonisolated enum ACHConfidence: String, Codable, Sendable, CaseIterable {
@@ -90,7 +137,8 @@ public nonisolated struct ACHAnalysis: Codable, Identifiable, Hashable, Sendable
 
     public var hypotheses: [ACHHypothesis] = []
     public var evidence: [ACHEvidence] = []
-    /// Cell ratings keyed by "evidenceID|hypothesisID"; absent = neutral.
+    /// Cell ratings keyed by "evidenceID|hypothesisID"; absent = UNASSESSED (not neutral — a
+    /// neutral rating is an explicit `.neutral` entry).
     public var ratings: [String: ACHConsistency] = [:]
     public var assumptions: [String] = []
     public var indicators: [String] = []   // "indicators to watch" (Heuer step 8)
@@ -105,32 +153,115 @@ public nonisolated struct ACHAnalysis: Codable, Identifiable, Hashable, Sendable
     public static func key(_ evidenceID: UUID, _ hypothesisID: UUID) -> String {
         "\(evidenceID.uuidString)|\(hypothesisID.uuidString)"
     }
-    public func rating(_ e: ACHEvidence, _ h: ACHHypothesis) -> ACHConsistency {
-        ratings[Self.key(e.id, h.id)] ?? .neutral
+    /// The rating of a cell, or nil when nobody has rated it.
+    public func rating(_ e: ACHEvidence, _ h: ACHHypothesis) -> ACHConsistency? {
+        ratings[Self.key(e.id, h.id)]
+    }
+    /// The matrix glyph for a cell: its rating's symbol, or the unassessed dash.
+    public func symbol(_ e: ACHEvidence, _ h: ACHHypothesis) -> String {
+        rating(e, h)?.symbol ?? ACHConsistency.unassessedSymbol
     }
 
-    /// Total inconsistency points against a hypothesis (lower = more robust).
+    /// Total inconsistency points against a hypothesis (lower = more robust). An unassessed cell
+    /// adds nothing — which is why the score is read with `assessedCount` beside it.
     public func inconsistencyScore(_ h: ACHHypothesis) -> Int {
-        evidence.reduce(0) { $0 + rating($1, h).inconsistencyWeight }
+        evidence.reduce(0) { $0 + (rating($1, h)?.inconsistencyWeight ?? 0) }
+    }
+    /// How many of this hypothesis's cells are rated.
+    public func assessedCount(_ h: ACHHypothesis) -> Int {
+        evidence.filter { rating($0, h) != nil }.count
     }
 
-    /// Hypotheses ranked by fewest inconsistencies (the ACH ordering).
+    // MARK: Coverage
+
+    public var cellCount: Int { evidence.count * hypotheses.count }
+    public var assessedCellCount: Int {
+        evidence.reduce(0) { n, e in n + hypotheses.filter { rating(e, $0) != nil }.count }
+    }
+    public var unassessedCellCount: Int { cellCount - assessedCellCount }
+    /// 0…1; 0 when there are no cells.
+    public var coverage: Double { cellCount == 0 ? 0 : Double(assessedCellCount) / Double(cellCount) }
+    public var isFullyAssessed: Bool { cellCount > 0 && assessedCellCount == cellCount }
+    /// The (evidence, hypothesis) pairs still to rate, in matrix order.
+    public var unassessedCells: [(evidence: ACHEvidence, hypothesis: ACHHypothesis)] {
+        var out: [(ACHEvidence, ACHHypothesis)] = []
+        for e in evidence { for h in hypotheses where rating(e, h) == nil { out.append((e, h)) } }
+        return out
+    }
+    /// True when every cell of this evidence row is rated.
+    public func isFullyAssessed(_ e: ACHEvidence) -> Bool {
+        !hypotheses.isEmpty && hypotheses.allSatisfy { rating(e, $0) != nil }
+    }
+
+    /// Hypotheses ranked by fewest inconsistencies (the ACH ordering). Equal scores keep the
+    /// matrix order, so a tie is visible as adjacent equal scores.
     public var ranking: [(hypothesis: ACHHypothesis, score: Int)] {
         hypotheses.map { ($0, inconsistencyScore($0)) }
             .sorted { $0.score < $1.score }
     }
 
-    /// The hypothesis ACH points to (fewest inconsistencies). Advisory only —
-    /// the analyst still records the conclusion explicitly.
-    public var leastInconsistent: ACHHypothesis? { ranking.first?.hypothesis }
+    /// What the ratings establish. A sole leading hypothesis needs (a) rated cells, (b) at least one
+    /// fully assessed evidence row that rates differently across hypotheses, and (c) a unique
+    /// lowest score. Otherwise the result is a tie, or no preference at all.
+    public var preference: ACHPreference {
+        guard hypotheses.count > 1, assessedCellCount > 0 else { return .noAssessment }
+        let diagnostic = evidence.filter { isDiagnostic($0) }
+        let ranked = ranking
+        guard let best = ranked.first else { return .noAssessment }
+        let top = ranked.filter { $0.score == best.score }.map(\.hypothesis)
+        if top.count > 1 {
+            // Every hypothesis equal on the points → nothing discriminates; some equal → a tie.
+            return top.count == hypotheses.count ? .noDiscriminatingEvidence : .tied(top, score: best.score)
+        }
+        guard !diagnostic.isEmpty else { return .noDiscriminatingEvidence }
+        let runnerUp = ranked.dropFirst().first?.score ?? best.score
+        return .leading(best.hypothesis, score: best.score, runnerUpScore: runnerUp, diagnostic: diagnostic)
+    }
 
-    /// Evidence is DIAGNOSTIC when it rates differently across hypotheses — that's
-    /// what actually discriminates. Evidence rated the same everywhere carries no
-    /// diagnostic value (Heuer: focus on the diagnostic items).
+    /// The hypothesis ACH singles out — only when one alone has the fewest inconsistencies on
+    /// assessed, discriminating evidence. Nil for an unrated matrix, a tie, or evidence that
+    /// rates the same everywhere. Advisory only — the analyst still records the conclusion.
+    public var leastInconsistent: ACHHypothesis? { preference.leading }
+
+    /// Evidence is DIAGNOSTIC when it is FULLY ASSESSED and rates differently across hypotheses —
+    /// that's what actually discriminates. Evidence rated the same everywhere carries no
+    /// diagnostic value (Heuer: focus on the diagnostic items); evidence with an unassessed cell
+    /// cannot be called diagnostic yet.
     public func isDiagnostic(_ e: ACHEvidence) -> Bool {
-        guard hypotheses.count > 1 else { return false }
-        let ratingsForE = hypotheses.map { rating(e, $0) }
-        return Set(ratingsForE.map(\.symbol)).count > 1
+        guard hypotheses.count > 1, isFullyAssessed(e) else { return false }
+        return Set(hypotheses.compactMap { rating(e, $0)?.symbol }).count > 1
+    }
+
+    /// The index label of a hypothesis ("H2") in matrix order.
+    public func label(of h: ACHHypothesis) -> String {
+        "H\((hypotheses.firstIndex { $0.id == h.id } ?? 0) + 1)"
+    }
+
+    /// The preference in words, for the screen and the report. Descriptive of the ratings; it
+    /// never turns a score into a probability or a finding.
+    public var preferenceStatement: String {
+        let unrated = unassessedCellCount
+        switch preference {
+        case .noAssessment:
+            return cellCount == 0 ? "No cells to rate yet."
+                : "No cell is rated yet (\(cellCount) unassessed). No preference is established."
+        case .noDiscriminatingEvidence:
+            var s = "No assessed evidence distinguishes the hypotheses, so no preference is established."
+            if unrated > 0 { s += " \(unrated) cell\(unrated == 1 ? " is" : "s are") still unassessed." }
+            return s
+        case .tied(let hs, let score):
+            var s = hs.map { label(of: $0) }.joined(separator: ", ") + " tie at \(score) inconsistency point\(score == 1 ? "" : "s"); no preference is established between them."
+            if unrated > 0 { s += " \(unrated) cell\(unrated == 1 ? " is" : "s are") still unassessed." }
+            return s
+        case .leading(let h, let score, let runnerUp, let diagnostic):
+            let items = diagnostic.prefix(4).map { e in
+                "\(e.text.prefix(60))\(e.text.count > 60 ? "…" : "") (" + hypotheses.map { "\(label(of: $0)) \(symbol(e, $0))" }.joined(separator: ", ") + ")"
+            }
+            var s = "\(label(of: h)) has the fewest inconsistency points (\(score), against \(runnerUp) for the next), on \(diagnostic.count) diagnostic item\(diagnostic.count == 1 ? "" : "s"): " + items.joined(separator: "; ") + "."
+            if unrated > 0 { s += " \(unrated) cell\(unrated == 1 ? " is" : "s are") still unassessed, so this can change." }
+            s += " A score describes the ratings; it is not a probability or a finding."
+            return s
+        }
     }
 
     // MARK: Progress
@@ -201,19 +332,23 @@ public enum ACHReportRenderer {
             let sep = "|---|" + String(repeating: "---|", count: a.hypotheses.count + 1)
             out += header + "\n" + sep + "\n"
             for e in a.evidence {
-                let cells = a.hypotheses.map { a.rating(e, $0).symbol }.joined(separator: " | ")
-                let src = e.source.trimmed.isEmpty ? "" : " _(\(e.source))_"
-                out += "| \(e.text)\(src) | \(cells) | \(a.isDiagnostic(e) ? "✓" : "") |\n"
+                let cells = a.hypotheses.map { a.symbol(e, $0) }.joined(separator: " | ")
+                let src = citationNote(e)
+                let diag = a.isDiagnostic(e) ? "✓" : (a.isFullyAssessed(e) ? "" : "not fully assessed")
+                out += "| \(e.text)\(src) | \(cells) | \(diag) |\n"
             }
             out += "\n"
+            out += "**Assessment coverage:** \(a.assessedCellCount) of \(a.cellCount) cells rated"
+            out += a.unassessedCellCount == 0 ? ".\n\n" : "; \(a.unassessedCellCount) unassessed (shown as —).\n\n"
 
             // Inconsistency scores + ranking
             out += "## Inconsistency scores (fewest = most robust)\n\n"
             for (i, entry) in a.ranking.enumerated() {
                 let idx = (a.hypotheses.firstIndex { $0.id == entry.hypothesis.id } ?? 0) + 1
-                out += "\(i + 1). H\(idx) — \(entry.hypothesis.text): **\(entry.score)** inconsistency point\(entry.score == 1 ? "" : "s")\n"
+                out += "\(i + 1). H\(idx) — \(entry.hypothesis.text): **\(entry.score)** inconsistency point\(entry.score == 1 ? "" : "s") (\(a.assessedCount(entry.hypothesis)) of \(a.evidence.count) cells rated)\n"
             }
-            out += "\n_Legend: CC very consistent · C consistent · N neutral · I inconsistent · II very inconsistent. Only I/II count against a hypothesis._\n\n"
+            out += "\n**What the ratings establish:** \(a.preferenceStatement)\n"
+            out += "\n_Legend: CC very consistent · C consistent · N neutral · I inconsistent · II very inconsistent · — unassessed. Only I/II count against a hypothesis; an unassessed cell counts for nothing and is not neutral._\n\n"
         }
 
         // Assumptions / indicators
@@ -241,5 +376,18 @@ public enum ACHReportRenderer {
         out += "---\n\n_ACH aids judgment; it does not compute a verdict. A low score means a hypothesis survives the evidence best, not that it is proven — if several remain viable, say so._\n"
         out += StudioAudit.appendix(a.history)
         return out
+    }
+
+    /// How an evidence row is sourced: a structured citation (exact version, quote) or the
+    /// investigator's own note.
+    static func citationNote(_ e: ACHEvidence) -> String {
+        if e.isCited, let c = e.citation {
+            var parts: [String] = []
+            if let v = c.sourceVersionID { parts.append("version \(v.uuidString.prefix(8))") }
+            if let q = c.quote?.trimmed, !q.isEmpty { parts.append("“\(q.prefix(120))\(q.count > 120 ? "…" : "")”") }
+            if !e.source.trimmed.isEmpty { parts.append(e.source.trimmed) }
+            return " _(cited: \(parts.joined(separator: " · ")))_"
+        }
+        return e.source.trimmed.isEmpty ? " _(investigator's note — uncited)_" : " _(investigator's note — uncited: \(e.source.trimmed))_"
     }
 }

@@ -81,4 +81,100 @@ struct ACHAnalysisTests {
         let data = try JSONEncoder().encode(original)
         #expect(try JSONDecoder().decode([ACHAnalysis].self, from: data) == original)
     }
+
+    // MARK: Investigator workflow review 2026-10-30, I3
+
+    private func twoByOne() -> (ACHAnalysis, ACHHypothesis, ACHHypothesis, ACHEvidence) {
+        var a = ACHAnalysis(title: "x", now: t0)
+        let h1 = ACHHypothesis(text: "Transcription error"), h2 = ACHHypothesis(text: "Deliberate change")
+        a.hypotheses = [h1, h2]
+        let e = ACHEvidence(text: "The dates differ")
+        a.evidence = [e]
+        return (a, h1, h2, e)
+    }
+
+    @Test("No ratings: two rivals and one unrated row establish no preference — not a 'leading' hypothesis")
+    func unratedMatrixHasNoPreference() {
+        let (a, h1, h2, e) = twoByOne()
+        #expect(a.rating(e, h1) == nil && a.rating(e, h2) == nil, "an unrated cell is unassessed, not neutral")
+        #expect(a.inconsistencyScore(h1) == 0 && a.inconsistencyScore(h2) == 0)
+        #expect(a.preference == .noAssessment)
+        #expect(a.leastInconsistent == nil, "a tie of zeros on nothing assessed must not single out the first hypothesis")
+        #expect(a.preference.candidates.isEmpty)
+        #expect(a.assessedCellCount == 0 && a.cellCount == 2 && a.unassessedCellCount == 2 && a.coverage == 0)
+        #expect(a.preferenceStatement.contains("No preference is established"))
+        #expect(a.isDiagnostic(e) == false)
+    }
+
+    @Test("Partial ratings: one rated cell does not make the unrated hypothesis the leader")
+    func partialRatingsNoSolePreference() {
+        var (a, h1, h2, e) = twoByOne()
+        a.ratings[ACHAnalysis.key(e.id, h1.id)] = .inconsistent    // h1: 1 point; h2: unassessed → 0 by default
+        #expect(a.ranking.first?.hypothesis.id == h2.id, "the raw ranking still orders by points")
+        #expect(a.leastInconsistent == nil, "but an unrated hypothesis is not 'least inconsistent'")
+        #expect(a.preference == .noDiscriminatingEvidence)
+        #expect(a.isDiagnostic(e) == false, "a row with an unassessed cell is not diagnostic yet")
+        #expect(a.isFullyAssessed(e) == false)
+        #expect(a.assessedCellCount == 1 && a.unassessedCellCount == 1)
+        #expect(a.preferenceStatement.contains("1 cell is still unassessed"))
+        // Rate the second cell the same → fully assessed, still nothing discriminates.
+        a.ratings[ACHAnalysis.key(e.id, h2.id)] = .inconsistent
+        #expect(a.preference == .noDiscriminatingEvidence && a.leastInconsistent == nil)
+        #expect(a.isFullyAssessed && a.isDiagnostic(e) == false)
+    }
+
+    @Test("Tied scores are presented together; a third hypothesis behind them does not break the tie")
+    func tiesArePreserved() {
+        var a = ACHAnalysis(title: "x", now: t0)
+        let h1 = ACHHypothesis(text: "H1"), h2 = ACHHypothesis(text: "H2"), h3 = ACHHypothesis(text: "H3")
+        a.hypotheses = [h1, h2, h3]
+        let e = ACHEvidence(text: "e")
+        a.evidence = [e]
+        a.ratings[ACHAnalysis.key(e.id, h1.id)] = .consistent
+        a.ratings[ACHAnalysis.key(e.id, h2.id)] = .neutral
+        a.ratings[ACHAnalysis.key(e.id, h3.id)] = .veryInconsistent
+        guard case .tied(let tied, let score) = a.preference else { Issue.record("expected a tie, got \(a.preference)"); return }
+        #expect(Set(tied.map(\.id)) == [h1.id, h2.id] && score == 0)
+        #expect(a.leastInconsistent == nil)
+        #expect(a.preference.candidates.count == 2)
+        #expect(a.preferenceStatement.contains("H1, H2 tie at 0 inconsistency points"))
+        #expect(a.preferenceStatement.contains("no preference is established"))
+        // Neutral and unassessed are different states: h2 is rated N, nothing is unassessed.
+        #expect(a.rating(e, h2) == .neutral && a.unassessedCellCount == 0)
+    }
+
+    @Test("A genuine difference on assessed diagnostic evidence is explained from the ratings, without a probability")
+    func leadingExplainedByRatings() {
+        var (a, h1, h2, e) = twoByOne()
+        a.ratings[ACHAnalysis.key(e.id, h1.id)] = .consistent
+        a.ratings[ACHAnalysis.key(e.id, h2.id)] = .veryInconsistent
+        guard case .leading(let h, let score, let runnerUp, let diagnostic) = a.preference else { Issue.record("expected leading, got \(a.preference)"); return }
+        #expect(h.id == h1.id && score == 0 && runnerUp == 2 && diagnostic.map(\.id) == [e.id])
+        #expect(a.leastInconsistent?.id == h1.id)
+        let s = a.preferenceStatement
+        #expect(s.contains("H1 has the fewest inconsistency points (0, against 2 for the next)"))
+        #expect(s.contains("H1 C, H2 II"), "the explanation names the underlying ratings")
+        #expect(s.contains("not a probability or a finding"))
+        #expect(!s.contains("%"))
+    }
+
+    @Test("Unassessed and neutral are different states in the report; an uncited row is labelled the investigator's note, a cited one shows its citation")
+    func reportDistinguishesStates() {
+        var (a, h1, h2, e) = twoByOne()
+        let cited = ACHEvidence(text: "Bank debit of ₹10,000 on 3 March", source: "statement p.2",
+                                citation: StudioEvidenceRef(sourceVersionID: UUID(uuidString: "0A0B0C0D-0000-0000-0000-000000000001"), quote: "Debit 10,000.00"))
+        a.evidence = [e, cited]
+        a.ratings[ACHAnalysis.key(e.id, h1.id)] = .neutral          // explicit N
+        // e × h2 left unassessed; the cited row unrated entirely.
+        let md = ACHReportRenderer.markdown(a, generatedAt: t0)
+        #expect(md.contains("| The dates differ _(investigator's note — uncited)_ | N | — |"))
+        #expect(md.contains("_(cited: version 0A0B0C0D · “Debit 10,000.00” · statement p.2)_"))
+        #expect(md.contains("**Assessment coverage:** 1 of 4 cells rated; 3 unassessed (shown as —)."))
+        #expect(md.contains("**What the ratings establish:** No assessed evidence distinguishes the hypotheses, so no preference is established. 3 cells are still unassessed."))
+        #expect(md.contains("an unassessed cell counts for nothing and is not neutral"))
+        #expect(cited.isCited && !e.isCited)
+        // An older JSON without the citation key still decodes (citation nil).
+        let old = #"{"id":"\#(UUID().uuidString)","text":"legacy","source":""}"#.data(using: .utf8)!
+        #expect((try? JSONDecoder().decode(ACHEvidence.self, from: old))?.citation == nil)
+    }
 }

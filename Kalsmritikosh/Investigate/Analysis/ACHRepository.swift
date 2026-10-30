@@ -215,15 +215,18 @@ public actor ACHRepository {
         let liveE = Set(try db.query("SELECT id FROM ach_evidence WHERE analysis_id = ? AND retracted_at IS NULL;",
                                      [.uuid(a.id)]).compactMap { $0.uuid(0) })
         for (i, e) in a.evidence.enumerated() {
+            let citation: SQLValue = e.citation.map { .text(json($0)) } ?? .null
             try db.exec("""
-                INSERT INTO ach_evidence (id, analysis_id, position, text, source, created_by, created_at, updated_by, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?)
+                INSERT INTO ach_evidence (id, analysis_id, position, text, source, citation_json, created_by, created_at, updated_by, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET position = excluded.position, text = excluded.text, source = excluded.source,
+                    citation_json = excluded.citation_json,
                     updated_by = excluded.updated_by, updated_at = excluded.updated_at, retracted_at = NULL, retracted_by = NULL
                 WHERE ach_evidence.analysis_id = excluded.analysis_id
                   AND (ach_evidence.position != excluded.position OR ach_evidence.text != excluded.text
-                       OR ach_evidence.source != excluded.source OR ach_evidence.retracted_at IS NOT NULL);
-                """, [.uuid(e.id), .uuid(a.id), .integer(Int64(i)), .text(e.text), .text(e.source),
+                       OR ach_evidence.source != excluded.source OR ach_evidence.citation_json IS NOT excluded.citation_json
+                       OR ach_evidence.retracted_at IS NOT NULL);
+                """, [.uuid(e.id), .uuid(a.id), .integer(Int64(i)), .text(e.text), .text(e.source), citation,
                       .text(actor), .date(date), .text(actor), .date(date)])
         }
         for gone in liveE.subtracting(a.evidence.map(\.id)) {
@@ -231,7 +234,9 @@ public actor ACHRepository {
                         [.date(date), .text(actor), .uuid(gone)])
         }
 
-        // Cells — keyed "evidenceID|hypothesisID" exactly as ACHAnalysis.key builds them.
+        // Cells — keyed "evidenceID|hypothesisID" exactly as ACHAnalysis.key builds them. A key absent
+        // from `a.ratings` is UNASSESSED: a stored rating it no longer carries is set back to
+        // 'unassessed' (who cleared it, when) — a rating is never silently left standing.
         for (key, rating) in a.ratings {
             let parts = key.split(separator: "|", omittingEmptySubsequences: false)
             guard parts.count == 2, let eid = UUID(uuidString: String(parts[0])), let hid = UUID(uuidString: String(parts[1])) else { continue }
@@ -243,7 +248,17 @@ public actor ACHRepository {
                 WHERE ach_cells.analysis_id = excluded.analysis_id AND ach_cells.consistency != excluded.consistency;
                 """, [.uuid(a.id), .uuid(eid), .uuid(hid), .text(rating.rawValue), .text(actor), .date(date)])
         }
+        let stored = try db.query("SELECT evidence_id, hypothesis_id FROM ach_cells WHERE analysis_id = ? AND consistency != ?;",
+                                  [.uuid(a.id), .text(Self.unassessed)])
+        for r in stored {
+            guard let eid = r.uuid(0), let hid = r.uuid(1), a.ratings[ACHAnalysis.key(eid, hid)] == nil else { continue }
+            try db.exec("UPDATE ach_cells SET consistency = ?, updated_by = ?, updated_at = ? WHERE evidence_id = ? AND hypothesis_id = ?;",
+                        [.text(Self.unassessed), .text(actor), .date(date), .uuid(eid), .uuid(hid)])
+        }
     }
+
+    /// The stored state of a cell whose rating was cleared (schema v166). Read back as "no rating".
+    static let unassessed = "unassessed"
 
     private nonisolated struct Head: Sendable {
         var analysis: ACHAnalysis
@@ -286,7 +301,7 @@ public actor ACHRepository {
             WHERE analysis_id IN (SELECT value FROM json_each(?)) AND retracted_at IS NULL ORDER BY analysis_id, position, created_at;
             """, [.text(ids)])
         let eRows = try await database.query("""
-            SELECT analysis_id, id, text, source FROM ach_evidence
+            SELECT analysis_id, id, text, source, citation_json FROM ach_evidence
             WHERE analysis_id IN (SELECT value FROM json_each(?)) AND retracted_at IS NULL ORDER BY analysis_id, position, created_at;
             """, [.text(ids)])
         let cRows = try await database.query("""
@@ -302,11 +317,12 @@ public actor ACHRepository {
         var evs: [UUID: [ACHEvidence]] = [:]
         for r in eRows {
             guard let aid = r.uuid(0), let id = r.uuid(1), let text = r.string(2) else { continue }
-            var e = ACHEvidence(text: text, source: r.string(3) ?? ""); e.id = id
+            var e = ACHEvidence(text: text, source: r.string(3) ?? "", citation: Self.decode(StudioEvidenceRef.self, r.string(4))); e.id = id
             evs[aid, default: []].append(e)
         }
         var cells: [UUID: [String: ACHConsistency]] = [:]
         for r in cRows {
+            // An 'unassessed' row (a cleared rating) is no rating: the key stays absent.
             guard let aid = r.uuid(0), let eid = r.uuid(1), let hid = r.uuid(2),
                   let c = r.string(3).flatMap(ACHConsistency.init(rawValue:)) else { continue }
             cells[aid, default: [:]][ACHAnalysis.key(eid, hid)] = c

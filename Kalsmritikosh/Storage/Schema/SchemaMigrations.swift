@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 165
+    public static let latestVersion = 166
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -798,7 +798,8 @@ public enum SchemaMigrations {
         (162, v162),
         (163, v163),
         (164, v164),
-        (165, v165)
+        (165, v165),
+        (166, v166)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7948,5 +7949,25 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'job_result_exports is append-only'); END;
     """
 
-
+    // MARK: - v166 — ACH unassessed cells and structured citations (investigator workflow review
+    // 2026-10-30, I3). A cell nobody rated used to be indistinguishable from a neutral rating, and a
+    // rating once written could not be taken back to "unassessed" because the CHECK admitted only the
+    // five ratings. ach_cells is rebuilt with 'unassessed' as a recordable state (who cleared it, when),
+    // existing rows carried over unchanged; ach_evidence gains citation_json — an exact source version
+    // and quote — so an uncited row can be labelled as the investigator's own note.
+    private static let v166: String = """
+    ALTER TABLE ach_evidence ADD COLUMN citation_json TEXT;
+    CREATE TABLE IF NOT EXISTS ach_cells__v166 (
+        analysis_id TEXT NOT NULL, evidence_id TEXT NOT NULL, hypothesis_id TEXT NOT NULL,
+        consistency TEXT NOT NULL CHECK (consistency IN ('veryConsistent','consistent','neutral','inconsistent','veryInconsistent','unassessed')),
+        updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        PRIMARY KEY (evidence_id, hypothesis_id)
+    );
+    INSERT OR IGNORE INTO ach_cells__v166 (analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at)
+        SELECT analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at FROM ach_cells;
+    DROP INDEX IF EXISTS idx_ach_cells_analysis;
+    DROP TABLE ach_cells;
+    ALTER TABLE ach_cells__v166 RENAME TO ach_cells;
+    CREATE INDEX IF NOT EXISTS idx_ach_cells_analysis ON ach_cells(analysis_id);
+    """
 }

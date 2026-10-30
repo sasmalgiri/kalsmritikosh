@@ -40,6 +40,9 @@ public struct ACHMatrixView: View {
     @State private var newAssumption = ""
     @State private var newIndicator = ""
     @State private var showExporter = false
+    /// The sources in the active analysis's case scope (exact versions with labels), for citations.
+    @State private var citationChoices: [(id: UUID, label: String)] = []
+    @State private var citationChoicesFor: UUID?
 
     /// When set, the list shows only this case's analyses and new ones are filed under it.
     private let caseID: UUID?
@@ -237,6 +240,24 @@ public struct ACHMatrixView: View {
 
     // MARK: Studio
 
+    /// The exact source versions in the analysis's case scope, labelled — what an evidence row may
+    /// cite. An analysis with no case offers no citations (its rows stay investigator's notes).
+    private func loadCitationChoices(for a: ACHAnalysis) async {
+        guard let scope = scopes[a.id] ?? caseID else { citationChoices = []; citationChoicesFor = a.id; return }
+        guard citationChoicesFor != a.id else { return }
+        citationChoicesFor = a.id
+        guard let custody = appState.investigationCustody, let files = appState.caseFiles else { citationChoices = []; return }
+        do {
+            let entries = try await custody.manifest(caseID: scope)
+            let ids = entries.map(\.sourceVersionID)
+            let labels = try await files.file.sourceLabels(ids)
+            citationChoices = ids.map { ($0, labels[$0] ?? "Source \($0.uuidString.prefix(8))") }
+        } catch {
+            KalsmritikoshLog.ui.error("ACH citation choices failed: \(error.localizedDescription, privacy: .public)")
+            citationChoices = []
+        }
+    }
+
     private func studio(_ a: Binding<ACHAnalysis>) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -264,6 +285,7 @@ public struct ACHMatrixView: View {
                 .padding(24).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity, alignment: .top)
             }
         }
+        .task(id: a.wrappedValue.id) { await loadCitationChoices(for: a.wrappedValue) }
     }
 
     private func questionSection(_ a: Binding<ACHAnalysis>) -> some View {
@@ -322,85 +344,171 @@ public struct ACHMatrixView: View {
                             HStack(spacing: 6) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     TextField("Evidence", text: $e.text).textFieldStyle(.plain).font(.caption)
-                                    TextField("source (optional)", text: $e.source).textFieldStyle(.plain).font(.caption2).foregroundStyle(.secondary)
+                                    citationRow($e)
                                 }.frame(width: 240, alignment: .leading)
                                 ForEach(hyps) { h in cell(a, evidenceID: e.id, hyp: h) }
-                                Image(systemName: a.wrappedValue.isDiagnostic(e) ? "checkmark.circle.fill" : "minus")
-                                    .foregroundStyle(a.wrappedValue.isDiagnostic(e) ? Color.green : Color.secondary)
-                                    .frame(width: 40)
-                                    .help(a.wrappedValue.isDiagnostic(e) ? "Diagnostic — it distinguishes the hypotheses" : "Not diagnostic — rated the same across hypotheses")
+                                diagnosticMark(a.wrappedValue, e)
                                 Button { a.wrappedValue.evidence.removeAll { $0.id == e.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                                     .buttonStyle(.plain).foregroundStyle(.secondary)
                             }
                             .padding(.vertical, 2)
                         }
                         Divider()
-                        // inconsistency score row
+                        // inconsistency score row — every hypothesis with the fewest points is marked, so
+                        // a tie shows as several marks, and an unrated matrix shows none.
+                        let candidates = Set(a.wrappedValue.preference.candidates.map(\.id))
                         HStack(spacing: 6) {
                             Text("Inconsistency").font(.caption2.weight(.bold)).frame(width: 240, alignment: .leading)
                             ForEach(hyps) { h in
-                                Text("\(a.wrappedValue.inconsistencyScore(h))")
-                                    .font(.caption.weight(.bold)).frame(width: 60)
-                                    .foregroundStyle(a.wrappedValue.leastInconsistent?.id == h.id ? Color.green : Color.primary)
+                                VStack(spacing: 0) {
+                                    Text("\(a.wrappedValue.inconsistencyScore(h))")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(candidates.contains(h.id) ? Color.green : Color.primary)
+                                    Text("\(a.wrappedValue.assessedCount(h))/\(a.wrappedValue.evidence.count) rated")
+                                        .font(.caption2).foregroundStyle(.tertiary)
+                                }
+                                .frame(width: 60)
+                                .accessibilityLabel("\(a.wrappedValue.label(of: h)): \(a.wrappedValue.inconsistencyScore(h)) inconsistency points, \(a.wrappedValue.assessedCount(h)) of \(a.wrappedValue.evidence.count) cells rated")
                             }
                             Spacer().frame(width: 40)
                         }
                     }
                 }
                 .frame(maxHeight: 420)
+                coverageLine(a.wrappedValue)
                 HStack(spacing: 8) {
                     TextField("Add evidence", text: $newEvidence).textFieldStyle(.roundedBorder)
                         .onSubmit { addEvidence(a) }
                     Button { addEvidence(a) } label: { Label("Add evidence", systemImage: "plus") }
                         .disabled(newEvidence.trimmed.isEmpty)
                 }
-                Text("Rate each cell for how consistent the evidence is with that hypothesis: CC very consistent · C consistent · N neutral · I inconsistent · II very inconsistent. Only I / II count against a hypothesis.")
+                Text("Rate each cell for how consistent the evidence is with that hypothesis: CC very consistent · C consistent · N neutral · I inconsistent · II very inconsistent · — unassessed (not yet rated; it says nothing). Only I / II count against a hypothesis.")
                     .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
+    /// "n of m cells rated" with the unassessed count — the matrix's coverage, always visible.
+    private func coverageLine(_ a: ACHAnalysis) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: a.isFullyAssessed ? "checkmark.circle" : "circle.dotted")
+                .foregroundStyle(a.isFullyAssessed ? Color.green : Color.orange)
+            Text(a.cellCount == 0 ? "No cells to rate yet."
+                 : "\(a.assessedCellCount) of \(a.cellCount) cells rated" + (a.unassessedCellCount == 0 ? "." : " · \(a.unassessedCellCount) unassessed (shown as —)."))
+                .font(.caption)
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("ach.coverage")
+    }
+
+    private func diagnosticMark(_ a: ACHAnalysis, _ e: ACHEvidence) -> some View {
+        let diagnostic = a.isDiagnostic(e)
+        let full = a.isFullyAssessed(e)
+        return Image(systemName: diagnostic ? "checkmark.circle.fill" : (full ? "minus" : "questionmark.circle"))
+            .foregroundStyle(diagnostic ? Color.green : (full ? Color.secondary : Color.orange))
+            .frame(width: 40)
+            .help(diagnostic ? "Diagnostic — it distinguishes the hypotheses"
+                  : (full ? "Not diagnostic — rated the same across hypotheses" : "Not fully assessed — rate every cell of this row first"))
+            .accessibilityLabel(diagnostic ? "Diagnostic" : (full ? "Not diagnostic" : "Not fully assessed"))
+    }
+
+    /// Below the evidence text: its citation (an exact source version in the case's scope, with an
+    /// optional quote) or, without one, the note that this is the investigator's own entry.
+    @ViewBuilder
+    private func citationRow(_ e: Binding<ACHEvidence>) -> some View {
+        HStack(spacing: 4) {
+            if e.wrappedValue.isCited, let c = e.wrappedValue.citation {
+                Image(systemName: "link").font(.caption2).foregroundStyle(.tint)
+                Text(citationLabel(c)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    .help("Cited: \(citationLabel(c))")
+                TextField("quote (optional)", text: Binding(get: { c.quote ?? "" },
+                                                            set: { var ref = c; ref.quote = $0.trimmed.isEmpty ? nil : $0; e.wrappedValue.citation = ref }))
+                    .textFieldStyle(.plain).font(.caption2)
+                Button { e.wrappedValue.citation = nil } label: { Label("Remove citation", systemImage: "link.badge.minus").labelStyle(.iconOnly) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Remove the citation — the row becomes an investigator's note")
+            } else {
+                Text("Investigator's note").font(.caption2).foregroundStyle(.orange)
+                    .help("Uncited — this row is your own entry, not a source. Cite a source version to change that.")
+                TextField("where from (optional)", text: e.source).textFieldStyle(.plain).font(.caption2).foregroundStyle(.secondary)
+                if !citationChoices.isEmpty {
+                    Menu {
+                        ForEach(citationChoices, id: \.id) { choice in
+                            Button(choice.label) { e.wrappedValue.citation = StudioEvidenceRef(sourceVersionID: choice.id) }
+                        }
+                    } label: { Label("Cite", systemImage: "link.badge.plus").labelStyle(.iconOnly) }
+                        .menuStyle(.borderlessButton).fixedSize().help("Cite an exact source version in this case's scope")
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func citationLabel(_ c: StudioEvidenceRef) -> String {
+        if let v = c.sourceVersionID, let l = citationChoices.first(where: { $0.id == v })?.label { return l }
+        if let v = c.sourceVersionID { return "Version \(v.uuidString.prefix(8))" }
+        return "Cited"
+    }
+
     private func cell(_ a: Binding<ACHAnalysis>, evidenceID: UUID, hyp: ACHHypothesis) -> some View {
         let key = ACHAnalysis.key(evidenceID, hyp.id)
-        let current = a.wrappedValue.ratings[key] ?? .neutral
+        let current = a.wrappedValue.ratings[key]
         return Menu {
             ForEach(ACHConsistency.allCases, id: \.self) { c in
                 Button("\(c.symbol) — \(c.label)") { a.wrappedValue.ratings[key] = c }
             }
+            Divider()
+            Button("\(ACHConsistency.unassessedSymbol) — \(ACHConsistency.unassessedLabel) (clear the rating)") { a.wrappedValue.ratings[key] = nil }
+                .disabled(current == nil)
         } label: {
-            Text(current.symbol)
+            Text(current?.symbol ?? ACHConsistency.unassessedSymbol)
                 .font(.caption.weight(.semibold))
+                .foregroundStyle(current == nil ? Color.secondary : Color.primary)
                 .frame(width: 60, height: 28)
                 .background(cellColor(current), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: current == nil ? [3, 3] : []))
+                    .foregroundStyle(current == nil ? Color.secondary.opacity(0.6) : Color.clear))
         }
         .menuStyle(.borderlessButton).fixedSize()
+        .help(current.map(\.label) ?? "Unassessed — not yet rated")
+        .accessibilityLabel("\(a.wrappedValue.label(of: hyp)) cell: \(current?.label ?? ACHConsistency.unassessedLabel)")
     }
 
-    private func cellColor(_ c: ACHConsistency) -> Color {
+    private func cellColor(_ c: ACHConsistency?) -> Color {
         switch c {
         case .veryInconsistent: return .red.opacity(0.28)
         case .inconsistent: return .red.opacity(0.14)
         case .veryConsistent: return .green.opacity(0.22)
         case .consistent: return .green.opacity(0.12)
         case .neutral: return .gray.opacity(0.12)
+        case nil: return .clear
         }
     }
 
     private func rankingSection(_ a: ACHAnalysis) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let candidates = Set(a.preference.candidates.map(\.id))
+        return VStack(alignment: .leading, spacing: 6) {
             Text("Ranking — fewest inconsistencies first").font(.callout.weight(.semibold))
             if !a.isReady { Text("Build the matrix to see the ranking.").font(.caption).foregroundStyle(.tertiary) }
             else {
                 ForEach(Array(a.ranking.enumerated()), id: \.element.hypothesis.id) { i, entry in
-                    let n = (a.hypotheses.firstIndex { $0.id == entry.hypothesis.id } ?? 0) + 1
                     HStack(spacing: 8) {
                         Text("\(i + 1).").font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                        Text("H\(n)").font(.caption.weight(.bold)).foregroundStyle(i == 0 ? Color.green : .secondary)
+                        Text(a.label(of: entry.hypothesis)).font(.caption.weight(.bold))
+                            .foregroundStyle(candidates.contains(entry.hypothesis.id) ? Color.green : .secondary)
                         Text(entry.hypothesis.text).font(.caption).lineLimit(1)
+                        if candidates.count > 1, candidates.contains(entry.hypothesis.id) {
+                            Text("tied").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(.orange.opacity(0.18), in: Capsule())
+                        }
                         Spacer()
-                        Text("\(entry.score) pt\(entry.score == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
+                        Text("\(entry.score) pt\(entry.score == 1 ? "" : "s") · \(a.assessedCount(entry.hypothesis))/\(a.evidence.count) rated")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                Text(a.preferenceStatement)
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("ach.preference")
                 Text("Lowest score = survives the evidence best. It is not proof — if several stay close, treat them as live.")
                     .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             }
@@ -412,10 +520,8 @@ public struct ACHMatrixView: View {
     private func conclusionSection(_ a: Binding<ACHAnalysis>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Conclusion").font(.callout.weight(.semibold))
-            if let h = a.wrappedValue.leastInconsistent {
-                Text("ACH points to: \(h.text). You decide — record your judgment below.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Text(conclusionHint(a.wrappedValue))
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Picker("Leading hypothesis", selection: a.conclusion.leadingHypothesisID) {
                 Text("—").tag(Optional<UUID>.none)
                 ForEach(a.wrappedValue.hypotheses) { h in Text(h.text).tag(Optional(h.id)) }
@@ -434,6 +540,17 @@ public struct ACHMatrixView: View {
                 Button { copyReport(a.wrappedValue) } label: { Label("Copy report", systemImage: "doc.on.doc") }
                 Button { showExporter = true } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
             }
+        }
+    }
+
+    /// What the matrix says before the person decides — never "ACH points to X" unless one
+    /// hypothesis alone has the fewest points on assessed, discriminating evidence.
+    private func conclusionHint(_ a: ACHAnalysis) -> String {
+        switch a.preference {
+        case .noAssessment: return "The matrix is not rated yet, so it establishes no preference. You may still record your judgment below — it is yours, not the matrix's."
+        case .noDiscriminatingEvidence: return "No assessed evidence distinguishes the hypotheses; no preference is established. Your judgment below is recorded as yours."
+        case .tied(let hs, _): return "\(hs.map { a.label(of: $0) }.joined(separator: " and ")) tie on the ratings; the matrix establishes no preference between them. You decide — record your judgment below."
+        case .leading(let h, _, _, _): return "The ratings leave \(a.label(of: h)) (\(h.text)) with the fewest inconsistencies. You decide — record your judgment below."
         }
     }
 
