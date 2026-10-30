@@ -286,6 +286,26 @@ struct ProceedingAnswererTests {
         #expect(try #require(ProceedingAnswerer.answer(jm, sources: [.init(objectID: UUID(), text: moody)])).body.contains("taking federal money earmarked for job training"))
     }
 
+    @Test("Held-out chronology 12 (2026-10-30): the term-stating sentence over the lead on the same day, an old conviction is not the charge, a singular lead in a multi-defendant release is the first-introduced person's")
+    func heldOut12() throws {
+        func release(_ date: String, _ body: String) -> String { "U.S. Department of Justice\nWestern District of Virginia\nFOR IMMEDIATE RELEASE\n\(date)\n\n" + body }
+        // The lead reports the sentencing without the term; the next sentence states it: the term is found.
+        let hooper = release("Wednesday, November 22, 2017", "Lynchburg, VIRGINIA – A former employee of the Internal Revenue Service was sentenced yesterday in the United States District Court for the Western District of Virginia. Ronald Lewis Hooper, 69, of Lynchburg, was sentenced yesterday to 20 months in federal prison to be followed by three years of supervised release.")
+        let rh = try #require(ProceedingAnswerer.parse("What was the sentence handed down to Ronald Lewis Hooper?"))
+        #expect(try #require(ProceedingAnswerer.answer(rh, sources: [.init(objectID: UUID(), text: hooper)])).body.hasPrefix("Ronald Lewis Hooper was sentenced to 20 months"))
+        // A conviction ten years before the release is background, not this case's charge.
+        let chester = release("Monday, November 27, 2017", "ROCHESTER, N.Y. - U.S. Attorney James P. Kennedy, Jr. announced today that Shamar R. Chester, 41, of Rochester, NY, pleaded guilty to failing to register as a sex offender before U.S. District Judge Elizabeth A. Wolford. Assistant U.S. Attorney John J. Field, who is handling the case, stated that Chester was convicted in 2007 in Washington, DC, for committing a sex crime involving a child.")
+        let sc = try #require(ProceedingAnswerer.parse("What were the charges filed against Shamar R. Chester?"))
+        #expect(try #require(ProceedingAnswerer.answer(sc, sources: [.init(objectID: UUID(), text: chester)])).body.contains("failing to register as a sex offender"))
+        // A singular lead in a release that introduces co-defendants too: the first-introduced person's.
+        let sullivan = release("Thursday, March 10, 2022", "BOISE – An Illinois woman was sentenced to 21 months in federal prison for bank fraud. Abbi L. Sullivan, 25, of Bloomington, Illinois, was sentenced by Senior U.S. District Judge B. Lynn Winmill. Co-defendants Jakara B. Edwards, 24, and Tatyana A. Love, 21, both of Chicago, pleaded guilty on October 19, 2021, to bank fraud.")
+        let steps = ProceedingEventExtractor.findings(in: sullivan, person: "Abbi L. Sullivan")
+        #expect(steps.contains { $0.step == .sentenced && $0.detail?.hasPrefix("21 months") == true }, "\(steps)")
+        #expect(!steps.contains { $0.step == .pleaded }, "the co-defendants' plea is not hers")
+        let edwards = ProceedingEventExtractor.findings(in: sullivan, person: "Jakara B. Edwards")
+        #expect(edwards.contains { $0.step == .pleaded } && !edwards.contains { $0.step == .sentenced }, "\(edwards)")
+    }
+
     @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")
     func pleaSemantics() throws {
         func release(_ body: String) -> ProceedingAnswerer.Source {

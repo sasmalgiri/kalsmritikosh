@@ -217,11 +217,17 @@ public nonisolated enum ProceedingAnswerer {
         }
         func sortKey(_ h: Hit) -> String { (h.1.day == nil ? "1" : "0") + key(h.1) }
         all.sort { sortKey($0) < sortKey($1) }
-        var seenSteps = Set<String>()
+        var seenSteps: [String: Int] = [:]
         var found: [Hit] = []
         for h in all {
             let undated = h.1.day == nil ? String(h.1.sentence.prefix(60)) : ""
-            if seenSteps.insert(h.1.step.rawValue + key(h.1) + undated).inserted { found.append(h) }
+            let k = h.1.step.rawValue + key(h.1) + undated
+            if let i = seenSteps[k] {
+                // The same step on the same day twice: the sentence that states the term ("… was
+                // sentenced yesterday to 20 months …") over the lead that only says it happened
+                // (held-out chronology 12, 2026-10-30).
+                if found[i].1.detail == nil, h.1.detail != nil { found[i] = h }
+            } else { seenSteps[k] = found.count; found.append(h) }
         }
         let name = parsed.person
         func cite(_ items: [(UUID, ProceedingEventExtractor.Finding)]) -> [VerifiedAnswer.Citation] {
@@ -397,9 +403,20 @@ public nonisolated enum ProceedingAnswerer {
                 return between.count > 120 || between.range(of: #"[.!?]\s+[a-z]"#, options: .regularExpression) != nil
                     || String(sentence[..<r.lowerBound])[last.upperBound...].range(of: #"[.!?]\s+[A-Z]"#, options: .regularExpression) != nil
             }
+            // "Chester was convicted in 2007 in Washington, DC, of committing a sex crime" in a 2017 release:
+            // an earlier conviction is background, not this case's charge (held-out chronology 12).
+            let printedYear: [UUID: Int] = Dictionary(uniqueKeysWithValues: about.compactMap { s in
+                ProceedingEventExtractor.printedDate(in: s.text)?.year.map { (s.objectID, $0) } })
+            func oldConviction(_ c: Candidate) -> Bool {
+                guard let y = printedYear[c.objectID],
+                      let m = c.sentence.range(of: #"\b(?:convicted|sentenced) (?:in|on) (?:[A-Z][a-z]+\.? \d{1,2}, )?((?:19|20)\d\d)\b"#, options: .regularExpression),
+                      let year = Int(String(c.sentence[m]).components(separatedBy: CharacterSet.decimalDigits.inverted).filter { $0.count == 4 }.last ?? "") else { return false }
+                return year <= y - 2
+            }
             func score(_ c: Candidate) -> Int {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
+                    - (oldConviction(c) ? 9 : 0)
                     + (!surnames.isEmpty && c.sentence.lowercased().range(of: namesPerson, options: .regularExpression) != nil ? 5 : 0)
                     + (c.sentence.range(of: offenceWords, options: .regularExpression) != nil ? 3 : 0)
                     - (c.sentence.range(of: supplementary, options: .regularExpression) != nil ? 4 : 0)

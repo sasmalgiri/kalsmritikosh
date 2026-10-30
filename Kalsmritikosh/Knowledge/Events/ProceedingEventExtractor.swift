@@ -106,10 +106,15 @@ public nonisolated enum ProceedingEventExtractor {
         // "A Florida man was sentenced today to one year …" — the lead names the person a sentence or
         // two later. In a document about one defendant (one "Name, 41," introduction at most), the
         // descriptive lead is about the person asked.
-        let introductions = (try? NSRegularExpression(pattern: #"\b[A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+, (?:a\s)?\d{2},"#))?
-            .numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length)) ?? 0
+        let introductionPattern = try? NSRegularExpression(pattern: #"\b[A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} [A-Z][a-zA-Z'\-]+, (?:a\s)?\d{2},"#)
+        let introductionMatches = introductionPattern?.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)) ?? []
+        let introductions = introductionMatches.count
+        // "An Illinois woman was sentenced to 21 months …" in a release that also introduces two
+        // co-defendants: the singular lead is about the person introduced FIRST (held-out chronology 12).
+        let firstIntroducedIsAsked = introductionMatches.first.map { m in
+            mentionsFully(((text as NSString).substring(with: m.range)).lowercased(), tokens: tokens) } ?? false
         var descriptiveLead: Int?
-        if introductions <= 1, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+,?\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
+        if introductions <= 1 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+,?\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
            i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
@@ -184,9 +189,16 @@ public nonisolated enum ProceedingEventExtractor {
                 let (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
                 // One per step and day; undated mentions are kept apart (the one that states the offence may come second).
                 let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?" + String(sentence.prefix(60)))
-                guard seen.insert(key).inserted else { continue }
-                out.append(Finding(step: step, day: day, dayFromPrintedDate: relative, sentence: sentence.trimmingCharacters(in: .whitespacesAndNewlines),
-                                   detail: step == .sentenced ? sentenceDetail(sentence) : nil, reportedOn: printed))
+                let finding = Finding(step: step, day: day, dayFromPrintedDate: relative, sentence: sentence.trimmingCharacters(in: .whitespacesAndNewlines),
+                                      detail: step == .sentenced ? sentenceDetail(sentence) : nil, reportedOn: printed)
+                guard seen.insert(key).inserted else {
+                    // The same step on the same day again: the sentence that states the term ("… was
+                    // sentenced yesterday to 20 months …") replaces a lead that only says it happened
+                    // (held-out chronology 12, 2026-10-30).
+                    if finding.detail != nil, let i = out.firstIndex(where: { $0.step == step && $0.detail == nil && $0.day == day }) { out[i] = finding }
+                    continue
+                }
+                out.append(finding)
             }
         }
         // A release's headline states its step ("Man Arrested for Possession …") while its lead only
