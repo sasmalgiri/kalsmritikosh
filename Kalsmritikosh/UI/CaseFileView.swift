@@ -531,11 +531,13 @@ struct CasePlanTab: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 HStack {
                                     Text("• \(e.label ?? model.label(for: e.evidenceRef))").font(.callout)
-                                    if !e.isDocumentary {
-                                        Text("investigator's note").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                                            .background(.orange.opacity(0.18), in: Capsule())
-                                            .help("Your own entry, not a document. A finding cannot rest on notes alone.")
-                                    }
+                                    // §2 — what this link is, by its verification: a verified passage, a live
+                                    // exhibit, the investigator's note, or unverified with the reason.
+                                    Text(e.support.label).font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                        .background((e.isDocumentary ? Color.green : Color.orange).opacity(0.18), in: Capsule())
+                                        .help(e.isDocumentary ? "Verified: the quoted words are in this source as it is in the case now."
+                                              : "Not documentary support. A finding cannot rest on this; fix the link, verify again or reject it.")
+                                        .accessibilityIdentifier("allegation.link.support")
                                     if let n = e.note { Text("— \(n)").font(.caption).foregroundStyle(.secondary) }
                                     Spacer()
                                     if e.opensPassage, let o = e.objectID {
@@ -571,7 +573,8 @@ struct CasePlanTab: View {
                         let quote = opt(gridQuote[a.id] ?? "")
                         let label = model.label(for: ref)
                         let passage = UUID(uuidString: ref).map { StudioEvidenceRef(sourceVersionID: $0, objectID: model.objectByVersion[$0], quote: quote) }
-                        model.run(appState) { try await $0.file.addAllegationEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, passage: passage, actor: model.actor) }
+                        // §2 — linked THROUGH verification: the quote is checked against the source text now.
+                        model.run(appState) { _ = try await $0.linkEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, passage: passage, actor: model.actor) }
                         gridRef[a.id] = ""; gridNote[a.id] = ""; gridQuote[a.id] = ""
                     }.disabled((gridRef[a.id] ?? "").isEmpty)
                 }
@@ -597,7 +600,8 @@ struct CasePlanTab: View {
                 Button("Record finding") {
                     let d = decisions[a.id] ?? (a.disposition, a.rationale ?? "")
                     let ex = opt(exceptionText[a.id] ?? "")
-                    model.run(appState) { try await $0.file.decide(allegationID: a.id, caseID: model.caseID, disposition: d.0, rationale: d.1, exception: ex, actor: model.actor) }
+                    // §2 — the service re-verifies every link before an adverse finding is written.
+                    model.run(appState) { try await $0.decide(allegationID: a.id, caseID: model.caseID, disposition: d.0, rationale: d.1, exception: ex, actor: model.actor) }
                 }
             }
             if (decisions[a.id]?.0 ?? a.disposition) == .substantiated, a.response == nil {
@@ -1166,7 +1170,12 @@ struct CaseChronologyTab: View {
                         HStack(spacing: 6) {
                             Text(e.author)
                             if let r = e.evidenceRef { Text("· \(model.label(for: r))") }
+                            if e.evidenceRef != nil || !e.citations.isEmpty { Text("· \(e.support.label)").foregroundStyle(e.support.isDocumentary ? .green : .orange) }
+                            if e.citations.count > 1 { Text("· +\(e.citations.count - 1) citation(s)") }
+                            if let rs = e.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { Text("· \(rs.label)") }
+                            if s.isSuperseded(e.origin) { Text("· superseded — re-review").foregroundStyle(.orange) }
                         }.font(.caption).foregroundStyle(.secondary)
+                        if let q = e.quote { Text("“\(q)”").font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                     }
                     Spacer()
                     Button("Retract") {

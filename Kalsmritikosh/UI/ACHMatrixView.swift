@@ -429,30 +429,61 @@ public struct ACHMatrixView: View {
     @ViewBuilder
     private func citationRow(_ e: Binding<ACHEvidence>) -> some View {
         HStack(spacing: 4) {
-            if e.wrappedValue.isCited, let c = e.wrappedValue.citation {
-                Image(systemName: "link").font(.caption2).foregroundStyle(.tint)
+            if e.wrappedValue.hasCitation, let c = e.wrappedValue.citation {
+                Image(systemName: e.wrappedValue.isCited ? "link" : "link.badge.minus").font(.caption2)
+                    .foregroundStyle(e.wrappedValue.isCited ? Color.accentColor : Color.orange)
                 Text(citationLabel(c)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     .help("Cited: \(citationLabel(c))")
-                TextField("quote (optional)", text: Binding(get: { c.quote ?? "" },
-                                                            set: { var ref = c; ref.quote = $0.trimmed.isEmpty ? nil : $0; e.wrappedValue.citation = ref }))
+                // §2 — the citation's verification: the quoted words must be in this source, in this case.
+                Text(e.wrappedValue.isCited ? "verified" : (e.wrappedValue.citationDetail ?? "not verified — quote the passage"))
+                    .font(.caption2).lineLimit(1)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background((e.wrappedValue.isCited ? Color.green : Color.orange).opacity(0.18), in: Capsule())
+                    .help(e.wrappedValue.isCited ? "The quoted words were found in this source as it is in the case now."
+                          : "Not a citation yet: quote the passage so it can be checked against the source. Until then this row is your own note.")
+                    .accessibilityIdentifier("ach.citation.state")
+                TextField("quote the passage", text: Binding(get: { c.quote ?? "" },
+                                                             set: { var ref = c; ref.quote = $0.trimmed.isEmpty ? nil : $0; e.wrappedValue.citation = ref; verifyCitation(e) }))
                     .textFieldStyle(.plain).font(.caption2)
-                Button { e.wrappedValue.citation = nil } label: { Label("Remove citation", systemImage: "link.badge.minus").labelStyle(.iconOnly) }
+                    .onSubmit { verifyCitation(e) }
+                Button { e.wrappedValue.citation = nil; e.wrappedValue.citationState = nil; e.wrappedValue.citationDetail = nil } label: { Label("Remove citation", systemImage: "xmark.circle").labelStyle(.iconOnly) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Remove the citation — the row becomes an investigator's note")
             } else {
                 Text("Investigator's note").font(.caption2).foregroundStyle(.orange)
-                    .help("Uncited — this row is your own entry, not a source. Cite a source version to change that.")
+                    .help("Uncited — this row is your own entry, not a source. Cite a source version and quote the passage to change that.")
                 TextField("where from (optional)", text: e.source).textFieldStyle(.plain).font(.caption2).foregroundStyle(.secondary)
                 if !citationChoices.isEmpty {
                     Menu {
                         ForEach(citationChoices, id: \.id) { choice in
-                            Button(choice.label) { e.wrappedValue.citation = StudioEvidenceRef(sourceVersionID: choice.id) }
+                            Button(choice.label) {
+                                e.wrappedValue.citation = StudioEvidenceRef(sourceVersionID: choice.id)
+                                e.wrappedValue.citationState = nil; e.wrappedValue.citationDetail = "not verified — quote the passage"
+                            }
                         }
                     } label: { Label("Cite", systemImage: "link.badge.plus").labelStyle(.iconOnly) }
-                        .menuStyle(.borderlessButton).fixedSize().help("Cite an exact source version in this case's scope")
+                        .menuStyle(.borderlessButton).fixedSize().help("Cite an exact source version in this case's scope, then quote the passage")
                 }
             }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    /// §2 — check the row's citation through the case's one evidence verifier and record the state.
+    private func verifyCitation(_ e: Binding<ACHEvidence>) {
+        guard let c = e.wrappedValue.citation, let version = c.sourceVersionID,
+              let scope = (activeID.flatMap { scopes[$0] }) ?? caseID, let files = appState.caseFiles else {
+            e.wrappedValue.citationState = nil
+            e.wrappedValue.citationDetail = appState.caseFiles == nil ? "the case file is not available" : "the analysis is not filed under a case"
+            return
+        }
+        let id = e.wrappedValue.id
+        Task { @MainActor in
+            let result = await files.verify(reference: version.uuidString, passage: c, caseID: scope)
+            guard var binding = activeBinding, let i = binding.wrappedValue.evidence.firstIndex(where: { $0.id == id }) else { return }
+            binding.wrappedValue.evidence[i].citationState = result.support.stored == "verified" ? "verified" : "unverified"
+            binding.wrappedValue.evidence[i].citationDetail = result.support.detail
+            if let p = result.passage { binding.wrappedValue.evidence[i].citation = p }
+        }
     }
 
     private func citationLabel(_ c: StudioEvidenceRef) -> String {

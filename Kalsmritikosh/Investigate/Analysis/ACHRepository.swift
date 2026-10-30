@@ -217,16 +217,18 @@ public actor ACHRepository {
         for (i, e) in a.evidence.enumerated() {
             let citation: SQLValue = e.citation.map { .text(json($0)) } ?? .null
             try db.exec("""
-                INSERT INTO ach_evidence (id, analysis_id, position, text, source, citation_json, created_by, created_at, updated_by, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
+                INSERT INTO ach_evidence (id, analysis_id, position, text, source, citation_json, citation_state, citation_detail, created_by, created_at, updated_by, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET position = excluded.position, text = excluded.text, source = excluded.source,
-                    citation_json = excluded.citation_json,
+                    citation_json = excluded.citation_json, citation_state = excluded.citation_state, citation_detail = excluded.citation_detail,
                     updated_by = excluded.updated_by, updated_at = excluded.updated_at, retracted_at = NULL, retracted_by = NULL
                 WHERE ach_evidence.analysis_id = excluded.analysis_id
                   AND (ach_evidence.position != excluded.position OR ach_evidence.text != excluded.text
                        OR ach_evidence.source != excluded.source OR ach_evidence.citation_json IS NOT excluded.citation_json
+                       OR ach_evidence.citation_state IS NOT excluded.citation_state OR ach_evidence.citation_detail IS NOT excluded.citation_detail
                        OR ach_evidence.retracted_at IS NOT NULL);
                 """, [.uuid(e.id), .uuid(a.id), .integer(Int64(i)), .text(e.text), .text(e.source), citation,
+                      .optionalText(e.citationState), .optionalText(e.citationDetail),
                       .text(actor), .date(date), .text(actor), .date(date)])
         }
         for gone in liveE.subtracting(a.evidence.map(\.id)) {
@@ -301,7 +303,7 @@ public actor ACHRepository {
             WHERE analysis_id IN (SELECT value FROM json_each(?)) AND retracted_at IS NULL ORDER BY analysis_id, position, created_at;
             """, [.text(ids)])
         let eRows = try await database.query("""
-            SELECT analysis_id, id, text, source, citation_json FROM ach_evidence
+            SELECT analysis_id, id, text, source, citation_json, citation_state, citation_detail FROM ach_evidence
             WHERE analysis_id IN (SELECT value FROM json_each(?)) AND retracted_at IS NULL ORDER BY analysis_id, position, created_at;
             """, [.text(ids)])
         let cRows = try await database.query("""
@@ -317,7 +319,8 @@ public actor ACHRepository {
         var evs: [UUID: [ACHEvidence]] = [:]
         for r in eRows {
             guard let aid = r.uuid(0), let id = r.uuid(1), let text = r.string(2) else { continue }
-            var e = ACHEvidence(text: text, source: r.string(3) ?? "", citation: Self.decode(StudioEvidenceRef.self, r.string(4))); e.id = id
+            var e = ACHEvidence(text: text, source: r.string(3) ?? "", citation: Self.decode(StudioEvidenceRef.self, r.string(4)),
+                                citationState: r.string(5), citationDetail: r.string(6)); e.id = id
             evs[aid, default: []].append(e)
         }
         var cells: [UUID: [String: ACHConsistency]] = [:]

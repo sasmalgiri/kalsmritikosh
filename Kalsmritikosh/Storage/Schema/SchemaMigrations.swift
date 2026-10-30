@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 167
+    public static let latestVersion = 168
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -800,7 +800,8 @@ public enum SchemaMigrations {
         (164, v164),
         (165, v165),
         (166, v166),
-        (167, v167)
+        (167, v167),
+        (168, v168)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7995,5 +7996,42 @@ public enum SchemaMigrations {
         added_by TEXT NOT NULL, created_at REAL NOT NULL, decided_by TEXT, decided_at REAL
     );
     CREATE INDEX IF NOT EXISTS idx_case_report_items_case ON case_report_items(case_id, created_at);
+    """
+
+    // MARK: - v168 — verified evidence, truthful handoffs and recorded case outputs (App Store completion
+    // instructions 2026-10-30 §2–§4). Every case evidence link, chronology entry and report item records
+    // its verification state (verified passage / exhibit / investigator's note / unverified + reason),
+    // the review state of the result row it was carried from, the saved result revision's digest and
+    // every citation it carries (not only the first). Legacy rows keep NULL and read as unverified.
+    // ACH evidence rows record their citation's verification. Case document outputs (reports, lists,
+    // statements, notices, person-data exports, copies and prints) are recorded with the snapshot and
+    // file digests and a status, so a write whose record failed is a pending operation, not a silent gap.
+    private static let v168: String = """
+    ALTER TABLE case_allegation_evidence ADD COLUMN verification TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN verified_at REAL;
+    ALTER TABLE case_allegation_evidence ADD COLUMN review_state TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN origin_digest TEXT;
+    ALTER TABLE case_journal ADD COLUMN verification TEXT;
+    ALTER TABLE case_journal ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_journal ADD COLUMN verified_at REAL;
+    ALTER TABLE case_journal ADD COLUMN citations_json TEXT;
+    ALTER TABLE case_journal ADD COLUMN review_state TEXT;
+    ALTER TABLE case_journal ADD COLUMN origin_digest TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verification TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verified_at REAL;
+    ALTER TABLE case_report_items ADD COLUMN citations_json TEXT;
+    ALTER TABLE case_report_items ADD COLUMN review_state TEXT;
+    ALTER TABLE case_report_items ADD COLUMN origin_digest TEXT;
+    ALTER TABLE ach_evidence ADD COLUMN citation_state TEXT;
+    ALTER TABLE ach_evidence ADD COLUMN citation_detail TEXT;
+    CREATE TABLE IF NOT EXISTS case_document_outputs (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, kind TEXT NOT NULL, route TEXT NOT NULL,
+        snapshot_sha256 TEXT NOT NULL, file_name TEXT, file_sha256 TEXT,
+        status TEXT NOT NULL CHECK (status IN ('released','written','recordPending','refused','failed')),
+        detail TEXT, released_by TEXT NOT NULL, released_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_document_outputs_case ON case_document_outputs(case_id, released_at);
     """
 }

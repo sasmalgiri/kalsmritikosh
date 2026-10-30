@@ -75,11 +75,18 @@ public nonisolated struct ACHEvidence: Codable, Identifiable, Hashable, Sendable
     /// A structured citation — an exact source version (and quote) in the case's scope. Optional;
     /// older rows have none.
     public var citation: StudioEvidenceRef?
-    public init(text: String, source: String = "", citation: StudioEvidenceRef? = nil) {
-        self.text = text; self.source = source; self.citation = citation
+    /// §2 — the citation's verification when last checked by the case's evidence verifier
+    /// ("verified" / "unverified"); nil = never checked. A citation counts only when verified.
+    public var citationState: String?
+    public var citationDetail: String?
+    public init(text: String, source: String = "", citation: StudioEvidenceRef? = nil, citationState: String? = nil, citationDetail: String? = nil) {
+        self.text = text; self.source = source; self.citation = citation; self.citationState = citationState; self.citationDetail = citationDetail
     }
-    /// True when the row points at an exact source version or passage.
-    public var isCited: Bool { citation?.sourceVersionID != nil || citation?.objectID != nil || citation?.blockID != nil }
+    /// True when the row carries a citation (a source version, document or passage identifier).
+    public var hasCitation: Bool { citation?.sourceVersionID != nil || citation?.objectID != nil || citation?.blockID != nil }
+    /// True when the citation was VERIFIED against the source in the case — the only cited state.
+    /// An identifier alone, or a typed quote that did not verify, is the investigator's note.
+    public var isCited: Bool { hasCitation && citationState == "verified" }
 }
 
 /// What the assessed matrix establishes about a preference — descriptive, never a finding.
@@ -386,7 +393,12 @@ public enum ACHReportRenderer {
             if let v = c.sourceVersionID { parts.append("version \(v.uuidString.prefix(8))") }
             if let q = c.quote?.trimmed, !q.isEmpty { parts.append("“\(q.prefix(120))\(q.count > 120 ? "…" : "")”") }
             if !e.source.trimmed.isEmpty { parts.append(e.source.trimmed) }
-            return " _(cited: \(parts.joined(separator: " · ")))_"
+            return " _(cited, verified: \(parts.joined(separator: " · ")))_"
+        }
+        if e.hasCitation {
+            // An identifier that was not verified against the source is not a citation.
+            let why = e.citationState == nil ? "not verified against the source" : (e.citationDetail ?? "did not verify")
+            return " _(investigator's note — citation unverified: \(why))_"
         }
         return e.source.trimmed.isEmpty ? " _(investigator's note — uncited)_" : " _(investigator's note — uncited: \(e.source.trimmed))_"
     }

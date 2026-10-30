@@ -155,13 +155,22 @@ public actor CaseFileRepository {
                         detail: "\(disposition.label): \(why ?? "")" + (exceptionNote.map { " (exception: \($0))" } ?? ""), at: date) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
             if disposition == .substantiated {
-                let links = try db.query("SELECT evidence_ref, stance FROM case_allegation_evidence WHERE allegation_id = ? AND removed_at IS NULL;", [.uuid(allegationID)])
-                let documentary = links.contains { r in
-                    guard r.string(1) == GridStance.supports.rawValue, let ref = r.string(0) else { return false }
-                    switch CaseEvidenceReference.parse(ref) { case .sourceVersion, .exhibit: return true; default: return false }
-                }
+                // §2 — documentary support is a VERIFIED passage or a live exhibit, by the stored
+                // verification state (re-checked by CaseFileService.decide immediately before this write).
+                // A source version whose passage did not verify, a legacy unverified link or a typed
+                // note never counts, whatever identifiers it carries.
+                let links = try db.query("SELECT evidence_ref, stance, verification FROM case_allegation_evidence WHERE allegation_id = ? AND removed_at IS NULL;", [.uuid(allegationID)])
+                let supporting = links.filter { $0.string(1) == GridStance.supports.rawValue }
+                let documentary = supporting.contains { ["verified", "exhibit"].contains($0.string(2) ?? "") }
                 guard documentary else {
-                    throw CaseFileError.adverseFindingUnsupported("link at least one source passage or exhibit that supports it — a typed note is your own entry, not evidence")
+                    let unverified = supporting.filter { r in
+                        if case .sourceVersion = CaseEvidenceReference.parse(r.string(0) ?? "") { return true }
+                        if case .exhibit = CaseEvidenceReference.parse(r.string(0) ?? "") { return true }
+                        return false
+                    }.count
+                    throw CaseFileError.adverseFindingUnsupported(unverified > 0
+                        ? "\(unverified) supporting link(s) name a source but did not verify (the quoted words were not found in the cited passage, the source is out of the case or inaccessible, or the exhibit is withdrawn) — fix the link or reject it; a typed note is your own entry, not evidence"
+                        : "link at least one source passage or exhibit that supports it — a typed note is your own entry, not evidence")
                 }
                 let response = try db.query("SELECT response FROM case_allegations WHERE id = ?;", [.uuid(allegationID)]).first?.string(0)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard (response?.isEmpty == false) || exceptionNote != nil else {
@@ -176,34 +185,92 @@ public actor CaseFileRepository {
 
     public func allegationEvidence(caseID: UUID) async throws -> [AllegationEvidence] {
         (try await database.query("""
-            SELECT e.id, e.allegation_id, e.evidence_ref, e.label, e.stance, e.note, e.added_by, e.created_at, e.quote, e.block_id, e.object_id, e.origin
+            SELECT e.id, e.allegation_id, e.evidence_ref, e.label, e.stance, e.note, e.added_by, e.created_at, e.quote, e.block_id, e.object_id, e.origin,
+                   e.verification, e.verification_detail, e.verified_at, e.review_state, e.origin_digest
             FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id
             WHERE a.case_id = ? AND e.removed_at IS NULL ORDER BY e.created_at;
             """, [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let a = r.uuid(1), let ref = r.string(2),
                   let st = r.string(4).flatMap(GridStance.init(rawValue:)), let by = r.string(6), let at = r.date(7) else { return nil }
             return AllegationEvidence(id: id, allegationID: a, evidenceRef: ref, label: r.string(3), stance: st, note: r.string(5), addedBy: by, createdAt: at,
-                                      quote: r.string(8), blockID: r.uuid(9), objectID: r.uuid(10), origin: r.string(11))
+                                      quote: r.string(8), blockID: r.uuid(9), objectID: r.uuid(10), origin: r.string(11),
+                                      verification: r.string(12), verificationDetail: r.string(13), verifiedAt: r.date(14),
+                                      reviewState: r.string(15), originDigest: r.string(16))
         }
     }
 
     /// Link evidence to an allegation. `passage` (I4) pins the exact quotation and locator inside the
     /// source version; `origin` (I5) names the reviewed result row it was carried from. The reference
-    /// itself must resolve in THIS case's scope.
+    /// itself must resolve in THIS case's scope. `support` (§2) is the verification the service ran
+    /// on this passage — a link stored without one is UNVERIFIED and is never documentary support
+    /// (`CaseFileService.linkEvidence` is the path that verifies). `reviewState`/`originDigest` (§3)
+    /// record the carried row's review state and the saved revision it came from. The same origin
+    /// carried twice to the same allegation is refused (`alreadyCarried`) unless `allowDuplicate`.
+    @discardableResult
     public func addAllegationEvidence(caseID: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance,
                                       note: String?, passage: StudioEvidenceRef? = nil, origin: String? = nil,
-                                      actor: String, at date: Date = Date()) async throws {
+                                      support: CaseEvidenceSupport? = nil, reviewState: String? = nil, originDigest: String? = nil,
+                                      allowDuplicate: Bool = false,
+                                      actor: String, at date: Date = Date()) async throws -> UUID {
         let ref = try Self.clean(evidenceRef, "The evidence")
         let actor = try Self.clean(actor, "Actor")
         let quote = Self.blankToNil(passage?.quote)
-        try await write("cf_grid", caseID: caseID, actor: actor, action: "gridLinked", detail: "\(stance.rawValue) \(label ?? ref)" + (quote.map { " — “\($0.prefix(80))”" } ?? ""), at: date) { db in
+        let id = UUID()
+        let stored = support ?? Self.defaultSupport(for: ref)
+        try await write("cf_grid", caseID: caseID, actor: actor, action: "gridLinked",
+                        detail: "\(stance.rawValue) \(label ?? ref)" + (quote.map { " — “\($0.prefix(80))”" } ?? "") + " [\(stored.stored)]", at: date) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
             try Self.requireResolvable(db, ref, caseID: caseID)
+            if let origin, !allowDuplicate {
+                // The same origin may legitimately carry several passages of one source (a row with two
+                // citations into one document): the duplicate is the same origin, source AND passage.
+                let dup = try db.query("""
+                    SELECT 1 FROM case_allegation_evidence
+                    WHERE allegation_id = ? AND origin = ? AND evidence_ref = ? AND COALESCE(quote, '') = ? AND removed_at IS NULL LIMIT 1;
+                    """, [.uuid(allegationID), .text(origin), .text(ref), .text(quote ?? "")])
+                guard dup.isEmpty else { throw CaseFileError.alreadyCarried("That passage") }
+            }
             try db.exec("""
-                INSERT INTO case_allegation_evidence (id, allegation_id, evidence_ref, label, stance, note, added_by, created_at, quote, block_id, object_id, origin)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
-                """, [.uuid(UUID()), .uuid(allegationID), .text(ref), .optionalText(label), .text(stance.rawValue), .optionalText(note), .text(actor), .date(date),
-                      .optionalText(quote), passage?.blockID.map { .uuid($0) } ?? .null, passage?.objectID.map { .uuid($0) } ?? .null, .optionalText(origin)])
+                INSERT INTO case_allegation_evidence (id, allegation_id, evidence_ref, label, stance, note, added_by, created_at, quote, block_id, object_id, origin,
+                                                      verification, verification_detail, verified_at, review_state, origin_digest)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(id), .uuid(allegationID), .text(ref), .optionalText(label), .text(stance.rawValue), .optionalText(note), .text(actor), .date(date),
+                      .optionalText(quote), passage?.blockID.map { .uuid($0) } ?? .null, passage?.objectID.map { .uuid($0) } ?? .null, .optionalText(origin),
+                      .text(stored.stored), .optionalText(stored.detail), support == nil ? .null : .date(date), .optionalText(reviewState), .optionalText(originDigest)])
+        }
+        return id
+    }
+
+    /// The state a link has when no verification was run: a typed note is a note; anything that
+    /// names a source is unverified until the service checks it.
+    static func defaultSupport(for reference: String) -> CaseEvidenceSupport {
+        if case .investigatorNote = CaseEvidenceReference.parse(reference) { return .note }
+        return .unverified("linked without verification — re-verify")
+    }
+
+    /// §2 — record the outcome of re-verifying a link (and pin the passage it resolved to).
+    public func recordVerification(linkID: UUID, caseID: UUID, _ result: CaseEvidenceVerification, at date: Date = Date()) async throws {
+        try await database.withSavepoint("cf_verify_\(linkID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try Self.requireInCase(db, "evidence link", linkID, caseID: caseID)
+            try db.exec("UPDATE case_allegation_evidence SET verification = ?, verification_detail = ?, verified_at = ?, block_id = COALESCE(?, block_id), object_id = COALESCE(?, object_id) WHERE id = ?;",
+                        [.text(result.support.stored), .optionalText(result.support.detail), .date(date),
+                         result.passage?.blockID.map { .uuid($0) } ?? .null, result.passage?.objectID.map { .uuid($0) } ?? .null, .uuid(linkID)])
+        }
+    }
+
+    /// §2 — record a re-verification of a chronology entry or a report item.
+    public func recordVerification(journalID: UUID, caseID: UUID, _ result: CaseEvidenceVerification, at date: Date = Date()) async throws {
+        try await database.withSavepoint("cf_verifyj_\(journalID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try Self.requireInCase(db, "journal entry", journalID, caseID: caseID)
+            try db.exec("UPDATE case_journal SET verification = ?, verification_detail = ?, verified_at = ? WHERE id = ?;",
+                        [.text(result.support.stored), .optionalText(result.support.detail), .date(date), .uuid(journalID)])
+        }
+    }
+    public func recordVerification(reportItemID: UUID, caseID: UUID, _ result: CaseEvidenceVerification, at date: Date = Date()) async throws {
+        try await database.withSavepoint("cf_verifyr_\(reportItemID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try Self.requireInCase(db, "report item", reportItemID, caseID: caseID)
+            try db.exec("UPDATE case_report_items SET verification = ?, verification_detail = ?, verified_at = ? WHERE id = ?;",
+                        [.text(result.support.stored), .optionalText(result.support.detail), .date(date), .uuid(reportItemID)])
         }
     }
 
@@ -217,7 +284,11 @@ public actor CaseFileRepository {
     // MARK: - Journal + manual chronology
 
     public func journal(caseID: UUID, kind: CaseJournalKind? = nil) async throws -> [CaseJournalEntry] {
-        var sql = "SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin FROM case_journal WHERE case_id = ? AND removed_at IS NULL"
+        var sql = """
+            SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
+                   verification, verification_detail, verified_at, citations_json, review_state, origin_digest
+            FROM case_journal WHERE case_id = ? AND removed_at IS NULL
+            """
         var b: [SQLValue] = [.uuid(caseID)]
         if let kind { sql += " AND entry_kind = ?"; b.append(.text(kind.rawValue)) }
         sql += " ORDER BY COALESCE(event_date, created_at), created_at;"
@@ -225,57 +296,100 @@ public actor CaseFileRepository {
             guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(2).flatMap(CaseJournalKind.init(rawValue:)),
                   let text = r.string(4), let author = r.string(6), let at = r.date(7) else { return nil }
             return CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at,
-                                    quote: r.string(8), origin: r.string(9))
+                                    quote: r.string(8), origin: r.string(9),
+                                    verification: r.string(10), verificationDetail: r.string(11), verifiedAt: r.date(12),
+                                    citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15))
         }
     }
 
+    /// Add a chronology entry or note. `citations` (§3) carries every citation of a carried row;
+    /// `support` (§2) is the verification of the primary citation; `reviewState`/`originDigest`
+    /// the carried row's review state and saved revision. A hand-typed entry carries none of these.
     @discardableResult
     public func addJournal(caseID: UUID, kind: CaseJournalKind, text: String, eventDate: Date?, evidenceRef: String?,
-                           quote: String? = nil, origin: String? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+                           quote: String? = nil, origin: String? = nil, citations: [StudioEvidenceRef] = [],
+                           support: CaseEvidenceSupport? = nil, reviewState: String? = nil, originDigest: String? = nil,
+                           allowDuplicate: Bool = false,
+                           actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, kind == .note ? "The note" : "The chronology entry")
         let actor = try Self.clean(actor, "Actor")
         let id = UUID()
+        let stored: CaseEvidenceSupport? = support ?? (evidenceRef.map(Self.defaultSupport(for:)))
         try await write("cf_jr", caseID: caseID, actor: actor, action: kind == .note ? "noteAdded" : "chronologyAdded", detail: text, at: date) { db in
             if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
-            try db.exec("INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin) VALUES (?,?,?,?,?,?,?,?,?,?);",
-                        [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date),
-                         .optionalText(Self.blankToNil(quote)), .optionalText(origin)])
+            if let origin, !allowDuplicate {
+                let dup = try db.query("SELECT 1 FROM case_journal WHERE case_id = ? AND origin = ? AND entry_kind = ? AND removed_at IS NULL LIMIT 1;",
+                                       [.uuid(caseID), .text(origin), .text(kind.rawValue)])
+                guard dup.isEmpty else { throw CaseFileError.alreadyCarried(kind == .chronology ? "That chronology entry" : "That note") }
+            }
+            try db.exec("""
+                INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
+                                          verification, verification_detail, verified_at, citations_json, review_state, origin_digest)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date),
+                      .optionalText(Self.blankToNil(quote)), .optionalText(origin),
+                      .optionalText(stored?.stored), .optionalText(stored?.detail), support == nil ? .null : .date(date),
+                      .optionalText(Self.encodeRefs(citations)), .optionalText(reviewState), .optionalText(originDigest)])
         }
         return id
+    }
+
+    static func encodeRefs(_ refs: [StudioEvidenceRef]) -> String? {
+        guard !refs.isEmpty, let data = try? JSONEncoder().encode(refs) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+    static func decodeRefs(_ raw: String?) -> [StudioEvidenceRef] {
+        guard let raw, let data = raw.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([StudioEvidenceRef].self, from: data)) ?? []
     }
 
     // MARK: - I5: the final report's explicit selection
 
     public func reportItems(caseID: UUID) async throws -> [CaseReportItem] {
         (try await database.query("""
-            SELECT id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at
+            SELECT id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at,
+                   citations_json, review_state, origin_digest, verification, verification_detail, verified_at
             FROM case_report_items WHERE case_id = ? ORDER BY created_at;
             """, [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let text = r.string(3), let by = r.string(9), let at = r.date(10) else { return nil }
             return CaseReportItem(id: id, caseID: c, allegationID: r.uuid(2), text: text, quote: r.string(4), evidenceRef: r.string(5), origin: r.string(6),
-                                  included: (r.int(7) ?? 1) != 0, exclusionReason: r.string(8), addedBy: by, createdAt: at, decidedBy: r.string(11), decidedAt: r.date(12))
+                                  included: (r.int(7) ?? 1) != 0, exclusionReason: r.string(8), addedBy: by, createdAt: at, decidedBy: r.string(11), decidedAt: r.date(12),
+                                  citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15),
+                                  verification: r.string(16), verificationDetail: r.string(17), verifiedAt: r.date(18))
         }
     }
 
     /// Select a cited item for the final report (included), or record it as excluded with the reason.
-    /// The item carries its passage and the reviewed result it came from; nothing is retyped.
+    /// The item carries every citation, the carried row's review state and the saved revision it came
+    /// from (§3), and the verification of its primary citation (§2); nothing is retyped.
     @discardableResult
     public func addReportItem(caseID: UUID, allegationID: UUID?, text: String, quote: String?, evidenceRef: String?, origin: String?,
-                              included: Bool = true, exclusionReason: String? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+                              included: Bool = true, exclusionReason: String? = nil,
+                              citations: [StudioEvidenceRef] = [], reviewState: String? = nil, originDigest: String? = nil,
+                              support: CaseEvidenceSupport? = nil, allowDuplicate: Bool = false,
+                              actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, "The report item")
         let actor = try Self.clean(actor, "Actor")
         let reason = Self.blankToNil(exclusionReason)
         if !included { _ = try Self.clean(reason ?? "", "The exclusion reason") }
         let id = UUID()
+        let stored: CaseEvidenceSupport? = support ?? (evidenceRef.map(Self.defaultSupport(for:)))
         try await write("cf_rep", caseID: caseID, actor: actor, action: included ? "reportItemIncluded" : "reportItemExcluded",
-                        detail: text + (reason.map { " — excluded: \($0)" } ?? ""), at: date) { db in
+                        detail: text + (reason.map { " — excluded: \($0)" } ?? "") + (reviewState.map { " [\($0)]" } ?? ""), at: date) { db in
             if let allegationID { try Self.requireInCase(db, "allegation", allegationID, caseID: caseID) }
             if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
+            if let origin, !allowDuplicate {
+                let dup = try db.query("SELECT 1 FROM case_report_items WHERE case_id = ? AND origin = ? LIMIT 1;", [.uuid(caseID), .text(origin)])
+                guard dup.isEmpty else { throw CaseFileError.alreadyCarried("That report item") }
+            }
             try db.exec("""
-                INSERT INTO case_report_items (id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                INSERT INTO case_report_items (id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at,
+                                               citations_json, review_state, origin_digest, verification, verification_detail, verified_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), allegationID.map { .uuid($0) } ?? .null, .text(text), .optionalText(Self.blankToNil(quote)), .optionalText(evidenceRef),
-                      .optionalText(origin), .integer(included ? 1 : 0), .optionalText(reason), .text(actor), .date(date), .text(actor), .date(date)])
+                      .optionalText(origin), .integer(included ? 1 : 0), .optionalText(reason), .text(actor), .date(date), .text(actor), .date(date),
+                      .optionalText(Self.encodeRefs(citations)), .optionalText(reviewState), .optionalText(originDigest),
+                      .optionalText(stored?.stored), .optionalText(stored?.detail), support == nil ? .null : .date(date)])
         }
         return id
     }

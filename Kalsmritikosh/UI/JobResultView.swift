@@ -89,8 +89,9 @@ final class JobResultModel {
 
     // MARK: I5 — carry a reviewed row into the case file (no retyping)
 
-    /// The case file (set by the view; nil in previews) and the case's allegations to add rows to.
-    var caseFile: CaseFileRepository?
+    /// The case file service (set by the view; nil in previews) and the case's allegations to add rows to.
+    var caseFiles: CaseFileService?
+    var caseFile: CaseFileRepository? { caseFiles?.file }
     private(set) var allegations: [CaseAllegation] = []
 
     func loadAllegations() async {
@@ -98,35 +99,44 @@ final class JobResultModel {
         allegations = (try? await caseFile.allegations(caseID: caseID)) ?? []
     }
 
-    /// The row's saved revision: a handoff carries the SAVED row, so unsaved edits are refused.
+    /// The row's saved revision: a handoff carries the SAVED row, so unsaved edits are refused. The
+    /// handoff itself re-reads the ledger (current revision, digest) before anything is written.
     private func savedRecord() -> JobResultRecord? {
         guard let current else { return nil }
         if dirty { problem = "Save your review first — what is carried into the case is the saved revision."; return nil }
         return current
     }
 
+    private func reviewWord(_ record: JobResultRecord, _ i: Int) -> String {
+        JobResultHandoff.reviewState(record, row: record.content.rows[i]).label
+    }
+
     func addToAllegation(row i: Int, allegationID: UUID, stance: GridStance, actor: String) async {
-        guard let caseFile, let record = savedRecord() else { return }
+        guard let caseFiles, let record = savedRecord() else { return }
         do {
-            try await JobResultHandoff.addToAllegation(record, row: i, allegationID: allegationID, stance: stance, note: nil, file: caseFile, actor: actor)
+            let ids = try await JobResultHandoff.addToAllegation(record, row: i, allegationID: allegationID, stance: stance, note: nil,
+                                                                 results: repo, caseFiles: caseFiles, actor: actor)
             let label = allegations.first { $0.id == allegationID }?.label ?? "the allegation"
-            message = "Row \(i + 1) linked to \(label) as “\(stance.label)” with its passage and this revision's identity."; problem = nil
+            let links = (try? await caseFiles.file.allegationEvidence(caseID: caseID).filter { ids.contains($0.id) }) ?? []
+            let verified = links.filter(\.isDocumentary).count
+            message = "Row \(i + 1) linked to \(label) as “\(stance.label)”: \(ids.count) passage(s) carried (\(verified) verified against the source), \(reviewWord(record, i)), revision kept."
+            problem = verified == ids.count ? nil : "\(ids.count - verified) passage(s) did not verify (\(links.compactMap(\.verificationDetail).first ?? "see the allegation")); they are linked as unverified and count for nothing."
         } catch { problem = error.localizedDescription; message = nil }
     }
 
     func addToChronology(row i: Int, actor: String) async {
-        guard let caseFile, let record = savedRecord() else { return }
+        guard let caseFiles, let record = savedRecord() else { return }
         do {
-            try await JobResultHandoff.addToChronology(record, row: i, file: caseFile, actor: actor)
-            message = "Row \(i + 1) added to the case chronology as your entry, quoting its passage."; problem = nil
+            try await JobResultHandoff.addToChronology(record, row: i, results: repo, caseFiles: caseFiles, actor: actor)
+            message = "Row \(i + 1) added to the case chronology as your entry with every citation (\(reviewWord(record, i)))."; problem = nil
         } catch { problem = error.localizedDescription; message = nil }
     }
 
     func addToReport(row i: Int, include: Bool, actor: String) async {
-        guard let caseFile, let record = savedRecord() else { return }
+        guard let caseFiles, let record = savedRecord() else { return }
         do {
-            try await JobResultHandoff.addToReport(record, row: i, include: include, file: caseFile, actor: actor)
-            message = include ? "Row \(i + 1) selected for the case report (same text, passage and revision)."
+            try await JobResultHandoff.addToReport(record, row: i, include: include, results: repo, caseFiles: caseFiles, actor: actor)
+            message = include ? "Row \(i + 1) selected for the case report (\(reviewWord(record, i)); every citation and the revision kept)."
                               : "Row \(i + 1) recorded as excluded from the case report, with your note as the reason."
             problem = nil
         } catch { problem = error.localizedDescription; message = nil }
@@ -194,7 +204,7 @@ struct JobResultView: View {
         .frame(minWidth: 720, minHeight: 560)
         .task {
             model.evidenceCheck = appState.jobResultEvidenceCheck(caseID: model.caseID)
-            model.caseFile = appState.caseFiles?.file
+            model.caseFiles = appState.caseFiles
             await model.load()
             await model.loadAllegations()
         }

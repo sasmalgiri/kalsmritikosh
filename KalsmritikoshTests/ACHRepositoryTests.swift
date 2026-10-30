@@ -169,13 +169,13 @@ struct ACHRepositoryTests {
         var a = ACHAnalysis(title: "cite", now: t0)
         a.hypotheses = [ACHHypothesis(text: "H1"), ACHHypothesis(text: "H2")]
         let version = UUID()
-        let cited = ACHEvidence(text: "debit", source: "p.2", citation: StudioEvidenceRef(sourceVersionID: version, quote: "Debit 10,000.00"))
+        let cited = ACHEvidence(text: "debit", source: "p.2", citation: StudioEvidenceRef(sourceVersionID: version, quote: "Debit 10,000.00"), citationState: "verified")
         let note = ACHEvidence(text: "my recollection", source: "")
         a.evidence = [cited, note]
         #expect(try await repo.save(a, actor: "x", at: t0))
         let loaded = try #require(try await repo.analysis(id: a.id)).analysis
         #expect(loaded.evidence.count == 2)
-        #expect(loaded.evidence[0].citation == StudioEvidenceRef(sourceVersionID: version, quote: "Debit 10,000.00") && loaded.evidence[0].isCited)
+        #expect(loaded.evidence[0].citation == StudioEvidenceRef(sourceVersionID: version, quote: "Debit 10,000.00") && loaded.evidence[0].isCited && loaded.evidence[0].citationState == "verified")
         #expect(loaded.evidence[1].citation == nil && !loaded.evidence[1].isCited)
         // Removing the citation persists too.
         var edited = loaded

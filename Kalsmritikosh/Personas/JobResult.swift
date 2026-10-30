@@ -325,6 +325,11 @@ public actor JobResultRepository {
         try await rows("WHERE case_id = ? AND job_id = ? AND state <> 'superseded' ORDER BY created_at DESC LIMIT 1", [.uuid(caseID), .text(jobID)]).first
     }
 
+    /// §3 — the stored SHA-256 of a saved revision's payload (the identity a carried row keeps).
+    public func payloadSHA256(id: UUID) async throws -> String? {
+        try await database.query("SELECT payload_sha256 FROM job_results WHERE id = ? LIMIT 1;", [.uuid(id)]).first?.string(0)
+    }
+
     /// Every run of a job in the case, newest first (superseded ones included).
     public func history(caseID: UUID, jobID: String) async throws -> [JobResultRecord] {
         try await rows("WHERE case_id = ? AND job_id = ? ORDER BY created_at DESC", [.uuid(caseID), .text(jobID)])

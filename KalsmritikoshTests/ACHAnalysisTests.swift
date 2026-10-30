@@ -162,15 +162,20 @@ struct ACHAnalysisTests {
     func reportDistinguishesStates() {
         var (a, h1, h2, e) = twoByOne()
         let cited = ACHEvidence(text: "Bank debit of ₹10,000 on 3 March", source: "statement p.2",
-                                citation: StudioEvidenceRef(sourceVersionID: UUID(uuidString: "0A0B0C0D-0000-0000-0000-000000000001"), quote: "Debit 10,000.00"))
-        a.evidence = [e, cited]
+                                citation: StudioEvidenceRef(sourceVersionID: UUID(uuidString: "0A0B0C0D-0000-0000-0000-000000000001"), quote: "Debit 10,000.00"),
+                                citationState: "verified")
+        // §2 — an identifier that was not verified against the source is not a citation.
+        let unchecked = ACHEvidence(text: "Refund credited", citation: StudioEvidenceRef(sourceVersionID: UUID(), quote: "Credit 2,000"), citationState: "unverified", citationDetail: "the quoted words are not in the cited source")
+        a.evidence = [e, cited, unchecked]
         a.ratings[ACHAnalysis.key(e.id, h1.id)] = .neutral          // explicit N
         // e × h2 left unassessed; the cited row unrated entirely.
         let md = ACHReportRenderer.markdown(a, generatedAt: t0)
         #expect(md.contains("| The dates differ _(investigator's note — uncited)_ | N | — |"))
-        #expect(md.contains("_(cited: version 0A0B0C0D · “Debit 10,000.00” · statement p.2)_"))
-        #expect(md.contains("**Assessment coverage:** 1 of 4 cells rated; 3 unassessed (shown as —)."))
-        #expect(md.contains("**What the ratings establish:** No assessed evidence distinguishes the hypotheses, so no preference is established. 3 cells are still unassessed."))
+        #expect(md.contains("_(cited, verified: version 0A0B0C0D · “Debit 10,000.00” · statement p.2)_"))
+        #expect(md.contains("_(investigator's note — citation unverified: the quoted words are not in the cited source)_"))
+        #expect(cited.isCited && !unchecked.isCited && unchecked.hasCitation)
+        #expect(md.contains("**Assessment coverage:** 1 of 6 cells rated; 5 unassessed (shown as —)."))
+        #expect(md.contains("**What the ratings establish:** No assessed evidence distinguishes the hypotheses, so no preference is established. 5 cells are still unassessed."))
         #expect(md.contains("an unassessed cell counts for nothing and is not neutral"))
         #expect(cited.isCited && !e.isCited)
         // An older JSON without the citation key still decodes (citation nil).

@@ -140,15 +140,20 @@ struct AcceptanceCaseTests {
         let a = try await caseFiles.file.addAllegation(caseID: c.id, text: "Dalmia Traders was paid twice for invoice INV-2041", actor: "Priya Nair")
         let ashaIndex = try #require(rows.firstIndex { $0.fields?["witness"] == "Asha Rao" && !$0.refs.isEmpty })
         let vikramIndex = try #require(rows.firstIndex { $0.fields?["witness"] == "Vikram Rao" && $0.flags.contains("denial") && !$0.refs.isEmpty })
-        try await JobResultHandoff.addToAllegation(statements, row: ashaIndex, allegationID: a, stance: .supports, note: nil, file: caseFiles.file, actor: "Priya Nair")
-        try await JobResultHandoff.addToAllegation(statements, row: vikramIndex, allegationID: a, stance: .contradicts, note: nil, file: caseFiles.file, actor: "Priya Nair")
-        try await JobResultHandoff.addToReport(statements, row: vikramIndex, include: true, allegationID: a, file: caseFiles.file, actor: "Priya Nair")
+        _ = try await JobResultHandoff.addToAllegation(statements, row: ashaIndex, allegationID: a, stance: .supports, note: nil, results: results, caseFiles: caseFiles, actor: "Priya Nair")
+        _ = try await JobResultHandoff.addToAllegation(statements, row: vikramIndex, allegationID: a, stance: .contradicts, note: nil, results: results, caseFiles: caseFiles, actor: "Priya Nair")
+        _ = try await JobResultHandoff.addToReport(statements, row: vikramIndex, include: true, allegationID: a, results: results, caseFiles: caseFiles, actor: "Priya Nair")
         _ = try await caseFiles.addTask(caseID: c.id, workspaceID: ws, title: "Request the receipt referred to in the 6 March e-mail (not attached)",
                                         assignee: "Priya Nair", due: now.addingTimeInterval(7 * 86_400), actor: "Priya Nair")
         // An adverse finding is refused until the response is recorded.
         await #expect(throws: CaseFileError.self) {
-            try await caseFiles.file.decide(allegationID: a, caseID: c.id, disposition: .substantiated, rationale: "Two invoices", actor: "Priya Nair")
+            try await caseFiles.decide(allegationID: a, caseID: c.id, disposition: .substantiated, rationale: "Two invoices", actor: "Priya Nair")
         }
+        // The carried passages verified against the ingested documents (§2): real quotes in real blocks.
+        let carriedLinks = try await caseFiles.file.allegationEvidence(caseID: c.id)
+        let carriedDetails = carriedLinks.map { $0.verificationDetail ?? "ok" }.joined(separator: "; ")
+        let allDocumentary = carriedLinks.allSatisfy { $0.isDocumentary }
+        #expect(allDocumentary, Comment(rawValue: carriedDetails))
 
         // 10. New evidence enters only through the explicit scope review.
         let laterURL = docs.appendingPathComponent(AcceptanceCaseFixture.laterDocument)
@@ -166,14 +171,14 @@ struct AcceptanceCaseTests {
         // 11. The explanation is recorded as the response; the finding is updated; the report keeps established, disputed and unknown apart.
         try await caseFiles.file.recordResponse(allegationID: a, caseID: c.id,
                                                 response: "The second copy was a resend of the same invoice; the bank shows one debit of ₹10,000 and a refund of ₹2,000.", actor: "Priya Nair")
-        try await caseFiles.file.decide(allegationID: a, caseID: c.id, disposition: .unsubstantiated,
+        try await caseFiles.decide(allegationID: a, caseID: c.id, disposition: .unsubstantiated,
                                         rationale: "One debit on the bank statement; the second invoice is a resend; the refund is a supplier correction.", actor: "Priya Nair")
         let snapshot = try #require(try await caseFiles.snapshot(caseID: c.id, custody: []))
         let report = CaseFileDocuments.caseFileReport(snapshot, by: "Priya Nair")
         #expect(report.contains("**Unsubstantiated**") && report.contains("Response: “The second copy was a resend"))
         #expect(report.contains("Supports:\n- ") && report.contains("Contradicts:\n- "), "both accounts are in the report with their passages")
         #expect(report.contains("(from job:hr.statements:"), "the carried rows name the result revision they came from")
-        #expect(report.contains("## Reviewed results included in this report"))
+        #expect(report.contains("## Provisional material included in this report"), "an undecided row is carried as provisional, not as a reviewed finding")
         #expect(report.contains("## Unresolved questions and limitations"))
         #expect(!report.lowercased().contains("fraud"))
         #expect(report.contains("## Tasks\n- [ ] Request the receipt"))
@@ -182,7 +187,7 @@ struct AcceptanceCaseTests {
         let workspaces = try #require(await state.workspaces)
         let reopened = try #require(try await CaseFileService(database: db, cases: cases, workspaces: workspaces).snapshot(caseID: c.id, custody: []))
         #expect(reopened.allegations.first?.disposition == .unsubstantiated && reopened.allegations.first?.response == snapshot.allegations.first?.response)
-        #expect(reopened.grid.count == 2 && reopened.grid.allSatisfy { $0.quote != nil && $0.origin != nil })
+        #expect(reopened.grid.count >= 2 && reopened.grid.allSatisfy { $0.quote != nil && $0.origin != nil && $0.isDocumentary })
         #expect(reopened.reportItems.count == 1 && reopened.tasks.count == 1)
         #expect(CaseFileDocuments.caseFileReport(reopened, by: "Priya Nair").replacingOccurrences(of: #"Produced by .*"#, with: "", options: .regularExpression)
                 == report.replacingOccurrences(of: #"Produced by .*"#, with: "", options: .regularExpression))

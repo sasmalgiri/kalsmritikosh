@@ -320,7 +320,7 @@ public actor StudioCaseFactsReader {
         -> (named: [StudioCaseValue], amounts: [StudioCaseValue], dates: [StudioCaseEvent]) {
         guard let entities else { return ([], [], []) }
         var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = [], dates: [StudioCaseEvent] = []
-        var seenNames = Set<String>(), seenAmounts = Set<String>(), seenDates = Set<String>()
+        var namedIndex: [String: Int] = [:], seenAmounts = Set<String>(), seenDates = Set<String>()
         for id in objectIDs.sorted(by: { $0.uuidString < $1.uuidString }).prefix(60) {
             guard let content = try await objects.fetchContent(id: id) else { continue }
             for e in try await entities.findByMentionSource(id) where e.qualityTier != .t3 {
@@ -332,8 +332,19 @@ public actor StudioCaseFactsReader {
                 let ref = StudioEvidenceRef(sourceVersionID: versionOf[id], objectID: id, quote: quote)
                 switch e.kind {
                 case .person, .organization:
-                    guard v.contains(" "), seenNames.insert(v.lowercased()).inserted else { continue }
-                    named.append(StudioCaseValue(value: v, label: e.kind == .person ? "person" : "organisation", refs: [ref]))
+                    guard v.contains(" ") else { continue }
+                    let label = e.kind == .person ? "person" : "organisation"
+                    if let at = namedIndex[v.lowercased()] {
+                        // The tagger labels one name both ways in one document ("Asha Rao" as a person
+                        // and as an organisation). Rows come back in no fixed order, so the label must
+                        // not depend on which arrived first: a name also read as a person is a person.
+                        if label == "person", named[at].label == "organisation" {
+                            named[at] = StudioCaseValue(value: named[at].value, label: "person", refs: named[at].refs)
+                        }
+                        continue
+                    }
+                    namedIndex[v.lowercased()] = named.count
+                    named.append(StudioCaseValue(value: v, label: label, refs: [ref]))
                 case .money:
                     // Acceptance case 2026-10-30: one entry per STATEMENT (document + sentence), not per
                     // value. Keying by value alone kept only the first "₹10,000" in the whole case and

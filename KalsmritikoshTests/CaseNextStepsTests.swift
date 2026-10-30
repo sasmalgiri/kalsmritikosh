@@ -31,8 +31,10 @@ struct CaseNextStepsTests {
         #expect(!ids.contains("triage"))
         #expect(ids.contains("grid-\(a)"))                                  // no evidence for or against
 
-        let source = try #require(try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID).first)
-        try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: source, label: nil, stance: .supports, note: nil, actor: "Ada")
+        // §2 — a decision needs a VERIFIED passage, so the supporting link quotes a real source.
+        let source = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "complaint.txt", text: "The manager shouted at two staff on Monday. Both left the floor.")
+        _ = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: source.version.uuidString, label: nil, stance: .supports, note: nil,
+                                         passage: StudioEvidenceRef(sourceVersionID: source.version, quote: "shouted at two staff on Monday"), actor: "Ada")
         ids = try await steps()
         #expect(!ids.contains("grid-\(a)") && ids.contains("contrary-\(a)"))   // only supporting evidence
         try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: "note:Rota shows Sam off shift", label: nil,
@@ -49,7 +51,7 @@ struct CaseNextStepsTests {
         #expect(try await !steps().contains("attest-\(iv)"))
 
         try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "Says the shouting was a fire drill.", actor: "Ada")
-        try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two accounts and the rota", actor: "Ada")
+        try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two accounts and the rota", actor: "Ada")
         #expect(try await steps().contains("findings"))
         // A failed custody read and broken references lead the list.
         let s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
