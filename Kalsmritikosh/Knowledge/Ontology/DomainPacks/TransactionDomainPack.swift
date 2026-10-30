@@ -60,7 +60,10 @@ public enum TransactionDomainPack {
 
         // "Rs"/"INR" only as a word of its own: "years 1932" and "others 1932" are not rupees
         // (case bench 2026-10-22: court opinions carried "Amount rs1932 INR").
-        if let amount = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?[\d,]+(?:\.\d{1,2})?"#, in: text) {
+        // Acceptance case 2026-10-30 (D-8): `[\d,]+` kept a comma that followed the figure ("₹10,000,")
+        // — the figure is digits with its grouping, Indian (2,40,000) or Western (240,000), never
+        // ending in a separator.
+        if let amount = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?"#, in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: normalize(amount),
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],

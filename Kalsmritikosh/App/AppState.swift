@@ -4446,6 +4446,10 @@ public final class AppState {
     public struct IngestProgress: Sendable, Equatable {
         public var filesDone = 0, filesTotal = 0
         public var embedDone = 0, embedTotal = 0
+        /// UI journey 2026-10-30b/c: files whose last ingest attempt failed. They count as processed
+        /// (the pass is over for them) and are shown as failed, so the indicator reaches a terminal
+        /// state instead of "1 item remaining" forever.
+        public var filesFailed = 0
         public var parsing: Bool { filesTotal > 0 && filesDone < filesTotal }
         public var embedding: Bool { embedTotal > 0 && embedDone < embedTotal }
         public var idle: Bool { !parsing && !embedding }
@@ -4465,13 +4469,17 @@ public final class AppState {
         // through a big mailbox instead of jumping only when the whole mbox ends.
         let koDone = Int(r.int(0) ?? 0)
         let dbFileCount = Int(r.int(1) ?? 0)
+        // A file whose last attempt failed produced no knowledge object; the pass is still over for
+        // it, so it counts as processed — and is reported as failed, never hidden in "remaining".
+        let failed = await ingestAttempts?.failedCount() ?? 0
         // Denominator = the pre-counted units (files + mailbox messages). Outside
         // a bulk pass, fall back to whatever's larger so the bar reads 100% idle.
         let planned = max(ingestPlannedFileTotal, dbFileCount)
-        let filesTotal = max(planned, koDone)   // cap at 100% (attachments add extra KOs)
+        let filesTotal = max(planned, koDone + failed)   // cap at 100% (attachments add extra KOs)
         return IngestProgress(
-            filesDone: koDone, filesTotal: filesTotal,
-            embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0)
+            filesDone: min(koDone + failed, filesTotal), filesTotal: filesTotal,
+            embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0),
+            filesFailed: failed
         )
     }
 

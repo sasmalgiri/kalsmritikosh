@@ -373,6 +373,11 @@ public struct SourcesView: View {
             readinessDimension(
                 title: "Parsed", done: r.filesDone, total: r.filesTotal,
                 busy: r.parsing, symbol: "doc.text.magnifyingglass")
+            if r.filesFailed > 0 {
+                Label("\(r.filesFailed) could not be read — see Needs attention", systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                    .accessibilityIdentifier("sources.live.failed")
+            }
             readinessDimension(
                 title: "Embedded", done: r.embedDone, total: r.embedTotal,
                 busy: r.embedding, symbol: "sparkles")
