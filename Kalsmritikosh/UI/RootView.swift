@@ -569,6 +569,7 @@ public struct RootView: View {
         .tint(Theme.brand)
         .preferredColorScheme(.light)
         .frame(minWidth: 1040, minHeight: 640)
+        .background(WindowFrameClamp())   // UI journey 2026-10-30, D1: a launch frame taller than the screen is fitted to it
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .overlay(shortcutHelpOverlay)
@@ -1617,8 +1618,12 @@ private struct CommandPaletteView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 24)
                         } else {
+                            // UI journey 2026-10-30, D2: rows were identified by their INDEX, so when the
+                            // list changed under a query the view at index 0 kept showing the earlier
+                            // entry ("Home") while Return ran the real first match. Identity is the
+                            // entry's own id; scrolling targets it too.
                             ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, entry in
-                                paletteRow(entry, index: idx).id(idx)
+                                paletteRow(entry, index: idx).id(entry.id)
                             }
                         }
                     }
@@ -1626,7 +1631,8 @@ private struct CommandPaletteView: View {
                 }
                 .frame(maxHeight: 340)
                 .onChange(of: highlighted) { _, new in
-                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(new, anchor: .center) }
+                    guard filtered.indices.contains(new) else { return }
+                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(filtered[new].id, anchor: .center) }
                 }
             }
         }
@@ -1828,6 +1834,50 @@ struct RecoveryKeyView: View {
         Task {
             note = await appState.unlockLedger(recoveryText: text)
             working = false
+        }
+    }
+}
+
+// MARK: - Window frame clamp (UI journey 2026-10-30, D1)
+
+/// The first launch opened a window 1100 × 2343 pt on a 956 pt screen — the content's proposed
+/// height became the frame, and the first screen's controls sat below the display. Whatever the
+/// cause (a restored frame or min-height pressure from the split view's detail), a window must fit
+/// the screen it opens on: when this view joins a window whose frame exceeds the screen's visible
+/// frame, the frame is fitted to it (and re-checked when the screen changes). Nothing else about
+/// the window is touched; the person can still resize or zoom.
+struct WindowFrameClamp: NSViewRepresentable {
+    func makeNSView(context: Context) -> ClampView { ClampView() }
+    func updateNSView(_ nsView: ClampView, context: Context) {}
+
+    final class ClampView: NSView {
+        private var observer: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            Self.fit(window)
+            observer.map { NotificationCenter.default.removeObserver($0) }
+            observer = NotificationCenter.default.addObserver(forName: NSWindow.didChangeScreenNotification, object: window, queue: .main) { note in
+                guard let w = note.object as? NSWindow else { return }
+                MainActor.assumeIsolated { Self.fit(w) }
+            }
+        }
+
+        deinit { observer.map { NotificationCenter.default.removeObserver($0) } }
+
+        /// Fit `window` inside its screen's visible frame when it is taller or wider than that frame.
+        static func fit(_ window: NSWindow) {
+            guard let screen = window.screen ?? NSScreen.main else { return }
+            let visible = screen.visibleFrame
+            var frame = window.frame
+            guard frame.height > visible.height || frame.width > visible.width
+                    || frame.minY < visible.minY || frame.maxY > visible.maxY else { return }
+            frame.size.height = min(frame.height, visible.height)
+            frame.size.width = min(frame.width, visible.width)
+            frame.origin.y = max(visible.minY, min(frame.origin.y, visible.maxY - frame.height))
+            frame.origin.x = max(visible.minX, min(frame.origin.x, visible.maxX - frame.width))
+            window.setFrame(frame, display: true, animate: false)
         }
     }
 }

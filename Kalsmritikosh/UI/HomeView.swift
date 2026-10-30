@@ -176,14 +176,34 @@ public struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Investigator workflow review 2026-10-30, I9: the two ways into the work sit on the
+            // main surface — start a matter, or go back to one — before anything else.
             HStack(spacing: 10) {
+                Button {
+                    onNavigate(.work)
+                } label: {
+                    Label("Start an investigation", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.brand)
+                .help("Open Professional Jobs: name the matter, choose its workspace, bring the documents into the case and run the first job.")
+                .accessibilityIdentifier("home.startInvestigation")
+
+                Button {
+                    onNavigate(.work)
+                } label: {
+                    Label("Resume a case", systemImage: "folder.badge.person.crop")
+                }
+                .buttonStyle(.bordered)
+                .help("Open Professional Jobs with the matters you can return to — every job run, review and document decision as you left it.")
+                .accessibilityIdentifier("home.resumeCase")
+
                 Button {
                     onNavigate(.sources)
                 } label: {
                     Label("Add your documents", systemImage: "folder.badge.plus")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.brand)
+                .buttonStyle(.bordered)
 
                 Button {
                     onNavigate(.ask)

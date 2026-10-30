@@ -119,4 +119,17 @@ struct PaletteCatalogTests {
         #expect(PaletteCatalog.fuzzySubsequence("cvt", "Convert"))
         #expect(!PaletteCatalog.fuzzySubsequence("tvc", "Convert"))
     }
+
+    @Test("UI journey D2: typing a screen's full title ranks that screen first and the list is what Return runs — Home is not among the matches")
+    func fullTitleRanksTheScreenFirst() {
+        for dest in Destination.allCases {
+            let matches = PaletteCatalog.matches(query: dest.title, in: entries)
+            #expect(matches.first?.target == .screen(dest), "\(dest.title) did not rank first; got \(matches.first?.title ?? "nothing")")
+        }
+        let pj = PaletteCatalog.matches(query: "Professional Jobs", in: entries)
+        #expect(pj.first?.target == .screen(.work))
+        #expect(!pj.contains { $0.target == .screen(.home) }, "Home must not match 'Professional Jobs' — the row shown must be the action run")
+        // The row identity the palette renders is the entry id (not its index), so a changing list cannot show a stale row.
+        #expect(Set(pj.map(\.id)).count == pj.count)
+    }
 }
