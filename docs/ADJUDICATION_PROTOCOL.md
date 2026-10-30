@@ -1,16 +1,30 @@
-# Accuracy adjudication protocol (F5)
+# Accuracy adjudication protocol (F5; corrected 2026-10-31 for App Store completion §7)
 
-The release gate is **≤ 1 % wrong answers** on a fresh held-out set, judged by people, not only by the
-automatic scorer. This protocol is how that number is produced. Agent-side preparation is done; the
-adjudication itself is done by people.
+The release gate is **≤ 1 % wrong answers per answer path (rules; claude) and per question family** on a
+fresh held-out set run once on frozen code, judged by people, not only by the automatic scorer. This
+protocol is how that number is produced. Agent-side preparation (sets, runs, blinded packs) is done by
+the agent; the adjudication itself is done by people who are not the agent and not the owner alone.
+
+**Corrections to the earlier text.** (1) ho10 is no longer the fresh set: ho10, ho11, ho12 and ho13 were
+each run once and then informed fixes, so all of ho9–ho13 are **regression sets**; the next fresh draw is
+**ho14**, generated only after the freeze (§4). (2) The gate is per path **and per family**, not one
+pooled figure. (3) A run that errors (launch failure, a shard that did not finish, a document that
+ingested as zero chunks without an error) is reported as an error and excluded from the denominator
+with its count stated — never scored as correct, a refusal or 0 %. (4) The claude path has not been
+measured since ho8; it must be measured on the frozen candidate from Terminal (the sandboxed test host
+has no key) before any claude-mode figure is stated.
 
 ## 1. Inputs
 
-- **Regression set ho9.** 60 public prosecutions (US DOJ press releases), 2 paraphrases per question,
-  generated after the fixes it measures. It is used for regression only; nothing is tuned on it.
-- **Fresh held-out set ho10.** Generated only after the code and scorer are frozen (§4). Run once.
+- **Regression sets ho9–ho13.** 60 public prosecutions each (US DOJ press releases), 2 paraphrases per
+  question. Used for regression only (`ProceedingAnswererTests.heldOut9`–`heldOut13` pin every miss);
+  nothing measured on them counts toward the gate.
+- **Fresh held-out set ho14.** Generated only after the code and scorer are frozen (§4), skipping every
+  prosecution in `$CASEBENCH_HOME/skip-chron` (x1–x15). Run once per path.
 - Both answer paths, each with its own bench results: **rules** (AI off, the default) and **claude**
-  (cloud composition, a public-data bench key).
+  (cloud composition, a public-data bench key, Terminal run only).
+- **Route validation.** Before scoring, the run record must show which route answered each question
+  (rules vs model) — a model answer on a rules run, or the reverse, voids the run.
 
 ## 2. The pack
 
@@ -53,15 +67,19 @@ Packs already built from the previous ho9 runs (`~/CaseBench/adjudication/`):
 questions, per path, with a 95 % interval. Refusals are reported separately: refusing when unsure is
 allowed; a wrong refusal is a recall loss, not a "wrong".
 
-## 4. The fresh held-out run (ho10) — once
+## 4. The fresh held-out run (ho14) — once
 
-1. Freeze the code and scorer: record the commit and the scorer's SHA-256 in the release packet. No
-   change to the code, scorer or prompts after this point counts toward the gate.
-2. Generate and run ho10 once with a new seed, skipping every prosecution used in ho1–ho9 (add ho9's
-   source folder to `$CASEBENCH_HOME/skip-chron`): `scripts/casebench/heldout.sh ho10-chron --generate <seed>`.
-   The driver records the commit, the scorer digest, the host and the command beside the results.
-3. Build the pack (the driver does), adjudicate per §3.
-4. If the gate fails, fix, refreeze and generate **ho11**; ho10 becomes a regression set. A held-out
+1. Freeze the code and scorer: record the commit and the scorer's SHA-256 in the release packet
+   (`docs/RELEASE_CANDIDATE.md`). No change to the code, scorer or prompts after this point counts toward
+   the gate.
+2. Re-run ho9–ho13 as regression on the frozen commit first (bundled pack, rules path) and record them;
+   a regression below the last recorded figure is a defect to explain, not a gate result.
+3. Generate and run ho14 once with a new seed, skipping every prosecution used in ho1–ho13 (x1–x15 in
+   `$CASEBENCH_HOME/skip-chron`): `scripts/casebench/heldout.sh ho14-chron --generate <seed>` from
+   Terminal (both paths), or the bundled-pack path for rules only (FINAL_BRIEF_EXECUTION §E3). The
+   driver records the commit, the scorer digest, the host and the command beside the results.
+4. Build the blinded pack (the driver does), adjudicate per §3, **per path and per family**.
+5. If the gate fails, fix, refreeze and generate **ho15**; ho14 becomes a regression set. A held-out
    set is never re-used to claim the gate.
 
 ## 5. Other answer families

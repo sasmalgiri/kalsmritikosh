@@ -1345,14 +1345,7 @@ public struct WorkCenterView: View {
         Task { @MainActor in
             do {
                 let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .print, actor: who, citations: [], text: text)
-                let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-                textView.string = pkg.text
-                textView.font = monospace
-                    ? NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    : NSFont.systemFont(ofSize: 11)
-                let operation = NSPrintOperation(view: textView)
-                operation.jobTitle = jobTitle
-                if operation.run() { _ = await outputs.released(pkg) }
+                if AppPrinting.run(text: pkg.text, jobTitle: jobTitle, monospace: monospace, fontSize: monospace ? 10 : 9) == .printed { _ = await outputs.released(pkg) }
             } catch {
                 KalsmritikoshLog.ui.error("Work Center print refused: \(error.localizedDescription, privacy: .public)")
                 NSAlert(error: error).runModal()

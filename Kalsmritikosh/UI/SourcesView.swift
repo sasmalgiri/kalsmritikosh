@@ -534,6 +534,15 @@ public struct SourcesView: View {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try appState.bookmarks.register(url: url) }
-        catch { KalsmritikoshLog.ui.error("Bookmark registration failed: \(error.localizedDescription, privacy: .public)") }
+        catch { KalsmritikoshLog.ui.error("Bookmark registration failed: \(error.localizedDescription, privacy: .public)"); return }
+        // UI journey run d (D-4): a folder the person just chose is read now, not after a second
+        // press of "Ingest All" (unchanged files in other folders skip by hash).
+        guard !ingesting else { return }
+        ingesting = true
+        Task { @MainActor in
+            defer { ingesting = false }
+            _ = await appState.ingestAllRoots()
+            await refresh()
+        }
     }
 }

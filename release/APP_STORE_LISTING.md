@@ -91,9 +91,16 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 > decide findings, guilt or outcomes — you do. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
 
-## Privacy nutrition labels
+## Privacy nutrition labels — DECISION PENDING (counsel + owner)
 
-- **Data Not Collected.** No data is collected, tracked, or linked to the user. No account.
+- The publisher collects nothing: no account, analytics, crash reporter, ads or tracking; the main app has no network
+  entitlement. Online mode (off by default) sends the person's chosen text to the AI provider *they* chose, under their
+  own key and that provider's terms, after per-send consent.
+- The label answer is **not yet recorded**: either "Data Not Collected" with the Online-mode disclosure above, or
+  "Other User Content, linked, App Functionality, Online mode only". See `docs/legal/LEGAL_PRIVACY_DECISION_SHEET.md`
+  L-1 and `docs/DISTRIBUTION_PACK.md` §1. The sentence that stood here before ("Data Not Collected" as settled) was
+  withdrawn on 2026-10-28 and must not be pasted into App Store Connect until the decision is recorded in
+  `release/approvals/legal-privacy.md`.
 
 ## URLs
 

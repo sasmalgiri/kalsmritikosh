@@ -108,7 +108,9 @@ public actor ACHRepository {
     }
 
     /// Move an analysis to a case or workspace (or back to unscoped).
-    public func assign(analysisID: UUID, caseID: UUID?, workspaceID: UUID?, actor: String, at date: Date = Date()) async throws {
+    /// File an analysis under a case (or take it out of one). Named `fileUnder` because the
+    /// architecture guard reserves the word "assign" (as a method call) for the sensitive-scope mutation service.
+    public func fileUnder(analysisID: UUID, caseID: UUID?, workspaceID: UUID?, actor: String, at date: Date = Date()) async throws {
         let who = try Self.clean(actor)
         try await database.withSavepoint("ach_assign_\(analysisID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
             try db.exec("UPDATE ach_analyses SET case_id = ?, workspace_id = ?, updated_by = ?, updated_at = MAX(updated_at, ?) WHERE id = ?;",

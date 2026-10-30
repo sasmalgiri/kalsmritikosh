@@ -42,6 +42,8 @@ public struct ACHMatrixView: View {
     /// The sources in the active analysis's case scope (exact versions with labels), for citations.
     @State private var citationChoices: [(id: UUID, label: String)] = []
     @State private var citationChoicesFor: UUID?
+    /// Open cases the person can file an analysis under (when this view has no fixed case).
+    @State private var caseChoices: [StudioCaseChoice] = []
 
     /// When set, the list shows only this case's analyses and new ones are filed under it.
     private let caseID: UUID?
@@ -72,6 +74,7 @@ public struct ACHMatrixView: View {
             let stored = try await repo.analyses(caseID: caseID)
             analyses = stored.map(\.analysis)
             scopes = Dictionary(uniqueKeysWithValues: stored.compactMap { s in s.caseID.map { (s.id, $0) } })
+            if caseID == nil { caseChoices = await appState.studioCaseChoices() }
             loaded = true
         } catch {
             KalsmritikoshLog.ui.error("ACH load failed: \(error.localizedDescription, privacy: .public)")
@@ -156,16 +159,7 @@ public struct ACHMatrixView: View {
                                               what: "Starts a fresh Analysis of Competing Hypotheses: frame the question, list rival hypotheses, add evidence, and rate the matrix."))
                     Button { loadSample() } label: { Label("Load a worked example", systemImage: "wand.and.stars") }
                 }
-                if let notice {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "info.circle").foregroundStyle(.secondary)
-                        Text(notice).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        Spacer()
-                        Button { self.notice = nil } label: { Label("Dismiss", systemImage: "xmark").labelStyle(.iconOnly) }
-                            .buttonStyle(.plain).foregroundStyle(.secondary)
-                    }
-                    .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                }
+                noticeView
                 if analyses.isEmpty {
                     ContentUnavailableView("No analyses yet", systemImage: "tablecells",
                                            description: Text("Create one to weigh competing explanations against your evidence."))
@@ -253,12 +247,65 @@ public struct ACHMatrixView: View {
         }
     }
 
+    /// The last outcome (a save problem, a release receipt, a refusal) — shown where the action was taken.
+    @ViewBuilder private var noticeView: some View {
+        if let notice {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                Text(notice).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("ach.notice")
+                Spacer()
+                Button { self.notice = nil } label: { Label("Dismiss", systemImage: "xmark").labelStyle(.iconOnly) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+            }
+            .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    /// UI journey run d (D-2): an analysis opened from the sidebar has no case, so it could cite
+    /// nothing and its outputs were recorded nowhere. The person files it under one of the open
+    /// cases here; citations then come from that case's sources and releases go to its log.
+    private func casePicker(_ a: Binding<ACHAnalysis>) -> some View {
+        let current = scopes[a.wrappedValue.id]
+        return Menu {
+            ForEach(caseChoices) { choice in
+                Button(choice.title + (choice.id == current ? " ✓" : "")) { file(a.wrappedValue, under: choice) }
+            }
+            if caseChoices.isEmpty { Text("No open case — start one from Home or Cases") }
+        } label: {
+            Label(current.flatMap { id in caseChoices.first { $0.id == id }?.title } ?? "File under a case…", systemImage: "folder")
+                .font(.caption).lineLimit(1)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .help(current == nil ? "This analysis belongs to no case yet: cite nothing, record nothing. Choose the case it is part of."
+              : "The case this analysis is filed under — its sources can be cited and its log records every copy, print and export.")
+        .accessibilityIdentifier("ach.case")
+    }
+
+    private func file(_ a: ACHAnalysis, under choice: StudioCaseChoice) {
+        guard let repo = appState.achMatrices else { ledgerMissing = true; return }
+        let who = actor
+        Task { @MainActor in
+            do {
+                try await repo.fileUnder(analysisID: a.id, caseID: choice.id, workspaceID: choice.workspaceID, actor: who)
+                scopes[a.id] = choice.id
+                citationChoicesFor = nil
+                await loadCitationChoices(for: a)
+                notice = "Filed under “\(choice.title)”. Evidence rows can now cite that case's sources; copies, prints and exports are recorded in its log."
+            } catch {
+                KalsmritikoshLog.ui.error("ACH case assignment failed: \(error.localizedDescription, privacy: .public)")
+                notice = "Couldn't file the analysis under that case: \(error.localizedDescription)"
+            }
+        }
+    }
+
     private func studio(_ a: Binding<ACHAnalysis>) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Button { activeID = nil } label: { Label("All analyses", systemImage: "chevron.left").font(.caption) }
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Title", text: a.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 320)
+                if caseID == nil { casePicker(a) }
                 Spacer()
                 Button { release(a.wrappedValue, route: .file) } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
@@ -269,6 +316,7 @@ public struct ACHMatrixView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    noticeView
                     questionSection(a)
                     hypothesesSection(a)
                     matrixSection(a)
@@ -665,11 +713,11 @@ public struct ACHMatrixView: View {
                     NSPasteboard.general.setString(pkg.text, forType: .string)
                     notice = "Copied. " + (await outputs.released(pkg).summary)
                 case .print:
-                    let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-                    tv.string = pkg.text
-                    tv.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    let op = NSPrintOperation(view: tv); op.jobTitle = "ACH — \(title)"
-                    if op.run() { notice = "Printed. " + (await outputs.released(pkg).summary) } else { notice = "Print cancelled; nothing was recorded." }
+                    switch AppPrinting.run(text: pkg.text, jobTitle: "ACH — \(title)", fontSize: 10) {
+                    case .printed: notice = "Printed. " + (await outputs.released(pkg).summary)
+                    case .cancelled: notice = "Print cancelled; nothing was recorded."
+                    case .notAvailable: notice = AppPrinting.unavailableMessage
+                    }
                 case .share:
                     break
                 }

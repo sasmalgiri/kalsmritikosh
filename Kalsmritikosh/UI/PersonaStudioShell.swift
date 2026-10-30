@@ -465,12 +465,8 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 showExporter = true
             #if os(macOS)
             case "print":
-                let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-                tv.string = pkg.text
-                tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-                let op = NSPrintOperation(view: tv); op.jobTitle = "\(config.name) — \(v.title)"
-                // A cancelled print dialog records nothing.
-                if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+                // A cancelled print dialog, or a build that cannot print, records nothing.
+                if AppPrinting.run(text: pkg.text, jobTitle: "\(config.name) — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
             #endif
             default: break
             }

@@ -699,6 +699,8 @@ public struct RootView: View {
                             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                             try? appState.bookmarks.register(url: url)
                             navigate(to: .sources)
+                            // UI journey run d (D-4): read the chosen folder now.
+                            if appState.ingestRunState == .idle { Task { @MainActor in _ = await appState.ingestAllRoots() } }
                         }
                     }
                 // ADD FILES — always-visible ingestion entry point: pick supported

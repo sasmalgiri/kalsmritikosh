@@ -598,7 +598,7 @@ struct CasePlanTab: View {
                                         .accessibilityIdentifier("allegation.link.support")
                                     if let n = e.note { Text("— \(n)").font(.caption).foregroundStyle(.secondary) }
                                     Spacer()
-                                    if e.opensPassage, let o = e.objectID {
+                                    if e.isDocumentary, e.opensPassage, let o = e.objectID {
                                         Button("Open passage") { openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: o, snippet: e.quote ?? "")) }
                                             .buttonStyle(.borderless).font(.caption)
                                             .help("Open the exact passage this link points at.")

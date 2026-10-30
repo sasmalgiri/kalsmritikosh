@@ -756,12 +756,8 @@ public struct ReasoningStudioView: View {
         Task {
             guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
-            let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-            tv.string = pkg.text
-            tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-            let op = NSPrintOperation(view: tv); op.jobTitle = "Root-Cause Analysis — \(v.title)"
-            // Recorded only when the print job completed — a cancelled dialog records nothing.
-            if op.run() { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
+            if AppPrinting.run(text: pkg.text, jobTitle: "Root-Cause Analysis — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
             #endif
         }
     }
