@@ -122,6 +122,12 @@ nonisolated enum JobText {
 public nonisolated enum InventoryExecutor {
     public enum Style: Sendable { case catalogue, exhibit, citation, records }
 
+    /// Acceptance case 2026-10-30: a message that says "see the attached receipt" with nothing attached
+    /// must not pass as complete. The register flags every document that refers to an attachment or
+    /// enclosure; whether the attachment is in the case is for the person to confirm (and request).
+    public static let attachmentFlag = "refers to an attachment or enclosure — confirm it is in the case, or request it"
+    static let attachmentPattern = #"\b(?:attached|attachment|attachments|enclosed|enclosure|enclosures)\b"#
+
     public static func run(_ e: JobEvidence, style: Style) -> JobRun {
         let f = e.facts
         guard !f.documents.isEmpty else {
@@ -139,6 +145,7 @@ public nonisolated enum InventoryExecutor {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { flags.append("unreadable — not reviewed"); unreadable += 1 }
             if dates.isEmpty { flags.append("no date stated"); undated += 1 }
             if doc.sourceVersionID == nil { flags.append("no exact source version") }
+            if JobText.matches(text, attachmentPattern) { flags.append(attachmentFlag) }
             var parts: [String] = []
             let days = Array(Set(dates.map { JobText.day($0.date) })).sorted()
             if !days.isEmpty { parts.append("Dates: " + days.prefix(6).joined(separator: ", ")) }
@@ -397,23 +404,43 @@ public nonisolated enum MoneyExecutor {
         }
         var rows: [JobResultRow] = []
         var totals: [String: Decimal] = [:]
+        var distinctTotals: [String: Decimal] = [:]
         var left = 0
+        // Acceptance case 2026-10-30: the same invoice filed three times (the invoice and two e-mail
+        // copies) states ₹10,000 three times — one statement, not three payments. A repeated statement
+        // is the same amount in the same words in another document: it is listed, flagged, and
+        // counted once in the DISTINCT total; the plain sum of every mention is kept beside it.
+        var seenStatements: [String: String] = [:]   // normalised (amount + sentence) → first document
         for a in amounts {
             let currency = FAMoney.currency(of: a.value)
             let value = FAMoney.value(of: a.value)
             var flags: [String] = []
             if currency.isEmpty { flags.append("currency not stated — not totalled") }
             if value == nil { flags.append("not one plain figure — not totalled") }
-            if let value, !currency.isEmpty { totals[currency, default: 0] += value } else { left += 1 }
+            let sentence = JobDeliverableText.normalised(a.refs.first?.quote ?? "")
+            let docName = a.refs.first.flatMap { JobText.document(of: $0, in: e.facts.documents)?.name } ?? ""
+            let key = JobDeliverableText.normalised(a.value) + "|" + sentence
+            var repeated = false
+            if !sentence.isEmpty, let first = seenStatements[key], first != docName {
+                repeated = true
+                flags.append("repeats the same statement as \(first) — one statement filed again, not a second amount; counted once")
+            } else if seenStatements[key] == nil { seenStatements[key] = docName }
+            if let value, !currency.isEmpty {
+                totals[currency, default: 0] += value
+                if !repeated { distinctTotals[currency, default: 0] += value }
+            } else { left += 1 }
             rows.append(JobResultRow(title: a.value, detail: a.refs.first?.quote, flags: flags, refs: a.refs))
         }
         for (cur, sum) in totals.sorted(by: { $0.key < $1.key }) {
-            rows.append(JobResultRow(title: "Stated amounts in \(cur): \(FAMoney.format(sum))",
-                                     flags: ["sum of stated amounts — not a loss, damages or recovery figure", "duplicates not resolved"]))
+            let distinct = distinctTotals[cur] ?? 0
+            rows.append(JobResultRow(title: "Stated amounts in \(cur): \(FAMoney.format(distinct)) distinct" + (distinct == sum ? "" : " (\(FAMoney.format(sum)) counting every mention)"),
+                                     flags: ["sum of stated amounts — not a loss, damages, payment or recovery figure",
+                                             distinct == sum ? "no repeated statement" : "repeated statements counted once in the distinct figure",
+                                             "a payment, its invoice and its refund are classified in the tracing schedule, not here"]))
         }
         var limitations = JobText.withheldLimitation(e.withheld)
         if left > 0 { limitations.append("\(left) amount(s) are left out of every total (no stated currency, or not one plain figure).") }
-        limitations.append("A difference between figures is a difference to explain, not evidence of loss or fraud.")
+        limitations.append("A difference between figures is a difference to explain, not evidence of loss or fraud. The same amount in the same words filed in another document is one statement counted once; an invoice, the bank debit that paid it and a refund against it are different statements — classify them (payment, refund, invoice) in the tracing schedule before any gross or net figure is read.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Classify each amount (movement, duplicate, reversal) before any total is relied on.",
                                                        "State the currency of every amount the documents leave unstated."]))

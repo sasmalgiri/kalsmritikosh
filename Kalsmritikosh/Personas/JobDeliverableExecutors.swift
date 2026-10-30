@@ -1119,14 +1119,22 @@ public nonisolated enum ConfigurableAnalysisExecutor {
             let members = groups[g] ?? []
             var detail = "\(members.count) value(s), \(Set(members.map { IssueMatrixExecutor.key($0.value) }).count) distinct"
             if !query.total.isEmpty {
-                var totals: [String: Decimal] = [:]; var left = 0
+                // The same statement filed in several documents (an invoice and its e-mail copies) is
+                // one statement: the total counts distinct (value, sentence) pairs and says how many
+                // mentions were folded. A total of stated amounts is never a payment figure.
+                var totals: [String: Decimal] = [:]; var left = 0; var folded = 0
+                var seen = Set<String>()
                 for m in members where m.label.compare(query.total, options: .caseInsensitive) == .orderedSame {
                     let c = FAMoney.currency(of: m.value)
+                    let key = JobDeliverableText.normalised(m.value) + "|" + JobDeliverableText.normalised(m.row.refs.first?.quote ?? "")
+                    if !(m.row.refs.first?.quote ?? "").isEmpty, !seen.insert(key).inserted { folded += 1; continue }
                     if let d = FAMoney.value(of: m.value), !c.isEmpty { totals[c, default: 0] += d } else { left += 1 }
                 }
                 if !totals.isEmpty || left > 0 {
-                    detail += "; total of \(query.total): " + (totals.isEmpty ? "none with a stated currency" : totals.sorted { $0.key < $1.key }.map { "\($0.key) \(FAMoney.format($0.value))" }.joined(separator: ", "))
+                    detail += "; total of \(query.total) (distinct statements): " + (totals.isEmpty ? "none with a stated currency" : totals.sorted { $0.key < $1.key }.map { "\($0.key) \(FAMoney.format($0.value))" }.joined(separator: ", "))
+                    if folded > 0 { detail += "; \(folded) repeated statement(s) counted once" }
                     if left > 0 { detail += "; \(left) not totalled (no currency or not one figure)" }
+                    detail += " — stated amounts, not payments"
                 }
             }
             rows.append(JobResultRow(title: "\(query.groupBy == "document" ? "Document" : "Field") \(g): " + Array(NSOrderedSet(array: members.map(\.value))).prefix(5).map { "\($0)" }.joined(separator: ", ") + (members.count > 5 ? " …" : ""),

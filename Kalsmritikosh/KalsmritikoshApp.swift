@@ -95,6 +95,12 @@ struct KalsmritikoshApp: App {
                         await PAProdGUISmokeFixture.bootAndSeed(appState)
                         return
                     }
+                    // Investigator workflow review 2026-10-30 — DEBUG-only: `--acceptance-case` boots a
+                    // disposable ledger holding the supplier-payment acceptance case for a UI walk-through.
+                    if AcceptanceCaseGUIFixture.isRequested {
+                        await AcceptanceCaseGUIFixture.boot(appState)
+                        return
+                    }
                     #endif
                     // First run: wait for the user to pick a system mode so
                     // the engine boots in the chosen mode. Returns at once on

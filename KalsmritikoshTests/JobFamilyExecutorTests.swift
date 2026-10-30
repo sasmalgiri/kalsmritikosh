@@ -127,7 +127,7 @@ struct JobFamilyExecutorTests {
     func money() {
         let (e, _, _) = Self.fixture()
         let r = MoneyExecutor.run(e)
-        #expect(r.content.rows.contains { $0.title == "Stated amounts in INR: 1,000.00" })
+        #expect(r.content.rows.contains { $0.title == "Stated amounts in INR: 1,000.00 distinct" })
         let million = r.content.rows.first { $0.title == "$2.75 million" }
         #expect(million?.flags.contains("currency not stated — not totalled") == true)
         #expect(million?.flags.contains("not one plain figure — not totalled") == true)

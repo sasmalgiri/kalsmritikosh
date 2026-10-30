@@ -326,7 +326,12 @@ public actor StudioCaseFactsReader {
                     guard v.contains(" "), seenNames.insert(v.lowercased()).inserted else { continue }
                     named.append(StudioCaseValue(value: v, label: e.kind == .person ? "person" : "organisation", refs: [ref]))
                 case .money:
-                    guard v.rangeOfCharacter(from: .decimalDigits) != nil, seenAmounts.insert(v.lowercased()).inserted else { continue }
+                    // Acceptance case 2026-10-30: one entry per STATEMENT (document + sentence), not per
+                    // value. Keying by value alone kept only the first "₹10,000" in the whole case and
+                    // hid that the invoice, its two e-mail copies and the bank debit each state it —
+                    // the repeats are the executors' to flag, with their quotes, not the reader's to drop.
+                    guard v.rangeOfCharacter(from: .decimalDigits) != nil,
+                          seenAmounts.insert(v.lowercased() + "|" + id.uuidString + "|" + quote.lowercased()).inserted else { continue }
                     amounts.append(StudioCaseValue(value: v, label: "amount", refs: [ref]))
                 case .date:
                     guard let day = Self.statedDay(raw: v, normalized: e.normalizedValue),
