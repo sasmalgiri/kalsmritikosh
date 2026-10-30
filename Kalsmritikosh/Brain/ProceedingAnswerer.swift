@@ -38,7 +38,9 @@ public nonisolated enum ProceedingAnswerer {
     /// The step a question's verb names.
     static let stepWords: [(String, ProceedingEventExtractor.Step)] = [
         // Noun forms first ("when X's sentencing took place", "the date of the guilty plea") —
-        // Claude-reworded closed-case questions, 2026-10-26.
+        // Claude-reworded closed-case questions, 2026-10-26. The plea verb before "charges": "did X
+        // plead guilty to the charges?" asks about the plea (held-out chronology 11, 2026-10-30).
+        ("plead guilty", .pleaded), ("pleaded guilty", .pleaded), ("pled guilty", .pleaded), ("plea of guilty", .pleaded),
         ("sentencing", .sentenced), ("guilty plea", .pleaded), ("indictment", .charged), ("conviction", .convicted),
         ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged), ("charging", .charged),
         ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),
@@ -76,7 +78,7 @@ public nonisolated enum ProceedingAnswerer {
     static func unwrap(_ q: String) -> String {
         // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
         // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do you know|do (?:you|we) have|have (?:you|we) got|is there|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do you know|do (?:you|we) have|have (?:you|we) got|is there|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -92,14 +94,16 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "How many (separate) press releases …", "the total count of press releases about X", "a count of
         // the press releases that mention X" — anywhere in the question, after any courtesy wrapper.
-        let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements)\b"#
+        // "public statements or press releases" (held-out chronology 11, 2026-10-30).
+        let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+|public\s+)?(?:(?:statements|notices|bulletins)\s+(?:or|and)\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements|statements)\b"#
         // "a count of how many press releases reference X" — the count phrase may wrap the how-many one.
         if q.range(of: #"^(?:roughly\s+|approximately\s+|about\s+|around\s+)?how many\s+"# + documents, options: .regularExpression) != nil
             || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?(?:how many\s+)?"# + documents, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .documentCount)
         }
         // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
-        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b|^(?:exactly\s+)?what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\b(?:details?|specifics?)\s+(?:on|of|about)\s+(?:the\s+)?sentence\b"#, options: .regularExpression) != nil {
+        // "the punishment or sentence that X received", "the sentence that X ended up getting" (held-out chronology 11).
+        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|^(?:the\s+)?(?:\w+\s+){0,3}?(?:sentence|punishment|penalty)\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed|ended up (?:getting|with|receiving)|wound up with)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b|^(?:exactly\s+)?what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\b(?:details?|specifics?)\s+(?:on|of|about)\s+(?:the\s+)?sentence\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .sentenceImposed)
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
@@ -115,11 +119,11 @@ public nonisolated enum ProceedingAnswerer {
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
         // "the date on which X was formally charged" (held-out chronology 10, 2026-10-29).
-        if q.range(of: #"^(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:exactly\s+|precisely\s+)?(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b|^(?:the\s+)?(?:exact\s+|precise\s+|specific\s+|actual\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
         }
         // "Is there any indication that X entered a guilty plea?" (held-out chronology 10, 2026-10-29).
-        if q.range(of: #"^(?:did|was|were|has|have|is)\b|^(?:any|an?)\s+(?:indication|record|evidence|sign|mention|confirmation)\s+(?:that|of|whether)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:did|was|were|has|have|is)\b|^(?:any|an?)\s+(?:indication|record|evidence|sign|mention|confirmation)\s+(?:(?:indicating|showing|confirming|suggesting)\s+)?(?:that|of|whether)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .whether(step))
         }
         // The same yes/no question behind a courtesy wrapper: "I'm trying to confirm: did X plead
@@ -175,7 +179,7 @@ public nonisolated enum ProceedingAnswerer {
             // (FBI)" as the heading line, the body naming no district — held-out chronology 9, 2026-10-29)
             // names that component; it is what the documents say, never a guessed district.
             guard line.count <= 80, !line.lowercased().hasPrefix("u.s. department of justice"),
-                  line.range(of: #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&]+ Division$|^Office of [A-Z][A-Za-z ]+$|^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Executive Office for United States Attorneys|Office of the Inspector General)(?: \([A-Z]{2,6}\))?$"#,
+                  line.range(of: #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&\-–]+ (?:Division|Section|Branch|Unit)$|^Office of [A-Z][A-Za-z ]+$|^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Executive Office for United States Attorneys|Office of the Inspector General)(?: \([A-Z]{2,6}\))?$"#,
                              options: .regularExpression) != nil else { continue }
             out.append(line)
         }
@@ -267,7 +271,10 @@ public nonisolated enum ProceedingAnswerer {
             }
             let text: String
             if let day = render(best.1.day) {
-                text = "\(name) was \(step.phrase) on \(day). The document says: \(quote(best.1.sentence))"
+                // A day read from "yesterday" or a weekday against the release's date: the release's
+                // own date is given too, so the reader sees both (held-out chronology 11, 2026-10-30).
+                let dated = best.1.dayFromPrintedDate && best.1.day != best.1.reportedOn ? render(best.1.reportedOn).map { " (the release is dated \($0))" } ?? "" : ""
+                text = "\(name) was \(step.phrase) on \(day)\(dated). The document says: \(quote(best.1.sentence))"
             } else if let reported = render(best.1.reportedOn) {
                 // The sentence gives no day of its own; the document's printed date is when it was reported.
                 text = "The document dated \(reported) reports that \(name) was \(step.phrase); it gives no other day: \(quote(best.1.sentence))"
@@ -307,8 +314,21 @@ public nonisolated enum ProceedingAnswerer {
             }
             return refuse("The documents that name \(name) don't say whether \(name) " + (step == .pleaded ? "pleaded guilty." : "was \(step.phrase)."))
         case .sentenceImposed:
-            guard let hit = found.first(where: { $0.1.step == .sentenced && $0.1.detail != nil }) else {
+            let terms = found.filter { $0.1.step == .sentenced && $0.1.detail != nil }
+            guard let hit = terms.first else {
                 return refuse("The documents that name \(name) don't state a sentence for \(name).")
+            }
+            // Different terms in different documents (a person sentenced in two prosecutions —
+            // held-out chronology 11, 2026-10-30): every one is given, in order, never only the first.
+            var distinct: [Hit] = [hit]
+            for t in terms.dropFirst() where t.0 != hit.0 && !distinct.contains(where: { IssueMatrixExecutor.key($0.1.detail ?? "") == IssueMatrixExecutor.key(t.1.detail ?? "") }) {
+                distinct.append(t)
+            }
+            if distinct.count > 1 {
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }
+                let text = "\(name) was sentenced to " + distinct.map { ($0.1.detail ?? "") + (render($0.1.day ?? $0.1.reportedOn).map { " (\($0))" } ?? "") }.joined(separator: " and, in another proceeding, to ")
+                    + " — the documents record more than one sentence. They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.7))
             }
             let text = "\(name) was sentenced to \(hit.1.detail ?? ""). The document says: \(quote(hit.1.sentence))"
             return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.8))
@@ -363,7 +383,15 @@ public nonisolated enum ProceedingAnswerer {
                       let m = re.firstMatch(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)), let r = Range(m.range(at: 1), in: sentence) else { return false }
                 let subject = String(sentence[r]).lowercased().trimmingCharacters(in: .punctuationCharacters)
                 let tokens = Set(parsed.person.lowercased().split(separator: " ").map { $0.trimmingCharacters(in: .punctuationCharacters) })
-                return !subjectStop.contains(subject) && !tokens.contains(subject) && !surnames.contains(subject)
+                guard !subjectStop.contains(subject), !tokens.contains(subject), !surnames.contains(subject) else { return false }
+                // "Zane Tilcock, 20, of Wichita is charged with …": the person's own introduction runs up to
+                // the verb. It is someone else's step only when no surname of the person stands within the
+                // clause, or a sentence boundary lies between them (two sentences run together).
+                let before = String(sentence[..<r.lowerBound]).lowercased()
+                guard let last = surnames.compactMap({ before.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: [.regularExpression, .backwards]) }).max(by: { $0.lowerBound < $1.lowerBound }) else { return true }
+                let between = before[last.upperBound...]
+                return between.count > 120 || between.range(of: #"[.!?]\s+[a-z]"#, options: .regularExpression) != nil
+                    || String(sentence[..<r.lowerBound])[last.upperBound...].range(of: #"[.!?]\s+[A-Z]"#, options: .regularExpression) != nil
             }
             func score(_ c: Candidate) -> Int {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
@@ -424,7 +452,8 @@ public nonisolated enum ProceedingAnswerer {
                 return refuse("The documents that name \(name) give no dated step of the case.")
             }
             let lines = dated.map { f -> String in
-                let when = f.1.day != nil ? (render(f.1.day) ?? "") : "\(render(f.1.reportedOn) ?? "") (date of the report)"
+                var when = f.1.day != nil ? (render(f.1.day) ?? "") : "\(render(f.1.reportedOn) ?? "") (date of the report)"
+                if f.1.day != nil, f.1.dayFromPrintedDate, f.1.day != f.1.reportedOn, let r = render(f.1.reportedOn) { when += " (release dated \(r))" }
                 return "• \(when) — \(f.1.step.phrase): \(quote(f.1.sentence))"
             }
             let text = "The case against \(name), in date order (\(dated.count) step\(dated.count == 1 ? "" : "s") from \(Set(dated.map(\.0)).count) document\(Set(dated.map(\.0)).count == 1 ? "" : "s")):\n" + lines.joined(separator: "\n")

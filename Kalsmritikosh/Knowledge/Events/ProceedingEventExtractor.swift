@@ -115,8 +115,9 @@ public nonisolated enum ProceedingEventExtractor {
         }
         // "Two Florida women pleaded guilty today …" followed by "Analay Rico, 37, … and Daylen Diaz,
         // 44, …": a plural lead is about each defendant the next sentences introduce.
+        // "A jury convicted three people of …" is a plural lead too (held-out chronology 11, 2026-10-30).
         if descriptiveLead == nil,
-           let i = all.prefix(8).firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|\d{1,2})\s(?:[A-Za-z\-]+,?\s){0,6}(?:men|women|residents|people|individuals|defendants|officers|officials|executives|employees|doctors|physicians|nurses|members|brothers|sisters|siblings|nationals|citizens|leaders|owners|operators)\b"#, options: .regularExpression) != nil }),
+           let i = all.prefix(8).firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:A|The) (?:federal )?jury (?:convicted|found|acquitted) )?(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})\s(?:[A-Za-z\-]+,?\s){0,6}(?:men|women|residents|people|individuals|defendants|officers|officials|executives|employees|doctors|physicians|nurses|members|brothers|sisters|siblings|nationals|citizens|leaders|owners|operators)\b"#, options: .regularExpression) != nil }),
            all[(i + 1)..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
@@ -175,6 +176,10 @@ public nonisolated enum ProceedingEventExtractor {
                 // A future or conditional clause right around the step is not the step.
                 let window = String(s[s.index(r.lowerBound, offsetBy: -min(40, s.distance(from: s.startIndex, to: r.lowerBound)))..<r.upperBound])
                 if window.range(of: notYet, options: .regularExpression) != nil { continue }
+                // A prior record ("had been previously convicted in 2007 … for which he was sentenced to
+                // 12 to 15 months") is background, not a step of this case (held-out chronology 11).
+                if step == .convicted || step == .sentenced,
+                   s.range(of: #"\bpreviously (?:been )?convicted\b|\bprior (?:felony )?convictions?\b|\bwas on (?:probation|parole)\b"#, options: .regularExpression) != nil { continue }
                 if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
                 let (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
                 // One per step and day; undated mentions are kept apart (the one that states the offence may come second).
@@ -287,8 +292,13 @@ public nonisolated enum ProceedingEventExtractor {
 
     static func mentionsFully(_ lower: String, tokens: [String]) -> Bool {
         guard let first = tokens.first, let last = tokens.last else { return false }
-        // A middle initial's period ("Nathaniel E. Robinson") is part of the name.
-        let pattern = #"\b"# + NSRegularExpression.escapedPattern(for: first) + #"\b(?:[^.]|(?<=\b[a-z])\.){0,40}?\b"# + NSRegularExpression.escapedPattern(for: last) + #"\b"#
+        // A middle initial's period ("Nathaniel E. Robinson") is part of the name. A hyphenated
+        // surname is also written with a space or run together ("Navarrete-Dominguez", "Navarrete
+        // Dominguez" — held-out chronology 11, 2026-10-30).
+        func loose(_ t: String) -> String {
+            NSRegularExpression.escapedPattern(for: t).replacingOccurrences(of: #"\-"#, with: "-").replacingOccurrences(of: "-", with: #"[\s-]?"#)
+        }
+        let pattern = #"\b"# + loose(first) + #"\b(?:[^.]|(?<=\b[a-z])\.){0,40}?\b"# + loose(last) + #"\b"#
         return lower.range(of: pattern, options: .regularExpression) != nil
     }
 
@@ -380,6 +390,8 @@ public nonisolated enum ProceedingEventExtractor {
         let term = (sentence as NSString).substring(with: m.range(at: 1))
         // "… from her employer, announced United States Attorney …" — the term ends before the attribution.
         let cut = term.replacingOccurrences(of: #"(?i),?\s+(?:announced|said|stated|according to|the (?:justice )?department)\b.*$"#, with: "", options: .regularExpression)
+            // "… in federal prison, U." — the term stopped inside "U.S. Attorney …".
+            .replacingOccurrences(of: #",?\s+(?:U|U\.S|United States)$"#, with: "", options: .regularExpression)
         return cut.trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
     }
 

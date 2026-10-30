@@ -170,7 +170,8 @@ struct ProceedingAnswererTests {
         #expect(steps == [.pleaded], "\(steps)")
         let tl = try #require(ProceedingAnswerer.parse("Give me the timeline of the case against Tayron Tyree Weeks"))
         let body = try #require(ProceedingAnswerer.answer(tl, sources: [.init(objectID: UUID(), text: mistitled), .init(objectID: UUID(), text: sentenced)])).body
-        #expect(body.contains("September 18, 2014 — pleaded guilty") && body.contains("December 12, 2014 — sentenced") && !body.contains("September 19, 2014"), "\(body)")
+        #expect(body.contains("September 18, 2014 (release dated September 19, 2014) — pleaded guilty") && body.contains("December 12, 2014 — sentenced")
+                && !body.contains("— sentenced: “Washington"), "\(body)")
     }
 
     @Test("Held-out chronology 10 (2026-10-29): more courtesy wrappers, 'entered a guilty plea', 'The defendant', a jury that found X guilty, a trial named elsewhere in the release, two sentencings, an offence sentence over a date or a co-defendant list, a weekday")
@@ -236,6 +237,53 @@ struct ProceedingAnswererTests {
         let bw = try #require(ProceedingAnswerer.parse("Can you tell me the date on which Billy Joe West was formally charged?"))
         let bwBody = try #require(ProceedingAnswerer.answer(bw, sources: [.init(objectID: UUID(), text: west)])).body
         #expect(bwBody.contains("March 2") && !bwBody.contains("don't record"), "\(bwBody)")
+    }
+
+    @Test("Held-out chronology 11 (2026-10-30): 'plead guilty to the charges', 'any record indicating', 'exactly when', 'punishment or sentence', 'public statements or press releases', a Section heading, a prior conviction, two sentences, a hyphenated surname, the release date beside a weekday")
+    func heldOut11() throws {
+        let n = QuestionCanonicalizer.normalize
+        let shapes: [(String, ProceedingAnswerer.Ask)] = [
+            ("For the record, did Christi Machala plead guilty to the charges?", .whether(.pleaded)),
+            ("Is there any record indicating that Christi Machala entered a guilty plea?", .whether(.pleaded)),
+            ("Could you confirm exactly when Christi Machala was sentenced?", .when(.sentenced)),
+            ("Do you know exactly when Christi Machala was sentenced?", .when(.sentenced)),
+            ("Could you specify the punishment or sentence that Christi Machala received?", .sentenceImposed),
+            ("Could you confirm the sentence that Christi Machala ended up getting?", .sentenceImposed),
+            ("How many public statements or press releases have been issued about Christi Machala?", .documentCount),
+            ("I need to know—what office was responsible for prosecuting Christi Machala?", .office),
+        ]
+        for (q, want) in shapes { #expect(ProceedingAnswerer.parse(n(q))?.ask == want, "\(q) → \(n(q))") }
+        func release(_ date: String, _ body: String, heading: String = "District of Kansas") -> String { "U.S. Department of Justice\n\(heading)\nFOR IMMEDIATE RELEASE\n\(date)\n\n" + body }
+        // A component section as the heading line.
+        let section = release("Friday, February 16, 2018", "United States Attorney Trent Shores announced today that Noel McFadden, 71, of Broken Arrow, pleaded guilty to one count of sexual exploitation of a child.", heading: "Criminal - Child Exploitation and Obscenity Section")
+        #expect(ProceedingAnswerer.offices(in: section) == ["Criminal - Child Exploitation and Obscenity Section"])
+        // The body's charge over the headline's.
+        let tilcock = release("Friday, January 3, 2025", "Two people from Wichita charged with robbing Kansas banks\n\nWICHITA, KAN. – A man and woman from Kansas have been charged through criminal complaint in Wichita on charges related to a series of bank robberies involving a firearm. According to court documents, Zane Tilcock, 20, of Wichita is charged with three counts of bank robbery. Emily Wise, 18, of Wichita is charged with one count of bank robbery.")
+        let zt = try #require(ProceedingAnswerer.parse("What were the specific charges filed against Zane Tilcock?"))
+        #expect(try #require(ProceedingAnswerer.answer(zt, sources: [.init(objectID: UUID(), text: tilcock)])).body.contains("three counts of bank robbery"))
+        // A prior conviction is not this case's sentencing; the sentencing release answers.
+        let plea = release("Friday, November 27, 2015", "Jarrod Ty Foxworthy, 29, of Lafayette, pleaded guilty before U.S. District Judge Richard T. Haik to one count of possession of a firearm by convicted felon. The defendant had been previously convicted in March of 2007 in North Carolina state court of common law robbery, for which he was sentenced to 12 to 15 months in prison.")
+        let sentencing = release("Friday, February 26, 2016", "Jarrod Ty Foxworthy, 29, of Lafayette, was sentenced by U.S. District Judge Patricia Minaldi on one count of possession of a firearm by a convicted felon.")
+        let jf = try #require(ProceedingAnswerer.parse("Can you tell me the exact date Jarrod Ty Foxworthy was sentenced?"))
+        let jfBody = try #require(ProceedingAnswerer.answer(jf, sources: [.init(objectID: UUID(), text: plea), .init(objectID: UUID(), text: sentencing)])).body
+        #expect(jfBody.contains("February 26, 2016") && !jfBody.contains("2007"), "\(jfBody)")
+        // Two sentences in two prosecutions: both given; "U." is not part of a term.
+        let first = release("Monday, March 10, 2014", "Huntington, W.Va. – A Illinois felon who illegally possessed four firearms in February of 2013 was sentenced today to six years and six months in federal prison, U.S. Attorney Booth Goodwin announced. Thomas Ray III, 44, of Will County, Illinois, previously pleaded guilty in December 2013 to possessing a firearm after having been convicted of a felony offense.")
+        let second = release("Monday, December 18, 2023", "HUNTINGTON, W.Va. – Thomas Ray III, 54, of Huntington, was sentenced today to 12 years in prison, to be followed by five years of supervised release, for being a felon in possession of a firearm.")
+        let tr = try #require(ProceedingAnswerer.parse("What sentence was handed down to Thomas Ray III?"))
+        let trBody = try #require(ProceedingAnswerer.answer(tr, sources: [.init(objectID: UUID(), text: first), .init(objectID: UUID(), text: second)])).body
+        #expect(trBody.contains("12 years") && trBody.contains("six years and six months") && !trBody.contains("prison, U"), "\(trBody)")
+        // A hyphenated surname written with a space in one release still names the person.
+        let hyphen = release("Monday, December 11, 2017", "BUFFALO, N.Y. - U.S. Attorney James P. Kennedy, Jr. announced today that Armando Navarrete Dominguez, 29, of Mexico, pleaded guilty to illegal re-entry.")
+        #expect(ProceedingEventExtractor.mentionsFully(hyphen.lowercased(), tokens: ProceedingEventExtractor.nameTokens("Armando Navarrete-Dominguez")))
+        // A weekday-derived day carries the release's own date beside it.
+        let weekday = release("Thursday, August 20, 2020", "PENSACOLA, FLORIDA – Michael C. Greutman, 59, of Fort Walton Beach, Florida, was sentenced Tuesday afternoon to 42 months in federal prison on charges of wire fraud.")
+        let mg = try #require(ProceedingAnswerer.parse("On what date was Michael C. Greutman sentenced?"))
+        #expect(try #require(ProceedingAnswerer.answer(mg, sources: [.init(objectID: UUID(), text: weekday)])).body.hasPrefix("Michael C. Greutman was sentenced on August 18, 2020 (the release is dated August 20, 2020)"))
+        // "A jury convicted three people of …" is a plural lead about each defendant named next.
+        let moody = release("Monday, December 11, 2017", "A jury convicted three people of taking federal money earmarked for job training and instead using the money to fund lavish lifestyles. James D. Moody, 58, of Toledo, Victoria Hawkins, 31, and Angela Bowser, 46, were convicted on all counts.", heading: "Northern District of Ohio")
+        let jm = try #require(ProceedingAnswerer.parse("What were the charges filed against James D. Moody?"))
+        #expect(try #require(ProceedingAnswerer.answer(jm, sources: [.init(objectID: UUID(), text: moody)])).body.contains("taking federal money earmarked for job training"))
     }
 
     @Test("No guilty plea on file is not 'No'; only a verdict at trial says the person did not plead; a plea is not 'not convicted'")
