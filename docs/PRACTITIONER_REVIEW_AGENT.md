@@ -28,12 +28,16 @@ For each persona: the standard the contract names (`JobContracts.policy`), the c
 
 ## General findings (all personas)
 
-- *Fixed:* nothing. *Open:* the result screen shows every contract column for every row, including the three
-  analysis fields on table rows of the data-lab result; a practitioner may want those only on the Analysis row.
-- *Open:* the launch window can open taller than the screen (journey finding D1); the cause was not found in
-  this pass (the window autosave frame is one hypothesis). A practitioner on a laptop will hit it first.
+- *Fixed (workflow review I8, 2026-10-30):* the data-lab query is edited once above the result; large results open as
+  a table with a filter, unresolved-only and a selected-row pane; fields show by row kind.
+- *Fixed (I9):* a launch window taller than its screen is fitted to it; run b measured `[0,33 1470x843]` on a 956 pt screen.
+- *Fixed (I6, I7, I3):* the earlier "Open" items on statement points, source families and the ACH worksheet — the speaker
+  follows the reporting verb and an ambiguous sentence stays unassigned; "one family" is a shared-text candidate with the
+  lineage decision the journalist's; an unrated ACH cell is unassessed and a tie is presented as a tie.
 - *Open:* exports were not exercised through the UI (system save panel); the export path is covered by
   `JobResultIntegrityTests` and `JobDeliverableTests`, not by a journey.
+- *Open:* the practitioner evaluation the workflow review asks for (five users, a shared task, time to first cited
+  finding and to a reviewed report, detours, errors) — people, not the agent.
 
 ## What a practitioner should be given
 

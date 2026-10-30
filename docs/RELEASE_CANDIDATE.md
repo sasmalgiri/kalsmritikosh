@@ -1,9 +1,31 @@
 # Release candidate — Investigations Made Easy v1 (candidate packet, not a release)
 
-Prepared 2026-10-30. This packet freezes **one candidate** with its commit, build digests and the evidence
-index. It is a candidate: the owner's verdict of 2026-10-29 ("not yet — do not ship publicly") stands until
-the gates in `docs/RELEASE_READINESS.md` are met. Rows marked *owner* or *people* are filled by them, not by
-the agent.
+Prepared 2026-10-30; **superseded the same day** by the investigator workflow review's changes (FINAL_BRIEF_EXECUTION
+§E5): product code changed after `da42fb08`, so by the freeze rule in §5 the candidate below is no longer the one to
+sign. The next candidate is the head of `investigations-next` after the review's commits (see §1a); its unsigned
+Release digests are recorded there when the build is made. The owner's verdict of 2026-10-29 ("not yet — do not ship
+publicly") stands until the gates in `docs/RELEASE_READINESS.md` are met. Rows marked *owner* or *people* are filled
+by them, not by the agent.
+
+## 1a. The superseding candidate (after the workflow review)
+
+| Field | Value |
+|---|---|
+| Commits | `db5d75d5` (I3) · `0a741ac7` (I6, I7) · `585bb2a4` (I1) · `00590051` (I2) · `22f8d9d9` (I4, I5) · `9aa8f479` (I8) · `25091949` (I9) · `bcb9af60` (acceptance case) · `517e9ae5` (UI-journey fixes) · `4ca1e1a3` (run c records) · `d014d2e7` (amount pattern, ingest indicator) — last code change `d014d2e7`; records commits follow it |
+| Schema | v167 (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin) — v166 ACH unassessed cells + citations, v167 passage-level case evidence, allegation response/exception, report items |
+| Unsigned Release digests | §2a below, built from the working tree at `d014d2e7` |
+| Hosted CI | run on the pushed head (one push, all seven jobs) — result recorded in the records commit after it |
+
+## 2a. Build digests of the superseding candidate (unsigned Release, this Mac, tree at `d014d2e7`)
+
+| Artifact | SHA-256 |
+|---|---|
+| `Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh` | `002ecb1c43b183f1c193a6ea15d6ea01d6ade0fe52a9ea72bf203d905fa83531` |
+| `…/Extensions/KalsmritikoshNetworkHelper.appex/Contents/MacOS/KalsmritikoshNetworkHelper` | `6de4964778762a62395e3533fb526ac05d9f04ad1ff4e6fa4c0117026db0b33d` (unchanged) |
+| `…/PlugIns/KalsmritikoshClipper.appex/Contents/MacOS/KalsmritikoshClipper` | `cd5b1da0f30dcddd96176b034b0cd816de5fda305cff14d1d4a2d4ff58a72ab3` (unchanged) |
+| `…/PlugIns/KalsmritikoshShare.appex/Contents/MacOS/KalsmritikoshShare` | `ac960b529c43f2c769f4beccfb7a9bb9142ce21ffca5b36db71663cc19a61b53` (unchanged) |
+
+Same command as §6. The *owner* records the signed Distribution build's digests beside these.
 
 ## 1. The candidate
 

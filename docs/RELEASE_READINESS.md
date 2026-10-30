@@ -1,8 +1,14 @@
-# Release readiness — Investigations Made Easy v1 (2026-10-29, revised after the completion instructions on 0ce29931)
+# Release readiness — Investigations Made Easy v1 (2026-10-30, revised after the investigator workflow review of da42fb08)
 
 **Decision: not ready to release.** The blockers are named below. This page summarises
 `docs/FINAL_BRIEF_EXECUTION.md` (the authority) as of `investigations-next`, after the B1–B5 engineering pass
-(§E1 of the execution record is the one evidence table).
+(§E1), the release-block directive (§E2–§E4) and the investigator workflow review (§E5 — the nine findings I1–I9,
+each built with source tests and walked through the development build; the one findings table is there).
+
+The owner's condition for supporting a v1 ship: the nine workflow fixes **and** the earlier release gates, with passing
+evidence on the final build. The nine are built and test-verified (§E5); the earlier gates below are unchanged in kind:
+accuracy (F5), the Distribution build (F3 tier 3), counsel (F6) and the practitioner/pilot reviews (F7) still need the
+owner or people.
 
 Testing cadence (agreed with the owner, 2026-10-28):
 - each change: the suites it touches, plus the guards;
@@ -16,7 +22,8 @@ Testing cadence (agreed with the owner, 2026-10-28):
 | F0 | One execution record; SHIP_DECISIONS current | done | SHIP_DECISIONS §0, FINAL_BRIEF_EXECUTION |
 | F1 | Shared kernel K1–K11 | **done** (unit/integration), incl. audit A3–A7 and B1 (erasure fails closed), B2 (job-result integrity), B4 (case-scoped cloud sends); bounded items recorded | K5 studio approvals carry no scope fingerprint (the export re-check covers it); K11 vault encryption is a recorded decision |
 | F2 | All 168 jobs produce their intended result | **met to integration level** — 20 studio, 97 executor (each checked against its own acceptance scenario; the 16 B3 had reopened now have their own executors, scenarios, completion rules and enforcement — FINAL_BRIEF_EXECUTION §E2), 51 service, 0 preparation, 0 gap. Open: UI journeys on the signed build; practitioner review of each deliverable | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobAcceptanceScenarioTests`, `JobDeliverableTests` |
-| F3 | Nine persona journeys | service level done (`InvestigationCaseSimulationTests`, 9 personas); **UI journeys done on the development-signed Debug build in sample-archive mode (2026-10-30)**, every persona to a result screen, four UI findings (two fixed); **open on the Distribution build** (tier 3), and export through the UI not exercised | `docs/evidence/ui-journeys-2026-10-30/JOURNEYS.md` |
+| F3 | Nine persona journeys | service level done (`InvestigationCaseSimulationTests`, 9 personas); **UI journeys done on the development-signed Debug build in sample-archive mode (2026-10-30)**, every persona to a result screen, four UI findings (two fixed); **the acceptance case walked through the UI (runs b and c, 2026-10-30)** — eight UI defects found, seven fixed and re-verified, one (first screen restores the last visited screen) stands; **open on the Distribution build** (tier 3), and export through the UI not exercised | `docs/evidence/ui-journeys-2026-10-30/JOURNEYS.md`, `docs/evidence/ui-journeys-2026-10-30b/JOURNEYS.md` |
+| W | Investigator workflow review I1–I9 (2026-10-30) | **built and test-verified, UI-verified on the development build** — see FINAL_BRIEF_EXECUTION §E5 for the per-finding table (commit, suites, screenshots, limitation). Open: the same walk on the Distribution build; the user/practitioner evaluation the review asks for (time to first cited finding, detours, attribution errors) | §E5; `AcceptanceCaseTests` |
 | F4 | Races, recovery, workload | T1 8/8 (`docs/RACE_MATRIX.md`); T2 done except the clean-machine restore (signed build); T3 measured on one Mac and bounded (`docs/SUPPORT_ENVELOPE.md`) | `NewerSchemaRefusalTests`, backup suites, `SupportEnvelopeTests` |
 | F5 | Independent adjudication, then a fresh held-out set | **measured on the current code, gate not yet met by the automatic scorer; human adjudication open.** Rules path (AI off), run from the agent through Xcode's test host via a bundled pack (FINAL_BRIEF_EXECUTION §E3): fresh one-shot sets ho10 2.2 % → ho11 3.2 % → ho12 1.1 % → ho13 1.7 % wrong (automatic scorer), each followed by targeted fixes with unit tests; the latest fixes (89d0f16e→) are not yet measured on a fresh set. By the agent's own reading of every flagged item, most remaining "wrong" are answer-key artefacts (the key assumes the release date where the text gives the day; a byte-identical duplicate release; an agreement to plead counted as a plea), but that reading is not independent. Blinded packs: ho9-rules-b6, ho10-rules, ho11-rules, ho12-rules, ho13-rules (`~/CaseBench/adjudication/`). The claude path is not measured (no key in the sandboxed host) | `docs/ADJUDICATION_PROTOCOL.md`, `scripts/casebench/pack_local.py`, `~/CaseBench/ho1x-chron/MEASUREMENT-rules.txt` |
 | F6 | Legal and distribution pack | prepared, incl. a supplemental-terms draft for counsel; **owner/counsel decisions open** | `docs/DISTRIBUTION_PACK.md`, `docs/LEGAL_REVIEW_PACK.md`, `docs/legal/SUPPLEMENTAL_TERMS_DRAFT.md` |
@@ -55,7 +62,13 @@ Testing cadence (agreed with the owner, 2026-10-28):
    - trademark clearance of the name.
 6. **Pilot and practitioner review (F7)**, then the release packet: commit, build and digest; enabled
    scope; job outcomes; limitations; CI results; signed-app results; legal texts; purchase setup;
-   recovery instructions.
+   recovery instructions. The workflow review adds the user evaluation it describes (five users, the
+   same task in their current tools and in the app, counterbalanced; time to first cited finding and to a
+   reviewed report; detours; attribution and contradiction errors; whether unreadable and missing
+   material is noticed) — the agent cannot run it.
+7. **Accuracy re-measure after the review's changes (F5):** the statement, source-map and amount paths
+   changed (I6, I7, the acceptance-case fixes); the held-out chronology bench is unaffected by them,
+   but the fresh draw ho14 and the human adjudication are still the open path.
 
 ## Known limitations to state in the release notes
 
