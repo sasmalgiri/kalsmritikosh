@@ -421,7 +421,8 @@ struct JobResultView: View {
                         Text("Accepted").tag(JobRowDecision?.some(.accepted))
                         Text("Rejected").tag(JobRowDecision?.some(.rejected))
                     }
-                    .pickerStyle(.segmented).frame(maxWidth: 320)
+                    .pickerStyle(.segmented).labelsHidden().frame(minWidth: 220, maxWidth: 320)   // D-7: the label wrapped vertically beside the segments
+                    .accessibilityLabel("Decision")
                     TextField("Your note", text: Binding(get: { model.rows[i].note ?? "" },
                                                          set: { model.rows[i].note = $0.isEmpty ? nil : $0 }))
                     if model.caseFile != nil { handoffMenu(row: row, index: i) }

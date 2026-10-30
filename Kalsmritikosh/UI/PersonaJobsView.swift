@@ -201,6 +201,7 @@ public final class PersonaJobsModel {
                 inclusionReview = nil
                 await refreshScope()
                 await reloadResults()
+                await refreshCaseSteps()   // UI journey 2026-10-30b, D-6: the "Next" list follows the new scope at once
             }
         } catch {
             lastError = "Couldn't add the documents: \(error.localizedDescription)"

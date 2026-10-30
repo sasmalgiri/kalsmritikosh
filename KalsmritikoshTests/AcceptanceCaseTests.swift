@@ -38,7 +38,7 @@ struct AcceptanceCaseTests {
         let files = try AcceptanceCaseFixture.materialise(from: Self.sourceFolder, into: docs, excluding: [AcceptanceCaseFixture.laterDocument])
         #expect(files.count == AcceptanceCaseFixture.fixtureNames.count)   // 9 documents + the unreadable scan
 
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
         let ingest = try #require(await state.ingest)
         let db = try #require(await state.database)

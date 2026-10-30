@@ -66,7 +66,7 @@ struct InvestigationWorkspaceIntakeTests {
         let eml = temp.appendingPathComponent("records.eml")
         try email(attaching: report).write(to: eml, atomically: true, encoding: .utf8)
 
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
         let ingest = try #require(await state.ingest)
         let db = try #require(await state.database)
@@ -106,7 +106,7 @@ struct InvestigationWorkspaceIntakeTests {
             ZIPTestFixture.stored("decision.txt", "SMITH v. JONES. No. 4781. Supreme Court of Texas. Dec. 16, 1927. Affirmed."),
             ZIPTestFixture.stored("notes.txt", "Investigator notes: the deed was recorded on May 2, 1925."),
         ], named: "case-bundle.zip")
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
         let ingest = try #require(await state.ingest)
         let db = try #require(await state.database)
@@ -130,7 +130,7 @@ struct InvestigationWorkspaceIntakeTests {
         defer { try? FileManager.default.removeItem(at: temp) }
         let first = temp.appendingPathComponent("opening-memo.txt")
         try "Opening memo. The supplier Dalmia Traders invoiced ₹10,000 on 3 March 2026 for the generator service.".write(to: first, atomically: true, encoding: .utf8)
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
         let ingest = try #require(await state.ingest)
         let db = try #require(await state.database)

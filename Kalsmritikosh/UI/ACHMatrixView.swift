@@ -325,8 +325,19 @@ public struct ACHMatrixView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text("Consistency matrix").font(.callout.weight(.semibold))
             if !a.wrappedValue.isReady {
-                Text("Add at least two hypotheses and one piece of evidence to build the matrix.")
+                // UI journey 2026-10-30b, D-1: the evidence input used to live only inside the built
+                // matrix, which needs evidence to exist — a new analysis could never add its first row.
+                Text(a.wrappedValue.hypotheses.count < 2
+                     ? "Add at least two hypotheses, then the evidence to rate against them."
+                     : "Add the first piece of evidence to build the matrix.")
                     .font(.callout).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    TextField("Add evidence", text: $newEvidence).textFieldStyle(.roundedBorder)
+                        .onSubmit { addEvidence(a) }
+                        .accessibilityIdentifier("ach.addEvidence")
+                    Button { addEvidence(a) } label: { Label("Add evidence", systemImage: "plus") }
+                        .disabled(newEvidence.trimmed.isEmpty)
+                }
             } else {
                 ScrollView(.horizontal, showsIndicators: true) {
                     VStack(alignment: .leading, spacing: 4) {

@@ -18,8 +18,8 @@ import TipKit
 struct KalsmritikoshApp: App {
     /// §1.1 — in sample-archive mode the folder store is in-memory only, so
     /// the user's saved folders are neither loaded nor overwritten.
-    @State private var appState = SampleArchiveMode.isActive
-        ? AppState(bookmarks: BookmarkStore(ephemeral: true))
+    @State private var appState = (SampleArchiveMode.isActive || CommandLine.arguments.contains("--acceptance-case"))
+        ? AppState(bookmarks: BookmarkStore(ephemeral: true))   // the acceptance-case fixture (DEBUG) must not touch the saved folders either
         : AppState()
 
     /// K7 — on Quit, pending studio writes finish (or the person is asked) before the app exits.

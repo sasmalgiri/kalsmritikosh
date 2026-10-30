@@ -94,7 +94,7 @@ struct JobResultWorkflowTests {
                 "the completed revision stays in the record")
 
         // Reopening the app brings the result back.
-        let second = await AppState(bookmarks: BookmarkStore())
+        let second = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await second.boot(databaseURL: f.temp.appendingPathComponent("case.sqlite"))
         let reopened = try await JobResultRepository(database: try #require(await second.database)).latest(caseID: f.caseA, jobID: chronology.id)
         #expect(reopened?.id == review.current?.id)

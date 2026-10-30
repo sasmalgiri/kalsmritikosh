@@ -28,6 +28,9 @@ public struct SourcesView: View {
     /// USF-002 — durable, multi-dimensional source readiness (searchable / evidence-ready /
     /// analytical / needs-attention). Distinct from live activity above.
     @State private var durableReadiness: SourceReadinessSummary?
+    /// UI journey 2026-10-30b, D-2: files whose last ingest attempt failed, by name, with the stage
+    /// and reason — the "Needs attention" count was a number with no rows behind it.
+    @State private var failedAttempts: [IngestAttemptsRepository.Attempt] = []
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     @State private var holdBlock: String?
@@ -54,6 +57,9 @@ public struct SourcesView: View {
                 rootsSection
                     .padding(.horizontal)
                 Divider().padding(.vertical, 12)
+                failedSection
+                    .padding(.horizontal)
+                    .padding(.bottom, failedAttempts.isEmpty ? 0 : 12)
                 recentsSection
                     .padding(.horizontal)
             }
@@ -292,6 +298,38 @@ public struct SourcesView: View {
         recents = await appState.screenAuthorizer?.filterRows(all, boundary: .globalOwner) ?? []
         readiness = await appState.ingestProgress()   // UX-002 / ING-007 — LIVE activity
         durableReadiness = await appState.sourceReadinessSummary()   // USF-002 — durable readiness
+        failedAttempts = await appState.ingestAttempts?.recentFailures(limit: 50) ?? []
+    }
+
+    /// D-2 — every file that could not be read, named, with the stage that failed and the reason.
+    @ViewBuilder
+    private var failedSection: some View {
+        if !failedAttempts.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Needs attention — \(failedAttempts.count) file(s) could not be read", systemImage: "exclamationmark.triangle")
+                    .font(.headline).foregroundStyle(.orange)
+                Text("These files are in the archive but hold no readable text, so no answer, job or report draws on them. Re-scan with text (OCR), supply a readable copy, or record that the original is unreadable.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                ForEach(failedAttempts) { a in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "doc.badge.ellipsis").foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(URL(string: a.url)?.lastPathComponent ?? a.url).font(.body)
+                            Text([a.stage.map { "stage: \($0)" }, a.detail.map { String($0.prefix(160)) }].compactMap { $0 }.joined(separator: " — "))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            Text(a.attemptedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        Text("unreadable").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.orange.opacity(0.18), in: Capsule())
+                    }
+                    .padding(12)
+                    .cardSurface(cornerRadius: 12)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("sources.failed.\(URL(string: a.url)?.lastPathComponent ?? a.url)")
+                }
+            }
+        }
     }
 
     private func runIngestion() async {

@@ -272,8 +272,17 @@ public actor StudioCaseFactsReader {
 
     /// An amount as the text writes it: "$2.75" followed by "million" in the document is "$2.75 million".
     nonisolated static func amountAsWritten(_ value: String, in content: String) -> String {
+        // UI journey 2026-10-30b, D-8: an extracted "₹10,000," kept the comma that followed it, and
+        // "₹2,40,000" (Indian grouping) came out as "₹2". Trailing punctuation is dropped and a
+        // figure is extended over the grouping that continues it in the text.
+        var value = value
+        while let last = value.last, ",.;:".contains(last) { value.removeLast() }
         guard let r = content.range(of: value) else { return value }
-        let rest = content[r.upperBound...].prefix(16)
+        let after = content[r.upperBound...].prefix(24)
+        if let m = after.range(of: #"^(?:,\d{2,3})+(?:\.\d{1,2})?"#, options: .regularExpression) {
+            value += String(after[m])
+        }
+        let rest = content[r.upperBound...].dropFirst(value.count - (content.distance(from: r.lowerBound, to: r.upperBound))).prefix(16)
         for scale in [" million", " billion", " thousand", " trillion", " crore", " lakh"] where rest.lowercased().hasPrefix(scale) {
             return value + scale
         }

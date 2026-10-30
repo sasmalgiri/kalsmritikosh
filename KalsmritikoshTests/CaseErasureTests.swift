@@ -27,7 +27,7 @@ struct CaseErasureTests {
     static func boot() async throws -> Fixture {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("k10-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("case.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             throw CaseErasureError.caseNotFound

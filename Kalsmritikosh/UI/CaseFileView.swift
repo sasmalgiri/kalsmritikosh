@@ -18,6 +18,9 @@ final class CaseFileModel {
     let workspaceID: UUID
     var snapshot: CaseFileSnapshot?
     var labels: [UUID: String] = [:]
+    /// I4 — the document (knowledge object) each in-scope source version was read into, so a passage
+    /// link made here opens the exact passage (UI journey 2026-10-30b, D-4).
+    var objectByVersion: [UUID: UUID] = [:]
     /// What the case documents name and the amounts they state (each with its sentence).
     var named: StudioCaseFacts?
     var error: String?
@@ -48,6 +51,12 @@ final class CaseFileModel {
             }
             snapshot = try await svc.snapshot(caseID: caseID, custody: custody)
             labels = try await svc.file.sourceLabels(custody.map(\.sourceVersionID))
+            if let objects = app.objects {
+                let byObject = (try? await objects.sourceVersionsByObject(inSourceVersionIDs: Set(custody.map(\.sourceVersionID)))) ?? [:]
+                var map: [UUID: UUID] = [:]
+                for (object, versions) in byObject { for v in versions where map[v] == nil { map[v] = object } }
+                objectByVersion = map
+            }
             do { unresolvedRefs = try await svc.file.unresolvedReferences(caseID: caseID) } catch {
                 KalsmritikoshLog.app.error("Case reference check failed: \(String(describing: error), privacy: .public)")
             }
@@ -561,7 +570,7 @@ struct CasePlanTab: View {
                         let ref = gridRef[a.id] ?? "", st = gridStance[a.id] ?? .supports, note = opt(gridNote[a.id] ?? "")
                         let quote = opt(gridQuote[a.id] ?? "")
                         let label = model.label(for: ref)
-                        let passage = UUID(uuidString: ref).map { StudioEvidenceRef(sourceVersionID: $0, quote: quote) }
+                        let passage = UUID(uuidString: ref).map { StudioEvidenceRef(sourceVersionID: $0, objectID: model.objectByVersion[$0], quote: quote) }
                         model.run(appState) { try await $0.file.addAllegationEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, passage: passage, actor: model.actor) }
                         gridRef[a.id] = ""; gridNote[a.id] = ""; gridQuote[a.id] = ""
                     }.disabled((gridRef[a.id] ?? "").isEmpty)

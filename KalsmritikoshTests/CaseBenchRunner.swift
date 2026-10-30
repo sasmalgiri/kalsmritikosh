@@ -197,7 +197,7 @@ struct CaseBenchRunner {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("bench.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             Issue.record("ledger did not boot for \(name)"); return

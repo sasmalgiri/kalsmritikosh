@@ -79,7 +79,7 @@ struct SupportEnvelopeTests {
             try d.write(to: docs.appendingPathComponent("mail-\(i).eml"))
         }
 
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("case.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             Issue.record("ledger did not boot"); return
