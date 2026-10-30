@@ -12,7 +12,7 @@ the agent.
 | Branch / PR | `investigations-next`, PR #169 |
 | Commit (code) | `460ae308` — last code change (held-out chronology 13 fixes); records and evidence commits follow it |
 | Commit (packet) | the commit that adds this file (see `git log -1 -- docs/RELEASE_CANDIDATE.md`) |
-| Hosted CI | all seven jobs green on `eac38eb5` (run 40862841271, 2026-10-29); later commits need their own run — see "Next CI" below |
+| Hosted CI | all seven jobs green on `da42fb08`, the packet commit (run 41002107045, 2026-10-30) |
 | Unsigned Release build | built from this working tree with `xcodebuild -configuration Release CODE_SIGNING_ALLOWED=NO` into `build/dd-release`; digests in §2 |
 | Signed Distribution build | *owner*: archive from the same commit in Xcode; record the archive's SHA-256 of `Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh` and the notarisation ticket here |
 | Schema | v165 (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin) |
@@ -34,7 +34,7 @@ the bundle. The *owner* records the signed digests beside these.
 
 | Gate | Evidence | State |
 |---|---|---|
-| Engineering CI | `.github/workflows/build-and-guard.yml`, run 40862841271 | green on eac38eb5; re-run due on the packet commit |
+| Engineering CI | `.github/workflows/build-and-guard.yml`, run 41002107045 | green on da42fb08 (the packet commit) |
 | Advertised functionality | `docs/JOB_CONTRACTS.md`, `docs/JOB_OUTCOME_MATRIX.md`, `JobAcceptanceScenarioTests` (97 scenarios), `JobDeliverableTests` | met to integration level |
 | Accuracy | `docs/FINAL_BRIEF_EXECUTION.md` §E3; `~/CaseBench/ho{9..13}-chron/MEASUREMENT-rules.txt`, `score-rules*.txt`; adjudication packs `~/CaseBench/adjudication/ho{9..13}-rules-*` | **not met by the automatic scorer** (fresh sets 1.1 %–1.7 % wrong); *people*: adjudicate; one more fresh draw after the ho13 fixes |
 | Signed-build checks | `docs/evidence/ui-journeys-2026-10-30/JOURNEYS.md` (development build, sample archive) | journeys done on the development build; *owner*: the Distribution build, install/upgrade/restore, exports through the UI, StoreKit, accessibility |
