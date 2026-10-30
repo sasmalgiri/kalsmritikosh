@@ -60,13 +60,94 @@ public final class PersonaJobsModel {
     public let resultsRepository: JobResultRepository?
     /// I1 — the explicit, auditable inclusion path (nil: the app has no intake wired; the scope strip hides).
     private let intake: InvestigationWorkspaceIntake?
+    /// I2 — the case file (its next steps are the one guide) and custody (its manifest feeds the snapshot).
+    private let caseFiles: CaseFileService?
+    private let custody: InvestigationCustodyService?
 
     public init(service: PersonaJobService, catalog: PersonaJobCatalog, workspaces: WorkspaceRepository,
                 cases: InvestigationCaseRepository? = nil, results: JobResultRepository? = nil,
-                intake: InvestigationWorkspaceIntake? = nil) {
+                intake: InvestigationWorkspaceIntake? = nil,
+                caseFiles: CaseFileService? = nil, custody: InvestigationCustodyService? = nil) {
         self.service = service; self.catalog = catalog; self.workspaces = workspaces; self.cases = cases
         self.resultsRepository = results
         self.intake = intake
+        self.caseFiles = caseFiles; self.custody = custody
+    }
+
+    // MARK: I2 — progress is the state of the work, not the count of launches
+
+    /// The person's "not applicable" decisions for the active matter: job id → reason. UI journey
+    /// state per case (UserDefaults); each decision is also written to the case's log.
+    public private(set) var notApplicable: [String: String] = [:]
+    private func naKey(_ caseID: UUID) -> String { "kalsmritikosh.jobs.na.\(caseID.uuidString)" }
+    private func loadNotApplicable() {
+        guard let caseID = activeCaseID else { notApplicable = [:]; return }
+        notApplicable = (UserDefaults.standard.dictionary(forKey: naKey(caseID)) as? [String: String]) ?? [:]
+    }
+    private func storeNotApplicable(_ map: [String: String], in caseID: UUID) {
+        UserDefaults.standard.set(map, forKey: naKey(caseID))
+        if caseID == activeCaseID { notApplicable = map }
+    }
+
+    /// Record that a job does not apply to this matter, with the reason. Refused without a reason.
+    /// Recorded in the case's log, so the decision is part of the record, not a hidden tick.
+    public func markNotApplicable(_ job: PersonaJob, reason: String, actor: String, at date: Date) async {
+        guard let caseID = activeCaseID else { lastError = "Open a matter first."; return }
+        let r = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !r.isEmpty else { lastError = "\(job.title): say why it does not apply to this matter."; return }
+        var map = (UserDefaults.standard.dictionary(forKey: naKey(caseID)) as? [String: String]) ?? [:]
+        map[job.id] = r
+        storeNotApplicable(map, in: caseID)
+        appendLog(jobTitle: job.title, summary: "Marked not applicable — \(r)", at: date, in: caseID)
+        if let caseFiles {
+            do { try await caseFiles.file.logAction(caseID: caseID, action: "job.notApplicable", detail: "\(job.title) — \(r)", actor: actor, at: date) }
+            catch { KalsmritikoshLog.ui.error("Not-applicable log failed: \(error.localizedDescription, privacy: .public)") }
+        }
+        if caseID == activeCaseID { lastOutcome = "\(job.title) marked not applicable: \(r)"; lastError = nil }
+    }
+
+    /// Reverse a not-applicable decision (recorded too); the job is open work again.
+    public func markApplicable(_ job: PersonaJob, actor: String, at date: Date) async {
+        guard let caseID = activeCaseID else { return }
+        var map = (UserDefaults.standard.dictionary(forKey: naKey(caseID)) as? [String: String]) ?? [:]
+        guard map.removeValue(forKey: job.id) != nil else { return }
+        storeNotApplicable(map, in: caseID)
+        appendLog(jobTitle: job.title, summary: "Applicable again", at: date, in: caseID)
+        if let caseFiles {
+            do { try await caseFiles.file.logAction(caseID: caseID, action: "job.applicable", detail: job.title, actor: actor, at: date) }
+            catch { KalsmritikoshLog.ui.error("Applicable log failed: \(error.localizedDescription, privacy: .public)") }
+        }
+        if caseID == activeCaseID { lastOutcome = "\(job.title) is open work again."; lastError = nil }
+    }
+
+    /// The state of one job's work in the open matter.
+    public func progress(of job: PersonaJob) -> JobProgress {
+        JobProgress.of(result: results[job.id], ran: ranJobs.contains(job.id), notApplicable: notApplicable[job.id], lastScopeChange: lastScopeChange)
+    }
+    /// Honest counts over the persona's runnable jobs.
+    public var progressSummary: JobProgressSummary { JobProgressSummary(runnableJobs.map { progress(of: $0) }) }
+
+    /// The case file's own next steps (CaseNextSteps) for the open matter; empty without a case file service.
+    public private(set) var caseSteps: [CaseNextStep] = []
+    public func refreshCaseSteps() async {
+        guard let caseID = activeCaseID, let caseFiles else { caseSteps = []; return }
+        do {
+            var manifest: [CustodyManifestEntry] = []
+            var custodyFailed = false
+            if let custody { do { manifest = try await custody.manifest(caseID: caseID) } catch { custodyFailed = true } } else { custodyFailed = true }
+            guard let snapshot = try await caseFiles.snapshot(caseID: caseID, custody: manifest) else { caseSteps = []; return }
+            let unresolved = (try? await caseFiles.file.unresolvedReferences(caseID: caseID).count) ?? 0
+            let steps = CaseNextSteps.compute(snapshot, unresolvedReferences: unresolved, custodyReadFailed: custodyFailed)
+            if caseID == activeCaseID { caseSteps = steps }
+        } catch {
+            KalsmritikoshLog.ui.error("Case next steps failed: \(error.localizedDescription, privacy: .public)")
+            if caseID == activeCaseID { caseSteps = [] }
+        }
+    }
+
+    /// What to do next: the case's steps, then the jobs' blockers and reviews.
+    public var recommendations: [JobRecommendation] {
+        JobRecommendations.compute(caseSteps: caseSteps, jobs: runnableJobs.map { ($0, progress(of: $0)) })
     }
 
     // MARK: I1 — documents in the case (scope), reviewed and approved explicitly
@@ -140,18 +221,11 @@ public final class PersonaJobsModel {
         return r.createdAt < change
     }
 
-    /// A1 — what a job card says: the saved result's state, or that a service job ran, or nothing yet.
+    /// A1/I2 — what a job card says: the state of its work (nil when nothing has happened yet).
     public func status(of job: PersonaJob) -> String? {
-        let earlier = isFromEarlierScope(job) ? " · from an earlier scope — run again to cover the documents added since" : ""
-        if let r = results[job.id] {
-            switch r.state {
-            case .draft: return "Draft — \(r.content.rows.count) row(s) to review" + earlier
-            case .blocked: return "Blocked — open to see what is missing" + earlier
-            case .completed: return "Completed by \(r.content.review?.by ?? r.createdBy)" + earlier
-            case .superseded: return nil
-            }
-        }
-        return ranJobs.contains(job.id) ? "Ran (no saved result for this kind of job)" : nil
+        let p = progress(of: job)
+        if case .notStarted = p.state { return nil }
+        return p.label
     }
 
     // JOB-RESUME — matters are durable; the page must let the user return to
@@ -176,10 +250,12 @@ public final class PersonaJobsModel {
         lastOutcome = "Resumed matter \"\(matter.title)\""
         lastError = nil
         loadRanJobs()
+        loadNotApplicable()
         loadWorkLog()
         Task {
             await reloadResults()   // A1 — each job's saved result comes back with the matter
             await refreshScope()
+            await refreshCaseSteps()
             if let p = scopePreview, p.hasChanges, activeCaseID == matter.id {
                 lastOutcome = "Resumed matter \"\(matter.title)\" — \(p.pending.count) new document(s) in its workspace are not in the case yet. Use “Review new documents” to add them."
             }
@@ -243,6 +319,7 @@ public final class PersonaJobsModel {
         activeCaseID = nil; activeMatterTitle = nil; lastOutcome = nil; lastError = nil
         ranJobs = []
         scopePreview = nil; lastScopeChange = nil; inclusionReview = nil
+        notApplicable = [:]; caseSteps = []
         await reloadJobs()
     }
 
@@ -284,9 +361,11 @@ public final class PersonaJobsModel {
                 : out.summary
             lastError = nil
             loadRanJobs()
+            loadNotApplicable()
             if let intakeID = intakeJob?.id, let c = out.producedID { markRan(intakeID, in: c) }   // intake IS phase 1, done
             await reloadResults()
             await refreshScope()
+            await refreshCaseSteps()
             if let c = out.producedID { appendLog(jobTitle: "Matter opened", summary: out.summary, at: date, in: c) }
             await reloadMatters()
         } catch { lastError = "\(error)"; lastOutcome = nil }
@@ -316,6 +395,7 @@ public final class PersonaJobsModel {
             if caseID == activeCaseID {
                 lastOutcome = "\(job.title): \(out.summary)"; lastError = nil
                 await reloadResults()
+                await refreshCaseSteps()
             } else {
                 lastOutcome = "\(job.title) finished for another matter; its result is saved there."; lastError = nil
             }
@@ -335,6 +415,8 @@ public struct PersonaJobsView: View {
     @State private var docJob: PersonaJob?          // JOB-DOC: job whose documentation sheet is open
     @State private var runnerJob: PersonaJob?       // JOB-RUN: job whose guided walkthrough is open
     @State private var resultJob: PersonaJob?       // A1: job whose saved result is open
+    @State private var naJob: PersonaJob?           // I2: job being marked not applicable (reason prompt)
+    @State private var naReason = ""
     /// SURFACE STYLE switch (Settings): classic fixed Analyze launchers vs the
     /// newer catalog-driven ones. Reactive via the shared FeatureFlags key.
     @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
@@ -391,7 +473,8 @@ public struct PersonaJobsView: View {
         let m = PersonaJobsModel(service: service, catalog: catalog, workspaces: ws,
                                  cases: appState.investigationCases,
                                  results: appState.database.map { JobResultRepository(database: $0) },
-                                 intake: appState.investigationWorkspaceIntake)
+                                 intake: appState.investigationWorkspaceIntake,
+                                 caseFiles: appState.caseFiles, custody: appState.investigationCustody)
         await m.load()
         model = m
     }
@@ -418,6 +501,15 @@ public struct PersonaJobsView: View {
         // JOB-RESUME — the resumable-matters list follows the chosen workspace.
         .onChange(of: model.selectedWorkspace) { _, _ in
             Task { await model.reloadMatters() }
+        }
+        // I2 — the not-applicable decision needs its reason.
+        .alert("Not applicable to this matter", isPresented: Binding(get: { naJob != nil }, set: { if !$0 { naJob = nil } }), presenting: naJob) { job in
+            TextField("Why it does not apply", text: $naReason)
+            Button("Record") { let r = naReason; Task { await model.markNotApplicable(job, reason: r, actor: "me", at: Date()) }; naJob = nil }
+                .disabled(naReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) { naJob = nil }
+        } message: { job in
+            Text("\(job.title) will stop holding its phase open. The reason is written to the case's log and the decision can be reversed.")
         }
     }
 
@@ -458,20 +550,20 @@ public struct PersonaJobsView: View {
     private func matterBar(_ model: PersonaJobsModel) -> some View {
         @Bindable var model = model
         if let title = model.activeMatterTitle, model.activeCaseID != nil {
-            let total = model.jobs.count
-            let done = model.ranJobs.intersection(Set(model.jobs.map(\.id))).count
+            let summary = model.progressSummary
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill.badge.person.crop").foregroundStyle(Theme.brand)
                     Text(title).font(.headline)
                     Spacer()
-                    Text("\(done) of \(total) jobs run")
+                    Text("\(summary.resolved) of \(summary.total) jobs resolved")
                         .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        .help("Resolved = completed, or marked not applicable with a reason. A blocked, empty or unreviewed result is not resolved.")
+                        .accessibilityIdentifier("jobs.progress.resolved")
                 }
-                ProgressView(value: Double(done), total: Double(max(total, 1)))
-                    .tint(Theme.brand)
-                Text("Work down the phases below — the highlighted phase is your next step. Every job stays evidence-cited.")
-                    .font(.caption2).foregroundStyle(.secondary)
+                ProgressView(value: summary.fraction).tint(Theme.brand)
+                Text(summary.text).font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("jobs.progress.summary")
+                recommendationList(model)
                 scopeStrip(model)
             }
             .padding(14)
@@ -549,6 +641,49 @@ public struct PersonaJobsView: View {
             .padding(14)
             .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.35), lineWidth: 1))
+        }
+    }
+
+    // I2 — what to do next, from the case's own state (CaseNextSteps) and the jobs' blockers and
+    // reviews. Each line names the fact behind it and opens the record it is about.
+    @ViewBuilder
+    private func recommendationList(_ model: PersonaJobsModel) -> some View {
+        let recs = model.recommendations
+        if recs.isEmpty {
+            Text("Nothing is waiting: no case step is open and no job is blocked or awaiting review. Run the jobs the matter needs; mark the rest not applicable with a reason.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Next").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(recs.prefix(5)) { rec in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: icon(for: rec.kind)).foregroundStyle(rec.kind == .blockedJob ? Color.orange : Theme.brand).imageScale(.small)
+                        Text(rec.text).font(.caption).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        if let jobID = rec.jobID, let job = model.jobs.first(where: { $0.id == jobID }) {
+                            if model.results[jobID] != nil {
+                                Button("Open") { resultJob = job }.controlSize(.mini)
+                            } else {
+                                Button("Run") { Task { await model.run(job, actor: "me", at: Date()) } }.controlSize(.mini).disabled(model.busy)
+                            }
+                        } else if case .caseStep(let place) = rec.kind {
+                            Text(place.rawValue.capitalized).font(.caption2).foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+                if recs.count > 5 { Text("and \(recs.count - 5) more").font(.caption2).foregroundStyle(.tertiary) }
+            }
+            .accessibilityIdentifier("jobs.recommendations")
+        }
+    }
+
+    private func icon(for kind: JobRecommendation.Kind) -> String {
+        switch kind {
+        case .caseStep: return "arrow.right.circle"
+        case .blockedJob: return "exclamationmark.octagon"
+        case .reviewJob: return "eye"
+        case .earlierScope: return "arrow.triangle.2.circlepath"
+        case .emptyResult: return "tray"
         }
     }
 
@@ -702,12 +837,13 @@ public struct PersonaJobsView: View {
             let inPhase = model.runnableJobs.filter { JobPhase.phase(of: $0.kind) == phase }
             return inPhase.isEmpty ? nil : (phase, inPhase)
         }
-        // The journey pointer: the first phase that still has unrun jobs.
-        let nextPhase = phased.first { !$0.1.allSatisfy { model.ranJobs.contains($0.id) } }?.0
+        // The journey pointer: the first phase with unresolved work (completed or not-applicable
+        // resolve a job; a launch, a blocked or an unreviewed result does not).
+        let nextPhase = phased.first { !$0.1.allSatisfy { model.progress(of: $0).state.isResolved } }?.0
         return VStack(alignment: .leading, spacing: 18) {
             ForEach(Array(phased.enumerated()), id: \.element.0.id) { index, entry in
                 let (phase, phaseJobs) = entry
-                let done = phaseJobs.filter { model.ranJobs.contains($0.id) }.count
+                let done = phaseJobs.filter { model.progress(of: $0).state.isResolved }.count
                 let isNext = phase == nextPhase && model.activeCaseID != nil
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
@@ -754,7 +890,7 @@ public struct PersonaJobsView: View {
                                 }
                             }
                         }
-                        Text("\(done)/\(phaseJobs.count)")
+                        Text("\(done)/\(phaseJobs.count) resolved")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
                     jobCards(model, jobs: phaseJobs)
@@ -772,14 +908,19 @@ public struct PersonaJobsView: View {
         VStack(alignment: .leading, spacing: 8) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], alignment: .leading, spacing: 12) {
                 ForEach(jobs) { job in
-                    let ran = model.ranJobs.contains(job.id)
+                    let progress = model.progress(of: job)
+                    let ran = progress.state.isResolved
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .top, spacing: 4) {
-                            if ran {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                    .imageScale(.small)
-                                    .help("Already run against this matter — run again any time.")
+                            if case .completed = progress.state {
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).imageScale(.small)
+                                    .help("Completed and reviewed for this matter — run again any time.")
+                            } else if case .notApplicable = progress.state {
+                                Image(systemName: "minus.circle.fill").foregroundStyle(.secondary).imageScale(.small)
+                                    .help("Marked not applicable to this matter, with the reason recorded.")
+                            } else if case .blocked = progress.state {
+                                Image(systemName: "exclamationmark.octagon.fill").foregroundStyle(.orange).imageScale(.small)
+                                    .help("Blocked — the case gave this job nothing to work from; see what is missing.")
                             }
                             Text(job.title).font(.callout.weight(.semibold))
                             Spacer(minLength: 0)
@@ -793,11 +934,17 @@ public struct PersonaJobsView: View {
                             }
                         }
                         Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        // A1 — the job's real state: a saved draft, blocked or completed result (not a checkmark).
+                        // A1/I2 — the job's real state of work (not a launch count).
                         if let status = model.status(of: job) {
                             Text(status).font(.caption2.weight(.medium))
-                                .foregroundStyle(model.results[job.id]?.state == .completed ? .green
-                                                 : model.results[job.id]?.state == .blocked ? .orange : .secondary)
+                                .foregroundStyle({ () -> Color in
+                                    switch progress.state {
+                                    case .completed: return .green
+                                    case .blocked: return .orange
+                                    default: return progress.fromEarlierScope ? .orange : .secondary
+                                    }
+                                }())
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         if job.kind == .ask, model.activeCaseID != nil {
                             TextField("Question for this case", text: Binding(get: { model.questions[job.id] ?? "" },
@@ -815,6 +962,15 @@ public struct PersonaJobsView: View {
                                     Button("Open result") { resultJob = job }
                                         .controlSize(.small)
                                         .help("See every row with its sources, decide and note each, correct, complete or export.")
+                                }
+                                // I2 — the explicit "does not apply" decision, with its reason, reversible.
+                                if case .notApplicable = progress.state {
+                                    Button("Applicable again") { Task { await model.markApplicable(job, actor: "me", at: Date()) } }
+                                        .controlSize(.small)
+                                } else if !ran {
+                                    Button("Not applicable…") { naJob = job; naReason = "" }
+                                        .controlSize(.small)
+                                        .help("Record that this job does not apply to this matter, with the reason. It then stops holding the phase open.")
                                 }
                             }
                             // ONE action per job (owner decision 2026-08-20): open the

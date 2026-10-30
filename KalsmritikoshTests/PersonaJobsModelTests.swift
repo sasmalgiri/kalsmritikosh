@@ -137,6 +137,56 @@ struct PersonaJobsModelTests {
         #expect(try #require(try await h.cases.fetch(caseID: caseID)).sources.count == 1)
     }
 
+    @Test("I2: a matter's progress counts resolved work, not launches — a run that saves nothing is 'attempted', a not-applicable decision needs a reason, is recorded in the case log and resolves the job; reversing it is recorded too")
+    func progressIsWorkState() async throws {
+        let (model, h) = try await makeModel()
+        await model.load()
+        await model.select(persona: InvestigatorPersonaPackage.applicationID)
+        model.matterTitle = "Progress"
+        await model.startMatter(actor: "me", at: t0)
+        let caseID = try #require(model.activeCaseID)
+        let before = model.progressSummary
+        #expect(before.resolved == 0 && before.total == model.runnableJobs.count)
+        // A service-kind job runs and saves no result: attempted, not resolved.
+        let custody = try #require(model.runnableJobs.first { $0.kind == .evidenceCustody })
+        await model.run(custody, actor: "me", at: t0.addingTimeInterval(5))
+        let p = model.progress(of: custody)
+        #expect(p.state == .attempted || p.state.needsAttention, "a launch alone never resolves a job: \(p)")
+        #expect(!p.state.isResolved)
+        #expect(model.progressSummary.resolved == 0)
+        // Not applicable without a reason is refused.
+        let dossier = try #require(model.runnableJobs.first { $0.kind == .subjectDossier })
+        await model.markNotApplicable(dossier, reason: "   ", actor: "me", at: t0.addingTimeInterval(10))
+        #expect(model.lastError?.contains("say why") == true && model.notApplicable[dossier.id] == nil)
+        // With a reason: resolved, logged on the matter and in the case's own log, and recommended nowhere.
+        let caseFiles = CaseFileService(database: h.db, cases: h.cases, workspaces: h.workspaces)
+        let withLog = PersonaJobsModel(service: h.service, catalog: try PersonaJobCatalogComposer.composeProduction(), workspaces: h.workspaces,
+                                       cases: h.cases, results: JobResultRepository(database: h.db), caseFiles: caseFiles)
+        await withLog.load()
+        withLog.selectedWorkspace = model.selectedWorkspace
+        await withLog.select(persona: InvestigatorPersonaPackage.applicationID)
+        withLog.openMatter(try #require(try await h.cases.fetch(caseID: caseID)).caseHeader)
+        try await Task.sleep(for: .milliseconds(300))
+        await withLog.markNotApplicable(dossier, reason: "No individual subject in this matter", actor: "me", at: t0.addingTimeInterval(20))
+        #expect(withLog.lastError == nil)
+        #expect(withLog.progress(of: dossier).state == .notApplicable(reason: "No individual subject in this matter"))
+        #expect(withLog.progressSummary.resolved == 1 && withLog.progressSummary.notApplicable == 1)
+        #expect(withLog.workLog.contains { $0.jobTitle == dossier.title && $0.summary.contains("not applicable") })
+        let actions = try await caseFiles.file.actions(caseID: caseID)
+        #expect(actions.contains { $0.action == "job.notApplicable" && ($0.detail ?? "").contains("No individual subject") })
+        #expect(!withLog.recommendations.contains { $0.jobID == dossier.id })
+        // The decision survives reopening the matter and can be reversed, with that recorded too.
+        withLog.openMatter(try #require(try await h.cases.fetch(caseID: caseID)).caseHeader)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(withLog.notApplicable[dossier.id] == "No individual subject in this matter")
+        await withLog.markApplicable(dossier, actor: "me", at: t0.addingTimeInterval(30))
+        #expect(withLog.progress(of: dossier).state == .notStarted)
+        #expect(try await caseFiles.file.actions(caseID: caseID).contains { $0.action == "job.applicable" })
+        // The case's own next steps lead the recommendations (no documents in this harness case).
+        #expect(withLog.recommendations.first?.kind == .caseStep(.evidence) || withLog.recommendations.first?.kind == .caseStep(.overview),
+                "\(withLog.recommendations.prefix(2))")
+    }
+
     @Test("Running a job before a matter is open fails closed with a clear message, not a crash")
     func runBeforeMatterFailsClosed() async throws {
         let (model, _) = try await makeModel()
