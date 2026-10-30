@@ -197,4 +197,129 @@ struct JobDeliverableTests {
         #expect(statements.contains { $0.speaker == "Vikram Rao" && $0.sentence.hasPrefix("Vikram Rao wrote") })
         #expect(!statements.contains { $0.speaker == "Asha Rao" && $0.sentence.hasPrefix("Vikram Rao wrote") })
     }
+
+    // MARK: Investigator workflow review 2026-10-30, I6
+
+    @Test("Speaker attribution follows the reporting verb: several named people, passive 'by', inverted 'said X', nested reports, denials, 'according to', a transcript turn, a From: author; an ambiguous sentence stays unassigned")
+    func speakerFollowsTheReportingVerb() {
+        let names = ["Asha Rao", "Vikram Rao", "Dev Sharma"]
+        func who(_ s: String, author: String? = nil) -> SpeakerAttribution.Resolution { SpeakerAttribution.resolve(s, named: names, author: author) }
+        // The person named first is NOT the speaker when the verb belongs to someone else.
+        let present = who("Asha Rao was present when Vikram Rao said the meeting ended at noon.")
+        #expect(present.speaker == "Vikram Rao" && present.basis == "Vikram Rao named before “said”")
+        // Passive with an agent.
+        #expect(who("The approval was confirmed by Vikram Rao on 3 March.").speaker == "Vikram Rao")
+        #expect(who("Asha Rao was told by Vikram Rao that the payment had cleared.").speaker == "Vikram Rao")
+        // Inverted after a quote.
+        #expect(who("“The payment was approved on 3 March,” said Vikram Rao.").speaker == "Vikram Rao")
+        // Nested: Asha's statement, reporting Vikram's words.
+        let nested = who("Asha Rao said Vikram Rao told her the payment was approved.")
+        #expect(nested.speaker == "Asha Rao" && nested.reported == ["Vikram Rao"])
+        // Denial.
+        let denial = who("Vikram Rao denied approving the payment of ₹10,000.")
+        #expect(denial.speaker == "Vikram Rao" && denial.isDenial)
+        // According to.
+        #expect(who("According to Asha Rao, the meeting ran late.").speaker == "Asha Rao")
+        // Appositive is fine; a clause is not.
+        #expect(who("Vikram Rao, the finance manager, stated that the invoice was paid once.").speaker == "Vikram Rao")
+        #expect(who("Asha Rao, who hired Dev Sharma, said the invoice was paid once.").speaker == "Asha Rao")
+        // Passive without an agent: nobody is tied to the verb → unassigned, with the reason.
+        let passive = who("Asha Rao and Vikram Rao were present when it was said that the payment was approved.")
+        #expect(passive.speaker == nil && passive.basis.contains("unassigned") && passive.basis.contains("passive “said” without a named agent"))
+        // First person in a document from a known author; a transcript turn.
+        #expect(who("I told the auditor the payment was approved.", author: "Dev Sharma").speaker == "Dev Sharma")
+        #expect(who("Dev Sharma: the payment was approved by Asha.").speaker == "Dev Sharma")
+        // The same sentence through the executor: a namesake present in the sentence is not the speaker.
+        let base = JobAcceptanceScenarioTests.evidence(for: "hr.statements")
+        let doc = StudioCaseDocument(objectID: UUID(), sourceVersionID: UUID(), name: "note.txt", date: nil)
+        var texts = base.texts
+        texts[doc.objectID] = "Asha Rao was present when Vikram Rao said the meeting about the payment ended at noon. Asha Rao and Vikram Rao were present when it was said that the payment of ₹1,000 was approved."
+        let f = base.facts
+        let facts = StudioCaseFacts(caseTitle: f.caseTitle, parties: f.parties, dates: f.dates, amounts: f.amounts, identifiers: f.identifiers,
+                                    documents: f.documents + [doc], events: f.events, allFacts: f.allFacts, named: f.named, statedAmounts: f.statedAmounts, statedDates: f.statedDates)
+        let e = JobEvidence(facts: facts, texts: texts, withheld: base.withheld, now: base.now, versionHashes: base.versionHashes, exports: [],
+                            batesPrefix: base.batesPrefix, replacedVersions: base.replacedVersions, mergedIdentities: [])
+        let statements = JobDeliverableText.attributedStatements(e).filter { $0.doc.objectID == doc.objectID }
+        #expect(statements.count == 2)
+        #expect(statements[0].speaker == "Vikram Rao", "the first-named person must not take the statement")
+        #expect(statements[1].speaker == nil, "an ambiguous attribution stays unassigned")
+        let r = StatementComparisonExecutor.run(e)
+        let unassigned = r.content.rows.filter { $0.title.hasSuffix("speaker unassigned") }
+        #expect(unassigned.count == 1 && unassigned[0].fields?["witness"] == "" && unassigned[0].flags.contains("assign the speaker before comparing"))
+        #expect(!r.content.rows.contains { $0.fields?["witness"] == "Asha Rao" && $0.detail?.contains("ended at noon") == true }, "Asha was given Vikram's statement")
+        // An unassigned row cannot be accepted until the witness is named.
+        var row = unassigned[0]; row.decision = .accepted
+        #expect(JobFields.completionProblems(job: "hr.statements", rows: [row]).contains { $0.contains("speaker is unassigned") })
+        row.fields?["witness"] = "Vikram Rao"
+        #expect(!JobFields.completionProblems(job: "hr.statements", rows: [row]).contains { $0.contains("speaker is unassigned") })
+    }
+
+    @Test("Comparison is narrow: equivalent money expressions are the same figure with both wordings kept, a denial and an assertion sharing a figure differ, and the same date is not called agreement on the event")
+    func comparisonIsNarrow() {
+        #expect(JobDeliverableText.normalisedAmount("₹10,000") == "INR 10000")
+        #expect(JobDeliverableText.normalisedAmount("INR 10,000") == "INR 10000")
+        #expect(JobDeliverableText.normalisedAmount("Rs. 10,000.00") == "INR 10000")
+        #expect(JobDeliverableText.normalisedAmount("$2.75 million") == "USD 2750000")
+        #expect(JobDeliverableText.normalisedAmount("1 lakh rupees") == "INR 100000")
+        #expect(JobDeliverableText.normalisedAmount("₹2,000") != JobDeliverableText.normalisedAmount("₹10,000"))
+        let base = JobAcceptanceScenarioTests.evidence()
+        let d1 = StudioCaseDocument(objectID: UUID(), sourceVersionID: UUID(), name: "asha.txt", date: nil)
+        let d2 = StudioCaseDocument(objectID: UUID(), sourceVersionID: UUID(), name: "vikram.txt", date: nil)
+        var texts = base.texts
+        texts[d1.objectID] = "Asha Rao said the supplier payment of ₹10,000 was approved at the meeting."
+        texts[d2.objectID] = "Vikram Rao denied that the supplier payment of INR 10,000 was approved at the meeting."
+        let f = base.facts
+        let facts = StudioCaseFacts(caseTitle: f.caseTitle, parties: f.parties, dates: f.dates, amounts: f.amounts, identifiers: f.identifiers,
+                                    documents: f.documents + [d1, d2], events: f.events, allFacts: f.allFacts, named: f.named, statedAmounts: f.statedAmounts, statedDates: f.statedDates)
+        let e = JobEvidence(facts: facts, texts: texts, withheld: base.withheld, now: base.now, versionHashes: base.versionHashes, exports: [],
+                            batesPrefix: base.batesPrefix, replacedVersions: base.replacedVersions, mergedIdentities: [])
+        let rows = StatementComparisonExecutor.run(e).content.rows
+        let asha = rows.first { $0.fields?["witness"] == "Asha Rao" && $0.detail?.contains("₹10,000") == true }
+        let vikram = rows.first { $0.fields?["witness"] == "Vikram Rao" && $0.detail?.contains("INR 10,000") == true }
+        #expect(asha != nil && vikram != nil && asha?.fields?["point"] == vikram?.fields?["point"], "the two accounts of the payment are not on one point")
+        #expect(asha?.flags.contains { $0.hasPrefix("states the same amount as Vikram Rao (₹10,000; Vikram Rao writes INR 10,000)") } == true, "equivalent money expressions are not matched with both wordings kept")
+        #expect(asha?.flags.contains { $0.hasPrefix("asserts what Vikram Rao denies") } == true && vikram?.flags.contains("denial") == true)
+        #expect(asha?.fields?["comparison"] == "differs" && vikram?.fields?["comparison"] == "differs", "a denial and an assertion sharing a figure were called agreement")
+        #expect(StatementComparisonExecutor.run(e).content.limitations.contains { $0.contains("not that they describe the same event") })
+    }
+
+    // MARK: Investigator workflow review 2026-10-30, I7
+
+    @Test("Source map: a syndicated rewrite is a possible relationship, not 'independent'; an unrelated document sharing a standard notice is not grouped; nothing is called independent; a lineage decision needs its rationale")
+    func sourceIndependenceIsNotClaimed() {
+        let base = JobAcceptanceScenarioTests.evidence()
+        func doc(_ n: String) -> StudioCaseDocument { StudioCaseDocument(objectID: UUID(), sourceVersionID: UUID(), name: n, date: nil) }
+        let wire = doc("wire.txt"), rewrite = doc("rewrite.txt"), notice1 = doc("hr-memo.txt"), notice2 = doc("it-memo.txt"), notice3 = doc("legal-memo.txt")
+        let footer = " This message is confidential and intended solely for the addressee; if you received it in error, notify the sender and delete it."
+        var texts = base.texts
+        texts[wire.objectID] = "The regulator confirmed on Tuesday that the refinery's licence had been suspended pending a safety review of the plant." + footer
+        texts[rewrite.objectID] = "On Tuesday the regulator confirmed the refinery's licence was suspended pending a safety review of the plant, sources said." + footer
+        texts[notice1.objectID] = "The staff picnic moves to the riverside park on Saturday because the hall is being repainted this month." + footer
+        texts[notice2.objectID] = "Laptops must be returned to the service desk before the migration weekend so that disk images can be taken." + footer
+        texts[notice3.objectID] = "Counsel will attend the board meeting to brief members on the new retention schedule and its exceptions." + footer
+        let f = base.facts
+        let extra = [wire, rewrite, notice1, notice2, notice3]
+        let facts = StudioCaseFacts(caseTitle: f.caseTitle, parties: f.parties, dates: f.dates, amounts: f.amounts, identifiers: f.identifiers,
+                                    documents: f.documents + extra, events: f.events, allFacts: f.allFacts, named: f.named, statedAmounts: f.statedAmounts, statedDates: f.statedDates)
+        let e = JobEvidence(facts: facts, texts: texts, withheld: base.withheld, now: base.now, versionHashes: base.versionHashes, exports: [],
+                            batesPrefix: base.batesPrefix, replacedVersions: base.replacedVersions, mergedIdentities: [])
+        let r = SourceFamilyExecutor.run(e)
+        func row(_ d: StudioCaseDocument) -> JobResultRow? { r.content.rows.first { $0.title == d.name } }
+        // The rewrite shares no identical sentence with the wire, yet is a candidate relationship.
+        #expect(row(wire)?.fields?["family"] == row(rewrite)?.fields?["family"] && row(wire)?.fields?["family"]?.hasSuffix(SourceFamilyExecutor.sharedText) == true)
+        #expect(row(rewrite)?.flags.contains { $0.hasPrefix("similar wording to wire.txt") && $0.contains("possible rewrite") } == true)
+        #expect(row(rewrite)?.flags.contains { $0.hasPrefix("repeats text of") } == false, "no identical sentence should be claimed")
+        // The three memos share only the footer: excluded as boilerplate, so none is grouped with another.
+        for d in [notice1, notice2, notice3] {
+            #expect(row(d)?.fields?["family"] == SourceFamilyExecutor.unassessedFamily, "\(d.name) was grouped by a standard notice")
+            #expect(row(d)?.flags.contains("1 boilerplate sentence(s) excluded from grouping") == true)
+        }
+        #expect(!r.content.rows.contains { $0.fields?["family"]?.lowercased().contains("independent") == true && $0.fields?["family"] != SourceFamilyExecutor.unassessedFamily })
+        #expect(r.content.limitations.contains { $0.contains("does not establish independence") })
+        // A lineage decision persists as the person's, with its rationale.
+        var decided = row(wire)!; decided.decision = .accepted; decided.fields?["lineage"] = "same origin (wire, syndication)"
+        #expect(JobFields.completionProblems(job: "jrn.source-map", rows: [decided]).contains { $0.contains("needs its rationale") })
+        decided.note = "Both carry the agency's dateline; the rewrite credits 'sources' but adds nothing."
+        #expect(!JobFields.completionProblems(job: "jrn.source-map", rows: [decided]).contains { $0.contains("needs its rationale") })
+    }
 }

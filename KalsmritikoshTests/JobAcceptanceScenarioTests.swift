@@ -275,7 +275,8 @@ struct JobAcceptanceScenarioTests {
             let vikram = r.content.rows.first { $0.fields?["witness"] == "Vikram Rao" && $0.fields?["point"] == asha?.fields?["point"] }
             return expect(asha != nil && vikram != nil && vikram?.flags.contains("silent") == false, "the two accounts of the meeting are not on the same point")
                 + expect(asha?.flags.contains { $0.hasPrefix("differs from Vikram Rao on date: 2026-03-03 vs 2026-03-02") } == true, "the differing meeting date is not shown as a difference")
-                + expect(asha?.flags.contains { $0.hasPrefix("agrees with Vikram Rao on amount ₹1,000") } == true, "the agreed amount is not shown as agreement")
+                + expect(asha?.flags.contains { $0.hasPrefix("states the same amount as Vikram Rao (₹1,000)") && $0.contains("not agreement on what happened") } == true, "the shared amount is not shown narrowly as the same figure")
+                + expect(asha?.flags.contains { $0.hasPrefix("speaker: Asha Rao named before “said”") } == true, "the speaker is not tied to the reporting verb")
                 + expect(asha?.fields?["comparison"] == "differs" && vikram?.fields?["comparison"] == "differs", "the point-by-point comparison is not recorded")
                 + expect(allCited(r), "a statement row without its quote's source")
         }
@@ -297,9 +298,10 @@ struct JobAcceptanceScenarioTests {
         }
         m["jrn.source-map"] = { r, _ in
             let a = r.content.rows.first { $0.title == "outlet-a.txt" }, b = r.content.rows.first { $0.title == "outlet-b.txt" }, memo = r.content.rows.first { $0.title == "memo.txt" }
-            return expect(a?.fields?["family"] != nil && a?.fields?["family"] == b?.fields?["family"], "two outlets repeating one wire story are not one source family")
-                + expect(a?.flags.contains { $0.hasPrefix("repeats text of outlet-b.txt") } == true, "the repeated text is not flagged")
-                + expect(memo?.fields?["family"] != a?.fields?["family"] && memo?.flags.contains("not assessed") == true, "an unrelated source joined the family, or was assessed by the app")
+            return expect(a?.fields?["family"] != nil && a?.fields?["family"] == b?.fields?["family"] && a?.fields?["family"]?.hasSuffix(SourceFamilyExecutor.sharedText) == true, "two outlets repeating one wire story are not one shared-text candidate family")
+                + expect(a?.flags.contains { $0.hasPrefix("repeats text of outlet-b.txt") && $0.contains("not proof of common origin") } == true, "the repeated text is not flagged as a possible relationship")
+                + expect(memo?.fields?["family"] == SourceFamilyExecutor.unassessedFamily && memo?.flags.contains("not assessed") == true, "an unrelated source joined the family, or was called independent")
+                + expect(!r.content.rows.contains { $0.fields?["family"]?.lowercased().contains("independent by") == true } && r.content.rows.allSatisfy { $0.fields?["lineage"] == nil }, "the app decided independence or lineage")
         }
         m["jrn.source-vault"] = { r, e in
             let pre = JobFields.prefill(job: "jrn.source-vault", rows: r.content.rows, evidence: e)

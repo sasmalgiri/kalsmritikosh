@@ -94,7 +94,9 @@ public nonisolated enum JobFields {
         m["inv.source-reliability"] = [F("reliability", "Source reliability (Admiralty)", .choice(["A", "B", "C", "D", "E", "F"])),
                                        F("credibility", "Information credibility", .choice(["1", "2", "3", "4", "5", "6"])), F("rationale", "Rationale")]
         m["res.source-criticism"] = [F("origin", "Origin"), F("authorship", "Authorship"), F("bias", "Bias"), F("reliability", "Reliability and reasons")]
-        m["jrn.source-map"] = [F("relationship", "Relationship"), F("family", "Independence family"),
+        m["jrn.source-map"] = [F("relationship", "Relationship"), F("family", "Text-similarity candidates (the app's reading)"),
+                               F("lineage", "Confirmed lineage (your decision, rationale in the note)",
+                                 .choice(["independent", "same origin (wire, syndication)", "derivative (rewrite)", "unknown"]), required: false),
                                F("protection", "Protection", .choice(["none", "confidential source"]))]
         let factor: JobField.Kind = .choice(["supports", "neutral", "undermines"])
         m["hr.credibility"] = [F("consistency", "Consistency", factor), F("corroboration", "Corroboration", factor),
@@ -118,7 +120,8 @@ public nonisolated enum JobFields {
         m["jrn.transcript"] = [F("speaker", "Speaker (corrected)", prefill: .names), F("timecode", "Timecode", required: false),
                                F("correction", "Correction log", required: false)]
         m["hr.statements"] = [F("point", "Point"), F("witness", "Witness", prefill: .names),
-                              F("comparison", "Comparison", .choice(["agrees", "differs", "silent"]))]
+                              F("comparison", "Comparison", .choice(["agrees", "differs", "silent"])),
+                              F("event", "Event (correct it if these statements describe different events)", required: false)]
         m["jrn.interview-plan"] = [F("claims", "Claims to put"), F("questions", "Questions"),
                                    F("status", "Status", .choice(["planned", "asked", "answered", "no response"]))]
         m["law.witness-profiles"] = [F("statements", "Statements", prefill: .rowDetail), F("documents", "Documents authored or received"),
@@ -268,6 +271,14 @@ public nonisolated enum JobFields {
         case "law.deposition", "siu.euo-prep":
             if accepted.contains(where: { $0.refs.isEmpty }) {
                 out.append("Each question links to a document passage: link the source of every accepted question, or reject it")
+            }
+        case "hr.statements":
+            if accepted.contains(where: { ($0.fields?["witness"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }) {
+                out.append("A statement whose speaker is unassigned cannot be accepted: name the witness from the source, or reject the row")
+            }
+        case "jrn.source-map":
+            if accepted.contains(where: { !($0.fields?["lineage"] ?? "").isEmpty && $0.fields?["lineage"] != "unknown" && !note($0) }) {
+                out.append("A lineage decision (independent, same origin, derivative) needs its rationale in the note — the app's text reading is not a reason")
             }
         case "fa.workpapers":
             if accepted.contains(where: { $0.flags.contains(WorkpaperExecutor.untraced) }) {

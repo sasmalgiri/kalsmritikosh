@@ -308,10 +308,17 @@ public nonisolated enum StatementExecutor {
     public static func quotes(_ e: JobEvidence) -> JobRun {
         var rows: [JobResultRow] = []
         for doc in e.facts.documents {
-            for s in JobText.sentences(e.texts[doc.objectID] ?? "") where JobText.matches(s, attribution) {
-                let speakers = JobText.names(in: s, e.facts.named, persons: true)
-                rows.append(JobResultRow(title: s, detail: speakers.isEmpty ? "Speaker not identified in the sentence." : "Names: " + speakers.joined(separator: ", "),
-                                         flags: ["verbatim"], refs: [JobText.ref(doc, s)]))
+            let text = e.texts[doc.objectID] ?? ""
+            let author = SpeakerAttribution.fromHeader(text, e.facts.named)
+            for s in JobText.sentences(text) where JobText.matches(s, attribution) {
+                let named = JobText.names(in: s, e.facts.named, persons: true)
+                let a = SpeakerAttribution.resolve(s, named: named, author: author)
+                let detail: String
+                if let who = a.speaker { detail = "Speaker: \(who) (\(a.basis))" + (a.reported.isEmpty ? "" : "; reports words of " + a.reported.joined(separator: ", ")) }
+                else if named.isEmpty { detail = "Speaker not identified in the sentence." }
+                else { detail = "Speaker \(a.basis)." }
+                rows.append(JobResultRow(title: s, detail: detail, flags: a.speaker == nil && !named.isEmpty ? ["verbatim", "speaker unassigned"] : ["verbatim"],
+                                         refs: [JobText.ref(doc, s)]))
             }
         }
         guard !rows.isEmpty else {

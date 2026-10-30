@@ -54,19 +54,186 @@ nonisolated enum JobDeliverableText {
         return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range).trimmingCharacters(in: .whitespaces) }
     }
 
-    /// Attributed statements per speaker: each sentence with an attribution, and the person named
-    /// EARLIEST in it as the speaker ("Vikram Rao wrote that Asha Rao signed" is Vikram's statement).
-    static func attributedStatements(_ e: JobEvidence) -> [(speaker: String, sentence: String, doc: StudioCaseDocument)] {
-        var out: [(String, String, StudioCaseDocument)] = []
+    /// Attributed statements: each sentence with an attribution, and its speaker when the sentence
+    /// ties one to a REPORTING VERB (investigator workflow review 2026-10-30, I6). "Asha Rao was
+    /// present when Vikram Rao said the meeting ended" is Vikram's statement, not Asha's; a sentence
+    /// whose speaker cannot be tied to a verb is kept UNASSIGNED for the person to attribute.
+    static func attributedStatements(_ e: JobEvidence) -> [AttributedStatement] {
+        var out: [AttributedStatement] = []
         for doc in e.facts.documents {
-            for s in JobText.sentences(e.texts[doc.objectID] ?? "") where JobText.matches(s, StatementExecutor.attribution) {
+            let text = e.texts[doc.objectID] ?? ""
+            let author = SpeakerAttribution.fromHeader(text, e.facts.named)
+            for s in JobText.sentences(text) where JobText.matches(s, StatementExecutor.attribution) {
                 let named = JobText.names(in: s, e.facts.named, persons: true)
-                guard let speaker = named.min(by: { (s.range(of: $0, options: .caseInsensitive)?.lowerBound ?? s.endIndex) < (s.range(of: $1, options: .caseInsensitive)?.lowerBound ?? s.endIndex) }) else { continue }
-                out.append((speaker, s, doc))
+                let a = SpeakerAttribution.resolve(s, named: named, author: author)
+                // A sentence that names no one and has no author is a quote with no one to attribute it to — skipped.
+                guard a.speaker != nil || !named.isEmpty else { continue }
+                out.append(AttributedStatement(speaker: a.speaker, sentence: s, doc: doc, basis: a.basis, reported: a.reported, isDenial: a.isDenial))
             }
         }
         return out
     }
+
+    /// Money figures normalised for comparison: currency code + plain number, so "₹10,000",
+    /// "INR 10,000", "Rs. 10,000" and "10000 rupees" are the SAME amount while each keeps its wording.
+    static func normalisedAmount(_ s: String) -> String? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        let lower = t.lowercased()
+        var currency = ""
+        if lower.contains("₹") || lower.contains("inr") || lower.contains("rs.") || lower.hasPrefix("rs ") || lower.contains("rupee") { currency = "INR" }
+        else if lower.contains("$") || lower.contains("usd") || lower.contains("dollar") { currency = "USD" }
+        else if lower.contains("€") || lower.contains("eur") || lower.contains("euro") { currency = "EUR" }
+        else if lower.contains("£") || lower.contains("gbp") || lower.contains("pound") { currency = "GBP" }
+        else { for code in ["chf", "jpy", "aud", "cad"] where lower.contains(code) { currency = code.uppercased() } }
+        guard let numberRange = t.range(of: #"\d[\d,]*(?:\.\d+)?"#, options: .regularExpression) else { return nil }
+        let digits = t[numberRange].replacingOccurrences(of: ",", with: "")
+        guard var value = Double(digits) else { return nil }
+        if lower.contains("crore") { value *= 10_000_000 }
+        else if lower.contains("lakh") { value *= 100_000 }
+        else if lower.contains("billion") { value *= 1_000_000_000 }
+        else if lower.contains("million") { value *= 1_000_000 }
+        else if lower.contains("thousand") { value *= 1_000 }
+        let formatted = value == value.rounded() ? String(Int64(value)) : String(value)
+        return currency.isEmpty ? formatted : "\(currency) \(formatted)"
+    }
+
+    /// The amounts a sentence states, grouped by normalised value → the wordings used.
+    static func amountGroups(in sentence: String, _ f: StudioCaseFacts) -> [String: Set<String>] {
+        var out: [String: Set<String>] = [:]
+        let wordings = Set(amounts(in: sentence, f) + figures(in: sentence))
+        for w in wordings { out[normalisedAmount(w) ?? w, default: []].insert(w) }
+        return out
+    }
+}
+
+/// One attributed sentence: who said it (nil = not assigned — for the person to attribute), on what
+/// basis, whose words it reports in turn (nested attribution), and whether it is a denial.
+public nonisolated struct AttributedStatement: Sendable, Equatable {
+    public var speaker: String?
+    public var sentence: String
+    public var doc: StudioCaseDocument
+    public var basis: String
+    public var reported: [String]
+    public var isDenial: Bool
+}
+
+/// Speaker resolution by reporting verb. Rules, in order, for each reporting verb in the sentence:
+/// "according to NAME" → NAME; passive "was … VERB by NAME" → NAME; inverted "VERB NAME" after a
+/// quote → NAME; otherwise the nearest person named BEFORE the verb, provided only a short
+/// appositive (≤ 4 words, no clause boundary, no other name) separates them. The first verb's
+/// speaker is the sentence's speaker; later verbs' speakers are people whose words it reports.
+/// Anything else is left unassigned with the reason.
+public nonisolated enum SpeakerAttribution {
+    public static let verbs = #"(?:said|says|stated|states|told|tells|testified|testifies|wrote|writes|explained|explains|admitted|admits|denied|denies|disputed|disputes|alleged|alleges|claimed|claims|confirmed|confirms|recalled|recalls|reported|reports|insisted|insists|maintained|maintains|added|replied|responded|asserted|asserts|according to)"#
+    static let denialVerbs: Set<String> = ["denied", "denies", "disputed", "disputes"]
+    static let clauseBoundary = #"\b(?:when|while|after|before|because|although|though|that|who|which|whom|where|if|unless|until|and|but|or)\b"#
+
+    public struct Resolution: Sendable, Equatable {
+        public var speaker: String?
+        public var basis: String
+        public var reported: [String]
+        public var isDenial: Bool
+    }
+
+    /// A document's author from a mail-style header ("From: Asha Rao <…>"), when the case names them.
+    static func fromHeader(_ text: String, _ named: [StudioCaseValue]) -> String? {
+        let head = String(text.prefix(600))
+        guard let line = head.range(of: #"(?m)^\s*From:[^\n]*"#, options: .regularExpression).map({ String(head[$0]) }) else { return nil }
+        return named.first { $0.label == "person" && line.range(of: $0.value, options: .caseInsensitive) != nil }?.value
+    }
+
+    public static func resolve(_ s: String, named: [String], author: String? = nil) -> Resolution {
+        let ns = s as NSString
+        guard let verbRe = try? NSRegularExpression(pattern: #"\b"# + verbs + #"\b"#, options: [.caseInsensitive]) else {
+            return Resolution(speaker: nil, basis: "attribution not read", reported: [], isDenial: false)
+        }
+        // Every occurrence of every name, as ranges.
+        var nameRanges: [(name: String, range: NSRange)] = []
+        for n in named {
+            guard let re = try? NSRegularExpression(pattern: #"\b"# + NSRegularExpression.escapedPattern(for: n) + #"\b"#, options: [.caseInsensitive]) else { continue }
+            for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)) { nameRanges.append((n, m.range)) }
+        }
+        nameRanges.sort { $0.range.location < $1.range.location }
+        let verbMatches = verbRe.matches(in: s, range: NSRange(location: 0, length: ns.length))
+        var isDenial = false
+        var speakers: [(String, String)] = []     // (speaker, basis) per resolved verb
+        var unresolvedReasons: [String] = []
+        for m in verbMatches {
+            let verb = ns.substring(with: m.range).lowercased()
+            if denialVerbs.contains(verb) { isDenial = true }
+            let before = ns.substring(to: m.range.location)
+            let after = ns.substring(from: m.range.location + m.range.length)
+            func firstName(in text: String, offset: Int, within limit: Int) -> String? {
+                nameRanges.first { $0.range.location >= offset && $0.range.location - offset <= limit }?.name
+            }
+            if verb == "according to" {
+                if let n = firstName(in: after, offset: m.range.location + m.range.length, within: 3) { speakers.append((n, "“according to \(n)”")); continue }
+                unresolvedReasons.append("“according to” names no one the case knows"); continue
+            }
+            // Passive with an agent: "was confirmed by NAME" / "were told by NAME".
+            if before.range(of: #"\b(?:was|were|is|are|been|being)\s+(?:\w+ly\s+)?$"#, options: .regularExpression) != nil {
+                if after.range(of: #"^\s+by\s+"#, options: .regularExpression) != nil,
+                   let byEnd = after.range(of: #"^\s+by\s+"#, options: .regularExpression) {
+                    let agentOffset = m.range.location + m.range.length + after.distance(from: after.startIndex, to: byEnd.upperBound)
+                    if let n = firstName(in: after, offset: agentOffset, within: 2) { speakers.append((n, "“\(verb) by \(n)”")); continue }
+                }
+                unresolvedReasons.append("passive “\(verb)” without a named agent"); continue
+            }
+            // Inverted after a quote: "…,” said NAME".
+            if before.range(of: #"[”"’,]\s*$"#, options: .regularExpression) != nil,
+               let n = firstName(in: after, offset: m.range.location + m.range.length, within: 2) {
+                speakers.append((n, "“\(verb) \(n)” after the quote")); continue
+            }
+            // First person with a known author: "I told the auditor …" in a mail From: the author.
+            if before.range(of: #"\bI\s+(?:\w+ly\s+)?$"#, options: .regularExpression) != nil, let author {
+                speakers.append((author, "“I \(verb)” in a document from \(author)")); continue
+            }
+            // Standard: the nearest name before the verb that is the verb's subject — separated from it
+            // only by a short appositive or a bracketed relative clause ("Asha Rao, who hired Dev Sharma,
+            // said" is Asha's: Dev is inside the clause, not the subject).
+            let preceding = nameRanges.filter { $0.range.location + $0.range.length <= m.range.location }
+            var tied: String?
+            var nearestSkipped: String?
+            for (idx, candidate) in preceding.enumerated().reversed() {
+                let end = candidate.range.location + candidate.range.length
+                let gap = ns.substring(with: NSRange(location: end, length: m.range.location - end))
+                // The text between the previous name (or the start) and this candidate: a relative
+                // clause opened there means the candidate sits inside it.
+                let leadStart = idx > 0 ? preceding[idx - 1].range.location + preceding[idx - 1].range.length : 0
+                let lead = ns.substring(with: NSRange(location: leadStart, length: candidate.range.location - leadStart))
+                let insideClause = lead.range(of: #",\s*(?:who|whom|which|that)\b[^,]*$"#, options: [.regularExpression, .caseInsensitive]) != nil
+                    && gap.range(of: #"^\s*,"#, options: .regularExpression) != nil
+                if insideClause { nearestSkipped = nearestSkipped ?? candidate.name; continue }
+                // Drop bracketed clauses and appositives, then the remainder must be short and clause-free.
+                let cleaned = gap.replacingOccurrences(of: #",\s*(?:who|whom|which|that)\b[^,]*,"#, with: " ", options: [.regularExpression, .caseInsensitive])
+                    .replacingOccurrences(of: #",\s*[^,]{0,60},"#, with: " ", options: .regularExpression)
+                let words = cleaned.split(whereSeparator: { $0.isWhitespace }).map { $0.trimmingCharacters(in: .punctuationCharacters) }.filter { !$0.isEmpty }
+                let boundary = cleaned.range(of: clauseBoundary, options: [.regularExpression, .caseInsensitive]) != nil
+                if words.count <= 4, !boundary, !cleaned.contains(".") { tied = candidate.name }
+                break
+            }
+            if let tied { speakers.append((tied, "\(tied) named before “\(verb)”")); continue }
+            if let nearest = preceding.last?.name {
+                unresolvedReasons.append("“\(verb)” is not tied to \(nearestSkipped ?? nearest) — a clause separates them"); continue
+            }
+            unresolvedReasons.append("no one is named before “\(verb)”")
+        }
+        if let first = speakers.first {
+            let reported = Array(NSOrderedSet(array: speakers.dropFirst().map(\.0).filter { $0 != first.0 })) as? [String] ?? []
+            return Resolution(speaker: first.0, basis: first.1, reported: reported, isDenial: isDenial)
+        }
+        // A transcript turn: "NAME: …".
+        if let turn = named.first(where: { s.range(of: "^\\s*" + NSRegularExpression.escapedPattern(for: $0) + "\\s*:", options: [.regularExpression, .caseInsensitive]) != nil }) {
+            return Resolution(speaker: turn, basis: "transcript turn “\(turn):”", reported: [], isDenial: isDenial)
+        }
+        var basis = "unassigned"
+        if !named.isEmpty { basis += " — names \(named.joined(separator: ", ")) but ties no one to the reporting verb" }
+        if !unresolvedReasons.isEmpty { basis += " (" + unresolvedReasons.joined(separator: "; ") + ")" }
+        return Resolution(speaker: nil, basis: basis, reported: [], isDenial: isDenial)
+    }
+}
+
+extension JobDeliverableText {
 
     /// Greedy topic clustering: a statement joins the first topic whose seed shares two content words.
     static func topics(_ sentences: [String]) -> [[Int]] {
@@ -326,52 +493,78 @@ public nonisolated enum StatementComparisonExecutor {
             return JobText.blocked("The case's documents contain no statement attributed to a named person, so there are no accounts to compare.",
                                    "Add the statements, interview notes or emails in which each witness gives their account.")
         }
-        let witnesses = Array(NSOrderedSet(array: statements.map(\.speaker))) as? [String] ?? []
+        let witnesses = Array(NSOrderedSet(array: statements.compactMap(\.speaker))) as? [String] ?? []
         let topics = JobDeliverableText.topics(statements.map(\.sentence))
         var rows: [JobResultRow] = []
+        var unassigned = 0
         for (t, members) in topics.enumerated() {
             let label = "Point \(t + 1): " + JobDeliverableText.topicLabel(members.map { statements[$0].sentence })
-            // What each witness states on this point: days and amounts.
-            var byWitness: [String: (days: Set<String>, amounts: Set<String>, items: [Int])] = [:]
+            // What each witness states on this point: days and amounts (normalised value → wordings).
+            var byWitness: [String: (days: Set<String>, amounts: [String: Set<String>], items: [Int], denial: Bool)] = [:]
             for i in members {
                 let s = statements[i]
-                var w = byWitness[s.speaker] ?? ([], [], [])
+                guard let speaker = s.speaker else {
+                    // Unassigned: kept for the person to attribute — never given to the nearest name.
+                    unassigned += 1
+                    rows.append(JobResultRow(title: "\(label) — speaker unassigned", detail: "“\(s.sentence)”",
+                                             flags: ["verbatim", "attribution \(s.basis)", "assign the speaker before comparing"],
+                                             refs: [JobText.ref(s.doc, s.sentence)],
+                                             fields: ["point": label, "witness": "", "comparison": "", "event": ""]))
+                    continue
+                }
+                var w = byWitness[speaker] ?? ([], [:], [], false)
                 w.days.formUnion(JobDeliverableText.days(of: s.sentence, e.facts))
-                w.amounts.formUnion(JobDeliverableText.amounts(in: s.sentence, e.facts))
+                for (norm, words) in JobDeliverableText.amountGroups(in: s.sentence, e.facts) { w.amounts[norm, default: []].formUnion(words) }
                 w.items.append(i)
-                byWitness[s.speaker] = w
+                w.denial = w.denial || s.isDenial
+                byWitness[speaker] = w
             }
             for name in witnesses {
                 guard let w = byWitness[name] else {
                     let p = e.facts.named.first { $0.value == name }
                     rows.append(JobResultRow(title: "\(label) — \(name)", detail: "No statement by \(name) on this point.", flags: ["silent"],
                                              refs: Array((p?.refs ?? []).prefix(1)),
-                                             fields: ["point": label, "witness": name, "comparison": "silent"]))
+                                             fields: ["point": label, "witness": name, "comparison": "silent", "event": label]))
                     continue
                 }
                 var flags: [String] = []
+                var differs = false, same = false
+                func wording(_ g: [String: Set<String>]) -> String { g.keys.sorted().map { g[$0]!.sorted().joined(separator: " = ") }.joined(separator: ", ") }
                 for (other, o) in byWitness where other != name {
                     if !w.days.isEmpty, !o.days.isEmpty {
-                        if w.days == o.days { flags.append("agrees with \(other) on date \(w.days.sorted().joined(separator: ", "))") }
-                        else { flags.append("differs from \(other) on date: \(w.days.sorted().joined(separator: ", ")) vs \(o.days.sorted().joined(separator: ", "))") }
+                        if w.days == o.days { same = true; flags.append("states the same date as \(other) (\(w.days.sorted().joined(separator: ", "))) — the same date, not necessarily the same event") }
+                        else { differs = true; flags.append("differs from \(other) on date: \(w.days.sorted().joined(separator: ", ")) vs \(o.days.sorted().joined(separator: ", "))") }
                     }
                     if !w.amounts.isEmpty, !o.amounts.isEmpty {
-                        if w.amounts == o.amounts { flags.append("agrees with \(other) on amount \(w.amounts.sorted().joined(separator: ", "))") }
-                        else { flags.append("differs from \(other) on amount: \(w.amounts.sorted().joined(separator: ", ")) vs \(o.amounts.sorted().joined(separator: ", "))") }
+                        if Set(w.amounts.keys) == Set(o.amounts.keys) {
+                            same = true
+                            flags.append("states the same amount as \(other) (\(wording(w.amounts))\(wording(w.amounts) == wording(o.amounts) ? "" : "; \(other) writes \(wording(o.amounts))")) — the same figure, not agreement on what happened")
+                        } else { differs = true; flags.append("differs from \(other) on amount: \(wording(w.amounts)) vs \(wording(o.amounts))") }
+                    }
+                    if w.denial != o.denial, same {
+                        differs = true
+                        flags.append(w.denial ? "denies what \(other) asserts — the shared figures do not make this agreement"
+                                              : "asserts what \(other) denies — the shared figures do not make this agreement")
                     }
                 }
-                let comparison = flags.contains { $0.hasPrefix("differs") } ? "differs" : (flags.contains { $0.hasPrefix("agrees") } ? "agrees" : "")
+                if w.denial { flags.append("denial") }
+                let comparison = differs ? "differs" : (same ? "agrees" : "")
                 let quotes = w.items.map { statements[$0].sentence }
+                let bases = Set(w.items.map { statements[$0].basis })
+                let reported = Set(w.items.flatMap { statements[$0].reported })
+                if !reported.isEmpty { flags.append("reports words of \(reported.sorted().joined(separator: ", ")) — nested attribution") }
                 rows.append(JobResultRow(title: "\(label) — \(name)", detail: quotes.map { "“\($0)”" }.joined(separator: " "),
-                                         flags: ["verbatim"] + flags, refs: w.items.map { JobText.ref(statements[$0].doc, statements[$0].sentence) },
-                                         fields: ["point": label, "witness": name, "comparison": comparison]))
+                                         flags: ["verbatim", "speaker: " + bases.sorted().joined(separator: "; ")] + flags,
+                                         refs: w.items.map { JobText.ref(statements[$0].doc, statements[$0].sentence) },
+                                         fields: ["point": label, "witness": name, "comparison": comparison, "event": label]))
             }
         }
         var limitations = JobText.withheldLimitation(e.withheld)
         if witnesses.count == 1 { limitations.append("Only one witness gives an attributed account; there is no second account to compare it with.") }
-        limitations.append("Agreement and difference are computed on the dates and amounts each statement gives; wording differences and meaning are yours to assess. A statement is what someone said, not what happened.")
+        if unassigned > 0 { limitations.append("\(unassigned) statement(s) name people but tie none of them to the reporting verb; they are left unassigned for you to attribute, not given to the nearest name.") }
+        limitations.append("A speaker is read from the reporting verb (“X said”, “according to X”, “confirmed by X”, “said X” after a quote); a point groups statements by shared words, which can put two different events together — correct the point or the event field. “Same date/amount” means the same figure in both statements, not that they describe the same event or agree in meaning; a denial and an assertion that share a figure are shown as differing. Wording and meaning are yours to assess. A statement is what someone said, not what happened.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
-                                         nextActions: ["Assess each point (agrees, differs, silent) against the quotes; corrections are added as new entries, never over the original."]))
+                                         nextActions: ["Assign any unassigned speaker; correct the point or event where two statements are about different things; then assess each point (agrees, differs, silent) against the quotes — corrections are added as new entries, never over the original."]))
     }
 }
 
@@ -387,6 +580,7 @@ public nonisolated enum WitnessProfileExecutor {
         var rows: [JobResultRow] = []
         for p in persons {
             let mine = statements.enumerated().filter { $0.element.speaker == p.value }
+            let ambiguous = statements.filter { $0.speaker == nil && $0.sentence.range(of: p.value, options: .caseInsensitive) != nil }.count
             // Documents: authored (From line or "X wrote/said" opening), received (To line), or merely naming.
             var authored: [String] = [], received: [String] = [], naming: [String] = []
             for doc in e.facts.documents {
@@ -417,6 +611,7 @@ public nonisolated enum WitnessProfileExecutor {
             } }
             let quotes = mine.map { "“\($0.element.sentence)”" }
             var flags: [String] = mine.isEmpty ? ["no attributed statement in the documents"] : ["\(mine.count) statement(s) quoted verbatim"]
+            if ambiguous > 0 { flags.append("\(ambiguous) statement(s) name \(p.value) without tying them to the reporting verb — unassigned, attribute by hand") }
             if inconsistencies.isEmpty { flags.append("no date or amount inconsistency found between the statements") }
             rows.append(JobResultRow(title: p.value, detail: quotes.isEmpty ? "Named in: \(([authored, received, naming].flatMap { $0 }).joined(separator: ", "))" : quotes.joined(separator: " "),
                                      flags: flags, refs: mine.isEmpty ? Array(p.refs.prefix(2)) : mine.map { JobText.ref($0.element.doc, $0.element.sentence) },
@@ -426,7 +621,7 @@ public nonisolated enum WitnessProfileExecutor {
             rows += inconsistencies
         }
         var limitations = JobText.withheldLimitation(e.withheld)
-        limitations.append("Authorship is read from From/To lines and an opening “X wrote/said”; a document that only names the witness is listed as naming them. Inconsistencies are found on dates and amounts only; wording is yours to compare.")
+        limitations.append("Authorship is read from From/To lines and an opening “X wrote/said”; a document that only names the witness is listed as naming them. A statement's speaker is read from its reporting verb; a sentence that names the witness without tying them to the verb is not counted as theirs. Inconsistencies are found on dates and amounts only; wording is yours to compare.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Assess each witness from the quotes; an inconsistency is a difference to put to them, not a finding of untruth."]))
     }
@@ -527,50 +722,99 @@ public nonisolated enum WorkpaperExecutor {
 
 public nonisolated enum SourceFamilyExecutor {
     static let minimumSharedLength = 60
+    /// Content-word overlap at or above which two long sentences are "similar wording" (a rewrite).
+    static let similarityThreshold = 0.6
+    /// Routine notices that documents share without any relationship between them.
+    static let boilerplatePattern = #"(?i)\b(?:confidential|intended (?:solely )?for|intended recipient|unsubscribe|all rights reserved|copyright|privacy policy|terms of (?:use|service)|disclaimer|do not reply|legal notice|received (?:this )?in error|notify the sender|this (?:e-?mail|message|communication))\b|©"#
 
+    public static let unassessedFamily = "No shared text detected; independence unassessed"
+    public static let noSharedText = "no shared text detected; independence unassessed"
+    public static let sharedText = "shared text detected; possible relationship"
+
+    /// Text-similarity CANDIDATES only (investigator workflow review 2026-10-30, I7): documents sharing
+    /// a long identical sentence, or near-identical wording, are grouped as a possible relationship;
+    /// documents sharing nothing are "independence unassessed", never "independent". Routine
+    /// boilerplate — a notice most documents carry, or a standard legal/e-mail footer — is excluded
+    /// before grouping. The person's confirmed lineage is a separate field with its rationale.
     public static func run(_ e: JobEvidence) -> JobRun {
         let docs = e.facts.documents
         guard !docs.isEmpty else {
             return JobText.blocked("The case has no documents in scope, so there is no source to map.", "Include the sources in the case's scope.")
         }
-        let sentences: [UUID: Set<String>] = Dictionary(uniqueKeysWithValues: docs.map { d in
-            (d.objectID, Set(JobText.sentences(e.texts[d.objectID] ?? "").filter { $0.count >= minimumSharedLength }.map(JobDeliverableText.normalised)))
+        // Long sentences per document, normalised; count in how many documents each appears.
+        var perDoc: [UUID: [String]] = [:]
+        var docCount: [String: Int] = [:]
+        for d in docs {
+            let longOnes = Array(Set(JobText.sentences(e.texts[d.objectID] ?? "").filter { $0.count >= minimumSharedLength }.map(JobDeliverableText.normalised)))
+            perDoc[d.objectID] = longOnes
+            for s in longOnes { docCount[s, default: 0] += 1 }
+        }
+        // Boilerplate: a standard notice by its words, or a sentence carried by most documents (3+).
+        func isBoilerplate(_ s: String) -> Bool {
+            if s.range(of: boilerplatePattern, options: .regularExpression) != nil { return true }
+            let n = docCount[s] ?? 0
+            return n >= 3 && Double(n) > Double(docs.count) / 2
+        }
+        var boilerplateCount: [UUID: Int] = [:]
+        let candidates: [UUID: [String]] = Dictionary(uniqueKeysWithValues: docs.map { d in
+            let all = perDoc[d.objectID] ?? []
+            let kept = all.filter { !isBoilerplate($0) }
+            boilerplateCount[d.objectID] = all.count - kept.count
+            return (d.objectID, kept)
         })
-        // Union-find over documents sharing at least one long identical sentence.
+        let words: [String: Set<String>] = Dictionary(uniqueKeysWithValues: Set(candidates.values.flatMap { $0 }).map { ($0, JobDeliverableText.contentWords($0)) })
+        // Union-find over documents sharing an identical long sentence or similar wording.
         var parent: [UUID: UUID] = Dictionary(uniqueKeysWithValues: docs.map { ($0.objectID, $0.objectID) })
         func find(_ x: UUID) -> UUID { var x = x; while parent[x] != x { x = parent[x]! }; return x }
-        var shared: [UUID: [(UUID, Int)]] = [:]
+        var identical: [UUID: [(UUID, Int)]] = [:]
+        var similar: [UUID: [(UUID, Int)]] = [:]
         for i in docs.indices { for j in docs.indices where j > i {
             let a = docs[i].objectID, b = docs[j].objectID
-            let n = sentences[a, default: []].intersection(sentences[b, default: []]).count
-            guard n > 0 else { continue }
-            shared[a, default: []].append((b, n)); shared[b, default: []].append((a, n))
+            let sa = candidates[a] ?? [], sb = candidates[b] ?? []
+            let same = Set(sa).intersection(sb)
+            var near = 0
+            for x in sa where !same.contains(x) { for y in sb where !same.contains(y) {
+                let wx = words[x] ?? [], wy = words[y] ?? []
+                guard !wx.isEmpty, !wy.isEmpty else { continue }
+                let overlap = Double(wx.intersection(wy).count) / Double(wx.union(wy).count)
+                if overlap >= similarityThreshold { near += 1 }
+            } }
+            guard !same.isEmpty || near > 0 else { continue }
+            if !same.isEmpty { identical[a, default: []].append((b, same.count)); identical[b, default: []].append((a, same.count)) }
+            if near > 0 { similar[a, default: []].append((b, near)); similar[b, default: []].append((a, near)) }
             parent[find(a)] = find(b)
         } }
         var familyNumber: [UUID: Int] = [:]
         var next = 1
         var rows: [JobResultRow] = []
+        func name(_ id: UUID) -> String { docs.first { $0.objectID == id }?.name ?? id.uuidString }
         for doc in docs {
             let root = find(doc.objectID)
-            if familyNumber[root] == nil { familyNumber[root] = next; next += 1 }
-            let fam = familyNumber[root]!
-            let partners: [(name: String, count: Int)] = (shared[doc.objectID] ?? []).compactMap { pair in
-                docs.first { $0.objectID == pair.0 }.map { ($0.name, pair.1) }
-            }
-            let partnerNames = partners.map(\.name).joined(separator: ", ")
+            let exact = identical[doc.objectID] ?? [], near = similar[doc.objectID] ?? []
+            let related = !exact.isEmpty || !near.isEmpty
             var flags: [String] = ["not assessed"]
-            if !partners.isEmpty { flags.append("repeats text of \(partnerNames) — one source family, not independent") }
-            // The same family value on every member (the partners are named in the flag and detail).
-            let family = partners.isEmpty ? "Family \(fam) (independent by text)" : "Family \(fam) (shared text)"
+            if !exact.isEmpty { flags.append("repeats text of \(exact.map { name($0.0) }.joined(separator: ", ")) — \(sharedText), not proof of common origin") }
+            if !near.isEmpty { flags.append("similar wording to \(near.map { name($0.0) }.joined(separator: ", ")) — possible rewrite; review as potentially dependent") }
+            if let b = boilerplateCount[doc.objectID], b > 0 { flags.append("\(b) boilerplate sentence(s) excluded from grouping") }
+            let family: String
+            if related {
+                if familyNumber[root] == nil { familyNumber[root] = next; next += 1 }
+                family = "Family \(familyNumber[root]!) — \(sharedText)"
+            } else {
+                family = unassessedFamily
+            }
             let quote = JobText.sentences(e.texts[doc.objectID] ?? "").first ?? doc.name
-            let detail = partners.isEmpty ? "No sentence of \(minimumSharedLength)+ characters is shared with another case document."
-                : "Shared text with: " + partners.map { "\($0.name) (\($0.count) identical sentence(s))" }.joined(separator: "; ")
-            rows.append(JobResultRow(title: doc.name, detail: detail, flags: flags, refs: [JobText.ref(doc, quote)], fields: ["family": family]))
+            var detailParts: [String] = []
+            if !exact.isEmpty { detailParts.append("Identical text with: " + exact.map { "\(name($0.0)) (\($0.1) sentence(s))" }.joined(separator: "; ")) }
+            if !near.isEmpty { detailParts.append("Similar wording to: " + near.map { "\(name($0.0)) (\($0.1) near-identical sentence(s))" }.joined(separator: "; ")) }
+            if !related { detailParts.append("No sentence of \(minimumSharedLength)+ characters is shared with or similar to another case document (boilerplate excluded). That does not establish independence.") }
+            rows.append(JobResultRow(title: doc.name, detail: detailParts.joined(separator: " "), flags: flags, refs: [JobText.ref(doc, quote)],
+                                     fields: ["family": family]))
         }
         var limitations = JobText.withheldLimitation(e.withheld)
-        limitations.append("One family means the same long sentences appear in both sources (a wire story repeated); it is not proof of a common origin, and different words do not prove independence. Relationship and protection are yours to record.")
+        limitations.append("“Shared text detected” means the same long sentences, or near-identical wording, appear in both sources — a candidate relationship (a wire story repeated, a rewrite), not proof of a common origin. “No shared text detected” means only that; it does not establish independence. Standard notices and footers most documents carry are excluded before grouping. Your confirmed lineage, with its rationale, is recorded separately in the Lineage field and the note.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
-                                         nextActions: ["Record each source's relationship to the story and its protection; count a family once when weighing corroboration."]))
+                                         nextActions: ["Decide each source's lineage (independent, same origin, derivative, unknown) with the rationale in the note; record its relationship to the story and its protection; count one origin once when weighing corroboration."]))
     }
 }
 
