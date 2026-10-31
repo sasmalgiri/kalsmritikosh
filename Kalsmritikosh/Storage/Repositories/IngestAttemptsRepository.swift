@@ -109,6 +109,17 @@ public actor IngestAttemptsRepository {
     /// counting as failed, and the ingest indicator sat at "1 item remaining" forever.
     static let processingOutcomes = "('queryable','passCompleted','deferred','failed')"
 
+    /// Whether this URL's latest PROCESSING outcome is a failure — such a file is read again when it is
+    /// next ingested, even with unchanged bytes (a recognition that failed under load may succeed now).
+    public func lastProcessingFailed(url: URL) async -> Bool {
+        let rows = (try? await database.query("""
+        SELECT status FROM ingest_file_attempts
+        WHERE url = ? AND status IN \(Self.processingOutcomes)
+        ORDER BY attempted_at DESC LIMIT 1;
+        """, [.text(url.absoluteString)])) ?? []
+        return rows.first?.string(0) == Status.failed.rawValue
+    }
+
     /// Count of files whose latest PROCESSING outcome failed — a Sources signal.
     public func failedCount() async -> Int {
         let rows = (try? await database.query("""

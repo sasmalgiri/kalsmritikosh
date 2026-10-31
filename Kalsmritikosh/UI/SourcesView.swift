@@ -31,6 +31,8 @@ public struct SourcesView: View {
     /// UI journey 2026-10-30b, D-2: files whose last ingest attempt failed, by name, with the stage
     /// and reason — the "Needs attention" count was a number with no rows behind it.
     @State private var failedAttempts: [IngestAttemptsRepository.Attempt] = []
+    @State private var readingAgain: String?
+    @State private var readAgainResult: String?
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     @State private var holdBlock: String?
@@ -308,8 +310,9 @@ public struct SourcesView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Needs attention — \(failedAttempts.count) file(s) could not be read", systemImage: "exclamationmark.triangle")
                     .font(.headline).foregroundStyle(.orange)
-                Text("These files are in the archive but hold no readable text, so no answer, job or report draws on them. Re-scan with text (OCR), supply a readable copy, or record that the original is unreadable.")
+                Text("These files are in the archive but hold no readable text, so no answer, job or report draws on them. Press Read again (text recognition can fail while the Mac is busy), re-scan with text (OCR), supply a readable copy, or record that the original is unreadable.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if let readAgainResult { Text(readAgainResult).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sources.readAgain.result") }
                 ForEach(failedAttempts) { a in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "doc.badge.ellipsis").foregroundStyle(.orange)
@@ -320,8 +323,24 @@ public struct SourcesView: View {
                             Text(a.attemptedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
                         }
                         Spacer()
-                        Text("unreadable").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.orange.opacity(0.18), in: Capsule())
+                        VStack(alignment: .trailing, spacing: 6) {
+                            Text("unreadable").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(.orange.opacity(0.18), in: Capsule())
+                            if let url = URL(string: a.url), url.isFileURL {
+                                Button("Read again") {
+                                    Task {
+                                        readingAgain = a.url
+                                        readAgainResult = await appState.readAgain(url)
+                                        readingAgain = nil
+                                        await refresh()
+                                    }
+                                }
+                                .controlSize(.small)
+                                .disabled(reason: readingAgain != nil ? "Another file is being read." : nil, remedy: "Wait for it to finish.",
+                                          help: "Read this file again. A scan whose text recognition failed while the Mac was busy is often read the second time.")
+                                .accessibilityIdentifier("sources.readAgain")
+                            }
+                        }
                     }
                     .padding(12)
                     .cardSurface(cornerRadius: 12)

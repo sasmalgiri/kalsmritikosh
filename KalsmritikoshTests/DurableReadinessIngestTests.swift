@@ -10,6 +10,8 @@
 
 import Foundation
 import Testing
+import PDFKit
+import AppKit
 @testable import Kalsmritikosh
 
 @Suite("USF-002.1 — durable readiness ingest", .serialized)
@@ -177,5 +179,27 @@ struct DurableReadinessIngestTests {
         #expect(snap.dimension(.textExtraction)?.state == .ready)
         #expect(snap.dimension(.indexing)?.state == .ready)
         #expect(snap.isSearchReady)
+    }
+
+    @Test("A file whose read failed is read again on the next ingest, not skipped as unchanged")
+    @MainActor func failedReadIsReadAgain() async throws {
+        let rig = try await makeRig()
+        // A scan with nothing on it: no text layer, nothing to recognise — the read fails.
+        let url = rig.dir.appendingPathComponent("blank-scan.pdf")
+        let image = NSImage(size: NSSize(width: 300, height: 300))
+        image.lockFocus(); NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 300, height: 300).fill(); image.unlockFocus()
+        let doc = PDFDocument(); doc.insert(try #require(PDFPage(image: image)), at: 0)
+        #expect(doc.write(to: url))
+        let first = try await rig.coordinator.ingest(fileAt: url)
+        #expect(first.processingStatus == .failed)
+        // Same bytes again (Sources ▸ Read again, or the next folder pass): parsed again, not skipped.
+        let second = try await rig.coordinator.ingest(fileAt: url)
+        #expect(second.intakeOutcome == .unchanged)
+        #expect(second.processingStatus == .failed, "read again, not skipped: \(String(describing: second.processingStatus))")
+        // A file that was read successfully is still skipped when unchanged.
+        let ok = try write(rig, "matter.eml", email)
+        _ = try await rig.coordinator.ingest(fileAt: ok)
+        let again = try await rig.coordinator.ingest(fileAt: ok)
+        #expect(again.processingStatus == .unchanged)
     }
 }

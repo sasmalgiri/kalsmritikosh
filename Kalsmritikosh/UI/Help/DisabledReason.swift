@@ -55,7 +55,7 @@ public nonisolated enum EmptyStateKind: Sendable, Equatable {
         case .noFiles:
             return "Add a folder in Sources. Files are read where they are; nothing is moved or copied."
         case .unreadableFiles(let n):
-            return "\(n) file\(n == 1 ? "" : "s") failed to read — see Needs attention in Sources for each reason (format kept but not read, password, corrupt file, scan without text)."
+            return "\(n) file\(n == 1 ? "" : "s") failed to read — see Needs attention in Sources for each reason (format kept but not read, password, corrupt file, scan without text, text recognition failed) and press Read again."
         case .outsideScope(let n):
             return "\(n) document\(n == 1 ? " is" : "s are") in the workspace but not in this case. Press “Review new documents” in Professional Jobs and confirm the scope preview."
         case .insufficientEvidence:

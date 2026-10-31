@@ -1473,8 +1473,12 @@ public actor IngestCoordinator {
            universalExecutor.registry.plugin(for: type)?.executionMode != .immediate {
             return skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
         }
-        // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser.
-        guard handle.shouldProcess else {
+        // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser. Except an
+        // unchanged file whose last read FAILED: it is read again (the failure may have been the Mac's
+        // state — text recognition under load — not the file), so "Read again" and a re-import work.
+        let rereadFailed = handle.outcome == .unchanged && !isMember
+            ? (await ingestAttempts?.lastProcessingFailed(url: url) ?? false) : false
+        guard handle.shouldProcess || rereadFailed else {
             let status: IngestAttemptsRepository.Status =
                 handle.outcome == .moved ? .moved : (handle.outcome == .aliased ? .aliased : .unchanged)
             return skipResult(status, stage: "intake", detail: "\(handle.outcome.rawValue) — parsing skipped")

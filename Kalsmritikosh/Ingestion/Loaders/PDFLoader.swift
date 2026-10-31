@@ -43,6 +43,9 @@ public struct PDFLoader: Ingestor {
         var combined = ""
         var pageOffsets: [Int] = []
         var ocrPagesUsed = 0
+        #if canImport(Vision)
+        let recognitionFailuresBefore = VisionPerform.failureCount()
+        #endif
 
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
@@ -82,6 +85,14 @@ public struct PDFLoader: Ingestor {
         // A document with no readable character is reported as empty, never saved as a silent,
         // searchless knowledge object (the caller records the error; the file stays listed).
         if combined.rangeOfCharacter(from: .alphanumerics) == nil {
+            // Text recognition itself failed (not a page without text): say so, so the file is listed
+            // with the real reason and "Read again" can succeed once the Mac is less busy.
+            #if canImport(Vision)
+            let failed = VisionPerform.failureCount() - recognitionFailuresBefore
+            if failed > 0 {
+                throw IngestorError.parseFailure(url, reason: "text recognition failed on \(failed) page(s) — the Mac may have been busy; use Read again in Sources ▸ Needs attention")
+            }
+            #endif
             throw IngestorError.empty(url)
         }
 

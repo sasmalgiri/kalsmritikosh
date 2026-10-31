@@ -440,6 +440,32 @@ public final class AppState {
         await runPostIngestChecksSinceLast()   // W3-4 / N-11
     }
 
+    /// Sources ▸ Needs attention ▸ Read again — read one file whose last read failed. The file is
+    /// opened under its folder's bookmark (or its own access, for a file added on its own); an
+    /// unchanged file whose last read failed is re-parsed, not skipped. Returns what happened.
+    public func readAgain(_ url: URL) async -> String {
+        guard let ingest else { return "The ledger is not open yet." }
+        guard PurchaseCenter.shared.allowPaidAction("read your folders") else { return "Reading documents needs a subscription." }
+        var opened: URL?
+        for root in bookmarks.roots {
+            guard let r = try? bookmarks.resolve(root) else { continue }
+            if url.standardizedFileURL.path.hasPrefix(r.standardizedFileURL.path + "/") { opened = r; break }
+            bookmarks.stopAccessing(r)
+        }
+        defer { if let opened { bookmarks.stopAccessing(opened) } }
+        let scoped = opened == nil && url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let r = try await ingest.ingest(fileAt: url, intent: .fullAvailable)
+            await runPostIngestChecksSinceLast()
+            if r.processingStatus == .failed { return "Still unreadable: \(r.processingDetail ?? "no reason recorded")" }
+            return "Read \(url.lastPathComponent): \(r.chunkCount) passage\(r.chunkCount == 1 ? "" : "s")."
+        } catch {
+            KalsmritikoshLog.app.error("Read again failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            return "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Device-suitable model install (consent-gated)
 
     /// User declined the suggested lighter model — hide the prompt for this session.
