@@ -21,7 +21,7 @@ cache or cookies. The main app has no network client entitlement.
 |---|---|---|---|---|---|---|
 | N1 | The **question** and, for the interpreter, the app's field names and descriptions | The provider the person chose, with their own API key | Online mode, when the rules and the on-device model did not understand the question | Off. Needs Online mode and a key. The interpreter module is on, but sends only in Online mode. | Preview of the exact text, destination and size. "Ask every time" is the default. If the person turns it off, they may allow the rest of the session for question-only sends. Optional name masking is **off by default**. Daily byte limit. | `outbound_log` in the encrypted ledger: the full text sent (after masking), its SHA-256, size, provider, model, host and outcome. The response body is not stored. |
 | N2 | **Document passages**, from two routes only. *Answer wording*: the answer synthesiser and the chunk fallback. *Record reading*: up to 8 documents naming a person, up to 7,000 characters each. Before any prompt is built, each source document passes the cloud source gate: privileged, above confidential, or protection unreadable/untraceable means it is not sent. Background, ingest, summary and expert calls cannot reach the cloud (they do not declare it). | Only a provider reviewed for case material (Claude on the commercial API, or a paid Gemini project; **not OpenAI** in this release), after the person confirms their account is on those terms. The confirmation lapses when the reviewed terms change. | Online mode with AI answers on; record reading has its own switch | Off | **Always previewed** with the provider's retention and training terms; never covered by "this session". Masking and the daily limit as in N1. | As N1. A refused send is logged as `blocked`, with the unsent text, inside the encrypted ledger. |
-| N3 | Product lookup, entitlements, purchase, restore | Apple, through StoreKit | At launch (entitlements); on the person's action (purchase, restore) | On | Apple's own sheets | Nothing beyond StoreKit |
+| N3 | Subscription products and prices, verified transactions and renewal information, introductory-offer eligibility, purchase, restore (2026-10-30: auto-renewable monthly/annual; legacy unlock/trial honoured) | Apple, through StoreKit (Apple's own connection, not the app's helper) | At launch and on foreground (entitlements, renewal status); on the person's action (subscribe, restore); Apple's transaction updates | On | Apple's own purchase sheets; the app shows Apple's prices and dates and caches only the last verified state | Nothing beyond StoreKit; no case content; subscribing enables nothing else (not Online). "Manage subscription" opens Apple's account page in the browser. |
 | N4 | "Report a problem": the app and macOS version | The person's Mail app, as a draft to the developer | Person's click | — | Editable draft; nothing is sent by the app | — |
 | N5 | "Send diagnostics": MetricKit JSON (crash and hang stacks, counters, device model, OS) | The person's Mail app | Person's click, after a list of the files | — | The person sends it, or not | — |
 
@@ -110,6 +110,11 @@ removes those.
   the second layer.
 
 ## 4. Open decisions (owner / counsel)
+
+0. **Subscriptions (2026-10-30).** N3 now carries auto-renewable subscriptions. Terms, privacy, support and the listing
+   state the plans, the 14-day introductory trial for eligible accounts, automatic renewal, cancellation a day before
+   the period ends, and that billing never deletes or locks away the person's work. Counsel: consumer-law notice and
+   withdrawal rules for auto-renewal in the launch markets; India price points and trader details (decision sheet L-10).
 
 1. **App Store privacy label.** N1 and N2 send content to a third-party AI service when the person turns them on.
    Whether that is "collection" under Apple's definitions, and what the label and `NSPrivacyCollectedDataTypes`
