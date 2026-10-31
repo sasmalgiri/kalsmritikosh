@@ -238,7 +238,8 @@ struct NewCaseSheet: View {
                 Button("Create case") { Task { await create() } }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || working)
+                    .disabled(reason: working ? "The case is being created." : title.trimmingCharacters(in: .whitespaces).isEmpty ? "A case title is required." : nil,
+                              remedy: working ? nil : "Type a title for the case.")
             }
             .padding(20)
         }

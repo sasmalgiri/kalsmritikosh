@@ -428,7 +428,9 @@ struct CaseOverviewTab: View {
                 HStack {
                     Spacer()
                     Button(closed ? "Reopen" : "Close case") { closeOrReopen(closed) }
-                        .disabled(closeRationale.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(reason: closeRationale.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? (closed ? "A reason to reopen is required." : "A closing rationale is required.") : nil,
+                                  remedy: closed ? "Type it in “Why reopen”." : "Type it in “Closing rationale”.")
                     if closed, s.profile.archivedAt == nil {
                         Button("Archive") { model.run(appState) { try await $0.file.archive(caseID: model.caseID, actor: model.actor) } }
                     }
@@ -555,7 +557,8 @@ struct CasePlanTab: View {
                         let t = newAllegation
                         model.run(appState) { _ = try await $0.file.addAllegation(caseID: model.caseID, text: t, actor: model.actor) }
                         newAllegation = ""
-                    }.disabled(newAllegation.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }.disabled(reason: newAllegation.trimmingCharacters(in: .whitespaces).isEmpty ? "No allegation typed." : nil,
+                               remedy: "Type the allegation in “Add an allegation”.")
                 }
                 ForEach(s.allegations) { a in allegationRow(a) }
             }

@@ -12,15 +12,18 @@ import SwiftUI
 
 public extension View {
     /// Disable the control while `reason` is non-nil, and say why and what to do: as the tooltip, as the
-    /// accessibility value and hint. With `reason == nil` the view is unchanged.
+    /// accessibility value and hint. With `reason == nil` the view is unchanged, apart from `help` — the
+    /// tooltip for the enabled control (one tooltip, so the reason never competes with it).
     @ViewBuilder
-    func disabled(reason: String?, remedy: String? = nil) -> some View {
+    func disabled(reason: String?, remedy: String? = nil, help: String? = nil) -> some View {
         if let reason {
             let text = remedy.map { "\(reason) \($0)" } ?? reason
             self.disabled(true)
                 .help(text)
                 .accessibilityValue("Unavailable: \(reason)")
                 .accessibilityHint(remedy ?? "")
+        } else if let help {
+            self.help(help)
         } else {
             self
         }
@@ -54,7 +57,7 @@ public nonisolated enum EmptyStateKind: Sendable, Equatable {
         case .unreadableFiles(let n):
             return "\(n) file\(n == 1 ? "" : "s") failed to read — see Needs attention in Sources for each reason (format kept but not read, password, corrupt file, scan without text)."
         case .outsideScope(let n):
-            return "\(n) document\(n == 1 ? " is" : "s are") in the workspace but not in this case. Press “Add documents to this case” and confirm the scope preview."
+            return "\(n) document\(n == 1 ? " is" : "s are") in the workspace but not in this case. Press “Review new documents” in Professional Jobs and confirm the scope preview."
         case .insufficientEvidence:
             return "No passage in the documents in scope supports an answer. Nothing is guessed; the closest passages are shown so you can judge, and Missing Proof lists what would settle it."
         case .pendingReview(let n):
@@ -78,7 +81,7 @@ public nonisolated enum EmptyStateKind: Sendable, Equatable {
     public var remedy: (title: String, destination: Destination)? {
         switch self {
         case .noFiles, .unreadableFiles: return ("Open Sources", .sources)
-        case .outsideScope: return ("Open Professional Jobs", .work)
+        case .outsideScope: return nil   // shown beside “Review new documents” itself
         case .insufficientEvidence: return ("Open Findings ▸ Missing Proof", .findings)
         case .pendingReview: return ("Open Review", .review)
         case .blockedExport: return nil

@@ -160,4 +160,19 @@ import Testing
         #expect(onDiskMatrix == matrix, "docs/HELP_COVERAGE_MATRIX.md differs from the registry rendering; run scripts/help-docs-from-console.py on this run's console log")
         #expect(manual.contains("# Investigations Made Easy — user manual") && !manual.lowercased().contains("team review"))
     }
+
+    /// §6.9 — an empty ledger-reading screen names the document reason only when it is true: nothing
+    /// added, or every file failed; while reading is under way or once something was read, the screen
+    /// keeps its own words. The outside-scope state names the control that fixes it, which exists.
+    @Test func emptyStateReasons() {
+        typealias P = AppState.IngestProgress
+        #expect(EmptyStateKind.ledgerReason(P()) == .noFiles)
+        #expect(EmptyStateKind.ledgerReason(P(filesDone: 3, filesTotal: 3, filesFailed: 3)) == .unreadableFiles(count: 3))
+        #expect(EmptyStateKind.ledgerReason(P(filesDone: 1, filesTotal: 3, filesFailed: 1)) == nil)   // still reading
+        #expect(EmptyStateKind.ledgerReason(P(filesDone: 3, filesTotal: 3, filesFailed: 1)) == nil)   // two were read
+        #expect(EmptyStateKind.outsideScope(available: 2).message.contains("“Review new documents”"))
+        #expect(Self.uiSources.contains("\"Review new documents\""))
+        #expect(EmptyStateKind.outsideScope(available: 1).remedy == nil)
+        #expect(EmptyStateKind.noFiles.remedy?.destination == .sources)
+    }
 }

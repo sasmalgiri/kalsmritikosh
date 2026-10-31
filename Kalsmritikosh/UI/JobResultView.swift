@@ -559,14 +559,27 @@ struct JobResultView: View {
                     TextField("Completion note (required to complete)", text: $model.completionNote).frame(maxWidth: 280)
                     Button("Mark completed") { Task { await complete() } }
                         .buttonStyle(.borderedProminent)
-                        .disabled(record.state == .blocked || model.undecided > 0
-                                  || model.completionNote.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .help(record.state == .blocked ? "A blocked result cannot be completed."
-                              : model.undecided > 0 ? "\(model.undecided) row(s) are undecided." : "Record that you reviewed and completed this result.")
+                        .disabled(reason: completeBlocker(record)?.reason, remedy: completeBlocker(record)?.remedy,
+                                  help: "Record that you reviewed and completed this result.")
                 }
             }
         }
         .padding(12)
+    }
+
+    /// Why "Mark completed" is unavailable, and what to do — nil when it can be pressed.
+    private func completeBlocker(_ record: JobResultRecord) -> (reason: String, remedy: String)? {
+        if record.state == .blocked {
+            return ("A blocked result cannot be completed.", "Supply what the job reports as missing and run it again.")
+        }
+        if model.undecided > 0 {
+            let n = model.undecided
+            return ("\(n) row\(n == 1 ? " is" : "s are") undecided.", "Set each row to Accepted or Rejected, then save.")
+        }
+        if model.completionNote.trimmingCharacters(in: .whitespaces).isEmpty {
+            return ("A completion note is required.", "Type what you checked in “Completion note”.")
+        }
+        return nil
     }
 
     /// B3 — validate an actual produced file and add its check as a row.

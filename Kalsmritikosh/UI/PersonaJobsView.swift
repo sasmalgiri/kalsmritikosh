@@ -697,7 +697,7 @@ public struct PersonaJobsView: View {
                             if model.results[jobID] != nil {
                                 Button("Open") { resultJob = job }.controlSize(.mini)
                             } else {
-                                Button("Run") { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } }.controlSize(.mini).disabled(model.busy)
+                                Button("Run") { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } }.controlSize(.mini).disabled(reason: model.busy ? "Another job is running." : nil, remedy: "Wait for it to finish; this button comes back by itself.")
                             }
                         } else if case .caseStep(let place) = rec.kind {
                             Text(place.rawValue.capitalized).font(.caption2).foregroundStyle(.tertiary)
@@ -749,11 +749,16 @@ public struct PersonaJobsView: View {
                 }
                 .controlSize(.small)
                 .tint(Theme.brand)
-                .disabled(model.busy)
-                .help("See the documents added to this matter's workspace that are not yet in the case, and approve which to include. Reopening the matter never adds them on its own.")
+                .disabled(reason: model.busy ? "Another job is running." : nil, remedy: "Wait for it to finish; this button comes back by itself.",
+                          help: "See the documents added to this matter's workspace that are not yet in the case, and approve which to include. Reopening the matter never adds them on its own.")
                 .accessibilityIdentifier("jobs.scope.review")
             }
             .padding(.top, 4)
+            // §6.9 — nothing in the case yet, documents waiting in the workspace: say which is true.
+            if let p = model.scopePreview, p.inScope == 0, !p.pending.isEmpty {
+                EmptyStateView(.outsideScope(available: p.pending.count))
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            }
         }
     }
 
@@ -989,8 +994,8 @@ public struct PersonaJobsView: View {
                             if model.activeCaseID != nil {
                                 Button("Run") { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } }
                                     .controlSize(.small)
-                                    .disabled(model.busy)
-                                    .help("Run this job against the open matter now; its result is saved for review.")
+                                    .disabled(reason: model.busy ? "Another job is running." : nil, remedy: "Wait for it to finish; this button comes back by itself.",
+                                              help: "Run this job against the open matter now; its result is saved for review.")
                                 if model.results[job.id] != nil {
                                     Button("Open result") { resultJob = job }
                                         .controlSize(.small)
@@ -1190,7 +1195,7 @@ struct ScopeReviewSheet: View {
                 Spacer()
                 Button(chosen.count == 1 ? "Add 1 document to this case" : "Add \(chosen.count) documents to this case") { onApprove(chosen) }
                     .buttonStyle(.borderedProminent).tint(Theme.brand)
-                    .disabled(chosen.isEmpty)
+                    .disabled(reason: chosen.isEmpty ? "No document is ticked." : nil, remedy: "Tick the documents this case may use.")
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("jobs.scope.approve")
             }
