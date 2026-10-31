@@ -311,13 +311,17 @@ final class PurchaseCenter {
     /// Set by a paid action that was refused: the paywall opens over the current screen.
     var paywallRequested: String?
 
-    /// The unit-test host never talks to the App Store and is always unlocked.
+    /// The unit-test host never talks to the App Store and is always unlocked — except a centre a
+    /// test makes with `talksToStore: true` inside an `SKTestSession` (`PurchaseStoreKitTests`).
     static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    private let talksToStore: Bool
     private var updates: Task<Void, Never>?
     private var products: [String: Product] = [:]
 
+    init(talksToStore: Bool = false) { self.talksToStore = talksToStore || !Self.isTestHost }
+
     func start() {
-        if Self.isTestHost { entitlement = .legacyUnlocked; return }
+        if !talksToStore { entitlement = .legacyUnlocked; return }
         guard updates == nil else { return }
         // The last verified state carries the person through an offline launch, under its own rule.
         if let cached = CachedEntitlement.load() { entitlement = cached.entitlement(now: Date()) }
@@ -376,13 +380,31 @@ final class PurchaseCenter {
 
     /// Read the signed transactions and renewal information StoreKit holds for this Apple account.
     func refresh() async {
-        if Self.isTestHost { entitlement = .legacyUnlocked; return }
+        if !talksToStore { entitlement = .legacyUnlocked; return }
         var records: [Entitlement.Record] = []
+        var seen: [UInt64: Int] = [:]
+        func record(_ t: Transaction) {
+            let r = Entitlement.Record(productID: t.productID, purchaseDate: t.purchaseDate, originalPurchaseDate: t.originalPurchaseDate,
+                                       expirationDate: t.expirationDate, revoked: t.revocationDate != nil,
+                                       isIntroductoryOffer: t.offer?.type == .introductory)
+            if let i = seen[t.id] {
+                // The same transaction read twice: a revocation seen on either read stands.
+                if r.revoked { records[i] = r }
+            } else {
+                seen[t.id] = records.count
+                records.append(r)
+            }
+        }
         for await result in Transaction.currentEntitlements {
             guard case .verified(let t) = result else { continue }   // an unverified transaction counts for nothing
-            records.append(.init(productID: t.productID, purchaseDate: t.purchaseDate, originalPurchaseDate: t.originalPurchaseDate,
-                                 expirationDate: t.expirationDate, revoked: t.revocationDate != nil,
-                                 isIntroductoryOffer: t.offer?.type == .introductory))
+            record(t)
+        }
+        // `currentEntitlements` drops what has expired or been refunded. The latest transaction of
+        // each product is read too, so an expired or refunded subscriber is told "your work stays
+        // readable, subscribe to edit again" (read-only window) and not treated as someone who
+        // never started (whole-window screen). Unverified ones still count for nothing.
+        for id in PurchaseProducts.all {
+            if case .verified(let t)? = await Transaction.latest(for: id) { record(t) }
         }
         var renewal: Entitlement.Renewal?
         if let any = products[PurchaseProducts.monthly] ?? products[PurchaseProducts.annual], let info = any.subscription,

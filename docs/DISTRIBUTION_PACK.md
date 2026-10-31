@@ -110,8 +110,10 @@ Products (`StoreKit/Kalsmritikosh.storekit`, App Store completion instructions �
 "Investigations Made Easy edition" with `…edition.monthly` ($4.99, P1M) and `…edition.annual` ($39.99, P1Y) at one
 level, each with a two-week free introductory offer; 3-day paid-to-paid billing grace; the legacy non-consumables
 `…trial14` and `…unlock` kept as they were (restore/compatibility only). Entitlement rules: `Purchase.swift`,
-proven by `PurchaseTests` (11 tests). Each row below is recorded per environment (local StoreKit, Sandbox,
-TestFlight); local fixtures alone do not prove the live products.
+proven by `PurchaseTests` (11, pure rules) and `PurchaseStoreKitTests` (11, the StoreKit testing environment loaded
+with this configuration in-process: purchase, renewal, cancellation, expiry, refund, billing retry with and without
+grace, crossgrade, legacy products, Restore, failed dialog). Each row below is recorded per environment (local
+StoreKit, Sandbox, TestFlight); the local environment alone does not prove the live products or the storefront prices.
 
 | # | Scenario | Required result |
 |---|---|---|
