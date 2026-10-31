@@ -23,6 +23,10 @@ extension AppState {
         // scope-enforced here, so it falls through to the scoped pipeline.
         guard access.scope.isGlobalOwnerBypass else { return nil }
         guard let entities, let events else { return nil }
+        // Questions the brain's dedicated answerers own — an email's sender/date/recipients, how many
+        // emails A sent B, a person's proceeding steps — go to them, not to the actor or person doors
+        // ("Who's the sender listed on the email "X"?" came back as an actor answer from other mail).
+        if Self.ownedByDedicatedAnswerer(question) { return nil }
         if let person = await composePersonAnswer(question: question) { return person }
         if let document = await composeDocumentKindAnswer(question: question) { return document }
         if let actor = await composeActorAnswer(question: question) { return actor }
@@ -209,6 +213,12 @@ extension AppState {
         return Self.deterministicAnswer(text,
             receipt: "Documents classed as \(q.kindWord)s whose text names every distinctive word of “\(q.partyPhrase)”; no model was consulted.",
             citations: docs.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: q.partyPhrase) })
+    }
+
+    /// True when an email or proceeding answerer in the brain owns the question (after courtesy wrappers).
+    nonisolated static func ownedByDedicatedAnswerer(_ question: String) -> Bool {
+        let normalized = QuestionCanonicalizer.normalize(question)
+        return EmailHeaderAnswerer.parse(normalized) != nil || ProceedingAnswerer.parse(normalized) != nil
     }
 
     static func deterministicAnswer(_ text: String, receipt: String, citations: [VerifiedAnswer.Citation]) -> VerifiedAnswer {

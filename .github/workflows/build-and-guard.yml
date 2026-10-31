@@ -82,9 +82,10 @@ jobs:
   # proven from the .xcresult by ci/verify-xcresult-tests.sh.
   build-and-test:
     runs-on: macos-26
-    # 80 so the log/result upload below still runs when the test step hits its own 55-minute
+    # 100 so the log/result upload below still runs when the test step hits its own 75-minute
     # limit (a job-level timeout cancels every remaining step, so a hang left no evidence).
-    timeout-minutes: 80
+    # The full target grew to ~5,500 tests: 41 → 51 → 55+ minutes on hosted runners (2026-10-28/29).
+    timeout-minutes: 100
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -133,7 +134,7 @@ jobs:
             build 2>&1 | tee viewer-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
 
       - name: Test (full KalsmritikoshTests target)
-        timeout-minutes: 55
+        timeout-minutes: 75
         env:
           NSUnbufferedIO: YES
         run: |
@@ -247,7 +248,8 @@ jobs:
   # honest about the shipping configuration.
   release-build:
     runs-on: macos-26
-    timeout-minutes: 45
+    # A whole-module Release build took 18–41 minutes on hosted runners; 45 cancelled one at 46.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5

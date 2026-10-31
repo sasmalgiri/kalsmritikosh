@@ -13,15 +13,19 @@ import Foundation
 @Suite struct KnowledgeModuleFlagsTests {
 
     @Test("An implemented module toggles on and off and persists")
-    func togglePersists() {
+    func togglePersists() throws {
         let m = KnowledgeModule.topicMinimization
         #expect(m.implemented)
-        KnowledgeModuleFlags.setEnabled(m, false)
-        #expect(KnowledgeModuleFlags.isEnabled(m) == false)
-        KnowledgeModuleFlags.setEnabled(m, true)
-        #expect(KnowledgeModuleFlags.isEnabled(m) == true)
-        // restore default
-        KnowledgeModuleFlags.setEnabled(m, m.defaultEnabled)
+        // A private store: CI runs several test hosts at once and they share the standard domain,
+        // so two hosts toggling the same key raced (CI PR #169, twice).
+        let name = "KnowledgeModuleFlagsTests-\(UUID().uuidString)"
+        let store = try #require(UserDefaults(suiteName: name))
+        defer { UserDefaults().removePersistentDomain(forName: name) }
+        let key = KnowledgeModuleFlags.storageKey(m)
+        KnowledgeModuleFlags.setEnabled(m, false, defaults: store)
+        #expect(store.object(forKey: key) as? Bool == false)
+        KnowledgeModuleFlags.setEnabled(m, true, defaults: store)
+        #expect(store.object(forKey: key) as? Bool == true)
     }
 
     @Test("Every registered module is implemented (all discussion items wired)")
@@ -56,6 +60,9 @@ import Foundation
             // NON-deterministic writer into the ledger should be a deliberate
             // choice rather than something a user discovers in their data.
             .inducedSchema,
+            // Final brief §3.5 — the one module that sends document text off the Mac (to the
+            // person's own cloud AI); only the person's explicit choice may turn it on.
+            .onlineRecordReading,
         ]
         for m in KnowledgeModule.allCases where m.implemented {
             if optIn.contains(m) {

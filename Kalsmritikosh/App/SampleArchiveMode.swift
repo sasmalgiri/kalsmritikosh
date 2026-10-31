@@ -26,7 +26,7 @@ public nonisolated enum SampleArchiveMode {
 
     /// True while the app runs against the sample ledger.
     public static var isActive: Bool {
-        UserDefaults.standard.bool(forKey: defaultsKey)
+        AppDefaults.store.bool(forKey: defaultsKey)
     }
 
     /// The sample ledger's own database file — never the user's.
@@ -41,13 +41,13 @@ public nonisolated enum SampleArchiveMode {
 
     /// Enter the sample archive (relaunches the app).
     @MainActor public static func enter() {
-        UserDefaults.standard.set(true, forKey: defaultsKey)
+        AppDefaults.store.set(true, forKey: defaultsKey)
         relaunch()
     }
 
     /// Return to the user's own archive (relaunches the app).
     @MainActor public static func exit() {
-        UserDefaults.standard.removeObject(forKey: defaultsKey)
+        AppDefaults.store.removeObject(forKey: defaultsKey)
         relaunch()
     }
 

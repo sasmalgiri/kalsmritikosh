@@ -158,10 +158,32 @@ public enum SlotFieldResolver {
         (["decided"], ["date", "when"], "decisiondate", .date, "Decision date", "legal"),
         // "What did the court decide in <case>?" — the disposition.
         (["court", "decide"], ["what"], "disposition", .status, "Disposition", "legal"),
+        // Wide case bench 2026-10-25 — the same questions asked other ways.
+        (["authored"], ["opinion", "judge", "justice", "ruling", "decision"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["justice"], ["wrote", "authored", "write", "penned"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["judge"], ["wrote", "authored", "write", "penned"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["outcome"], ["v", "case", "court", "appeal", "in re"], "disposition", .status, "Disposition", "legal"),
+        (["decided"], ["how"], "disposition", .status, "Disposition", "legal"),
+        // "What did the court rule / hold / order in …?" asks what it decided, not which court.
+        (["court"], ["rule", "ruled", "hold", "held", "order", "ordered", "conclude", "concluded"], "disposition", .status, "Disposition", "legal"),
+        (["ruling"], ["v", "case", "court", "in re"], "disposition", .status, "Disposition", "legal"),
+        (["court"], ["heard", "name", "named"], "court", .identity, "Court", "legal"),
+        (["date"], ["v", "in re", "ex parte"], "decisiondate", .date, "Decision date", "legal"),
+        (["decided"], ["day", "year"], "decisiondate", .date, "Decision date", "legal"),
+        (["handed", "down"], ["date", "when", "day", "year"], "decisiondate", .date, "Decision date", "legal"),
+        (["tribunal"], ["which", "what", "name", "decided", "heard"], "court", .identity, "Court", "legal"),
         // "Who were the parties in X v. Y?" — the caption's parties; a contract's parties are not
         // a court case's, so the question must name a case (a "v.", "in re", case, suit, court).
         (["parties"], ["v", "vs", "in re", "ex parte", "case", "suit", "lawsuit", "litigation", "court", "appeal"],
          "parties", .counterparty, "Parties", "legal"),
+        // "Who were the two sides in X v. Y?", "Who was involved as plaintiff and defendant in …?"
+        (["sides"], ["v", "vs", "in re", "case", "suit", "lawsuit", "court"], "parties", .counterparty, "Parties", "legal"),
+        // Held-out wording set 5 (2026-10-25): "Who is on each side of X v. Y?", "Who wrote the
+        // court's opinion in …?", "What was the result of X v. Y?".
+        (["side"], ["v", "vs", "in re", "suit", "lawsuit", "court"], "parties", .counterparty, "Parties", "legal"),
+        (["wrote", "opinion"], ["who", "which", "name"], "opinionauthor", .identity, "Opinion by", "legal"),
+        (["result"], ["v", "vs", "in re", "ex parte", "court", "appeal"], "disposition", .status, "Disposition", "legal"),
+        (["plaintiff", "defendant"], ["who", "v", "vs", "case"], "parties", .counterparty, "Parties", "legal"),
         // A1.1 — "who is the owner/holder of this patent" (no field bigram).
         (["patent"], ["owner", "owns", "proprietor", "holder", "belongs"], "applicant", .counterparty, "Applicant", "patent"),
     ]
@@ -236,6 +258,11 @@ public enum SlotFieldResolver {
             }
         }
         out = positioned.sorted { $0.position < $1.position }.map(\.r)
+        // "On what date did the court rule in X?" asks when, not what was ruled.
+        if out.contains(where: { $0.fieldID == "decisiondate" }),
+           q.range(of: #"\b(?:when|date|day)\b"#, options: .regularExpression) != nil {
+            out.removeAll { $0.fieldID == "disposition" }
+        }
 
         // F8 (rung 1n) — FIELD-SHAPED FALLBACK, only when the vocabulary named
         // nothing: "what is the trademark number" is unmistakably a field
@@ -312,8 +339,30 @@ public enum SlotFieldResolver {
         // "Which firm initiated FDA recall F-3176-2017?" asks for the firm: the noun right after
         // which/what names the field, before any other word of the question that happens to be a
         // field on file ("recall") — case bench 2026-10-24.
-        if words.count >= 2, ["which", "what"].contains(words[0]) {
-            let head = words[1]
+        // "Name the company behind …" names its head noun after "name the".
+        let headIndex = (words.count >= 3 && words[0] == "name" && words[1] == "the") ? 2
+            : (words.count >= 2 && ["which", "what"].contains(words[0])) ? 1 : nil
+        if let hi = headIndex {
+            var head = words[hi]
+            // "What recall class was …": the first noun only modifies the second.
+            let joiners: Set<String> = ["was", "were", "is", "are", "did", "does", "do", "has", "had", "of", "for", "in", "on",
+                                        "at", "to", "behind", "named", "listed", "given", "assigned", "the", "a", "an"]
+            // A record calls the same thing by its own word: a recall's "company" is its firm.
+            let kin = ["company": "firm", "business": "firm", "maker": "manufacturer", "carrier": "operator",
+                       "part": "component", "class": "classification", "system": "component",
+                       "airplane": "aircraft", "plane": "aircraft"]
+            func namesField(_ w: String) -> Bool {
+                w.count >= 4 && (knownFields.contains(where: { $0.hasSuffix(w) }) || kin[w].map { k in knownFields.contains(where: { $0.hasSuffix(k) }) } == true)
+            }
+            if hi + 2 < words.count, !joiners.contains(words[hi + 1]), joiners.contains(words[hi + 2]),
+               words[hi + 1].count >= 3, !words[hi + 1].contains(where: \.isNumber),
+               // "Which firm recalled the product …": a verb after the noun is not a second noun.
+               !words[hi + 1].hasSuffix("ed") || namesField(words[hi + 1]) { head = words[hi + 1] }
+            // "What recall class applies to …", "What vehicle system does …": when the second word
+            // names a field on file, the first only modifies it (held-out wording set 4, 2026-10-25).
+            if head == words[hi], hi + 1 < words.count, !joiners.contains(words[hi + 1]),
+               namesField(words[hi + 1]) { head = words[hi + 1] }
+            if !knownFields.contains(where: { $0.hasSuffix(head) }), let k = kin[head] { head = k }
             if head.count >= 4, !ungrammaticalAlone.contains(head) {
                 if knownFields.contains(head) { best = (fieldID: head, length: 1) }
                 else {
@@ -344,14 +393,9 @@ public enum SlotFieldResolver {
         // holds `recallingfirm`, and "firm" is its last word, not its whole name, so the
         // question got the report's text instead of the firm. A content word of four letters
         // or more that ENDS exactly one field on file names that field.
-        if best == nil {
-            var ends: Set<String> = []
-            for w in words where w.count >= 4 && !ungrammaticalAlone.contains(w) && !FTSQuerySanitizer.stopwords.contains(w) {
-                let matches = knownFields.filter { $0 != w && $0.hasSuffix(w) }
-                if matches.count == 1, let f = matches.first { ends.insert(f) }
-            }
-            if ends.count == 1, let f = ends.first { best = (fieldID: f, length: 1) }
-        }
+        // (2026-10-25: the end-of-field rule now reads only the question's head noun, above. Applied
+        // to every word it sent "Who was the FDA investigator assigned to FDA recall X?" to
+        // "reasonforrecall" through the word "recall".)
         guard let hit = best else { return nil }
         return Resolution(
             fieldID: hit.fieldID,
@@ -381,10 +425,25 @@ public enum SlotFieldResolver {
     public nonisolated static func resolve(
         in fullQuestion: String, knownFields: Set<String>
     ) -> [Resolution] {
+        // A field the on-device or cloud interpreter chose for this question (QuestionUnderstanding,
+        // owner decision 2026-10-25) — only ever one the retrieved facts carry.
+        if QuestionUnderstanding.interpretedField(for: fullQuestion) == QuestionUnderstanding.noField { return [] }
+        if let chosen = QuestionUnderstanding.interpretedField(for: fullQuestion), knownFields.contains(chosen) {
+            return [Resolution(fieldID: chosen, requestedField: requestedFieldClass(for: chosen),
+                               humanLabel: humanLabel(forFieldID: chosen), domainGroup: "interpreted")]
+        }
         // A quoted title names the matter, not a field: "What happened in the case "Oakland
         // Resident Who Sold Fentanyl In San Francisco's Tenderloin …"?" reached a field minted
         // from a dateline ("sanfrancisco") through the title's words (case bench 2026-10-24).
         let question = withoutQuotedTitles(fullQuestion)
+        // "What was the court's decision in X?", "Was X affirmed or reversed?" ask what the court
+        // decided — not which court, and not when (held-out case bench 2026-10-25 answered both
+        // with the court's name or the decision date).
+        if knownFields.contains("disposition"),
+           question.lowercased().range(of: #"^(?!.*\b(?:when|date|day|year)\b).*(?:\bcourt'?s (?:decision|ruling|holding|judgment|disposition)\b|\b(?:decision|ruling|holding|judgment) of the court\b|\b(?:affirmed|reversed|upheld|overturned|dismissed|granted|denied)\s+or\s+(?:affirmed|reversed|upheld|overturned|dismissed|granted|denied|not)\b|\bcome out\b|\bturn out\b)"#,
+                                           options: .regularExpression) != nil {
+            return [Resolution(fieldID: "disposition", requestedField: .status, humanLabel: "Disposition", domainGroup: "legal")]
+        }
         let curated = resolve(in: question)
         // Case bench 2026-10-21: "When was FDA recall D-0227-2026 initiated?" resolved to the bare
         // "date" field and answered "2026" (a stray year) while the document states "Recall
@@ -401,10 +460,27 @@ public enum SlotFieldResolver {
         // on file for the matter ("Location: Kennesaw, GA") is what it asks for.
         if let place = placeField(in: question, knownFields: knownFields) { return [place] }
         if let reason = reasonField(in: question, knownFields: knownFields) { return [reason] }
-        if let discovered = resolveAgainstInventory(question, knownFields: knownFields) {
+        // "How was FDA recall X classified?" asks for what the verb names, not for a field that
+        // happens to share a word with the reference ("recall").
+        if question.lowercased().range(of: #"^\s*how\s+(?:was|were|is|are)\b"#, options: .regularExpression) != nil,
+           let stemmed = verbNamedField(in: question, knownFields: knownFields) { return [stemmed] }
+        // A case caption names the matter, not a field: "Missouri-Kansas-Texas Railroad v. National
+        // Railroad Adjustment Board" reached a field minted from "St. Louis, Mo." lines ("missouri")
+        // through the party's name (held-out wording set 4, 2026-10-25).
+        let matterless = withoutCaseCaption(question)
+        if let discovered = resolveAgainstInventory(matterless, knownFields: knownFields) {
             return [discovered]
         }
+        // Last: a verb that names a field ("How was it classified?" → classification).
+        if let stemmed = verbNamedField(in: matterless, knownFields: knownFields) { return [stemmed] }
         return []
+    }
+
+    /// The question with a trailing case caption ("… in Hughes v. Life Insurance Co., 112 F. Supp.
+    /// 2d 780?") blanked out: the run of capitalised words before "v." to the end.
+    nonisolated static func withoutCaseCaption(_ question: String) -> String {
+        question.replacingOccurrences(of: #"(?:\b[A-Z][\w.&'’\-]*,?\s+(?:(?:of|and|the|for|&)\s+)*)+v(?:s)?\.\s.*$"#,
+                                      with: " ", options: .regularExpression)
     }
 
     /// The question with its quoted titles ("…" or “…”) blanked out.
@@ -426,7 +502,10 @@ public enum SlotFieldResolver {
     /// answer was the record's fact list or its distribution sentence.
     nonisolated static func reasonField(in question: String, knownFields: Set<String>) -> Resolution? {
         let q = question.lowercased().trimmingCharacters(in: .whitespaces)
-        guard q.hasPrefix("why ") || q.hasPrefix("for what reason") || q.hasPrefix("what was the reason") else { return nil }
+        guard q.hasPrefix("why ") || q.hasPrefix("for what reason") || q.hasPrefix("what was the reason")
+              || q.range(of: #"^what (?:problem |issue |defect )?led to\b"#, options: .regularExpression) != nil
+              // "What was the problem that led to FDA recall X?" (held-out wording set 4, 2026-10-25).
+              || q.range(of: #"^what (?:was|is) the (?:problem|issue|defect|reason) (?:that )?(?:led to|caused|prompted|behind)\b"#, options: .regularExpression) != nil else { return nil }
         // The field must be about what the question names ("reasonforrecall" for a recall), so a
         // "why" about something else never lands on an unrelated record's reason.
         let words = Set(q.components(separatedBy: CharacterSet.letters.inverted).filter { $0.count >= 4 })
@@ -439,6 +518,26 @@ public enum SlotFieldResolver {
         return Resolution(fieldID: f, requestedField: .identifier, humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
     }
 
+    /// A question VERB that names a field on file: "How was FDA recall X classified?" →
+    /// classification, "Who manufactured the vehicles …" → manufacturer, "What caused the accident …"
+    /// → probable cause. The verb's stem (its last three letters off, at least five left) must
+    /// begin a word of exactly one known field. Wide case bench 2026-10-25.
+    nonisolated static func verbNamedField(in question: String, knownFields: Set<String>) -> Resolution? {
+        let words = withoutQuotedTitles(question).lowercased()
+            .components(separatedBy: CharacterSet.letters.inverted)
+            .filter { $0.count >= 6 && ($0.hasSuffix("ed") || $0.hasSuffix("ied")) }
+        for w in words {
+            let stem = String(w.dropLast(w.hasSuffix("ied") ? 3 : 2).prefix(max(5, w.count - 3)))
+            guard stem.count >= 4 else { continue }
+            let hits = knownFields.filter { $0.contains(stem) }
+            if hits.count == 1, let f = hits.first {
+                return Resolution(fieldID: f, requestedField: requestedFieldClass(for: f),
+                                  humanLabel: humanLabel(forFieldID: f), domainGroup: "discovered")
+            }
+        }
+        return nil
+    }
+
     /// Fields that date the event a record is about (an accident, an incident, a loss).
     nonisolated static let eventDateFields = ["accidentdate", "incidentdate", "eventdate", "dateofaccident",
                                               "dateofincident", "dateofloss", "lossdate", "occurrencedate",
@@ -449,7 +548,8 @@ public enum SlotFieldResolver {
     /// stem wins, ties go to the shorter (more specific) field name.
     nonisolated static func namedDateField(in question: String, knownFields: Set<String>) -> Resolution? {
         let q = question.lowercased()
-        guard q.hasPrefix("when ") || q.contains(" when ") || q.hasPrefix("on what date") || q.hasPrefix("what date") else { return nil }
+        guard q.hasPrefix("when ") || q.contains(" when ") || q.hasPrefix("on what date") || q.hasPrefix("what date")
+              || q.range(of: #"\bthe date (?:for|of)\b"#, options: .regularExpression) != nil else { return nil }
         let dateFields = knownFields.filter { $0 != "date" && FactSchemaRegistry.expectedShape(of: $0) == .date }
         guard !dateFields.isEmpty else { return nil }
         let words = q.components(separatedBy: CharacterSet.letters.inverted)

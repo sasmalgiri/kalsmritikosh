@@ -402,20 +402,20 @@ struct MboxAccountingTests {
             return
         }
         let key = "kalsmritikosh.moveA.threadCoalescing"
-        let original = UserDefaults.standard.object(forKey: key)
+        let original = AppDefaults.store.object(forKey: key)
         defer {
-            if let original { UserDefaults.standard.set(original, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
+            if let original { AppDefaults.store.set(original, forKey: key) }
+            else { AppDefaults.store.removeObject(forKey: key) }
         }
         print("── user's current setting: coalescing = \(EmailLoader.threadCoalescingEnabled)")
 
         let loader = EmailLoader()
 
-        UserDefaults.standard.set(false, forKey: key)
+        AppDefaults.store.set(false, forKey: key)
         let perMessage = try await loader.ingestMany(fileAt: url, type: .mbox)
         print("── coalescing OFF → \(perMessage.count) KO(s)  [file holds 526 separators]")
 
-        UserDefaults.standard.set(true, forKey: key)
+        AppDefaults.store.set(true, forKey: key)
         let perThread = try await loader.ingestMany(fileAt: url, type: .mbox)
         print("── coalescing ON  → \(perThread.count) KO(s)  [408 measured in the ingest run]")
 
@@ -465,12 +465,12 @@ struct MboxAccountingTests {
             return
         }
         let key = "kalsmritikosh.moveA.threadCoalescing"
-        let original = UserDefaults.standard.object(forKey: key)
+        let original = AppDefaults.store.object(forKey: key)
         defer {
-            if let original { UserDefaults.standard.set(original, forKey: key) }
-            else { UserDefaults.standard.removeObject(forKey: key) }
+            if let original { AppDefaults.store.set(original, forKey: key) }
+            else { AppDefaults.store.removeObject(forKey: key) }
         }
-        UserDefaults.standard.set(false, forKey: key)
+        AppDefaults.store.set(false, forKey: key)
         print("── pinned coalescing = \(EmailLoader.threadCoalescingEnabled) (expect false)")
 
         let (state, dir) = try await RealArchivePipelineTests.bootState(label: "mboxpin")

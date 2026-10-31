@@ -161,6 +161,7 @@ public struct SettingsView: View {
                 settingsGroup("Privacy", "hand.raised", anchor: .privacy) { privacySection }
                 settingsGroup("Background maintenance", "moon.zzz", anchor: .backgroundMaintenance) { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
+                settingsGroup("Subscription", "creditcard", anchor: .subscription) { subscriptionSection }
                 settingsGroup("Your data", "trash", anchor: .yourData) { dataSection }
                 settingsGroup("Help & feedback", "envelope", anchor: .helpFeedback) { feedbackSection }
                 settingsGroup("Legal & privacy", "checkmark.shield", anchor: .legalPrivacy) { legalSection }
@@ -1744,6 +1745,7 @@ public struct SettingsView: View {
         case .privacy:               return "Privacy"
         case .backgroundMaintenance: return "Background maintenance"
         case .ingestOptions:         return "Ingest options"
+        case .subscription:          return "Subscription"
         case .yourData:              return "Your data"
         case .helpFeedback:          return "Help & feedback"
         case .legalPrivacy:          return "Legal & privacy"
@@ -1775,10 +1777,24 @@ public struct SettingsView: View {
                 }
                 .disabled(backingUp)
                 Button {
+                    backUpEverything()
+                } label: {
+                    Label("Back up everything…", systemImage: "externaldrive.fill.badge.plus")
+                }
+                .disabled(backingUp)
+                .help("The ledger and a copy of every original file it can read, so the whole archive can be restored on another Mac.")
+                Button {
                     inspectBackup()
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                Button {
+                    restoreFromBackup()
+                } label: {
+                    Label("Restore from a backup…", systemImage: "arrow.counterclockwise.circle")
+                }
+                .disabled(backingUp)
+                .help("Replace this ledger with a verified backup. The app quits and restores it when it opens again; the current ledger is kept in a “Before restore” folder.")
                 MoveToNewMacButton()
                 // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
                 if ProductModuleFlags.showPreviewFeatures {
@@ -1803,12 +1819,95 @@ public struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if let note = appState.restoreNotice {
+                Label(note, systemImage: "arrow.counterclockwise.circle").font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    /// Brief §11 — choose a backup, verify it, confirm, and quit; the next launch restores it before
+    /// the ledger opens (a live ledger is never replaced).
+    private func restoreFromBackup() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.prompt = "Restore This Backup"
+        panel.message = "Choose a backup folder made by “Back up now…” or “Back up everything…”."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        let scoped = dir.startAccessingSecurityScopedResource()
+        defer { if scoped { dir.stopAccessingSecurityScopedResource() } }
+        if let problem = PendingRestore.schedule(backupFolder: dir) { backupStatus = problem; return }
+        let alert = NSAlert()
+        alert.messageText = "Restore “\(dir.lastPathComponent)”?"
+        alert.informativeText = "Investigations Made Easy will quit. When you open it again, it replaces this ledger with the backup (checked file by file), and keeps the current ledger in a “Before restore” folder beside it. If anything fails, the current ledger is left as it is."
+        alert.addButton(withTitle: "Quit and Restore")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { PendingRestore.cancel(); return }
+        NSApp.terminate(nil)
+        #endif
     }
 
     /// Copy the live database (+ its -wal/-shm sidecars, if present) into a
     /// timestamped backup folder the user selects. Read-only w.r.t. the app's
     /// own data; failures are surfaced, never swallowed.
+    /// Brief §11 — a complete backup: the ledger snapshot plus every readable original, with the map
+    /// that relinks them on restore. Originals that cannot be read are listed in the backup, not hidden.
+    private func backUpEverything() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.prompt = "Back Up Here"
+        panel.message = "Choose a folder for a complete backup: the ledger and a copy of every original file."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        backingUp = true; backupStatus = nil
+        Task {
+            let stamp = Int(Date().timeIntervalSince1970)
+            let dest = dir.appendingPathComponent("Investigations Made Easy-Complete-Backup-\(stamp)")
+            // Review R5: every open studio's pending writes land in the ledger first; a change that
+            // failed to save would be missing from the backup, so the backup waits for it.
+            guard await StudioStorage.flushAll() else {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup not made: a studio change has not been saved yet. Choose Retry in that studio, then back up again."
+                }
+                return
+            }
+            let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("kalsmritikosh-cbackup-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: scratch) }
+            var opened: [URL] = []
+            defer { for u in opened { appState.bookmarks.stopAccessing(u) } }
+            do {
+                guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
+                try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+                let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
+                try await database.backupSnapshot(to: snapshot)
+                for root in appState.bookmarks.roots { if let u = try? appState.bookmarks.resolve(root) { opened.append(u) } }
+                var originals: [(fileID: UUID, url: URL)] = [], missing: [String] = []
+                for r in try await database.query("SELECT id, url FROM files;", []) {
+                    guard let id = r.uuid(0), let url = r.string(1).flatMap(URL.init(string:)) else { continue }
+                    if FileManager.default.isReadableFile(atPath: url.path) { originals.append((id, url)) } else { missing.append(url.path) }
+                }
+                let manifest = try BackupService().createCompleteBackup(
+                    databaseSnapshot: snapshot, originals: originals, notIncluded: missing, destination: dest,
+                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970)
+                let copied = manifest.entries.filter { $0.kind == .originalSource }.count
+                await MainActor.run {
+                    backingUp = false
+                    // Final brief §3.8: "complete" only when every original is in it.
+                    let left = (try? BackupService.sourcesMap(in: dest).notIncluded.count) ?? missing.count
+                    backupStatus = (manifest.coverage == .complete
+                        ? "Complete backup “\(dest.lastPathComponent)”: the ledger and all \(copied) original file(s), each with its SHA-256."
+                        : "Backup “\(dest.lastPathComponent)” is NOT complete: the ledger and \(copied) original file(s); \(left) original(s) could not be read and are listed in the backup as not included — keep those files yourself.")
+                        + " The ledger stays encrypted; keep the recovery key (Settings ▸ Data ▸ Encryption) separately."
+                }
+            } catch {
+                await MainActor.run { backingUp = false; backupStatus = "Complete backup failed: \(error.localizedDescription)" }
+            }
+        }
+        #endif
+    }
+
     private func backUpNow() {
         #if canImport(AppKit)
         let panel = NSOpenPanel()
@@ -1824,6 +1923,15 @@ public struct SettingsView: View {
             let dbURL = DatabaseLocations.defaultDatabaseURL
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Investigations Made Easy-Backup-\(stamp)")
+            // Review R5: every open studio's pending writes land in the ledger first; a change that
+            // failed to save would be missing from the backup, so the backup waits for it.
+            guard await StudioStorage.flushAll() else {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup not made: a studio change has not been saved yet. Choose Retry in that studio, then back up again."
+                }
+                return
+            }
             // F18 — a CONSISTENT live snapshot via SQLite's Online Backup API, taken inside the
             // Database actor, instead of "checkpoint, then copy the files": nothing stopped writes
             // between those copies, so a busy ledger could be captured torn. The snapshot is one
@@ -2056,6 +2164,7 @@ public struct SettingsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "trash").foregroundStyle(.red)
                 Text("Your data").font(.title3.bold())
+                InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — backup, recovery, erasure
             }
             Text("Erase everything Investigations Made Easy has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -2152,6 +2261,33 @@ public struct SettingsView: View {
     /// Legal & Privacy — accuracy disclaimer, privacy posture, terms, and
     /// third-party notices. Always visible (not hidden under Advanced) so the
     /// declarations are easy to find.
+    /// §11 — the verified subscription state, from StoreKit; management happens in the Apple Account.
+    private var subscriptionSection: some View {
+        let store = PurchaseCenter.shared
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard").foregroundStyle(Theme.brand)
+                Text("Subscription").font(.title3.bold())
+                InfoPopoverButton(topic: "subscription-plans")   // §6.8 — purchases
+            }
+            Text(store.statusText).font(.callout).accessibilityIdentifier("settings.subscription.status")
+            Text("One edition with all nine personas, monthly or annual, same access either way. Eligible new subscribers get a 14-day free trial, after which the chosen plan renews automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if !store.entitlement.allowsPaidUse || store.entitlement.hadAccessBefore {
+                    Button("See plans") { store.paywallRequested = "subscribe" }.buttonStyle(.borderedProminent).controlSize(.small)
+                }
+                Button("Restore purchases") { Task { await store.restore() } }.controlSize(.small).disabled(store.busy)
+                Button("Manage subscription") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }.controlSize(.small)
+                    .help("Opens your Apple Account's subscription page to change the plan or cancel. Cancel at least a day before the period ends to avoid the next charge.")
+                Link("How to cancel (Apple)", destination: PurchaseProducts.cancelInstructionsURL).font(.caption)
+            }
+            if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary) }
+            Text("Payment, renewal, refunds and restore are handled by Apple; the app never sees payment details and subscribing turns nothing else on (not Online mode). The subscription applies on the Macs signed in with your Apple account; your archive is not copied between them.")
+                .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var legalSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -3166,6 +3302,20 @@ private struct LedgerEncryptionSubsection: View {
                 Image(systemName: encrypted ? "lock.shield.fill" : "lock.open").foregroundStyle(Theme.brand)
                 Text("Encryption").font(.title3.bold())
             }
+            if !appState.schemaUnrepaired.isEmpty {
+                // Brief §11: a repair that could not finish is shown before anyone relies on the ledger.
+                Label("This ledger is missing \(appState.schemaUnrepaired.count) part(s) of its structure that could not be added automatically: \(appState.schemaUnrepaired.prefix(3).joined(separator: "; ")). Back it up and contact support before approving findings or exporting.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !appState.pendingErasureWork.isEmpty {
+                // B1 — an erasure whose file steps did not finish is named, never shown as done.
+                Label("An erasure is not finished: \(appState.pendingErasureWork.values.flatMap { $0 }.prefix(3).joined(separator: "; ")). Its files are kept and it is retried the next time the app opens.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(encrypted
                  ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them."
                  : "The ledger is not open yet.")
@@ -3186,8 +3336,7 @@ private struct LedgerEncryptionSubsection: View {
                     }
                     if let revealed {
                         Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(revealed, forType: .string)
+                            NSPasteboard.general.copySecret(revealed)
                         }
                     }
                 }
@@ -3220,3 +3369,15 @@ struct InvestigatorProfileSection: View {
     }
 }
 
+#if canImport(AppKit)
+extension NSPasteboard {
+    /// The recovery key on the clipboard: this Mac only (never Universal Clipboard), and marked
+    /// concealed + transient so clipboard managers do not record it.
+    func copySecret(_ secret: String) {
+        prepareForNewContents(with: .currentHostOnly)
+        setString(secret, forType: .string)
+        setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+    }
+}
+#endif

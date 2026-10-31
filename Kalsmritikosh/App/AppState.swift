@@ -412,6 +412,7 @@ public final class AppState {
 
     public func ingestFiles(_ urls: [URL]) async {
         guard let ingest, !urls.isEmpty else { return }
+        guard PurchaseCenter.shared.allowPaidAction("add documents") else { return }   // §11 — a paid action
         if ProductModuleFlags.isEnabled(.importQueue) {
             importQueue.enqueue(urls, state: self)
             return
@@ -621,6 +622,9 @@ public final class AppState {
     /// Investigations Made Easy (v151) — the case file around each case: intake, triage, stage, plan,
     /// allegations, people, interviews, exhibits, holds, tasks and deadlines (over the one task engine).
     public private(set) var caseFiles: CaseFileService?
+    /// App Store completion §4 — the one door for case content leaving the app (file, clipboard,
+    /// print, share): freeze, revalidate, protect, release, record.
+    public private(set) var caseOutputs: CaseOutputService?
     /// A-6 — Competing-hypotheses (ACH) matrices in the ledger (v152).
     public private(set) var achMatrices: ACHRepository?
     /// Case bench 2026-10-20 — a case opened over a workspace takes in its documents (and their
@@ -701,6 +705,10 @@ public final class AppState {
     public private(set) var enrichmentDrainer: EnrichmentDrainer?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
+    /// Schema objects the boot check could not add to this ledger (brief §11) — shown in Settings, never only logged.
+    public private(set) var schemaUnrepaired: [String] = []
+    /// B1 — erasure file steps not finished (per case id): kept on disk, retried at launch, shown in Settings.
+    public internal(set) var pendingErasureWork: [String: [String]] = [:]
 
     // MARK: - Header search hand-off
     /// A query typed into the always-visible header search box. SearchView
@@ -712,8 +720,13 @@ public final class AppState {
     public var deepLinkMessage: String?
     /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
     public var ledgerLocationNotice: String?
+    /// Brief §11 — what the restore scheduled in Settings did at this launch.
+    public var restoreNotice: String?
     /// O-5 — every online send, append-only.
     public private(set) var outboundLog: OutboundLogRepository?
+    /// The person's own cloud AI (Online mode) — kept so the question interpreter's last step
+    /// reaches it through the same masking, limit and consent as every other send.
+    @ObservationIgnored var onlineProvider: OnlineCloudProvider?
     /// W1-9 — files waiting, running and finished in this session.
     public let importQueue = ImportQueue()
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
@@ -993,10 +1006,27 @@ public final class AppState {
                 resolvedDBURL = boot.url
                 ledgerLocationNotice = boot.notice
             }
+            // K2 — a full erase interrupted during its file steps finishes now, before anything reads
+            // the vector cache or the vault.
+            Self.resumePendingFullErase(besideLedgerAt: resolvedDBURL)
             // W2-7 — open the encrypted ledger (creating the key, or converting a plaintext
             // ledger once). Off the main actor: converting a large ledger takes a while.
-            let recoveryKey = bootRecoveryKey
+            var recoveryKey = bootRecoveryKey
             bootRecoveryKey = nil
+            // Brief §11 — a restore chosen in Settings runs now, before the ledger opens.
+            if databaseURL == nil {
+                switch await PendingRestore.performIfScheduled(databaseURL: resolvedDBURL, recoveryKey: recoveryKey) {
+                case .none: break
+                case .restored(let note): restoreNotice = note
+                case .failed(let note):
+                    restoreNotice = note
+                    recoveryKey = nil   // a key typed for the backup is not this ledger's
+                case .needsKey(let why):
+                    pendingBoot = (databaseURL, suppressAutoReingest)
+                    self.phase = .needsRecoveryKey(why)
+                    return
+                }
+            }
             if LedgerFileState.of(resolvedDBURL) == .plaintext {
                 bootNote = "Encrypting your ledger (one time — this can take a few minutes for a large archive)…"
             }
@@ -1013,8 +1043,14 @@ public final class AppState {
             }
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
+            // A5 — a case erasure interrupted between its ledger commit and its file steps finishes now.
+            pendingErasureWork = await Self.resumePendingCaseErasures(besideLedgerAt: resolvedDBURL, database: db)
             // Add anything an older upgrade left out (only adds; once per schema version).
             await SchemaConformance.checkAtBoot(db)
+            do { schemaUnrepaired = try await SchemaConformance.unrepaired(db) } catch {
+                schemaUnrepaired = ["the schema check result could not be read"]
+                KalsmritikoshLog.storage.error("Schema conformance result unreadable: \(error.localizedDescription, privacy: .public)")
+            }
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
 
             // HNSW ANN index — built lazily after boot. Pass it to
@@ -1080,6 +1116,8 @@ public final class AppState {
             // Passed to ingest; only copies bytes when managedEvidenceMode is on (default off).
             let evidenceVault = EvidenceVault(
                 root: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+            // K11 — copies stored before owner-only permissions are tightened once, off the boot path.
+            Task.detached(priority: .utility) { await evidenceVault.protectExisting() }
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
             // PERF.2 — durable deferred-enrichment job ledger. Boot recovery below
@@ -1312,7 +1350,7 @@ public final class AppState {
             // ONLY in Online mode with the network helper bundled (CapabilityRegistry
             // .cloudEligible); in Private mode it is never eligible.
             self.outboundLog = OutboundLogRepository(database: db)
-            await capabilities.register(OnlineCloudProvider(
+            let online = OnlineCloudProvider(
                 outboundLog: self.outboundLog,
                 knownNames: { [db] in
                     let rows = (try? await db.query("""
@@ -1322,7 +1360,12 @@ public final class AppState {
                         LIMIT 3000;
                         """, [])) ?? []
                     return rows.compactMap { $0.string(0) }
-                }))
+                },
+                // Protected source identities (jrn.source-vault): masked in every send, whatever the
+                // PII-masking setting; a send in which one survives is refused.
+                protectedNames: { [db] in (try? await JobResultRepository(database: db).protectedIdentityNames()) ?? [] })
+            self.onlineProvider = online
+            await capabilities.register(online)
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when
@@ -2211,6 +2254,8 @@ public final class AppState {
                         .deletingLastPathComponent()
                         .appendingPathComponent("hnsw-index.bin")
                     let liveCount = (try? await vectors.count()) ?? 0
+                    // K11 — the cache is sealed under a key derived from this ledger's key.
+                    let cacheKey = LedgerKeychain.load()?.derivedKey(for: "hnsw-cache")
                     // P9.3 — adaptive scale gate: only hold the in-memory HNSW when
                     // the corpus fits the device's RAM budget. Above the cap, skip
                     // the build; SQLiteVectorStore's memory-bounded path serves
@@ -2221,12 +2266,12 @@ public final class AppState {
                         return HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
                     }
                     if liveCount > 0,
-                       await hnsw.load(from: cacheURL, expectedCount: liveCount) {
+                       await hnsw.load(from: cacheURL, expectedCount: liveCount, sealedWith: cacheKey) {
                         return await hnsw.stats()
                             ?? HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
                     }
                     let stats = await hnsw.build(from: vectors)
-                    _ = await hnsw.persist(to: cacheURL)
+                    _ = await hnsw.persist(to: cacheURL, sealedWith: cacheKey)
                     return stats
                 }()
                 _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm, hnswWarm)
@@ -2360,6 +2405,10 @@ public final class AppState {
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 baseRetriever: retriever,
                 evidence: evidenceStoreRepo,
+                // A case-scoped brain gets NO archive-wide lookups (setEmailLookup and the like): those
+                // query the whole ledger, filtered for sensitivity and workspace but not for the case's
+                // source scope. Without them the email/proceeding answerers read only the scoped
+                // retrieval, so nothing outside the case can enter an answer.
                 makeBrain: { scoped in
                     MasterBrain(
                         intentDetector: intentDetector, router: router, retriever: scoped, executor: executor,
@@ -2376,7 +2425,8 @@ public final class AppState {
                 // (sensitivity is enforced downstream in ExpertContext for base and recovered items alike).
                 scopedRecall: SourceScopedRetriever.ScopedRecall(
                     chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
-                    events: events, entities: entities, relationships: relationships))
+                    events: events, entities: entities, relationships: relationships),
+                objectVersions: { try await objects.sourceVersionsByObject(inSourceVersionIDs: $0) })
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.
@@ -2424,6 +2474,15 @@ public final class AppState {
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 evidence: evidenceStoreRepo, custody: custodyRepo, database: db)
+            // App Store completion §4 — every case output route goes through one service; a release
+            // that could not be recorded keeps a pending record beside the ledger and lands at launch.
+            if let caseFiles, let custodyService = self.investigationCustody {
+                let outputs = CaseOutputService(database: db, caseFiles: caseFiles,
+                                                custody: { caseID in try await custodyService.manifest(caseID: caseID) },
+                                                pendingDirectory: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("case-output-pending", isDirectory: true))
+                self.caseOutputs = outputs
+                Task { await outputs.resumePending() }
+            }
             // INV-20 — the case Closure authority, live from boot. A case is CLOSED only by a recorded human
             // decision (never auto-closed); the accepted unresolved items are retained (honest closure); a
             // reopen is a new decision that preserves the prior closure. The closure + case status transition
@@ -2526,7 +2585,45 @@ public final class AppState {
                 causal: investigationCausalService,
                 linkage: investigationLinkageService,
                 capa: investigationCAPAService,
-                workspaceIntake: workspaceIntake)
+                workspaceIntake: workspaceIntake,
+                caseFacts: { [investigationDataLabService, genericFactsRepo, events, objects, entities, db] caseID, access in
+                    // The case's evidence for a shared executor, under the job's own access context.
+                    let (included, withheld) = try await investigationDataLabService.eligibleSourceVersions(caseID: caseID, access: access)
+                    let reader = StudioCaseFactsReader(facts: genericFactsRepo, events: events, objects: objects, entities: entities)
+                    let facts = try await reader.read(caseTitle: "", sourceVersionIDs: Set(included))
+                    // Each admitted document's text, for the executors that quote it verbatim.
+                    var texts: [UUID: String] = [:]
+                    for doc in facts.documents { texts[doc.objectID] = try await objects.fetchContent(id: doc.objectID) }
+                    // Content hashes of the admitted versions, and the case's produced exports.
+                    var hashes: [UUID: String] = [:]
+                    for v in included {
+                        if let h = try await db.query("SELECT content_hash FROM source_versions WHERE id = ?;", [.uuid(v)]).first?.string(0) { hashes[v] = h }
+                    }
+                    let exports: [(title: String, text: String)] = try await db.query("""
+                        SELECT r.title, x.format, x.exported_at, x.snapshot_text FROM studio_record_exports x
+                        JOIN studio_records r ON r.id = x.record_id WHERE r.case_id = ? AND x.snapshot_text <> '' ORDER BY x.exported_at;
+                        """, [.uuid(caseID)]).compactMap { r in
+                            guard let text = r.string(3) else { return nil }
+                            return (title: "\(r.string(0) ?? "Export") (\(r.string(1) ?? "file"), \(r.date(2)?.formatted() ?? ""))", text: text)
+                        }
+                    // B3 — versions a newer version of the same document replaces (an exhibit is flagged).
+                    var replaced: Set<UUID> = []
+                    for v in included where try await db.query("SELECT 1 FROM source_versions WHERE supersedes = ? LIMIT 1;", [.uuid(v)]).first != nil {
+                        replaced.insert(v)
+                    }
+                    // The case's confirmed (unreversed) identity merges: the only way two name forms
+                    // become one party in a result (law.parties-issues).
+                    let decisions = try await InvestigationIdentityDecisionRepository(database: db).decisions(caseID: caseID)
+                    var merged: [MergedIdentity] = []
+                    for pair in MergedIdentity.confirmedPairs(decisions) {
+                        guard let winner = try await entities.find(byID: pair.winner)?.value,
+                              let loser = try await entities.find(byID: pair.loser)?.value else { continue }
+                        merged.append(MergedIdentity(canonical: winner, aliases: [loser], decidedBy: pair.actor, decidedAt: pair.at))
+                    }
+                    return JobEvidence(facts: facts, texts: texts, withheld: withheld, versionHashes: hashes, exports: exports,
+                                       replacedVersions: replaced, mergedIdentities: MergedIdentity.grouped(merged))
+                },
+                jobResults: JobResultRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
@@ -2566,10 +2663,18 @@ public final class AppState {
                 // treats as a refusal.
                 let auditChainService = AuditChainService(
                     database: db, secret: auditSecret,
-                    eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo] in
+                    eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo, weak self, db] in
                         var out = try await custodyRepo?.auditChainEvents() ?? []
                         out += try await factReviewsRepo?.auditChainEvents() ?? []
                         out += try await governanceRepo?.auditChainEvents() ?? []
+                        // The case-file action log (allegation decisions, interview revisions and
+                        // attestations, exhibits, holds, exports, closure and reopening) — brief §5.
+                        if let caseFile = await self?.caseFiles?.file { out += try await caseFile.auditChainEvents() }
+                        // Case source membership and reopening, findings approvals and withdrawals,
+                        // hypothesis decisions — the rest of a case's history (brief §5).
+                        out += try await InvestigationCaseRepository(database: db).auditChainEvents()
+                        out += try await InvestigationFindingsApprovalRepository(database: db).auditChainEvents()
+                        out += try await InvestigationAnalysisRepository(database: db).auditChainEvents()
                         return out
                     })
                 self.auditChain = auditChainService
@@ -2731,6 +2836,74 @@ public final class AppState {
             // L5 — the subject-first door (status / subject-event questions).
             await brain.setSubjectEventAnswer { [weak self] question, access in
                 await self?.composeSubjectEventAnswer(question: question, access: access)
+            }
+            // Understanding the question (owner decision 2026-10-25): rules first, then the
+            // on-device model for what the rules could not place, then the person's own cloud AI
+            // (Online mode only, through its masking, limit and consent) for what both missed.
+            let onDevice: (any QuestionInterpreting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionInterpreter() : nil
+            let cloud: (any QuestionInterpreting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                ? CloudQuestionInterpreter { [weak self] prompt in
+                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
+                        throw OnlineCloudProvider.OnlineError.notAvailable
+                    }
+                    // The question (and field names) only — no document text.
+                    return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
+                } : nil
+            await brain.setQuestionInterpreters(onDevice: onDevice, cloud: cloud)
+            // Any wording → one canonical form, the same cascade.
+            let rewriteOnDevice: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionRewriter() : nil
+            let rewriteCloud: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
+                ? CloudQuestionRewriter { [weak self] prompt in
+                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
+                        throw OnlineCloudProvider.OnlineError.notAvailable
+                    }
+                    // The question (and field names) only — no document text.
+                    return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
+                } : nil
+            await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
+            // Verified record extraction (Online, AI on): the person's documents go through the Online
+            // provider — its preview, masking and consent — and only a verbatim-verified answer is shown.
+            // Final brief §3.5: its own switch, off by default — it sends document excerpts, unlike the
+            // question interpreter, which sends only the question and field names.
+            await brain.setRecordExtractor(KnowledgeModuleFlags.isEnabled(.onlineRecordReading)
+                ? VerifiedRecordExtractor { [weak self] prompt in
+                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
+                        throw OnlineCloudProvider.OnlineError.notAvailable
+                    }
+                    // Review L2: document excerpts go only to an eligible, confirmed provider.
+                    return try await provider.generateFromDocuments(prompt: prompt, options: GenerationOptions(maxTokens: 600, temperature: 0))
+                } : nil)
+            // Emails by exact subject, or sent by one person to another, straight from the ledger.
+            let participants = EmailParticipantRepository(database: db)
+            await brain.setEmailLookup { [weak chunks] lookup in
+                switch lookup {
+                case .subject(let subject):
+                    let phrase = "\"" + subject.replacingOccurrences(of: "\"", with: " ") + "\""
+                    do { return (try await chunks?.searchFTS(phrase, limit: 80) ?? []).map(\.objectID) } catch {
+                        KalsmritikoshLog.brain.error("email lookup by subject failed: \(String(describing: error), privacy: .public)")
+                        return []
+                    }
+                case .between(let a, let b):
+                    do { return try await participants.messageIDs(from: a, to: b, limit: MasterBrain.emailLookupCap) } catch {
+                        KalsmritikoshLog.brain.error("email lookup between people failed: \(String(describing: error), privacy: .public)")
+                        return []
+                    }
+                }
+            }
+            // Documents naming a person, for exact document counts (brief §7). Archive-wide brain only:
+            // case-scoped brains never get this lookup (see makeBrain).
+            await brain.setNameLookup { [weak chunks] name in
+                let phrase = "\"" + name.replacingOccurrences(of: "\"", with: " ") + "\""
+                do {
+                    let hits = try await chunks?.searchFTS(phrase, limit: MasterBrain.nameLookupCap) ?? []
+                    let ids = NSOrderedSet(array: hits.map(\.objectID)).compactMap { $0 as? UUID }
+                    return (ids, hits.count < MasterBrain.nameLookupCap)
+                } catch {
+                    KalsmritikoshLog.brain.error("name lookup failed: \(String(describing: error), privacy: .public)")
+                    return ([], false)
+                }
             }
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in
@@ -3250,6 +3423,9 @@ public final class AppState {
 
             // Rule 10 (A5.7) — masked / redacted values present in the text.
             found += detector.detectRedactedValues(texts: texts)
+
+            // Rule 11 — steps of a person's proceeding implied but not on file.
+            found += detector.detectProceedingGaps(texts: texts)
 
             // Rule 3 — replies whose original (thread root) wasn't ingested.
             // A message is a "root" if its subject carries no reply prefix;
@@ -4028,6 +4204,28 @@ public final class AppState {
     /// W2-5 — set when a legal hold refused a destructive action; the UI shows it and clears it.
     public var legalHoldBlock: String?
 
+    static let legalHoldCountSQL = """
+        SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
+        WHERE h.released_at IS NULL AND i.removed_at IS NULL;
+        """
+
+    /// Preferences that hold case content (`docs/DATA_FLOW_INVENTORY.md` L15): the studio stores from
+    /// before the move into the ledger, the self-score questions/answers and per-case job logs. SOP
+    /// drafts and reviews are method authoring, not case content, and stay.
+    nonisolated static let caseContentPreferenceKeys = [
+        "kalsmritikosh.fa.store", "kalsmritikosh.jn.store", "kalsmritikosh.pl.store", "kalsmritikosh.rca.store",
+        "kalsmritikosh.siu.store", "kalsmritikosh.wi.store", "kalsmritikosh.cc.store", "kalsmritikosh.ds.store",
+        "kalsmritikosh.gn.store", "kalsmritikosh.in.store", "kalsmritikosh.rs.store", "kalsmritikosh.selfscore.latest",
+    ]
+    nonisolated static let caseContentPreferencePrefixes = ["kalsmritikosh.jobs.log.", "kalsmritikosh.jobs.ran."]
+    /// The preferences a full erase clears. In the test host (same bundle id as the app) this is a
+    /// separate suite, so a test erase can never remove the owner's real preferences.
+    nonisolated static let erasePreferences: UserDefaults =
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            // Per process: CI runs test hosts in parallel processes, and one host's erase must not
+            // clear the preferences another host's test just wrote.
+            ? (UserDefaults(suiteName: "kalsmritikosh.tests.erase.\(ProcessInfo.processInfo.processIdentifier)") ?? .standard) : .standard
+
     /// User-initiated FULL ERASE of all ingested + derived data — the global
     /// "Delete all my data" the app was missing. Removes every watched folder
     /// and empties every ledger table; the on-disk vector-index cache and the
@@ -4038,13 +4236,34 @@ public final class AppState {
     @discardableResult
     public func deleteAllData() async -> Int {
         guard let db = database, !deletingAllData else { return 0 }
-        // W2-5 — an active legal hold blocks erasing the ledger.
-        if let held = try? await db.query("""
-            SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
-            WHERE h.released_at IS NULL AND i.removed_at IS NULL;
-            """, []).first?.int(0), held > 0 {
+        // W2-5 — an active legal hold blocks erasing the ledger. Fail closed (K2): a hold check that
+        // cannot be read is not "no hold".
+        let held: Int
+        do { held = Int(try await db.query(Self.legalHoldCountSQL, []).first?.int(0) ?? 0) } catch {
+            legalHoldBlock = "Not erased: the legal-hold check could not be read (\(error.localizedDescription)). Nothing was deleted."
+            KalsmritikoshLog.app.error("Erase refused: legal-hold check unreadable: \(error.localizedDescription, privacy: .public)")
+            return 0
+        }
+        if held > 0 {
             legalHoldBlock = "Not erased: \(held) document\(held == 1 ? " is" : "s are") under a legal hold. Release the hold first (Tools → Legal production)."
             KalsmritikoshLog.app.notice("Erase refused: \(held, privacy: .public) documents under legal hold")
+            return 0
+        }
+        // The table inventory must be read before anything is touched: an unreadable inventory is an
+        // incomplete erase, never an empty one.
+        let tables: [String]
+        do {
+            tables = try await db.query(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';", [])
+                .compactMap { $0.string(0) }.filter { $0 != "ledger_full_erase" }
+        } catch {
+            eraseResidue = [(table: "table inventory (unreadable: \(error.localizedDescription))", rows: -1)]
+            KalsmritikoshLog.app.fault("FULL ERASE NOT STARTED — the table inventory could not be read")
+            return 0
+        }
+        guard !tables.isEmpty else {
+            eraseResidue = [(table: "table inventory (empty)", rows: -1)]
+            KalsmritikoshLog.app.fault("FULL ERASE NOT STARTED — the table inventory is empty")
             return 0
         }
         deletingAllData = true
@@ -4061,58 +4280,132 @@ public final class AppState {
         claimProjectionBackfillTask?.cancel()
         claimProjectionBackfillTask = nil
         await claimProjection?.cancel()
-        // 2. Empty every user table. Skip sqlite internals and FTS shadow
-        //    tables (those are maintained by triggers on their base tables, so
-        //    deleting the base rows cleans the index). FK off during the wipe so
-        //    parent/child delete order doesn't matter.
-        let rows = (try? await db.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';",
-            [])) ?? []
-        let tables = rows.compactMap { $0.string(0) }
+        // Background writers that hold pre-erase content (the idle maintenance scan: topics,
+        // summaries, histories; the idle compression pass) are stopped and awaited, so nothing
+        // erased is written back after the wipe. Compression restarts after the erase.
+        idleMaintenanceScan?.cancel()
+        _ = await idleMaintenanceScan?.value
+        idleMaintenanceScan = nil
+        await compression?.stop()
+        defer { Task { [compression] in await compression?.start() } }
+        // Open studio screens: their pending writes are dropped and they write nothing more until
+        // reopened — a queued save must not recreate an erased draft (K2 writer barrier).
+        await StudioStorage.invalidateAllForErase()
+
+        // 2. Empty every user table in one savepoint. Nothing interleaves with the wipe, and the
+        //    count-back sees exactly what the wipe left. The legal-hold check is repeated INSIDE the
+        //    destructive boundary: a hold placed meanwhile rolls the whole wipe back. The full-erase
+        //    marker lets the append-only guards stand aside (v161) for this act only. AFTER DELETE
+        //    triggers can refill an emptied table (deleting chunks writes evidence_revisions), so the
+        //    pass repeats until every table is empty. FK off so delete order does not matter.
+        struct HoldArrived: Error { let count: Int }
         try? await db.exec("PRAGMA foreign_keys=OFF;", [])
-        for t in tables { try? await db.exec("DELETE FROM \"\(t)\";", []) }
+        let atomicResidue: [EraseResidueRow]?
+        do {
+            atomicResidue = try await db.withSavepoint("full_erase") { db in
+                let heldNow = Int(try db.query(AppState.legalHoldCountSQL, []).first?.int(0) ?? 0)
+                if heldNow > 0 { throw HoldArrived(count: heldNow) }
+                try db.exec("INSERT INTO ledger_full_erase (started_at) VALUES (?);", [.date(Date())])
+                var left: [EraseResidueRow] = []
+                for _ in 0..<3 {
+                    for t in tables { try? db.exec("DELETE FROM \"\(t)\";", []) }
+                    left = []
+                    for t in tables {
+                        let n = (try? db.query("SELECT COUNT(*) FROM \"\(t)\";", []).first?.int(0)).flatMap { $0 }.map { Int($0) } ?? -1
+                        if n != 0 { left.append(EraseResidueRow(table: t, rows: n)) }
+                    }
+                    if left.isEmpty { break }
+                }
+                try db.exec("DELETE FROM ledger_full_erase;", [])
+                return left
+            }
+        } catch let hold as HoldArrived {
+            try? await db.exec("PRAGMA foreign_keys=ON;", [])
+            legalHoldBlock = "Not erased: a legal hold was placed while the erase was starting (\(hold.count) document\(hold.count == 1 ? "" : "s")). Nothing was deleted."
+            KalsmritikoshLog.app.notice("Erase rolled back: a legal hold arrived during the erase")
+            return 0
+        } catch {
+            KalsmritikoshLog.app.error("Full-erase savepoint failed: \(error.localizedDescription, privacy: .public)")
+            atomicResidue = nil
+        }
         try? await db.exec("PRAGMA foreign_keys=ON;", [])
-        // 3. Drop the vector-index cache so it rebuilds empty.
-        let cache = db.url.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
-        try? FileManager.default.removeItem(at: cache)
-        // 4. Remove the managed-evidence vault (EV-005) — the content-addressed byte
-        //    copies made while managed mode was on. Without this, "Delete all my data"
-        //    left original bytes behind in the container. Same root as boot wiring
-        //    (<db dir>/EvidenceVault); blobs are chmod 444, but unlinking depends on
-        //    the parent directory, so removing the tree succeeds. Recreated on demand.
-        let vaultRoot = db.url.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true)
-        try? FileManager.default.removeItem(at: vaultRoot)
+        // 3. Managed files beside the ledger (vector-index cache, managed-evidence vault): removed
+        //    under an operation record, then checked. A database savepoint cannot make file deletion
+        //    atomic; the record lets an interrupted removal finish at the next launch, and anything
+        //    that is still there is reported, never assumed gone.
+        let fileResidue = Self.removeManagedFiles(besideLedgerAt: db.url)
+        // 4. Preferences that hold case content.
+        let defaults = Self.erasePreferences
+        for key in Self.caseContentPreferenceKeys { defaults.removeObject(forKey: key) }
+        for key in defaults.dictionaryRepresentation().keys where Self.caseContentPreferencePrefixes.contains(where: { key.hasPrefix($0) }) {
+            defaults.removeObject(forKey: key)
+        }
         // 5. Return the freed pages to the filesystem. Without VACUUM the
         //    emptied knowledge.sqlite keeps its full pre-erase size on disk
         //    (owner witness: 121 MB with every table at 0 rows), which reads
         //    as "my data wasn't deleted" — a promise breach for an erase.
         try? await db.exec("VACUUM;", [])
 
-        // 6. P4.3 — PROVE IT. Everything above is `try? await db.exec(DELETE)`,
-        //    so a table that failed to empty produced no error and was counted
-        //    as cleared anyway. The function then returned the number of DELETE
-        //    statements ATTEMPTED and called it "tables cleared". For the one
-        //    operation in this app a user cannot undo and cannot inspect, that
-        //    is the worst place in the codebase to infer success from the
-        //    absence of a thrown error.
-        //
-        //    So count the rows back. A residue is reported, logged as a fault,
-        //    and left VISIBLE rather than folded into the success number — a
-        //    half-erased ledger that reports a clean erase would have the user
-        //    re-ingest on top of surviving rows and then wonder why their counts
-        //    are wrong.
-        let residue = await Self.eraseResidue(db: db, tables: tables)
+        // 6. P4.3 — PROVE IT. Count the rows back; a residue is reported, logged as a fault and left
+        //    VISIBLE rather than folded into the success number. The savepoint's own count is the
+        //    verdict; a savepoint that could not run is re-counted. Files that survived are residue too.
+        var residue: [(table: String, rows: Int)]
+        if let atomicResidue {
+            residue = atomicResidue.map { (table: $0.table, rows: $0.rows) }
+        } else {
+            residue = await Self.eraseResidue(db: db, tables: tables)
+        }
+        residue += fileResidue.map { (table: "file: \($0)", rows: -1) }
+        residue.sort { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
         eraseResidue = residue
         newFilesSinceLaunch = 0
         if residue.isEmpty {
-            KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY (user-initiated full erase)")
+            KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY, managed files removed (user-initiated full erase)")
         } else {
-            let detail = residue.map { "\($0.table)=\($0.rows)" }.joined(separator: ", ")
             let residueCount = residue.count
-            KalsmritikoshLog.app.fault("FULL ERASE INCOMPLETE — \(residueCount, privacy: .public) table(s) still hold rows after the wipe: \(detail, privacy: .public)")
+            KalsmritikoshLog.app.fault("FULL ERASE INCOMPLETE — \(residueCount, privacy: .public) item(s) still hold data after the wipe")
         }
         return tables.count
     }
+
+    /// The operation record of a full erase's file steps (beside the ledger).
+    nonisolated static let fullEraseRecordName = "full-erase-pending.json"
+
+    /// Remove the app-managed files beside the ledger under an operation record; returns the names
+    /// still present afterwards. Safe to call again: an interrupted removal finishes on the next call.
+    @discardableResult
+    nonisolated static func removeManagedFiles(besideLedgerAt ledgerURL: URL) -> [String] {
+        let dir = ledgerURL.deletingLastPathComponent()
+        let targets = ["hnsw-index.bin", "EvidenceVault"]
+        let fm = FileManager.default
+        let record = dir.appendingPathComponent(fullEraseRecordName)
+        if let data = try? JSONSerialization.data(withJSONObject: ["targets": targets, "startedAt": Date().timeIntervalSince1970]) {
+            do { try data.write(to: record, options: .atomic) } catch {
+                KalsmritikoshLog.app.error("Full-erase operation record not written: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        var left: [String] = []
+        for name in targets {
+            let url = dir.appendingPathComponent(name)
+            guard fm.fileExists(atPath: url.path) else { continue }
+            do { try fm.removeItem(at: url) } catch {
+                KalsmritikoshLog.app.error("Full erase could not remove \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+            if fm.fileExists(atPath: url.path) { left.append(name) }
+        }
+        if left.isEmpty { try? fm.removeItem(at: record) }
+        return left
+    }
+
+    /// At launch: finish the file steps of a full erase that was interrupted.
+    nonisolated static func resumePendingFullErase(besideLedgerAt ledgerURL: URL) {
+        let record = ledgerURL.deletingLastPathComponent().appendingPathComponent(fullEraseRecordName)
+        guard FileManager.default.fileExists(atPath: record.path) else { return }
+        let left = removeManagedFiles(besideLedgerAt: ledgerURL)
+        KalsmritikoshLog.app.notice("Resumed an interrupted full erase: \(left.isEmpty ? "files removed" : "still present: " + left.joined(separator: ", "), privacy: .public)")
+    }
+
+    struct EraseResidueRow: Sendable { let table: String; let rows: Int }
 
     /// Tables that still held rows after the last full erase. EMPTY is the
     /// expected state; anything here means the erase did not finish and the
@@ -4166,6 +4459,10 @@ public final class AppState {
     public struct IngestProgress: Sendable, Equatable {
         public var filesDone = 0, filesTotal = 0
         public var embedDone = 0, embedTotal = 0
+        /// UI journey 2026-10-30b/c: files whose last ingest attempt failed. They count as processed
+        /// (the pass is over for them) and are shown as failed, so the indicator reaches a terminal
+        /// state instead of "1 item remaining" forever.
+        public var filesFailed = 0
         public var parsing: Bool { filesTotal > 0 && filesDone < filesTotal }
         public var embedding: Bool { embedTotal > 0 && embedDone < embedTotal }
         public var idle: Bool { !parsing && !embedding }
@@ -4185,13 +4482,17 @@ public final class AppState {
         // through a big mailbox instead of jumping only when the whole mbox ends.
         let koDone = Int(r.int(0) ?? 0)
         let dbFileCount = Int(r.int(1) ?? 0)
+        // A file whose last attempt failed produced no knowledge object; the pass is still over for
+        // it, so it counts as processed — and is reported as failed, never hidden in "remaining".
+        let failed = await ingestAttempts?.failedCount() ?? 0
         // Denominator = the pre-counted units (files + mailbox messages). Outside
         // a bulk pass, fall back to whatever's larger so the bar reads 100% idle.
         let planned = max(ingestPlannedFileTotal, dbFileCount)
-        let filesTotal = max(planned, koDone)   // cap at 100% (attachments add extra KOs)
+        let filesTotal = max(planned, koDone + failed)   // cap at 100% (attachments add extra KOs)
         return IngestProgress(
-            filesDone: koDone, filesTotal: filesTotal,
-            embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0)
+            filesDone: min(koDone + failed, filesTotal), filesTotal: filesTotal,
+            embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0),
+            filesFailed: failed
         )
     }
 
@@ -4622,6 +4923,7 @@ public final class AppState {
     @discardableResult
     public func ingestAllRoots() async -> Int {
         guard let ingest else { return 0 }
+        guard PurchaseCenter.shared.allowPaidAction("read your folders") else { return 0 }   // §11 — a paid action
         // Fresh pass — clear any prior Stop/Pause and mark running for the
         // live Pause/Resume/Stop controls.
         await ingestControl.reset()

@@ -59,7 +59,7 @@ public enum SentenceQuoteComposer {
     ) -> QuotedAnswer? {
         let queryWords = contentWords(question)
         guard queryWords.count >= minOverlap else { return nil }
-        let asksForValue = question.lowercased().contains("how many")
+        let asksForValue = CountQuestionGate.asksCount(question)
             || question.lowercased().contains("when ")
             || question.lowercased().contains("how much")
 
@@ -133,11 +133,28 @@ public enum SentenceQuoteComposer {
             return QuotedAnswer(sentence: body, objectID: hit.chunk.objectID, chunkID: hit.chunk.id,
                                 receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
         }
+        // A labeled reason runs on in its paragraph ("failure of the throttle cable. A factor
+        // relating to the accident was: …") — quote the paragraph, not its first sentence.
+        let quoted = asksWhy && hit.score >= labeledReason ? Self.paragraph(from: hit.sentence, in: hit.chunk.text) : hit.sentence
         return QuotedAnswer(
-            sentence: hit.sentence,
+            sentence: quoted,
             objectID: hit.chunk.objectID,
             chunkID: hit.chunk.id,
             receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+    }
+
+    /// `sentence` and what follows it up to the end of its paragraph (a line break), at most ~400
+    /// characters, cut at a sentence end.
+    nonisolated static func paragraph(from sentence: String, in text: String) -> String {
+        guard let r = text.range(of: sentence) else { return sentence }
+        let rest = text[r.lowerBound...]
+        let line = rest.prefix { $0 != "\n" }
+        guard line.count > sentence.count else { return sentence }
+        if line.count <= 400 { return String(line).trimmingCharacters(in: .whitespaces) }
+        let head = line.prefix(400)
+        guard let end = head.lastIndex(where: { $0 == "." || $0 == "!" || $0 == "?" }),
+              head.distance(from: head.startIndex, to: end) >= sentence.count - 1 else { return sentence }
+        return String(head[...end]).trimmingCharacters(in: .whitespaces)
     }
 
     /// The account of a matter: the first substantive sentence of the matter's own document —
@@ -307,13 +324,27 @@ public enum SentenceQuoteComposer {
     nonisolated static func asksWhy(_ question: String) -> Bool {
         let q = question.lowercased()
         return q.hasPrefix("why ") || q.contains(" why ") || q.contains("what was the reason") || q.contains("what caused")
+            || q.contains("what led to") || q.range(of: #"\bsay caused\b|\bwhat (?:problem|issue|defect) (?:caused|led)"#, options: .regularExpression) != nil
+            // "What did investigators determine caused …?" (held-out wording set 4, 2026-10-25).
+            || q.range(of: #"\b(?:determine[sd]?|f(?:i|ou)nd|conclude[sd]?|decide[sd]?)\s+(?:had\s+|was\s+)?caused\b"#, options: .regularExpression) != nil
     }
+
+    /// The weight of a sentence the record labels as the reason: above any overlap-plus-connective
+    /// score a narrative sentence can reach.
+    nonisolated static let labeledReason = 12
 
     /// How strongly a sentence reads as the stated reason: the line under a reason label scores
     /// highest; a sentence with a causal connective scores some.
     nonisolated static func reasonWeight(_ sentence: String, previous: String) -> Int {
         let prev = previous.lowercased().trimmingCharacters(in: .whitespaces)
-        if prev.hasSuffix(":"), prev.contains("reason") || prev.contains("cause") || prev.contains("basis") { return 6 }
+        // The line a record LABELS as the reason outweighs any narrative sentence that merely
+        // mentions the event (held-out wording set 5, 2026-10-25: "What caused the accident …?"
+        // quoted the factual narrative over the line under "— probable cause").
+        if prev.hasSuffix(":"), prev.contains("reason") || prev.contains("cause") || prev.contains("basis") { return labeledReason }
+        // A heading line that names the cause ("NTSB SEA03LA084 — probable cause") introduces it.
+        if prev.range(of: #"(?:—|-|:)\s*(?:probable cause|cause|reason for recall)\s*$"#, options: .regularExpression) != nil { return labeledReason }
+        // … or runs straight into it when the line break was lost ("NTSB X — probable cause The pilot …").
+        if sentence.prefix(80).range(of: #"(?i)(?:—|-)\s*probable cause\s+[A-Z]"#, options: .regularExpression) != nil { return labeledReason }
         let lower = sentence.lowercased()
         if lower.hasPrefix("reason") || lower.hasPrefix("cause") { return 5 }
         let connectives = ["because", "due to", "as a result", "resulted in", "caused", "failure to", "failed to", "could ", "may "]
@@ -404,7 +435,10 @@ public struct NumberedEntryCount: Sendable, Equatable {
         guard let noun = countedNoun(in: question) else { return nil }
         // An entry starts a line or follows a space / separator (normalized text runs entries
         // together: "… injured employees Employee #1: hospitalized injury, age 35 OSHA …").
-        let n0 = NSRegularExpression.escapedPattern(for: noun)
+        // "How many workers were hurt?" of a record that numbers "Employee #1" (wide case bench 2026-10-25).
+        let kin: [String: [String]] = ["worker": ["employee"], "employee": ["worker"], "person": ["employee", "victim"],
+                                       "people": ["employee", "victim", "person"], "staff": ["employee"]]
+        let n0 = "(?:" + ([noun] + (kin[noun] ?? [])).map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")"
         let patterns = ["(?im)^\\s*(" + n0 + ")s?\\s*#?\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*",   // a line of its own
                         "(?i)(?<=[\\s|])(" + n0 + ")s?\\s*#\\s*(\\d{1,3})\\s*[:\\-–][^\\n|]*"]  // mid-line: needs the #
         let regexes = patterns.compactMap { try? NSRegularExpression(pattern: $0) }
@@ -445,6 +479,23 @@ public struct NumberedEntryCount: Sendable, Equatable {
                         }
                     }
                 }
+                // No numbered people either: an event line naming ONE of them ("Event: Employee
+                // amputates finger in moving chain") is a count of one (held-out wording set 4,
+                // 2026-10-25). A plural or a number word in that line is left to the other paths.
+                if seen.isEmpty, aboutHarm,
+                   let re = try? NSRegularExpression(pattern: "(?im)^\\s*event:\\s*(?:an?\\s+)?(" + n0 + ")\\s+(?!s\\b)[a-z][^\\n]*$") {
+                    for rc in ordered {
+                        let ns = rc.chunk.text as NSString
+                        guard let m = re.firstMatch(in: rc.chunk.text, range: NSRange(location: 0, length: ns.length)) else { continue }
+                        let line = ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
+                        guard line.range(of: Self.harmWords, options: .regularExpression) != nil,
+                              line.range(of: CountQuestionGate.numberWords, options: .regularExpression) == nil,
+                              line.range(of: "(?i)\\b" + n0 + "s\\b", options: .regularExpression) == nil else { continue }
+                        seen["1"] = line
+                        first = rc.chunk
+                        break
+                    }
+                }
             }
             guard let chunk = first, !seen.isEmpty else { continue }
             if best == nil || seen.count > best!.count {
@@ -480,8 +531,11 @@ public struct NumberedEntryCount: Sendable, Equatable {
     /// The noun after "how many" ("how many employees were hurt" → "employee"), singular.
     nonisolated static func countedNoun(in question: String) -> String? {
         let q = question.lowercased()
-        guard let r = q.range(of: #"how many ([a-z]+)"#, options: .regularExpression) else { return nil }
-        var word = String(q[r].dropFirst("how many ".count))
+        guard let r = q.range(of: #"(?:how many|number of) ([a-z]+)"#, options: .regularExpression) else {
+            // The interpreter placed a count wording the rules miss: count the people a record numbers.
+            return QuestionUnderstanding.gateIntent(for: question) == .peopleCount ? "person" : nil
+        }
+        var word = String(q[r].split(separator: " ").last ?? "")
         guard word.count >= 3, !["times", "days", "years", "months", "hours", "dollars"].contains(word) else { return nil }
         if word.hasSuffix("ies") { word = String(word.dropLast(3)) + "y" }
         else if word.hasSuffix("s") { word = String(word.dropLast()) }

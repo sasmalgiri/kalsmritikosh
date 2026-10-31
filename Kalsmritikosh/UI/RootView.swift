@@ -324,7 +324,7 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .cases
+    @State private var selection: Destination? = RootView.launchDestination(restored: nil)
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
@@ -442,14 +442,21 @@ public struct RootView: View {
            !history.isEmpty {
             navHistory = history
             if let entry = history.current { applyNavEntry(entry) }
-        } else if let dest = selection {
-            // Fresh session — seed the history with the launch surface.
+        } else {
+            // Fresh profile (no saved session): Home, which leads with "Start an investigation" and
+            // "Resume a case" (I9; App Store completion §5). A returning person resumes above.
+            let dest = Self.launchDestination(restored: nil)
+            selection = dest
             navHistory.navigate(to: AppNavigationEntry(
                 destination: Self.navBucket(for: dest),
                 contextKind: "surface",
                 contextID: dest.rawValue))
         }
     }
+
+    /// The first screen: the restored session's surface for a returning person, Home for a fresh
+    /// profile. Pure, so the rule is testable without a window.
+    nonisolated static func launchDestination(restored: Destination?) -> Destination { restored ?? .home }
 
     /// Coarse mapping of every UI surface into the closed SHELL-001
     /// destination vocabulary; the EXACT surface rides in contextID.
@@ -478,7 +485,12 @@ public struct RootView: View {
     public init() {}
 
     public var body: some View {
-        phaseContent
+        // The root is flexible (GeometryReader) so the window never takes the split view's ideal height
+        // (UI runs h/i: 5 038 and 3 685 pt windows with the subscription card, banner and tutorial off-screen).
+        GeometryReader { root in
+            phaseContent
+                .frame(width: root.size.width, height: root.size.height)
+        }
             // P0.5 — v1 is single-mode (.ledgerEventDriven pinned), so there is
             // NO user-visible mode chooser in release. The chooser is retained
             // only for internal/debug builds; release never wires the sheet.
@@ -503,10 +515,28 @@ public struct RootView: View {
         case .needsRecoveryKey(let message):
             RecoveryKeyView(message: message)
         case .ready:
-            VStack(spacing: 0) {
-                // §1.1 — the sample ledger announces itself on every screen.
-                if SampleArchiveMode.isActive { SampleArchiveBanner() }
-                main
+            // Pinned to the window (GeometryReader at the root): when anything is stacked around the split
+            // view — the sample banner above it, the subscription screen over it — the window took the
+            // split view's IDEAL height (3 685 pt on Professional Jobs, 5 038 pt on Home) and the banner,
+            // strip, tutorial panel and subscription card landed below the display (UI runs h and i; the
+            // macOS 26 split-view sizing already noted for the Ask surface). A flexible root has no ideal
+            // height, so the window keeps its own size and the split view fills it.
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        // §1.1 — the sample ledger announces itself on every screen.
+                        if SampleArchiveMode.isActive { SampleArchiveBanner() }
+                        main
+                    }
+                    // §6.2 — the replayable tutorial is a column beside the sample case (UI run j: as an
+                    // overlay it covered the Ask composer's Send button). It exists only in the sample
+                    // mode, so replaying it cannot touch the person's own archive.
+                    if SampleArchiveMode.isActive && HelpTutorial.progress.isRunning {
+                        Divider()
+                        TutorialPanel()
+                    }
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
             }
         }
     }
@@ -569,6 +599,7 @@ public struct RootView: View {
         .tint(Theme.brand)
         .preferredColorScheme(.light)
         .frame(minWidth: 1040, minHeight: 640)
+        .background(WindowFrameClamp())   // UI journey 2026-10-30, D1: a launch frame taller than the screen is fitted to it
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .overlay(shortcutHelpOverlay)
@@ -583,6 +614,14 @@ public struct RootView: View {
             if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
                 navigate(to: dest)
             }
+        }
+        // §6.6 — Help links land on the Guide (the Guide itself scrolls to the topic).
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshOpenHelp)) { _ in
+            navigate(to: .guide)
+        }
+        // §6.1 — the introduction can be shown again from Help; it resets nothing.
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshReplayOnboarding)) { _ in
+            presentingOnboarding = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshPaletteEntry)) { note in
             // Menu-bar items post catalog entry ids so menus and the palette
@@ -691,6 +730,8 @@ public struct RootView: View {
                             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                             try? appState.bookmarks.register(url: url)
                             navigate(to: .sources)
+                            // UI journey run d (D-4): read the chosen folder now.
+                            if appState.ingestRunState == .idle { Task { @MainActor in _ = await appState.ingestAllRoots() } }
                         }
                     }
                 // ADD FILES — always-visible ingestion entry point: pick supported
@@ -1617,8 +1658,12 @@ private struct CommandPaletteView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 24)
                         } else {
+                            // UI journey 2026-10-30, D2: rows were identified by their INDEX, so when the
+                            // list changed under a query the view at index 0 kept showing the earlier
+                            // entry ("Home") while Return ran the real first match. Identity is the
+                            // entry's own id; scrolling targets it too.
                             ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, entry in
-                                paletteRow(entry, index: idx).id(idx)
+                                paletteRow(entry, index: idx).id(entry.id)
                             }
                         }
                     }
@@ -1626,7 +1671,8 @@ private struct CommandPaletteView: View {
                 }
                 .frame(maxHeight: 340)
                 .onChange(of: highlighted) { _, new in
-                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(new, anchor: .center) }
+                    guard filtered.indices.contains(new) else { return }
+                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(filtered[new].id, anchor: .center) }
                 }
             }
         }
@@ -1828,6 +1874,63 @@ struct RecoveryKeyView: View {
         Task {
             note = await appState.unlockLedger(recoveryText: text)
             working = false
+        }
+    }
+}
+
+// MARK: - Window frame clamp (UI journey 2026-10-30, D1)
+
+/// The first launch opened a window 1100 × 2343 pt on a 956 pt screen — the content's proposed
+/// height became the frame, and the first screen's controls sat below the display. Whatever the
+/// cause (a restored frame or min-height pressure from the split view's detail), a window must fit
+/// the screen it opens on: when this view joins a window whose frame exceeds the screen's visible
+/// frame, the frame is fitted to it (and re-checked when the screen changes). Nothing else about
+/// the window is touched; the person can still resize or zoom.
+struct WindowFrameClamp: NSViewRepresentable {
+    func makeNSView(context: Context) -> ClampView { ClampView() }
+    func updateNSView(_ nsView: ClampView, context: Context) {}
+
+    final class ClampView: NSView {
+        private var observer: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            Self.fit(window)
+            observer.map { NotificationCenter.default.removeObserver($0) }
+            observer = NotificationCenter.default.addObserver(forName: NSWindow.didChangeScreenNotification, object: window, queue: .main) { note in
+                guard let w = note.object as? NSWindow else { return }
+                MainActor.assumeIsolated { Self.fit(w) }
+            }
+            // UI run i: in the sample case the window grew to 1 394 pt AFTER launch (the banner and strip
+            // arrive with the ready phase), so the launch-time fit missed it. Fit on every resize that
+            // leaves the screen; a resize that stays on-screen is untouched (`fit` returns at once).
+            resizeObserver.map { NotificationCenter.default.removeObserver($0) }
+            resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { note in
+                guard let w = note.object as? NSWindow else { return }
+                MainActor.assumeIsolated { Self.fit(w) }
+            }
+        }
+
+        private var resizeObserver: NSObjectProtocol?
+
+        deinit {
+            observer.map { NotificationCenter.default.removeObserver($0) }
+            resizeObserver.map { NotificationCenter.default.removeObserver($0) }
+        }
+
+        /// Fit `window` inside its screen's visible frame when it is taller or wider than that frame.
+        static func fit(_ window: NSWindow) {
+            guard let screen = window.screen ?? NSScreen.main else { return }
+            let visible = screen.visibleFrame
+            var frame = window.frame
+            guard frame.height > visible.height || frame.width > visible.width
+                    || frame.minY < visible.minY || frame.maxY > visible.maxY else { return }
+            frame.size.height = min(frame.height, visible.height)
+            frame.size.width = min(frame.width, visible.width)
+            frame.origin.y = max(visible.minY, min(frame.origin.y, visible.maxY - frame.height))
+            frame.origin.x = max(visible.minX, min(frame.origin.x, visible.maxX - frame.width))
+            window.setFrame(frame, display: true, animate: false)
         }
     }
 }

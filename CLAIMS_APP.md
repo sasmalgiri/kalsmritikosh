@@ -36,7 +36,7 @@ change — copy and registry move together or not at all.
 | asc.judgement-human | `It organises, finds and documents` | release/APP_STORE_LISTING.md |
 | asc.no-decision | `It organises and cites your evidence` | release/APP_STORE_LISTING.md |
 | asc.english-only | `English only in this version.` | release/APP_STORE_LISTING.md |
-| asc.trial-then-buy | `Try it free for 14 days, then buy it once` | release/APP_STORE_LISTING.md |
+| asc.trial-then-buy | `Try every paid feature free for 14 days, then $4.99 a month or $39.99 a year` | release/APP_STORE_LISTING.md |
 | asc.encrypted-at-rest | `the knowledge base is encrypted on` | release/APP_STORE_LISTING.md |
 | asc.no-account | `There's no account, no sign-in, and no analytics.` | release/APP_STORE_LISTING.md |
 | asc.private-by-default | `By default your files and questions` | release/APP_STORE_LISTING.md |
@@ -50,7 +50,7 @@ What each App Store row rests on (R-2, App Review 2.3.1, 2026-10-24). The ids ar
 | `asc.evidence-only-default` | `EvidenceOnlyRelease.enforced` = `!aiEnabled` with `aiEnabled` absent = off (Kalsmritikosh/Routing/EvidenceOnlyRelease.swift); toggle "Use AI to write answers" (Kalsmritikosh/UI/SettingsView.swift); SHIP_DECISIONS 2026-10-24 (1)–(2). No unit test pins the default (the test host keeps stored behaviour by design). |
 | `asc.judgement-human` / `asc.no-decision` | SHIP_DECISIONS 2026-10-23 (4) and (6); the case report states "judgement stays with the investigator" (test:documentsAndLog in KalsmritikoshTests/CaseFileTests.swift). |
 | `asc.english-only` | SHIP_DECISIONS 2026-10-23 (2). |
-| `asc.trial-then-buy` | Products `…trial14` and `…unlock`, `familyShareable: true` (StoreKit/Kalsmritikosh.storekit); Kalsmritikosh/App/Store/Purchase.swift; test:trialThenBuy (KalsmritikoshTests/PurchaseTests.swift); SHIP_DECISIONS 2026-10-18 (1). |
+| `asc.trial-then-buy` | Subscription group with `…edition.monthly` ($4.99, P1M) and `…edition.annual` ($39.99, P1Y), each with a two-week free introductory offer (StoreKit/Kalsmritikosh.storekit); Kalsmritikosh/App/Store/Purchase.swift; test:trialThenPaidThenCancelled (KalsmritikoshTests/PurchaseTests.swift) |
 | `asc.encrypted-at-rest` | test:aKeyedLedgerIsEncryptedOnDisk (KalsmritikoshTests/LedgerEncryptionTests.swift); SHIP_DECISIONS 2026-10-15 (W2-7). |
 | `asc.no-account` | Privacy label Data Not Collected (owner:OWNER_ACCEPTANCE_CHECKLIST.md); site row `privacy.no-servers` in CLAIMS.md. |
 | `asc.private-by-default` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift (site row `privacy.online-opt-in`); main app has no network entitlement (ci/guards/release-configuration.sh). |

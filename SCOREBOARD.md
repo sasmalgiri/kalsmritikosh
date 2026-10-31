@@ -40,7 +40,7 @@ drift between copy and registry, on any surface.
 | site | privacy.models-bundled | models ship inside the app | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | site | privacy.erase-everything | One click erases the entire ledger | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | site | privacy.private-by-design | Erase everything in one click | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
-| site | privacy.nothing-collected | Data Not Collected | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
+| site | privacy.nothing-collected | no servers that receive your content | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | site | privacy.no-upload | Nothing is uploaded, ever | ci:sensitive-export |
 | site | privacy.offline | Works fully offline | ci:sensitive-export |
 | site | privacy.no-copy | not copied to us | ci:sensitive-export |

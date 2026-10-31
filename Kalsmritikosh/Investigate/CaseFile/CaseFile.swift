@@ -185,8 +185,19 @@ public nonisolated struct CaseAllegation: Identifiable, Sendable, Equatable {
     public var decidedBy: String?
     public var decidedAt: Date?
     public let createdAt: Date
+    /// I4 — the respondent's account or explanation, as put to them (nil: no response recorded).
+    public var response: String?
+    /// I4 — why an adverse finding was recorded without a response (an explicit, justified exception).
+    public var exceptionNote: String?
     /// "A1", "A2" … — how the report and the grid refer to it.
     public var label: String { "A\(sequence)" }
+
+    public init(id: UUID, caseID: UUID, sequence: Int, text: String, disposition: AllegationDisposition, rationale: String?,
+                decidedBy: String?, decidedAt: Date?, createdAt: Date, response: String? = nil, exceptionNote: String? = nil) {
+        self.id = id; self.caseID = caseID; self.sequence = sequence; self.text = text; self.disposition = disposition
+        self.rationale = rationale; self.decidedBy = decidedBy; self.decidedAt = decidedAt; self.createdAt = createdAt
+        self.response = response; self.exceptionNote = exceptionNote
+    }
 }
 
 public nonisolated struct AllegationEvidence: Identifiable, Sendable, Equatable {
@@ -198,6 +209,110 @@ public nonisolated struct AllegationEvidence: Identifiable, Sendable, Equatable 
     public let note: String?
     public let addedBy: String
     public let createdAt: Date
+    /// I4 — the exact passage: its quotation and locator (block, object) within the source version.
+    public let quote: String?
+    public let blockID: UUID?
+    public let objectID: UUID?
+    /// I5 — where it came from when carried over from a reviewed result ("job:<job>:<result>:row:<n>").
+    public let origin: String?
+    /// §2 — the verification of this link when it was last checked (nil: never verified — legacy).
+    public let verification: String?
+    public let verificationDetail: String?
+    public let verifiedAt: Date?
+    /// §3 — the review state of the result row it was carried from ("accepted", "undecided",
+    /// "rejected", "completed"); nil for a link the person made by hand.
+    public let reviewState: String?
+    /// §3 — the SHA-256 of the saved result revision it was carried from.
+    public let originDigest: String?
+
+    public init(id: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance, note: String?, addedBy: String,
+                createdAt: Date, quote: String? = nil, blockID: UUID? = nil, objectID: UUID? = nil, origin: String? = nil,
+                verification: String? = nil, verificationDetail: String? = nil, verifiedAt: Date? = nil,
+                reviewState: String? = nil, originDigest: String? = nil) {
+        self.id = id; self.allegationID = allegationID; self.evidenceRef = evidenceRef; self.label = label; self.stance = stance
+        self.note = note; self.addedBy = addedBy; self.createdAt = createdAt
+        self.quote = quote; self.blockID = blockID; self.objectID = objectID; self.origin = origin
+        self.verification = verification; self.verificationDetail = verificationDetail; self.verifiedAt = verifiedAt
+        self.reviewState = reviewState; self.originDigest = originDigest
+    }
+
+    /// What this link is, from its stored verification: a verified passage, a live exhibit, the
+    /// investigator's note, or unverified with the reason (legacy links are unverified until re-checked).
+    public var support: CaseEvidenceSupport { CaseEvidenceSupport.from(stored: verification, detail: verificationDetail, reference: evidenceRef) }
+    /// Verified documentary support (a verified passage or a live exhibit) — what an adverse finding
+    /// may rest on. A source version whose passage did not verify is NOT documentary.
+    public var isDocumentary: Bool { support.isDocumentary }
+    /// A reference that names a document or exhibit at all (as opposed to a typed note).
+    public var namesASource: Bool {
+        switch CaseEvidenceReference.parse(evidenceRef) {
+        case .sourceVersion, .exhibit: return true
+        case .investigatorNote, .unresolved: return false
+        }
+    }
+    /// The passage can be opened directly (it names a document).
+    public var opensPassage: Bool { objectID != nil }
+    /// The passage as stored.
+    public var passage: StudioEvidenceRef? {
+        guard case .sourceVersion(let v) = CaseEvidenceReference.parse(evidenceRef) else { return nil }
+        return StudioEvidenceRef(sourceVersionID: v, objectID: objectID, blockID: blockID, quote: quote)
+    }
+}
+
+/// I5 — one item the person selected for (or excluded from) the final case report: the cited text
+/// with its passage and the reviewed result revision it came from, never retyped.
+public nonisolated struct CaseReportItem: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let caseID: UUID
+    public let allegationID: UUID?
+    public let text: String
+    public let quote: String?
+    public let evidenceRef: String?
+    public let origin: String?
+    public let included: Bool
+    public let exclusionReason: String?
+    public let addedBy: String
+    public let createdAt: Date
+    public let decidedBy: String?
+    public let decidedAt: Date?
+    /// §3 — every citation the carried row had (not only the first).
+    public var citations: [StudioEvidenceRef] = []
+    /// §3 — "accepted" / "completed" / "undecided" / "rejected"; nil for a hand-made item.
+    public var reviewState: String?
+    public var originDigest: String?
+    /// §2 — verification of the citations when last checked.
+    public var verification: String?
+    public var verificationDetail: String?
+    public var verifiedAt: Date?
+
+    public init(id: UUID, caseID: UUID, allegationID: UUID?, text: String, quote: String?, evidenceRef: String?, origin: String?,
+                included: Bool, exclusionReason: String?, addedBy: String, createdAt: Date, decidedBy: String?, decidedAt: Date?,
+                citations: [StudioEvidenceRef] = [], reviewState: String? = nil, originDigest: String? = nil,
+                verification: String? = nil, verificationDetail: String? = nil, verifiedAt: Date? = nil) {
+        self.id = id; self.caseID = caseID; self.allegationID = allegationID; self.text = text; self.quote = quote; self.evidenceRef = evidenceRef
+        self.origin = origin; self.included = included; self.exclusionReason = exclusionReason; self.addedBy = addedBy; self.createdAt = createdAt
+        self.decidedBy = decidedBy; self.decidedAt = decidedAt; self.citations = citations; self.reviewState = reviewState
+        self.originDigest = originDigest; self.verification = verification; self.verificationDetail = verificationDetail; self.verifiedAt = verifiedAt
+    }
+
+    /// An item the report may print as a reviewed finding: carried from an accepted or completed row.
+    public var isAcceptedReview: Bool { reviewState == "accepted" || reviewState == "completed" }
+    public var support: CaseEvidenceSupport {
+        CaseEvidenceSupport.from(stored: verification, detail: verificationDetail, reference: evidenceRef ?? "")
+    }
+}
+
+/// §3 — the review state a carried row had in its saved result revision, as stored.
+public nonisolated enum CarriedReviewState: String, Sendable, CaseIterable {
+    case accepted, completed, undecided, rejected
+    /// What the report prints beside the item.
+    public var label: String {
+        switch self {
+        case .accepted: return "accepted on review"
+        case .completed: return "completed result"
+        case .undecided: return "provisional — not yet decided on review"
+        case .rejected: return "rejected on review"
+        }
+    }
 }
 
 // MARK: - Journal and chronology
@@ -216,6 +331,31 @@ public nonisolated struct CaseJournalEntry: Identifiable, Sendable, Equatable {
     public let evidenceRef: String?
     public let author: String
     public let createdAt: Date
+    /// I4/I5 — the exact passage quoted, and the reviewed result it was carried from.
+    public let quote: String?
+    public let origin: String?
+    /// §2/§3 — verification of the citations, every citation carried, the review state and the
+    /// saved revision's digest (nil for an entry typed by hand).
+    public var verification: String?
+    public var verificationDetail: String?
+    public var verifiedAt: Date?
+    public var citations: [StudioEvidenceRef] = []
+    public var reviewState: String?
+    public var originDigest: String?
+
+    public init(id: UUID, caseID: UUID, kind: CaseJournalKind, eventDate: Date?, text: String, evidenceRef: String?, author: String,
+                createdAt: Date, quote: String? = nil, origin: String? = nil,
+                verification: String? = nil, verificationDetail: String? = nil, verifiedAt: Date? = nil,
+                citations: [StudioEvidenceRef] = [], reviewState: String? = nil, originDigest: String? = nil) {
+        self.id = id; self.caseID = caseID; self.kind = kind; self.eventDate = eventDate; self.text = text; self.evidenceRef = evidenceRef
+        self.author = author; self.createdAt = createdAt; self.quote = quote; self.origin = origin
+        self.verification = verification; self.verificationDetail = verificationDetail; self.verifiedAt = verifiedAt
+        self.citations = citations; self.reviewState = reviewState; self.originDigest = originDigest
+    }
+
+    public var support: CaseEvidenceSupport {
+        CaseEvidenceSupport.from(stored: verification, detail: verificationDetail, reference: evidenceRef ?? "note:")
+    }
 }
 
 // MARK: - People, contacts, interviews, credibility
@@ -278,6 +418,24 @@ public nonisolated struct CaseInterview: Identifiable, Sendable, Equatable {
         guard let statementSHA256, let statementText else { return statementSHA256 == nil }
         return CaseFileHash.sha256(statementText) == statementSHA256
     }
+}
+
+/// A correction to an attested statement (implementation brief §9). The attested statement is never
+/// edited: a correction is a new, append-only record linked to it, with its own fingerprint, the reason,
+/// and — once the interviewee confirms it — who confirmed it and when. A confirmation entered here is a
+/// recorded assertion, not cryptographic proof of the interviewee's identity.
+public nonisolated struct StatementAddendum: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let interviewID: UUID
+    public let caseID: UUID
+    public let text: String
+    public let reason: String
+    public let sha256: String
+    public let recordedBy: String
+    public let recordedAt: Date
+    public let confirmedBy: String?
+    public let confirmedAt: Date?
+    public var intact: Bool { CaseFileHash.sha256(text) == sha256 }
 }
 
 public nonisolated enum CredibilityFactor: String, Codable, Sendable, CaseIterable, Identifiable {
@@ -417,10 +575,33 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
     case duplicateExhibitNumber(String)
     case statementAlreadyAttested
     case noStatement
+    case attestedFieldLocked(String)
+    case notAttested
+    case addendumAlreadyConfirmed
+    case unresolvedReference(String, String)
     case taskEngineUnavailable
+    /// The record exists but belongs to another case (implementation brief §3).
+    case notInCase(String, UUID)
+    /// The case is closed; reopen it to change it.
+    case caseClosed
+    /// The record changed since it was read; reload and try again.
+    case staleRecord(String, UUID)
+    /// I4 — an adverse finding needs documentary evidence and the response put to the respondent
+    /// (or an explicit, justified exception); a typed disposition on notes alone is refused.
+    case adverseFindingUnsupported(String)
+    /// §3 — the same reviewed row was already carried to this target; carrying it again must be intentional.
+    case alreadyCarried(String)
+    /// §3 — a rejected result row cannot enter the case as evidence or a reviewed finding.
+    case rejectedRowNotEvidence
+    /// §3 — the result revision the row is carried from is not the saved current one.
+    case staleResultRevision
 
     public var errorDescription: String? {
         switch self {
+        case .adverseFindingUnsupported(let why): return "An adverse finding can't be recorded yet: \(why)."
+        case .alreadyCarried(let what): return "\(what) is already in the case from this result row; carry it again only on purpose (it is not duplicated)."
+        case .rejectedRowNotEvidence: return "A row rejected on review cannot be carried into the case as evidence or a finding; it can be recorded as excluded with the reason."
+        case .staleResultRevision: return "This result revision is not the saved current one; reopen the result and carry the row from its current revision."
         case .blank(let f): return "\(f) can't be empty."
         case .caseNotFound: return "The case was not found."
         case .notFound(let what, _): return "The \(what) was not found."
@@ -428,7 +609,14 @@ public nonisolated enum CaseFileError: Error, Sendable, Equatable, LocalizedErro
         case .duplicateExhibitNumber(let n): return "Exhibit \(n) already exists in this case."
         case .statementAlreadyAttested: return "The statement is already attested. Record a new statement instead of changing it."
         case .noStatement: return "There is no statement to attest."
+        case .attestedFieldLocked(let what): return "The statement is confirmed, so its \(what) can't be changed. Add a correction instead."
+        case .notAttested: return "Only a confirmed statement takes a correction; edit the statement directly."
+        case .addendumAlreadyConfirmed: return "This correction is already confirmed."
+        case .unresolvedReference(let ref, let why): return "“\(ref)” can't be used as evidence: \(why)."
         case .taskEngineUnavailable: return "Tasks aren't available yet."
+        case .notInCase(let what, _): return "That \(what) belongs to another case."
+        case .caseClosed: return "The case is closed. Reopen it to make changes."
+        case .staleRecord(let what, _): return "The \(what) changed since it was opened. Reload it and try again."
         }
     }
 }

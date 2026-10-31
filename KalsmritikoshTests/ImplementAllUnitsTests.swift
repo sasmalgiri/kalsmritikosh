@@ -815,6 +815,13 @@ struct DiagnosticEndToEndTests {
         """, [.uuid(UUID())])
         let before = (try? await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0)) ?? 0
         #expect((before ?? 0) > 0, "the fixture row did not land, so this proves nothing")
+        // Append-only rows too (v161): a studio draft's revision and export snapshot are the
+        // person's data, and a full erase must not leave them behind.
+        let studio = StudioRecordRepository(database: db)
+        let draftID = UUID()
+        try await studio.save(studio: "siu", id: draftID, title: "x", payload: Data("{}".utf8), actor: "Tester")
+        try await studio.recordExport(recordID: draftID, format: "markdown", text: "report", actor: "Tester")
+        #expect(try await studio.revisions(recordID: draftID).count == 1)
 
         let cleared = await state.deleteAllData()
         #expect(cleared > 0, "no tables were cleared")
@@ -824,6 +831,77 @@ struct DiagnosticEndToEndTests {
                 "erase left rows behind: \(state.eraseResidue.map { "\($0.table)=\($0.rows)" })")
         let after = (try? await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0)) ?? 0
         #expect((after ?? -1) == 0, "the row survived an erase that reported success")
+    }
+
+    @Test("K2: an active hold, or a hold check that cannot be read, refuses the erase and deletes nothing",
+          .timeLimit(.minutes(5)))
+    func eraseFailsClosedOnHolds() async throws {
+        let (state, dir) = try await bootedState()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        guard case .ready = state.phase else { Issue.record("AppState did not boot"); await state.shutdown(); return }
+        defer { Task { await state.shutdown() } }
+        let db = try #require(state.database)
+        try await db.exec("INSERT INTO files (id, url, source_type, size_bytes, modified_at, ingested_at, content_hash) VALUES (?, '/tmp/held.txt', 'text', 5, 0, 0, 'h');", [.uuid(UUID())])
+        let hold = UUID()
+        try await db.exec("INSERT INTO legal_holds (id, name, created_at) VALUES (?, 'Matter', 1);", [.uuid(hold)])
+        try await db.exec("INSERT INTO legal_hold_items (hold_id, object_id, created_at) VALUES (?, ?, 1);", [.uuid(hold), .uuid(UUID())])
+        #expect(await state.deleteAllData() == 0)
+        #expect(try await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0) == 1)
+        #expect(state.legalHoldBlock?.contains("legal hold") == true)
+        // The hold check cannot be read: not "no hold" — nothing is deleted.
+        try await db.exec("UPDATE legal_holds SET released_at = 2;", [])
+        try await db.exec("DROP TABLE legal_hold_items;", [])
+        #expect(await state.deleteAllData() == 0)
+        #expect(try await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0) == 1)
+        #expect(state.legalHoldBlock?.contains("could not be read") == true)
+    }
+
+    @Test("K2: a managed file that cannot be removed is residue, finished at the next launch; content preferences go; a studio save after the erase writes nothing",
+          .timeLimit(.minutes(5)))
+    func eraseFilesPreferencesAndWriters() async throws {
+        let (state, dir) = try await bootedState()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.appendingPathComponent("EvidenceVault").path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        guard case .ready = state.phase else { Issue.record("AppState did not boot"); await state.shutdown(); return }
+        defer { Task { await state.shutdown() } }
+        let db = try #require(state.database)
+        // A vault the erase cannot empty (its directory is read-only).
+        let vault = dir.appendingPathComponent("EvidenceVault", isDirectory: true)
+        try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
+        try Data("original bytes".utf8).write(to: vault.appendingPathComponent("blob.bin"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: vault.path)
+        try Data("vectors".utf8).write(to: dir.appendingPathComponent("hnsw-index.bin"))
+        // Preferences holding case content (the test suite, never the owner's domain).
+        let prefs = AppState.erasePreferences
+        prefs.set("[]", forKey: "kalsmritikosh.siu.store")
+        prefs.set("job summary", forKey: "kalsmritikosh.jobs.log.\(UUID().uuidString)")
+        // An open studio with a saved draft.
+        let storage = StudioStorage(studio: "siu", legacyKey: "test.erase.\(UUID().uuidString)")
+        let repo = StudioRecordRepository(database: db)
+        storage.repositoryOverride = repo
+        let draft = SIUReferral(title: "Before erase", now: Date())
+        storage.persist([draft], app: nil)
+        await storage.flush()
+        #expect(try await repo.records(studio: "siu").count == 1)
+
+        _ = await state.deleteAllData()
+        #expect(state.eraseResidue.contains { $0.table == "file: EvidenceVault" })
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("hnsw-index.bin").path))
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(AppState.fullEraseRecordName).path))
+        #expect(prefs.object(forKey: "kalsmritikosh.siu.store") == nil)
+        #expect(!prefs.dictionaryRepresentation().keys.contains { $0.hasPrefix("kalsmritikosh.jobs.log.") })
+        #expect(try await repo.records(studio: "siu").isEmpty)
+        // The studio screen still holds the old draft; its next save must not recreate it.
+        storage.persist([draft], app: nil)
+        await storage.flush()
+        #expect(try await repo.records(studio: "siu").isEmpty)
+        // Next launch: the interrupted file step finishes once the vault can be removed.
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: vault.path)
+        AppState.resumePendingFullErase(besideLedgerAt: dir.appendingPathComponent("db.sqlite"))
+        #expect(!FileManager.default.fileExists(atPath: vault.path))
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent(AppState.fullEraseRecordName).path))
     }
 
     @Test("The answer harness declines an empty ledger instead of passing it",

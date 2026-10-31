@@ -26,11 +26,11 @@ struct SampleArchiveModeTests {
     @Test("The mode is OFF unless entered; the flag alone decides")
     func flagDecides() {
         let key = SampleArchiveMode.defaultsKey
-        let saved = UserDefaults.standard.object(forKey: key)
-        defer { UserDefaults.standard.set(saved, forKey: key) }
-        UserDefaults.standard.removeObject(forKey: key)
+        let saved = AppDefaults.store.object(forKey: key)
+        defer { AppDefaults.store.set(saved, forKey: key) }
+        AppDefaults.store.removeObject(forKey: key)
         #expect(!SampleArchiveMode.isActive, "a fresh install runs on the user's own ledger")
-        UserDefaults.standard.set(true, forKey: key)
+        AppDefaults.store.set(true, forKey: key)
         #expect(SampleArchiveMode.isActive)
     }
 

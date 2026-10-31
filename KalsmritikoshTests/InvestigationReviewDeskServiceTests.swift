@@ -139,6 +139,23 @@ struct InvestigationReviewDeskServiceTests {
         }
     }
 
+    @Test("Scope before limit: 1,200 other-case gaps and contradictions never hide this case's own")
+    func scopeBeforeLimit() async throws {
+        let rig = try await rig()
+        // Other cases' items, all detected AFTER this case's, so a global newest-first LIMIT would cut ours.
+        for _ in 0..<1_200 {
+            try await seedGap(rig.db, id: UUID(), evidence: rig.koB)
+            try await seedContradiction(rig.db, id: UUID(), evidenceA: rig.koB, evidenceB: nil, status: "open")
+        }
+        let ourGap = UUID(), ourContradiction = UUID()
+        try await seedGap(rig.db, id: ourGap, evidence: rig.koA)
+        try await seedContradiction(rig.db, id: ourContradiction, evidenceA: rig.koA, evidenceB: rig.koA2, status: "open")
+        #expect(try await rig.deskSvc.gaps(caseID: rig.caseID, limit: 10).map(\.gap.id) == [ourGap])
+        #expect(try await rig.deskSvc.contradictions(caseID: rig.caseID, limit: 10).map(\.contradiction.id) == [ourContradiction])
+        // And a disposition finds it wherever it sits.
+        #expect(try await rig.deskSvc.confirmGap(caseID: rig.caseID, gapID: ourGap, note: nil, actor: "lead", at: t0).decision == .confirmed)
+    }
+
     // MARK: - Gold case: conflicting accounts
 
     @Test("Conflicting accounts gold case: rate the source, review the in-scope contradiction (both sides kept) + a gap, reopen persists")

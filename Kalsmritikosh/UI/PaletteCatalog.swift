@@ -40,6 +40,8 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
     case yourData
     case helpFeedback
     case legalPrivacy
+    /// §11 — subscription status, Manage subscription, Restore purchases.
+    case subscription
 }
 
 public extension Notification.Name {
@@ -121,6 +123,9 @@ public enum PaletteCatalog {
             PaletteEntry(id: "set.helpFeedback", title: "Help & feedback",
                          subtitle: "Settings — report a problem, send an idea", icon: "envelope",
                          keywords: ["support", "contact", "bug", "problem"], target: .settingsAnchor(.helpFeedback)),
+            PaletteEntry(id: "set.subscription", title: "Subscription — plan, trial, restore, manage",
+                         subtitle: "Settings — the verified plan and dates; Restore purchases; manage or cancel through your Apple Account", icon: "creditcard",
+                         keywords: ["subscription", "subscribe", "trial", "price", "billing", "cancel", "restore", "purchase", "renew"], target: .settingsAnchor(.subscription)),
             PaletteEntry(id: "set.legalPrivacy", title: "Legal & privacy notices",
                          subtitle: "Settings — terms, disclaimers, acknowledgments", icon: "checkmark.shield",
                          keywords: ["terms", "license", "disclaimer", "eula"], target: .settingsAnchor(.legalPrivacy)),

@@ -1,0 +1,197 @@
+AXWindow/AXStandardWindow title="Sources" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x757]
+      AXGroup/AXHostingView [0,121 244x757]
+        AXScrollArea [0,121 244x704] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [20,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Search, ⌘2" help="Search — Instant full-text search across every chunk  (⌘2)" [8,302 228x38] actions=AXPress
+          AXButton desc="Timeline, ⌘3" help="Timeline — Chronological view of all dated events  (⌘3)" [8,343 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [8,384 228x38] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,833 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x757]
+      AXGroup/AXHostingView [0,121 1470x757]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Sources" [260,188 100x31] actions=AXCancel
+        AXButton desc="Information about Sources = your knowledge base" id=info help="Shows what this does, what it needs and what follows" [368,202 18x18] actions=AXCancel,AXPress
+        AXButton desc="Ingest All" [1221,199 103x24] actions=AXCancel,AXPress
+        AXButton desc="Add Folder…" [1332,199 121x24] actions=AXCancel,AXPress
+        AXStaticText value="8 file(s) ingested" [260,220 82x13] actions=AXCancel
+        AXImage desc="Search" id=magnifyingglass [261,260 12x13] actions=AXCancel
+        AXStaticText value="8" [280,260 7x13] actions=AXCancel
+        AXStaticText value="Searchable" [292,260 54x13] actions=AXCancel
+        AXImage desc="Verified" id=checkmark.seal [363,259 15x15] actions=AXCancel
+        AXStaticText value="8" [384,260 7x13] actions=AXCancel
+        AXStaticText value="Evidence-ready" [396,260 76x13] actions=AXCancel
+        AXImage desc="Horizontal Bar Chart On A Document" id=chart.bar.doc.horizontal [490,260 11x14] actions=AXCancel
+        AXStaticText value="0" [507,260 7x13] actions=AXCancel
+        AXStaticText value="Analytical" [519,260 47x13] actions=AXCancel
+        AXImage desc="Search Document" id=doc.text.magnifyingglass [261,289 13x16] actions=AXCancel
+        AXStaticText value="Parsed" [279,283 34x13] actions=AXCancel
+        AXStaticText value="Embedded" [350,283 53x13] actions=AXCancel
+        AXStaticText value="8/8" [279,297 17x13] actions=AXCancel
+        AXImage desc="Sparkle" id=sparkles [331,290 12x14] actions=AXCancel
+        AXStaticText value="13/13" [350,297 30x13] actions=AXCancel
+        AXStaticText value="Ready" [419,291 52x13] actions=AXCancel
+        AXScrollArea [244,310 1226x567] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Folders" [260,310 48x16]
+          AXImage desc="Move" id=folder [273,356 14x12]
+          AXStaticText value="ProjectDelta" [297,346 75x16]
+          AXButton desc="Delete" [1428,354 12x14] actions=AXPress
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [297,364 681x13]
+          AXStaticText value="Recently Ingested" [260,426 117x16]
+          AXImage desc="Plain Text Document" id=doc.text help="Click to see who is named in this document and related documents" [273,463 11x14]
+          AXStaticText value="amendment-7.md" help="Click to see who is named in this document and related documents" [294,462 107x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1301,462 67x17]
+          AXStaticText value="MARKDOWN" help="Click to see who is named in this document and related documents" [1377,462 49x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,463 5x8]
+          AXStaticText value="# Amendment No. 7 — Project Delta Master Supply Agreement
+
+**Effective Date:** May 02, 2024
+**Parties:** Supplier ABC and Northwind Industries.
+
+This amendment to the Project Delta" help="Click to see who is named in this document and related documents" [294,480 300x25]
+          AXImage desc="Get Mail" id=envelope help="Click to see who is named in this document and related documents" [273,538 15x11]
+          AXStaticText value="invoice-401.eml" help="Click to see who is named in this document and related documents" [298,537 96x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1332,537 67x17]
+          AXStaticText value="EML" help="Click to see who is named in this document and related documents" [1407,537 19x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,538 5x8]
+          AXStaticText value="From: ar@supplier-abc.com
+To: ap@northwind.example
+Subject: Invoice No. 401 — Project Delta milestone 1
+Date: Mon, 22 Jan 2024 10:14:00 +0000
+
+Dear Accounts Payable,
+
+Please find a" help="Click to see who is named in this document and related documents" [298,555 138x25]
+          AXImage desc="Get Mail" id=envelope help="Click to see who is named in this document and related documents" [273,613 15x11]
+          AXStaticText value="invoice-432.eml" help="Click to see who is named in this document and related documents" [298,612 98x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1332,612 67x17]
+          AXStaticText value="EML" help="Click to see who is named in this document and related documents" [1407,612 19x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,613 5x8]
+          AXStaticText value="From: ar@supplier-abc.com
+To: ap@northwind.example
+Subject: Invoice No. 432 — Project Delta milestone 2 — OVERDUE
+Date: Fri, 14 Jun 2024 09:02:00 +0000
+
+Dear Accounts Payable,
+
+Inv" help="Click to see who is named in this document and related documents" [298,630 138x25]
+          AXImage desc="Plain Text Document" id=doc.text help="Click to see who is named in this document and related documents" [273,688 11x14]
+          AXStaticText value="contract.md" help="Click to see who is named in this document and related documents" [294,687 74x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1301,687 67x17]
+          AXStaticText value="MARKDOWN" help="Click to see who is named in this document and related documents" [1377,687 49x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,688 5x8]
+          AXStaticText value="# Master Supply Agreement — Project Delta
+
+**Effective Date:** January 12, 2024
+**Vendor:** Supplier ABC
+**Client:** Northwind Industries
+**Project:** Project Delta — fabrication o" help="Click to see who is named in this document and related documents" [294,705 211x25]
+          AXImage desc="Get Mail" id=envelope help="Click to see who is named in this document and related documents" [273,763 15x11]
+          AXStaticText value="supplier_abc_24.eml" help="Click to see who is named in this document and related documents" [298,762 126x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1332,762 67x17]
+          AXStaticText value="EML" help="Click to see who is named in this document and related documents" [1407,762 19x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,763 5x8]
+          AXStaticText value="From: john.carter@northwind.example
+To: maria.lopez@supplier-abc.com
+Subject: Re: Project Delta — internal review on the proposed amendment
+Date: Tue, 23 Apr 2024 09:55:00 +0000
+
+M" help="Click to see who is named in this document and related documents" [298,780 183x25]
+          AXImage desc="Get Mail" id=envelope help="Click to see who is named in this document and related documents" [273,838 15x11]
+          AXStaticText value="supplier_abc_25.eml" help="Click to see who is named in this document and related documents" [298,837 126x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1332,837 67x17]
+          AXStaticText value="EML" help="Click to see who is named in this document and related documents" [1407,837 19x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,838 5x8]
+          AXStaticText value="From: program-office@northwind.example
+To: program-leads@northwind.example
+Subject: Project Delta status — weekly digest
+Date: Fri, 24 May 2024 16:00:00 +0000
+
+Team,
+
+Project Delta" help="Click to see who is named in this document and related documents" [298,855 204x25]
+          AXImage desc="Get Mail" id=envelope help="Click to see who is named in this document and related documents" [273,913 15x11]
+          AXStaticText value="supplier_abc_22.eml" help="Click to see who is named in this document and related documents" [298,912 126x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1332,912 67x17]
+          AXStaticText value="EML" help="Click to see who is named in this document and related documents" [1407,912 19x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,913 5x8]
+          AXStaticText value="From: maria.lopez@supplier-abc.com
+To: john.carter@northwind.example
+Cc: program-office@northwind.example
+Subject: Project Delta — material certification delays affecting first lot" help="Click to see who is named in this document and related documents" [298,930 180x25]
+          AXImage desc="Get Mail" id=envelope help="Click to see who is named in this document and related documents" [273,988 15x11]
+          AXStaticText value="supplier_abc_23.eml" help="Click to see who is named in this document and related documents" [298,987 126x16]
+          AXStaticText value="Searchable" help="Click to see who is named in this document and related documents" [1332,987 67x17]
+          AXStaticText value="EML" help="Click to see who is named in this document and related documents" [1407,987 19x13]
+          AXImage desc="Forward" id=chevron.right help="Click to see who is named in this document and related documents" [1436,988 5x8]
+          AXStaticText value="From: maria.lopez@supplier-abc.com
+To: john.carter@northwind.example
+Subject: Project Delta — confirmed delivery delayed for first lot
+Date: Thu, 18 Apr 2024 11:12:00 +0000
+
+John,
+" help="Click to see who is named in this document and related documents" [298,1005 180x25]
+          AXScrollBar value="0" [1452,309 19x562]
+            AXValueIndicator value="0" [1461,313 6x429]
+            AXButton/AXIncrementPage [1461,743 6x124] actions=AXPress
+            AXButton/AXDecrementPage [1461,313 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXGroup desc="Tutorial, step 6 of 10: Review conflicting accounts" id=tutorial.panel [1073,591 381x235]
+      AXStaticText value="Tutorial" [1089,606 61x13]
+      AXStaticText value="Step 6 of 10" id=tutorial.position [1358,607 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the tutorial." [1426,607 13x13] actions=AXPress
+      AXStaticText value="Review conflicting accounts" [1088,631 181x16]
+      AXStaticText value="Open Findings ▸ Contradictions (or Timeline). Look at the first-lot delivery date: the 8 April email estimates about 13 May 2024; the 18 April email and the amendment say 28 May 2024." [1088,657 348x60]
+      AXStaticText value="What you should see" [1088,727 104x13]
+      AXStaticText value="Both versions are kept with their sources. An estimate that was later revised is shown as a change of account, not labelled wrong — you decide what it means and record why." [1088,742 331x39]
+      AXButton desc="Back" id=tutorial.back [1088,791 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Findings" [1142,791 91x21] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,791 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Sources" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Sources" id=<swiftui> [0,33 1470x845] actions=AXRaise

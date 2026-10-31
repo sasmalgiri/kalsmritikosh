@@ -1,3 +1,6 @@
+> **SUPERSEDED 2026-10-27** — the network helper exists and Online mode is built. The current flows are in
+> `docs/DATA_FLOW_INVENTORY.md`; public text lives in `docs/privacy.html`.
+
 # Online mode — disclosure drafts (O-8) — FOR OWNER / LEGAL REVIEW
 
 Status: **draft, not published.** `release/PRIVACY_POLICY.md`, `release/APP_STORE_LISTING.md` and

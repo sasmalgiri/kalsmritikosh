@@ -58,10 +58,24 @@ public actor InvestigationAnalysisRepository {
 
     /// Set a hypothesis's human-decision status. `requireSupported` is checked by the service before this;
     /// only a PROPOSED hypothesis (kind=hypothesis) may move to confirmed/rejected; a lead may be dismissed.
+    /// `decision` (rationale + the profile at decision time) is written in the same savepoint as the
+    /// status change, so a confirmed hypothesis never exists without its recorded reasons.
     public func setHypothesisStatus(hypothesisID: UUID, expectedRevision: Int, to status: HypothesisStatus,
-                                    actor: String, at date: Date) async throws -> InvestigationHypothesis {
+                                    actor: String, at date: Date,
+                                    decision: (reason: HypothesisConfirmationReason, profile: HypothesisEvidenceProfile)? = nil) async throws -> InvestigationHypothesis {
         let cleanActor = try validatedActor(actor)
         try await tx("invhyps", hypothesisID) { db in
+            if let decision {
+                let p = decision.profile
+                try db.exec("""
+                    INSERT INTO investigation_hypothesis_decisions (id, hypothesis_id, decision, rationale, contrary_evidence, alternatives,
+                        for_count, against_count, for_lineages, against_lineages, unassessed_count, actor, decided_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                    """, [.uuid(UUID()), .uuid(hypothesisID), .text(status.rawValue), .text(decision.reason.rationale),
+                          .text(decision.reason.contraryEvidence), .text(decision.reason.alternatives),
+                          .integer(Int64(p.forCount)), .integer(Int64(p.againstCount)), .integer(Int64(p.forLineages)),
+                          .integer(Int64(p.againstLineages)), .integer(Int64(p.unassessedCount)), .text(cleanActor), .date(date)])
+            }
             let h = try Self.hypothesisCAS(db, hypothesisID, expectedRevision: expectedRevision)
             switch status {
             case .confirmed, .rejected:
@@ -118,16 +132,100 @@ public actor InvestigationAnalysisRepository {
     }
 
     /// The counted evidence profile — deterministic counts, never a verdict.
+    /// Lineages reuse the HIST-035 independence keys (email thread, file content hash); a citation whose
+    /// object has no such key falls back to its source version's content hash, so two imports of the
+    /// same bytes are still one lineage. Only a citation with neither stands alone.
     public func profile(hypothesisID: UUID) async throws -> HypothesisEvidenceProfile {
         let rows = try await database.query("""
-            SELECT stance, COUNT(*) FROM investigation_hypothesis_evidence WHERE hypothesis_id = ? GROUP BY stance;
+            SELECT e.stance, e.knowledge_object_id, sv.content_hash, e.source_version_id,
+                   (SELECT COUNT(*) FROM investigation_hypothesis_evidence_assessments a WHERE a.link_id = e.id)
+            FROM investigation_hypothesis_evidence e
+            LEFT JOIN source_versions sv ON sv.id = e.source_version_id
+            WHERE e.hypothesis_id = ?;
             """, [.uuid(hypothesisID)])
-        var f = 0, a = 0
+        let objectIDs = Set(rows.compactMap { $0.uuid(1) })
+        let keys = try await LedgerSourceIndependenceKeyProvider(objects: KnowledgeObjectRepository(database: database))
+            .keys(for: objectIDs)
+        var f = 0, a = 0, unassessed = 0
+        var forKeys = Set<String>(), againstKeys = Set<String>()
         for r in rows {
-            let n = Int(r.int(1) ?? 0)
-            if r.string(0) == EvidenceStance.supporting.rawValue { f = n } else if r.string(0) == EvidenceStance.opposing.rawValue { a = n }
+            guard let stance = r.string(0).flatMap(EvidenceStance.init(rawValue:)) else { continue }
+            let key = r.uuid(1).flatMap { keys[$0] }
+                ?? r.string(2).map { "version-hash:" + $0 }
+                ?? "version:" + (r.string(3) ?? UUID().uuidString)
+            if (r.int(4) ?? 0) == 0 { unassessed += 1 }
+            switch stance {
+            case .supporting: f += 1; forKeys.insert(key)
+            case .opposing: a += 1; againstKeys.insert(key)
+            }
         }
-        return HypothesisEvidenceProfile(forCount: f, againstCount: a)
+        return HypothesisEvidenceProfile(forCount: f, againstCount: a, forLineages: forKeys.count,
+                                         againstLineages: againstKeys.count, unassessedCount: unassessed)
+    }
+
+    /// Record (or revise) a reviewer's reliability + diagnostic-relevance assessment of one link.
+    public func assess(linkID: UUID, reliability: SourceReliability, relevance: DiagnosticRelevance, note: String?,
+                       assessedBy: String, at date: Date) async throws {
+        let cleanBy = try validatedActor(assessedBy)
+        let noteValue = opt(note)
+        try await tx("invhea", linkID) { db in
+            guard !(try db.query("SELECT 1 FROM investigation_hypothesis_evidence WHERE id = ? LIMIT 1;", [.uuid(linkID)])).isEmpty else {
+                throw InvestigationHypothesisError.evidenceLinkNotFound(linkID)
+            }
+            try db.exec("""
+                INSERT INTO investigation_hypothesis_evidence_assessments (link_id, reliability, diagnostic_relevance, note, assessed_by, assessed_at)
+                VALUES (?,?,?,?,?,?)
+                ON CONFLICT(link_id) DO UPDATE SET reliability = excluded.reliability, diagnostic_relevance = excluded.diagnostic_relevance,
+                    note = excluded.note, assessed_by = excluded.assessed_by, assessed_at = excluded.assessed_at;
+                """, [.uuid(linkID), .text(reliability.rawValue), .text(relevance.rawValue), noteValue, .text(cleanBy), .date(date)])
+        }
+    }
+
+    public func assessments(hypothesisID: UUID) async throws -> [HypothesisEvidenceAssessment] {
+        let rows = try await database.query("""
+            SELECT a.link_id, a.reliability, a.diagnostic_relevance, a.note, a.assessed_by, a.assessed_at
+            FROM investigation_hypothesis_evidence_assessments a
+            JOIN investigation_hypothesis_evidence e ON e.id = a.link_id
+            WHERE e.hypothesis_id = ? ORDER BY a.assessed_at ASC, a.link_id ASC;
+            """, [.uuid(hypothesisID)])
+        return rows.compactMap { r in
+            guard let link = r.uuid(0), let rel = r.string(1).flatMap(SourceReliability.init(rawValue:)),
+                  let dia = r.string(2).flatMap(DiagnosticRelevance.init(rawValue:)), let by = r.string(4), let at = r.date(5) else { return nil }
+            return HypothesisEvidenceAssessment(linkID: link, reliability: rel, relevance: dia, note: r.string(3), assessedBy: by, assessedAt: at)
+        }
+    }
+
+    /// Every hypothesis decision with the evidence profile it was made on (implementation brief §5).
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        try await database.query("""
+            SELECT id, hypothesis_id, decision, rationale, contrary_evidence, alternatives, for_count, against_count,
+                   for_lineages, against_lineages, unassessed_count, actor, decided_at
+            FROM investigation_hypothesis_decisions ORDER BY decided_at ASC, id ASC;
+            """, []).compactMap { r in
+            guard let id = r.uuid(0), let h = r.uuid(1), let decision = r.string(2), let actor = r.string(11), let at = r.date(12) else { return nil }
+            func digest(_ i: Int) -> String { CaseFileHash.sha256(r.string(i) ?? "") }
+            let counts = (6...10).map { String(r.int($0) ?? 0) }.joined(separator: ",")
+            let payload = "actor=\(actor);alternativesDigest=\(digest(5));at=\(at.timeIntervalSince1970);contraryDigest=\(digest(4));"
+                + "counts=\(counts);decision=\(decision);hypothesisID=\(h.uuidString);rationaleDigest=\(digest(3))"
+            return AuditChainEvent(source: .hypothesisDecision, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
+    }
+
+    public func decisions(hypothesisID: UUID) async throws -> [HypothesisDecision] {
+        let rows = try await database.query("""
+            SELECT id, hypothesis_id, decision, rationale, contrary_evidence, alternatives, for_count, against_count,
+                   for_lineages, against_lineages, unassessed_count, actor, decided_at
+            FROM investigation_hypothesis_decisions WHERE hypothesis_id = ? ORDER BY decided_at ASC, id ASC;
+            """, [.uuid(hypothesisID)])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let hyp = r.uuid(1), let decision = r.string(2).flatMap(HypothesisStatus.init(rawValue:)),
+                  let rationale = r.string(3), let actor = r.string(11), let at = r.date(12) else { return nil }
+            let profile = HypothesisEvidenceProfile(forCount: Int(r.int(6) ?? 0), againstCount: Int(r.int(7) ?? 0),
+                                                    forLineages: Int(r.int(8) ?? 0), againstLineages: Int(r.int(9) ?? 0),
+                                                    unassessedCount: Int(r.int(10) ?? 0))
+            return HypothesisDecision(id: id, hypothesisID: hyp, decision: decision, rationale: rationale, contraryEvidence: r.string(4),
+                                      alternatives: r.string(5), profile: profile, actor: actor, decidedAt: at)
+        }
     }
 
     // MARK: - Evidence requests

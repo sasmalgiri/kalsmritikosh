@@ -2857,7 +2857,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Gaps"
           },
           {
-            "help" : "List every missing statement or period. A trace with silent gaps looks complete but misleads — naming the gaps is what makes it court-ready.",
+            "help" : "List every missing statement or period. A trace with silent gaps looks complete but misleads — naming the gaps is what lets a reader rely on it.",
             "key" : "completeness",
             "kind" : "longText",
             "label" : "Missing records"
@@ -5400,7 +5400,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.evidence-custody" : {
-    "purpose" : "Keep a defensible chain of custody: register exhibits, record acquisition and integrity, log transfers, then seal.",
+    "purpose" : "Keep a chain-of-custody record: register exhibits, record acquisition and integrity, log transfers, then seal.",
     "steps" : [
       {
         "fields" : [
@@ -6542,7 +6542,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.document-vault" : {
-    "purpose" : "Keep a tamper-evident vault for your originals — hashed so you can prove they're unaltered, unlike a plain folder.",
+    "purpose" : "Keep a tamper-evident vault for your originals — hashed so you can show they still match what was first recorded, unlike a plain folder.",
     "steps" : [
       {
         "fields" : [
@@ -7071,7 +7071,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.legacy-archive" : {
-    "purpose" : "Assemble the legacy binder — your records for the next generation, with a sealed receipt so it can't be tampered with.",
+    "purpose" : "Assemble the legacy binder — your records for the next generation, with a sealed receipt that shows if anything in it was changed later.",
     "steps" : [
       {
         "fields" : [

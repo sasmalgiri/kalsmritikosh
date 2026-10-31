@@ -61,7 +61,11 @@ public struct PDFLoader: Ingestor {
 
             // Fallback: render the page and OCR it.
             #if canImport(AppKit)
-            let ocrText = await renderAndOCR(page: page, index: index)
+            // OCR output with no letter or digit (a table pass that returned separators only, a
+            // recogniser that returned nothing readable) is no text (held-out chronology 10,
+            // 2026-10-29: two PDFs came back as empty knowledge objects with no error).
+            var ocrText = await renderAndOCR(page: page, index: index)
+            if ocrText.rangeOfCharacter(from: .alphanumerics) == nil { ocrText = "" }
             if !ocrText.isEmpty {
                 combined.append(ocrText)
                 if !ocrText.hasSuffix("\n") { combined.append("\n") }
@@ -75,7 +79,9 @@ public struct PDFLoader: Ingestor {
             #endif
         }
 
-        if combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        // A document with no readable character is reported as empty, never saved as a silent,
+        // searchless knowledge object (the caller records the error; the file stays listed).
+        if combined.rangeOfCharacter(from: .alphanumerics) == nil {
             throw IngestorError.empty(url)
         }
 

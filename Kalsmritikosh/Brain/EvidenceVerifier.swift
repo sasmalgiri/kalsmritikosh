@@ -690,7 +690,13 @@ public struct EvidenceVerifier: Verifier {
         // curated ("classification", "recallingfirm"); a curated mapping still wins
         // (SlotFieldResolver.resolve). Timeline, list, count, yes/no and the other composed
         // shapes are not value questions ("timeline of the patent" is not the patent field).
-        let asksForValue = [.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
+        // A yes/no question about a field ("Is the status for FDA recall X Ongoing?") reaches the field
+        // too; YesNoFieldGate then answers yes or no against the value (wide case bench 2026-10-25).
+        // An account question ("Summarize the case …", "Describe what happened …") asks for no
+        // field, even when its title holds a field's word ("… From Her Employer").
+        let asksForValue = !SentenceQuoteComposer.asksWhatHappened(intent.rawQuestion)
+            && ([.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
+                || (YesNoFieldGate.asksYesNo(intent.rawQuestion) && YesNoFieldGate.fieldPhrase(intent.rawQuestion) != nil))
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
                                                knownFields: asksForValue ? retrievedFields : [])
         // A1.2 — the receipt speaks for the WHOLE archive.

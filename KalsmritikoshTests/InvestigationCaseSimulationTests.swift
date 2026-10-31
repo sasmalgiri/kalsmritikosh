@@ -146,6 +146,8 @@ struct InvestigationCaseSimulationTests {
         let pack = try #require(try InvestigationCasePacks.packs().first { $0.persona == persona }, "no pack for \(persona)")
 
         // The evidence path (AI off) for a deterministic result, in this process's argument domain only.
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
         var settings = previous
         settings["kalsmritikosh.privacy.offlineNoLLM"] = true
@@ -155,7 +157,7 @@ struct InvestigationCaseSimulationTests {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-case-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("case.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             Issue.record("ledger did not boot"); return

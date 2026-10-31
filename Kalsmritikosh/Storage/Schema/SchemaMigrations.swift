@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 152
+    public static let latestVersion = 168
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -57,6 +57,12 @@ public enum SchemaMigrations {
     static func migrate(_ database: Database, through targetVersion: Int,
                         fault: MigrationFaultHook? = nil) async throws {
         let current = try await database.currentUserVersion()
+        // T2 — a ledger written by a newer version of the app is never opened by this one: its tables
+        // and rules are not ones this build knows, and writing to it could break them. Nothing is changed.
+        if targetVersion == latestVersion, current > latestVersion {
+            throw DatabaseError.migrationFailed(version: current, message:
+                "This ledger was written by a newer version of the app (schema \(current); this version reads up to \(latestVersion)). Update the app to open it. The ledger was not changed.")
+        }
         // Self-heal a stale counter. Observed in the field: some databases carry
         // a fully-applied latest schema while `user_version` is stuck at an early
         // value. Blindly re-running the pending migrations would fail (bare CREATE
@@ -125,6 +131,18 @@ public enum SchemaMigrations {
         return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
             .map { ns.substring(with: $0.range(at: 1)) }
             .filter { !$0.hasSuffix("__new") && !$0.contains("__v") }
+    }
+
+    /// The (table, column) pairs a migration adds with `ALTER TABLE … ADD COLUMN …` — so a migration that
+    /// only adds columns still gives the self-heal sentinel something to check (v162, 2026-10-28).
+    static func addedColumns(inMigration version: Int) -> [(table: String, column: String)] {
+        guard let sql = migrationSQL(for: version),
+              let re = try? NSRegularExpression(pattern: #"ALTER\s+TABLE\s+"?([A-Za-z_][A-Za-z0-9_]*)"?\s+ADD\s+COLUMN\s+"?([A-Za-z_][A-Za-z0-9_]*)"?"#,
+                                                options: [.caseInsensitive]) else { return [] }
+        let ns = sql as NSString
+        return re.matches(in: sql, range: NSRange(location: 0, length: ns.length))
+            .map { (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range(at: 2))) }
+            .filter { !$0.0.hasSuffix("__new") && !$0.0.contains("__v") }
     }
 
     /// A migration is safe to re-run when every top-level statement is a `CREATE … IF NOT EXISTS`
@@ -537,7 +555,24 @@ public enum SchemaMigrations {
             // self-healed straight to 152 and the ACH tables would never be created.
             "ach_analyses": ["id", "case_id", "workspace_id", "title", "origin", "created_by", "updated_by", "retracted_at"],
             "ach_cells": ["analysis_id", "evidence_id", "hypothesis_id", "consistency", "updated_by", "updated_at"],
-            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"]
+            "ach_legacy_imports": ["source_key", "analysis_count", "imported_by", "imported_at"],
+            // v153 — case-action log made append-only and sealed into the audit chain.
+            "case_action_seal_boundaries": ["id", "sealed_from_at", "legacy_action_count", "created_at"],
+            // v154 — hypothesis decisions carry their reasons; evidence links carry reliability + relevance.
+            "investigation_hypothesis_decisions": ["id", "hypothesis_id", "decision", "rationale", "contrary_evidence",
+                                                    "alternatives", "for_lineages", "against_lineages", "actor", "decided_at"],
+            "investigation_hypothesis_evidence_assessments": ["link_id", "reliability", "diagnostic_relevance", "assessed_by", "assessed_at"],
+            // v155 — schema-conformance verification recorded in the ledger it verified.
+            "schema_conformance_marks": ["schema_version", "schema_fingerprint", "status", "added", "could_not_add", "checked_at"],
+            // v156 — corrections to a confirmed statement are linked addenda, never edits.
+            "case_statement_addenda": ["id", "interview_id", "case_id", "text", "reason", "sha256", "recorded_by", "recorded_at", "confirmed_by", "confirmed_at"],
+            // v157 — when sealing of the rest of a case's history began.
+            "audit_seal_boundaries": ["history", "sealed_from_at", "legacy_count", "created_at"],
+            // v158 — professional studio work in the ledger, bound to its case (final brief §3.1).
+            "studio_records": ["id", "studio", "persona", "job_id", "case_id", "workspace_id", "title", "model_version", "revision",
+                               "payload_json", "payload_sha256", "review_state", "origin", "created_by", "created_at",
+                               "updated_by", "updated_at", "retracted_at", "retracted_by",
+                               "approved_payload_sha256", "erased_at"]
         ]
         // Derived, never hand-maintained: every table the NEWEST migration creates must exist. The
         // hand-kept list above stopped tracking new migrations after v118, which let a ledger at
@@ -545,6 +580,11 @@ public enum SchemaMigrations {
         for table in createdTables(inMigration: latestVersion) {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
             guard !rows.isEmpty else { return false }
+        }
+        // …and every column it adds (a column-only newest migration has no table to check).
+        for (table, column) in addedColumns(inMigration: latestVersion) {
+            let rows = try await database.query("PRAGMA table_info(\(table));", [])
+            guard rows.contains(where: { $0.string(1) == column }) else { return false }
         }
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -745,7 +785,23 @@ public enum SchemaMigrations {
         (149, v149),
         (150, v150),
         (151, v151),
-        (152, v152)
+        (152, v152),
+        (153, v153),
+        (154, v154),
+        (155, v155),
+        (156, v156),
+        (157, v157),
+        (158, v158),
+        (159, v159),
+        (160, v160),
+        (161, v161),
+        (162, v162),
+        (163, v163),
+        (164, v164),
+        (165, v165),
+        (166, v166),
+        (167, v167),
+        (168, v168)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -7435,4 +7491,547 @@ public enum SchemaMigrations {
     );
     """
 
+    // MARK: - v153 — the case-action log is append-only and inside the audit chain (implementation
+    // brief §5). case_actions rows could be updated or deleted by any SQL; the audit chain sealed
+    // custody, reviews and governance but not case actions. Triggers now refuse UPDATE and DELETE,
+    // and the seal boundary records where sealed history begins: rows written before this
+    // migration are legacy, unsealed history — never claimed to have been protected.
+    private static let v153: String = """
+    CREATE TABLE IF NOT EXISTS case_action_seal_boundaries (
+        id TEXT PRIMARY KEY NOT NULL,
+        sealed_from_at REAL NOT NULL,
+        legacy_action_count INTEGER NOT NULL,
+        created_at REAL NOT NULL
+    );
+    INSERT INTO case_action_seal_boundaries (id, sealed_from_at, legacy_action_count, created_at)
+        SELECT 'v153', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM case_actions), CAST(strftime('%s','now') AS REAL)
+        WHERE NOT EXISTS (SELECT 1 FROM case_action_seal_boundaries WHERE id = 'v153');
+    CREATE TRIGGER IF NOT EXISTS case_actions_append_only_update BEFORE UPDATE ON case_actions
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_actions_append_only_delete BEFORE DELETE ON case_actions
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    """
+
+
+    // MARK: - v154 — a hypothesis is confirmed by reasons, not by a count (implementation brief §8).
+    // The profile used to allow confirmation when "for >= against"; neither a majority nor the absence
+    // of contradiction proves a hypothesis. A confirmation now records the reviewer's rationale, how the
+    // contrary evidence was weighed, the alternatives considered, and the evidence profile at that moment
+    // (append-only). Each evidence link may carry a source-reliability and diagnostic-relevance assessment.
+    private static let v154: String = """
+    CREATE TABLE IF NOT EXISTS investigation_hypothesis_decisions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        hypothesis_id     TEXT NOT NULL,
+        decision          TEXT NOT NULL,
+        rationale         TEXT NOT NULL,
+        contrary_evidence TEXT,
+        alternatives      TEXT,
+        for_count         INTEGER NOT NULL,
+        against_count     INTEGER NOT NULL,
+        for_lineages      INTEGER NOT NULL,
+        against_lineages  INTEGER NOT NULL,
+        unassessed_count  INTEGER NOT NULL,
+        actor             TEXT NOT NULL,
+        decided_at        REAL NOT NULL,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE CASCADE,
+        CHECK(decision IN ('confirmed','rejected','dismissed')),
+        CHECK(length(trim(rationale)) > 0),
+        CHECK(decision <> 'confirmed' OR (length(trim(coalesce(contrary_evidence,''))) > 0 AND length(trim(coalesce(alternatives,''))) > 0)),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_hypothesis_decisions_hyp ON investigation_hypothesis_decisions(hypothesis_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_hypothesis_decisions_append_only_update BEFORE UPDATE ON investigation_hypothesis_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_hypothesis_decisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS investigation_hypothesis_evidence_assessments (
+        link_id              TEXT PRIMARY KEY NOT NULL,
+        reliability          TEXT NOT NULL,
+        diagnostic_relevance TEXT NOT NULL,
+        note                 TEXT,
+        assessed_by          TEXT NOT NULL,
+        assessed_at          REAL NOT NULL,
+        FOREIGN KEY(link_id) REFERENCES investigation_hypothesis_evidence(id) ON DELETE CASCADE,
+        CHECK(reliability IN ('high','medium','low','unknown')),
+        CHECK(diagnostic_relevance IN ('high','medium','low','none')),
+        CHECK(length(trim(assessed_by)) > 0)
+    );
+    """
+
+
+    // MARK: - v155 — schema conformance is verified per database (implementation brief §11). The
+    // "already checked" marker lived in global UserDefaults, so a restored ledger, or a second
+    // ledger at the same version, was never checked. The mark now lives in the ledger it describes,
+    // pinned to the schema version and a fingerprint of that ledger's own schema; an incomplete
+    // repair is recorded, not hidden.
+    private static let v155: String = """
+    CREATE TABLE IF NOT EXISTS schema_conformance_marks (
+        schema_version     INTEGER PRIMARY KEY NOT NULL,
+        schema_fingerprint TEXT NOT NULL,
+        status             TEXT NOT NULL,
+        added              TEXT NOT NULL DEFAULT '',
+        could_not_add      TEXT NOT NULL DEFAULT '',
+        checked_at         REAL NOT NULL,
+        CHECK(status IN ('clean','incomplete'))
+    );
+    """
+
+
+    // MARK: - v156 — a confirmed statement is corrected by an addendum, never edited (implementation
+    // brief §9). Each addendum links to its interview, carries its own SHA-256 and reason, and can be
+    // confirmed once. Rows are append-only: text, reason and fingerprint never change, a confirmation
+    // is written once, and nothing is deleted except with the interview itself.
+    private static let v156: String = """
+    CREATE TABLE IF NOT EXISTS case_statement_addenda (
+        id            TEXT PRIMARY KEY NOT NULL,
+        interview_id  TEXT NOT NULL,
+        case_id       TEXT NOT NULL,
+        text          TEXT NOT NULL,
+        reason        TEXT NOT NULL,
+        sha256        TEXT NOT NULL,
+        recorded_by   TEXT NOT NULL,
+        recorded_at   REAL NOT NULL,
+        confirmed_by  TEXT,
+        confirmed_at  REAL,
+        FOREIGN KEY(interview_id) REFERENCES case_interviews(id) ON DELETE CASCADE,
+        CHECK(length(trim(text)) > 0),
+        CHECK(length(trim(reason)) > 0),
+        CHECK(length(trim(recorded_by)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_statement_addenda_case ON case_statement_addenda(case_id, interview_id);
+    CREATE TRIGGER IF NOT EXISTS case_statement_addenda_fixed BEFORE UPDATE ON case_statement_addenda
+    WHEN NEW.text IS NOT OLD.text OR NEW.reason IS NOT OLD.reason OR NEW.sha256 IS NOT OLD.sha256
+      OR NEW.interview_id IS NOT OLD.interview_id OR NEW.case_id IS NOT OLD.case_id
+      OR NEW.recorded_by IS NOT OLD.recorded_by OR NEW.recorded_at IS NOT OLD.recorded_at
+      OR OLD.confirmed_by IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_statement_addenda is append-only'); END;
+    """
+
+
+    // MARK: - v157 — the rest of a case's history is fixed once written and sealed (brief §5).
+    // Case events (scope membership, reopening), findings approvals/withdrawals and hypothesis
+    // decisions join the audit chain; rows can no longer be edited in place. Deletion is left to the
+    // case's own cascade and is caught by the chain (a sealed event that disappears breaks it).
+    // The boundary rows record when sealing of each began; earlier rows were not protected before.
+    private static let v157: String = """
+    -- Admit the case-history sources. audit_chain's CHECK listed only custody/review/governance, so
+    -- since v153 a case action made every seal fail (found 2026-10-26 by the first test that sealed
+    -- one). SQLite cannot alter a CHECK: recreate and copy rows VERBATIM, as v111 did — every sealed
+    -- hash is untouched and the existing chain stays intact.
+    CREATE TABLE audit_chain__v157 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v157 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v157 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_case_events_fixed BEFORE UPDATE ON investigation_case_events
+    BEGIN SELECT RAISE(ABORT, 'investigation_case_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_findings_approvals_fixed BEFORE UPDATE ON investigation_findings_approvals
+    BEGIN SELECT RAISE(ABORT, 'investigation_findings_approvals is append-only'); END;
+    CREATE TABLE IF NOT EXISTS audit_seal_boundaries (
+        history        TEXT PRIMARY KEY NOT NULL,
+        sealed_from_at REAL NOT NULL,
+        legacy_count   INTEGER NOT NULL,
+        created_at     REAL NOT NULL
+    );
+    INSERT OR IGNORE INTO audit_seal_boundaries (history, sealed_from_at, legacy_count, created_at)
+        VALUES ('investigation_case_events', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_case_events), CAST(strftime('%s','now') AS REAL)),
+               ('investigation_findings_approvals', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_findings_approvals), CAST(strftime('%s','now') AS REAL)),
+               ('investigation_hypothesis_decisions', CAST(strftime('%s','now') AS REAL), (SELECT COUNT(*) FROM investigation_hypothesis_decisions), CAST(strftime('%s','now') AS REAL));
+    """
+
+
+    // MARK: - v158 — studio work in the encrypted ledger, bound to its case (final brief §3.1).
+    //
+    // Privilege logs, workplace investigations, SIU referrals, forensic engagements, fact-check memos,
+    // reasoning analyses and the shell studios used to live as JSON in app preferences — outside the
+    // encrypted ledger, outside backups, and tied to no case. One row per draft here, with its case or
+    // workspace, persona/job, model version, revision, who and when, and review state; every saved
+    // revision and every export snapshot is kept (append-only). Legacy JSON that cannot be decoded is
+    // quarantined byte for byte, never dropped.
+    private static let v158: String = """
+    CREATE TABLE IF NOT EXISTS studio_records (
+        id             TEXT PRIMARY KEY NOT NULL,
+        studio         TEXT NOT NULL,
+        persona        TEXT,
+        job_id         TEXT,
+        case_id        TEXT,
+        workspace_id   TEXT,
+        title          TEXT NOT NULL DEFAULT '',
+        model_version  INTEGER NOT NULL DEFAULT 1,
+        revision       INTEGER NOT NULL DEFAULT 1,
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        review_state   TEXT NOT NULL DEFAULT 'draft' CHECK (review_state IN ('draft','inReview','approved','superseded')),
+        origin         TEXT NOT NULL DEFAULT 'ledger' CHECK (origin IN ('ledger','appStorageImport')),
+        created_by     TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        updated_by     TEXT NOT NULL,
+        updated_at     REAL NOT NULL,
+        retracted_at   REAL,
+        retracted_by   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_records_studio ON studio_records(studio, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_studio_records_case ON studio_records(case_id);
+    CREATE TABLE IF NOT EXISTS studio_record_revisions (
+        record_id      TEXT NOT NULL,
+        revision       INTEGER NOT NULL,
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        reason         TEXT NOT NULL,
+        saved_by       TEXT NOT NULL,
+        saved_at       REAL NOT NULL,
+        PRIMARY KEY (record_id, revision)
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_record_revisions_fixed BEFORE UPDATE ON studio_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS studio_record_exports (
+        id              TEXT PRIMARY KEY NOT NULL,
+        record_id       TEXT NOT NULL,
+        revision        INTEGER NOT NULL,
+        format          TEXT NOT NULL,
+        artifact_sha256 TEXT NOT NULL,
+        snapshot_text   TEXT NOT NULL,
+        exported_by     TEXT NOT NULL,
+        exported_at     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_record_exports_record ON studio_record_exports(record_id, exported_at);
+    CREATE TRIGGER IF NOT EXISTS studio_record_exports_fixed BEFORE UPDATE ON studio_record_exports
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    CREATE TABLE IF NOT EXISTS studio_legacy_imports (
+        source_key        TEXT PRIMARY KEY NOT NULL,
+        imported_count    INTEGER NOT NULL,
+        quarantined_count INTEGER NOT NULL,
+        imported_by       TEXT NOT NULL,
+        imported_at       REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS studio_legacy_quarantine (
+        id            TEXT PRIMARY KEY NOT NULL,
+        source_key    TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        raw_json      TEXT NOT NULL,
+        error         TEXT NOT NULL,
+        captured_at   REAL NOT NULL
+    );
+    """
+
+
+    // MARK: - v159 — the legacy studio store kept byte for byte; an outcome for every element
+    // (ship-readiness review R4); approvals bound to the approved content (R3). The old preference blob is stored exactly as it was, with its
+    // SHA-256, BEFORE anything is converted; each element of it gets one recorded outcome
+    // (imported, identical duplicate, already migrated, quarantined), so nothing can be skipped.
+    private static let v159: String = """
+    CREATE TABLE IF NOT EXISTS studio_legacy_blobs (
+        source_key   TEXT PRIMARY KEY NOT NULL,
+        raw_blob     TEXT NOT NULL,
+        sha256       TEXT NOT NULL,
+        byte_count   INTEGER NOT NULL,
+        captured_at  REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
+    BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured'); END;
+    CREATE TABLE IF NOT EXISTS studio_legacy_outcomes (
+        source_key    TEXT NOT NULL,
+        element_index INTEGER NOT NULL,
+        record_id     TEXT,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('imported','identicalDuplicate','alreadyMigrated','quarantined')),
+        detail        TEXT NOT NULL,
+        recorded_at   REAL NOT NULL,
+        PRIMARY KEY (source_key, element_index)
+    );
+    -- Review R3: an approval is bound to the exact content approved (revisions coalesce for five
+    -- minutes, so a revision number alone cannot say what was approved).
+    ALTER TABLE studio_records ADD COLUMN approved_payload_sha256 TEXT;
+    ALTER TABLE studio_records ADD COLUMN approved_by TEXT;
+    ALTER TABLE studio_records ADD COLUMN approved_at REAL;
+    """
+
+
+    // MARK: - v160 — governed erasure of studio work (ship-readiness review L4). Retraction keeps a
+    // draft; erasure removes its content. An erasure is a recorded act (who, when, why, on what basis)
+    // and is refused while a legal hold (v145 legal_holds / legal_hold_items, on the draft or its case)
+    // is active — enforced in StudioRecordRepository.erase. Revision and export rows stay (their dates
+    // and SHA-256s say that something existed and was erased); only their content may be cleared, and
+    // only when a recorded erasure for that draft exists. Rows are still never deleted.
+    private static let v160: String = """
+    CREATE TABLE IF NOT EXISTS studio_erasures (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        record_id          TEXT NOT NULL,
+        case_id            TEXT,
+        reason             TEXT NOT NULL,
+        legal_basis        TEXT,
+        payload_sha256     TEXT NOT NULL,
+        revisions_cleared  INTEGER NOT NULL,
+        exports_cleared    INTEGER NOT NULL,
+        quarantine_cleared INTEGER NOT NULL,
+        legacy_originals   INTEGER NOT NULL,
+        erased_by          TEXT NOT NULL,
+        erased_at          REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_studio_erasures_record ON studio_erasures(record_id);
+    CREATE TRIGGER IF NOT EXISTS studio_erasures_fixed BEFORE UPDATE ON studio_erasures
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS studio_erasures_kept BEFORE DELETE ON studio_erasures
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    ALTER TABLE studio_records ADD COLUMN erased_at REAL;
+    DROP TRIGGER IF EXISTS studio_record_revisions_fixed;
+    CREATE TRIGGER studio_record_revisions_fixed BEFORE UPDATE ON studio_record_revisions
+    WHEN NOT (NEW.payload_json = '' AND NEW.record_id = OLD.record_id AND NEW.revision = OLD.revision
+              AND NEW.payload_sha256 = OLD.payload_sha256 AND NEW.reason = OLD.reason
+              AND NEW.saved_by = OLD.saved_by AND NEW.saved_at = OLD.saved_at
+              AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only (content is cleared only by a recorded erasure)'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_fixed;
+    CREATE TRIGGER studio_record_exports_fixed BEFORE UPDATE ON studio_record_exports
+    WHEN NOT (NEW.snapshot_text = '' AND NEW.id = OLD.id AND NEW.record_id = OLD.record_id
+              AND NEW.revision = OLD.revision AND NEW.format = OLD.format
+              AND NEW.artifact_sha256 = OLD.artifact_sha256 AND NEW.exported_by = OLD.exported_by
+              AND NEW.exported_at = OLD.exported_at
+              AND EXISTS (SELECT 1 FROM studio_erasures e WHERE e.record_id = OLD.record_id))
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only (content is cleared only by a recorded erasure)'); END;
+    """
+
+
+    // MARK: - v161 — the user's full erase passes the append-only guards (2026-10-28). "Delete all my
+    // data" is the person's deliberate destroy act; the append-only triggers (case_actions v153, studio
+    // revisions/exports v158, studio_erasures v160) made it silently leave those rows behind. Each guard
+    // now stands aside only while a full-erase marker row exists — written and removed inside the one
+    // savepoint of AppState.deleteAllData — so no ordinary delete can pass it.
+    private static let v161: String = """
+    CREATE TABLE IF NOT EXISTS ledger_full_erase (
+        started_at REAL NOT NULL
+    );
+    DROP TRIGGER IF EXISTS case_actions_append_only_delete;
+    CREATE TRIGGER case_actions_append_only_delete BEFORE DELETE ON case_actions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_revisions_kept;
+    CREATE TRIGGER studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_kept;
+    CREATE TRIGGER studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_erasures_kept;
+    CREATE TRIGGER studio_erasures_kept BEFORE DELETE ON studio_erasures
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'studio_erasures is append-only'); END;
+    """
+
+
+    // MARK: - v162 — erasure reaches the captured pre-ledger store (final completion instructions K3). A
+    // studio erasure used to count the captured preference stores (v159) still holding the draft and leave
+    // them. The store's content may now be cleared — only after a recorded erasure of a draft that store
+    // held — keeping its SHA-256, size and capture time, with the reason. Its other elements are not lost:
+    // each was imported into the ledger or kept byte for byte in quarantine.
+    private static let v162: String = """
+    ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_reason TEXT;
+    ALTER TABLE studio_legacy_blobs ADD COLUMN cleared_at REAL;
+    -- K5: the scope an export was authorised against (a digest of the case's accessible source
+    -- versions at the moment of the final check).
+    ALTER TABLE studio_record_exports ADD COLUMN scope_fingerprint TEXT;
+    DROP TRIGGER IF EXISTS studio_legacy_blobs_fixed;
+    CREATE TRIGGER studio_legacy_blobs_fixed BEFORE UPDATE ON studio_legacy_blobs
+    WHEN NOT (NEW.raw_blob = '' AND NEW.source_key = OLD.source_key AND NEW.sha256 = OLD.sha256
+              AND NEW.byte_count = OLD.byte_count AND NEW.captured_at = OLD.captured_at
+              AND NEW.cleared_reason IS NOT NULL AND NEW.cleared_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM studio_erasures e JOIN studio_legacy_outcomes o ON o.record_id = e.record_id
+                          WHERE o.source_key = OLD.source_key))
+    BEGIN SELECT RAISE(ABORT, 'studio_legacy_blobs is kept as captured (cleared only by a recorded erasure)'); END;
+    """
+
+
+    // MARK: - v163 — persisted job results (final completion instructions §3). A job that runs a
+    // shared executor saves its typed result here: draft (generated, awaiting the person), blocked
+    // (an input is missing — the reason is in the payload), completed (accepted), superseded (a later
+    // run replaced it). Each run is a new row; earlier rows stay, marked superseded.
+    private static let v163: String = """
+    CREATE TABLE IF NOT EXISTS job_results (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        job_id         TEXT NOT NULL,
+        family         TEXT NOT NULL,
+        state          TEXT NOT NULL CHECK (state IN ('draft','blocked','completed','superseded')),
+        payload_json   TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL,
+        created_by     TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        superseded_by  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_results_case_job ON job_results(case_id, job_id, created_at);
+    """
+
+    // MARK: - v164 — case and person erasure (final completion instructions K10). One case, or one
+    // person's derived record, can be erased on the person's deliberate act: every case-scoped row is
+    // removed in one savepoint and a content-free erasure record is kept (who, when, why, how much —
+    // never the content; a person is recorded by a SHA-256 of the name, not the name). The append-only
+    // guards on case_actions and studio revisions/exports stand aside only for the case named in the
+    // ledger_case_erase marker, written and removed inside that savepoint. Erasure records cannot be
+    // changed, and are removed only by a full erase.
+    private static let v164: String = """
+    CREATE TABLE IF NOT EXISTS ledger_case_erase (
+        case_id TEXT PRIMARY KEY NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_erasures (
+        id             TEXT PRIMARY KEY NOT NULL,
+        scope          TEXT NOT NULL CHECK (scope IN ('case','person')),
+        case_id        TEXT,
+        subject_sha256 TEXT,
+        reason         TEXT NOT NULL,
+        legal_basis    TEXT,
+        rows_json      TEXT NOT NULL,
+        sources_erased INTEGER NOT NULL DEFAULT 0,
+        sources_kept   INTEGER NOT NULL DEFAULT 0,
+        erased_by      TEXT NOT NULL,
+        erased_at      REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS case_erasures_fixed BEFORE UPDATE ON case_erasures
+    BEGIN SELECT RAISE(ABORT, 'case_erasures is a fixed record'); END;
+    CREATE TRIGGER IF NOT EXISTS case_erasures_kept BEFORE DELETE ON case_erasures
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_erasures is kept'); END;
+    DROP TRIGGER IF EXISTS case_actions_append_only_delete;
+    CREATE TRIGGER case_actions_append_only_delete BEFORE DELETE ON case_actions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_actions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_revisions_kept;
+    CREATE TRIGGER studio_record_revisions_kept BEFORE DELETE ON studio_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_revisions is append-only'); END;
+    DROP TRIGGER IF EXISTS studio_record_exports_kept;
+    CREATE TRIGGER studio_record_exports_kept BEFORE DELETE ON studio_record_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m JOIN studio_records r ON r.case_id = m.case_id WHERE r.id = OLD.record_id)
+    BEGIN SELECT RAISE(ABORT, 'studio_record_exports is append-only'); END;
+    """
+
+    // MARK: - v165 — job result exports (completion instructions 2026-10-29, B2). An export of a job
+    // result is recorded only after the file was written and read back: which revision (by its
+    // payload digest), the written bytes' SHA-256 and the exact text. Kept like studio exports —
+    // removed only with its case (ledger_case_erase) or by a full erase.
+    private static let v165: String = """
+    CREATE TABLE IF NOT EXISTS job_result_exports (
+        id             TEXT PRIMARY KEY NOT NULL,
+        result_id      TEXT NOT NULL,
+        case_id        TEXT NOT NULL,
+        job_id         TEXT NOT NULL,
+        result_sha256  TEXT NOT NULL,
+        file_name      TEXT NOT NULL,
+        file_sha256    TEXT NOT NULL,
+        snapshot_text  TEXT NOT NULL,
+        exported_by    TEXT NOT NULL,
+        exported_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_result_exports_result ON job_result_exports(result_id);
+    CREATE TRIGGER IF NOT EXISTS job_result_exports_fixed BEFORE UPDATE ON job_result_exports
+    BEGIN SELECT RAISE(ABORT, 'job_result_exports is a fixed record'); END;
+    CREATE TRIGGER IF NOT EXISTS job_result_exports_kept BEFORE DELETE ON job_result_exports
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'job_result_exports is append-only'); END;
+    """
+
+    // MARK: - v166 — ACH unassessed cells and structured citations (investigator workflow review
+    // 2026-10-30, I3). A cell nobody rated used to be indistinguishable from a neutral rating, and a
+    // rating once written could not be taken back to "unassessed" because the CHECK admitted only the
+    // five ratings. ach_cells is rebuilt with 'unassessed' as a recordable state (who cleared it, when),
+    // existing rows carried over unchanged; ach_evidence gains citation_json — an exact source version
+    // and quote — so an uncited row can be labelled as the investigator's own note.
+    private static let v166: String = """
+    ALTER TABLE ach_evidence ADD COLUMN citation_json TEXT;
+    CREATE TABLE IF NOT EXISTS ach_cells__v166 (
+        analysis_id TEXT NOT NULL, evidence_id TEXT NOT NULL, hypothesis_id TEXT NOT NULL,
+        consistency TEXT NOT NULL CHECK (consistency IN ('veryConsistent','consistent','neutral','inconsistent','veryInconsistent','unassessed')),
+        updated_by TEXT NOT NULL, updated_at REAL NOT NULL,
+        PRIMARY KEY (evidence_id, hypothesis_id)
+    );
+    INSERT OR IGNORE INTO ach_cells__v166 (analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at)
+        SELECT analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at FROM ach_cells;
+    DROP INDEX IF EXISTS idx_ach_cells_analysis;
+    DROP TABLE ach_cells;
+    ALTER TABLE ach_cells__v166 RENAME TO ach_cells;
+    CREATE INDEX IF NOT EXISTS idx_ach_cells_analysis ON ach_cells(analysis_id);
+    """
+
+    // MARK: - v167 — passage-level case evidence and reviewed-result handoffs (investigator workflow
+    // review 2026-10-30, I4/I5). An allegation's evidence link and a chronology entry carry the exact
+    // passage (quote, block, object) beside the source version, and the reviewed job-result row they
+    // came from (origin), so a reviewer opens the passage from the allegation or the report without
+    // searching the document again. An allegation records the response put to the respondent and,
+    // for an adverse finding without one, the explicit exception. The final report's selection is
+    // explicit: case_report_items lists what is included and what is excluded with the reason.
+    private static let v167: String = """
+    ALTER TABLE case_allegation_evidence ADD COLUMN quote TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN block_id TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN object_id TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN origin TEXT;
+    ALTER TABLE case_journal ADD COLUMN quote TEXT;
+    ALTER TABLE case_journal ADD COLUMN origin TEXT;
+    ALTER TABLE case_allegations ADD COLUMN response TEXT;
+    ALTER TABLE case_allegations ADD COLUMN exception_note TEXT;
+    CREATE TABLE IF NOT EXISTS case_report_items (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, allegation_id TEXT,
+        text TEXT NOT NULL, quote TEXT, evidence_ref TEXT, origin TEXT,
+        included INTEGER NOT NULL DEFAULT 1, exclusion_reason TEXT,
+        added_by TEXT NOT NULL, created_at REAL NOT NULL, decided_by TEXT, decided_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_items_case ON case_report_items(case_id, created_at);
+    """
+
+    // MARK: - v168 — verified evidence, truthful handoffs and recorded case outputs (App Store completion
+    // instructions 2026-10-30 §2–§4). Every case evidence link, chronology entry and report item records
+    // its verification state (verified passage / exhibit / investigator's note / unverified + reason),
+    // the review state of the result row it was carried from, the saved result revision's digest and
+    // every citation it carries (not only the first). Legacy rows keep NULL and read as unverified.
+    // ACH evidence rows record their citation's verification. Case document outputs (reports, lists,
+    // statements, notices, person-data exports, copies and prints) are recorded with the snapshot and
+    // file digests and a status, so a write whose record failed is a pending operation, not a silent gap.
+    private static let v168: String = """
+    ALTER TABLE case_allegation_evidence ADD COLUMN verification TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN verified_at REAL;
+    ALTER TABLE case_allegation_evidence ADD COLUMN review_state TEXT;
+    ALTER TABLE case_allegation_evidence ADD COLUMN origin_digest TEXT;
+    ALTER TABLE case_journal ADD COLUMN verification TEXT;
+    ALTER TABLE case_journal ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_journal ADD COLUMN verified_at REAL;
+    ALTER TABLE case_journal ADD COLUMN citations_json TEXT;
+    ALTER TABLE case_journal ADD COLUMN review_state TEXT;
+    ALTER TABLE case_journal ADD COLUMN origin_digest TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verification TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verification_detail TEXT;
+    ALTER TABLE case_report_items ADD COLUMN verified_at REAL;
+    ALTER TABLE case_report_items ADD COLUMN citations_json TEXT;
+    ALTER TABLE case_report_items ADD COLUMN review_state TEXT;
+    ALTER TABLE case_report_items ADD COLUMN origin_digest TEXT;
+    ALTER TABLE ach_evidence ADD COLUMN citation_state TEXT;
+    ALTER TABLE ach_evidence ADD COLUMN citation_detail TEXT;
+    CREATE TABLE IF NOT EXISTS case_document_outputs (
+        id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL, kind TEXT NOT NULL, route TEXT NOT NULL,
+        snapshot_sha256 TEXT NOT NULL, file_name TEXT, file_sha256 TEXT,
+        status TEXT NOT NULL CHECK (status IN ('released','written','recordPending','refused','failed')),
+        detail TEXT, released_by TEXT NOT NULL, released_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_document_outputs_case ON case_document_outputs(case_id, released_at);
+    """
 }

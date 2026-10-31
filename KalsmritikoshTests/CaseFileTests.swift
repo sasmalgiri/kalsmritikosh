@@ -77,9 +77,18 @@ struct CaseFileTests {
         await #expect(throws: CaseFileError.self) {
             try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: " ", actor: "Ada")
         }
-        try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: "src-1", label: "Email 4 March",
-                                               stance: .supports, note: "Names the date", actor: "Ada")
-        try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two witnesses and the email agree", actor: "Ada")
+        // §2 — support is a VERIFIED passage of an ingested document, linked through the service.
+        let email = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "email-4-march.txt",
+                                                              text: "On 3 March the manager shouted at staff in the open office. Two people left the floor.")
+        let source = email.version.uuidString
+        _ = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: source, label: "Email 4 March", stance: .supports, note: "Names the date",
+                                         passage: StudioEvidenceRef(sourceVersionID: email.version, quote: "On 3 March the manager shouted at staff"), actor: "Ada")
+        // I4 — an adverse finding needs the response put to the respondent (or an explicit exception).
+        await #expect(throws: CaseFileError.adverseFindingUnsupported("record the response put to the respondent, or state the exception that justifies deciding without one")) {
+            try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two witnesses and the email agree", actor: "Ada")
+        }
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "Denies shouting; says voices were raised by both.", actor: "Ada")
+        try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two witnesses and the email agree", actor: "Ada")
         let list = try await f.file.allegations(caseID: f.caseID)
         #expect(list.first?.label == "A1")
         #expect(list.first?.disposition == .substantiated)
@@ -151,7 +160,8 @@ struct CaseFileTests {
     @Test("Review batches split documents and need a second person for QC")
     func batches() async throws {
         let f = try await Self.fixture()
-        let n = try await f.file.createBatches(caseID: f.caseID, sourceRefs: (1...25).map { "s\($0)" }, size: 10, reviewer: "Ada", actor: "Ada")
+        let sources = try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID, count: 25)
+        let n = try await f.file.createBatches(caseID: f.caseID, sourceRefs: sources, size: 10, reviewer: "Ada", actor: "Ada")
         #expect(n == 3)
         let b = try #require(try await f.file.reviewBatches(caseID: f.caseID).first)
         #expect(b.sourceRefs.count == 10)
@@ -219,6 +229,198 @@ struct CaseFileTests {
         #expect(rows.count == 2)
         #expect(rows.first?.title == "Urgent case")
         #expect(rows.first?.overdueTasks == 1 && rows.first?.severity == .critical)
+    }
+
+    // MARK: Investigator workflow review 2026-10-30, I4 + I5
+
+    @Test("§2: documentary support means a VERIFIED passage — a real quote in a real block verifies; a fabricated quote, an absent block, a wrong version, an out-of-case source, a withdrawn exhibit and a legacy identifier-only link all fail; an exception waives only the response; a scope change after linking is caught at the decision")
+    func verifiedPassagesGateAdverseFindings() async throws {
+        let f = try await Self.fixture()
+        let a = try await f.file.addAllegation(caseID: f.caseID, text: "The supplier was paid twice", actor: "Ada")
+        let bank = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "bank-statement.txt",
+                                                             text: "Transfer to Dalmia Traders on 5 March 2026 for ₹10,000. The debit of ₹10,000 is the only payment to that supplier in the period. Closing balance ₹2,42,000.")
+        let other = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "memo.txt",
+                                                              text: "The staff picnic moves to the riverside park. Asha Rao booked the hall.")
+        let outside = try await CaseFileTestSources.seed(f.db)   // in the archive, not in this case
+        // Notes alone cannot substantiate.
+        _ = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: "note:Two invoices in the folder", label: nil, stance: .supports, note: nil, actor: "Ada")
+        await #expect(throws: CaseFileError.adverseFindingUnsupported("link at least one source passage or exhibit that supports it — a typed note is your own entry, not evidence")) {
+            try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Obvious", actor: "Ada")
+        }
+        // A fabricated quote against a real source: unverified, and refused as support with the reason.
+        let fake = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: bank.version.uuidString, label: "Bank statement", stance: .supports, note: nil,
+                                                passage: StudioEvidenceRef(sourceVersionID: bank.version, quote: "Debit 20,000 Dalmia Traders twice"), actor: "Ada")
+        #expect(fake.verification.support == .unverified("the quoted words are not in the cited source"))
+        await #expect(throws: CaseFileError.self) { try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "x", exception: "no respondent", actor: "Ada") }
+        // An absent block, a block of another version, an out-of-case source, a bare identifier.
+        let absent = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: bank.version.uuidString, label: nil, stance: .supports, note: nil,
+                                                  passage: StudioEvidenceRef(sourceVersionID: bank.version, blockID: UUID(), quote: "only payment to that supplier"), actor: "Ada")
+        #expect(absent.verification.support == .unverified("the cited passage no longer exists"))
+        let wrongVersion = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: bank.version.uuidString, label: nil, stance: .supports, note: nil,
+                                                        passage: StudioEvidenceRef(sourceVersionID: bank.version, blockID: other.blocks[0], quote: "staff picnic"), actor: "Ada")
+        #expect(wrongVersion.verification.support == .unverified("the cited passage belongs to a different version of the source"))
+        await #expect(throws: CaseFileError.self, "a source outside the case cannot even be linked") {
+            _ = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: outside.uuidString, label: nil, stance: .supports, note: nil,
+                                             passage: StudioEvidenceRef(sourceVersionID: outside, quote: "anything"), actor: "Ada")
+        }
+        let bare = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: bank.version.uuidString, label: nil, stance: .supports, note: nil, passage: nil, actor: "Ada")
+        #expect(bare.verification.support.stored == "unverified" && bare.verification.support.detail?.contains("quotes no passage") == true)
+        // The legacy path (identifiers only, no verification) stores an unverified link that never counts.
+        let legacyID = try await f.file.addAllegationEvidence(caseID: f.caseID, allegationID: a, evidenceRef: bank.version.uuidString, label: "old fixture", stance: .supports, note: nil,
+                                                              passage: StudioEvidenceRef(sourceVersionID: bank.version, objectID: UUID(), blockID: UUID(), quote: "Debit 10,000.00 Dalmia Traders"), actor: "Ada")
+        #expect(try await f.file.allegationEvidence(caseID: f.caseID).first { $0.id == legacyID }?.isDocumentary == false)
+        await #expect(throws: CaseFileError.self) { try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "x", exception: "no respondent", actor: "Ada") }
+        // A withdrawn exhibit is not support either.
+        let ex = try await f.file.addExhibit(caseID: f.caseID, number: nil, description: "The paper invoice", sourceRef: nil, sha256: nil, collectedBy: "Ada", collectedAt: Date(), collectedWhere: nil, actor: "Ada")
+        let exhibit = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: "exhibit:\(ex)", label: nil, stance: .supports, note: nil, actor: "Ada")
+        #expect(exhibit.verification.support == .exhibit(ex))
+        let exID = try #require(try await f.file.exhibits(caseID: f.caseID).first { $0.number == ex }?.id)
+        try await f.file.withdrawExhibit(caseID: f.caseID, id: exID, actor: "Ada")
+        let afterWithdraw = try await f.svc.reverifyLinks(caseID: f.caseID)
+        #expect(afterWithdraw.first { $0.link.id == exhibit.id }?.verification.support.stored == "unverified")
+        await #expect(throws: CaseFileError.self) { try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "x", exception: "no respondent", actor: "Ada") }
+        // A REAL quote with no locator resolves to the one block that holds it and verifies.
+        let real = try await f.svc.linkEvidence(caseID: f.caseID, allegationID: a, evidenceRef: bank.version.uuidString, label: "Bank statement, 5 March", stance: .supports,
+                                                note: "The debit", passage: StudioEvidenceRef(sourceVersionID: bank.version, quote: "is the only payment to that supplier in the period"), actor: "Ada")
+        guard case .documentary(let v, let o, let b) = real.verification.support else { Issue.record("expected documentary, got \(real.verification.support)"); return }
+        #expect(v == bank.version && o == bank.object && b == bank.blocks[1], "the quote is pinned to the block it is in")
+        let stored = try #require(try await f.file.allegationEvidence(caseID: f.caseID).first { $0.id == real.id })
+        #expect(stored.isDocumentary && stored.blockID == bank.blocks[1] && stored.objectID == bank.object && stored.opensPassage && stored.verification == "verified")
+        // Documentary support, but no response: refused; the exception waives only that.
+        await #expect(throws: CaseFileError.adverseFindingUnsupported("record the response put to the respondent, or state the exception that justifies deciding without one")) {
+            try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two payments, one invoice", actor: "Ada")
+        }
+        try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "Two payments, one invoice",
+                               exception: "Respondent left the organisation; two written requests unanswered", actor: "Ada")
+        var al = try #require(try await f.file.allegations(caseID: f.caseID).first)
+        #expect(al.disposition == .substantiated && al.exceptionNote == "Respondent left the organisation; two written requests unanswered" && al.response == nil)
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "The second payment was a refund reversal.", actor: "Ada")
+        al = try #require(try await f.file.allegations(caseID: f.caseID).first)
+        #expect(al.response == "The second payment was a refund reversal.")
+        // The report labels every link by its verification and tells a typed disposition apart.
+        let b2 = try await f.file.addAllegation(caseID: f.caseID, text: "The approval was forged", actor: "Ada")
+        try await f.svc.decide(allegationID: b2, caseID: f.caseID, disposition: .unsubstantiated, rationale: "No document shows it", actor: "Ada")
+        var s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
+        var report = CaseFileDocuments.caseFileReport(s, by: "Ada")
+        #expect(report.contains("- Bank statement, 5 March (verified passage) — “is the only payment to that supplier in the period” — The debit [\(bank.version.uuidString); block \(bank.blocks[1].uuidString.prefix(8))]"))
+        #expect(report.contains("(unverified — the quoted words are not in the cited source)"))
+        #expect(report.contains("(investigator's note)"))
+        #expect(report.contains("Response: “The second payment was a refund reversal.”"))
+        #expect(report.contains("**Unsubstantiated** — decided by Ada on") && report.contains("typed disposition: no documentary evidence supports it"))
+        #expect(report.contains("evidence link(s) name a source but did not verify"))
+        // A scope change after linking: the source leaves the case → re-verification at the next decision refuses.
+        try await f.file.decide(allegationID: a, caseID: f.caseID, disposition: .pending, rationale: nil, actor: "Ada")
+        let header = try #require(try await f.cases.fetch(caseID: f.caseID)).caseHeader
+        _ = try await f.cases.excludeSource(caseID: f.caseID, expectedRevision: header.revision, sourceRef: bank.version.uuidString, sourceKind: .sourceVersion, note: "out of period", actor: "Ada", at: Date())
+        await #expect(throws: CaseFileError.self, "the only verified passage left the case") {
+            try await f.svc.decide(allegationID: a, caseID: f.caseID, disposition: .substantiated, rationale: "x", actor: "Ada")
+        }
+        s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
+        report = CaseFileDocuments.caseFileReport(s, by: "Ada")
+        #expect(s.grid.first { $0.id == real.id }?.verification == "unverified" && report.contains("(unverified — the cited source is not in this case or is not accessible under the current policy)"))
+    }
+
+    @Test("§3: a carried row keeps EVERY citation, its saved revision's ledger digest and its review state; a rejected row is refused as evidence; an undecided row prints as provisional; a superseded origin is flagged; the same row is not carried twice by accident")
+    func reviewedRowHandsOffIntoTheCase() async throws {
+        let f = try await Self.fixture()
+        let a = try await f.file.addAllegation(caseID: f.caseID, text: "The approval was given on 3 March", actor: "Ada")
+        let vikram = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "vikram.txt",
+                                                               text: "Vikram Rao said the meeting about the payment was held on March 2, 2026. Vikram Rao denied approving it before 5 March.")
+        let asha = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "asha.txt",
+                                                             text: "Asha Rao said the meeting was held on March 3, 2026. Asha Rao said she approved the payment.")
+        let results = JobResultRepository(database: f.db)
+        let q1 = "Vikram Rao said the meeting about the payment was held on March 2, 2026.", q2 = "Vikram Rao denied approving it before 5 March."
+        var row1 = JobResultRow(title: "Point 1: meeting · payment — Vikram Rao", detail: "“\(q1)” “\(q2)”", date: "2026-03-02",
+                                refs: [StudioEvidenceRef(sourceVersionID: vikram.version, objectID: vikram.object, blockID: vikram.blocks[0], quote: q1),
+                                       StudioEvidenceRef(sourceVersionID: vikram.version, objectID: vikram.object, blockID: vikram.blocks[1], quote: q2)],
+                                fields: ["point": "Point 1", "witness": "Vikram Rao", "comparison": "differs"])
+        row1.decision = .accepted
+        let q3 = "Asha Rao said the meeting was held on March 3, 2026."
+        let row2 = JobResultRow(title: "Point 1: meeting · payment — Asha Rao", detail: "“\(q3)”", refs: [StudioEvidenceRef(sourceVersionID: asha.version, objectID: asha.object, quote: q3)])
+        var row3 = JobResultRow(title: "Point 2 — Asha Rao", detail: "“Asha Rao said she approved the payment.”", refs: [StudioEvidenceRef(sourceVersionID: asha.version, quote: "Asha Rao said she approved the payment.")])
+        row3.decision = .rejected; row3.note = "Duplicate of the attested statement already in the case"
+        let id = try await results.save(caseID: f.caseID, jobID: "hr.statements", family: .interviewsQuotes, state: .draft,
+                                        content: JobResultContent(rows: [row1, row2, row3]), actor: "Ada")
+        let record = try #require(try await results.latest(caseID: f.caseID, jobID: "hr.statements"))
+        #expect(record.id == id)
+        let digest = try #require(try await results.payloadSHA256(id: id))
+        // Both passages of the accepted row travel, each verified; the undecided row is provisional; the rejected row is refused.
+        let linkIDs = try await JobResultHandoff.addToAllegation(record, row: 0, allegationID: a, stance: .contradicts, note: "Vikram's date differs", results: results, caseFiles: f.svc, actor: "Ada")
+        #expect(linkIDs.count == 2)
+        _ = try await JobResultHandoff.addToAllegation(record, row: 1, allegationID: a, stance: .supports, note: nil, results: results, caseFiles: f.svc, actor: "Ada")
+        await #expect(throws: CaseFileError.rejectedRowNotEvidence) {
+            _ = try await JobResultHandoff.addToAllegation(record, row: 2, allegationID: a, stance: .supports, note: nil, results: results, caseFiles: f.svc, actor: "Ada")
+        }
+        await #expect(throws: CaseFileError.alreadyCarried("That passage"), "the same row to the same allegation twice is refused") {
+            _ = try await JobResultHandoff.addToAllegation(record, row: 0, allegationID: a, stance: .contradicts, note: nil, results: results, caseFiles: f.svc, actor: "Ada")
+        }
+        try await JobResultHandoff.addToChronology(record, row: 0, results: results, caseFiles: f.svc, actor: "Ada")
+        try await JobResultHandoff.addToReport(record, row: 0, include: true, allegationID: a, results: results, caseFiles: f.svc, actor: "Ada")
+        try await JobResultHandoff.addToReport(record, row: 1, include: true, allegationID: a, results: results, caseFiles: f.svc, actor: "Ada")
+        try await JobResultHandoff.addToReport(record, row: 2, include: false, results: results, caseFiles: f.svc, actor: "Ada")
+        await #expect(throws: CaseFileError.rejectedRowNotEvidence) {
+            _ = try await JobResultHandoff.addToReport(record, row: 2, include: true, results: results, caseFiles: f.svc, actor: "Ada")
+        }
+        // A caller-supplied record that is not the saved current revision is refused before anything is written.
+        let forged = JobResultRecord(id: UUID(), caseID: record.caseID, jobID: record.jobID, family: record.family, state: record.state,
+                                     content: record.content, createdBy: record.createdBy, createdAt: record.createdAt)
+        await #expect(throws: CaseFileError.staleResultRevision) {
+            _ = try await JobResultHandoff.addToChronology(forged, row: 0, results: results, caseFiles: f.svc, actor: "Ada")
+        }
+        try await f.file.recordResponse(allegationID: a, caseID: f.caseID, response: "Asha says the diary shows the 3rd; Vikram was reading an earlier draft.", actor: "Ada")
+        let origin0 = JobResultHandoff.origin(jobID: "hr.statements", resultID: record.id, row: 0)
+        let origin1 = JobResultHandoff.origin(jobID: "hr.statements", resultID: record.id, row: 1)
+        var s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
+        let links = s.grid.filter { $0.origin == origin0 }
+        #expect(links.count == 2 && Set(links.compactMap(\.quote)) == [q1, q2] && links.allSatisfy { $0.isDocumentary && $0.reviewState == "accepted" && $0.originDigest == digest && $0.stance == .contradicts })
+        let ashaLink = try #require(s.grid.first { $0.origin == origin1 })
+        #expect(ashaLink.reviewState == "undecided" && ashaLink.isDocumentary, "the undecided row's passage still verifies — it is the REVIEW that is provisional")
+        let chron = try #require(s.journal.first { $0.kind == .chronology })
+        #expect(chron.citations.count == 2 && chron.quote == q1 && chron.origin == origin0 && chron.reviewState == "accepted" && chron.originDigest == digest && chron.support.isDocumentary)
+        let included = s.reportItems.filter(\.included), excluded = s.reportItems.filter { !$0.included }
+        #expect(included.count == 2 && included.first { $0.origin == origin0 }?.citations.count == 2 && included.first { $0.origin == origin0 }?.isAcceptedReview == true)
+        #expect(included.first { $0.origin == origin1 }?.isAcceptedReview == false)
+        #expect(excluded.count == 1 && excluded[0].exclusionReason == "Duplicate of the attested statement already in the case" && excluded[0].reviewState == "rejected")
+        var report = CaseFileDocuments.caseFileReport(s, by: "Ada")
+        #expect(report.contains("## Reviewed results included in this report") && report.contains("## Provisional material included in this report"))
+        #expect(report.contains("(from \(origin0); accepted on review; revision \(digest.prefix(12)))"))
+        #expect(report.contains("(from \(origin1); provisional — not yet decided on review; revision \(digest.prefix(12)))"))
+        #expect(report.contains("+ 1 more citation(s)"), "the second passage is not lost in the report")
+        #expect(report.contains("## Material excluded from this report\n- \(JobResultHandoff.text(of: row3)) [\(asha.version.uuidString)] — excluded: Duplicate of the attested statement already in the case"))
+        // A newer saved run supersedes the origin: the report says so instead of showing the old revision as current.
+        _ = try await results.save(caseID: f.caseID, jobID: "hr.statements", family: .interviewsQuotes, state: .draft, content: JobResultContent(rows: [row1]), actor: "Ada")
+        s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
+        #expect(s.supersededOrigins.contains(origin0) && s.supersededOrigins.contains(origin1))
+        report = CaseFileDocuments.caseFileReport(s, by: "Ada")
+        #expect(report.contains("SUPERSEDED by a later result revision — re-review") && report.contains("carried item(s) come from a result revision that has since been superseded"))
+        // Excluding an included item later keeps it, with the reason, and is in the log.
+        try await f.file.setReportItem(caseID: f.caseID, id: included[0].id, included: false, reason: "Superseded by the attested statement", actor: "Ada")
+        let after = try await f.file.reportItems(caseID: f.caseID)
+        #expect(after.first { $0.id == included[0].id }?.exclusionReason == "Superseded by the attested statement")
+        #expect(try await f.file.actions(caseID: f.caseID).filter { $0.action == "reportItemExcluded" }.count == 2)
+    }
+
+    @Test("A name the tagger labels both as a person and as an organisation in one document reads as a PERSON whichever row comes first (the acceptance case's Asha Rao lost her speaker attribution when the organisation row won)")
+    func doublyTaggedNameIsAPerson() async throws {
+        let f = try await Self.fixture()
+        let doc = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "statement.txt",
+                                                            text: "Asha Rao said she approved the payment to Dalmia Traders on 3 March 2026. Asha Rao said the invoice was received once.")
+        let entities = EntitiesRepository(database: f.db)
+        for order in [[Entity.Kind.organization, .person], [.person, .organization]] {
+            // Both orders of arrival: the organisation row first, then the person row, and the reverse.
+            try await f.db.exec("DELETE FROM entity_mentions WHERE source_object_id = ?;", [.uuid(doc.object)])
+            try await f.db.exec("DELETE FROM entities WHERE source_object_id = ?;", [.uuid(doc.object)])
+            try await entities.insertBatch(order.map { Entity(kind: $0, value: "Asha Rao", sourceObjectID: doc.object) }
+                                           + [Entity(kind: .organization, value: "Dalmia Traders", sourceObjectID: doc.object)])
+            let reader = StudioCaseFactsReader(facts: GenericFactRepository(database: f.db), events: EventsRepository(database: f.db),
+                                               objects: KnowledgeObjectRepository(database: f.db), entities: entities)
+            let facts = try await reader.read(caseTitle: "x", sourceVersionIDs: [doc.version])
+            let asha = facts.named.filter { $0.value == "Asha Rao" }
+            #expect(asha.count == 1 && asha.first?.label == "person", "\(order): \(facts.named.map { "\($0.value)=\($0.label)" })")
+            #expect(facts.named.first { $0.value == "Dalmia Traders" }?.label == "organisation")
+            let names = JobText.names(in: "Asha Rao said she approved the payment to Dalmia Traders on 3 March 2026.", facts.named, persons: true)
+            #expect(SpeakerAttribution.resolve("Asha Rao said she approved the payment to Dalmia Traders on 3 March 2026.", named: names).speaker == "Asha Rao")
+        }
     }
 
     @Test("Documents carry what was recorded; every change is in the action log")

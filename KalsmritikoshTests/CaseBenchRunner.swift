@@ -37,6 +37,8 @@ struct CaseBenchRunner {
         /// Generations that returned text while this question was answered, per provider ID —
         /// the proof of which model (if any) wrote the answer.
         let aiCalls: [String: Int]
+        /// The question as the app answered it, when it was rewritten (normalised or canonical form).
+        var resolved: String? = nil
     }
     struct CaseResult: Encodable {
         let `case`: String; let source: String
@@ -71,13 +73,71 @@ struct CaseBenchRunner {
         let modelCallsByPurpose: [String: Int]
     }
 
-    static var env: [String: String] { ProcessInfo.processInfo.environment }
+    /// The run's settings: the process environment, or — for a bundled pack run — the pack's
+    /// settings (`BundledPack.overrides`), which stand in for the TEST_RUNNER_* variables.
+    static var env: [String: String] { ProcessInfo.processInfo.environment.merging(BundledPack.overrides) { _, pack in pack } }
+
+    /// A bundled pack (`scripts/casebench/pack_local.py`): the shards and settings of one bench run,
+    /// packed into a single JSON resource because the sandboxed Xcode test host can read neither
+    /// ~/CaseBench nor TEST_RUNNER_* variables. Materialised into the temporary folder and run
+    /// exactly as an environment-driven run; each shard result is attached to the test result.
+    enum BundledPack {
+        nonisolated(unsafe) static var overrides: [String: String] = [:]
+        struct File: Decodable { let name: String; let b64: String }
+        struct Case: Decodable { let `case`: String; let files: [File] }
+        struct Shard: Decodable { let name: String; let truth: String; let cases: [Case] }
+        struct Pack: Decodable { let set: String; let env: [String: String]; let shards: [Shard] }
+
+        static func url() -> URL? {
+            let bundle = Bundle(for: Marker.self)
+            if let u = bundle.url(forResource: "casebench-pack", withExtension: "json") { return u }
+            guard let root = bundle.resourceURL, let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
+            while let u = e.nextObject() as? URL { if u.lastPathComponent == "casebench-pack.json" { return u } }
+            return nil
+        }
+
+        /// Materialise the pack: returns the cases root and the results folder.
+        static func materialise(_ packURL: URL) throws -> (cases: URL, results: URL, set: String, shards: Int) {
+            let pack = try JSONDecoder().decode(Pack.self, from: Data(contentsOf: packURL))
+            let base = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-pack-\(UUID().uuidString)", isDirectory: true)
+            let cases = base.appendingPathComponent("cases", isDirectory: true), results = base.appendingPathComponent("results", isDirectory: true)
+            try FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
+            for s in pack.shards {
+                let dir = cases.appendingPathComponent(s.name, isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try s.truth.write(to: dir.appendingPathComponent("truth.jsonl"), atomically: true, encoding: .utf8)
+                for c in s.cases {
+                    let folder = dir.appendingPathComponent(c.case, isDirectory: true)
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    for f in c.files { try (Data(base64Encoded: f.b64) ?? Data()).write(to: folder.appendingPathComponent(f.name)) }
+                }
+            }
+            overrides = pack.env
+            return (cases, results, pack.set, pack.shards.count)
+        }
+    }
+    private final class Marker {}
 
     @Test("Run every shard under CASEBENCH_DIR")
     func runShards() async throws {
-        guard let root = Self.env["CASEBENCH_DIR"] else { return }   // owner-run only
-        let out = URL(fileURLWithPath: Self.env["CASEBENCH_OUT"] ?? root + "/../results", isDirectory: true)
+        var bundled: (cases: URL, results: URL, set: String, shards: Int)?
+        if ProcessInfo.processInfo.environment["CASEBENCH_DIR"] == nil, let pack = BundledPack.url() {
+            bundled = try BundledPack.materialise(pack)
+        }
+        defer { if let b = bundled { try? FileManager.default.removeItem(at: b.cases.deletingLastPathComponent()) } }
+        guard let root = bundled?.cases.path ?? Self.env["CASEBENCH_DIR"] else { return }   // owner-run only
+        let out = bundled?.results ?? URL(fileURLWithPath: Self.env["CASEBENCH_OUT"] ?? root + "/../results", isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        defer {
+            // A bundled run hands its results back through the test result (the sandboxed host's
+            // folders are not readable from outside): one attachment per shard.
+            if let b = bundled, let files = try? FileManager.default.contentsOfDirectory(at: out, includingPropertiesForKeys: nil) {
+                for f in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where f.pathExtension == "jsonl" {
+                    if let data = try? Data(contentsOf: f) { Attachment.record(data, named: f.lastPathComponent) }
+                }
+                Attachment.record(Data("set: \(b.set)\nshards: \(b.shards)\nsettings: \(BundledPack.overrides.sorted { $0.key < $1.key })\n".utf8), named: "MEASUREMENT-pack.txt")
+            }
+        }
         let maxShards = Int(Self.env["CASEBENCH_MAX_SHARDS"] ?? "") ?? .max
         let embed = Self.env["CASEBENCH_EMBED"] != "0"
         let askEvery = max(1, Int(Self.env["CASEBENCH_ASK_EVERY"] ?? "") ?? 1)
@@ -137,7 +197,7 @@ struct CaseBenchRunner {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("bench.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             Issue.record("ledger did not boot for \(name)"); return
@@ -184,23 +244,46 @@ struct CaseBenchRunner {
         if embed { await ingest.drainEmbeddingsNow() }
         let embedSeconds = Date().timeIntervalSince(t1)
 
+        // The gap layer the app builds on its idle pass, built now so an opened case can show it
+        // (closed-case simulation 2026-10-26: without it every case reported 0 gaps).
+        if workflowEvery > 0 { _ = await state.scanForGaps() }
+
         // 2. Ask each case's questions over the whole shard's ledger (an archive holds many cases).
         let brain = await state.brain
+        // CASEBENCH_CLOUD_KEY_FILE — the cloud step of the understanding cascade, measured with the
+        // owner's Claude key (read from a file outside the repo; the app itself reaches the cloud only
+        // through its network helper, which a test host does not have). Answers stay evidence-only:
+        // only the question's wording goes to the model, never a document.
+        if let keyFile = Self.env["CASEBENCH_CLOUD_KEY_FILE"],
+           let key = try? String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
+            let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-haiku-4-5-20251001"
+            let send: @Sendable (String) async throws -> String = { prompt in try await BenchClaude.send(prompt, key: key, model: model) }
+            await brain.setQuestionInterpreters(onDevice: nil, cloud: CloudQuestionInterpreter(generate: send))
+            await brain.setQuestionRewriters(onDevice: nil, cloud: CloudQuestionRewriter(generate: send))
+            // Verified record extraction reads the person's documents — a stronger reader than the
+            // question rewriter; every answer it proposes is checked verbatim against the documents.
+            let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-sonnet-5"
+            await brain.setRecordExtractor(VerifiedRecordExtractor { prompt in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) })
+            await brain.setInterpreterModelsAllowedOverride(true)
+        }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         func ask(_ id: String, _ q: String) async -> AnswerResult {
             let s = Date()
             let before = await LLMCallCounters.shared.snapshot().completedByProvider
+            let claudeBefore = await BenchClaude.Usage.shared.calls
             let a = await brain.answer(question: q, access: access)
+            let claudeCalls = await BenchClaude.Usage.shared.calls - claudeBefore
             let after = await LLMCallCounters.shared.snapshot().completedByProvider
-            let calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
+            var calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
                 let d = kv.value - (before[kv.key] ?? 0)
                 if d > 0 { out[kv.key] = d }
             }
+            if claudeCalls > 0 { calls["claude"] = claudeCalls }
             return AnswerResult(id: id, q: q, body: a.body, refused: a.refused, refusal: a.refusalReason,
                                 cited: a.citations.map { caseOfObject[$0.objectID] ?? "?" },
                                 snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
                                 confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s),
-                                aiCalls: calls)
+                                aiCalls: calls, resolved: a.resolvedQuestion == q ? nil : a.resolvedQuestion)
         }
         var lines: [String] = []
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -320,5 +403,29 @@ struct CaseBenchRunner {
         } catch {
             return failed(error)
         }
+    }
+}
+
+/// The bench's direct Claude call (test target only).
+enum BenchClaude {
+    static func send(_ prompt: String, key: String, model: String, maxTokens: Int = 400) async throws -> String {
+        guard let url = URL(string: "https://api.anthropic.com/v1/messages") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        for (k, v) in ["x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": model, "max_tokens": maxTokens, "messages": [["role": "user", "content": prompt]]])
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = object["content"] as? [[String: Any]] else { throw URLError(.badServerResponse) }
+        await BenchClaude.Usage.shared.add((object["usage"] as? [String: Any]).map { ($0["input_tokens"] as? Int ?? 0) + ($0["output_tokens"] as? Int ?? 0) } ?? 0)
+        return content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined()
+    }
+
+    actor Usage {
+        static let shared = Usage()
+        private(set) var tokens = 0, calls = 0
+        func add(_ n: Int) { tokens += n; calls += 1 }
     }
 }

@@ -653,8 +653,11 @@ public struct AskView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Evidence for this answer")
+                        // UI run i, I-1: `.accessibilityElement(children: .contain)` + `.accessibilityLabel` on this
+                        // container (which holds the AppKit-backed horizontal chip row) sent SwiftUI's label
+                        // resolver into unbounded recursion the moment any assistive client read a chip —
+                        // four crashes. The heading is a real (visually hidden) element instead.
+                        .accessibilityIdentifier("ask.evidence")
                     }
                     // §1.3 — closest match on a not-found answer: explicitly
                     // NOT an answer, openable at the passage.
@@ -683,8 +686,7 @@ public struct AskView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3])))
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Not an answer. The closest passage in your documents: \(near.quote)")
+                        .accessibilityIdentifier("ask.closestPassage")
                     }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block
@@ -983,6 +985,11 @@ public struct AskView: View {
             // so the brain's answer call runs in parallel — the user
             // sees something immediately, and the next time they ask the
             // boosted files are already in the canonical store.
+            // §11 — asking the archive is analysis, a paid action; the refusal opens the subscription screen.
+            guard await MainActor.run(body: { PurchaseCenter.shared.allowPaidAction("ask questions") }) else {
+                await MainActor.run { self.turns.removeAll { $0.id == placeholderID } }
+                return
+            }
             Task { await appState.boostIngestForQuestion(q) }
 
             // 3) The full brain answer is the ONLY LLM path (spec P1.3).

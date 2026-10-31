@@ -1722,46 +1722,66 @@ public struct DataLabView: View {
 
     private enum ExportFormat: String { case csv, xlsx, docx, pdf }
 
+    /// App Store completion §4 — a dataset leaves the app through `CaseOutputService`: the
+    /// destination is chosen first; the cells and the report text are scrubbed of protected
+    /// identities BEFORE the document is rendered (a binary file cannot be scrubbed afterwards);
+    /// the bytes are written atomically, read back and recorded; the EXP document is posted only for
+    /// a file that was actually written.
     private func export(_ rec: WorkbenchDatasetRecord, format: ExportFormat) {
         #if os(macOS)
         errorMessage = nil
+        guard let outputs = appState.caseOutputs else { errorMessage = "The ledger isn't open yet; nothing was exported."; return }
         let projection = activeProjection()
-        let data: Data?
-        switch format {
-        case .csv:
-            data = WorkbenchCSV.render(rec, projection: projection).data(using: .utf8)
-        case .xlsx:
-            data = DocumentExporter.xlsx(grid: WorkbenchCSV.grid(rec, projection: projection))
-        case .docx:
-            data = DocumentExporter.docx([reportRecord(rec, projection: projection)])
-        case .pdf:
-            data = DocumentExporter.pdf([reportRecord(rec, projection: projection)])
-        }
-        guard let data else { errorMessage = "Could not build the \(format.rawValue.uppercased()) file."; return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = rec.dataset.title.replacingOccurrences(of: "/", with: "-")
             + "." + format.rawValue
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try data.write(to: url)
-        } catch {
-            errorMessage = "Could not write the file: \(error)"
-            return
-        }
-        // The SAP habit: what left the app gets a number you can quote.
-        Task {
-            if let workCenter = appState.workCenter {
-                let doc = try? await workCenter.capture(
-                    type: "EXP",
-                    title: "\(rec.dataset.title) — \(format.rawValue.uppercased()) export",
-                    values: ["Dataset": rec.dataset.title,
-                             "Format": format.rawValue.uppercased(),
-                             "Rows": String(rec.rows.count),
-                             "Revision": String(rec.dataset.revision),
-                             "Scenario": activeScenario?.scenario.title ?? "",
-                             "File": url.lastPathComponent],
-                    actor: actorName, at: Date())
-                lastExportNumber = doc?.docNumber
+        let title = rec.dataset.title, revision = rec.dataset.revision, rowCount = rec.rows.count
+        let scenario = activeScenario?.scenario.title ?? "", who = actorName
+        let qualityReport = quality
+        Task { @MainActor in
+            do {
+                let pkg: CaseOutputPackage
+                switch format {
+                case .csv:
+                    pkg = try await outputs.prepareText(caseID: nil, kind: .dataset, route: .file, actor: who, citations: [],
+                                                        text: WorkbenchCSV.render(rec, projection: projection))
+                case .xlsx:
+                    var grid: [[String]] = []
+                    for row in WorkbenchCSV.grid(rec, projection: projection) {
+                        var cells: [String] = []
+                        for cell in row { cells.append(try await outputs.protectedText(cell)) }
+                        grid.append(cells)
+                    }
+                    pkg = try await outputs.prepareData(caseID: nil, kind: .dataset, route: .file, actor: who, citations: [],
+                                                        texts: grid.flatMap { $0 }, data: DocumentExporter.xlsx(grid: grid))
+                case .docx, .pdf:
+                    let text = try await outputs.protectedText(WorkbenchReport.render(rec, projection: projection, quality: qualityReport))
+                    let record = ExportRecord(title: try await outputs.protectedText(title), sourceType: "dataset", text: text)
+                    guard let data = format == .docx ? DocumentExporter.docx([record]) : DocumentExporter.pdf([record]) else {
+                        errorMessage = "Could not build the \(format.rawValue.uppercased()) file."; return
+                    }
+                    pkg = try await outputs.prepareData(caseID: nil, kind: .dataset, route: .file, actor: who, citations: [], texts: [record.title, text], data: data)
+                }
+                let receipt = await outputs.write(pkg, to: url)
+                guard receipt.status == .written else { errorMessage = receipt.summary; return }
+                // The SAP habit: what left the app gets a number you can quote — only for a file that exists.
+                if let workCenter = appState.workCenter {
+                    let doc = try? await workCenter.capture(
+                        type: "EXP",
+                        title: "\(title) — \(format.rawValue.uppercased()) export",
+                        values: ["Dataset": title,
+                                 "Format": format.rawValue.uppercased(),
+                                 "Rows": String(rowCount),
+                                 "Revision": String(revision),
+                                 "Scenario": scenario,
+                                 "File": url.lastPathComponent,
+                                 "SHA-256": receipt.fileSHA256 ?? ""],
+                        actor: who, at: Date())
+                    lastExportNumber = doc?.docNumber
+                }
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
         #endif

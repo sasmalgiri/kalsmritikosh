@@ -141,6 +141,57 @@ public actor EmailParticipantRepository {
         }
     }
 
+    /// The messages one person sent another (closed-case simulation, Enron mailboxes 2026-10-26:
+    /// counts read from retrieval stopped at its top hits). A person matches by display name, or by
+    /// an address that spells the name ("debra.perlingiere@…"); To and Cc both count as received.
+    /// Messages from `sender` ADDRESSED to `recipient` (the To line; a Cc is a copy, not "sent to").
+    public func messageIDs(from sender: String, to recipient: String, limit: Int = 2_000) async throws -> [UUID] {
+        func clauses(_ name: String, alias: String) -> (String, [SQLValue]) {
+            let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+            let parts = n.split(separator: " ").map(String.init)
+            var sql = "(lower(COALESCE(\(alias).display_name, '')) LIKE ? OR lower(\(alias).raw_address) LIKE ?"
+            var args: [SQLValue] = [.text("%\(n)%"), .text(n.contains("@") ? n : "%\(n)%")]
+            if parts.count >= 2 {
+                sql += " OR lower(\(alias).raw_address) LIKE ? OR (lower(COALESCE(\(alias).display_name, '')) LIKE ? AND lower(COALESCE(\(alias).display_name, '')) LIKE ?)"
+                args += [.text("\(parts[0]).\(parts[parts.count - 1])@%"), .text("%\(parts[0])%"), .text("%\(parts[parts.count - 1])%")]
+            }
+            return (sql + ")", args)
+        }
+        let (f, fa) = clauses(sender, alias: "f"), (t, ta) = clauses(recipient, alias: "t")
+        // LIKE finds candidates; the names must then match as whole words ("All Houston" is not
+        // "dl-ga-all_enron_houston_employees", "Bill Rapp" is not "Bill Rappaport").
+        let rows = try await database.query("""
+        SELECT f.source_ko_id, f.display_name, f.raw_address, t.display_name, t.raw_address
+          FROM email_participant_occurrences f
+          JOIN email_participant_occurrences t ON t.source_ko_id = f.source_ko_id
+         WHERE f.role = 'from' AND \(f) AND t.role = 'to' AND \(t)
+         LIMIT ?;
+        """, fa + ta + [.integer(Int64(limit) * 4)])
+        var out: [UUID] = [], seen = Set<UUID>()
+        for r in rows {
+            guard let id = r.uuid(0), !seen.contains(id),
+                  Self.names(sender, display: r.string(1), address: r.string(2)),
+                  Self.names(recipient, display: r.string(3), address: r.string(4)) else { continue }
+            seen.insert(id); out.append(id)
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
+    /// The person's name as whole words of the display name or address, or "first.last@".
+    nonisolated static func names(_ name: String, display: String?, address: String?) -> Bool {
+        let n = name.lowercased().trimmingCharacters(in: .whitespaces)
+        let a = (address ?? "").lowercased(), d = (display ?? "").lowercased()
+        if n.contains("@") { return a.contains(n) || d.contains(n) }
+        let parts = n.split(separator: " ").map(String.init).filter { $0.count >= 2 }
+        guard let first = parts.first, let last = parts.last else { return false }
+        if parts.count >= 2, a.hasPrefix("\(first).\(last)@") { return true }
+        func word(_ w: String, in s: String) -> Bool {
+            s.range(of: #"(?<![a-z0-9_])"# + NSRegularExpression.escapedPattern(for: w) + #"(?![a-z0-9_])"#, options: .regularExpression) != nil
+        }
+        return parts.allSatisfy { word($0, in: d) } || parts.allSatisfy { word($0, in: d + " " + a) }
+    }
+
     /// L5 — the display names an address SENDS under ("Shirshendu Sasmal"),
     /// most frequent first.
     public func displayNames(sentBy address: String, limit: Int = 3) async throws -> [String] {

@@ -18,10 +18,19 @@ final class CaseFileModel {
     let workspaceID: UUID
     var snapshot: CaseFileSnapshot?
     var labels: [UUID: String] = [:]
+    /// I4 — the document (knowledge object) each in-scope source version was read into, so a passage
+    /// link made here opens the exact passage (UI journey 2026-10-30b, D-4).
+    var objectByVersion: [UUID: UUID] = [:]
     /// What the case documents name and the amounts they state (each with its sentence).
     var named: StudioCaseFacts?
     var error: String?
+    /// §4 — what happened to the last release (exported and recorded, refused, pending record…).
+    var outputNotice: String?
     var busy = false
+    /// The custody manifest could not be read: reports must not present an empty custody record.
+    var custodyReadFailed = false
+    /// Stored evidence references that no longer resolve in this case (brief §4 repair queue).
+    var unresolvedRefs: [UnresolvedCaseReference] = []
 
     init(caseID: UUID, workspaceID: UUID) { self.caseID = caseID; self.workspaceID = workspaceID }
 
@@ -30,9 +39,29 @@ final class CaseFileModel {
     func load(_ app: AppState) async {
         guard let svc = app.caseFiles else { error = "The ledger isn't ready yet."; return }
         do {
-            let custody = (try? await app.investigationCustody?.manifest(caseID: caseID)) ?? []
+            // A custody read that fails is not an empty custody record (implementation brief §6): the
+            // case still opens, but the custody report refuses and every report says it is incomplete.
+            var custody: [CustodyManifestEntry] = []
+            custodyReadFailed = false
+            if let custodyService = app.investigationCustody {
+                do { custody = try await custodyService.manifest(caseID: caseID) } catch {
+                    custodyReadFailed = true
+                    KalsmritikoshLog.app.error("Case custody read failed: \(String(describing: error), privacy: .public)")
+                }
+            } else {
+                custodyReadFailed = true
+            }
             snapshot = try await svc.snapshot(caseID: caseID, custody: custody)
             labels = try await svc.file.sourceLabels(custody.map(\.sourceVersionID))
+            if let objects = app.objects {
+                let byObject = (try? await objects.sourceVersionsByObject(inSourceVersionIDs: Set(custody.map(\.sourceVersionID)))) ?? [:]
+                var map: [UUID: UUID] = [:]
+                for (object, versions) in byObject { for v in versions where map[v] == nil { map[v] = object } }
+                objectByVersion = map
+            }
+            do { unresolvedRefs = try await svc.file.unresolvedReferences(caseID: caseID) } catch {
+                KalsmritikoshLog.app.error("Case reference check failed: \(String(describing: error), privacy: .public)")
+            }
             if named == nil, let title = snapshot?.caseHeader.title {   // read once: it scans every case document
                 named = await app.studioCaseFacts(StudioCaseChoice(id: caseID, workspaceID: workspaceID, title: title), includePrivileged: false)
             }
@@ -44,6 +73,7 @@ final class CaseFileModel {
     /// Run a change, then reload; errors are shown and logged.
     func run(_ app: AppState, _ body: @escaping (CaseFileService) async throws -> Void) {
         guard let svc = app.caseFiles else { return }
+        guard PurchaseCenter.shared.allowPaidAction("edit the case file") else { return }   // §11 — a paid action; reading and exporting never ask
         busy = true
         Task {
             defer { busy = false }
@@ -60,6 +90,59 @@ final class CaseFileModel {
     func report(_ e: Error) {
         KalsmritikoshLog.app.error("Case file: \(e.localizedDescription, privacy: .public)")
         error = e.localizedDescription
+    }
+
+    /// App Store completion §4 — the ONE way a case document leaves this screen as a file: the
+    /// destination is chosen first; then `CaseOutputService` freezes the case as it is now
+    /// (re-verified links, every cited source still cleared, protected identities scrubbed, banners),
+    /// writes atomically, reads back and records the digest of the bytes on disk. A cancelled panel
+    /// writes and records nothing; a refusal is recorded with its reason.
+    func exportDocument(_ app: AppState, kind: CaseOutputKind, name: String, ext: String,
+                        render: @escaping @Sendable (CaseFileSnapshot) -> String) {
+        guard let outputs = app.caseOutputs else { error = "The ledger isn't ready yet; nothing was exported."; return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }   // cancelled: nothing written, nothing recorded
+        let caseID = caseID, actor = actor
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let pkg = try await outputs.prepare(caseID: caseID, kind: kind, route: .file, actor: actor, render: render)
+                let receipt = await outputs.write(pkg, to: url)
+                outputNotice = receipt.summary
+                error = receipt.status == .written && receipt.recorded ? nil : receipt.summary
+            } catch {
+                outputNotice = nil
+                report(error)
+            }
+            await load(app)
+        }
+    }
+
+    /// The same door for free text drafted on this screen (a preservation notice).
+    func exportText(_ app: AppState, kind: CaseOutputKind, name: String, ext: String, text: String) {
+        guard let outputs = app.caseOutputs else { error = "The ledger isn't ready yet; nothing was exported."; return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let caseID = caseID, actor = actor
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let pkg = try await outputs.prepareText(caseID: caseID, kind: kind, route: .file, actor: actor, citations: [], text: text)
+                let receipt = await outputs.write(pkg, to: url)
+                outputNotice = receipt.summary
+                error = receipt.status == .written && receipt.recorded ? nil : receipt.summary
+            } catch {
+                outputNotice = nil
+                report(error)
+            }
+            await load(app)
+        }
     }
 
     /// Evidence the person can point at: exhibits first, then every source in scope.
@@ -130,6 +213,9 @@ public struct CaseFileView: View {
             .padding(.horizontal, 20)
             if let e = model.error {
                 Text(e).foregroundStyle(.red).font(.callout).padding(.horizontal, 20).padding(.top, 8)
+            } else if let n = model.outputNotice {
+                Text(n).foregroundStyle(.secondary).font(.callout).padding(.horizontal, 20).padding(.top, 8)
+                    .accessibilityIdentifier("case.output.notice")
             }
             Divider().padding(.top, 10)
             if let s = model.snapshot {
@@ -212,10 +298,29 @@ struct CaseOverviewTab: View {
     @State private var closeRationale = ""
     @State private var unresolved = ""
     @State private var stageReason = ""
+    @State private var eraseReason = ""
+    @State private var eraseBasis = ""
+    @State private var eraseDocuments = false
+    @State private var confirmErase = false
+    @State private var eraseStatus: String?
 
     var body: some View {
         let closed = s.caseHeader.status == .closed
+        let steps = CaseNextSteps.compute(s, unresolvedReferences: model.unresolvedRefs.count, custodyReadFailed: model.custodyReadFailed)
         VStack(alignment: .leading, spacing: 0) {
+            if !steps.isEmpty {
+                CaseSection(title: "Next steps", subtitle: "From what this case holds now. They suggest; you decide.") {
+                    ForEach(steps.prefix(6)) { step in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: "arrow.right.circle").foregroundStyle(.tint).accessibilityHidden(true)
+                            Text(step.text)
+                            Spacer()
+                            Text(Self.tabName(step.place)).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if steps.count > 6 { Text("and \(steps.count - 6) more").font(.caption).foregroundStyle(.secondary) }
+                }
+            }
             CaseSection(title: "Stage", subtitle: "Move the case along. Closing is a recorded decision below.") {
                 HStack {
                     StageChip(stage: closed ? .closed : s.profile.stage)
@@ -329,6 +434,35 @@ struct CaseOverviewTab: View {
                     }
                 }
             }
+            CaseSection(title: "Erase this case",
+                        subtitle: "Removes everything recorded for this case — its work, notes, results and history — and keeps only a record that it was erased (who, when, why; never the content). A legal hold refuses it. Documents another case or workspace uses are always kept.") {
+                TextField("Why erase (required)", text: $eraseReason)
+                TextField("Legal basis (optional)", text: $eraseBasis)
+                Toggle("Also erase the documents only this case uses", isOn: $eraseDocuments)
+                HStack {
+                    if let eraseStatus { Text(eraseStatus).font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                    InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — erasure and holds
+                    Button("Erase case…", role: .destructive) { confirmErase = true }
+                        .disabled(reason: eraseReason.trimmingCharacters(in: .whitespaces).isEmpty ? "A reason for the erasure is required." : nil,
+                                  remedy: "Type the reason first; a legal basis is optional.")
+                }
+            }
+            .confirmationDialog("Erase this case permanently?", isPresented: $confirmErase) {
+                Button("Erase", role: .destructive) {
+                    let reason = eraseReason, basis = opt(eraseBasis), docs = eraseDocuments
+                    Task {
+                        do {
+                            let out = try await appState.eraseCase(model.caseID, eraseExclusiveSources: docs, reason: reason,
+                                                                   legalBasis: basis, actor: model.actor)
+                            eraseStatus = out.summary
+                        } catch { eraseStatus = error.localizedDescription }
+                    }
+                }
+            } message: {
+                Text(eraseDocuments ? "The case and the documents only it uses are removed. This cannot be undone."
+                                    : "The case is removed; its documents stay in your library. This cannot be undone.")
+            }
         }
         .onAppear { sync() }
         .onChange(of: s.profile) { sync() }
@@ -342,6 +476,17 @@ struct CaseOverviewTab: View {
         profile = s.profile
         triage = s.profile.triage
         teamText = s.profile.team.joined(separator: ", ")
+    }
+
+    static func tabName(_ place: CaseNextStep.Place) -> String {
+        switch place {
+        case .overview: return CaseFileTab.overview.rawValue
+        case .plan: return CaseFileTab.plan.rawValue
+        case .tasks: return CaseFileTab.tasks.rawValue
+        case .people: return CaseFileTab.people.rawValue
+        case .evidence: return CaseFileTab.evidence.rawValue
+        case .log: return CaseFileTab.log.rawValue
+        }
     }
 
     private func closeOrReopen(_ closed: Bool) {
@@ -374,6 +519,11 @@ struct CasePlanTab: View {
     @State private var gridRef: [UUID: String] = [:]
     @State private var gridStance: [UUID: GridStance] = [:]
     @State private var gridNote: [UUID: String] = [:]
+    /// I4 — the exact passage quoted for a new link, the respondent's response, and an exception.
+    @State private var gridQuote: [UUID: String] = [:]
+    @State private var responseText: [UUID: String] = [:]
+    @State private var exceptionText: [UUID: String] = [:]
+    @State private var openedPassage: OpenedSource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -411,6 +561,12 @@ struct CasePlanTab: View {
             }
         }
         .onAppear { plan = s.profile.plan }
+        .sheet(item: $openedPassage) { opened in
+            VStack(spacing: 0) {
+                EvidenceViewer(citation: opened.citation)
+                HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
+            }
+        }
     }
 
     private func planField(_ title: String, _ kp: WritableKeyPath<CasePlan, String?>) -> some View {
@@ -433,42 +589,90 @@ struct CasePlanTab: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(st.label) (\(items.count))").font(.caption.bold()).foregroundStyle(st == .supports ? .green : (st == .contradicts ? .red : .secondary))
                         ForEach(items) { e in
-                            HStack {
-                                Text("• \(e.label ?? model.label(for: e.evidenceRef))").font(.callout)
-                                if let n = e.note { Text("— \(n)").font(.caption).foregroundStyle(.secondary) }
-                                Spacer()
-                                Button("Remove") {
-                                    model.run(appState) { try await $0.file.retractAllegationEvidence(caseID: model.caseID, id: e.id, actor: model.actor) }
-                                }.buttonStyle(.borderless).font(.caption)
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack {
+                                    Text("• \(e.label ?? model.label(for: e.evidenceRef))").font(.callout)
+                                    // §2 — what this link is, by its verification: a verified passage, a live
+                                    // exhibit, the investigator's note, or unverified with the reason.
+                                    Text(e.support.label).font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                        .background((e.isDocumentary ? Color.green : Color.orange).opacity(0.18), in: Capsule())
+                                        .help(e.isDocumentary ? "Verified: the quoted words are in this source as it is in the case now."
+                                              : "Not documentary support. A finding cannot rest on this; fix the link, verify again or reject it.")
+                                        .accessibilityIdentifier("allegation.link.support")
+                                    if let n = e.note { Text("— \(n)").font(.caption).foregroundStyle(.secondary) }
+                                    Spacer()
+                                    if e.isDocumentary, e.opensPassage, let o = e.objectID {
+                                        Button("Open passage") { openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: o, snippet: e.quote ?? "")) }
+                                            .buttonStyle(.borderless).font(.caption)
+                                            .help("Open the exact passage this link points at.")
+                                    }
+                                    Button("Remove") {
+                                        model.run(appState) { try await $0.file.retractAllegationEvidence(caseID: model.caseID, id: e.id, actor: model.actor) }
+                                    }.buttonStyle(.borderless).font(.caption)
+                                }
+                                if let q = e.quote {
+                                    Text("“\(q)”").font(.caption).foregroundStyle(.secondary).lineLimit(3).padding(.leading, 12)
+                                }
+                                if let origin = e.origin {
+                                    Text("From a reviewed result: \(origin)").font(.caption2).foregroundStyle(.tertiary).padding(.leading, 12)
+                                }
                             }
                         }
                     }
                 }
             }
-            HStack {
-                EvidencePicker(title: "Evidence", ref: Binding(get: { gridRef[a.id] ?? "" }, set: { gridRef[a.id] = $0 })).frame(maxWidth: 320)
-                Picker("", selection: Binding(get: { gridStance[a.id] ?? .supports }, set: { gridStance[a.id] = $0 })) {
-                    ForEach(GridStance.allCases) { Text($0.label).tag($0) }
-                }.labelsHidden().frame(width: 120)
-                TextField("Why", text: Binding(get: { gridNote[a.id] ?? "" }, set: { gridNote[a.id] = $0 }))
-                Button("Link") {
-                    let ref = gridRef[a.id] ?? "", st = gridStance[a.id] ?? .supports, note = opt(gridNote[a.id] ?? "")
-                    let label = model.label(for: ref)
-                    model.run(appState) { try await $0.file.addAllegationEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, actor: model.actor) }
-                    gridRef[a.id] = ""; gridNote[a.id] = ""
-                }.disabled((gridRef[a.id] ?? "").isEmpty)
+            // I4 — link a passage: the source, the stance, the quoted words and why.
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    EvidencePicker(title: "Evidence", ref: Binding(get: { gridRef[a.id] ?? "" }, set: { gridRef[a.id] = $0 })).frame(maxWidth: 320)
+                    Picker("", selection: Binding(get: { gridStance[a.id] ?? .supports }, set: { gridStance[a.id] = $0 })) {
+                        ForEach(GridStance.allCases) { Text($0.label).tag($0) }
+                    }.labelsHidden().frame(width: 120)
+                    TextField("Why", text: Binding(get: { gridNote[a.id] ?? "" }, set: { gridNote[a.id] = $0 }))
+                    Button("Link") {
+                        let ref = gridRef[a.id] ?? "", st = gridStance[a.id] ?? .supports, note = opt(gridNote[a.id] ?? "")
+                        let quote = opt(gridQuote[a.id] ?? "")
+                        let label = model.label(for: ref)
+                        let passage = UUID(uuidString: ref).map { StudioEvidenceRef(sourceVersionID: $0, objectID: model.objectByVersion[$0], quote: quote) }
+                        // §2 — linked THROUGH verification: the quote is checked against the source text now.
+                        model.run(appState) { _ = try await $0.linkEvidence(caseID: model.caseID, allegationID: a.id, evidenceRef: ref, label: label, stance: st, note: note, passage: passage, actor: model.actor) }
+                        gridRef[a.id] = ""; gridNote[a.id] = ""; gridQuote[a.id] = ""
+                    }.disabled((gridRef[a.id] ?? "").isEmpty)
+                }
+                TextField("Quote the exact passage (optional — makes the link reopenable to the words)", text: Binding(get: { gridQuote[a.id] ?? "" }, set: { gridQuote[a.id] = $0 }), axis: .vertical)
+                    .lineLimit(1...3).font(.caption)
             }
+            // I4 — the response put to the respondent; an adverse finding needs it or an exception.
+            HStack {
+                TextField(a.response == nil ? "Response put to the respondent (their account or explanation)" : "Response: \(a.response ?? "")",
+                          text: Binding(get: { responseText[a.id] ?? "" }, set: { responseText[a.id] = $0 }), axis: .vertical).lineLimit(1...3)
+                Button("Record response") {
+                    let r = responseText[a.id] ?? ""
+                    model.run(appState) { try await $0.file.recordResponse(allegationID: a.id, caseID: model.caseID, response: r, actor: model.actor) }
+                    responseText[a.id] = ""
+                }.disabled((responseText[a.id] ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let r = a.response { Text("Response: “\(r)”").font(.caption).foregroundStyle(.secondary) }
             HStack {
                 Picker("Finding", selection: Binding(get: { decisions[a.id]?.0 ?? a.disposition }, set: { decisions[a.id] = ($0, decisions[a.id]?.1 ?? a.rationale ?? "") })) {
                     ForEach(AllegationDisposition.allCases) { Text($0.label).tag($0) }
                 }.frame(maxWidth: 260)
                 TextField("Rationale", text: Binding(get: { decisions[a.id]?.1 ?? a.rationale ?? "" }, set: { decisions[a.id] = (decisions[a.id]?.0 ?? a.disposition, $0) }))
+                InfoPopoverButton(topic: "safety-decisions")   // §6.8 — adverse findings
                 Button("Record finding") {
                     let d = decisions[a.id] ?? (a.disposition, a.rationale ?? "")
-                    model.run(appState) { try await $0.file.decide(allegationID: a.id, caseID: model.caseID, disposition: d.0, rationale: d.1, actor: model.actor) }
+                    let ex = opt(exceptionText[a.id] ?? "")
+                    // §2 — the service re-verifies every link before an adverse finding is written.
+                    model.run(appState) { try await $0.decide(allegationID: a.id, caseID: model.caseID, disposition: d.0, rationale: d.1, exception: ex, actor: model.actor) }
                 }
             }
-            if let by = a.decidedBy { Text("Recorded by \(by) on \(CaseFileDocuments.d(a.decidedAt))").font(.caption).foregroundStyle(.secondary) }
+            if (decisions[a.id]?.0 ?? a.disposition) == .substantiated, a.response == nil {
+                TextField("Exception — why this adverse finding is recorded without the respondent's response", text: Binding(get: { exceptionText[a.id] ?? a.exceptionNote ?? "" }, set: { exceptionText[a.id] = $0 }), axis: .vertical)
+                    .lineLimit(1...3).font(.caption)
+                Text("An adverse finding needs a documentary passage that supports it and the response put to the respondent, or this exception. A typed note is your own entry, not evidence.")
+                    .font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
+            if let by = a.decidedBy { Text("Recorded by \(by) on \(CaseFileDocuments.d(a.decidedAt))" + (a.exceptionNote.map { " · exception: \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary) }
             Divider()
         }
     }
@@ -689,6 +893,9 @@ struct InterviewEditor: View {
     @State var interview: CaseInterview
     let done: () -> Void
     @State private var attestedBy = ""
+    @State private var correction = ""
+    @State private var correctionReason = ""
+    @State private var correctionConfirmedBy = ""
     @State private var factor: CredibilityFactor = .consistency
     @State private var assessment: CredibilityAssessment = .neutral
     @State private var credNote = ""
@@ -704,13 +911,14 @@ struct InterviewEditor: View {
                         ForEach(InterviewStatus.allCases.filter { $0 != .attested || attested }) { Text($0.label).tag($0) }
                     }.disabled(attested)
                     DatePicker("When", selection: Binding(get: { interview.scheduledAt ?? Date() }, set: { interview.scheduledAt = $0 }))
-                    TextField("How (in person, video, phone)", text: str(\.mode))
-                    TextField("Where", text: str(\.location))
+                        .disabled(attested)
+                    TextField("How (in person, video, phone)", text: str(\.mode)).disabled(attested)
+                    TextField("Where", text: str(\.location)).disabled(attested)
                     TextField("Questions", text: str(\.questions), axis: .vertical).lineLimit(3...10)
                 }
                 Section("Recording and transcript") {
-                    EvidencePicker(title: "Recording", ref: str(\.recordingRef))
-                    EvidencePicker(title: "Transcript", ref: str(\.transcriptRef))
+                    EvidencePicker(title: "Recording", ref: str(\.recordingRef)).disabled(attested)
+                    EvidencePicker(title: "Transcript", ref: str(\.transcriptRef)).disabled(attested)
                     Text("Add the recording to the case's sources; its transcript is made on this Mac and can be chosen here.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Summary") {
@@ -736,7 +944,44 @@ struct InterviewEditor: View {
                         }
                     }
                     Button("Export statement for signature…") {
-                        CaseFileSave.save(CaseFileDocuments.statement(s, interview: interview, by: model.actor), name: "Statement - \(s.person(interview.personID)?.name ?? "interview")", ext: "md")
+                        let iv = interview, actor = model.actor
+                        model.exportDocument(appState, kind: .statement, name: "Statement - \(s.person(interview.personID)?.name ?? "interview")", ext: "md") { fresh in
+                            CaseFileDocuments.statement(fresh, interview: fresh.interviews.first { $0.id == iv.id } ?? iv, by: actor)
+                        }
+                    }
+                }
+                if attested {
+                    Section("Corrections") {
+                        let mine = s.addenda.filter { $0.interviewID == interview.id }
+                        if mine.isEmpty {
+                            Text("A confirmed statement is never edited. If the interviewee corrects it, record the correction here; it is kept with the statement, in order.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        ForEach(mine) { a in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(a.text).font(.callout)
+                                Text("Reason: \(a.reason) · recorded \(CaseFileDocuments.t(a.recordedAt)) by \(a.recordedBy)").font(.caption).foregroundStyle(.secondary)
+                                if let at = a.confirmedAt {
+                                    Text("Confirmed by \(a.confirmedBy ?? "") on \(CaseFileDocuments.t(at))").font(.caption)
+                                } else {
+                                    HStack {
+                                        TextField("Confirmed by (interviewee's name)", text: $correctionConfirmedBy)
+                                        Button("Record confirmation") {
+                                            let id = a.id, by = correctionConfirmedBy
+                                            model.run(appState) { try await $0.file.confirmAddendum(caseID: model.caseID, id: id, confirmedBy: by, actor: model.actor) }
+                                            correctionConfirmedBy = ""
+                                        }.disabled(correctionConfirmedBy.trimmingCharacters(in: .whitespaces).isEmpty)
+                                    }
+                                }
+                            }
+                        }
+                        TextField("The correction, in the interviewee's words", text: $correction, axis: .vertical).lineLimit(2...8)
+                        TextField("Why it is being corrected", text: $correctionReason)
+                        Button("Add correction") {
+                            let id = interview.id, text = correction, why = correctionReason
+                            model.run(appState) { try await $0.file.addStatementAddendum(caseID: model.caseID, interviewID: id, text: text, reason: why, actor: model.actor) }
+                            correction = ""; correctionReason = ""
+                        }.disabled(correction.trimmingCharacters(in: .whitespaces).isEmpty || correctionReason.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
                 Section("Credibility", content: {
@@ -791,6 +1036,17 @@ struct CaseEvidenceTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if !model.unresolvedRefs.isEmpty {
+                CaseSection(title: "References to repair",
+                            subtitle: "\(model.unresolvedRefs.count) piece(s) of evidence in this case point at something that isn't a source, exhibit or note of this case. They are kept as written; relink or retract each one.") {
+                    ForEach(model.unresolvedRefs) { u in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(u.record): “\(model.label(for: u.ref))”").lineLimit(2)
+                            Text(u.problem.prefix(1).uppercased() + u.problem.dropFirst() + ".").font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
             CaseSection(title: "Sources in the case", subtitle: "\(s.custody.count) document(s) in scope, each with its content fingerprint.") {
                 ForEach(s.custody.prefix(200), id: \.sourceVersionID) { e in
                     let ref = e.sourceVersionID.uuidString
@@ -834,8 +1090,13 @@ struct CaseEvidenceTab: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Export exhibit list…") { CaseFileSave.save(CaseFileDocuments.exhibitListCSV(s), name: "Exhibits - \(s.caseHeader.title)", ext: "csv") }
-                    Button("Export custody report…") { CaseFileSave.save(CaseFileDocuments.custodyReport(s, by: model.actor), name: "Custody - \(s.caseHeader.title)", ext: "md") }
+                    Button("Export exhibit list…") { model.exportDocument(appState, kind: .exhibitList, name: "Exhibits - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.exhibitListCSV($0) } }
+                    Button("Export custody report…") {
+                        let actor = model.actor
+                        model.exportDocument(appState, kind: .custodyReport, name: "Custody - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.custodyReport($0, by: actor) }
+                    }
+                        .disabled(model.custodyReadFailed)
+                        .help(model.custodyReadFailed ? "The custody record could not be read." : "")
                 }
             }
             CaseSection(title: "Preservation (hold) notices", subtitle: "Issue a notice per custodian, record when they acknowledge, release it when the matter ends.") {
@@ -849,7 +1110,7 @@ struct CaseEvidenceTab: View {
                     TextEditor(text: $noticeText).font(.callout).frame(minHeight: 180)
                     HStack {
                         Spacer()
-                        Button("Save notice to send…") { CaseFileSave.save(noticeText, name: "Preservation notice - \(custodian)", ext: "txt") }
+                        Button("Save notice to send…") { model.exportText(appState, kind: .holdNotice, name: "Preservation notice - \(custodian)", ext: "txt", text: noticeText) }
                         Button("Record as issued") {
                             let c = custodian, t = noticeText, rem = Calendar.current.date(byAdding: .day, value: 7, to: Date())
                             let pid = s.people.first { $0.name.caseInsensitiveCompare(c) == .orderedSame }?.id
@@ -894,7 +1155,7 @@ struct CaseEvidenceTab: View {
                 }
                 ForEach(s.redactions) { r in Text("\(model.label(for: r.sourceRef)) · \(r.location) · \(r.reason) · \(r.redactedBy)").font(.caption) }
                 if !s.redactions.isEmpty {
-                    HStack { Spacer(); Button("Export redaction log…") { CaseFileSave.save(CaseFileDocuments.redactionLogCSV(s), name: "Redactions - \(s.caseHeader.title)", ext: "csv") } }
+                    HStack { Spacer(); Button("Export redaction log…") { model.exportDocument(appState, kind: .redactionLog, name: "Redactions - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.redactionLogCSV($0) } } }
                 }
             }
             CaseSection(title: "Review batches", subtitle: "Split the case's documents into batches; a second person checks each finished batch.") {
@@ -977,7 +1238,12 @@ struct CaseChronologyTab: View {
                         HStack(spacing: 6) {
                             Text(e.author)
                             if let r = e.evidenceRef { Text("· \(model.label(for: r))") }
+                            if e.evidenceRef != nil || !e.citations.isEmpty { Text("· \(e.support.label)").foregroundStyle(e.support.isDocumentary ? .green : .orange) }
+                            if e.citations.count > 1 { Text("· +\(e.citations.count - 1) citation(s)") }
+                            if let rs = e.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { Text("· \(rs.label)") }
+                            if s.isSuperseded(e.origin) { Text("· superseded — re-review").foregroundStyle(.orange) }
                         }.font(.caption).foregroundStyle(.secondary)
+                        if let q = e.quote { Text("“\(q)”").font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                     }
                     Spacer()
                     Button("Retract") {
@@ -1000,12 +1266,19 @@ struct CaseLogTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            CaseSection(title: "Export", subtitle: "Each export is recorded in the case log.") {
+            CaseSection(title: "Export", subtitle: "Each export is frozen, re-checked against the case's sources and access, scrubbed of protected identities, written, read back and recorded in the case log.") {
                 HStack {
-                    Button("Case file report…") { export(CaseFileDocuments.caseFileReport(s, named: model.named, by: model.actor), "Case file - \(s.caseHeader.title)", "md", "caseFileReport") }
-                    Button("Case log…") { export(CaseFileDocuments.actionLogCSV(s), "Case log - \(s.caseHeader.title)", "csv", "caseLog") }
-                    Button("Exhibit list…") { export(CaseFileDocuments.exhibitListCSV(s), "Exhibits - \(s.caseHeader.title)", "csv", "exhibitList") }
-                    Button("Custody report…") { export(CaseFileDocuments.custodyReport(s, by: model.actor), "Custody - \(s.caseHeader.title)", "md", "custodyReport") }
+                    InfoPopoverButton(topic: "task-review-approve-export")   // §6.8 — approvals and exports
+                    Button("Case file report…") {
+                        let named = model.named, actor = model.actor
+                        model.exportDocument(appState, kind: .caseFileReport, name: "Case file - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.caseFileReport($0, named: named, by: actor) }
+                    }
+                    Button("Case log…") { model.exportDocument(appState, kind: .caseLog, name: "Case log - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.actionLogCSV($0) } }
+                    Button("Exhibit list…") { model.exportDocument(appState, kind: .exhibitList, name: "Exhibits - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.exhibitListCSV($0) } }
+                    Button("Custody report…") {
+                        let actor = model.actor
+                        model.exportDocument(appState, kind: .custodyReport, name: "Custody - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.custodyReport($0, by: actor) }
+                    }
                 }
             }
             CaseSection(title: "Personal data about someone", subtitle: "For a data-subject request: everything this case file records about one named person. Documents that mention them are found with Search and the person's dossier.") {
@@ -1014,7 +1287,10 @@ struct CaseLogTab: View {
                         Text("Choose").tag("")
                         ForEach(Array(Set(s.people.map(\.name))).sorted(), id: \.self) { Text($0).tag($0) }
                     }.frame(maxWidth: 300)
-                    Button("Export…") { export(CaseFileDocuments.personDataExport(s, name: personName, by: model.actor), "Personal data - \(personName)", "md", "personDataExport") }
+                    Button("Export…") {
+                        let person = personName, actor = model.actor
+                        model.exportDocument(appState, kind: .personDataExport, name: "Personal data - \(personName)", ext: "md") { CaseFileDocuments.personDataExport($0, name: person, by: actor) }
+                    }
                         .disabled(personName.isEmpty)
                 }
             }
@@ -1031,8 +1307,4 @@ struct CaseLogTab: View {
         }
     }
 
-    private func export(_ text: String, _ name: String, _ ext: String, _ action: String) {
-        CaseFileSave.save(text, name: name, ext: ext)
-        Task { try? await appState.caseFiles?.file.logAction(caseID: model.caseID, action: "exported", detail: action, actor: model.actor) }
-    }
 }

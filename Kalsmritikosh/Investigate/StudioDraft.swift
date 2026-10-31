@@ -36,6 +36,9 @@ public nonisolated struct StudioFieldProvenance: Codable, Hashable, Sendable {
     public var evidence: [StudioEvidenceRef]
     public var prefilledValue: String?
     public var investigatorEntry: Bool
+    /// Marked as the investigator's entry after its cited source failed to resolve (review R2/R1):
+    /// printed as their entry, and it blocks approval — documentary support cannot be waived by a label.
+    public var relabelledFromUnresolved: Bool?
 
     public init(evidence: [StudioEvidenceRef] = [], prefilledValue: String? = nil, investigatorEntry: Bool = false) {
         self.evidence = evidence; self.prefilledValue = prefilledValue; self.investigatorEntry = investigatorEntry
@@ -85,6 +88,18 @@ public nonisolated enum StudioExportGate {
         for path in paths { p[path] = .investigator }
         provenance = p
         return paths
+    }
+
+    /// Mark the given fields as investigator entries (the investigator vouches for them). Those in
+    /// `unresolved` had a citation that failed: they are flagged, so approval stays blocked for them.
+    public static func markAsInvestigatorEntries(_ paths: [String], unresolved: Set<String> = [], provenance: inout StudioProvenance?) {
+        var p = provenance ?? [:]
+        for path in paths {
+            var e = StudioFieldProvenance.investigator
+            if unresolved.contains(path) { e.relabelledFromUnresolved = true }
+            p[path] = e
+        }
+        provenance = p
     }
 
     /// The appendix printed with an exported studio report: how many lines rest on documents and
@@ -167,11 +182,20 @@ public nonisolated struct StudioCaseDocument: Sendable, Hashable {
     public let date: Date?
 }
 
-/// A dated event in the case.
+/// A dated event in the case. An event the document dates only to a year, a decade or a span keeps
+/// that uncertainty: `precision` says how exact `date` is, and `endDate` closes a stated range
+/// (res.chronology: "an uncertain date keeps its range").
 public nonisolated struct StudioCaseEvent: Sendable, Hashable {
     public let date: Date
     public let title: String
     public let refs: [StudioEvidenceRef]
+    public let endDate: Date?
+    public let precision: DatePrecision
+    public init(date: Date, title: String, refs: [StudioEvidenceRef], endDate: Date? = nil, precision: DatePrecision = .day) {
+        self.date = date; self.title = title; self.refs = refs; self.endDate = endDate; self.precision = precision
+    }
+    /// True when the document does not date the event to one day (coarser precision, or a range).
+    public var isUncertain: Bool { endDate != nil || precision.rawValue < DatePrecision.day.rawValue }
 }
 
 /// Everything a studio can be pre-filled from, read once from the case's ledger.
@@ -188,13 +212,18 @@ public nonisolated struct StudioCaseFacts: Sendable {
     public let named: [StudioCaseValue]
     /// Amounts the documents state, each with the sentence it appears in.
     public let statedAmounts: [StudioCaseValue]
+    /// Calendar dates the documents state with an explicit year, each titled by the sentence it
+    /// appears in — what a document dates even when no ledger event was recognised there.
+    /// Relative dates ("today", "this morning") are never here: they resolve to the reading day.
+    public let statedDates: [StudioCaseEvent]
 
     public init(caseTitle: String, parties: [StudioCaseValue], dates: [StudioCaseValue], amounts: [StudioCaseValue],
                 identifiers: [StudioCaseValue], documents: [StudioCaseDocument], events: [StudioCaseEvent],
-                allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = []) {
+                allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = [],
+                statedDates: [StudioCaseEvent] = []) {
         self.caseTitle = caseTitle; self.parties = parties; self.dates = dates; self.amounts = amounts
         self.identifiers = identifiers; self.documents = documents; self.events = events; self.allFacts = allFacts
-        self.named = named; self.statedAmounts = statedAmounts
+        self.named = named; self.statedAmounts = statedAmounts; self.statedDates = statedDates
     }
 
     public static let empty = StudioCaseFacts(caseTitle: "", parties: [], dates: [], amounts: [], identifiers: [],
@@ -243,8 +272,17 @@ public actor StudioCaseFactsReader {
 
     /// An amount as the text writes it: "$2.75" followed by "million" in the document is "$2.75 million".
     nonisolated static func amountAsWritten(_ value: String, in content: String) -> String {
+        // UI journey 2026-10-30b, D-8: an extracted "₹10,000," kept the comma that followed it, and
+        // "₹2,40,000" (Indian grouping) came out as "₹2". Trailing punctuation is dropped and a
+        // figure is extended over the grouping that continues it in the text.
+        var value = value
+        while let last = value.last, ",.;:".contains(last) { value.removeLast() }
         guard let r = content.range(of: value) else { return value }
-        let rest = content[r.upperBound...].prefix(16)
+        let after = content[r.upperBound...].prefix(24)
+        if let m = after.range(of: #"^(?:,\d{2,3})+(?:\.\d{1,2})?"#, options: .regularExpression) {
+            value += String(after[m])
+        }
+        let rest = content[r.upperBound...].dropFirst(value.count - (content.distance(from: r.lowerBound, to: r.upperBound))).prefix(16)
         for scale in [" million", " billion", " thousand", " trillion", " crore", " lakh"] where rest.lowercased().hasPrefix(scale) {
             return value + scale
         }
@@ -268,12 +306,21 @@ public actor StudioCaseFactsReader {
         return candidates.max { $0.count < $1.count }
     }
 
-    /// Names and amounts from the ledger's entities for each case document, kept only when the
-    /// document's text states them verbatim (so every line can be checked against its quote).
-    func namesAndAmounts(objectIDs: Set<UUID>) async throws -> (named: [StudioCaseValue], amounts: [StudioCaseValue]) {
-        guard let entities else { return ([], []) }
-        var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = []
-        var seenNames = Set<String>(), seenAmounts = Set<String>()
+    /// A date entity's day, only when its text names an explicit year ("March 3, 2009"); a relative
+    /// date ("today") resolves to the reading day and is not evidence of when anything happened.
+    nonisolated static func statedDay(raw: String, normalized: String?) -> Date? {
+        guard raw.range(of: #"\b(1[5-9]|20)\d{2}\b"#, options: .regularExpression) != nil,
+              let n = normalized?.uppercased() else { return nil }
+        return ISO8601DateFormatter().date(from: n)
+    }
+
+    /// Names, amounts and explicit dates from the ledger's entities for each case document, kept only
+    /// when the document's text states them verbatim (so every line can be checked against its quote).
+    func namesAndAmounts(objectIDs: Set<UUID>, versionOf: [UUID: UUID] = [:]) async throws
+        -> (named: [StudioCaseValue], amounts: [StudioCaseValue], dates: [StudioCaseEvent]) {
+        guard let entities else { return ([], [], []) }
+        var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = [], dates: [StudioCaseEvent] = []
+        var namedIndex: [String: Int] = [:], seenAmounts = Set<String>(), seenDates = Set<String>()
         for id in objectIDs.sorted(by: { $0.uuidString < $1.uuidString }).prefix(60) {
             guard let content = try await objects.fetchContent(id: id) else { continue }
             for e in try await entities.findByMentionSource(id) where e.qualityTier != .t3 {
@@ -281,19 +328,40 @@ public actor StudioCaseFactsReader {
                 if e.kind == .money { v = Self.amountAsWritten(v, in: content) }
                 if e.kind == .person, !v.contains(" "), let full = Self.fullName(v, in: content) { v = full }
                 guard v.count >= 2, let quote = Self.sentence(containing: v, in: content) else { continue }
-                let ref = StudioEvidenceRef(objectID: id, quote: quote)
+                // The exact source version the passage was read from (review R1).
+                let ref = StudioEvidenceRef(sourceVersionID: versionOf[id], objectID: id, quote: quote)
                 switch e.kind {
                 case .person, .organization:
-                    guard v.contains(" "), seenNames.insert(v.lowercased()).inserted else { continue }
-                    named.append(StudioCaseValue(value: v, label: e.kind == .person ? "person" : "organisation", refs: [ref]))
+                    guard v.contains(" ") else { continue }
+                    let label = e.kind == .person ? "person" : "organisation"
+                    if let at = namedIndex[v.lowercased()] {
+                        // The tagger labels one name both ways in one document ("Asha Rao" as a person
+                        // and as an organisation). Rows come back in no fixed order, so the label must
+                        // not depend on which arrived first: a name also read as a person is a person.
+                        if label == "person", named[at].label == "organisation" {
+                            named[at] = StudioCaseValue(value: named[at].value, label: "person", refs: named[at].refs)
+                        }
+                        continue
+                    }
+                    namedIndex[v.lowercased()] = named.count
+                    named.append(StudioCaseValue(value: v, label: label, refs: [ref]))
                 case .money:
-                    guard v.rangeOfCharacter(from: .decimalDigits) != nil, seenAmounts.insert(v.lowercased()).inserted else { continue }
+                    // Acceptance case 2026-10-30: one entry per STATEMENT (document + sentence), not per
+                    // value. Keying by value alone kept only the first "₹10,000" in the whole case and
+                    // hid that the invoice, its two e-mail copies and the bank debit each state it —
+                    // the repeats are the executors' to flag, with their quotes, not the reader's to drop.
+                    guard v.rangeOfCharacter(from: .decimalDigits) != nil,
+                          seenAmounts.insert(v.lowercased() + "|" + id.uuidString + "|" + quote.lowercased()).inserted else { continue }
                     amounts.append(StudioCaseValue(value: v, label: "amount", refs: [ref]))
+                case .date:
+                    guard let day = Self.statedDay(raw: v, normalized: e.normalizedValue),
+                          seenDates.insert(id.uuidString + "|" + quote).inserted else { continue }
+                    dates.append(StudioCaseEvent(date: day, title: quote, refs: [ref]))
                 default: continue
                 }
             }
         }
-        return (Array(named.prefix(40)), Array(amounts.prefix(40)))
+        return (Array(named.prefix(40)), Array(amounts.prefix(40)), Array(dates.prefix(200)))
     }
 
     nonisolated static let partyFields: Set<String> = ["plaintiff", "defendant", "petitioner", "respondent", "appellant",
@@ -319,21 +387,26 @@ public actor StudioCaseFactsReader {
         let identifiers = rows.filter { Self.identifierFields.contains($0.field) }
             .map { StudioCaseValue(value: $0.value, label: $0.field, refs: refs($0)) }
 
+        let objectIDs = try await objects.objectIDs(inSourceVersionIDs: sourceVersionIDs)
+        // One case version per document, so every reference names the version it was read from.
+        let versionOf = try await objects.sourceVersionsByObject(inSourceVersionIDs: sourceVersionIDs)
+            .compactMapValues { $0.sorted { $0.uuidString < $1.uuidString }.first }
         let caseEvents = try await events.forSourceVersions(sourceVersionIDs, limit: 400)
             .filter(\.hasTrustworthyDate)
             .sorted { $0.date < $1.date }
             .map { StudioCaseEvent(date: $0.date, title: $0.title,
-                                   refs: [StudioEvidenceRef(objectID: $0.sourceObjectID, quote: String(($0.summary ?? $0.title).prefix(200)))]) }
+                                   refs: [StudioEvidenceRef(sourceVersionID: versionOf[$0.sourceObjectID], objectID: $0.sourceObjectID,
+                                                            quote: String(($0.summary ?? $0.title).prefix(200)))],
+                                   endDate: $0.endDate, precision: $0.datePrecision) }
 
-        let objectIDs = try await objects.objectIDs(inSourceVersionIDs: sourceVersionIDs)
         let names = try await objects.sourceFilenames(for: objectIDs)
         let documents = objectIDs.sorted { (names[$0] ?? "") < (names[$1] ?? "") }
-            .map { StudioCaseDocument(objectID: $0, sourceVersionID: nil, name: names[$0] ?? "Document", date: nil) }
+            .map { StudioCaseDocument(objectID: $0, sourceVersionID: versionOf[$0], name: names[$0] ?? "Document", date: nil) }
 
-        let (named, stated) = try await namesAndAmounts(objectIDs: objectIDs)
+        let (named, stated, statedDates) = try await namesAndAmounts(objectIDs: objectIDs, versionOf: versionOf)
         return StudioCaseFacts(caseTitle: caseTitle, parties: parties, dates: dates, amounts: amounts,
                                identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all,
-                               named: named, statedAmounts: stated)
+                               named: named, statedAmounts: stated, statedDates: statedDates)
     }
 }
 

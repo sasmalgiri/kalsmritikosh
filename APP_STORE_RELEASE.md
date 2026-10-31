@@ -9,8 +9,10 @@
   their constitution, Compliance Board with periodic re-checks, in-app SOP
   Handbook generated from the enforced rules.
 - Fully private by default: zero downloads (BGE models in-bundle, reasoning =
-  Apple on-device), zero network (code + locked v1 profile + test-pinned), and
-  **kernel-enforced** — outgoing network connections = No in Release.
+  Apple on-device). The main app has no network entitlement. **Superseded
+  2026-10-27:** the Release build embeds the network helper for the optional
+  Online mode (three provider hosts, each send previewed) — see
+  `docs/DATA_FLOW_INVENTORY.md`.
 - Legal notices v1.4: competitor-parity clauses, subscription-proof payments,
   SOP-claim bounding (interpretation, not certification).
 - Release hygiene: all developer tools compile out of Release builds.
@@ -29,10 +31,15 @@
 2. **Archive:** select `main`, Product ▸ Archive (Release config).
 3. **Verify the sealed sandbox on the artifact:**
    `codesign -d --entitlements - Kalsmritikosh.app | grep -c network.client`
-   → must print `0` (internet closed, kernel-enforced).
+   → must print `0` for the main app. Then check the embedded helper
+   (`Contents/Extensions/KalsmritikoshNetworkHelper.appex`): outgoing
+   network only, and only the three provider hosts in its allowlist.
 4. **App Store Connect:**
-   - Privacy label: **Data Not Collected** (truthful — no network at all).
-   - `ITSAppUsesNonExemptEncryption = NO` (no network traffic to encrypt).
+   - Privacy label: decided from `docs/DATA_FLOW_INVENTORY.md` §4 with counsel
+     (Online mode sends content to a third-party AI provider when turned on).
+   - `ITSAppUsesNonExemptEncryption`: the Online helper uses HTTPS and the
+     ledger uses SQLCipher — confirm the exemption against Apple's
+     questionnaire for the linked libraries and keep the rationale (review L6).
    - Age rating questionnaire; category: Productivity or Business.
    - Price: **free download, 14-day free trial, then one $79 in-app
      purchase**, no subscription, Family Sharing on (SHIP_DECISIONS

@@ -37,6 +37,10 @@ public struct BackupService: Sendable {
         case promotionFailed(String)
         /// W2-7 — the backup's ledger is encrypted with a key this Mac does not hold.
         case encryptedWithAnotherKey
+        /// T2 — the destination volume does not have room for the backup (nothing was written).
+        case insufficientSpace(needed: Int64, available: Int64)
+        /// T2 — the backup was made by a newer version of the app (a newer ledger schema).
+        case newerSchema(backup: Int, supported: Int)
     }
 
     /// Copy the database + originals into `destination`, writing a manifest.
@@ -50,6 +54,21 @@ public struct BackupService: Sendable {
         schemaVersion: Int,
         nowEpoch: Double,
         coverage: BackupCoverage = .ledgerOnly
+    ) throws -> BackupManifest {
+        try Self.checkSpace(for: [databaseURL] + originalURLs, at: destination)
+        return try Self.staged(destination) { staging in
+            try writeBackup(databaseURL: databaseURL, originalURLs: originalURLs, destination: staging,
+                            schemaVersion: schemaVersion, nowEpoch: nowEpoch, coverage: coverage)
+        }
+    }
+
+    private func writeBackup(
+        databaseURL: URL,
+        originalURLs: [URL],
+        destination: URL,
+        schemaVersion: Int,
+        nowEpoch: Double,
+        coverage: BackupCoverage
     ) throws -> BackupManifest {
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -81,6 +100,48 @@ public struct BackupService: Sendable {
         let json = try JSONEncoder().encode(manifest)
         try json.write(to: destination.appendingPathComponent(Self.manifestName))
         return manifest
+    }
+
+    // MARK: - T2 — a backup write that fails never damages the backup already there
+
+    /// Write the backup into a staging folder beside `destination` and move it into place only when
+    /// every file and the manifest are written. A failure part-way (a full disk, an unreadable file)
+    /// removes the staging folder and leaves whatever was at `destination` exactly as it was.
+    static func staged(_ destination: URL, _ write: (URL) throws -> BackupManifest) throws -> BackupManifest {
+        let fm = FileManager.default
+        let parent = destination.deletingLastPathComponent()
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        let token = UUID().uuidString
+        let staging = parent.appendingPathComponent(".\(destination.lastPathComponent).writing-\(token)", isDirectory: true)
+        let aside = parent.appendingPathComponent(".\(destination.lastPathComponent).replaced-\(token)", isDirectory: true)
+        defer { try? fm.removeItem(at: staging) }
+        let manifest = try write(staging)
+        let hadPrevious = fm.fileExists(atPath: destination.path)
+        if hadPrevious { try fm.moveItem(at: destination, to: aside) }
+        do { try fm.moveItem(at: staging, to: destination) } catch {
+            if hadPrevious { try? fm.moveItem(at: aside, to: destination) }   // put the previous backup back
+            throw error
+        }
+        if hadPrevious { try? fm.removeItem(at: aside) }
+        return manifest
+    }
+
+    /// Refuse before writing anything when the destination volume cannot hold the backup.
+    static func checkSpace(for inputs: [URL], at destination: URL) throws {
+        let needed = inputs.reduce(Int64(0)) { sum, url in
+            sum + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        var probe = destination
+        while !FileManager.default.fileExists(atPath: probe.path), probe.pathComponents.count > 1 { probe.deleteLastPathComponent() }
+        guard let available = try? probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+        else { return }   // capacity unknown: the staged write still protects the previous backup
+        try requireSpace(needed: needed, available: available)
+    }
+
+    static func requireSpace(needed: Int64, available: Int64) throws {
+        // Room for the copies plus the manifest and a margin.
+        let margin = max(Int64(1 << 20), needed / 20)
+        if available < needed + margin { throw BackupError.insufficientSpace(needed: needed + margin, available: available) }
     }
 
     /// Validate a backup folder against its manifest WITHOUT copying — the
@@ -159,6 +220,10 @@ public struct BackupService: Sendable {
                         ledgerKey: LedgerKey? = LedgerKeychain.load()) throws -> BackupManifest {
         let (manifest, verdict) = try inspect(backupFolder: backupFolder)
         guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
+        // T2 — an older app never restores a newer ledger over the current one; update the app first.
+        guard manifest.schemaVersion <= SchemaMigrations.latestVersion else {
+            throw BackupError.newerSchema(backup: manifest.schemaVersion, supported: SchemaMigrations.latestVersion)
+        }
         guard verdict.unsafe.isEmpty else { throw BackupError.unsafeEntry(verdict.unsafe.joined(separator: ", ")) }
         guard verdict.corrupt.isEmpty else { throw BackupError.damaged(verdict.corrupt) }
         guard verdict.ok else { throw BackupError.restoreIncomplete(missing: verdict.missing) }
@@ -195,7 +260,9 @@ public struct BackupService: Sendable {
                 catch LedgerEncryptionError.wrongKey { throw BackupError.encryptedWithAnotherKey }
             }
         }
-        if let problem = Database.quickCheck(fileAt: stagedDB, key: ledgerKey) {
+        // A plaintext backup (made before ledger encryption) is checked without a key; the next
+        // launch encrypts it once, like any plaintext ledger.
+        if let problem = Database.quickCheck(fileAt: stagedDB, key: LedgerFileState.of(stagedDB) == .encrypted ? ledgerKey : nil) {
             throw BackupError.databaseUnusable(problem)
         }
 
@@ -231,5 +298,89 @@ public struct BackupService: Sendable {
         }
         try? fm.removeItem(at: aside)
         return manifest
+    }
+
+    // MARK: - Complete backup (brief §11)
+
+    public static let sourcesMapName = "backup-sources.json"
+
+    /// What a complete backup carries besides the ledger: each original's backup path, keyed by the
+    /// ledger's file id, and the sources that could not be read (kept as external dependencies).
+    public struct SourcesMap: Codable, Sendable, Equatable {
+        public var originals: [String: String]      // file id → relative path inside the backup
+        public var notIncluded: [String]            // original locations that could not be read
+    }
+
+    /// Ledger snapshot + every readable original (under `originals/`) + the sources map, all in one
+    /// manifest with sizes and SHA-256. `databaseSnapshot` must be a consistent snapshot (the caller
+    /// takes it with the online backup API).
+    @discardableResult
+    public func createCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
+                                     destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
+        try Self.checkSpace(for: [databaseSnapshot] + originals.map(\.url), at: destination)
+        return try Self.staged(destination) { staging in
+            try writeCompleteBackup(databaseSnapshot: databaseSnapshot, originals: originals, notIncluded: notIncluded,
+                                    destination: staging, schemaVersion: schemaVersion, nowEpoch: nowEpoch)
+        }
+    }
+
+    private func writeCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
+                                     destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
+        let fm = FileManager.default
+        try fm.createDirectory(at: destination.appendingPathComponent("originals", isDirectory: true), withIntermediateDirectories: true)
+        var entries: [BackupEntry] = []
+        var taken = Self.reservedNames
+        let dbName = Self.uniqueName(for: databaseSnapshot.lastPathComponent, taken: &taken)
+        let dbDst = destination.appendingPathComponent(dbName)
+        if fm.fileExists(atPath: dbDst.path) { try fm.removeItem(at: dbDst) }
+        try fm.copyItem(at: databaseSnapshot, to: dbDst)
+        let dbMeasured = try Self.measure(dbDst)
+        entries.append(BackupEntry(relativePath: dbName, byteSize: dbMeasured.byteSize, sha256: dbMeasured.sha256, kind: .database))
+        var map = SourcesMap(originals: [:], notIncluded: notIncluded)
+        var takenOriginals = Set<String>()
+        for o in originals {
+            let rel = "originals/" + Self.uniqueName(for: o.url.lastPathComponent, taken: &takenOriginals)
+            let dst = destination.appendingPathComponent(rel)
+            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+            do { try fm.copyItem(at: o.url, to: dst) } catch { map.notIncluded.append(o.url.path); continue }
+            let measured = try Self.measure(dst)
+            entries.append(BackupEntry(relativePath: rel, byteSize: measured.byteSize, sha256: measured.sha256, kind: .originalSource))
+            map.originals[o.fileID.uuidString] = rel
+        }
+        let mapURL = destination.appendingPathComponent(Self.sourcesMapName)
+        try JSONEncoder().encode(map).write(to: mapURL)
+        let mapMeasured = try Self.measure(mapURL)
+        entries.append(BackupEntry(relativePath: Self.sourcesMapName, byteSize: mapMeasured.byteSize, sha256: mapMeasured.sha256, kind: .derivedExport))
+        // Complete only when nothing was left out (final brief §3.8).
+        let coverage: BackupCoverage = map.notIncluded.isEmpty ? .complete : .ledgerWithSomeOriginals
+        let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion, createdAtEpoch: nowEpoch, entries: entries, coverage: coverage)
+        try JSONEncoder().encode(manifest).write(to: destination.appendingPathComponent(Self.manifestName))
+        return manifest
+    }
+
+    /// The sources map a complete (or partial-originals) backup carries.
+    public static func sourcesMap(in backupFolder: URL) throws -> SourcesMap {
+        try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: backupFolder.appendingPathComponent(sourcesMapName)))
+    }
+
+    /// Restore a complete backup into `targetFolder` (verified, staged and failure-atomic, as
+    /// `restore`), then relink the restored ledger's sources to the restored originals so every
+    /// citation opens on this Mac without the old Mac's paths. Returns the sources not included.
+    @discardableResult
+    public func restoreComplete(backupFolder: URL, into targetFolder: URL,
+                                ledgerKey: LedgerKey? = LedgerKeychain.load()) async throws -> SourcesMap {
+        let manifest = try restore(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
+        guard manifest.coverage == .complete || manifest.coverage == .ledgerWithSomeOriginals,
+              let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
+        let map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
+        let restoredDB = targetFolder.appendingPathComponent(dbEntry.relativePath)
+        let db = try Database(url: restoredDB, key: LedgerFileState.of(restoredDB) == .encrypted ? ledgerKey : nil)
+        for (fileID, rel) in map.originals {
+            guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
+            let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL
+            try await db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(restored.absoluteString), .uuid(id)])
+        }
+        await db.close()
+        return map
     }
 }

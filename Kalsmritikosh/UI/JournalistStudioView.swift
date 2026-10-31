@@ -16,12 +16,16 @@ import AppKit
 #endif
 
 public struct JournalistStudioView: View {
-    @AppStorage("kalsmritikosh.jn.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "journalist", legacyKey: "kalsmritikosh.jn.store")
+    @Environment(AppState.self) private var appState
     @State private var memos: [FactCheckMemo] = []
     @State private var loaded = false
     @State private var activeID: UUID?
     @State private var stage: FactCheckMemo.Stage = .story
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -32,11 +36,18 @@ public struct JournalistStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
+            }
+            exportPackage = nil
+        }
     }
 
     // MARK: Persistence
@@ -44,12 +55,14 @@ public struct JournalistStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([FactCheckMemo].self, from: data) { memos = d }
+        // Final brief §3.2: references resolve against the draft's own case at preview and export.
+        gate.resolve = { [storage, appState] id, values, provenance, privileged in
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            return await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+        }
+        Task { memos = await storage.load(FactCheckMemo.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(memos), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(memos, app: appState) }
     private var activeBinding: Binding<FactCheckMemo>? {
         guard let id = activeID, let idx = memos.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { memos[idx] },
@@ -100,7 +113,9 @@ public struct JournalistStudioView: View {
                 Text("\(m.claims.count) claim(s) · \(flagged) to run as alleged")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { memos.removeAll { $0.id == m.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { memos.removeAll { $0.id == m.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: m.id) { memos.removeAll { $0.id == m.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = m.id; stage = firstIncomplete(m) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -132,10 +147,15 @@ public struct JournalistStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Memo title", text: m.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: m, message: $fillMessage)
-                Button { gate.run(m) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                StudioFillFromCaseMenu(model: m, message: $fillMessage, bind: { await storage.bind(m.wrappedValue.id, to: $0, app: appState) })
+                Button { approveNow(m.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(m.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(m.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: m.wrappedValue.id) { await storage.refreshApproval(m.wrappedValue.id, app: appState) }
+                Button { gate.run(m) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(m) { printMemo(m.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(m) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -224,7 +244,15 @@ public struct JournalistStudioView: View {
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                     }
                     TextField("Sources supporting it", text: $c.sources).textFieldStyle(.roundedBorder).font(.caption)
-                    TextField("Independent corroboration — or its absence", text: $c.corroboration).textFieldStyle(.roundedBorder).font(.caption)
+                    TextField("Independent corroboration — or its absence (copies of one story are one source)", text: $c.corroboration).textFieldStyle(.roundedBorder).font(.caption)
+                    HStack(spacing: 8) {
+                        Toggle("Adverse to someone", isOn: Binding(get: { c.adverse ?? (c.status?.mustBeLabelledAlleged == true) }, set: { c.adverse = $0 }))
+                            .toggleStyle(.checkbox).font(.caption)
+                        TextField("Who it affects (comma-separated)", text: Binding(
+                            get: { (c.affectedSubjects ?? []).joined(separator: ", ") },
+                            set: { c.affectedSubjects = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }))
+                            .textFieldStyle(.roundedBorder).font(.caption)
+                    }
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
@@ -237,10 +265,8 @@ public struct JournalistStudioView: View {
         VStack(alignment: .leading, spacing: 12) {
             header("Right of reply",
                    "Anyone facing a claim short of verified gets the allegations put to them in full, with a real deadline — and their response (or silence) goes on the record.")
-            if m.wrappedValue.claims.contains(where: { $0.status?.mustBeLabelledAlleged == true }) && m.wrappedValue.replies.isEmpty {
-                Label("This story has claims short of verified — the memo won't complete without at least one reply entry.",
-                      systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange)
+            ForEach(m.wrappedValue.replyGaps, id: \.self) { gap in
+                Label(gap, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
             }
             ForEach(m.replies) { $r in
                 VStack(alignment: .leading, spacing: 6) {
@@ -253,10 +279,18 @@ public struct JournalistStudioView: View {
                     }
                     TextField("What was put to them (in full)", text: $r.claimSummary, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(1...2)
+                    Text("Claims put to them").font(.caption.weight(.medium))
+                    ForEach(Array(m.wrappedValue.claims.enumerated()), id: \.element.id) { i, c in
+                        Toggle("\(i + 1). \(c.text)", isOn: Binding(get: { (r.claimIDs ?? []).contains(c.id) },
+                                                                    set: { on in var v = r.claimIDs ?? []; v.removeAll { $0 == c.id }; if on { v.append(c.id) }; r.claimIDs = v }))
+                            .toggleStyle(.checkbox).font(.caption).lineLimit(1)
+                    }
                     HStack(spacing: 8) {
                         TextField("Deadline", text: $r.deadline).textFieldStyle(.roundedBorder).frame(width: 180)
-                        TextField("Response — or 'no response by deadline'", text: $r.response).textFieldStyle(.roundedBorder)
+                        TextField("Response — or 'no response by deadline' (silence is not an admission)", text: $r.response).textFieldStyle(.roundedBorder)
                     }
+                    TextField("How the story treats the reply", text: Binding(get: { r.editorialTreatment ?? "" }, set: { r.editorialTreatment = $0 }))
+                        .textFieldStyle(.roundedBorder).font(.caption)
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
@@ -284,10 +318,10 @@ public struct JournalistStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(m) { copyMemo(m.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(m) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(m) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(m) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(m) { printMemo(m.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(m) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -313,13 +347,49 @@ public struct JournalistStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ m: FactCheckMemo) -> String {
+    private func sealed(_ m: FactCheckMemo, approved: Bool = false) -> String {
         let stages = FactCheckMemo.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Journalist Fact-Check", title: m.title,
-            report: FactCheckMemoRenderer.markdown(m, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + FactCheckMemoRenderer.markdown(m, generatedAt: Date()),
             stagesComplete: stages.filter { m.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: FactCheckMemo) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: FactCheckMemo.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: FactCheckMemo) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: FactCheckMemo.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: FactCheckMemo) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: FactCheckMemo.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
+            if AppPrinting.run(text: pkg.text, jobTitle: "Fact-Check Memo — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: FactCheckMemo) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: FactCheckMemo.needsPrivilegedSources, mandatory: FactCheckMemo.mandatoryEvidence, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -328,24 +398,11 @@ public struct JournalistStudioView: View {
     private var exportFilename: String {
         "fact-check-\((activeBinding?.wrappedValue.title ?? "memo").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyMemo(_ m: FactCheckMemo) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(m), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printMemo(_ m: FactCheckMemo) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(m)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "Fact-Check Memo — \(m.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("Journalist Studio") {
     JournalistStudioView().frame(width: 1040, height: 760)
+
 }
 #endif

@@ -63,6 +63,17 @@ public actor ContradictionsRepository {
         return rows.compactMap(decode)
     }
 
+    /// One page of every contradiction, in a stable order, after `cursor` — scope is applied by the
+    /// caller before any limit (implementation brief §7). Throws instead of returning a partial page.
+    public func page(after cursor: (Date, String)?, size: Int = 1_000) async throws -> [Contradiction] {
+        var sql = "SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind FROM contradictions"
+        var args: [SQLValue] = []
+        if let (at, id) = cursor { sql += " WHERE (detected_at > ? OR (detected_at = ? AND id > ?))"; args += [.date(at), .date(at), .text(id)] }
+        sql += " ORDER BY detected_at ASC, id ASC LIMIT ?;"
+        args.append(.integer(Int64(size)))
+        return try await database.query(sql, args).compactMap(decode)
+    }
+
     /// Fetch exactly the requested contradictions by id (no row ceiling). Genuinely unbounded:
     /// ids are de-duplicated and queried in deterministic chunks of ≤500 so a large linked set
     /// never exceeds SQLite's bind-variable limit. Throws on a database failure rather than

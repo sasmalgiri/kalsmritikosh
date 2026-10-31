@@ -15,7 +15,7 @@
 //     that never reproduced when the suite was run alone. `.serialized` removes
 //     the interleaving.
 //
-//  2. A LIVE SETTING MUTATED BY A TEST RUN. `UserDefaults.standard` in the test
+//  2. A LIVE SETTING MUTATED BY A TEST RUN. `AppDefaults.store` in the test
 //     host is the APP's defaults domain, so these tests were writing the real
 //     AI-mode preference — a test run could leave the owner's app in
 //     unconstrained, or (on the failing path) with the key deleted. Each test
@@ -32,12 +32,12 @@ import Foundation
     /// is put back afterwards, including when an expectation fails.
     private func withIsolatedAIMode(_ body: () -> Void) {
         let key = FeatureFlags.aiModeKey
-        let original = UserDefaults.standard.string(forKey: key)
+        let original = AppDefaults.store.string(forKey: key)
         defer {
             if let original {
-                UserDefaults.standard.set(original, forKey: key)
+                AppDefaults.store.set(original, forKey: key)
             } else {
-                UserDefaults.standard.removeObject(forKey: key)
+                AppDefaults.store.removeObject(forKey: key)
             }
         }
         body()
@@ -46,7 +46,7 @@ import Foundation
     @Test("Default AI mode is guided (grounded contract)")
     func defaultIsGuided() {
         withIsolatedAIMode {
-            UserDefaults.standard.removeObject(forKey: FeatureFlags.aiModeKey)
+            AppDefaults.store.removeObject(forKey: FeatureFlags.aiModeKey)
             #expect(FeatureFlags.aiModeValue() == .guided)
             #expect(AIMode.guided.enforcesGrounding)
         }
@@ -55,10 +55,10 @@ import Foundation
     @Test("Unconstrained makes grounding advisory; the value persists and reads back")
     func unconstrainedAdvisoryAndPersists() {
         withIsolatedAIMode {
-            UserDefaults.standard.set(AIMode.unconstrained.rawValue, forKey: FeatureFlags.aiModeKey)
+            AppDefaults.store.set(AIMode.unconstrained.rawValue, forKey: FeatureFlags.aiModeKey)
             #expect(FeatureFlags.aiModeValue() == .unconstrained)
             #expect(!AIMode.unconstrained.enforcesGrounding)
-            UserDefaults.standard.set(AIMode.guided.rawValue, forKey: FeatureFlags.aiModeKey)
+            AppDefaults.store.set(AIMode.guided.rawValue, forKey: FeatureFlags.aiModeKey)
             #expect(FeatureFlags.aiModeValue() == .guided)
         }
     }
@@ -77,7 +77,7 @@ import Foundation
         // or future-version preference must leave grounding ENFORCED rather
         // than silently loosening the answer contract.
         withIsolatedAIMode {
-            UserDefaults.standard.set("not-a-mode", forKey: FeatureFlags.aiModeKey)
+            AppDefaults.store.set("not-a-mode", forKey: FeatureFlags.aiModeKey)
             #expect(FeatureFlags.aiModeValue() == .guided)
         }
     }

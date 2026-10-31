@@ -17,7 +17,9 @@ import AppKit
 #endif
 
 public struct WorkplaceStudioView: View {
-    @AppStorage("kalsmritikosh.wi.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "workplace", legacyKey: "kalsmritikosh.wi.store")
+    @Environment(AppState.self) private var appState
     @State private var cases: [WorkplaceInvestigation] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -28,6 +30,8 @@ public struct WorkplaceStudioView: View {
     @State private var newPerson = ""
     @State private var newRecommendation = ""
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -38,11 +42,18 @@ public struct WorkplaceStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
+            }
+            exportPackage = nil
+        }
     }
 
     // MARK: Persistence
@@ -50,12 +61,14 @@ public struct WorkplaceStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([WorkplaceInvestigation].self, from: data) { cases = d }
+        // Final brief §3.2: references resolve against the draft's own case at preview and export.
+        gate.resolve = { [storage, appState] id, values, provenance, privileged in
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            return await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+        }
+        Task { cases = await storage.load(WorkplaceInvestigation.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(cases), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(cases, app: appState) }
     private var activeBinding: Binding<WorkplaceInvestigation>? {
         guard let id = activeID, let idx = cases.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { cases[idx] },
@@ -108,7 +121,9 @@ public struct WorkplaceStudioView: View {
                 Text("\(c.allegations.count) allegation(s) · \(c.evidence.count) evidence")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { cases.removeAll { $0.id == c.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { cases.removeAll { $0.id == c.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: c.id) { cases.removeAll { $0.id == c.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = c.id; stage = firstIncomplete(c) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -140,10 +155,15 @@ public struct WorkplaceStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Case title", text: w.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: w, message: $fillMessage)
-                Button { gate.run(w) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                StudioFillFromCaseMenu(model: w, message: $fillMessage, bind: { await storage.bind(w.wrappedValue.id, to: $0, app: appState) })
+                Button { approveNow(w.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(w.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(w.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: w.wrappedValue.id) { await storage.refreshApproval(w.wrappedValue.id, app: appState) }
+                Button { gate.run(w) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(w) { printReport(w.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(w) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -286,19 +306,52 @@ public struct WorkplaceStudioView: View {
                     .onSubmit { addCredibility(w) }
                 Button { addCredibility(w) } label: { Label("Add", systemImage: "plus").labelStyle(.iconOnly) }.disabled(newPerson.trimmed.isEmpty)
             }
+            if w.wrappedValue.credibility.isEmpty {
+                TextField("Or, why no credibility assessment applies (e.g. a documentary case with no witness accounts)",
+                          text: Binding(get: { w.wrappedValue.credibilityNotApplicable ?? "" }, set: { w.wrappedValue.credibilityNotApplicable = $0 }), axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(1...2).font(.caption)
+            }
+            Text("Assess from the evidence — plausibility, corroboration, consistency. Never from emotion, accent or expression.")
+                .font(.caption2).foregroundStyle(.secondary)
             next(.findings)
         }
     }
 
     private func findingsStage(_ w: Binding<WorkplaceInvestigation>) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            header("Findings — balance of probabilities",
-                   "Classify each allegation and give the reasoning as \u{201C}because X, supported by Y\u{201D}. \(FindingClassifications.disciplineNote)")
+            header("Findings",
+                   "Choose the standard of proof, then for each allegation: whether it was put to the respondent, the evidence for and against, how contrary evidence and mitigation were weighed, the finding and its reasoning (\u{201C}because X, supported by Y\u{201D}). \u{201C}Unsubstantiated\u{201D} is not a finding that the complaint was false.")
+            Picker("Standard of proof", selection: w.standardOfProof) {
+                Text("Not chosen").tag(Optional<WIStandard>.none)
+                ForEach(WIStandard.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+            }
+            .frame(maxWidth: 360)
             ForEach(w.allegations) { $a in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(a.question).font(.callout.weight(.semibold))
+                    Picker("Put to the respondent", selection: $a.response) {
+                        Text("Not recorded").tag(Optional<WIResponseState>.none)
+                        ForEach(WIResponseState.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+                    }
+                    .frame(maxWidth: 380).font(.caption)
                     TextField("Respondent's response", text: $a.respondentResponse, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(1...2).font(.caption)
+                    if !w.wrappedValue.evidence.isEmpty {
+                        Text("Evidence — supports (+) / points the other way (−)").font(.caption.weight(.medium))
+                        ForEach(w.wrappedValue.evidence) { e in
+                            HStack(spacing: 8) {
+                                Toggle("+", isOn: Binding(get: { (a.supportingEvidence ?? []).contains(e.id) },
+                                                          set: { on in var v = a.supportingEvidence ?? []; v.removeAll { $0 == e.id }; if on { v.append(e.id) }; a.supportingEvidence = v }))
+                                    .toggleStyle(.checkbox)
+                                Toggle("−", isOn: Binding(get: { (a.contraryEvidence ?? []).contains(e.id) },
+                                                          set: { on in var v = a.contraryEvidence ?? []; v.removeAll { $0 == e.id }; if on { v.append(e.id) }; a.contraryEvidence = v }))
+                                    .toggleStyle(.checkbox)
+                                Text(e.descriptionText).font(.caption).lineLimit(1)
+                            }
+                        }
+                    }
+                    TextField("How contrary evidence and any mitigation were weighed", text: Binding(get: { a.contraryAndMitigation ?? "" }, set: { a.contraryAndMitigation = $0 }), axis: .vertical)
+                        .textFieldStyle(.roundedBorder).lineLimit(1...3).font(.caption)
                     Picker("Finding", selection: $a.finding) {
                         Text("Not yet classified").tag(Optional<FindingClassification>.none)
                         ForEach(FindingClassification.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
@@ -307,6 +360,9 @@ public struct WorkplaceStudioView: View {
                     if let f = a.finding { Text(f.detail).font(.caption2).foregroundStyle(.secondary) }
                     TextField("Because X, supported by Y…", text: $a.reasoning, axis: .vertical)
                         .textFieldStyle(.roundedBorder).lineLimit(2...4)
+                    ForEach(a.findingBlockers, id: \.self) { b in
+                        Label("Before approval: \(b)", systemImage: "exclamationmark.circle").font(.caption2).foregroundStyle(.orange)
+                    }
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
@@ -353,10 +409,10 @@ public struct WorkplaceStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(w) { copyReport(w.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(w) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(w) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(w) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(w) { printReport(w.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(w) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -398,13 +454,49 @@ public struct WorkplaceStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ w: WorkplaceInvestigation) -> String {
+    private func sealed(_ w: WorkplaceInvestigation, approved: Bool = false) -> String {
         let stages = WorkplaceInvestigation.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Workplace Investigation", title: w.title,
-            report: WIReportRenderer.markdown(w, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + WIReportRenderer.markdown(w, generatedAt: Date()),
             stagesComplete: stages.filter { w.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: WorkplaceInvestigation) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: WorkplaceInvestigation.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: WorkplaceInvestigation) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: WorkplaceInvestigation.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: WorkplaceInvestigation) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: WorkplaceInvestigation.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
+            if AppPrinting.run(text: pkg.text, jobTitle: "Workplace Investigation — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: WorkplaceInvestigation) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: WorkplaceInvestigation.needsPrivilegedSources, mandatory: WorkplaceInvestigation.mandatoryEvidence, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -413,24 +505,11 @@ public struct WorkplaceStudioView: View {
     private var exportFilename: String {
         "hr-investigation-\((activeBinding?.wrappedValue.title ?? "report").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ w: WorkplaceInvestigation) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(w), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ w: WorkplaceInvestigation) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(w)
-        tv.font = NSFont.systemFont(ofSize: 11)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "Workplace Investigation — \(w.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("HR Investigation Studio") {
     WorkplaceStudioView().frame(width: 1040, height: 760)
+
 }
 #endif

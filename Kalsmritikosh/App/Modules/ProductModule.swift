@@ -435,6 +435,9 @@ nonisolated public enum ModuleInvariant: String, CaseIterable, Sendable {
 /// Thread-safe, nonisolated accessor over UserDefaults (FeatureFlags convention).
 nonisolated public enum ProductModuleFlags {
 
+    /// Modules built but outside the locked v1 contract (single user, no team features).
+    public nonisolated static let outOfV1Scope: Set<ProductModule> = [.teamReview]
+
     public nonisolated static func isEnabled(_ m: ProductModule) -> Bool {
         disabledReason(m) == nil && storedOrDefault(m)
     }
@@ -444,6 +447,9 @@ nonisolated public enum ProductModuleFlags {
     public nonisolated static func disabledReason(_ m: ProductModule) -> String? {
         let s = m.spec
         guard s.implemented else { return "Coming in a later build (\(s.planID))" }
+        // F6 listing audit — the v1 contract is single-user (SHIP_DECISIONS §0): team features are
+        // not offered in this version, even as a preview.
+        if outOfV1Scope.contains(m) { return "Not part of this version (single-user)" }
         if s.preview, !showPreviewFeatures { return "Preview — not yet verified; turn on “Show preview features” to try it" }
         if s.requiresOnline {
             if !ConnectivityMode.onlineAvailableInThisBuild { return "Online mode is not available in this build" }
@@ -462,17 +468,17 @@ nonisolated public enum ProductModuleFlags {
 
     /// Preview features (built, not yet verified on real data/hardware) are hidden unless this is on.
     public nonisolated static var showPreviewFeatures: Bool {
-        get { UserDefaults.standard.bool(forKey: showPreviewKey) }
-        set { UserDefaults.standard.set(newValue, forKey: showPreviewKey) }
+        get { AppDefaults.store.bool(forKey: showPreviewKey) }
+        set { AppDefaults.store.set(newValue, forKey: showPreviewKey) }
     }
 
     public nonisolated static func setEnabled(_ m: ProductModule, _ on: Bool) {
-        UserDefaults.standard.set(on, forKey: m.storageKey)
+        AppDefaults.store.set(on, forKey: m.storageKey)
         if m == .captureExtensions { ShareInbox.mirrorSwitch() }   // the Share extension reads the copy
     }
 
     private nonisolated static func storedOrDefault(_ m: ProductModule) -> Bool {
-        let d = UserDefaults.standard
+        let d = AppDefaults.store
         if d.object(forKey: m.storageKey) == nil { return m.spec.defaultEnabled }
         return d.bool(forKey: m.storageKey)
     }

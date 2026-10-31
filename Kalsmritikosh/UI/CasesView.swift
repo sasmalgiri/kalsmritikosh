@@ -322,19 +322,3 @@ enum CaseReminders {
         }
     }
 }
-
-// MARK: - Saving exports
-
-@MainActor
-enum CaseFileSave {
-    static func save(_ text: String, name: String, ext: String) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
-            KalsmritikoshLog.app.error("Case export failed: \(error.localizedDescription, privacy: .public)")
-            NSAlert(error: error).runModal()
-        }
-    }
-}

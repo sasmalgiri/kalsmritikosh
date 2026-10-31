@@ -21,7 +21,7 @@ struct CustomProtocolStudioTests {
 
     @Test("The studio ships OFF")
     func flagDefaultsOff() {
-        UserDefaults.standard.removeObject(forKey: FeatureFlags.customProtocolStudioKey)
+        AppDefaults.store.removeObject(forKey: FeatureFlags.customProtocolStudioKey)
         #expect(FeatureFlags.customProtocolStudioValue() == false)
     }
 

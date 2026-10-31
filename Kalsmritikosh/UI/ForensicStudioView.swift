@@ -17,7 +17,9 @@ import AppKit
 #endif
 
 public struct ForensicStudioView: View {
-    @AppStorage("kalsmritikosh.fa.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "forensic", legacyKey: "kalsmritikosh.fa.store")
+    @Environment(AppState.self) private var appState
     @State private var engagements: [ForensicEngagement] = []
     @State private var loaded = false
     @State private var activeID: UUID?
@@ -25,6 +27,8 @@ public struct ForensicStudioView: View {
     @State private var newFinding = ""
     @State private var newLimitation = ""
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -35,11 +39,18 @@ public struct ForensicStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
+            }
+            exportPackage = nil
+        }
     }
 
     // MARK: Persistence
@@ -47,12 +58,14 @@ public struct ForensicStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([ForensicEngagement].self, from: data) { engagements = d }
+        // Final brief §3.2: references resolve against the draft's own case at preview and export.
+        gate.resolve = { [storage, appState] id, values, provenance, privileged in
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            return await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+        }
+        Task { engagements = await storage.load(ForensicEngagement.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(engagements), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(engagements, app: appState) }
     private var activeBinding: Binding<ForensicEngagement>? {
         guard let id = activeID, let idx = engagements.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { engagements[idx] },
@@ -105,7 +118,9 @@ public struct ForensicStudioView: View {
                 Text("\(e.schedule.count) transaction(s) · \(e.method?.name ?? "no method")")
                     .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 Spacer()
-                Button(role: .destructive) { engagements.removeAll { $0.id == e.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { engagements.removeAll { $0.id == e.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: e.id) { engagements.removeAll { $0.id == e.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = e.id; stage = firstIncomplete(e) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -137,10 +152,15 @@ public struct ForensicStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("Engagement title", text: f.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: f, message: $fillMessage)
-                Button { gate.run(f) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                StudioFillFromCaseMenu(model: f, message: $fillMessage, bind: { await storage.bind(f.wrappedValue.id, to: $0, app: appState) })
+                Button { approveNow(f.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(f.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(f.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: f.wrappedValue.id) { await storage.refreshApproval(f.wrappedValue.id, app: appState) }
+                Button { gate.run(f) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(f) { printReport(f.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(f) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -268,16 +288,70 @@ public struct ForensicStudioView: View {
                         TextField("Account", text: $t.account).textFieldStyle(.roundedBorder).frame(width: 120)
                     }
                     TextField("Source document (required)", text: $t.sourceDoc).textFieldStyle(.roundedBorder)
+                    HStack(spacing: 8) {
+                        Picker("Kind", selection: Binding(get: { f.wrappedValue.kind(of: t) }, set: { t.kind = $0 })) {
+                            ForEach(FAKind.allCases, id: \.self) { Text($0.label).tag($0) }
+                        }
+                        .frame(maxWidth: 280)
+                        TextField("Currency (e.g. INR)", text: Binding(get: { t.currency ?? "" }, set: { t.currency = $0 }))
+                            .textFieldStyle(.roundedBorder).frame(width: 110)
+                        TextField("Reference (UTR, cheque, wire)", text: Binding(get: { t.reference ?? "" }, set: { t.reference = $0 }))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    if f.wrappedValue.summary.duplicateCopies.contains(where: { $0.row == t.id }) {
+                        Toggle("Looks like the same transaction as another row (counted once). This is a separate payment", isOn: Binding(get: { t.confirmedDistinct ?? false }, set: { t.confirmedDistinct = $0 }))
+                            .font(.caption)
+                    }
                     if !t.isComplete {
                         Label("Needs date, description, amount, and a source document.", systemImage: "exclamationmark.circle")
+                            .font(.caption2).foregroundStyle(.orange)
+                    } else if f.wrappedValue.kind(of: t) == .unclassified {
+                        Label("An amount the case mentions — say what it is. Until then it is not in the totals.", systemImage: "questionmark.circle")
                             .font(.caption2).foregroundStyle(.orange)
                     }
                 }
                 .padding(10).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
-            Button { f.wrappedValue.schedule.append(FATransaction()) } label: { Label("Add transaction", systemImage: "plus") }
-            Text("Schedule total: $\(String(format: "%.2f", f.wrappedValue.scheduleTotal))")
-                .font(.callout.weight(.semibold))
+            Button { var t = FATransaction(); t.kind = .payment; f.wrappedValue.schedule.append(t) } label: { Label("Add transaction", systemImage: "plus") }
+            let summary = f.wrappedValue.summary
+            if summary.byCurrency.isEmpty {
+                Text("No classified movements yet — the schedule has no total.").font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(summary.byCurrency.keys.sorted(), id: \.self) { cur in
+                if let t = summary.byCurrency[cur] {
+                    Text("\(cur.isEmpty ? "Currency not stated" : cur): gross \(FAMoney.format(t.gross)) · returned \(FAMoney.format(t.returned)) · net \(FAMoney.format(t.net))")
+                        .font(.callout.weight(.semibold))
+                }
+            }
+            if !summary.unclassified.isEmpty || !summary.notMovements.isEmpty || !summary.duplicateCopies.isEmpty {
+                Text("Not in the totals: \(summary.unclassified.count) unclassified, \(summary.notMovements.count) not a movement, \(summary.duplicateCopies.count) duplicate copy(ies).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let note = f.wrappedValue.prefillNote { Text(note).font(.caption).foregroundStyle(.orange) }
+            Divider()
+            Text("Reconciliation — each account's statement balances").font(.headline)
+            ForEach(Binding(get: { f.wrappedValue.reconciliations ?? [] }, set: { f.wrappedValue.reconciliations = $0 })) { $r in
+                HStack(spacing: 6) {
+                    TextField("Account", text: $r.account).textFieldStyle(.roundedBorder).frame(width: 110)
+                    TextField("From yyyy-mm-dd", text: $r.periodStart).textFieldStyle(.roundedBorder).frame(width: 120)
+                    TextField("To yyyy-mm-dd", text: $r.periodEnd).textFieldStyle(.roundedBorder).frame(width: 120)
+                    TextField("Opening", text: $r.opening).textFieldStyle(.roundedBorder).frame(width: 100)
+                    TextField("Closing", text: $r.closing).textFieldStyle(.roundedBorder).frame(width: 100)
+                    TextField("Currency", text: $r.currency).textFieldStyle(.roundedBorder).frame(width: 70)
+                    TextField("Statement", text: $r.sourceDoc).textFieldStyle(.roundedBorder)
+                    if let res = f.wrappedValue.reconcile().first(where: { $0.id == r.id }) {
+                        if let d = res.difference {
+                            Text(d == 0 ? "reconciles" : "\(FAMoney.format(d)) unexplained").font(.caption).foregroundStyle(d == 0 ? Color.green : Color.orange)
+                        } else if !res.unresolved.isEmpty {
+                            Text("Can't reconcile: \(res.unresolved.joined(separator: "; "))").font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                }
+            }
+            Button { f.wrappedValue.reconciliations = (f.wrappedValue.reconciliations ?? []) + [FAReconciliation()] } label: { Label("Add statement period", systemImage: "plus") }
+            ForEach(f.wrappedValue.missingPeriods, id: \.self) { gap in
+                Label("No statement for \(gap)", systemImage: "calendar.badge.exclamationmark").font(.caption).foregroundStyle(.orange)
+            }
             next(.opinion)
         }
     }
@@ -332,10 +406,10 @@ public struct ForensicStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(f) { copyReport(f.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(f) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(f) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(f) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(f) { printReport(f.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(f) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -369,13 +443,49 @@ public struct ForensicStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ e: ForensicEngagement) -> String {
+    private func sealed(_ e: ForensicEngagement, approved: Bool = false) -> String {
         let stages = ForensicEngagement.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "Forensic Accountant", title: e.title,
-            report: FAReportRenderer.markdown(e, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + FAReportRenderer.markdown(e, generatedAt: Date()),
             stagesComplete: stages.filter { e.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: ForensicEngagement) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: ForensicEngagement.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: ForensicEngagement) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: ForensicEngagement.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: ForensicEngagement) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: ForensicEngagement.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
+            if AppPrinting.run(text: pkg.text, jobTitle: "Expert Report — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: ForensicEngagement) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: ForensicEngagement.needsPrivilegedSources, mandatory: ForensicEngagement.mandatoryEvidence, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -384,24 +494,11 @@ public struct ForensicStudioView: View {
     private var exportFilename: String {
         "expert-report-\((activeBinding?.wrappedValue.title ?? "engagement").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ e: ForensicEngagement) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(e), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ e: ForensicEngagement) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(e)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "Expert Report — \(e.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("Forensic Studio") {
     ForensicStudioView().frame(width: 1040, height: 780)
+
 }
 #endif

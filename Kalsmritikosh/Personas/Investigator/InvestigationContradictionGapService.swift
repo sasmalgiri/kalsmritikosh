@@ -33,9 +33,18 @@ public actor InvestigationContradictionGapService {
     public func contradictions(caseID: UUID, limit: Int = 500) async throws -> [CaseContradictionItem] {
         let authorized = try await authorizedSet(caseID)
         let caseReviews = try await reviews.reviewsByItem(caseID: caseID, itemKind: .contradiction)
+        // Scope before limit: walk every contradiction in a stable order and keep the case's own,
+        // so other cases' items can never push this case's out of a global LIMIT (brief §7).
         var out: [CaseContradictionItem] = []
-        for c in await contradictions.all(limit: limit) where try await isContradictionInScope(c, authorized: authorized) {
-            out.append(CaseContradictionItem(contradiction: c, review: caseReviews[c.id.uuidString]))
+        var cursor: (Date, String)?
+        while out.count < limit {
+            let page = try await contradictions.page(after: cursor)
+            guard let last = page.last else { break }
+            for c in page where try await isContradictionInScope(c, authorized: authorized) {
+                out.append(CaseContradictionItem(contradiction: c, review: caseReviews[c.id.uuidString]))
+                if out.count == limit { break }
+            }
+            cursor = (last.detectedAt, last.id.uuidString)
         }
         return out
     }
@@ -45,8 +54,15 @@ public actor InvestigationContradictionGapService {
         let authorized = try await authorizedSet(caseID)
         let caseReviews = try await reviews.reviewsByItem(caseID: caseID, itemKind: .gap)
         var out: [CaseGapItem] = []
-        for g in await gaps.all(includeDismissed: true, limit: limit) where try await isGapInScope(g, authorized: authorized) {
-            out.append(CaseGapItem(gap: g, review: caseReviews[g.id.uuidString]))
+        var cursor: (Date, String)?
+        while out.count < limit {
+            let page = try await gaps.page(includeDismissed: true, after: cursor)
+            guard let last = page.last else { break }
+            for g in page where try await isGapInScope(g, authorized: authorized) {
+                out.append(CaseGapItem(gap: g, review: caseReviews[g.id.uuidString]))
+                if out.count == limit { break }
+            }
+            cursor = (last.detectedAt, last.id.uuidString)
         }
         return out
     }
@@ -79,7 +95,16 @@ public actor InvestigationContradictionGapService {
     private func disposeGap(caseID: UUID, gapID: UUID, decision: DeskDecision, note: String?, actor: String, at date: Date) async throws -> InvestigationDeskReview {
         _ = try await requireOpenCaseScope(caseID)
         let authorized = try await authorizedSet(caseID)
-        guard let g = await gaps.all(includeDismissed: true, limit: 5000).first(where: { $0.id == gapID }) else { throw InvestigationDeskError.gapNotFound(gapID) }
+        // The gap by its id, wherever it sits — not among the first 5,000 of every case's gaps.
+        var found: GapNode?
+        var cursor: (Date, String)?
+        while found == nil {
+            let page = try await gaps.page(includeDismissed: true, after: cursor)
+            guard let last = page.last else { break }
+            found = page.first { $0.id == gapID }
+            cursor = (last.detectedAt, last.id.uuidString)
+        }
+        guard let g = found else { throw InvestigationDeskError.gapNotFound(gapID) }
         guard try await isGapInScope(g, authorized: authorized) else { throw InvestigationDeskError.gapOutOfScope(gapID) }
         return try await reviews.record(caseID: caseID, itemKind: .gap, itemID: gapID.uuidString, decision: decision, note: note, actor: actor, at: date)
     }

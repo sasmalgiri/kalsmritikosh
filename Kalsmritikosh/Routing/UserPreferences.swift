@@ -57,7 +57,7 @@ public final class ModelUserPreferences: @unchecked Sendable {
     // MARK: - Internals
 
     private nonisolated func pinsByCapability() -> [ModelCapability: String] {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        guard let data = AppDefaults.store.data(forKey: defaultsKey),
               let pins = try? JSONDecoder().decode([Pin].self, from: data) else {
             return [:]
         }
@@ -69,7 +69,7 @@ public final class ModelUserPreferences: @unchecked Sendable {
     private nonisolated func persist(pins: [ModelCapability: String]) {
         let array = pins.map { Pin(capability: $0.key, providerID: $0.value) }
         if let data = try? JSONEncoder().encode(array) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
+            AppDefaults.store.set(data, forKey: defaultsKey)
         }
     }
 }

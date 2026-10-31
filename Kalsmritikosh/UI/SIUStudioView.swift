@@ -17,12 +17,16 @@ import AppKit
 #endif
 
 public struct SIUStudioView: View {
-    @AppStorage("kalsmritikosh.siu.store") private var storeBlob = ""
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage = StudioStorage(studio: "siu", legacyKey: "kalsmritikosh.siu.store")
+    @Environment(AppState.self) private var appState
     @State private var referrals: [SIUReferral] = []
     @State private var loaded = false
     @State private var activeID: UUID?
     @State private var stage: SIUReferral.Stage = .claim
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var gate = StudioProvenanceGate()
     @State private var fillMessage: String?
 
@@ -33,11 +37,18 @@ public struct SIUStudioView: View {
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .studioProvenanceGate(gate)
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
-                      defaultFilename: exportFilename) { _ in }
+                      defaultFilename: exportFilename) { result in
+            // Recorded only after the file was written (final brief §3.1 / §4 artifact pipeline).
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
+            }
+            exportPackage = nil
+        }
     }
 
     // MARK: Persistence
@@ -45,12 +56,14 @@ public struct SIUStudioView: View {
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([SIUReferral].self, from: data) { referrals = d }
+        // Final brief §3.2: references resolve against the draft's own case at preview and export.
+        gate.resolve = { [storage, appState] id, values, provenance, privileged in
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            return await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+        }
+        Task { referrals = await storage.load(SIUReferral.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(referrals), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(referrals, app: appState) }
     private var activeBinding: Binding<SIUReferral>? {
         guard let id = activeID, let idx = referrals.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { referrals[idx] },
@@ -67,7 +80,7 @@ public struct SIUStudioView: View {
                         .font(.largeTitle.weight(.bold))
                     Text("Work a referred claim the way an SIU really does: record red flags against objective criteria (indicators, never proof), build the loss chronology, document the investigation, preserve discrepancies, and file the exact report — whether it returns to claims or refers out.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Text(JurisdictionNotice.studio(instrument: "NAIC Model #901 and NICB indicators (US)"))
+                    Text(JurisdictionNotice.studio(instrument: "the NAIC Insurance Fraud Prevention Model Act (Model 680; adoption varies by state) and NICB indicators (US)"))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -103,7 +116,9 @@ public struct SIUStudioView: View {
                 Text("Updated \(r.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { referrals.removeAll { $0.id == r.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { referrals.removeAll { $0.id == r.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: r.id) { referrals.removeAll { $0.id == r.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = r.id; stage = firstIncomplete(r) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -135,10 +150,15 @@ public struct SIUStudioView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 TextField("File title", text: r.title).textFieldStyle(.plain).font(.headline).frame(maxWidth: 360)
                 Spacer()
-                StudioFillFromCaseMenu(model: r, message: $fillMessage)
-                Button { gate.run(r) { showExporter = true } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
+                StudioFillFromCaseMenu(model: r, message: $fillMessage, bind: { await storage.bind(r.wrappedValue.id, to: $0, app: appState) })
+                Button { approveNow(r.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(r.wrappedValue.id) ? "Approved" : "Approve", systemImage: storage.approvedIDs.contains(r.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: r.wrappedValue.id) { await storage.refreshApproval(r.wrappedValue.id, app: appState) }
+                Button { gate.run(r) { exportNow($0) } } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
                 #if os(macOS)
-                Button { gate.run(r) { printReport(r.wrappedValue) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
+                Button { gate.run(r) { printNow($0) } } label: { Label("Print", systemImage: "printer") }.controlSize(.small)
                 #endif
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
@@ -328,10 +348,10 @@ public struct SIUStudioView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
             HStack(spacing: 10) {
-                Button { gate.run(r) { copyReport(r.wrappedValue) } } label: { Label("Copy", systemImage: "doc.on.doc") }
-                Button { gate.run(r) { showExporter = true } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
+                Button { gate.run(r) { copyNow($0) } } label: { Label("Copy", systemImage: "doc.on.doc") }
+                Button { gate.run(r) { exportNow($0) } } label: { Label("Export Markdown", systemImage: "square.and.arrow.up") }
                 #if os(macOS)
-                Button { gate.run(r) { printReport(r.wrappedValue) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
+                Button { gate.run(r) { printNow($0) } } label: { Label("Print / Save as PDF", systemImage: "printer") }
                 #endif
             }
         }
@@ -357,13 +377,49 @@ public struct SIUStudioView: View {
 
     /// Every deliverable that LEAVES the studio (copy/print/export) carries a
     /// signed seal — content hash, honest stage completion, signer key.
-    private func sealed(_ r: SIUReferral) -> String {
+    private func sealed(_ r: SIUReferral, approved: Bool = false) -> String {
         let stages = SIUReferral.Stage.allCases
         return StudioDeliverableSeal.sealedReport(
             studio: "SIU Investigation", title: r.title,
-            report: SIUReportRenderer.markdown(r, generatedAt: Date()),
+            report: (approved ? "" : StudioStorage.draftBanner) + SIUReportRenderer.markdown(r, generatedAt: Date()),
             stagesComplete: stages.filter { r.isComplete($0) }.count,
             stagesTotal: stages.count, at: Date())
+    }
+
+    // MARK: Export package (review R2) — rendered and sealed once; the same bytes are written and recorded
+
+    private func exportNow(_ v: SIUReferral) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            exportPackage = pkg
+            showExporter = true
+        }
+    }
+    private func copyNow(_ v: SIUReferral) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(pkg.text, forType: .string)
+            #endif
+            storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+        }
+    }
+    private func printNow(_ v: SIUReferral) {
+        Task {
+            guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
+            #if os(macOS)
+            // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
+            if AppPrinting.run(text: pkg.text, jobTitle: "SIU Report — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+        }
+    }
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: SIUReferral) {
+        Task {
+            let why = await storage.approve(v, provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources, mandatory: SIUReferral.mandatoryEvidence, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
+        }
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
@@ -372,24 +428,11 @@ public struct SIUStudioView: View {
     private var exportFilename: String {
         "siu-report-\((activeBinding?.wrappedValue.claimNumber ?? "claim").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ r: SIUReferral) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealed(r), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ r: SIUReferral) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealed(r)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "SIU Report — \(r.title)"; op.run()
-    }
-    #endif
 }
 
 #if DEBUG
 #Preview("SIU Studio") {
     SIUStudioView().frame(width: 1040, height: 760)
+
 }
 #endif

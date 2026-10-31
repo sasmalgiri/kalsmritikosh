@@ -36,15 +36,55 @@ struct PersonaDeliverables2Tests {
         #expect(!r.isComplete(.screening))          // screened > identified
         r.screened = 8
         #expect(r.isComplete(.screening))
-        var s = RSStudy(); s.study = "A 2020"; s.result = "+1"
+        var s = RSStudy(); s.study = "A 2020"; s.result = "+1"; s.source = "a-2020.pdf"
         r.studies = [s]
         #expect(!r.isComplete(.extraction))         // 1 row ≠ 2 included
         var s2 = RSStudy(); s2.study = "B 2021"; s2.result = "−1"
         r.studies = [s, s2]
+        #expect(!r.isComplete(.extraction))         // final brief §3.6: a row without its source is not complete
+        r.studies[1].source = "b-2021.pdf"
         #expect(r.isComplete(.extraction))
         #expect(!r.isComplete(.synthesis))
         r.synthesis = "conflicting"; r.certainty = .low
         #expect(r.isComplete(.synthesis))
+    }
+
+    @Test("Final brief §3.6: totals come from screening decisions; two reports of one study are one study; a negative review completes")
+    func researcherDerivedFlow() {
+        var r = ResearchReview(title: "x", now: t0)
+        r.question = "Q"
+        var q = RSSearch(); q.database = "PubMed"; q.searchString = "(remote work) AND productivity"; q.date = "2026-01-05"
+        r.searches = [q]
+        func rec(_ c: String, _ d: RSDecision, study: String = "", reason: String = "") -> RSRecord {
+            var x = RSRecord(); x.citation = c; x.decision = d; x.studyKey = study; x.reason = reason; return x
+        }
+        r.records = [rec("Bloom 2015", .included, study: "bloom-trial"), rec("Bloom 2021 follow-up", .included, study: "bloom-trial"),
+                     rec("Smith 2020", .excludedOnFullText, reason: ""), rec("Dup of Smith", .duplicate), rec("Off-topic", .excludedOnTitle)]
+        #expect(r.flow.identified == 5 && r.flow.duplicates == 1 && r.flow.includedReports == 2 && r.flow.includedStudies == 1)
+        #expect(!r.isComplete(.screening))           // a full-text exclusion without its reason
+        r.records?[2].reason = "No productivity measure"
+        #expect(r.isComplete(.screening))
+        // One study (two reports) needs one extraction row.
+        var s = RSStudy(); s.study = "Bloom"; s.result = "+13%"; s.source = "bloom-2021.pdf"
+        r.studies = [s]
+        #expect(r.isComplete(.extraction))
+        // Certainty per outcome.
+        r.synthesis = "One trial."
+        var oc = RSOutcomeCertainty(); oc.outcome = "Calls handled"; oc.certainty = .moderate
+        r.outcomeCertainty = [oc]
+        #expect(!r.isComplete(.synthesis))           // no reason given for the rating
+        r.outcomeCertainty?[0].reason = "Single trial; downgraded for imprecision"
+        #expect(r.isComplete(.synthesis))
+        let md = ResearchReviewRenderer.markdown(r, generatedAt: t0)
+        #expect(md.contains("included 2 report(s) of 1 study(ies)") && md.contains("derived from the recorded screening decisions"))
+        #expect(md.contains("`(remote work) AND productivity`"))
+        // A review that includes nothing is complete without invented studies.
+        var neg = ResearchReview(title: "n", now: t0)
+        neg.question = "Q"; neg.searches = [q]
+        neg.records = [rec("Only candidate", .excludedOnFullText, reason: "Wrong population")]
+        neg.synthesis = "No study met the criteria."
+        #expect(neg.isComplete(.screening) && neg.isComplete(.extraction) && neg.isComplete(.synthesis))
+        #expect(ResearchReviewRenderer.markdown(neg, generatedAt: t0).contains("complete, negative review"))
     }
 
     @Test("Researcher hardcopy: protocol → PRISMA → extraction table → GRADE")

@@ -176,14 +176,34 @@ public struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Investigator workflow review 2026-10-30, I9: the two ways into the work sit on the
+            // main surface — start a matter, or go back to one — before anything else.
             HStack(spacing: 10) {
+                Button {
+                    onNavigate(.work)
+                } label: {
+                    Label("Start an investigation", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.brand)
+                .help("Open Professional Jobs: name the matter, choose its workspace, bring the documents into the case and run the first job.")
+                .accessibilityIdentifier("home.startInvestigation")
+
+                Button {
+                    onNavigate(.work)
+                } label: {
+                    Label("Resume a case", systemImage: "folder.badge.person.crop")
+                }
+                .buttonStyle(.bordered)
+                .help("Open Professional Jobs with the matters you can return to — every job run, review and document decision as you left it.")
+                .accessibilityIdentifier("home.resumeCase")
+
                 Button {
                     onNavigate(.sources)
                 } label: {
                     Label("Add your documents", systemImage: "folder.badge.plus")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.brand)
+                .buttonStyle(.bordered)
 
                 Button {
                     onNavigate(.ask)
@@ -207,10 +227,10 @@ public struct HomeView: View {
             // users voice about the incumbent tools (subscription shock,
             // cloud exposure, export lock-in, weeks-long learning curves).
             HStack(alignment: .top, spacing: 16) {
-                promise("lock.shield", "100% on your Mac",
-                        "Nothing ever leaves this computer — no cloud, no account, works offline forever.")
-                promise("creditcard", "Yours once",
-                        "One purchase. No subscription, no per-page fees, no surprise renewal.")
+                promise("lock.shield", "Private by default",
+                        "Your documents are read on this Mac and the app opens no connection for them. Online AI is optional, with your own key and a preview of every send.")
+                promise("creditcard", "One plain plan",
+                        "One edition, all nine personas, monthly or yearly. Cancel any time; your work stays readable and exportable.")
                 promise("square.and.arrow.up", "No lock-in",
                         "Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours.")
                 promise("checkmark.seal", "Answers you can check",

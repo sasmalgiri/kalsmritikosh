@@ -4,7 +4,7 @@
 //
 //  PERSONA STUDIO #3 (SIU / insurance fraud) — the referral / investigation
 //  report a Special Investigations Unit actually produces, per the regulatory
-//  pattern (NAIC Model #901; state SIU regs): claim identification → the
+//  pattern (NAIC Insurance Fraud Prevention Model Act, Model 680; state SIU regs): claim identification → the
 //  referral basis stated against OBJECTIVE criteria (red flags are indicators,
 //  never proof) → loss chronology → investigation conducted → statement
 //  discrepancies → findings of fact → disposition. The real disciplines are

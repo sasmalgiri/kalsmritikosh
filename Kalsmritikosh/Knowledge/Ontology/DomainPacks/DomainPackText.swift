@@ -100,7 +100,7 @@ public enum DomainPackText {
 
     /// The first money-shaped token (₹, Rs, INR, $, £, €), or nil.
     public nonisolated static func firstMoney(in text: String) -> String? {
-        let pattern = #"(?:₹|rs\.?|inr|\$|£|€)\s?[\d,]+(?:\.\d{1,2})?"#
+        let pattern = #"(?:₹|rs\.?|inr|\$|£|€)\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?"#   // never ends in a separator; Indian grouping kept
         guard let r = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) else { return nil }
         return String(text[r]).trimmingCharacters(in: .whitespaces)
     }

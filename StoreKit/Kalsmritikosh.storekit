@@ -8,13 +8,13 @@
       "internalID" : "7A1F3B20",
       "localizations" : [
         {
-          "description" : "Try everything in Investigations Made Easy free for 14 days. Nothing is charged.",
-          "displayName" : "14-day free trial",
+          "description" : "Earlier plan (2026-10-18), kept for compatibility only: a free 14-day trial. Not sold to new customers.",
+          "displayName" : "14-day free trial (earlier plan)",
           "locale" : "en_US"
         }
       ],
       "productID" : "ecosanskritiinnovation.Kalsmritikosh.trial14",
-      "referenceName" : "14-day free trial",
+      "referenceName" : "Legacy 14-day free trial",
       "type" : "NonConsumable"
     },
     {
@@ -23,22 +23,90 @@
       "internalID" : "7A1F3B21",
       "localizations" : [
         {
-          "description" : "Unlock Investigations Made Easy for good: one purchase, no subscription, every Mac on your Apple account.",
-          "displayName" : "Investigations Made Easy",
+          "description" : "Earlier plan (2026-10-18), kept for restore and reinstall only: the permanent unlock. Not sold to new customers.",
+          "displayName" : "Investigations Made Easy — lifetime unlock (earlier plan)",
           "locale" : "en_US"
         }
       ],
       "productID" : "ecosanskritiinnovation.Kalsmritikosh.unlock",
-      "referenceName" : "Unlock Investigations Made Easy",
+      "referenceName" : "Legacy permanent unlock",
       "type" : "NonConsumable"
     }
   ],
   "settings" : {
     "_applicationInternalID" : "",
+    "_billingGracePeriodEnabled" : true,
+    "_billingGracePeriodInDays" : 3,
     "_developerTeamID" : "6TPTCJD42Q",
     "_storeKitErrors" : [ ]
   },
-  "subscriptionGroups" : [ ],
+  "subscriptionGroups" : [
+    {
+      "id" : "21777001",
+      "localizations" : [
+        {
+          "description" : "All nine personas and every v1 job, on your Mac.",
+          "displayName" : "Investigations Made Easy",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "Investigations Made Easy edition",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7A1F3B30",
+          "introductoryOffer" : {
+            "internalID" : "7A1F3B32",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Every persona and job. Renews monthly unless cancelled.",
+              "displayName" : "Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ecosanskritiinnovation.Kalsmritikosh.edition.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Edition — monthly",
+          "subscriptionGroupID" : "21777001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [ ]
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7A1F3B31",
+          "introductoryOffer" : {
+            "internalID" : "7A1F3B33",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Every persona and job. Charged once a year; renews yearly unless cancelled.",
+              "displayName" : "Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ecosanskritiinnovation.Kalsmritikosh.edition.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Edition — annual",
+          "subscriptionGroupID" : "21777001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [ ]
+        }
+      ]
+    }
+  ],
   "version" : {
     "major" : 4,
     "minor" : 0

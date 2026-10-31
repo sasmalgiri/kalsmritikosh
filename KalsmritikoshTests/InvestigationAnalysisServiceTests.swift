@@ -4,7 +4,7 @@
 //
 //  INV-04..07 — the Investigator analytical spine over the shared engines. Proves: a lead is captured as a
 //  proposal and PROMOTED by a human (INV-04); a hypothesis is scored by its COUNTED for/against evidence
-//  profile and can be CONFIRMED only when supported — an unsupported one stays a proposal (INV-07); every
+//  profile and CONFIRMED only by a human who records rationale, contrary evidence and alternatives — counts never decide (INV-07, brief §8); every
 //  citation must be inside the case scope AND belong to the cited version (INV-05/07); a 5W1H cell either
 //  cites in-scope evidence or is marked unknown, never fabricated (INV-05); evidence requests link to
 //  hypotheses (INV-06); and the "conflicting accounts" gold case + architecture boundary. Synthetic only.
@@ -64,22 +64,63 @@ struct InvestigationAnalysisServiceTests {
 
     // MARK: - INV-07 Hypothesis matrix
 
-    @Test("A hypothesis is confirmed only when its counted evidence profile supports it; unsupported stays a proposal")
-    func confirmRequiresSupport() async throws {
+    private let reason = HypothesisConfirmationReason(rationale: "The approval email names the duplicated payment",
+                                                      contraryEvidence: "The ledger extract omits it, but it predates the payment run",
+                                                      alternatives: "A clerical re-entry was considered; the bank shows two debits")
+
+    @Test("Confirmation is a recorded human judgment: rationale, contrary evidence and alternatives are required; counts never decide")
+    func confirmRequiresReasons() async throws {
         let rig = try await rig()
         let hyp = try await rig.service.captureHypothesis(caseID: rig.caseID, statement: "Payment was duplicated", actor: "a", at: t0)
         // No supporting evidence yet → cannot confirm.
         await #expect(throws: InvestigationHypothesisError.self) {
-            _ = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, actor: "lead", at: t0)
+            _ = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, reason: reason, actor: "lead", at: t0)
         }
         #expect(try await rig.service.hypotheses(caseID: rig.caseID).first?.status == .proposed)   // still a proposal
-        // Add against then for; profile = 1 for / 1 against → supported (for >= against, for > 0).
         try await rig.service.addEvidence(caseID: rig.caseID, hypothesisID: hyp.id, stance: .opposing, sourceVersionID: rig.vA, knowledgeObjectID: rig.koA, note: nil, actor: "a", at: t0)
         try await rig.service.addEvidence(caseID: rig.caseID, hypothesisID: hyp.id, stance: .supporting, sourceVersionID: rig.vA, knowledgeObjectID: rig.koA2, note: nil, actor: "a", at: t0)
         let profile = try await rig.service.profile(hypothesisID: hyp.id)
         #expect(profile.forCount == 1 && profile.againstCount == 1 && profile.isSupported)
-        let confirmed = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, actor: "lead", at: t0)
+        #expect(profile.summary.contains("do not decide"))
+        // Without the explanation, a supported hypothesis is still not confirmed.
+        await #expect(throws: InvestigationHypothesisError.contraryEvidenceNotAddressed) {
+            _ = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision,
+                reason: HypothesisConfirmationReason(rationale: "It fits", contraryEvidence: "  ", alternatives: "none"), actor: "lead", at: t0)
+        }
+        await #expect(throws: InvestigationHypothesisError.alternativesNotAddressed) {
+            _ = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision,
+                reason: HypothesisConfirmationReason(rationale: "It fits", contraryEvidence: "Weighed", alternatives: ""), actor: "lead", at: t0)
+        }
+        #expect(try await rig.service.decisions(hypothesisID: hyp.id).isEmpty)
+        let confirmed = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, reason: reason, actor: "lead", at: t0)
         #expect(confirmed.status == .confirmed)
+        // The reasons and the profile at that moment are recorded, and cannot be rewritten.
+        let decision = try #require(try await rig.service.decisions(hypothesisID: hyp.id).first)
+        #expect(decision.decision == .confirmed && decision.contraryEvidence == reason.contraryEvidence && decision.profile == profile)
+        await #expect(throws: (any Error).self) {
+            try await rig.db.exec("UPDATE investigation_hypothesis_decisions SET rationale = 'edited';")
+        }
+    }
+
+    @Test("Copies of one document are one evidential lineage; links carry reliability and diagnostic relevance")
+    func lineagesAndAssessments() async throws {
+        let rig = try await rig()
+        let hyp = try await rig.service.captureHypothesis(caseID: rig.caseID, statement: "H", actor: "a", at: t0)
+        // koA and koA2 are two objects of ONE source version (same content hash): two citations, one lineage.
+        let l1 = try await rig.service.addEvidence(caseID: rig.caseID, hypothesisID: hyp.id, stance: .supporting, sourceVersionID: rig.vA, knowledgeObjectID: rig.koA, note: nil, actor: "a", at: t0)
+        try await rig.service.addEvidence(caseID: rig.caseID, hypothesisID: hyp.id, stance: .supporting, sourceVersionID: rig.vA, knowledgeObjectID: rig.koA2, note: nil, actor: "a", at: t0)
+        var profile = try await rig.service.profile(hypothesisID: hyp.id)
+        #expect(profile.forCount == 2 && profile.forLineages == 1 && profile.unassessedCount == 2)
+        #expect(profile.summary.hasPrefix("2 citations for from 1 independent source"))
+        try await rig.service.assessEvidence(linkID: l1.id, reliability: .high, relevance: .low, note: "consistent with every theory", actor: "lead", at: t0)
+        try await rig.service.assessEvidence(linkID: l1.id, reliability: .medium, relevance: .low, note: nil, actor: "lead", at: t0)   // revised
+        let assessments = try await rig.service.assessments(hypothesisID: hyp.id)
+        #expect(assessments.count == 1 && assessments.first?.reliability == .medium && assessments.first?.relevance == .low)
+        profile = try await rig.service.profile(hypothesisID: hyp.id)
+        #expect(profile.unassessedCount == 1)
+        await #expect(throws: InvestigationHypothesisError.evidenceLinkNotFound(rig.koB)) {
+            try await rig.service.assessEvidence(linkID: rig.koB, reliability: .high, relevance: .high, note: nil, actor: "lead", at: t0)
+        }
     }
 
     @Test("A hypothesis with only opposing evidence is unsupported and cannot be confirmed")
@@ -89,7 +130,7 @@ struct InvestigationAnalysisServiceTests {
         try await rig.service.addEvidence(caseID: rig.caseID, hypothesisID: hyp.id, stance: .opposing, sourceVersionID: rig.vA, knowledgeObjectID: rig.koA, note: nil, actor: "a", at: t0)
         #expect(try await rig.service.profile(hypothesisID: hyp.id).isSupported == false)
         await #expect(throws: InvestigationHypothesisError.self) {
-            _ = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, actor: "lead", at: t0)
+            _ = try await rig.service.confirmHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, reason: reason, actor: "lead", at: t0)
         }
         // Rejecting is always allowed.
         let rejected = try await rig.service.rejectHypothesis(hypothesisID: hyp.id, expectedRevision: hyp.revision, actor: "lead", at: t0)
@@ -158,10 +199,10 @@ struct InvestigationAnalysisServiceTests {
         // A is supported; B is not.
         #expect(try await rig.service.profile(hypothesisID: hA.id).isSupported)
         #expect(try await rig.service.profile(hypothesisID: hB.id).isSupported == false)
-        let confirmedA = try await rig.service.confirmHypothesis(hypothesisID: hA.id, expectedRevision: hA.revision, actor: "lead", at: t0)
+        let confirmedA = try await rig.service.confirmHypothesis(hypothesisID: hA.id, expectedRevision: hA.revision, reason: reason, actor: "lead", at: t0)
         #expect(confirmedA.status == .confirmed)
         await #expect(throws: InvestigationHypothesisError.self) {   // B stays a proposal — no autonomous winner
-            _ = try await rig.service.confirmHypothesis(hypothesisID: hB.id, expectedRevision: hB.revision, actor: "lead", at: t0)
+            _ = try await rig.service.confirmHypothesis(hypothesisID: hB.id, expectedRevision: hB.revision, reason: reason, actor: "lead", at: t0)
         }
         // A request to resolve the conflict; a 5W1H cell answered + one unknown.
         _ = try await rig.service.createEvidenceRequest(caseID: rig.caseID, hypothesisID: hB.id, description: "Interview the approver", actor: "a", at: t0)

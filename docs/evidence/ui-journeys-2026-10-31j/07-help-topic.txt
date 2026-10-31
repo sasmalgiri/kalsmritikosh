@@ -1,0 +1,9 @@
+J-4(b) "Open in Help" → Guide — 2026-10-31 — FAIL (reproduced twice: 07-help-topic.png/-depth14.txt/-after6s.txt and 07b-help-topic-second-attempt.*)
+Observed after pressing "Open in Help" (waited 3 s, re-dumped at 6 s; second attempt waited 4 s):
+  window title "Guide"; AXScrollArea id=help.guide [244,172 1226x670]; AXScrollBar value="0" (scrolled to TOP)
+  only expanded topic: "Get started: from documents to an exported report" id=help.topic.get-started help="Collapse" (the default)
+  target topic: AXButton desc="Encryption, backup, recovery key, erasure and holds" id=help.topic.task-keys-backup-erase help="Expand" [263,1489 1187x56] — COLLAPSED and below the visible viewport (viewport bottom 842)
+  no highlight observed (the topic card is off-screen)
+Expected (§6.8 / GuideView.swift:45-53): Guide opens scrolled to the topic with it expanded and highlighted.
+Likely cause (code read, not edited): SurfaceOpener.openHelp posts .kalsmritikoshOpenHelp once; RootView.swift:615 navigates to .guide, and GuideView.swift:45 expands/scrolls in its own onReceive — but when the Guide is not the current destination, GuideView is not mounted when the notification is posted, so expansion/scroll never happen. Topic links from inside the (already mounted) Guide would work; links from other screens land at the top.
+App alive throughout (pid 29290).

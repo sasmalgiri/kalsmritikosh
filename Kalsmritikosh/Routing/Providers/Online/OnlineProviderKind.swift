@@ -105,23 +105,38 @@ public nonisolated enum OnlineRequestBuilder {
         }
     }
 
-    public enum ParseError: Error, LocalizedError {
+    public enum ParseError: Error, LocalizedError, Equatable {
         case http(Int, String), refused(String), unreadable
+        /// K8 — 401/403: the key was refused; retrying will not help.
+        case auth(Int)
+        /// K8 — 429: the provider is limiting requests; try again later.
+        case rateLimited
+        /// K8 — 5xx: the provider failed; nothing was answered.
+        case server(Int)
         public var errorDescription: String? {
             switch self {
             case .http(let code, let msg): return "The provider returned HTTP \(code): \(msg)"
             case .refused(let why):        return "The provider declined to answer: \(why)"
             case .unreadable:              return "The provider's reply could not be read."
+            case .auth(let code):          return "The provider refused the API key (HTTP \(code)). Check the key and its access in Settings › Online."
+            case .rateLimited:             return "The provider is limiting requests right now (HTTP 429). Nothing was answered; try again in a minute."
+            case .server(let code):        return "The provider had an error (HTTP \(code)). Nothing was answered; try again later."
             }
         }
     }
 
     public static func parse(kind: OnlineProviderKind, response: OutboundHTTPResponse) throws -> String {
         let root = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any]
-        if response.status >= 400 {
+        switch response.status {
+        case 401, 403: throw ParseError.auth(response.status)
+        case 429: throw ParseError.rateLimited
+        case 500...: throw ParseError.server(response.status)
+        case 400...:
+            // The provider's own message, short — never the request it echoes back.
             let message = ((root?["error"] as? [String: Any])?["message"] as? String)
                 ?? String(data: response.body.prefix(300), encoding: .utf8) ?? ""
-            throw ParseError.http(response.status, message)
+            throw ParseError.http(response.status, String(message.prefix(200)))
+        default: break
         }
         guard let root else { throw ParseError.unreadable }
         switch kind {
@@ -136,10 +151,15 @@ public nonisolated enum OnlineRequestBuilder {
             return text
         case .openai:
             guard let choices = root["choices"] as? [[String: Any]],
-                  let msg = choices.first?["message"] as? [String: Any],
-                  let text = msg["content"] as? String else { throw ParseError.unreadable }
+                  let msg = choices.first?["message"] as? [String: Any] else { throw ParseError.unreadable }
+            if let refusal = msg["refusal"] as? String, !refusal.isEmpty { throw ParseError.refused(refusal) }
+            if choices.first?["finish_reason"] as? String == "content_filter" { throw ParseError.refused("content filter") }
+            guard let text = msg["content"] as? String, !text.isEmpty else { throw ParseError.unreadable }
             return text
         case .gemini:
+            if let block = (root["promptFeedback"] as? [String: Any])?["blockReason"] as? String { throw ParseError.refused(block) }
+            if let reason = (root["candidates"] as? [[String: Any]])?.first?["finishReason"] as? String,
+               ["SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"].contains(reason) { throw ParseError.refused(reason) }
             guard let cands = root["candidates"] as? [[String: Any]],
                   let content = cands.first?["content"] as? [String: Any],
                   let parts = content["parts"] as? [[String: Any]] else { throw ParseError.unreadable }
@@ -147,5 +167,63 @@ public nonisolated enum OnlineRequestBuilder {
             guard !text.isEmpty else { throw ParseError.unreadable }
             return text
         }
+    }
+}
+
+// MARK: - Which providers may receive case documents (ship-readiness review L2)
+//
+// Sending a person's documents is not the same decision as sending a question. An opt-in switch is not
+// enough: the provider's own terms decide whether confidential case material may go to it at all. Each
+// provider carries the terms as reviewed on `documentTermsVersion`; the person confirms that their own
+// account is on those terms, and the confirmation lapses when the reviewed terms change. A provider whose
+// terms have not been reviewed for case material receives no documents.
+
+nonisolated extension OnlineProviderKind {
+
+    /// The date the terms below were reviewed. A confirmation given against an older text lapses.
+    public var documentTermsVersion: String { "2026-10-27" }
+
+    /// false = no document excerpts are sent to this provider in this release.
+    public var mayReceiveDocuments: Bool {
+        switch self {
+        case .anthropic, .gemini: return true
+        case .openai:             return false
+        }
+    }
+
+    /// What the provider does with what it receives, shown in Settings and on every document send.
+    public var documentTerms: String {
+        switch self {
+        case .anthropic:
+            return "Anthropic's commercial API: by default, inputs and outputs are deleted within 30 days, with exceptions for usage-policy enforcement and legal requirements; zero retention needs a separate agreement. Under the commercial terms they are not used for training. This app's publisher receives nothing — that does not mean the provider keeps nothing."
+        case .gemini:
+            return "Google Gemini API: only a PAID (billing-enabled) project. On the unpaid tier Google may use what you send to improve its products, including human review, and asks that sensitive or confidential information not be sent — case documents must not go to an unpaid key. Age, region and permitted-use conditions apply."
+        case .openai:
+            return "OpenAI: its API data-use and retention terms have not been reviewed for case material in this release, so no document text is sent to it. Questions alone may still be sent."
+        }
+    }
+
+    /// What the person confirms before their documents may go to this provider.
+    public var documentAttestation: String {
+        switch self {
+        case .anthropic: return "My Anthropic account is on the commercial API terms, and I may send this case material to it"
+        case .gemini:    return "My Gemini key belongs to a paid (billing-enabled) project, and I may send this case material to it"
+        case .openai:    return ""
+        }
+    }
+}
+
+public nonisolated enum OnlineDocumentEligibility {
+    /// nil when document excerpts may go to `kind` given the recorded confirmation; otherwise why not.
+    public static func refusal(kind: OnlineProviderKind, confirmedTermsVersion: String?) -> String? {
+        guard kind.mayReceiveDocuments else {
+            return "\(kind.displayName) is not reviewed for case documents in this release — no document text was sent."
+        }
+        guard confirmedTermsVersion == kind.documentTermsVersion else {
+            return confirmedTermsVersion == nil
+                ? "Confirm in Settings ▸ Online that your \(kind.displayName) account's terms permit sending case material — no document text was sent."
+                : "The reviewed \(kind.displayName) terms changed since you confirmed them; confirm again in Settings ▸ Online — no document text was sent."
+        }
+        return nil
     }
 }

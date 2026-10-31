@@ -28,6 +28,8 @@ public final class BookmarkStore {
     /// real watched folders and the eval would ingest the real archive into
     /// the throwaway DB, contaminating every metric.
     private let ephemeral: Bool
+    /// True for a harness store that neither loads nor writes the person's saved folders.
+    public var isEphemeral: Bool { ephemeral }
 
     public struct Root: Codable, Identifiable, Hashable, Sendable {
         public let id: UUID

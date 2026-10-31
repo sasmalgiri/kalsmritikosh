@@ -50,6 +50,36 @@ extension AppState {
     }
 }
 
+extension AppState {
+    /// Final brief §3.2 — what a studio draft's case can check its references against, under the
+    /// export access policy. nil when the draft has no case (or the case cannot be read).
+    public func studioEvidenceContext(caseID: UUID?, workspaceID: UUID?, includePrivileged: Bool) async -> StudioEvidenceContext? {
+        guard let caseID, let dataLab = investigationDataLab, let objects, let database else { return nil }
+        let ws: UUID
+        if let workspaceID { ws = workspaceID } else if let choice = await studioCaseChoices().first(where: { $0.id == caseID }) { ws = choice.workspaceID } else { return nil }
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: ws, maximumSensitivity: .restricted, permitsPrivilegedMaterial: includePrivileged, purpose: .export))
+        do {
+            let (included, _) = try await dataLab.eligibleSourceVersions(caseID: caseID, access: access)
+            let versions = Set(included)
+            let objectIDs = try await objects.objectIDs(inSourceVersionIDs: versions)
+            let names = try await objects.sourceFilenames(for: objectIDs)
+            let objectVersions = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
+            return StudioEvidenceContext(
+                eligibleSourceVersions: versions, caseObjects: objectIDs, documentNames: names, objectVersions: objectVersions,
+                blockText: { id in
+                    guard let r = try? await database.query("SELECT source_version_id, raw_text FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(id)]).first,
+                          let text = r.string(1) else { return nil }
+                    return (r.uuid(0), text)
+                },
+                objectText: { id in (try? await objects.fetchContent(id: id)) ?? nil })
+        } catch {
+            KalsmritikoshLog.app.error("Studio evidence check failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+}
+
 // MARK: - D1 — the first case, from onboarding
 
 /// What the person is investigating, as onboarding asks it: the sidebar focus it tailors, and

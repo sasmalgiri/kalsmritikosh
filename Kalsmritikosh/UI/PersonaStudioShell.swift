@@ -22,7 +22,7 @@ public protocol StudioStageProtocol: CaseIterable, Hashable {
     var systemImage: String { get }
 }
 
-public protocol StudioDeliverable: Codable, Identifiable where ID == UUID {
+public protocol StudioDeliverable: StudioPersisted {
     associatedtype Stage: StudioStageProtocol
     var title: String { get set }
     var updatedAt: Date { get set }
@@ -41,10 +41,32 @@ public protocol CaseBackedStudio {
     mutating func prefill(from facts: StudioCaseFacts)
     /// A privilege log needs the privileged sources (it describes them; it never prints them).
     static var needsPrivilegedSources: Bool { get }
+    /// K6 — field paths whose content must be documentary (a resolved case source) before the work
+    /// product can be approved; `*` matches one path segment ("schedule.*.amount"). A filled field
+    /// here that is the investigator's own entry blocks approval.
+    static var mandatoryEvidence: [String] { get }
 }
 
 extension CaseBackedStudio {
     public static var needsPrivilegedSources: Bool { false }
+    public static var mandatoryEvidence: [String] { [] }
+}
+
+public nonisolated enum StudioMandatoryEvidence {
+    public static func matches(_ path: String, _ pattern: String) -> Bool {
+        let a = path.split(separator: "."), b = pattern.split(separator: ".")
+        guard a.count == b.count else { return false }
+        return zip(a, b).allSatisfy { $0.1 == "*" || $0.0 == $0.1 }
+    }
+
+    /// Filled mandatory fields that are not documentary evidence.
+    public static func missing(values: [String: String], provenance: StudioProvenance?, patterns: [String]) -> [String] {
+        values.keys.sorted().filter { path in
+            guard patterns.contains(where: { matches(path, $0) }),
+                  !(values[path] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            return StudioExportGate.status(of: values[path] ?? "", provenance: provenance?[path]) != .evidenced
+        }
+    }
 }
 
 // MARK: - Configuration
@@ -70,12 +92,15 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     private let config: StudioConfig<M>
     private let stageContent: (Binding<M>, M.Stage, @escaping (M.Stage) -> Void) -> StageContent
 
-    @AppStorage private var storeBlob: String
+    /// Final brief §3.1 — drafts live in the encrypted ledger, bound to their case.
+    @State private var storage: StudioStorage
     @State private var items: [M] = []
     @State private var loaded = false
     @State private var activeID: UUID?
     @State private var stage: M.Stage?
     @State private var showExporter = false
+    /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
+    @State private var exportPackage: StudioExportPackage?
     @State private var showHistory = false
     @Environment(AppState.self) private var appState
     @State private var caseChoices: [StudioCaseChoice] = []
@@ -84,12 +109,15 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     /// The report action waiting on the provenance gate, and the fields that stopped it.
     @State private var gatedAction: String?
     @State private var gatedFields: [String] = []
+    /// Field path → why its cited source did not resolve (final brief §3.2).
+    @State private var gatedReasons: [String: String] = [:]
 
     public init(config: StudioConfig<M>,
                 @ViewBuilder stageContent: @escaping (Binding<M>, M.Stage, @escaping (M.Stage) -> Void) -> StageContent) {
         self.config = config
         self.stageContent = stageContent
-        _storeBlob = AppStorage(wrappedValue: "", config.storeKey)
+        _storage = State(initialValue: StudioStorage(studio: config.storeKey.replacingOccurrences(of: "kalsmritikosh.", with: "").replacingOccurrences(of: ".store", with: ""),
+                                                     legacyKey: config.storeKey))
     }
 
     private var stages: [M.Stage] { Array(M.Stage.allCases) }
@@ -100,21 +128,25 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             if let binding = activeBinding { studio(binding) } else { listScreen }
         }
         .onAppear(perform: load)
+        .studioStorageBanner(storage)
         .alert("Some entries have no source", isPresented: Binding(get: { gatedAction != nil }, set: { if !$0 { gatedAction = nil } })) {
             Button("Mark as my entries and continue") { releaseGate() }
             Button("Cancel", role: .cancel) { gatedAction = nil }
         } message: {
-            Text("\(gatedFields.count) filled field(s) are neither taken from the case's documents nor marked as your own entry: \(gatedFields.prefix(6).joined(separator: ", "))\(gatedFields.count > 6 ? " …" : ""). A report that leaves the app must say, for every line, which it is.")
+            Text(gatedReasons.isEmpty
+                 ? "\(gatedFields.count) filled field(s) are neither taken from the case's documents nor marked as your own entry: \(gatedFields.prefix(6).joined(separator: ", "))\(gatedFields.count > 6 ? " …" : ""). A report that leaves the app must say, for every line, which it is."
+                 : "\(gatedFields.count) field(s) need a decision. Some cite a source that does not check out — \(gatedReasons.keys.sorted().prefix(4).map { "\($0): \(gatedReasons[$0] ?? "")" }.joined(separator: "; ")). Marking them as your entries prints them as yours, not as documentary evidence.")
         }
         .fileExporter(isPresented: $showExporter,
-                      document: RCAMarkdownDocument(text: activeReport),
+                      document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
                       contentType: .plainText,
                       defaultFilename: exportFilename) { result in
-            if case .success = result, let b = activeBinding {
-                var v = b.wrappedValue
-                StudioAudit.record(&v.history, "Report exported as Markdown")
-                b.wrappedValue = v
+            // Recorded only after the file was written and read back (the ledger's export log is the
+            // history of what left the app — writing it into the draft would change the approved content).
+            if case .success(let url) = result, let pkg = exportPackage {
+                storage.exported(pkg, format: "markdown", writtenTo: url, app: appState)
             }
+            exportPackage = nil
         }
     }
 
@@ -123,12 +155,9 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     private func load() {
         guard !loaded else { return }
         loaded = true
-        if let data = storeBlob.data(using: .utf8),
-           let d = try? JSONDecoder().decode([M].self, from: data) { items = d }
+        Task { items = await storage.load(M.self, app: appState) }
     }
-    private func persist() {
-        if let data = try? JSONEncoder().encode(items), let s = String(data: data, encoding: .utf8) { storeBlob = s }
-    }
+    private func persist() { storage.persist(items, app: appState) }
     private var activeBinding: Binding<M>? {
         guard let id = activeID, let idx = items.firstIndex(where: { $0.id == id }) else { return nil }
         return Binding(get: { items[idx] },
@@ -180,7 +209,9 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                 Text(m.updatedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2).foregroundStyle(.tertiary)
                 Spacer()
-                Button(role: .destructive) { items.removeAll { $0.id == m.id }; persist() } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly) }
+                Button(role: .destructive) { items.removeAll { $0.id == m.id }; persist() } label: { Label("Remove", systemImage: "trash").labelStyle(.iconOnly) }
+                    .help(StudioEraseButton.removeHelp)
+                StudioEraseButton(storage: storage, id: m.id) { items.removeAll { $0.id == m.id }; persist() }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
                 Button("Open") { activeID = m.id; stage = firstIncomplete(m) }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -215,6 +246,12 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                     .controlSize(.small)
                     .popover(isPresented: $showHistory) { historyPanel(m.wrappedValue) }
                 if m.wrappedValue is any CaseBackedStudio { fillFromCaseMenu(m) }
+                Button { approveNow(m.wrappedValue) } label: {
+                    Label(storage.approvedIDs.contains(m.wrappedValue.id) ? "Approved" : "Approve",
+                          systemImage: storage.approvedIDs.contains(m.wrappedValue.id) ? "checkmark.seal.fill" : "checkmark.seal")
+                }.controlSize(.small)
+                .help("Approve exactly this version. Reports carry a DRAFT banner until a current approval covers them; any change returns the draft to draft.")
+                .task(id: m.wrappedValue.id) { await storage.refreshApproval(m.wrappedValue.id, app: appState) }
                 Button { gate(m, "copy") }
                     label: { Label("Copy", systemImage: "doc.on.doc") }.controlSize(.small)
                 Button { gate(m, "export") } label: { Label("Export", systemImage: "square.and.arrow.up") }.controlSize(.small)
@@ -290,22 +327,13 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
 
     // MARK: Report actions
 
-    private func recordAndShare(_ m: Binding<M>, _ action: String) {
-        var v = m.wrappedValue
-        StudioAudit.record(&v.history, action)
-        m.wrappedValue = v
-    }
-    private var activeReport: String {
-        guard let b = activeBinding else { return "" }
-        return sealedReport(b.wrappedValue)
-    }
 
     /// Every report that LEAVES the app carries the signed deliverable seal:
     /// content hash, honest stage completion, installation-key signature —
     /// the one shell seals all ten studios.
-    private func sealedReport(_ m: M) -> String {
+    private func sealedReport(_ m: M, approved: Bool = false) -> String {
         let complete = stages.filter { m.isComplete($0) }.count
-        let report = config.render(m, Date())
+        let report = (approved ? "" : StudioStorage.draftBanner) + config.render(m, Date())
         return StudioDeliverableSeal.sealedReport(
             studio: config.name, title: m.title,
             report: report,
@@ -319,8 +347,16 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             if caseChoices.isEmpty {
                 Text("No open cases")
             } else {
-                ForEach(caseChoices) { c in
-                    Button(c.title) { fill(m, from: c) }
+                Section("Fill from") {
+                    ForEach(caseChoices) { c in
+                        Button(c.title) { fill(m, from: c) }
+                    }
+                }
+                // Review step 5: a draft can belong to a case without anything being filled from it.
+                Section("Assign to case without filling") {
+                    ForEach(caseChoices) { c in
+                        Button(c.title) { assign(m, to: c) }
+                    }
                 }
             }
         } label: {
@@ -333,12 +369,26 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                               what: "Fills the empty fields from the case's own documents. Each filled field keeps the source it came from; anything you type or change is marked as your entry."))
     }
 
+    private func assign(_ m: Binding<M>, to choice: StudioCaseChoice) {
+        filling = true
+        Task {
+            defer { filling = false }
+            fillMessage = await storage.bind(m.wrappedValue.id, to: choice, app: appState)
+                ? "Assigned to \u{201C}\(choice.title)\u{201D}; nothing was filled. Its sources are now checked against that case."
+                : "Not assigned: this draft belongs to another case."
+        }
+    }
+
     private func fill(_ m: Binding<M>, from choice: StudioCaseChoice) {
         guard let current = m.wrappedValue as? any CaseBackedStudio else { return }
         let privileged = type(of: current).needsPrivilegedSources
         filling = true
         Task {
             defer { filling = false }
+            guard await storage.bind(m.wrappedValue.id, to: choice, app: appState) else {
+                fillMessage = "Not filled: this draft belongs to another case."
+                return
+            }
             guard let facts = await appState.studioCaseFacts(choice, includePrivileged: privileged),
                   var cb = m.wrappedValue as? any CaseBackedStudio else {
                 fillMessage = "The case could not be read."
@@ -359,11 +409,25 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
 
     /// Run a report action, or hold it until the unsupported fields are resolved.
     private func gate(_ m: Binding<M>, _ action: String) {
-        if let cb = m.wrappedValue as? any CaseBackedStudio {
-            let missing = StudioExportGate.unsupportedFields(cb.gateValues, provenance: cb.provenance)
-            if !missing.isEmpty { gatedFields = missing; gatedAction = action; return }
+        guard let cb = m.wrappedValue as? any CaseBackedStudio else { perform(m.wrappedValue, action); return }
+        let missing = StudioExportGate.unsupportedFields(cb.gateValues, provenance: cb.provenance)
+        let id = m.wrappedValue.id, values = cb.gateValues, provenance = cb.provenance
+        let privileged = type(of: cb).needsPrivilegedSources
+        let validated = m.wrappedValue
+        Task { @MainActor in
+            // References resolve against the draft's own case (final brief §3.2).
+            let context = await appState.studioEvidenceContext(caseID: storage.caseOf[id], workspaceID: nil, includePrivileged: privileged)
+            let unresolved = await StudioEvidenceResolver.unresolved(values: values, provenance: provenance, context: context)
+            guard missing.isEmpty && unresolved.isEmpty else {
+                gatedFields = (missing + unresolved.keys.sorted()).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+                gatedReasons = unresolved
+                gatedAction = action
+                return
+            }
+            // The exact value that was checked is the one exported (the package refuses if the
+            // screen moved on in the meantime).
+            perform(validated, action)
         }
-        perform(m, action)
     }
 
     private func releaseGate() {
@@ -371,44 +435,58 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
         gatedAction = nil
         if var cb = m.wrappedValue as? any CaseBackedStudio {
             var p = cb.provenance
-            let marked = StudioExportGate.markUnsupportedAsInvestigatorEntries(cb.gateValues, provenance: &p)
+            let marked = gatedFields
+            StudioExportGate.markAsInvestigatorEntries(marked, unresolved: Set(gatedReasons.keys), provenance: &p)
             cb.provenance = p
             if var updated = cb as? M {
-                StudioAudit.record(&updated.history, "Marked \(marked.count) field(s) as investigator entries")
+                StudioAudit.record(&updated.history, "Marked \(marked.count) field(s) as investigator entries (\(gatedReasons.count) whose cited source did not resolve)")
                 m.wrappedValue = updated
             }
         }
-        perform(m, action)
+        perform(m.wrappedValue, action)
     }
 
-    private func perform(_ m: Binding<M>, _ action: String) {
-        switch action {
-        case "copy": recordAndShare(m, "Report copied to clipboard"); copyReport(m.wrappedValue)
-        case "export": showExporter = true
-        #if os(macOS)
-        case "print": recordAndShare(m, "Report printed / saved as PDF"); printReport(m.wrappedValue)
-        #endif
-        default: break
+    /// Report actions on one package (review R2): frozen, rendered and sealed once; the same bytes are
+    /// copied, printed or written, and recorded only after the action completed.
+    private func perform(_ v: M, _ action: String) {
+        Task {
+            let cb = v as? any CaseBackedStudio
+            let authorise = cb.map { StudioStorage.ExportAuthorisation(provenance: $0.provenance, values: $0.gateValues, privileged: type(of: $0).needsPrivilegedSources) }
+            guard let pkg = await storage.package(v, app: appState, authorise: authorise, render: { sealedReport(v, approved: $0) }) else { return }
+            switch action {
+            case "copy":
+                #if os(macOS)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(pkg.text, forType: .string)
+                #endif
+                storage.exported(pkg, format: "clipboard", writtenTo: nil, app: appState)
+            case "export":
+                exportPackage = pkg
+                showExporter = true
+            #if os(macOS)
+            case "print":
+                // A cancelled print dialog, or a build that cannot print, records nothing.
+                if AppPrinting.run(text: pkg.text, jobTitle: "\(config.name) — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            #endif
+            default: break
+            }
+        }
+    }
+
+    /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
+    private func approveNow(_ v: M) {
+        let cb = v as? any CaseBackedStudio
+        let privileged = cb.map { type(of: $0).needsPrivilegedSources } ?? false
+        Task {
+            let mandatory = cb.map { type(of: $0).mandatoryEvidence } ?? []
+            let why = await storage.approve(v, provenance: cb?.provenance, values: cb?.gateValues ?? [:], privileged: privileged, mandatory: mandatory, app: appState)
+            storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
         }
     }
 
     private var exportFilename: String {
         "\(config.filenamePrefix)-\((activeBinding?.wrappedValue.title ?? "report").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
-    private func copyReport(_ m: M) {
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(sealedReport(m), forType: .string)
-        #endif
-    }
-    #if os(macOS)
-    private func printReport(_ m: M) {
-        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = sealedReport(m)
-        tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-        let op = NSPrintOperation(view: tv); op.jobTitle = "\(config.name) — \(m.title)"; op.run()
-    }
-    #endif
 }
 
 // MARK: - Shared stage-editor bits

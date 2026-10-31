@@ -22,6 +22,7 @@ public nonisolated enum OnlineSettings {
     private static let modelKey = "kalsmritikosh.online.model"
     private static let consentKey = "kalsmritikosh.online.askEveryTime"
     private static let capKey = "kalsmritikosh.online.dailyByteCap"
+    private static let documentTermsKey = "kalsmritikosh.online.documentTermsConfirmed."
     private static let keychainService = "ecosanskritiinnovation.Kalsmritikosh.onlineKeys"
 
     public static var kind: OnlineProviderKind {
@@ -41,6 +42,15 @@ public nonisolated enum OnlineSettings {
     public static var askEveryTime: Bool {
         get { UserDefaults.standard.object(forKey: consentKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: consentKey) }
+    }
+
+    /// Review L2 — the reviewed-terms version the person confirmed for `kind` (nil = never confirmed).
+    public static func confirmedDocumentTerms(for kind: OnlineProviderKind) -> String? {
+        UserDefaults.standard.string(forKey: documentTermsKey + kind.rawValue)
+    }
+    public static func setDocumentTermsConfirmed(_ confirmed: Bool, for kind: OnlineProviderKind) {
+        if confirmed { UserDefaults.standard.set(kind.documentTermsVersion, forKey: documentTermsKey + kind.rawValue) }
+        else { UserDefaults.standard.removeObject(forKey: documentTermsKey + kind.rawValue) }
     }
 
     /// I-8 — bytes that may be sent per day; nil = no limit, 0 = nothing may be sent.
@@ -95,6 +105,10 @@ public struct OutboundPreview: Sendable, Identifiable {
     public let text: String
     public let bytes: Int
     public let maskedCount: Int
+    /// Review L2 — the text includes document excerpts: always previewed, never covered by "this session".
+    public var carriesDocuments: Bool = false
+    /// The provider's retention / training terms, shown with a document send.
+    public var providerTerms: String? = nil
 }
 
 @MainActor
@@ -108,7 +122,7 @@ public final class OutboundConsent {
 
     /// Ask the user. Returns true to send, false to decline.
     public func request(_ preview: OutboundPreview) async -> Bool {
-        if !OnlineSettings.askEveryTime, allowedThisSession { return true }
+        if !OnlineSettings.askEveryTime, allowedThisSession, !preview.carriesDocuments { return true }
         // One prompt at a time: a second request waits for the first to resolve.
         while pending != nil { try? await Task.sleep(nanoseconds: 200_000_000) }
         return await withCheckedContinuation { c in
