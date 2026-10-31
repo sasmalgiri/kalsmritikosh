@@ -256,13 +256,13 @@ struct CaseBenchRunner {
         // only the question's wording goes to the model, never a document.
         if let keyFile = Self.env["CASEBENCH_CLOUD_KEY_FILE"],
            let key = try? String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
-            let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-haiku-4-5-20251001"
+            let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-opus-5"
             let send: @Sendable (String) async throws -> String = { prompt in try await BenchClaude.send(prompt, key: key, model: model) }
             await brain.setQuestionInterpreters(onDevice: nil, cloud: CloudQuestionInterpreter(generate: send))
             await brain.setQuestionRewriters(onDevice: nil, cloud: CloudQuestionRewriter(generate: send))
             // Verified record extraction reads the person's documents — a stronger reader than the
             // question rewriter; every answer it proposes is checked verbatim against the documents.
-            let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-sonnet-5"
+            let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-opus-5"
             await brain.setRecordExtractor(VerifiedRecordExtractor { prompt in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) })
             await brain.setInterpreterModelsAllowedOverride(true)
         }
@@ -406,21 +406,26 @@ struct CaseBenchRunner {
     }
 }
 
-/// The bench's direct Claude call (test target only).
+/// The bench's direct Claude call (test target only). The request and the reading of the reply are the
+/// app's own (`OnlineRequestBuilder`) — model floor on output tokens, refusal fallbacks, error mapping —
+/// so the bench measures what Online mode sends; only the transport differs (the test host has no
+/// network helper).
 enum BenchClaude {
     static func send(_ prompt: String, key: String, model: String, maxTokens: Int = 400) async throws -> String {
-        guard let url = URL(string: "https://api.anthropic.com/v1/messages") else { throw URLError(.badURL) }
+        let outbound = try OnlineRequestBuilder.build(kind: .anthropic, model: model, apiKey: key,
+                                                      system: nil, prompt: prompt, maxTokens: maxTokens)
+        guard let url = URL(string: outbound.url) else { throw URLError(.badURL) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
-        for (k, v) in ["x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"] { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model, "max_tokens": maxTokens, "messages": [["role": "user", "content": prompt]]])
-        let (data, _) = try await URLSession.shared.data(for: request)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = object["content"] as? [[String: Any]] else { throw URLError(.badServerResponse) }
-        await BenchClaude.Usage.shared.add((object["usage"] as? [String: Any]).map { ($0["input_tokens"] as? Int ?? 0) + ($0["output_tokens"] as? Int ?? 0) } ?? 0)
-        return content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined()
+        request.timeoutInterval = 300
+        for (k, v) in outbound.headers { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = outbound.body
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let text = try OnlineRequestBuilder.parse(kind: .anthropic, response: OutboundHTTPResponse(status: status, body: data))
+        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        await BenchClaude.Usage.shared.add((object?["usage"] as? [String: Any]).map { ($0["input_tokens"] as? Int ?? 0) + ($0["output_tokens"] as? Int ?? 0) } ?? 0)
+        return text
     }
 
     actor Usage {
