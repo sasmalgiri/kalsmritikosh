@@ -2125,11 +2125,14 @@ public actor MasterBrain {
             // sensitivity/workspace filter), not the top retrieval hits; capped searches say "at least".
             var complete = true
             var loadCap = 24
+            // Whether the archive's index finds any readable document naming the person (nil: no lookup wired).
+            var indexNamesPerson: Bool?
             // Every proceeding question reads the person's documents the index finds, not only the top
             // retrieval hits: a timeline or a "when charged" needs the release retrieval ranked low
             // (held-out chronology triage 2026-10-27: 15 of 62 real misses were retrieval).
             if let nameLookup {
                 let lookup = await nameLookup(parsed.person)
+                indexNamesPerson = !lookup.ids.isEmpty
                 var found = lookup.ids
                 if let policy = sensitivePolicy {
                     found = await policy.filter(result: RetrievalResult(authorityObjectIDs: found), access: access).result.authorityObjectIDs
@@ -2181,6 +2184,14 @@ public actor MasterBrain {
             if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete) {
                 KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")
                 return answered
+            }
+            // No readable document anywhere names the person: answering on would describe another
+            // defendant's case from passages that share the question's wording (ho13 cloud-path run,
+            // 2026-10-31: three people whose only releases were unreadable scans were answered from
+            // other cases). Refuse instead, and say where unreadable files are listed.
+            if indexNamesPerson == false, !ProceedingAnswerer.anySourceNames(parsed.person, in: sources) {
+                KalsmritikoshLog.brain.info("proceeding answer: no readable document names the person — refused")
+                return ProceedingAnswerer.absentPerson(parsed.person, intentKind: intent.kind.rawValue)
             }
         }
         var slotFirst: VerifiedAnswer?

@@ -684,3 +684,66 @@ struct ProceedingGapTests {
     }
 
 }
+
+/// ho13 on Opus 5, 2026-10-31: three defendants whose only releases were unreadable scans were
+/// answered from OTHER defendants' releases (the passages matched the question's wording). A person
+/// no readable document names is refused, with no citations; a person who is named is still answered.
+@Suite("Proceeding questions about a person no readable document names", .serialized)
+struct ProceedingAbsentPersonLedgerTests {
+
+    static let releases: [(file: String, text: String)] = [
+        ("brown.txt", """
+        U.S. Department of Justice
+        District of New Jersey
+        FOR IMMEDIATE RELEASE
+        Wednesday, May 19, 2021
+        Newark Man Sentenced for Gun Trafficking
+        NEWARK, N.J. – Torell Brown, 31, of Newark, was sentenced today to 60 months in prison for conspiring to traffic firearms, U.S. Attorney Rachael A. Honig announced.
+        """),
+        ("nichols.txt", """
+        U.S. Department of Justice
+        District of New Mexico
+        FOR IMMEDIATE RELEASE
+        Thursday, May 16, 2013
+        Albuquerque Woman Sentenced for Identity Theft
+        ALBUQUERQUE – Shelly Nichols, 44, was sentenced on May 15, 2013, to 25 months in federal prison for aggravated identity theft.
+        """),
+    ]
+
+    @Test("\"When was Gary Stephen Rowe sentenced?\" over other defendants' releases → refused, nothing cited")
+    func absentPersonIsRefused() async throws {
+        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        var settings = previous
+        settings["kalsmritikosh.privacy.offlineNoLLM"] = true
+        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
+        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
+
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-absent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
+        await state.boot(databaseURL: temp.appendingPathComponent("absent.sqlite"))
+        guard case .ready = await state.phase, let ingest = await state.ingest else {
+            Issue.record("ledger did not boot"); return
+        }
+        for r in Self.releases {
+            let url = temp.appendingPathComponent(r.file)
+            try r.text.write(to: url, atomically: true, encoding: .utf8)
+            _ = try await ingest.ingest(fileAt: url)
+        }
+        let brain = await state.brain
+        let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
+        for q in ["When was Gary Stephen Rowe sentenced?",
+                  "Which office handled the prosecution of Gary Stephen Rowe?",
+                  "Could you lay out the full timeline of the case against Gary Stephen Rowe for me?"] {
+            let a = await brain.answer(question: q, access: access)
+            #expect(a.refused, "refused: \(q) → \(a.body.prefix(200))")
+            #expect(a.citations.isEmpty, "nothing cited from another case: \(q)")
+            #expect(a.body.contains("Gary Stephen Rowe") && a.body.contains("Needs attention"))
+        }
+        // The control: a person the documents name is still answered, from their own release.
+        let named = await brain.answer(question: "When was Shelly Nichols sentenced?", access: access)
+        #expect(!named.refused, "answered: \(named.refusalReason ?? "")")
+        #expect(named.body.contains("2013"), "her own release: \(named.body.prefix(200))")
+    }
+}

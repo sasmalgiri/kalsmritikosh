@@ -226,7 +226,10 @@ struct CaseBenchRunner {
                     if let v = r.sourceVersionID { versionsByCase[line.case, default: []].append(v) }
                     filesByCase[line.case, default: []].append(r.fileRecord.id)
                     docsByCase[line.case, default: []].append(.init(doc: file.lastPathComponent, chunks: r.chunkCount,
-                        entities: r.entityCount, events: r.eventCount, seconds: Date().timeIntervalSince(s), error: nil))
+                        entities: r.entityCount, events: r.eventCount, seconds: Date().timeIntervalSince(s),
+                        // A file the pipeline could not read returns (it is recorded under Needs attention)
+                        // rather than throwing; the bench reports it as an error, never as a 0-chunk success.
+                        error: r.processingStatus == .failed ? "failed: \(r.processingDetail ?? "no reason recorded")" : nil))
                 } catch {
                     docsByCase[line.case, default: []].append(.init(doc: file.lastPathComponent, chunks: 0, entities: 0,
                         events: 0, seconds: Date().timeIntervalSince(s), error: String(describing: error)))

@@ -226,6 +226,26 @@ public nonisolated enum ProceedingAnswerer {
         return out
     }
 
+    /// True when any source names the person in full (given name and surname within a short stretch).
+    static func anySourceNames(_ person: String, in sources: [Source]) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        return sources.contains { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: tokens) }
+    }
+
+    /// The refusal for a person no readable document names: no citations, nothing from other cases.
+    static func absentPerson(_ person: String, intentKind: String) -> VerifiedAnswer {
+        var body = "No readable document in your archive names \(person), so there is no answer to give about them.\n\n"
+        body += "Documents about other people match the wording of the question; answering from them would describe "
+        body += "someone else's case while appearing to answer about \(person).\n\n"
+        body += "If you expected documents about \(person), open Sources ▸ Needs attention: a scan without text, a "
+        body += "password-protected file or a file that failed to read is listed there with its reason."
+        return VerifiedAnswer(
+            body: body, answerText: body, intentKind: intentKind, citations: [], confidence: Confidence(0.0),
+            contradictions: [], refused: true,
+            refusalReason: "No readable document names \(person).",
+            report: nil, walkSteps: [], source: .ragFallback, reasoningTrace: nil)
+    }
+
     public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true) -> VerifiedAnswer? {
         var about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
         // A document that names the person only by a declared alias ("McKenzie McClure", when another
