@@ -1663,6 +1663,9 @@ public actor MasterBrain {
     /// (brief §7 exact aggregates). `complete` is false when the index search stopped at its cap.
     private var nameLookup: (@Sendable (String) async -> (ids: [UUID], complete: Bool))?
     public func setNameLookup(_ lookup: @escaping @Sendable (String) async -> (ids: [UUID], complete: Bool)) { nameLookup = lookup }
+    /// Files byte-identical to the given documents' files, stored once (wired by AppState, which owns the ledger).
+    private var identicalCopyCount: (@Sendable ([UUID]) async -> Int)?
+    public func setIdenticalCopyCount(_ count: @escaping @Sendable ([UUID]) async -> Int) { identicalCopyCount = count }
     static let nameLookupCap = 2_000
     static let documentCountLoadCap = 600
     public func setEmailLookup(_ lookup: @escaping @Sendable (EmailLookup) async -> [UUID]) { emailLookup = lookup }
@@ -2181,7 +2184,11 @@ public actor MasterBrain {
                 KalsmritikoshLog.brain.info("proceeding answer: verified extraction for \(String(describing: parsed.ask), privacy: .public)")
                 return verified
             }
-            if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete) {
+            var copies = 0
+            if case .documentCount = parsed.ask, let identicalCopyCount {
+                copies = await identicalCopyCount(ProceedingAnswerer.namingSources(parsed.person, in: sources))
+            }
+            if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete, identicalCopies: copies) {
                 KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")
                 return answered
             }

@@ -2905,6 +2905,24 @@ public final class AppState {
                     return ([], false)
                 }
             }
+            // A document count says when further files are exact copies of the documents counted
+            // (same bytes: stored once, so they are not separate documents).
+            await brain.setIdenticalCopyCount { [weak database] objectIDs in
+                guard let database, !objectIDs.isEmpty else { return 0 }
+                let marks = objectIDs.map { _ in "?" }.joined(separator: ",")
+                do {
+                    let rows = try await database.query("""
+                    SELECT COUNT(DISTINCT f.id) FROM files f
+                    JOIN files c ON c.content_hash = f.content_hash AND c.id <> f.id
+                    WHERE f.alias_of IS NOT NULL AND f.content_hash IS NOT NULL
+                      AND c.id IN (SELECT file_id FROM knowledge_objects WHERE id IN (\(marks)));
+                    """, objectIDs.map { .uuid($0) })
+                    return Int(rows.first?.int(0) ?? 0)
+                } catch {
+                    KalsmritikoshLog.brain.error("identical copy count failed: \(String(describing: error), privacy: .public)")
+                    return 0
+                }
+            }
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in
                 await self?.composeToolGroundedAnswer(question: question, access: access)

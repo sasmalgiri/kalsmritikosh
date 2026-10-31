@@ -170,6 +170,9 @@ public nonisolated enum ProceedingAnswerer {
         return "\u{201C}\(t)\u{201D}"
     }
 
+    /// A heading line that is only an office or agency name ("Western District of New York").
+    static let officeLine = #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&\-–]+ (?:Division|Section|Branch|Unit)$|^Office of [A-Z][A-Za-z ]+$|^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Executive Office for United States Attorneys|Office of the Inspector General)(?: \([A-Z]{2,6}\))?$"#
+
     /// Offices a release names: a heading line of its own, the announcing office, a "prosecuted by …
     /// for the … District of …" line.
     static func offices(in text: String) -> [String] {
@@ -180,7 +183,7 @@ public nonisolated enum ProceedingAnswerer {
             // (FBI)" as the heading line, the body naming no district — held-out chronology 9, 2026-10-29)
             // names that component; it is what the documents say, never a guessed district.
             guard line.count <= 80, !line.lowercased().hasPrefix("u.s. department of justice"),
-                  line.range(of: #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&\-–]+ (?:Division|Section|Branch|Unit)$|^Office of [A-Z][A-Za-z ]+$|^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Executive Office for United States Attorneys|Office of the Inspector General)(?: \([A-Z]{2,6}\))?$"#,
+                  line.range(of: officeLine,
                              options: .regularExpression) != nil else { continue }
             out.append(line)
         }
@@ -246,7 +249,14 @@ public nonisolated enum ProceedingAnswerer {
             report: nil, walkSteps: [], source: .ragFallback, reasoningTrace: nil)
     }
 
-    public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true) -> VerifiedAnswer? {
+    /// The sources that name the person in full — the documents a count or a refusal is about.
+    static func namingSources(_ person: String, in sources: [Source]) -> [UUID] {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        return sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: tokens) }.map(\.objectID)
+    }
+
+    /// `identicalCopies`: further files byte-identical to the documents that name the person (stored once).
+    public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true, identicalCopies: Int = 0) -> VerifiedAnswer? {
         var about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
         // A document that names the person only by a declared alias ("McKenzie McClure", when another
         // release says "McKenzie McClure a/k/a Kalvin McClure") is about them too (held-out chronology 13).
@@ -534,9 +544,14 @@ public nonisolated enum ProceedingAnswerer {
             return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(dated), confidence: Confidence(0.8))
         case .documentCount:
             let n = about.count
+            // Each document by its headline — not the office heading every release of one district shares.
             let lines = about.map { s in "• " + (s.text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
-                .first { $0.count > 25 && ProceedingEventExtractor.fullDate(in: $0) == nil && !$0.hasPrefix("U.S. Department") && !$0.hasPrefix("FOR IMMEDIATE") } ?? "document") }
+                .first { $0.count > 25 && ProceedingEventExtractor.fullDate(in: $0) == nil && !$0.hasPrefix("U.S. Department") && !$0.hasPrefix("FOR IMMEDIATE")
+                    && $0.range(of: officeLine, options: .regularExpression) == nil } ?? "document") }
             var text = "\(complete ? "\(n)" : "At least \(n)") of the documents found name \(name):\n" + lines.joined(separator: "\n")
+            if identicalCopies > 0 {
+                text += "\n\n\(identicalCopies) further file\(identicalCopies == 1 ? " is an exact copy" : "s are exact copies") of \(identicalCopies == 1 ? "one of these" : "these") and \(identicalCopies == 1 ? "is" : "are") counted once."
+            }
             if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
             return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                                   citations: about.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },

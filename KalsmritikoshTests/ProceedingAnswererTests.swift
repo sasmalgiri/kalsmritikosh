@@ -741,6 +741,15 @@ struct ProceedingAbsentPersonLedgerTests {
             #expect(a.citations.isEmpty, "nothing cited from another case: \(q)")
             #expect(a.body.contains("Gary Stephen Rowe") && a.body.contains("Needs attention"))
         }
+        // An exact copy of a release (same bytes, another file name) is stored once: the count says so,
+        // and each document is listed by its headline, not the district heading every release shares.
+        let copy = temp.appendingPathComponent("nichols-copy.txt")
+        try FileManager.default.copyItem(at: temp.appendingPathComponent("nichols.txt"), to: copy)
+        _ = try await ingest.ingest(fileAt: copy)
+        let count = await brain.answer(question: "How many press releases mention Shelly Nichols?", access: access)
+        #expect(count.body.hasPrefix("1 of the documents"), "one document: \(count.body.prefix(200))")
+        #expect(count.body.contains("1 further file is an exact copy"), "the copy is reported: \(count.body)")
+        #expect(count.body.contains("Albuquerque Woman Sentenced") && !count.body.contains("• District of New Mexico"))
         // The control: a person the documents name is still answered, from their own release.
         let named = await brain.answer(question: "When was Shelly Nichols sentenced?", access: access)
         #expect(!named.refused, "answered: \(named.refusalReason ?? "")")
