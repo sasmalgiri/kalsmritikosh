@@ -508,6 +508,26 @@ public nonisolated enum ProceedingAnswerer {
                                       citations: [hit, other].map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.sentence.prefix(200))) },
                                       confidence: Confidence(0.65))
             }
+            // "The indictment ALSO charges Salois with possession …" is the second count: the count it adds
+            // to is stated earlier in the same release ("… alleges that Salois received and distributed
+            // child pornography"), often without "charged with" — quote both, never the second alone
+            // (ho13 regression, 2026-11-01).
+            if hit.sentence.range(of: supplementary, options: .regularExpression) != nil || hit.sentence.range(of: #"(?i)\balso\s+(?:charg|indict|accus)"#, options: .regularExpression) != nil,
+               let src = about.first(where: { $0.objectID == hit.objectID }) {
+                let sents = ProceedingEventExtractor.sentences(of: src.text)
+                if let at = sents.firstIndex(of: hit.sentence),
+                   let first = sents[..<at].reversed().first(where: { s in
+                       !surnames.isEmpty && s.lowercased().range(of: namesPerson, options: .regularExpression) != nil
+                           && s.range(of: offenceWords, options: .regularExpression) != nil
+                           && s.range(of: prior, options: .regularExpression) == nil
+                           && s.range(of: #"(?i)\bprior\b[^.]{0,24}\bconvict"#, options: .regularExpression) == nil
+                           && !otherSubject(s) && s.count > 40 }) {
+                    let text = "The documents say: \(quote(first)) \(quote(hit.sentence))"
+                    return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                          citations: [first, hit.sentence].map { VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String($0.prefix(200))) },
+                                          confidence: Confidence(0.75))
+                }
+            }
             let text = "The documents say: \(quote(hit.sentence))"
             return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                                   citations: [VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String(hit.sentence.prefix(200)))],

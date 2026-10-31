@@ -306,6 +306,26 @@ struct ProceedingAnswererTests {
         #expect(edwards.contains { $0.step == .pleaded } && !edwards.contains { $0.step == .sentenced }, "\(edwards)")
     }
 
+    @Test("A supplementary count (\"the indictment also charges X with …\") is quoted with the count it adds to, never alone")
+    func supplementaryCountKeepsTheFirst() throws {
+        let text = """
+        U.S. Department of Justice
+        Western District of Missouri
+        FOR IMMEDIATE RELEASE
+        Tuesday, July 22, 2014
+
+        Springfield Man Indicted
+
+        Anthony Richard Salois, 47, of Springfield, was charged in a two-count indictment returned by a federal grand jury in Springfield. Today's indictment alleges that Salois received and distributed child pornography over the Internet between Sept. 16 and 20, 2013. Because Salois has a prior state conviction for sexual abuse involving a minor, the count carries a mandatory minimum sentence. The indictment also charges Salois with being in possession of child pornography on Oct. 10, 2013.
+        """
+        let parsed = try #require(ProceedingAnswerer.parse("What were the charges filed against Anthony Richard Salois?"))
+        let a = try #require(ProceedingAnswerer.answer(parsed, sources: [.init(objectID: UUID(), text: text)]))
+        #expect(!a.refused)
+        #expect(a.body.contains("received and distributed child pornography"), "the first count: \(a.body)")
+        #expect(a.body.contains("also charges Salois with being in possession"), "the second count: \(a.body)")
+        #expect(!a.body.contains("prior state conviction"), "background is not a count: \(a.body)")
+    }
+
     @Test("Held-out chronology 13 (2026-10-30): 'do we know exactly when', 'looking for details on what sentence', 'what exactly was the sentence imposed', 'outcome in terms of sentencing', 'charged in a criminal complaint', a document naming the person only by a declared alias")
     func heldOut13() throws {
         let n = QuestionCanonicalizer.normalize
