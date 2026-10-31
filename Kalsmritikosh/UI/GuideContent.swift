@@ -41,7 +41,7 @@ enum GuideContent {
             ],
             tips: [
                 "An event marked “observed” came from a structured source (an email header, a timestamp). “Inferred” means indirect evidence only — treat it as a lead, not a fact.",
-                "The report never asserts beyond the evidence; “Missing Proof” lists exactly what would strengthen the case."
+                "The report asserts only what the cited evidence supports; “Missing Proof” lists what would strengthen the case."
             ]
         ),
         GuidePersona(
@@ -59,7 +59,7 @@ enum GuideContent {
                 (.findings, "Findings", "proof status, contradictions, and evidence gaps")
             ],
             tips: [
-                "Corroboration counts matter: “2 sources” means two independent documents state the same fact.",
+                "Corroboration counts matter: “2 sources” means two documents state the same fact — and copies, forwards and shared wording count once, because shared text is not independent corroboration.",
                 "Timeline gaps (months with no evidence) often point to what to collect next."
             ]
         ),
@@ -78,7 +78,7 @@ enum GuideContent {
                 (.saved, "Saved", "bookmark the questions you will re-run as new documents arrive")
             ],
             tips: [
-                "Answers never invent facts: if the documents don’t say it, the answer says so.",
+                "Answers are built only from your documents: if the documents don’t say it, the answer says so. Open the citation — the quotation is checked, but the document itself can be wrong.",
                 "Re-ask saved questions after each new ingest — answers update as evidence grows."
             ]
         ),
@@ -164,7 +164,7 @@ enum GuideContent {
         ("Inferred", "Reconstructed from indirect evidence only (e.g. a file’s modification time). A lead, not a fact."),
         ("Contradicted", "Another source states a conflicting version. Both sides are preserved — check Contradictions."),
         ("Corroborated", "The same fact appears in two or more independent source documents."),
-        ("Confidence", "How strongly the evidence supports this item, from 0 to 100%. Calibrated, not a guess."),
+        ("Confidence", "The evidence gate’s own grading of how well the passages support this item, from 0 to 100. Not calibrated until validated on your archive: read 80 as “stronger than 60”, not as “right four times in five” — check the citations."),
         ("Citation", "The exact source (file, page, row) a statement came from. Open it to verify."),
         ("Missing Proof", "Evidence that would be needed to establish a claim but is absent from your sources.")
     ]
@@ -217,9 +217,9 @@ enum GuideContent {
             ("Ledger mode", "Fastest: rule-based reading and indexing with almost no AI at import. The default — you can search right away."),
             ("Hot / Warm / Cold", "Reads everything lightly, then spends extra AI effort only on the important (\"hot\") part."),
             ("Full AI", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
-            ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
+            ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and on-device (Private mode), and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
-            ("Transcription", "Turns audio and video into text, fully on-device (Apple Speech, English). Runs while importing when \u{201C}Transcribe audio & video\u{201D} is on (the default); turn it off for faster imports.")
+            ("Transcription", "Turns audio and video into text on this Mac (Apple Speech, English). Runs while importing when \u{201C}Transcribe audio & video\u{201D} is on in Settings \u{2192} Modules (the default); with it off, recordings are kept and can be transcribed later in Transcripts. A transcript is what the speech model heard, not a certified record.")
         ]),
         // W4-8 — switcher map; full page in docs/COMING_FROM_DEVONTHINK.md.
         ("Coming from DEVONthink", "arrow.left.arrow.right", [
@@ -230,7 +230,7 @@ enum GuideContent {
             ("Annotations", "Highlights and notes, stored beside the source and never written into it."),
             ("Item links", "kalsmritikosh:// links open the exact passage."),
             ("Stamps / Bates", "Tools → Production sets: Bates PDFs, load files, privilege log and legal holds."),
-            ("Sync", "None, by design. Team review uses a shared folder with signed logs."),
+            ("Sync", "None, by design. Your archive stays on this Mac; move it with a complete backup and its recovery key."),
             ("AI chat", "Ask answers only from your documents, each claim cited; conflicts are shown, never averaged.")
         ]),
         // RC-2 — the 1.2 roadmap, linked from Help (direction, not dates).
@@ -239,7 +239,7 @@ enum GuideContent {
             ("Deeper story review", "Approve, correct, or reject story beats inline; your review feeds the next reconstruction."),
             ("More formats", "PowerPoint 97\u{2013}2003 (PPT) and Keynote, which are kept but not read today."),
             ("Better transcription", "On-demand transcription improvements for long audio and video."),
-            ("The promise that doesn't change", "Everything stays on-device. The privacy contract is permanent.")
+            ("The promise that doesn't change", "Private mode stays the default: your documents are read on this Mac, and nothing is sent anywhere unless you turn on Online mode and approve each send.")
         ])
     ]
 }

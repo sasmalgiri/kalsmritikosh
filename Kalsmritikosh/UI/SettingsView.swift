@@ -2164,6 +2164,7 @@ public struct SettingsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "trash").foregroundStyle(.red)
                 Text("Your data").font(.title3.bold())
+                InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — backup, recovery, erasure
             }
             Text("Erase everything Investigations Made Easy has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -2267,6 +2268,7 @@ public struct SettingsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "creditcard").foregroundStyle(Theme.brand)
                 Text("Subscription").font(.title3.bold())
+                InfoPopoverButton(topic: "subscription-plans")   // §6.8 — purchases
             }
             Text(store.statusText).font(.callout).accessibilityIdentifier("settings.subscription.status")
             Text("One edition with all nine personas, monthly or annual, same access either way. Eligible new subscribers get a 14-day free trial, after which the chosen plan renews automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")

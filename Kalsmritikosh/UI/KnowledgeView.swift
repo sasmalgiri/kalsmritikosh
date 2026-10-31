@@ -240,6 +240,7 @@ private struct KnowledgeListView: View {
             EntityChip(row.value, kind: kind)
                 .opacity(0.5)
             Spacer()
+            InfoPopoverButton(topic: "task-people-and-namesakes")   // §6.8 — merging identities
             Button {
                 Task { await unmerge(row) }
             } label: {
@@ -247,6 +248,7 @@ private struct KnowledgeListView: View {
             }
             .buttonStyle(.borderless)
             .controlSize(.small)
+            .help("Split this merged identity back out. Nothing is deleted; the split is recorded in the audit log.")
         }
     }
 

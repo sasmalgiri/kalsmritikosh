@@ -45,9 +45,19 @@ struct PurchaseGate: ViewModifier {
     /// A profile that never had access, or whose store has not answered with nothing verified cached,
     /// sees the whole-window screen (with retry); everyone else keeps the window (read-only when
     /// nothing paid stands).
-    private var gatesWholeWindow: Bool { store.entitlement.leadsWithSubscriptionScreen }
+    private var gatesWholeWindow: Bool { store.entitlement.leadsWithSubscriptionScreen && !SampleArchiveMode.isActive }
 
     @ViewBuilder private var statusStrip: some View {
+        if SampleArchiveMode.isActive && !store.entitlement.allowsPaidUse {
+            // §6.3 — the sample is free to work on; subscribing is for the person's own documents.
+            strip(icon: "graduationcap", text: "Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents.",
+                  action: "See plans") { store.paywallRequested = "work on your own documents" }
+        } else {
+            entitlementStrip
+        }
+    }
+
+    @ViewBuilder private var entitlementStrip: some View {
         switch store.entitlement {
         case .introductoryTrial(_, _, let willRenew):
             strip(icon: "clock", text: "Free trial: \(store.entitlement.daysLeft() ?? 1) day(s) left. \(willRenew ? "It renews automatically unless cancelled a day before it ends." : "Renewal is off; nothing will be charged.")",

@@ -442,8 +442,10 @@ struct CaseOverviewTab: View {
                 HStack {
                     if let eraseStatus { Text(eraseStatus).font(.caption).foregroundStyle(.secondary) }
                     Spacer()
+                    InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — erasure and holds
                     Button("Erase case…", role: .destructive) { confirmErase = true }
-                        .disabled(eraseReason.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(reason: eraseReason.trimmingCharacters(in: .whitespaces).isEmpty ? "A reason for the erasure is required." : nil,
+                                  remedy: "Type the reason first; a legal basis is optional.")
                 }
             }
             .confirmationDialog("Erase this case permanently?", isPresented: $confirmErase) {
@@ -656,6 +658,7 @@ struct CasePlanTab: View {
                     ForEach(AllegationDisposition.allCases) { Text($0.label).tag($0) }
                 }.frame(maxWidth: 260)
                 TextField("Rationale", text: Binding(get: { decisions[a.id]?.1 ?? a.rationale ?? "" }, set: { decisions[a.id] = (decisions[a.id]?.0 ?? a.disposition, $0) }))
+                InfoPopoverButton(topic: "safety-decisions")   // §6.8 — adverse findings
                 Button("Record finding") {
                     let d = decisions[a.id] ?? (a.disposition, a.rationale ?? "")
                     let ex = opt(exceptionText[a.id] ?? "")
@@ -1265,6 +1268,7 @@ struct CaseLogTab: View {
         VStack(alignment: .leading, spacing: 0) {
             CaseSection(title: "Export", subtitle: "Each export is frozen, re-checked against the case's sources and access, scrubbed of protected identities, written, read back and recorded in the case log.") {
                 HStack {
+                    InfoPopoverButton(topic: "task-review-approve-export")   // §6.8 — approvals and exports
                     Button("Case file report…") {
                         let named = model.named, actor = model.actor
                         model.exportDocument(appState, kind: .caseFileReport, name: "Case file - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.caseFileReport($0, named: named, by: actor) }

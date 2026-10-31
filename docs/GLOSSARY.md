@@ -13,7 +13,7 @@ add, and everything it tells you can be traced back to a source.
 
 **Kalsmritikosh** = a private memory of all your documents = you dump in your
 files/emails, it reads them, and it answers questions with the receipts (which
-file, which page). It runs entirely on your Mac — nothing leaves the machine.
+file, which page). In Private mode (the default) it runs on your Mac and opens no connection for your documents; Online mode is optional, with your own key and a preview of every send.
 
 ---
 
@@ -45,7 +45,7 @@ These labels ride along with every fact so you know how much to lean on it.
 | **Inferred** | Pieced together from indirect clues (e.g. a file's edit date). A **lead, not a fact**. |
 | **Corroborated** | The same fact shows up in **two or more independent** documents. Stronger. |
 | **Contradicted** | Two sources disagree. The app keeps **both** and flags it — it never quietly picks one. Go check it. |
-| **Confidence** | A 0–100% strength score for how well the evidence backs the item. Calibrated, not a vibe. |
+| **Confidence** | The evidence gate’s own 0–100 grading of how well the passages back the item. Not calibrated until validated on your archive: read 80 as “stronger than 60”, not “right four times in five” — the citations are what to check. |
 | **Quality tier (T1 / T2 / T3)** | A trust grade. **T1** = high (clean, corroborated), **T2** = medium, **T3** = low (weak/garbled). The app never deletes T3 data — it just ranks it last. |
 | **Citation** | The exact source of a statement (file → page/row/byte). Click it to see the original. |
 | **Missing Proof / Gap** | Something you'd need to prove a claim, but it's **not in your files**. The app tells you what's missing instead of guessing. |
@@ -97,7 +97,7 @@ The app trades **time for depth**. Faster = lighter reading; deeper = more AI wo
 | **Full LLM** | Runs the AI over every slice of every document. Deepest, but can take **hours** on big archives. |
 | **Quality costs time** | The core rule: better/deeper analysis takes longer. The app defaults to fast + all-on-device, and lets you opt into more depth. |
 | **OCR** | "Read text out of a scanned page or photo." | Slower, used automatically for scans/images. |
-| **Transcription** | "Turn audio/video into text." | On demand only (Transcripts screen), fully on-device (Apple Speech, English in this version) — never automatic during ingest. |
+| **Transcription** | "Turn audio/video into text." | On this Mac (Apple Speech, English). Runs while importing when *Transcribe audio & video* is on (Settings → Modules, the default); with it off, recordings are kept and can be transcribed later in the Transcripts screen. |
 
 ---
 

@@ -515,6 +515,11 @@ public struct RootView: View {
                 if SampleArchiveMode.isActive { SampleArchiveBanner() }
                 main
             }
+            // §6.2 — the replayable tutorial rides over the sample case only; it never appears on the
+            // person's own archive, so replaying it cannot touch their work.
+            .overlay(alignment: .bottomTrailing) {
+                if SampleArchiveMode.isActive && HelpTutorial.isRunning { TutorialPanel() }
+            }
         }
     }
 
@@ -591,6 +596,14 @@ public struct RootView: View {
             if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
                 navigate(to: dest)
             }
+        }
+        // §6.6 — Help links land on the Guide (the Guide itself scrolls to the topic).
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshOpenHelp)) { _ in
+            navigate(to: .guide)
+        }
+        // §6.1 — the introduction can be shown again from Help; it resets nothing.
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshReplayOnboarding)) { _ in
+            presentingOnboarding = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshPaletteEntry)) { note in
             // Menu-bar items post catalog entry ids so menus and the palette

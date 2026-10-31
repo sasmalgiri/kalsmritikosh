@@ -1105,7 +1105,10 @@ struct ScopeReviewSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Add documents to this case").font(.title3.weight(.semibold))
+            HStack(spacing: 8) {
+                Text("Add documents to this case").font(.title3.weight(.semibold))
+                InfoPopoverButton(topic: "task-review-approve-export")   // §6.8 — document authorisation
+            }
             Text("The case answers only from documents in its scope. Below is what its workspace holds that the case has not decided on. Nothing is added until you confirm; what you leave unticked stays out, and excluded documents stay excluded.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 14) {

@@ -227,8 +227,8 @@ public struct HomeView: View {
             // users voice about the incumbent tools (subscription shock,
             // cloud exposure, export lock-in, weeks-long learning curves).
             HStack(alignment: .top, spacing: 16) {
-                promise("lock.shield", "100% on your Mac",
-                        "Nothing ever leaves this computer — no cloud, no account, works offline forever.")
+                promise("lock.shield", "Private by default",
+                        "Your documents are read on this Mac and the app opens no connection for them. Online AI is optional, with your own key and a preview of every send.")
                 promise("creditcard", "One plain plan",
                         "One edition, all nine personas, monthly or yearly. Cancel any time; your work stays readable and exportable.")
                 promise("square.and.arrow.up", "No lock-in",

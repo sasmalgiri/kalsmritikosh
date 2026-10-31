@@ -283,6 +283,7 @@ struct JobResultView: View {
                     .accessibilityIdentifier("result.unresolvedOnly")
                 Spacer()
                 if editable, table, JobResultTable.bulkAllowed(jobID: model.jobID), !shown.isEmpty {
+                    InfoPopoverButton(topic: "task-review-approve-export")   // §6.8 — accepting evidence
                     Button("Accept shown (\(shown.count))") { for i in shown { model.rows[i].decision = .accepted } }.controlSize(.small)
                         .help("These rows restate source values, so one decision over the rows shown is safe; each row still records its own decision.")
                     Button("Reject shown (\(shown.count))") { for i in shown { model.rows[i].decision = .rejected } }.controlSize(.small)
@@ -554,7 +555,7 @@ struct JobResultView: View {
                     Button("Export…") { Task { await export(record) } }
                     Spacer()
                     Button("Save review") { Task { await model.save(complete: false, actor: actor) } }
-                        .disabled(!model.dirty)
+                        .disabled(reason: model.dirty ? nil : "Nothing has changed since the last save.", remedy: "Decide a row or add a note, then save.")
                     TextField("Completion note (required to complete)", text: $model.completionNote).frame(maxWidth: 280)
                     Button("Mark completed") { Task { await complete() } }
                         .buttonStyle(.borderedProminent)

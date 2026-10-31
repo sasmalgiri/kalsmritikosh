@@ -147,6 +147,23 @@ struct KalsmritikoshApp: App {
                 // The type-to-confirm sheet there remains the sole erase trigger.
                 Button("Delete All My Data…") { postPaletteEntry("act.deleteAllData") }
             }
+            // §6.6 — the Help menu: the searchable offline help, the Get started guide, the replayable
+            // tutorial and introduction, subscription management and the support page. All of it stays
+            // reachable before a purchase and after a subscription ends.
+            CommandGroup(replacing: .help) {
+                Button("Investigations Made Easy Help") { SurfaceOpener.open(.guide) }
+                    .keyboardShortcut("?", modifiers: .command)
+                Button("Get Started Guide") { SurfaceOpener.openHelp(HelpRegistry.getStarted.id) }
+                Divider()
+                Button("Replay the Tutorial (Sample Case)") { HelpTutorial.replay() }
+                Button("Replay the Introduction") { SurfaceOpener.replayOnboarding() }
+                Divider()
+                Button("Subscription, Trial and Cancelling") { SurfaceOpener.openHelp("subscription-plans") }
+                Button("Manage Subscription (Apple Account)…") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }
+                Divider()
+                Button("Support (Privacy-Safe Bug Reports)…") { NSWorkspace.shared.open(HelpLinks.support) }
+                Button("Privacy Policy…") { NSWorkspace.shared.open(HelpLinks.privacy) }
+            }
         }
     }
 

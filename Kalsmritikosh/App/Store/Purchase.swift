@@ -498,6 +498,10 @@ final class PurchaseCenter {
     @discardableResult
     func allowPaidAction(_ what: String) -> Bool {
         if entitlement.allowsPaidUse { return true }
+        // §6.3/§6.11 — the isolated sample case is the preview before any commitment: its ledger holds
+        // only the bundled documents, so working on it (the tutorial) needs no subscription. The
+        // person's own archive is never open in this mode.
+        if SampleArchiveMode.isActive { return true }
         paywallRequested = what
         return false
     }

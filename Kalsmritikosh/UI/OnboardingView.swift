@@ -135,7 +135,7 @@ public struct OnboardingView: View {
                 seeRow("Presentations", "PPTX", "rectangle.on.rectangle")
                 seeRow("Email", "MBOX, EML, EMLX (Apple Mail)", "envelope")
                 seeRow("Images", "PNG, JPG, HEIC, TIFF, WebP (with OCR)", "photo")
-                seeRow("Audio & video", "MP3, WAV, M4A, video — catalogued and preserved at ingest; transcribe on demand in Transcripts (on-device, English)", "waveform")
+                seeRow("Audio & video", "MP3, WAV, M4A, video — transcribed on this Mac while importing (Apple Speech, English) while “Transcribe audio & video” is on in Settings ▸ Modules (the default); otherwise kept, and transcribable later in Transcripts", "waveform")
                 seeRow("Archives", "ZIP — expanded then ingested", "archivebox")
             }
             Divider().padding(.vertical, 6)
@@ -237,45 +237,53 @@ public struct OnboardingView: View {
         .frame(maxWidth: 560)
     }
 
+    /// §6.1 — three ways in, up front: the isolated sample with its tutorial, your own documents, or a
+    /// case you already have. Private mode, the trial, Help and recovery in one plain sentence each.
     private var welcomeStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            bullet("Everything stays on your Mac. No cloud unless you opt in.")
-            bullet("Investigations Made Easy ingests documents, emails, spreadsheets, presentations, images, audio, and video.")
-            bullet("It extracts entities, events, timelines, summaries, and a memory layer per project / person / company.")
-            bullet("Ask any question — answers come back with cited evidence and a confidence score.")
+            HStack(spacing: 10) {
+                Button {
+                    UserDefaults.standard.set(true, forKey: "kalsmritikosh.onboarding.shown")
+                    HelpTutorial.replay()
+                } label: { Label("Try a sample case", systemImage: "graduationcap") }
+                    .buttonStyle(.borderedProminent)
+                    .help("Opens the bundled sample in its own separate ledger with a step-by-step tutorial. Nothing is mixed with your documents; no purchase is needed. The app relaunches.")
+                    .accessibilityIdentifier("onboarding.trySample")
+                Button {
+                    step = .persona
+                } label: { Label("Start with my documents", systemImage: "folder.badge.plus") }
+                    .help("Choose what you are investigating, then the first folder to read.")
+                    .accessibilityIdentifier("onboarding.startDocuments")
+                Button {
+                    dismiss()
+                    SurfaceOpener.open(.work)
+                } label: { Label("Resume a case", systemImage: "folder.badge.person.crop") }
+                    .help("Open Professional Jobs with the matters you can return to.")
+                    .accessibilityIdentifier("onboarding.resumeCase")
+            }
+            .controlSize(.large)
+            Divider()
+            bullet("Private by default: your documents are read on this Mac and the app opens no connection for them. Online AI is optional, uses your own provider account, and shows every send before it leaves.")
+            bullet("Documents, email, spreadsheets, presentations, scans and recordings become dated, cited facts; unreadable files are listed as unreadable, never filled in.")
+            bullet("Ask a question or run a job: every claim carries a citation you can open. The quotation is checked; whether the document is right is your call.")
+            bullet("A 14-day free trial is offered when Apple finds your account eligible; after any trial or subscription ends, your cases stay readable and export, backup and recovery keep working.")
+            bullet("Help is one keystroke away (⌘?) and works offline; a complete backup with its recovery key lives under Settings ▸ Your data.")
         }
-        .frame(maxWidth: 520)
+        .frame(maxWidth: 560)
     }
 
+    /// §6.1 — what this Mac can do, in plain words; the technical figures sit behind a disclosure.
     private var hardwareStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Detected hardware").font(.headline)
-            HStack {
-                Label("Memory", systemImage: "memorychip")
-                Spacer()
-                Text("\(ramGB) GB")
-                    .font(.callout.monospaced())
-            }
-            HStack {
-                Label("Tier", systemImage: "speedometer")
-                Spacer()
-                Text(detectedTier.capitalized)
-                    .font(.callout.monospaced())
-            }
-            HStack {
-                Label("AI providers ready", systemImage: "brain")
-                Spacer()
-                Text("\(providerCount)")
-                    .font(.callout.monospaced())
-            }
-            Divider().padding(.vertical, 8)
-            Text("Investigations Made Easy will dynamically pick a model that fits your hardware. You can override in Settings later.")
+            Text("What this Mac can do").font(.headline)
+            Text(plainCapabilitySummary)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 520, alignment: .leading)
             // RC-2 — requirements honesty, stated up front: what on-device AI
             // needs, and that evidence-only mode is a STATE, not an error.
             VStack(alignment: .leading, spacing: 6) {
-                Label("On-device AI — what it needs", systemImage: "cpu")
+                Label("AI-written prose — what it needs", systemImage: "cpu")
                     .font(.callout.weight(.semibold))
                 Text("AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Investigations Made Easy still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes.")
                     .font(.caption)
@@ -285,8 +293,48 @@ public struct OnboardingView: View {
             .padding(.top, 4)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("On-device AI requirements: AI prose needs Apple silicon with Apple Intelligence enabled. Without it, every answer still comes from your evidence with citations, in plainer prose. Answers may be slower until first indexing completes.")
+            DisclosureGroup("Technical details") {
+                VStack(spacing: 6) {
+                    HStack {
+                        Label("Memory", systemImage: "memorychip")
+                        Spacer()
+                        Text("\(ramGB) GB").font(.callout.monospaced())
+                    }
+                    HStack {
+                        Label("Performance tier", systemImage: "speedometer")
+                        Spacer()
+                        Text(detectedTier.capitalized).font(.callout.monospaced())
+                    }
+                    HStack {
+                        Label("AI providers ready", systemImage: "brain")
+                        Spacer()
+                        Text("\(providerCount)").font(.callout.monospaced())
+                    }
+                    Text("The app picks a model that fits this hardware; Settings ▸ Local model setup lets you change it.")
+                        .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.top, 6)
+            }
+            .font(.callout)
         }
         .frame(maxWidth: 520)
+    }
+
+    /// One paragraph a beginner can act on, from the detected hardware.
+    private var plainCapabilitySummary: String {
+        var parts: [String] = []
+        if ramGB >= 16 {
+            parts.append("This Mac has enough memory (\(ramGB) GB) to read large archives and run the on-device AI comfortably.")
+        } else if ramGB > 0 {
+            parts.append("This Mac has \(ramGB) GB of memory: reading documents, searching and cited answers work; very large archives and deep AI passes will be slower, so start with one folder.")
+        } else {
+            parts.append("Reading documents, searching and cited answers work on this Mac.")
+        }
+        parts.append(providerCount > 0
+                     ? "An AI model is ready, so answers and summaries can be phrased in prose."
+                     : "No AI model is ready yet, so answers come as quoted evidence with citations until one is set up in Settings.")
+        parts.append("Scans are read by OCR and recordings are transcribed on this Mac; both take longer than text files.")
+        return parts.joined(separator: " ")
     }
 
     @State private var showFolderPicker = false
@@ -360,11 +408,14 @@ public struct OnboardingView: View {
                 .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.green)
             Text("You're ready.").font(.title3.bold())
-            Text("Open the Sources tab to ingest your folder, then ask a question on the Ask tab.")
+            Text("Your folder is being read (Sources shows “Ready” when done). Next: Professional Jobs ▸ “Start matter” names your first case, “Add documents to this case” brings the documents into its scope, “Run” starts the first job, and Ask answers questions with citations you can open. Review what you keep, choose what the report carries, then export it from the case file.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 480)
+                .frame(maxWidth: 520)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { SurfaceOpener.openHelp(HelpRegistry.getStarted.id); dismiss() } label: { Label("Open the Get started guide", systemImage: "book") }
+                .controlSize(.small)
         }
     }
 

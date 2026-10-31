@@ -16,8 +16,11 @@ struct OutboundConsentSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Send to \(preview.provider)?", systemImage: "icloud.and.arrow.up").font(.title3.bold())
-            Text("This text will be sent to \(preview.host) (model \(preview.model)) with your own key. Nothing else leaves your Mac.")
+            HStack(spacing: 8) {
+                Label("Send to \(preview.provider)?", systemImage: "icloud.and.arrow.up").font(.title3.bold())
+                InfoPopoverButton(topic: "task-private-online")   // §6.8 — Online sends
+            }
+            Text("This text will be sent to \(preview.host) (model \(preview.model)) with your own key, and billed to your provider account. Nothing else leaves your Mac for this request.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if preview.carriesDocuments {
