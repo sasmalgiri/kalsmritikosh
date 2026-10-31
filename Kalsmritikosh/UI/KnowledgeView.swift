@@ -98,9 +98,11 @@ private struct KnowledgeListView: View {
     var body: some View {
         VStack {
             if rows.isEmpty && excluded.isEmpty {
-                FirstRunNudge(icon: "books.vertical",
-                              title: "Nothing here yet",
-                              message: "Add your files and the people, places, and events found in them appear here — unified across every document.")
+                LedgerEmptyState {
+                    FirstRunNudge(icon: "books.vertical",
+                                  title: "Nothing here yet",
+                                  message: "Add your files and the people, places, and events found in them appear here — unified across every document.")
+                }
             } else {
                 List {
                     Section {

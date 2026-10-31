@@ -86,6 +86,48 @@ public nonisolated enum EmptyStateKind: Sendable, Equatable {
     }
 }
 
+extension EmptyStateKind {
+    /// For a screen that reads the ledger and found nothing: the document reason, when one is true —
+    /// nothing added (`noFiles`), or files added and every one failed to read (`unreadableFiles`).
+    /// nil when something was read or reading is still under way; the screen then keeps its own words
+    /// (its emptiness has another cause, e.g. no payments among documents that were read).
+    nonisolated static func ledgerReason(_ p: AppState.IngestProgress) -> EmptyStateKind? {
+        if p.filesTotal == 0 { return .noFiles }
+        let read = p.filesDone - p.filesFailed
+        if read == 0 && p.filesFailed > 0 && !p.parsing { return .unreadableFiles(count: p.filesFailed) }
+        return nil
+    }
+}
+
+/// An empty ledger-reading screen: the shared empty state when no documents were added or none could be
+/// read, otherwise the screen's own empty content.
+struct LedgerEmptyState<Fallback: View>: View {
+    @Environment(AppState.self) private var appState
+    @State private var kind: EmptyStateKind?
+    @State private var checked = false
+    private let fallback: Fallback
+
+    init(@ViewBuilder fallback: () -> Fallback) {
+        self.fallback = fallback()
+    }
+
+    var body: some View {
+        Group {
+            if let kind {
+                EmptyStateView(kind)
+            } else if checked {
+                fallback
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            kind = EmptyStateKind.ledgerReason(await appState.ingestProgress())
+            checked = true
+        }
+    }
+}
+
 /// The shared empty state: which of the reasons is true, and the way out.
 public struct EmptyStateView: View {
     let kind: EmptyStateKind

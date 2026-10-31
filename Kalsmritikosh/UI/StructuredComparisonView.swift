@@ -60,12 +60,14 @@ public struct StructuredComparisonView: View {
             if !loadedList {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if documents.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.on.doc").font(.title).foregroundStyle(.secondary)
-                    Text("No documents yet.").foregroundStyle(.secondary)
-                    Button { SurfaceOpener.open(.sources) } label: {
-                        Label("Add your files", systemImage: "folder")
-                    }.controlSize(.small)
+                LedgerEmptyState {
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.on.doc").font(.title).foregroundStyle(.secondary)
+                        Text("No documents yet.").foregroundStyle(.secondary)
+                        Button { SurfaceOpener.open(.sources) } label: {
+                            Label("Add your files", systemImage: "folder")
+                        }.controlSize(.small)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
