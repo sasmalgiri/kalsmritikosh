@@ -522,17 +522,21 @@ public struct RootView: View {
             // macOS 26 split-view sizing already noted for the Ask surface). A flexible root has no ideal
             // height, so the window keeps its own size and the split view fills it.
             GeometryReader { geo in
-                VStack(spacing: 0) {
-                    // §1.1 — the sample ledger announces itself on every screen.
-                    if SampleArchiveMode.isActive { SampleArchiveBanner() }
-                    main
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        // §1.1 — the sample ledger announces itself on every screen.
+                        if SampleArchiveMode.isActive { SampleArchiveBanner() }
+                        main
+                    }
+                    // §6.2 — the replayable tutorial is a column beside the sample case (UI run j: as an
+                    // overlay it covered the Ask composer's Send button). It exists only in the sample
+                    // mode, so replaying it cannot touch the person's own archive.
+                    if SampleArchiveMode.isActive && HelpTutorial.progress.isRunning {
+                        Divider()
+                        TutorialPanel()
+                    }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
-                // §6.2 — the replayable tutorial rides over the sample case only; it never appears on the
-                // person's own archive, so replaying it cannot touch their work.
-                .overlay(alignment: .bottomTrailing) {
-                    if SampleArchiveMode.isActive && HelpTutorial.progress.isRunning { TutorialPanel() }
-                }
             }
         }
     }

@@ -43,16 +43,26 @@ public struct GuideView: View {
                 .padding(20)
             }
             .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshOpenHelp)) { note in
-                guard let id = note.object as? String, HelpRegistry.topic(id) != nil else { return }
-                query = ""
-                expanded.insert(id)
-                highlighted = id
-                DispatchQueue.main.async {
-                    if reduceMotion { proxy.scrollTo(id, anchor: .top) } else { withAnimation { proxy.scrollTo(id, anchor: .top) } }
-                }
+                if let id = note.object as? String { show(id, proxy) }
             }
+            // D-1: a link pressed on another screen arrives before the Guide exists; the pending topic is
+            // consumed once the Guide is on screen.
+            .onAppear { if let id = HelpNavigation.shared.pendingTopic { show(id, proxy) } }
+            .onChange(of: HelpNavigation.shared.pendingTopic) { _, id in if let id { show(id, proxy) } }
         }
         .accessibilityIdentifier("help.guide")
+    }
+
+    /// Expand, highlight and scroll to a topic; clears the pending request.
+    private func show(_ id: String, _ proxy: ScrollViewProxy) {
+        guard HelpRegistry.topic(id) != nil else { HelpNavigation.shared.pendingTopic = nil; return }
+        query = ""
+        expanded.insert(id)
+        highlighted = id
+        HelpNavigation.shared.pendingTopic = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            if reduceMotion { proxy.scrollTo(id, anchor: .top) } else { withAnimation { proxy.scrollTo(id, anchor: .top) } }
+        }
     }
 
     // MARK: - Header: title, search, replay

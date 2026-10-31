@@ -1,0 +1,22 @@
+J-2 (I-1 crash re-verify) — 2026-10-31 12:56
+Question typed into AXTextField [463,802 646x16]: "Who signed the master supply agreement?"; Send question pressed via AX (button at [1237,801 32x32]).
+Answer with Evidence present at first re-dump (~10 s).
+Answer text (verbatim AX value, truncated by the view at "signed January 12, "):
+"Master Supply Agreement — Project Delta
+Effective Date: January 12, 2024 Vendor: Supplier ABC Client: Northwind Industries Project: Project Delta — fabrication of 24 turbine blade assemblies. Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, "
+Badge: AXImage desc="Answer status: Partially supported" id=circle.lefthalf.filled; AXStaticText "Answer status: Partially supported"; "Confidence: moderate · 1 source"
+Evidence area: AXStaticText "Evidence" id=ask.evidence; AXScrollArea id=ask.evidence containing ONE chip:
+  AXButton desc="Source 1: contract.md. Opens at the quoted passage." [269,992 87x20] (no accessibility container around chips — identifiers only)
+Receipt: "Answer receipt. Confidence: moderate · Evidence: 1 passage, 1 file · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0"
+Disclaimer: "AI-assisted answer — it can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice."
+Steps and process checks:
+  tree 20 (full depth) -> 02-live-answer-depth20.txt (193 lines, exit 0); pgrep: 29290 alive
+  find amendment / find contract.md -> chip found; pgrep: 29290 alive
+  press chip -> AXSheet [415,215 640x480] title "contract.md", Done [989,225 56x24], Open menu button, AXTextArea with the full contract text (quoted passage highlighted in 03-citation-sheet.png); pgrep: 29290 alive
+  press Done -> sheet gone (0 AXSheet); pgrep: 29290 alive
+Newest crash report remains Kalsmritikosh-2026-10-31-122034.ips (12:20, before this run) — no new crash.
+Also pressed "Technical details" (expands to "Why this answer? (14 steps)", "How did Investigations Made Easy answer this?", "State: Partially supported") — alive.
+RESULT: PASS

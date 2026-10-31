@@ -1,0 +1,64 @@
+    AXGroup id=tutorial.panel [1073,592 381x234]
+      AXStaticText value="Tutorial" [1089,607 61x13]
+      AXStaticText value="Step 1 of 10" id=tutorial.position [1360,608 57x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1426,608 13x13] actions=AXPress
+      AXStaticText value="You are in the sample case" [1088,632 171x16]
+      AXStaticText value="The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read." [1088,658 346x60]
+      AXStaticText value="What you should see" [1088,728 104x13]
+      AXStaticText value="Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened." [1088,743 349x39]
+      AXButton desc="Back" id=tutorial.back [1088,792 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Sources" [1142,792 91x20] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,792 44x20] actions=AXPress
+== after next1
+    AXGroup id=tutorial.panel [1073,604 381x222]
+      AXStaticText value="Tutorial" [1089,619 61x13]
+      AXStaticText value="Step 2 of 10" id=tutorial.position [1358,619 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1426,620 13x13] actions=AXPress
+      AXStaticText value="Choose the investigation question" [1088,643 220x16]
+      AXStaticText value="Open Professional Jobs, choose the “Investigator” card and press “Start matter” after typing the title “Project Delta slip”. The question for this matter: why did the first delivery slip, and who approved the change?" [1088,669 345x60]
+      AXStaticText value="What you should see" [1088,739 104x13]
+      AXStaticText value="“Created case “Project Delta slip” … with 8 source(s) in scope”, the jobs grouped in phases, and “Start here — open a matter” done." [1088,754 349x26]
+      AXButton desc="Back" id=tutorial.back [1088,791 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Professional Jobs" [1142,791 90x21] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,791 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+== after next2
+    AXGroup id=tutorial.panel [1073,589 381x237]
+      AXStaticText value="Tutorial" [1089,604 61x13]
+      AXStaticText value="Step 3 of 10" id=tutorial.position [1358,604 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1426,605 13x13] actions=AXPress
+      AXStaticText value="Inspect and authorise the case documents" [1088,628 274x16]
+      AXStaticText value="Press “Add documents to this case” — or “Review new documents” when the matter already holds the workspace’s documents. Read the preview: how many are in scope now, how many are new, how many stay excluded. Nothing is added until you confirm." [1088,654 342x75]
+      AXStaticText value="What you should see" [1088,739 104x13]
+      AXStaticText value="“Documents: 8 in scope”. Only these documents are read for this matter’s jobs and questions." [1088,754 315x26]
+      AXButton desc="Back" id=tutorial.back [1088,791 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Professional Jobs" [1142,791 90x21] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,791 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+== after back
+    AXGroup id=tutorial.panel [1073,604 381x222]
+      AXStaticText value="Tutorial" [1089,619 61x13]
+      AXStaticText value="Step 2 of 10" id=tutorial.position [1358,619 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1426,620 13x13] actions=AXPress
+      AXStaticText value="Choose the investigation question" [1088,643 220x16]
+      AXStaticText value="Open Professional Jobs, choose the “Investigator” card and press “Start matter” after typing the title “Project Delta slip”. The question for this matter: why did the first delivery slip, and who approved the change?" [1088,669 345x60]
+      AXStaticText value="What you should see" [1088,739 104x13]
+      AXStaticText value="“Created case “Project Delta slip” … with 8 source(s) in scope”, the jobs grouped in phases, and “Start here — open a matter” done." [1088,754 349x26]
+      AXButton desc="Back" id=tutorial.back [1088,791 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Professional Jobs" [1142,791 90x21] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,791 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+== after stop: tutorial elements = 0
+== second replay (after Stop)
+    AXGroup id=tutorial.panel [1073,592 381x234]
+      AXStaticText value="Tutorial" [1089,607 61x13]
+      AXStaticText value="Step 1 of 10" id=tutorial.position [1360,608 57x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1426,608 13x13] actions=AXPress
+      AXStaticText value="You are in the sample case" [1088,632 171x16]
+      AXStaticText value="The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read." [1088,658 346x60]
+      AXStaticText value="What you should see" [1088,728 104x13]
+      AXStaticText value="Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened." [1088,743 349x39]
+      AXButton desc="Back" id=tutorial.back [1088,792 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Sources" [1142,792 91x20] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,792 44x20] actions=AXPress
+stopped again; tutorial elements = 0

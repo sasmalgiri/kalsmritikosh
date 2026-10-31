@@ -253,7 +253,18 @@ public final class PersonaJobsModel {
         loadRanJobs()
         loadNotApplicable()
         loadWorkLog()
+        // UI run i, I-7: a matter opened under one profession came back with another's job catalogue
+        // after a relaunch. The profession is remembered when the matter is opened; older matters fall
+        // back to the profession of the jobs already run in them.
+        let remembered = Self.rememberedPersona(for: matter.id)
+            ?? PersonaJobCatalogComposer.allJobs.first { ranJobs.contains($0.id) }.map { ApplicationDefinitionID(rawValue: $0.persona) }
+        let switched = remembered != nil && remembered != selectedPersona && personas.contains { $0.id == remembered }
+        if let remembered, switched {
+            selectedPersona = remembered
+            lastOutcome = "Resumed matter \"\(matter.title)\" under \(personas.first { $0.id == remembered }?.label ?? remembered.rawValue)"
+        }
         Task {
+            if switched { await reloadJobs() }
             await reloadResults()   // A1 — each job's saved result comes back with the matter
             await refreshScope()
             await refreshCaseSteps()
@@ -329,6 +340,23 @@ public final class PersonaJobsModel {
         jobs = await service.jobs(forPersona: id)
     }
 
+    // MARK: Which profession a matter belongs to (I-7)
+
+    static let matterPersonaKey = "kalsmritikosh.matterPersona"
+
+    /// Remember the profession a matter was opened under (per case id, in the preference store).
+    static func rememberPersona(_ persona: ApplicationDefinitionID, for caseID: UUID) {
+        var map = AppDefaults.store.dictionary(forKey: matterPersonaKey) as? [String: String] ?? [:]
+        map[caseID.uuidString] = persona.rawValue
+        AppDefaults.store.set(map, forKey: matterPersonaKey)
+    }
+
+    static func rememberedPersona(for caseID: UUID) -> ApplicationDefinitionID? {
+        guard let map = AppDefaults.store.dictionary(forKey: matterPersonaKey) as? [String: String],
+              let raw = map[caseID.uuidString] else { return nil }
+        return ApplicationDefinitionID(rawValue: raw)
+    }
+
     /// First run: no workspace exists yet — create the default one rather
     /// than dead-ending a brand-new user on a disabled button.
     public func ensureWorkspace() async {
@@ -356,6 +384,7 @@ public final class PersonaJobsModel {
                 workspaceID: wsID, title: title, actor: actor, at: date))
             activeCaseID = out.producedID
             activeMatterTitle = title
+            if let c = out.producedID, let p = selectedPersona { Self.rememberPersona(p, for: c) }
             // UI journey 2026-10-30: a matter opened in an empty workspace has nothing in scope and every
             // job blocks; say so here, with the way to fix it, instead of letting each job say it.
             lastOutcome = out.summary.contains("with 0 source(s)")

@@ -16,10 +16,20 @@ public extension Notification.Name {
     static let kalsmritikoshReplayOnboarding = Notification.Name("kalsmritikosh.replayOnboarding")
 }
 
+/// The topic a Help link asked for, kept until the Guide is on screen to consume it (UI run j, D-1: the
+/// notification alone was lost when the Guide was not mounted yet, so "Open in Help" landed at the top).
+@MainActor
+@Observable
+public final class HelpNavigation {
+    public static let shared = HelpNavigation()
+    public var pendingTopic: String?
+}
+
 @MainActor
 public extension SurfaceOpener {
     /// Open the Guide at a topic (`HelpRegistry` id). An unknown id opens the Guide at the top.
     static func openHelp(_ topicID: String) {
+        HelpNavigation.shared.pendingTopic = topicID
         NotificationCenter.default.post(name: .kalsmritikoshOpenHelp, object: topicID)
     }
 

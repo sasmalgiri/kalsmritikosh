@@ -117,8 +117,8 @@ public nonisolated enum HelpTutorial {
     }
 }
 
-/// The floating tutorial card shown over the sample case while the tutorial runs. Back/Next, position,
-/// Show me, Stop; nothing advances by itself; keyboard-operable buttons; no motion.
+/// The tutorial column beside the sample case while the tutorial runs. Back/Next, position, Show me,
+/// Stop; nothing advances by itself; keyboard-operable buttons; no motion.
 struct TutorialPanel: View {
     @State private var progress = HelpTutorial.progress
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -164,11 +164,9 @@ struct TutorialPanel: View {
                 .controlSize(.small)
             }
             .padding(14)
-            .frame(width: 380)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.08)))
-            .shadow(radius: reduceMotion ? 0 : 8, y: 2)
-            .padding(16)
+            .frame(width: 320, alignment: .topLeading)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(.regularMaterial)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("tutorial.panel")
             .transaction { $0.animation = nil }
