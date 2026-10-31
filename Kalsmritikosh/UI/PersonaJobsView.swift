@@ -466,8 +466,8 @@ public struct PersonaJobsView: View {
                     }
                     .sheet(item: $resultJob, onDismiss: { Task { await model.reloadResults() } }) { job in
                         if let repo = model.resultsRepository, let caseID = model.activeCaseID {
-                            JobResultView(model: JobResultModel(repo: repo, caseID: caseID, jobID: job.id, jobTitle: job.title), actor: "me",
-                                          onRerun: { await model.run(job, actor: "me", at: Date()) })
+                            JobResultView(model: JobResultModel(repo: repo, caseID: caseID, jobID: job.id, jobTitle: job.title), actor: InvestigatorProfile.name,
+                                          onRerun: { await model.run(job, actor: InvestigatorProfile.name, at: Date()) })
                         }
                     }
                     .sheet(item: $runnerJob) { job in
@@ -479,7 +479,7 @@ public struct PersonaJobsView: View {
                             JobRunnerView(
                                 job: job, doc: doc,
                                 canRun: !model.busy && model.activeCaseID != nil,
-                                onRun: { Task { await model.run(job, actor: "me", at: Date()) } },
+                                onRun: { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } },
                                 onClose: { runnerJob = nil },
                                 onStartWorkflow: {
                                     // Hand off to the Work Center as a full guided
@@ -538,7 +538,7 @@ public struct PersonaJobsView: View {
         // I2 — the not-applicable decision needs its reason.
         .alert("Not applicable to this matter", isPresented: Binding(get: { naJob != nil }, set: { if !$0 { naJob = nil } }), presenting: naJob) { job in
             TextField("Why it does not apply", text: $naReason)
-            Button("Record") { let r = naReason; Task { await model.markNotApplicable(job, reason: r, actor: "me", at: Date()) }; naJob = nil }
+            Button("Record") { let r = naReason; Task { await model.markNotApplicable(job, reason: r, actor: InvestigatorProfile.name, at: Date()) }; naJob = nil }
                 .disabled(naReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Button("Cancel", role: .cancel) { naJob = nil }
         } message: { job in
@@ -604,7 +604,7 @@ public struct PersonaJobsView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.25), lineWidth: 1))
             .sheet(item: $model.inclusionReview) { preview in
                 ScopeReviewSheet(preview: preview,
-                                 onApprove: { chosen in Task { await model.approveInclusion(chosen, actor: "me", at: Date()) } },
+                                 onApprove: { chosen in Task { await model.approveInclusion(chosen, actor: InvestigatorProfile.name, at: Date()) } },
                                  onCancel: { model.inclusionReview = nil })
             }
         } else {
@@ -653,7 +653,7 @@ public struct PersonaJobsView: View {
                         }.frame(maxWidth: 220)
                     }
                     Button {
-                        Task { await model.startMatter(actor: "me", at: Date()) }
+                        Task { await model.startMatter(actor: InvestigatorProfile.name, at: Date()) }
                     } label: { Label("Start matter", systemImage: "play.fill") }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.brand)
@@ -697,7 +697,7 @@ public struct PersonaJobsView: View {
                             if model.results[jobID] != nil {
                                 Button("Open") { resultJob = job }.controlSize(.mini)
                             } else {
-                                Button("Run") { Task { await model.run(job, actor: "me", at: Date()) } }.controlSize(.mini).disabled(model.busy)
+                                Button("Run") { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } }.controlSize(.mini).disabled(model.busy)
                             }
                         } else if case .caseStep(let place) = rec.kind {
                             Text(place.rawValue.capitalized).font(.caption2).foregroundStyle(.tertiary)
@@ -987,7 +987,7 @@ public struct PersonaJobsView: View {
                         Spacer(minLength: 0)
                         HStack(spacing: 8) {
                             if model.activeCaseID != nil {
-                                Button("Run") { Task { await model.run(job, actor: "me", at: Date()) } }
+                                Button("Run") { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } }
                                     .controlSize(.small)
                                     .disabled(model.busy)
                                     .help("Run this job against the open matter now; its result is saved for review.")
@@ -998,7 +998,7 @@ public struct PersonaJobsView: View {
                                 }
                                 // I2 — the explicit "does not apply" decision, with its reason, reversible.
                                 if case .notApplicable = progress.state {
-                                    Button("Applicable again") { Task { await model.markApplicable(job, actor: "me", at: Date()) } }
+                                    Button("Applicable again") { Task { await model.markApplicable(job, actor: InvestigatorProfile.name, at: Date()) } }
                                         .controlSize(.small)
                                 } else if !ran {
                                     Button("Not applicable…") { naJob = job; naReason = "" }

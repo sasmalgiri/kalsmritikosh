@@ -139,7 +139,7 @@ private struct KnowledgeListView: View {
                 let reason = eraseReason
                 Task {
                     do {
-                        eraseStatus = try await appState.erasePerson(row.id, reason: reason, legalBasis: nil, actor: "user").summary
+                        eraseStatus = try await appState.erasePerson(row.id, reason: reason, legalBasis: nil, actor: InvestigatorProfile.name).summary
                     } catch { eraseStatus = error.localizedDescription }
                     await refresh()
                 }

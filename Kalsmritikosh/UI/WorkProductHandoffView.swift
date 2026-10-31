@@ -258,7 +258,7 @@ public final class WorkProductHandoffModel {
 
     /// A verification bundle left the app — record the export act (v111).
     public func noteBundleExported(revision: Int, at date: Date) async {
-        await recordGovernance(.bundleExported, actor: "me",
+        await recordGovernance(.bundleExported, actor: InvestigatorProfile.name,
                                detail: "revision=\(revision)", at: date)
     }
 
@@ -756,17 +756,17 @@ public struct WorkProductHandoffView: View {
             // the sealed assessment or certificate.
             sopReviewStatus
             HStack(spacing: 10) {
-                Button { Task { await model.buildFindings(actor: "me", at: Date()) } } label: {
+                Button { Task { await model.buildFindings(actor: InvestigatorProfile.name, at: Date()) } } label: {
                     Label("Build findings", systemImage: "doc.badge.gearshape")
                 }.buttonStyle(.bordered).disabled(model.busy)
-                Button { Task { await model.approve(actor: "me", at: Date()) } } label: {
+                Button { Task { await model.approve(actor: InvestigatorProfile.name, at: Date()) } } label: {
                     Label("Approve", systemImage: "checkmark.seal.fill")
                 }.buttonStyle(.borderedProminent).disabled(model.busy || model.built == nil)
                     .guidance(GuidanceTip("Approve findings",
                                           what: "Records your human approval of the built findings under the chosen standard of proof. Approval authorizes the report — it does not verify the world or close the matter.",
                                           enabledWhen: "Build findings, choose a standard of proof, and enter a rationale (below) first."),
                               enabled: !(model.busy || model.built == nil))
-                Button { Task { await model.withdraw(actor: "me", at: Date()) } } label: {
+                Button { Task { await model.withdraw(actor: InvestigatorProfile.name, at: Date()) } } label: {
                     Label("Withdraw", systemImage: "xmark.seal")
                 }.buttonStyle(.bordered).disabled(model.busy || model.built == nil || !snap.isApproved)
             }
@@ -1027,11 +1027,11 @@ public struct WorkProductHandoffView: View {
             }
             HStack(spacing: 10) {
                 if snap.isClosed {
-                    Button { Task { await model.reopen(actor: "me", at: Date()) } } label: {
+                    Button { Task { await model.reopen(actor: InvestigatorProfile.name, at: Date()) } } label: {
                         Label("Reopen matter", systemImage: "lock.open")
                     }.buttonStyle(.bordered).disabled(model.busy)
                 } else {
-                    Button { Task { await model.close(actor: "me", at: Date()) } } label: {
+                    Button { Task { await model.close(actor: InvestigatorProfile.name, at: Date()) } } label: {
                         Label("Close matter", systemImage: "lock")
                     }.buttonStyle(.borderedProminent).disabled(model.busy)
                 }
