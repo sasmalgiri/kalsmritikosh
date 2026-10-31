@@ -42,9 +42,10 @@ struct PurchaseGate: ViewModifier {
         .task { store.start() }
     }
 
-    /// Only a profile that never had access sees the whole-window screen; everyone else keeps the
-    /// window (read-only when nothing paid stands).
-    private var gatesWholeWindow: Bool { store.entitlement == .notStarted }
+    /// A profile that never had access, or whose store has not answered with nothing verified cached,
+    /// sees the whole-window screen (with retry); everyone else keeps the window (read-only when
+    /// nothing paid stands).
+    private var gatesWholeWindow: Bool { store.entitlement.leadsWithSubscriptionScreen }
 
     @ViewBuilder private var statusStrip: some View {
         switch store.entitlement {
@@ -95,7 +96,7 @@ struct PurchaseScreen: View {
 
             if store.productsUnavailable || store.offers.isEmpty {
                 VStack(spacing: 8) {
-                    Text("The App Store did not return the plans and prices for your storefront, so none can be shown. Nothing is charged until a plan is shown and chosen.")
+                    Text("The App Store did not return the plans and prices for your storefront, so none can be shown and nothing can be subscribed to yet. Nothing is charged until a plan is shown and chosen. Reading, exporting, backing up, Help and the sample case work meanwhile.")
                         .font(.callout).multilineTextAlignment(.center).frame(maxWidth: 440).foregroundStyle(.secondary)
                     Button("Try again") { Task { await store.loadProducts(); await store.refresh() } }.disabled(store.busy)
                 }

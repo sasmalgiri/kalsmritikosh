@@ -30,8 +30,10 @@ struct PurchaseTests {
     @MainActor func firstLaunch() {
         #expect(Entitlement.evaluate(records: [], renewal: nil, storeAnswered: false, now: t0) == .unknown)
         #expect(Entitlement.evaluate(records: [], renewal: nil, storeAnswered: true, now: t0) == .notStarted)
-        #expect(Entitlement.unknown.allowsPaidUse, "a slow store never locks a person out")
-        #expect(!Entitlement.notStarted.allowsPaidUse && !Entitlement.notStarted.hadAccessBefore)
+        #expect(!Entitlement.unknown.allowsPaidUse, "an unanswered store is never an unlimited unlock (UI run f, F-1)")
+        #expect(Entitlement.unknown.leadsWithSubscriptionScreen && Entitlement.unknown.allowsReadAccess && !Entitlement.unknown.hadAccessBefore)
+        #expect(!Entitlement.notStarted.allowsPaidUse && !Entitlement.notStarted.hadAccessBefore && Entitlement.notStarted.leadsWithSubscriptionScreen)
+        #expect(!Entitlement.lapsed(reason: .expired).leadsWithSubscriptionScreen, "a lapsed profile keeps its window, read-only")
         #expect(PurchaseCenter.isTestHost)
         PurchaseCenter.shared.start()
         #expect(PurchaseCenter.shared.entitlement == .legacyUnlocked)

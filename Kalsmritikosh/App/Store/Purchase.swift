@@ -78,16 +78,29 @@ nonisolated enum Entitlement: Equatable, Sendable {
     case lapsed(reason: LapseReason)
     /// The store answered and this account never had anything.
     case notStarted
-    /// The store has not answered yet and nothing verified is cached.
+    /// The store has not answered yet and nothing verified is cached. Not an unlock: paid actions
+    /// wait, the subscription screen says the store could not be reached and offers retry, while
+    /// reading, Help, the sample and recovery stay open (a verified cached state is used instead
+    /// whenever one exists — see `PurchaseCenter.refresh`).
     case unknown
 
     nonisolated enum LapseReason: String, Equatable, Sendable { case expired, revoked, legacyTrialEnded, billingFailed }
 
-    /// Paid functions (creating, editing, analysing) may be used.
+    /// Paid functions (creating, editing, analysing) may be used. Only a VERIFIED state grants them:
+    /// an unanswered store is never an unlimited unlock (UI run f, F-1).
     var allowsPaidUse: Bool {
         switch self {
-        case .legacyUnlocked, .legacyTrial, .introductoryTrial, .subscribed, .grace, .unknown: return true
-        case .billingRetry, .lapsed, .notStarted: return false
+        case .legacyUnlocked, .legacyTrial, .introductoryTrial, .subscribed, .grace: return true
+        case .billingRetry, .lapsed, .notStarted, .unknown: return false
+        }
+    }
+
+    /// The whole-window subscription screen leads: nothing was ever bought, or the store has not
+    /// answered and nothing verified is cached. Everyone else keeps the window.
+    var leadsWithSubscriptionScreen: Bool {
+        switch self {
+        case .notStarted, .unknown: return true
+        default: return false
         }
     }
 
@@ -448,7 +461,13 @@ final class PurchaseCenter {
             message = error.localizedDescription
         }
         await refresh()
-        if !entitlement.allowsPaidUse, message == nil { message = "No active subscription or purchase was found for this Apple account." }
+        if message == nil {
+            switch entitlement {
+            case .unknown: message = "The App Store did not answer, so nothing could be restored. Check the connection and try again."
+            case .notStarted, .lapsed, .billingRetry: message = "No active subscription or purchase was found for this Apple account."
+            default: message = "Restored: " + statusText
+            }
+        }
     }
 
     /// A paid action (create, edit, analyse) asks here first. When nothing paid stands, the paywall
@@ -482,7 +501,7 @@ final class PurchaseCenter {
             case .billingFailed: return "Renewal failed. Your work stays readable and exportable; update the payment method to continue."
             }
         case .notStarted: return "Not subscribed."
-        case .unknown: return "Checking with the App Store…"
+        case .unknown: return "The App Store has not confirmed a plan for this account yet (offline, or the store did not answer). Reading, export, backup, recovery and Help work; subscribing or editing waits for the store. Try again or Restore purchases."
         }
     }
 }
