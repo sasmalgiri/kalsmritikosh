@@ -310,6 +310,10 @@ final class PurchaseCenter {
     var message: String?
     /// Set by a paid action that was refused: the paywall opens over the current screen.
     var paywallRequested: String?
+    /// §6.11 — the person chose Help, Backup & recovery or "Look around first" on the leading subscription
+    /// screen: for this launch the window is usable read-only (strip + sheet on paid actions) instead of
+    /// blurred, so help, recovery, the sample and reading are really reachable before any purchase.
+    var gateDismissedThisLaunch = false
 
     /// The unit-test host never talks to the App Store and is always unlocked — except a centre a
     /// test makes with `talksToStore: true` inside an `SKTestSession` (`PurchaseStoreKitTests`).

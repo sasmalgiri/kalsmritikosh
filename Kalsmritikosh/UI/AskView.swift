@@ -653,8 +653,11 @@ public struct AskView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Evidence for this answer")
+                        // UI run i, I-1: `.accessibilityElement(children: .contain)` + `.accessibilityLabel` on this
+                        // container (which holds the AppKit-backed horizontal chip row) sent SwiftUI's label
+                        // resolver into unbounded recursion the moment any assistive client read a chip —
+                        // four crashes. The heading is a real (visually hidden) element instead.
+                        .accessibilityIdentifier("ask.evidence")
                     }
                     // §1.3 — closest match on a not-found answer: explicitly
                     // NOT an answer, openable at the passage.
@@ -683,8 +686,7 @@ public struct AskView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3])))
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Not an answer. The closest passage in your documents: \(near.quote)")
+                        .accessibilityIdentifier("ask.closestPassage")
                     }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block

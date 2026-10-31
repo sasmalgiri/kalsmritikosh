@@ -121,20 +121,20 @@ public nonisolated enum HelpRegistry {
         steps: [
             "Add documents. Open Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” when every file has been processed; a count “could not be read — see Needs attention” lists the files that failed and why.",
             "Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace.",
-            "Bring documents into the case. Press “Add documents to this case”. The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.",
+            "Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.",
             "Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet).",
             "Ask a question. Open Ask, type the question and press “Send question”. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed.",
-            "Open the exact citation. Press “Open source” on a result row, or “Open at this passage” under an answer, to see the quoted passage in the original document. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute.",
-            "Review the result. In a job result, decide row by row or press “Accept shown” / “Reject shown”, add a note, then “Save review”. Unreviewed rows are marked as such wherever they are carried.",
+            "Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute.",
+            "Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried.",
             "Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”.",
-            "Export. In the case file, press “Case file report…”, then “Export…”. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest. Reopen the exported file to confirm what the reader will see.",
+            "Export. In the case file’s “Log & exports” section press “Case file report…” and choose where to save it. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see.",
             "Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us."
         ],
         notes: [
             "Private mode is the default: the app opens no connection for your documents. Online AI is optional, uses your own provider account (which may charge you), shows every send before it leaves, and is never switched on by subscribing.",
             "Before a subscription, and after one ends, every case stays readable and exports, backups, recovery, Help and the privacy controls keep working; only creating, editing and analysing wait for a subscription."
         ],
-        controls: ["Add Folder…", "Ready", "Start matter", "Add documents to this case", "Run", "Send question", "Open source", "Open at this passage", "Accept shown", "Reject shown", "Save review", "Include in report", "Exclude from report (reason = your note)", "Add to case…", "Add to chronology", "Case file report…", "Export…", "Complete backup"],
+        controls: ["Add Folder…", "Ready", "Start matter", "Add documents to this case", "Review new documents", "Run", "Send question", "Open source", "Open at this passage", "Open result", "Accept shown", "Reject shown", "Save review", "Mark completed", "Include in report", "Exclude from report (reason = your note)", "Add to case…", "Add to chronology", "Case file report…", "Complete backup"],
         destination: .work,
         keywords: ["quick start", "first steps", "tutorial", "beginner", "how to begin"]
     )
@@ -223,12 +223,12 @@ public nonisolated enum HelpRegistry {
             summary: "Nothing is a finding until you review it; nothing leaves the case except through the one output route that re-checks citations and keeps protected identities out.",
             steps: [
                 "Review each result (“Save review”); an unreviewed row carried anywhere stays marked unreviewed.",
-                "“Include in report” selects what the report contains; the case file report is built from the current evidence and lists its sources.",
+                "“Include in report” (from “Add to case…” on a reviewed row) selects what the report contains; the case file report is built from the current evidence and lists its sources.",
                 "Redaction removes text from a PDF for real (flattened and verified); if anything is still readable, no file is produced.",
                 "Every export, copy and print of case content goes through one route: the content is frozen, each citation is re-verified, access is re-checked after the save dialog, protected identities are scrubbed, the file is written and read back, and the case log records it with its digest. A refused output is recorded too.",
                 "Print is available only when the build is entitled to print; otherwise the app says so plainly and records nothing."
             ],
-            controls: ["Save review", "Include in report", "Case file report…", "Export…"], destination: .cases,
+            controls: ["Save review", "Include in report", "Add to case…", "Case file report…"], destination: .cases,
             keywords: ["approve", "redact", "print", "copy", "report", "output"]),
         HelpTopic(
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
@@ -316,7 +316,7 @@ public nonisolated enum HelpRegistry {
                     prohibited.append(contentsOf: doc.prohibitedConclusions)
                 }
             }
-            steps.append("Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.")
+            steps.append("Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.")
             func unique(_ a: [String]) -> [String] { var seen = Set<String>(); return a.filter { seen.insert($0.lowercased()).inserted } }
             var notes: [String] = []
             let prods = unique(products)
@@ -327,9 +327,9 @@ public nonisolated enum HelpRegistry {
             notes.append("Job descriptions and limits come from the job documentation of the \(jobs.count) jobs this profession ships with; a job without documentation is listed from its card only.")
             return HelpTopic(
                 id: "persona-" + slug(p.applicationID.rawValue),
-                kind: .persona, title: "Recipe for a \(p.label)", summary: p.intro,
+                kind: .persona, title: "Recipe — \(p.label)", summary: p.intro,
                 steps: steps, notes: notes,
-                controls: ["Start matter", "Add documents to this case", "Save review", "Include in report", "Case file report…", "Export…"],
+                controls: ["Start matter", "Add documents to this case", "Open result", "Save review", "Include in report", "Case file report…"],
                 destination: .work,
                 keywords: [p.label.lowercased(), "recipe", "profession", "persona"] + jobs.map { $0.title.lowercased() },
                 persona: p.label)
@@ -427,7 +427,7 @@ public nonisolated enum HelpRegistry {
 
     public static let subscription: [HelpTopic] = [
         HelpTopic(id: "subscription-plans", kind: .subscription, title: "Plans, the free trial, renewal and cancelling",
-                  summary: "One edition with all nine professions, as a monthly or annual subscription. Prices and periods are shown by the App Store for your country; the app never shows a made-up price.",
+                  summary: "One edition with all nine personas (the professions listed under “By profession”), as a monthly or annual subscription. Prices and periods are shown by the App Store for your country; the app never shows a made-up price.",
                   steps: [
                     "A 14-day free introductory trial is offered when Apple finds your account eligible (one per account). The subscription screen shows the price that follows the trial and when it will be charged.",
                     "The subscription renews automatically unless cancelled at least a day before the period ends. Cancel in your Apple Account (Help ▸ Manage subscription, or the “Manage subscription” link on the subscription screen); Apple’s instructions are linked there.",

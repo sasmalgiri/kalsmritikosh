@@ -19,7 +19,10 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct PurchaseStoreKitTests {
-    /// A fresh session on the committed configuration: no transactions, dialogs off.
+    /// A fresh session on the committed configuration: no transactions, dialogs off. Every test also
+    /// clears its transactions when it ends (`defer`): the local testing environment persists per app
+    /// bundle, and a Debug launch of the app outside Xcode reads it — a test that left an annual
+    /// subscription behind made the app report "Annual plan, renews 31 Oct 2027" (UI run h, 2026-10-31).
     private static func session() throws -> SKTestSession {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let s = try SKTestSession(contentsOf: root.appendingPathComponent("StoreKit/Kalsmritikosh.storekit"))
@@ -67,7 +70,8 @@ struct PurchaseStoreKitTests {
     }
 
     @Test func storefrontPlansAndTrialEligibility() async throws {
-        _ = try Self.session()
+        let s = try Self.session()
+        defer { s.clearTransactions() }
         let c = await Self.centre()
         #expect(!c.productsUnavailable)
         #expect(c.offers.map(\.plan) == [.monthly, .annual])
@@ -89,6 +93,7 @@ struct PurchaseStoreKitTests {
 
     @Test func trialRenewsThenIsCancelledThenExpires() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         let c = await Self.centre()
         await c.subscribe(.monthly)
         guard case .introductoryTrial(let ends, .monthly, true) = c.entitlement else {
@@ -120,6 +125,7 @@ struct PurchaseStoreKitTests {
     /// read-only, for someone who had access — never the "never started" screen.
     @Test func cancelledSubscriptionExpiresAtPeriodEndIntoReadOnly() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         s.timeRate = .oneRenewalEveryTwoSeconds
         let c = await Self.centre()
         await c.subscribe(.annual)
@@ -138,6 +144,7 @@ struct PurchaseStoreKitTests {
 
     @Test func refundRevokesAndRestoreReportsIt() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         let c = await Self.centre()
         await c.subscribe(.annual)
         #expect(c.entitlement.plan == .annual && c.entitlement.allowsPaidUse)
@@ -155,6 +162,7 @@ struct PurchaseStoreKitTests {
     // minute, billing retry two) and the renewal fails because `shouldEnterBillingRetryOnRenewal` is set.
     @Test func billingRetryWithGraceKeepsAccessUntilGraceEnds() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         s.timeRate = .oneRenewalEveryMinute
         s.billingGracePeriodIsEnabled = true
         s.shouldEnterBillingRetryOnRenewal = true
@@ -177,6 +185,7 @@ struct PurchaseStoreKitTests {
 
     @Test func billingRetryWithoutGraceIsReadOnly() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         s.timeRate = .oneRenewalEveryThirtySeconds
         s.billingGracePeriodIsEnabled = false
         s.shouldEnterBillingRetryOnRenewal = true
@@ -191,6 +200,7 @@ struct PurchaseStoreKitTests {
 
     @Test func planChangeWithinTheGroup() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         let c = await Self.centre()
         await c.subscribe(.monthly)
         #expect(c.entitlement.plan == .monthly)
@@ -219,6 +229,7 @@ struct PurchaseStoreKitTests {
 
     @Test func legacyPermanentUnlockBeatsEverythingAndIsNeverAskedToSubscribe() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         _ = try await s.buyProduct(identifier: PurchaseProducts.legacyUnlock)
         let c = await Self.centre()
         #expect(c.entitlement == .legacyUnlocked)
@@ -236,6 +247,7 @@ struct PurchaseStoreKitTests {
 
     @Test func legacyFreeTrialProductIsATrialNotBillingConsent() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         _ = try await s.buyProduct(identifier: PurchaseProducts.legacyTrial)
         let c = await Self.centre()
         guard case .legacyTrial(let ends) = c.entitlement else { Issue.record("expected the legacy trial, got \(c.entitlement)"); return }
@@ -248,7 +260,8 @@ struct PurchaseStoreKitTests {
     }
 
     @Test func restoreWithNothingBoughtSaysSo() async throws {
-        _ = try Self.session()
+        let s = try Self.session()
+        defer { s.clearTransactions() }
         let c = await Self.centre()
         await c.restore()
         #expect(c.entitlement == .notStarted)
@@ -257,6 +270,7 @@ struct PurchaseStoreKitTests {
 
     @Test func storeFailureNeverUnlocksAndNeverRemovesValidAccess() async throws {
         let s = try Self.session()
+        defer { s.clearTransactions() }
         let c = await Self.centre()
         await c.subscribe(.annual)
         #expect(c.entitlement.allowsPaidUse)

@@ -29,11 +29,28 @@ struct PurchaseGate: ViewModifier {
 
     func body(content: Content) -> some View {
         ZStack {
-            content
+            // UI run i, I-3: as a safe-area inset the strip covered the Ask composer on surfaces pinned to
+            // the viewport; as a layout row below the content it takes its own space.
+            VStack(spacing: 0) {
+                content
+                statusStrip
+            }
                 .blur(radius: gatesWholeWindow ? 20 : 0)
                 .allowsHitTesting(!gatesWholeWindow)
-                .safeAreaInset(edge: .bottom, spacing: 0) { statusStrip }
-            if gatesWholeWindow { PurchaseScreen(store: store, presentedAsSheet: false) }
+                .accessibilityHidden(gatesWholeWindow)   // UI run h: assistive tech must not drive the blurred window either
+            if gatesWholeWindow {
+                // UI run h, H-1: laid out freely over the split view, the screen was proposed a 5 000-pt
+                // height and the card landed below the display. Pin it to the window's own size and
+                // scroll inside it when the window is small (macOS 26 split-view sizing).
+                GeometryReader { geo in
+                    ScrollView {
+                        PurchaseScreen(store: store, presentedAsSheet: false)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: geo.size.height)
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                }
+            }
         }
         .sheet(isPresented: Binding(get: { store.paywallRequested != nil }, set: { if !$0 { store.paywallRequested = nil } })) {
             PurchaseScreen(store: store, presentedAsSheet: true)
@@ -45,7 +62,7 @@ struct PurchaseGate: ViewModifier {
     /// A profile that never had access, or whose store has not answered with nothing verified cached,
     /// sees the whole-window screen (with retry); everyone else keeps the window (read-only when
     /// nothing paid stands).
-    private var gatesWholeWindow: Bool { store.entitlement.leadsWithSubscriptionScreen && !SampleArchiveMode.isActive }
+    private var gatesWholeWindow: Bool { store.entitlement.leadsWithSubscriptionScreen && !SampleArchiveMode.isActive && !store.gateDismissedThisLaunch }
 
     @ViewBuilder private var statusStrip: some View {
         if SampleArchiveMode.isActive && !store.entitlement.allowsPaidUse {
@@ -69,6 +86,13 @@ struct PurchaseGate: ViewModifier {
             strip(icon: "exclamationmark.triangle", text: store.statusText, action: "Update payment") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }
         case .billingRetry, .lapsed:
             strip(icon: "lock.open", text: "Read-only: " + store.statusText, action: "Subscribe") { store.paywallRequested = "edit and analyse again" }
+        case .notStarted, .unknown:
+            if store.gateDismissedThisLaunch {
+                strip(icon: "lock.open", text: store.entitlement == .unknown
+                      ? "The App Store has not answered yet. Reading, Help, the sample case and backup work; adding documents, running jobs and asking wait for a plan."
+                      : "No subscription yet. Reading, Help, the sample case and backup work; subscribe to add documents, run jobs and ask.",
+                      action: "See plans") { store.gateDismissedThisLaunch = false }
+            }
         default:
             EmptyView()
         }
@@ -140,19 +164,34 @@ struct PurchaseScreen: View {
             HStack(spacing: 16) {
                 Button { SampleArchiveMode.enter() } label: { Label("Try a sample case", systemImage: "sparkles") }
                     .help("Opens the bundled sample in its own separate ledger. Nothing is mixed with your documents; no purchase is needed.")
-                Button { SurfaceOpener.open(.guide); if presentedAsSheet { dismiss() } } label: { Label("Help", systemImage: "questionmark.circle") }
-                Button { SurfaceOpener.open(.settings); if presentedAsSheet { dismiss() } } label: { Label("Backup & recovery", systemImage: "externaldrive") }
+                Button { leave(); SurfaceOpener.open(.guide) } label: { Label("Help", systemImage: "questionmark.circle") }
+                    .help("Searchable offline help, the Get started guide and the tutorial — no subscription needed.")
+                    .accessibilityIdentifier("purchase.help")
+                Button { leave(); SurfaceOpener.open(.settings) } label: { Label("Backup & recovery", systemImage: "externaldrive") }
                     .help("Settings ▸ Your data: complete backup, recovery key, export and erasure never need a subscription.")
+                    .accessibilityIdentifier("purchase.backup")
             }
             .buttonStyle(.bordered).controlSize(.small)
             Text(footer).font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center).frame(maxWidth: 460)
-            if presentedAsSheet { Button("Not now") { dismiss() }.buttonStyle(.link).font(.caption) }
+            if presentedAsSheet {
+                Button("Not now") { dismiss() }.buttonStyle(.link).font(.caption)
+            } else {
+                Button("Look around first (read-only)") { leave() }.buttonStyle(.link).font(.caption)
+                    .help("Use the window without a plan: everything is readable; adding documents, running jobs and asking will offer the plans again.")
+                    .accessibilityIdentifier("purchase.lookAround")
+            }
         }
         .padding(32)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("purchase.screen")
         .onAppear { if let first = store.offers.first(where: { $0.plan == .annual }) ?? store.offers.first { selected = first.plan } }
+    }
+
+    /// Leave the screen: a sheet is dismissed; the leading whole-window screen gives way to the
+    /// read-only window for this launch (§6.11 — help and recovery are reachable before purchase).
+    private func leave() {
+        if presentedAsSheet { dismiss() } else { store.gateDismissedThisLaunch = true }
     }
 
     private var plans: some View {

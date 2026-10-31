@@ -13,13 +13,13 @@ Ten steps that take a folder of documents to a cited, reviewed, exported report.
 
 1. Add documents. Open Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” when every file has been processed; a count “could not be read — see Needs attention” lists the files that failed and why.
 2. Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace.
-3. Bring documents into the case. Press “Add documents to this case”. The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.
+3. Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.
 4. Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet).
 5. Ask a question. Open Ask, type the question and press “Send question”. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed.
-6. Open the exact citation. Press “Open source” on a result row, or “Open at this passage” under an answer, to see the quoted passage in the original document. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute.
-7. Review the result. In a job result, decide row by row or press “Accept shown” / “Reject shown”, add a note, then “Save review”. Unreviewed rows are marked as such wherever they are carried.
+6. Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute.
+7. Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried.
 8. Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”.
-9. Export. In the case file, press “Case file report…”, then “Export…”. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest. Reopen the exported file to confirm what the reader will see.
+9. Export. In the case file’s “Log & exports” section press “Case file report…” and choose where to save it. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see.
 10. Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us.
 
 Private mode is the default: the app opens no connection for your documents. Online AI is optional, uses your own provider account (which may charge you), shows every send before it leaves, and is never switched on by subscribing.
@@ -115,7 +115,7 @@ Screen: **Fund Flow**.
 Nothing is a finding until you review it; nothing leaves the case except through the one output route that re-checks citations and keeps protected identities out.
 
 1. Review each result (“Save review”); an unreviewed row carried anywhere stays marked unreviewed.
-2. “Include in report” selects what the report contains; the case file report is built from the current evidence and lists its sources.
+2. “Include in report” (from “Add to case…” on a reviewed row) selects what the report contains; the case file report is built from the current evidence and lists its sources.
 3. Redaction removes text from a PDF for real (flattened and verified); if anything is still readable, no file is produced.
 4. Every export, copy and print of case content goes through one route: the content is frozen, each citation is re-verified, access is re-checked after the save dialog, protected identities are scrubbed, the file is written and read back, and the case log records it with its digest. A refused output is recorded too.
 5. Print is available only when the build is entitled to print; otherwise the app says so plainly and records nothing.
@@ -158,7 +158,7 @@ Screen: **Settings**.
 
 Each recipe is derived from the jobs the profession ships with and their documentation. Content Creator ships behind its own module and is not one of the nine.
 
-### Recipe for a Investigator
+### Recipe — Investigator
 
 Who did what, when — with custody of every source. Intake, triage, plan, interviews, evidence per allegation, findings and closure.
 
@@ -180,7 +180,7 @@ Who did what, when — with custody of every source. Intake, triage, plan, inter
 16. Run “Chain of custody”: The evidence locker — the case custody manifest over authorized versions. Needs: Sources; custody events.
 17. Run “Case report & export”: Assemble the case report — findings with a sealed receipt.
 18. Run “Closure & reopen”: Close or reopen the case by an explicit human decision.
-19. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+19. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Work products: Investigation Plan; Subject Dossier; Identity Resolution Decision log; Source Reliability Schedule; Contradiction Schedule; Missing-Evidence Register; CAPA Register; Effectiveness Review; Evidence/Custody Manifest.
 
@@ -192,7 +192,7 @@ Job descriptions and limits come from the job documentation of the 16 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Lawyer / Professional Reviewer
+### Recipe — Lawyer / Professional Reviewer
 
 Fact-finding, chronology, review coding, privilege log and production — every event linked to its source, every conflict preserved.
 
@@ -220,7 +220,7 @@ Fact-finding, chronology, review coding, privilege log and production — every 
 22. Run “Remediation register”: Track remediation/undertaking actions to closure. Needs: Identified issues.
 23. Run “Remediation effectiveness”: Verify a completed remediation actually resolved the issue. Needs: Closed remediation.
 24. Run “Matter closure & reopen”: Close the matter (sealed); reopen preserves full history. Needs: Matter; open items.
-25. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+25. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Work products: Matter profile; Issue register; Chronology / statement of facts; Fact-evidence matrix; Witness summaries; impeachment pack; Coding log; Privilege log; Obligations schedule; Damages ledger; Deadline calendar; Deposition outline; Exhibit list; binder; Production set; receipt; Redaction validation record; Cited answer; Method run record; Identity decision log; Reliability record; Causal chain record; Remediation record; Effectiveness record; Closure record.
 
@@ -232,7 +232,7 @@ Job descriptions and limits come from the job documentation of the 22 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Compliance / HR Investigator
+### Recipe — Compliance / HR Investigator
 
 A workplace complaint handled by a fair, documented process: scope, interviews, policy mapping, findings and the file that shows the process.
 
@@ -255,7 +255,7 @@ A workplace complaint handled by a fair, documented process: scope, interviews, 
 17. Run “Action effectiveness”: Verify a completed action actually fixed the issue.
 18. Run “Close the case”: Close or reopen the case by an explicit human decision.
 19. Run “Endorsement & disclosure review (FTC)”: Check posts, ads and sponsored material for undisclosed material connections — sponsorships, affiliate links, gifts, AI-generated content — against the FTC Endorsement Guides; every finding cited to the material.
-20. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+20. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Professional limits: Findings are about the evidence, not about a person’s character; no disciplinary decision is made by the app. A policy breach is recorded only where the policy text and the evidence are both cited.
 
@@ -263,7 +263,7 @@ Job descriptions and limits come from the job documentation of the 17 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Forensic Accountant
+### Recipe — Forensic Accountant
 
 Funds tracing, net worth, duplicate and refund analysis — the schedule behind every figure, with the rows it rests on.
 
@@ -285,7 +285,7 @@ Funds tracing, net worth, duplicate and refund analysis — the schedule behind 
 16. Run “Recovery actions”: Track recovery and remediation actions to closure.
 17. Run “Recovery effectiveness”: Verify a completed action actually recovered or remediated.
 18. Run “Close the engagement”: Close or reopen the engagement by an explicit human decision.
-19. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+19. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Professional limits: A matching amount is a candidate, not a finding; the app never labels a transaction fraudulent. Amounts are not converted between currencies; balances follow only the rows you include.
 
@@ -293,7 +293,7 @@ Job descriptions and limits come from the job documentation of the 16 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Insurance Fraud (SIU)
+### Recipe — Insurance Fraud (SIU)
 
 A suspicious claim worked to a referral: red flags, the claim chronology, statements compared, and the SIU report.
 
@@ -315,7 +315,7 @@ A suspicious claim worked to a referral: red flags, the claim chronology, statem
 16. Run “Recovery & referral actions”: Track recovery, NICB/DOI referral, and follow-up actions to closure.
 17. Run “Action effectiveness”: Verify a completed action actually resolved the exposure.
 18. Run “Close the claim file”: Close or reopen the file by an explicit human decision.
-19. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+19. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Professional limits: Red flags are indicators for review, not evidence of fraud; the referral decision is the person’s. The report states what the documents show and what they do not.
 
@@ -323,7 +323,7 @@ Job descriptions and limits come from the job documentation of the 16 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Journalist
+### Recipe — Journalist
 
 Claims checked to sources, right of reply recorded, a fact-check that shows what is supported, what conflicts and what is missing.
 
@@ -351,7 +351,7 @@ Claims checked to sources, right of reply recorded, a fact-check that shows what
 22. Run “Source-document vault”: Custody-tracked vault for source documents with integrity hashes. Needs: Documents.
 23. Run “Correction actions”: Track corrective actions on published errors to closure. Needs: Published error.
 24. Run “Correction effectiveness”: Verify a published correction actually resolved the error. Needs: Closed correction.
-25. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+25. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Work products: Story brief; Claim board export; Source map; Source reliability schedule; Interview plan; Quote book; Corrected transcript; Chronology; Verification log; Reporting-gap register; Right-of-reply log; Publication decision record; Correction log; Publication package; receipt; Cited answer; Method run record; Cited dataset; Identity decision log; Causal chain record; Custody log; Correction action record; Effectiveness record.
 
@@ -363,7 +363,7 @@ Job descriptions and limits come from the job documentation of the 22 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Researcher / Historian
+### Recipe — Researcher / Historian
 
 What the papers and data actually show: an evidence review with dates at their real precision and uncertainty kept visible.
 
@@ -389,7 +389,7 @@ What the papers and data actually show: an evidence review with dates at their r
 20. Run “Errata register”: Track corrections to the edition as corrective actions to closure. Needs: Identified errors.
 21. Run “Errata effectiveness review”: Verify a published correction actually resolved the issue. Needs: Closed erratum.
 22. Run “Matter closure”: Close the research matter (sealed, reopenable with history). Needs: Matter; open items.
-23. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+23. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Work products: Research Protocol; Corpus Catalogue; Metadata export; Corrected transcript; Authority file; Source Criticism notes; Screening log; Coded dataset; Chronology; Prosopography table; Interpretation comparison; Alternative-history note; Bibliography; citation audit; Annotated edition; receipt; Cited answer; Method run record; Causal chain record; Errata record; Effectiveness record; Closure record.
 
@@ -401,7 +401,7 @@ Job descriptions and limits come from the job documentation of the 20 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Genealogist / Family Historian
+### Recipe — Genealogist / Family Historian
 
 Who is who, worked to the Genealogical Proof Standard: sources cited, conflicts resolved in writing, a proof argument.
 
@@ -423,7 +423,7 @@ Who is who, worked to the Genealogical Proof Standard: sources cited, conflicts 
 16. Run “Research to-dos”: Track follow-up searches and record orders to closure.
 17. Run “Did it answer?”: Verify a completed search actually answered the question.
 18. Run “Close the question”: Close or reopen the research question by explicit decision.
-19. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+19. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Professional limits: Two records with the same name are not the same person until the proof argument says so. A derived date (for example from an age at death) is shown as derived.
 
@@ -431,7 +431,7 @@ Job descriptions and limits come from the job documentation of the 16 jobs this 
 
 Screen: **Professional Jobs**.
 
-### Recipe for a Individual
+### Recipe — Individual
 
 A personal dispute — an insurance claim, a deposit, a job — your own file in order, with the documents behind each point.
 
@@ -460,7 +460,7 @@ A personal dispute — an insurance claim, a deposit, a job — your own file in
 23. Run “Did the fix work?”: Verify a completed fix actually resolved the problem. Needs: Closed action.
 24. Run “Document vault”: Custody-tracked vault for originals with integrity hashes. Needs: Documents.
 25. Run “Close a matter”: Close a personal matter (sealed, reopenable with history). Needs: Matter; open items.
-26. Review each result (“Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…” → “Export…”) and reopen the file.
+26. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
 Work products: Records index; Version history; Career/education summary; Family record; Property register; Insurance register; Health summary; Application tracker; Reminder list; Emergency pack; Redacted export; Personal chronology; Legacy archive; receipt; Cited answer; Method run record; Identity decision log; Reliability record; Conflict/gap register; Causal chain record; Action record; Effectiveness record; Custody log; Closure record.
 
@@ -910,7 +910,7 @@ In Private mode the AI runs on this Mac and is used to read, extract and phrase.
 
 ### Plans, the free trial, renewal and cancelling
 
-One edition with all nine professions, as a monthly or annual subscription. Prices and periods are shown by the App Store for your country; the app never shows a made-up price.
+One edition with all nine personas (the professions listed under “By profession”), as a monthly or annual subscription. Prices and periods are shown by the App Store for your country; the app never shows a made-up price.
 
 1. A 14-day free introductory trial is offered when Apple finds your account eligible (one per account). The subscription screen shows the price that follows the trial and when it will be charged.
 2. The subscription renews automatically unless cancelled at least a day before the period ends. Cancel in your Apple Account (Help ▸ Manage subscription, or the “Manage subscription” link on the subscription screen); Apple’s instructions are linked there.
@@ -976,14 +976,14 @@ Screen: **Live**.
 
 Help ▸ Replay the Tutorial opens the isolated sample case (its own ledger, bundled Project Delta documents) and walks these steps; nothing touches your own archive.
 
-1. **You are in the sample case.** The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read. *You should see:* Sources lists the Project Delta folder and shows “Ready” once all eight files are processed. Your own documents are not here and were not opened.
-2. **Choose the investigation question.** Open Professional Jobs, choose “Investigator” and press “Start matter”. Name it “Project Delta slip”. The question for this matter: why did the first delivery slip, and who approved the change? *You should see:* A matter named Project Delta slip, with its workspace, and the jobs grouped in phases with “Start here — open a matter” done.
-3. **Inspect and authorise the case documents.** Press “Add documents to this case”. Read the preview: how many documents are in scope now, how many are new, how many stay excluded. Confirm. *You should see:* “Documents: 8 in scope”. Only these documents are read for this matter’s jobs and questions.
-4. **Ask — one answerable question, one that is not.** Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”. *You should see:* The first answer: effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC), cited to the amendment and the 24 May status digest. The second: no document records a payment — the invoice was unpaid as of 14 June 2024 — so the app says the documents do not answer it instead of guessing.
-5. **Open the exact citation.** Under the first answer press “Open at this passage” on the amendment citation. *You should see:* The amendment opens at the quoted sentence (“Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024.”). The quotation is checked against the document; whether the document is right is your judgement.
-6. **Review conflicting accounts.** Open Findings ▸ Contradictions (or Timeline). Look at the first-lot delivery date: the 8 April email estimates about 13 May 2024; the 18 April email and the amendment say 28 May 2024. *You should see:* Both versions are kept with their sources. An estimate that was later revised is shown as a change of account, not labelled wrong — you decide what it means and record why.
-7. **Save a reviewed result.** Back in Professional Jobs, press “Run” on the first job of the intake phase. In the result, decide the rows (or press “Accept shown”), add a note, and press “Save review”. *You should see:* The result shows your decisions and the review time. Unreviewed rows stay marked unreviewed wherever they are carried.
-8. **Carry it into the report.** On a reviewed row press “Include in report”; try “Add to chronology” on a dated row. *You should see:* The case file’s report selection and chronology gain the rows with every citation and their review state. A row whose source changes later is shown as stale.
-9. **Export the report and reopen it.** Open Cases, open the matter, press “Case file report…”, then “Export…”. Save the file, then open it from the Finder. *You should see:* The exported report lists what you included, each with its sources, and a section for what the evidence does not establish (invoice 432’s payment). The case log records the export with its digest.
-10. **What you saw, and back to your own archive.** A supported conclusion (the amendment’s approval, two documents) and an insufficient one (the payment, no document). Press “Back to my archive” in the banner when you are done. *You should see:* The app relaunches on your own archive. Nothing from the sample was written to it; the tutorial can be replayed any time from Help.
+1. **You are in the sample case.** The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read. *You should see:* Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened.
+2. **Choose the investigation question.** Open Professional Jobs, choose the “Investigator” card and press “Start matter” after typing the title “Project Delta slip”. The question for this matter: why did the first delivery slip, and who approved the change? *You should see:* “Created case “Project Delta slip” … with 8 source(s) in scope”, the jobs grouped in phases, and “Start here — open a matter” done.
+3. **Inspect and authorise the case documents.** Press “Add documents to this case” — or “Review new documents” when the matter already holds the workspace’s documents. Read the preview: how many are in scope now, how many are new, how many stay excluded. Nothing is added until you confirm. *You should see:* “Documents: 8 in scope”. Only these documents are read for this matter’s jobs and questions.
+4. **Ask — one settled question, one the record cannot settle.** Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”. *You should see:* The first answer quotes the amendment — effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) — with a citation chip for it. The second quotes the record as it stands: invoice 432 issued 30 May 2024, due 29 June, “unpaid as of June 14, 2024”; no document records a payment and none is invented. The badge says how far the evidence goes.
+5. **Open the exact citation.** Under the first answer press the numbered citation chip “1 amendment-7.md”. *You should see:* The amendment opens in a sheet with the cited passage highlighted. The quotation is checked against the document; whether the document is right is your judgement. “Done” closes it.
+6. **Review conflicting accounts.** Open Findings ▸ Contradictions. The first-lot delivery date was given as about 13 May 2024 (8 April email), then 28 May 2024 (18 April email and the amendment). *You should see:* A row “Conflicting dates for “Delivery delayed”” — “Conflicts with a second source; both claims are preserved and not reconciled automatically”, 2 sources, “Review”. An estimate that was later revised is shown as a conflict to review, not labelled wrong — you decide what it means and record why.
+7. **Save a reviewed result.** Back in Professional Jobs, press “Run” on a Collect & organize job that produces rows — “Documentary evidence register” — then “Open result”. Decide a row (Accepted or Rejected), type a note, press “Save review”. *You should see:* The result shows “Reviewed by me, <date>” and your decisions; the jobs summary counts “1 to review”. Unreviewed rows stay marked unreviewed wherever they are carried.
+8. **Carry it into the report.** On the reviewed row press “Add to case…” and choose “Include in report”; then “Add to chronology”. *You should see:* “Row 1 selected for the case report (accepted on review; every citation and the revision kept).” and “Row 1 added to the case chronology …”. The case log records both.
+9. **Export the report and reopen it.** Open Cases, open the matter, go to “Log & exports” and press “Case file report…”. Save the file, then open it from the Finder. *You should see:* The notice reads “Exported <name> (SHA-256 …), recorded.” and the case log gains an “exported” line. The report lists the reviewed rows you included with their sources, the chronology entry, and an “Unresolved questions and limitations” section.
+10. **What you saw, and back to your own archive.** A settled point (the amendment’s approval, quoted from the document) and one the record leaves open (the payment: unpaid as of 14 June 2024, nothing later). Press “Back to my archive” in the banner when you are done. *You should see:* The app relaunches on your own archive. Nothing from the sample was written to it; the tutorial can be replayed any time from Help ▸ Replay the Tutorial.
 

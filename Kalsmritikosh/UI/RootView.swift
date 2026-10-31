@@ -485,7 +485,12 @@ public struct RootView: View {
     public init() {}
 
     public var body: some View {
-        phaseContent
+        // The root is flexible (GeometryReader) so the window never takes the split view's ideal height
+        // (UI runs h/i: 5 038 and 3 685 pt windows with the subscription card, banner and tutorial off-screen).
+        GeometryReader { root in
+            phaseContent
+                .frame(width: root.size.width, height: root.size.height)
+        }
             // P0.5 — v1 is single-mode (.ledgerEventDriven pinned), so there is
             // NO user-visible mode chooser in release. The chooser is retained
             // only for internal/debug builds; release never wires the sheet.
@@ -510,15 +515,24 @@ public struct RootView: View {
         case .needsRecoveryKey(let message):
             RecoveryKeyView(message: message)
         case .ready:
-            VStack(spacing: 0) {
-                // §1.1 — the sample ledger announces itself on every screen.
-                if SampleArchiveMode.isActive { SampleArchiveBanner() }
-                main
-            }
-            // §6.2 — the replayable tutorial rides over the sample case only; it never appears on the
-            // person's own archive, so replaying it cannot touch their work.
-            .overlay(alignment: .bottomTrailing) {
-                if SampleArchiveMode.isActive && HelpTutorial.isRunning { TutorialPanel() }
+            // Pinned to the window (GeometryReader at the root): when anything is stacked around the split
+            // view — the sample banner above it, the subscription screen over it — the window took the
+            // split view's IDEAL height (3 685 pt on Professional Jobs, 5 038 pt on Home) and the banner,
+            // strip, tutorial panel and subscription card landed below the display (UI runs h and i; the
+            // macOS 26 split-view sizing already noted for the Ask surface). A flexible root has no ideal
+            // height, so the window keeps its own size and the split view fills it.
+            GeometryReader { geo in
+                VStack(spacing: 0) {
+                    // §1.1 — the sample ledger announces itself on every screen.
+                    if SampleArchiveMode.isActive { SampleArchiveBanner() }
+                    main
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+                // §6.2 — the replayable tutorial rides over the sample case only; it never appears on the
+                // person's own archive, so replaying it cannot touch their work.
+                .overlay(alignment: .bottomTrailing) {
+                    if SampleArchiveMode.isActive && HelpTutorial.progress.isRunning { TutorialPanel() }
+                }
             }
         }
     }
@@ -1884,9 +1898,22 @@ struct WindowFrameClamp: NSViewRepresentable {
                 guard let w = note.object as? NSWindow else { return }
                 MainActor.assumeIsolated { Self.fit(w) }
             }
+            // UI run i: in the sample case the window grew to 1 394 pt AFTER launch (the banner and strip
+            // arrive with the ready phase), so the launch-time fit missed it. Fit on every resize that
+            // leaves the screen; a resize that stays on-screen is untouched (`fit` returns at once).
+            resizeObserver.map { NotificationCenter.default.removeObserver($0) }
+            resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { note in
+                guard let w = note.object as? NSWindow else { return }
+                MainActor.assumeIsolated { Self.fit(w) }
+            }
         }
 
-        deinit { observer.map { NotificationCenter.default.removeObserver($0) } }
+        private var resizeObserver: NSObjectProtocol?
+
+        deinit {
+            observer.map { NotificationCenter.default.removeObserver($0) }
+            resizeObserver.map { NotificationCenter.default.removeObserver($0) }
+        }
 
         /// Fit `window` inside its screen's visible frame when it is taller or wider than that frame.
         static func fit(_ window: NSWindow) {

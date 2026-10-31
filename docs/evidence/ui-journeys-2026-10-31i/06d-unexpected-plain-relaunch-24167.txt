@@ -1,0 +1,27 @@
+AXWindow/AXStandardWindow title="Investigations Made Easy" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXScrollArea [185,65 1100x813] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXGroup id=purchase.screen [463,167 544x608]
+        AXImage desc="Sparkle" id=sparkles [718,202 33x40]
+        AXStaticText value="Investigations Made Easy — one edition, all nine personas" [502,259 465x20]
+        AXStaticText value="Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and annual plans give the same access." [498,294 473x48]
+        AXButton desc="Monthly plan, $4.99 per month, 14-day free trial" id=purchase.plan.monthly [509,356 220x97] actions=AXPress
+        AXButton desc="Annual plan, $39.99 per year, 14-day free trial" id=purchase.plan.annual [740,356 221x97] actions=AXPress
+        AXButton desc="Start 14-day free trial" id=purchase.subscribe [658,467 153x24] actions=AXPress
+        AXStaticText value="14 days free, then $39.99 per year. Renews automatically at $39.99 per year unless cancelled at least a day before the period ends. Manage or cancel through your Apple Account." id=purchase.disclosure [507,505 455x26]
+        AXLink desc="How to cancel a trial or subscription (Apple)" [629,545 212x13] actions=AXPress
+        AXLink desc="Restore purchases" [550,572 113x16] actions=AXPress
+        AXLink desc="Manage subscription" [681,572 127x16] actions=AXPress
+        AXLink desc="Terms" [826,573 35x15] actions=AXPress
+        AXLink desc="Privacy" [879,573 41x15] actions=AXPress
+        AXButton desc="Try a sample case" help="Opens the bundled sample in its own separate ledger. Nothing is mixed with your documents; no purchase is needed." [547,617 134x20] actions=AXPress
+        AXButton desc="Help" id=purchase.help help="Searchable offline help, the Get started guide and the tutorial — no subscription needed." [698,617 65x20] actions=AXPress
+        AXButton desc="Backup & recovery" id=purchase.backup help="Settings ▸ Your data: complete backup, recovery key, export and erasure never need a subscription." [779,617 143x20] actions=AXPress
+        AXStaticText value="Payment, renewal, refunds and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode or send anything anywhere. The subscription works on the Macs signed in with your Apple account; your archive is not copied between them." [505,651 460x65]
+        AXLink desc="Look around first (read-only)" id=purchase.lookAround help="Use the window without a plan: everything is readable; adding documents, running jobs and asking will offer the plans again." [665,731 139x13] actions=AXPress
+  AXButton/AXCloseButton [193,41 16x16] actions=AXPress
+  AXButton/AXFullScreenButton help="this button also has an action to zoom the window" [239,41 16x16] actions=AXPress,AXZoomWindow
+    AXGroup [240,42 14x14]
+  AXButton/AXMinimizeButton [216,41 16x16] actions=AXPress
+  AXStaticText value="Investigations Made Easy" [267,41 168x16]
+FOCUSED: AXWindow/AXStandardWindow title="Investigations Made Easy" id=<swiftui> [185,33 1100x845] actions=AXRaise

@@ -65,7 +65,7 @@ import Testing
             #expect(!jobs.isEmpty, "\(r.id)")
             for job in jobs { #expect(r.steps.contains { $0.contains("“\(job.title)”") }, "\(r.id) misses job \(job.title)") }
             #expect(r.notes.contains { $0.hasPrefix("Professional limits:") }, "\(r.id)")
-            #expect(r.steps.first?.contains("Start matter") == true && r.steps.last?.contains("Export…") == true, "\(r.id)")
+            #expect(r.steps.first?.contains("Start matter") == true && r.steps.last?.contains("Case file report…") == true, "\(r.id)")
         }
         #expect(!recipes.contains { $0.persona == "Content Creator" })
     }
@@ -95,24 +95,27 @@ import Testing
     }
 
     @Test("The tutorial follows the mandated path, names its controls, and runs only in the sample case")
-    func tutorialPath() {
+    func tutorialPath() async {
         let ids = HelpTutorial.steps.map(\.id)
         #expect(ids == ["open-sample", "question", "authorise", "ask", "citation", "conflict", "review", "carry", "export", "finish"])
         for s in HelpTutorial.steps { #expect(!s.instruction.isEmpty && !s.expect.isEmpty, "\(s.id)") }
         // Both a supported conclusion and an insufficient one are shown.
         let all = HelpTutorial.steps.map(\.expect).joined(separator: " ")
-        #expect(all.contains("2 May 2024") && all.contains("invoice 432") && all.contains("do not answer"))
-        // Progress is one integer in the preference store; replaying resets it to the first step.
-        HelpTutorial.stop()
-        #expect(!HelpTutorial.isRunning)
-        AppDefaults.store.set(7, forKey: HelpTutorial.stepKey)
-        #expect(HelpTutorial.isRunning && HelpTutorial.currentIndex == 7)
-        HelpTutorial.currentIndex = 99
-        #expect(HelpTutorial.currentIndex == HelpTutorial.steps.count - 1)
-        HelpTutorial.stop()
-        #expect(AppDefaults.store.object(forKey: HelpTutorial.stepKey) == nil)
+        #expect(all.contains("2 May 2024") && all.contains("invoice 432") && all.contains("none is invented"))
+        // Progress is one observable integer mirrored to the preference store; it clamps to the steps.
+        let p = await MainActor.run { HelpTutorial.progress }
+        await MainActor.run {
+            p.stop()
+            #expect(!p.isRunning)
+            p.set(7)
+            #expect(p.isRunning && p.index == 7 && AppDefaults.store.integer(forKey: TutorialProgress.stepKey) == 7)
+            p.set(99)
+            #expect(p.index == HelpTutorial.steps.count - 1)
+            p.stop()
+            #expect(AppDefaults.store.object(forKey: TutorialProgress.stepKey) == nil)
+        }
         // The panel is gated on the sample mode in RootView (source check: the overlay condition).
-        #expect(Self.uiSources.contains("SampleArchiveMode.isActive && HelpTutorial.isRunning"))
+        #expect(Self.uiSources.contains("SampleArchiveMode.isActive && HelpTutorial.progress.isRunning"))
     }
 
     @Test("Search finds tasks by plain words and ranks title matches first")

@@ -283,16 +283,17 @@ public struct OnboardingView: View {
             // RC-2 — requirements honesty, stated up front: what on-device AI
             // needs, and that evidence-only mode is a STATE, not an error.
             VStack(alignment: .leading, spacing: 6) {
-                Label("AI-written prose — what it needs", systemImage: "cpu")
+                Label(Self.aiProseTitle, systemImage: "cpu")
                     .font(.callout.weight(.semibold))
-                Text("AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Investigations Made Easy still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes.")
+                Text(Self.aiProseBody)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)
             }
             .padding(.top, 4)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("On-device AI requirements: AI prose needs Apple silicon with Apple Intelligence enabled. Without it, every answer still comes from your evidence with citations, in plainer prose. Answers may be slower until first indexing completes.")
+            // UI run h, H-6: the spoken text is the visible text, not a paraphrase.
+            .accessibilityLabel("\(Self.aiProseTitle). \(Self.aiProseBody)")
             DisclosureGroup("Technical details") {
                 VStack(spacing: 6) {
                     HStack {
@@ -319,6 +320,9 @@ public struct OnboardingView: View {
         }
         .frame(maxWidth: 520)
     }
+
+    static let aiProseTitle = "AI-written prose — what it needs"
+    static let aiProseBody = "AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Investigations Made Easy still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes."
 
     /// One paragraph a beginner can act on, from the detected hardware.
     private var plainCapabilitySummary: String {
@@ -372,7 +376,7 @@ public struct OnboardingView: View {
                         .padding(.vertical, 4)
                 }
                 .controlSize(.small)
-                Text("Opens the bundled ProjectDelta sample (8 emails and contracts) in its own separate ledger, so you can see Investigations Made Easy reconstruct a project without adding your data \u{2014} nothing is ever mixed with your own documents. The app relaunches; \u{201C}Back to my archive\u{201D} returns you.")
+                Text("Opens the bundled Project Delta sample (eight emails and contracts) in its own separate ledger with the step-by-step tutorial, so you can see the path from documents to an exported report without adding your data \u{2014} nothing is mixed with your own documents. The app relaunches; \u{201C}Back to my archive\u{201D} returns you.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)
@@ -399,7 +403,7 @@ public struct OnboardingView: View {
     /// fixtures resolve, and the sample boot re-resolves them itself.
     private func tryDemoArchive(at url: URL) {
         UserDefaults.standard.set(true, forKey: "kalsmritikosh.onboarding.shown")
-        SampleArchiveMode.enter()
+        HelpTutorial.replay()   // §6.2 — the sample opens with its tutorial; replay() enters the sample mode
     }
 
     private var doneStep: some View {

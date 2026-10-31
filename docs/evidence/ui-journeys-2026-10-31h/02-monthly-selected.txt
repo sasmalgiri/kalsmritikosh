@@ -1,0 +1,99 @@
+AXWindow/AXStandardWindow title="Home" id=<swiftui> [185,33 1100x5038] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x5038]
+    AXGroup id=purchase.screen [463,2267 544x621]
+      AXImage desc="Sparkle" id=sparkles [718,2302 33x40]
+      AXStaticText value="Investigations Made Easy — one edition, all nine personas" [502,2359 465x20]
+      AXStaticText value="Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and annual plans give the same access." [498,2394 473x48]
+      AXButton desc="Monthly plan, $4.99 per month, 14-day free trial" id=purchase.plan.monthly [508,2462 221x98] actions=AXPress
+      AXButton desc="Annual plan, $39.99 per year, 14-day free trial" id=purchase.plan.annual [741,2456 220x110] actions=AXPress
+      AXButton desc="Start 14-day free trial" id=purchase.subscribe [658,2580 153x24] actions=AXPress
+      AXStaticText value="14 days free, then $4.99 per month. Renews automatically at $4.99 per month unless cancelled at least a day before the period ends. Manage or cancel through your Apple Account." id=purchase.disclosure [505,2618 460x26]
+      AXLink desc="How to cancel a trial or subscription (Apple)" [629,2658 212x13] actions=AXPress
+      AXLink desc="Restore purchases" [550,2685 113x16] actions=AXPress
+      AXLink desc="Manage subscription" [681,2685 127x16] actions=AXPress
+      AXLink desc="Terms" [826,2686 35x15] actions=AXPress
+      AXLink desc="Privacy" [879,2686 41x15] actions=AXPress
+      AXButton desc="Try a sample case" help="Opens the bundled sample in its own separate ledger. Nothing is mixed with your documents; no purchase is needed." [547,2730 134x20] actions=AXPress
+      AXButton desc="Help" id=purchase.help help="Searchable offline help, the Get started guide and the tutorial — no subscription needed." [698,2730 65x20] actions=AXPress
+      AXButton desc="Backup & recovery" id=purchase.backup help="Settings ▸ Your data: complete backup, recovery key, export and erasure never need a subscription." [779,2730 143x20] actions=AXPress
+      AXStaticText value="Payment, renewal, refunds and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode or send anything anywhere. The subscription works on the Macs signed in with your Apple account; your archive is not copied between them." [505,2764 460x65]
+      AXLink desc="Look around first (read-only)" id=purchase.lookAround help="Use the window without a plan: everything is readable; adding documents, running jobs and asking will offer the plans again." [665,2844 139x13] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,33 1100x5038]
+      AXGroup/AXHostingView [185,33 244x5038]
+        AXScrollArea [185,33 244x4985] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,59 14x17]
+          AXStaticText value="Investigations Made Easy" [241,47 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,96 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,130 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,159 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,196 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,196 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [193,214 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,255 228x38] actions=AXPress
+          AXButton desc="Competing Hypotheses" help="Competing Hypotheses — Weigh competing explanations against your evidence — an Analysis of Competing Hypotheses matrix that ranks by fewest inconsistencies" [193,296 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [193,337 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,390 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,408 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,449 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,490 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,531 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,572 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,625 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,5026 224x35] actions=AXPress
+      AXSplitter value="244" [429,85 0x4986]
+      AXGroup/AXHostingView [185,33 1100x5038]
+        AXImage desc="Search" id=magnifyingglass [458,51 12x13] actions=AXCancel
+        AXTextField [482,50 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,51 12x13] actions=AXCancel,AXPress
+        AXScrollArea [429,84 856x4987] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXImage desc="Sparkle" id=sparkles [478,133 21x25]
+          AXStaticText value="Investigations Made Easy" [523,122 308x31]
+          AXStaticText value="Your documents, worked by the professional's own SOP — cited, evidence-gated, to the real deliverable." [523,155 590x15]
+          AXButton desc="Start an investigation" id=home.startInvestigation help="Open Professional Jobs: name the matter, choose its workspace, bring the documents into the case and run the first job." [467,182 172x24] actions=AXPress
+          AXButton desc="Resume a case" id=home.resumeCase help="Open Professional Jobs with the matters you can return to — every job run, review and document decision as you left it." [649,182 141x24] actions=AXPress
+          AXButton desc="Add your documents" [800,182 175x24] actions=AXPress
+          AXButton desc="Ask a question" [985,182 142x25] actions=AXPress
+          AXButton desc="Full guide" [1139,186 83x16] actions=AXPress
+          AXStaticText value="Pick the lens that fits your work — every path answers only from what you ingest." [467,219 391x13]
+          AXStaticText value="Private by default" [468,257 106x13]
+          AXStaticText value="One plain plan" [667,257 93x13]
+          AXStaticText value="No lock-in" [866,258 69x14]
+          AXStaticText value="Answers you can check" [1064,258 138x13]
+          AXStaticText value="Your documents are read on this Mac and the app opens no connection for them. Online AI is optional, with your own key and a preview of every send." [467,274 167x65]
+          AXStaticText value="One edition, all nine personas, monthly or yearly. Cancel any time; your work stays readable and exportable." [666,274 176x52]
+          AXStaticText value="Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours." [865,276 167x39]
+          AXStaticText value="Every answer cites the exact document behind it — click and see the source." [1064,275 177x39]
+          AXImage desc="Sparkles On A Stack Of Rectangles" id=sparkles.rectangle.stack [463,392 12x12]
+          AXStaticText value="Questions from your archive" [482,391 154x14]
+          AXStaticText value="Grounded in what your documents actually contain — tap to ask." [463,413 318x13]
+          AXButton desc="What led up to Invoice INV-2041 Dalmia Traders?" [463,434 788x27] actions=AXPress
+          AXButton desc="Who is Dalmia Traders, and what is their role across the documents?" [463,469 788x27] actions=AXPress
+          AXButton desc="What is Asha Rao's involvement across the documents?" [463,504 788x27] actions=AXPress
+          AXButton desc="Who is Asha Rao, and what is their role across the documents?" [463,539 788x27] actions=AXPress
+          AXButton desc="What is Bank transfer's involvement across the documents?" [463,574 788x27] actions=AXPress
+          AXButton desc="What led up to Invoice issued?" [463,609 788x27] actions=AXPress
+          AXButton desc="Who is Vikram Rao, and what is their role across the documents?" [463,644 788x27] actions=AXPress
+          AXButton desc="What is Meridian's involvement across the documents?" [463,679 788x27] actions=AXPress
+          AXStaticText value="Your tasks" [449,734 75x19]
+          AXImage desc="Search" id=magnifyingglass [462,776 12x13]
+          AXTextField [486,775 766x16] actions=AXConfirm
+          AXOpaqueProviderGroup/AXOpaqueProviderGrid [448,812 817x413] actions=AXScrollToTop,AXScrollToBottom
+            AXButton desc="Reconstruct a period, A readable, cited narrative built from the dated events." [448,812 401x129] actions=AXPress
+            AXButton desc="Browse documents & summaries, Every ingested source with its summary and distilled memory." [864,812 401x129] actions=AXPress
+            AXButton desc="Uncertain or approximate dates, Date-precision-aware timeline — honest about what's fuzzy." [448,954 401x129] actions=AXPress
+            AXButton desc="Corpus statistics, Entities, events, and how much is indexed." [864,954 401x129] actions=AXPress
+            AXButton desc="Ask what's known vs inferred, Separate direct evidence from reconstruction." [448,1096 401x129] actions=AXPress
+            AXButton desc="Add the archive, Ingest the collection to study." [864,1096 401x129] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Home" [554,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Home" id=<swiftui> [185,33 1100x5038] actions=AXRaise
