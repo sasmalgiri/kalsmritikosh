@@ -71,8 +71,9 @@ public nonisolated enum LegalNotice {
     provider whose terms permit it, after you confirm your account is on those terms, and that \
     provider keeps what it receives under its own terms. Sync through a folder, if \
     you turn it on, writes your own work into a folder you choose, encrypted with your \
-    passphrase; that folder's service moves it. The free trial and the purchase are handled by \
-    Apple through the App Store. Removing the app’s data folder deletes the database and the \
+    passphrase; that folder's service moves it. The subscription, its free trial, renewals, refunds \
+    and restore are handled by Apple through the App Store; the app never sees payment details and \
+    subscribing turns nothing else on. Removing the app’s data folder deletes the database and the \
     working files beside it; backups, snapshots, sync folders and exports you made, Keychain \
     items and Spotlight entries are separate and are removed by you.
     """
@@ -167,16 +168,19 @@ public nonisolated enum LegalNotice {
     /// Version of these notices — bump on any material change, keep the date.
     public static let termsVersion = "1.8 (2026-10-18)"
 
-    /// Payment terms: written to hold unchanged whether the app is a one-time
-    /// purchase (v1, per SHIP_DECISIONS) or gains paid tiers later.
+    /// Payment terms (SHIP_DECISIONS 2026-10-30): one edition, sold as an auto-renewable
+    /// subscription; verified legacy one-time unlocks stay valid.
     public static let subscriptionStatement = """
-    The app is a one-time purchase on the Mac App Store — no subscription, no \
-    per-gigabyte fees. All purchases and refunds are handled by Apple through your App \
-    Store account under Apple’s terms; the developer never sees or stores your payment \
-    details. If additional paid tiers are introduced, prices and tier boundaries may \
-    change prospectively with notice — never retroactively. Whatever the tier: your \
-    documents, ledger, and reports remain yours, stay on your device, remain exportable \
-    at no charge, and no tier change ever locks you out of data you created.
+    One edition with all nine personas, sold through the Mac App Store as an auto-renewable \
+    subscription — monthly or annual at the price shown for your storefront, the same access \
+    either way. Eligible new subscribers get a 14-day free trial; the chosen plan then renews \
+    automatically unless cancelled at least a day before the period ends, in your Apple Account. \
+    A permanent unlock bought under the earlier one-time offer remains valid. All payments, \
+    renewals, refunds and restores are handled by Apple under Apple’s terms; the developer never \
+    sees or stores your payment details. Prices may change prospectively with notice — never \
+    retroactively. Whatever the plan or its state: your documents, ledger and reports remain \
+    yours, stay on your device, stay readable and exportable at no charge, and no billing state \
+    ever deletes or locks away data you created.
     """
 
     /// How these notices change — the versioned, prospective change process.

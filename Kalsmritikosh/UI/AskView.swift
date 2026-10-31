@@ -983,6 +983,11 @@ public struct AskView: View {
             // so the brain's answer call runs in parallel — the user
             // sees something immediately, and the next time they ask the
             // boosted files are already in the canonical store.
+            // §11 — asking the archive is analysis, a paid action; the refusal opens the subscription screen.
+            guard await MainActor.run(body: { PurchaseCenter.shared.allowPaidAction("ask questions") }) else {
+                await MainActor.run { self.turns.removeAll { $0.id == placeholderID } }
+                return
+            }
             Task { await appState.boostIngestForQuestion(q) }
 
             // 3) The full brain answer is the ONLY LLM path (spec P1.3).

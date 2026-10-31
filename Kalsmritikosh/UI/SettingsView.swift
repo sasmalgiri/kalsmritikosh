@@ -161,6 +161,7 @@ public struct SettingsView: View {
                 settingsGroup("Privacy", "hand.raised", anchor: .privacy) { privacySection }
                 settingsGroup("Background maintenance", "moon.zzz", anchor: .backgroundMaintenance) { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
+                settingsGroup("Subscription", "creditcard", anchor: .subscription) { subscriptionSection }
                 settingsGroup("Your data", "trash", anchor: .yourData) { dataSection }
                 settingsGroup("Help & feedback", "envelope", anchor: .helpFeedback) { feedbackSection }
                 settingsGroup("Legal & privacy", "checkmark.shield", anchor: .legalPrivacy) { legalSection }
@@ -1744,6 +1745,7 @@ public struct SettingsView: View {
         case .privacy:               return "Privacy"
         case .backgroundMaintenance: return "Background maintenance"
         case .ingestOptions:         return "Ingest options"
+        case .subscription:          return "Subscription"
         case .yourData:              return "Your data"
         case .helpFeedback:          return "Help & feedback"
         case .legalPrivacy:          return "Legal & privacy"
@@ -2258,6 +2260,32 @@ public struct SettingsView: View {
     /// Legal & Privacy — accuracy disclaimer, privacy posture, terms, and
     /// third-party notices. Always visible (not hidden under Advanced) so the
     /// declarations are easy to find.
+    /// §11 — the verified subscription state, from StoreKit; management happens in the Apple Account.
+    private var subscriptionSection: some View {
+        let store = PurchaseCenter.shared
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard").foregroundStyle(Theme.brand)
+                Text("Subscription").font(.title3.bold())
+            }
+            Text(store.statusText).font(.callout).accessibilityIdentifier("settings.subscription.status")
+            Text("One edition with all nine personas, monthly or annual, same access either way. Eligible new subscribers get a 14-day free trial, after which the chosen plan renews automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if !store.entitlement.allowsPaidUse || store.entitlement.hadAccessBefore {
+                    Button("See plans") { store.paywallRequested = "subscribe" }.buttonStyle(.borderedProminent).controlSize(.small)
+                }
+                Button("Restore purchases") { Task { await store.restore() } }.controlSize(.small).disabled(store.busy)
+                Button("Manage subscription") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }.controlSize(.small)
+                    .help("Opens your Apple Account's subscription page to change the plan or cancel. Cancel at least a day before the period ends to avoid the next charge.")
+                Link("How to cancel (Apple)", destination: PurchaseProducts.cancelInstructionsURL).font(.caption)
+            }
+            if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary) }
+            Text("Payment, renewal, refunds and restore are handled by Apple; the app never sees payment details and subscribing turns nothing else on (not Online mode). The subscription applies on the Macs signed in with your Apple account; your archive is not copied between them.")
+                .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var legalSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {

@@ -127,6 +127,7 @@ public struct ACHMatrixView: View {
 
     private func save(_ a: ACHAnalysis, caseID scope: UUID?) async {
         guard let repo = appState.achMatrices else { ledgerMissing = true; return }
+        guard PurchaseCenter.shared.allowPaidAction("edit analyses") else { return }   // §11 — a paid action
         do {
             try await repo.save(a, caseID: scope, actor: actor)
         } catch {

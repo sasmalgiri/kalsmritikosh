@@ -57,8 +57,14 @@ Version 2.0 · [[effective date]]
 9. **Export and sanctions.** You may not use or export the app in breach of applicable export-control
    or sanctions laws, or in a country subject to a US Government embargo.
 
-10. **Purchase.** A one-time purchase of [[price, e.g. USD 79]] after a 14-day free trial; no
-    subscription. Refunds are handled by Apple under its policies.
+10. **Subscription.** The App's creating, editing and analysis functions are sold as an auto-renewable
+    subscription through Apple — monthly or annual at the price shown in your storefront, the same access
+    either way. Eligible new subscribers receive a 14-day free introductory period; the chosen plan then
+    renews automatically unless cancelled at least a day before the period ends, through your Apple
+    Account. Permanent unlocks bought under the earlier one-time offer remain valid. When no subscription
+    stands, your existing cases remain readable and export, complete backup, recovery, Help, privacy and
+    erasure controls remain available; nothing is deleted because of billing. Refunds are handled by Apple
+    under its policies.
 
 11. **Governing law.** *Counsel*: [[governing law and forum]]. (The site currently names India; the app
     names none. Consumers keep the protections of the law of their country of residence where that

@@ -104,24 +104,31 @@ algorithm. It protects the person's own data and authenticates records.
 protecting the user's own data and authentication, using the OS. *Counsel* to confirm for the launch
 markets.
 
-## 6. StoreKit test script — prepared; run on the signed build (tier 3)
+## 6. StoreKit test script — prepared; run in the sandbox and on the TestFlight build (tier 3)
 
-Products (`StoreKit/Kalsmritikosh.storekit`): `…trial14` (non-consumable, $0, 14-day trial) and the
-$79 non-consumable unlock; Family Sharing on; no subscription.
+Products (`StoreKit/Kalsmritikosh.storekit`, App Store completion instructions §11): one subscription group
+"Investigations Made Easy edition" with `…edition.monthly` ($4.99, P1M) and `…edition.annual` ($39.99, P1Y) at one
+level, each with a two-week free introductory offer; 3-day paid-to-paid billing grace; the legacy non-consumables
+`…trial14` and `…unlock` kept as they were (restore/compatibility only). Entitlement rules: `Purchase.swift`,
+proven by `PurchaseTests` (11 tests). Each row below is recorded per environment (local StoreKit, Sandbox,
+TestFlight); local fixtures alone do not prove the live products.
 
-1. Fresh install, no purchases: the trial offer is shown, with no charge text.
-2. Start the trial: everything unlocks, and the trial end date is shown.
-3. Advance the clock 15 days (StoreKit Test): the app reverts to its locked state honestly. No data
-   is lost or hidden, and export still works.
-4. Buy the unlock ($79): it unlocks permanently, and the receipt shows a one-time purchase.
-5. Restore purchases on a second Mac (same Apple ID): it unlocks without a second charge.
-6. Family Sharing member: it unlocks.
-7. Interrupted purchase, purchase failure and "Ask to Buy" pending: nothing is unlocked while the
-   purchase is unresolved, and the message is clear.
-8. Refund (StoreKit Test revoke): the unlock is withdrawn; data remains and stays exportable.
-9. Offline at launch after purchase: the cached entitlement keeps the app unlocked.
+| # | Scenario | Required result |
+|---|---|---|
+| 1 | Fresh account, store reachable | Subscription screen with both plans at the storefront's prices, "Start 14-day free trial", disclosure of the post-trial price, renewal and cancellation; Help, sample and backup/recovery reachable |
+| 2 | Store unreachable | "Try again" and no price shown; nothing charged |
+| 3 | Eligible trial on monthly, then on annual (plan change in the Apple Account) | One trial per group; the switch shows Apple's effective date; no second trial |
+| 4 | Ineligible account (reset eligibility not used) | "Subscribe … per month/year"; no trial promised |
+| 5 | Cancel during trial / cancel renewal | Access until the verified end; status strip shows the date and "renewal is off"; no charge |
+| 6 | Renewal (accelerated clock) | Status shows the new period; no duplicate subscription |
+| 7 | Pending (Ask to Buy), declined, cancelled dialog, unverified | Honest message; no access granted |
+| 8 | Failed renewal with grace | Access continues to Apple's grace end, strip says so; after grace: read-only + "update payment" |
+| 9 | Expiry / refund / revoke | Read-only: cases open, exports/backup/recovery/Help/privacy work; paid actions open the subscription sheet |
+| 10 | Offline launch with a valid cached state; offline past the verified end | Access kept until the verified end only; then read-only, never "unknown = unlocked" |
+| 11 | Restore on a second Mac | Entitlement restored; archive not implied to sync |
+| 12 | Legacy `…unlock` holder; legacy `…trial14` holder mid-trial | Full access, never asked to subscribe; remaining old trial honoured, then read-only |
 
-Record each step's result in the release packet.
+Record each step's result in the release packet (`release/approvals/storekit.md`).
 
 ## 7. Listing audit — done against `APP_STORE_METADATA.md`
 

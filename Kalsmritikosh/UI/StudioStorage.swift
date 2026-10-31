@@ -240,6 +240,12 @@ final class StudioStorage {
     /// failed change stays pending and `retry()` (or the next edit) sends it again.
     func persist<M: StudioPersisted>(_ items: [M], app: AppState?) {
         guard !erasedGeneration else { return }   // K2: nothing erased is written back
+        // §11 — editing a studio draft is a paid action; without a standing subscription the draft is
+        // read-only: nothing is written, the person is told why, and the subscription screen opens.
+        guard PurchaseCenter.shared.allowPaidAction("edit studio drafts") else {
+            problem = "Read-only: this draft is not saved because no subscription stands. Its last saved version is kept; subscribe to edit it."
+            return
+        }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         var list: [(UUID, String, Data)] = []
         for m in items {

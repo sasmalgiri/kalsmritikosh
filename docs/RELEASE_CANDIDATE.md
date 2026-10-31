@@ -5,12 +5,16 @@ Unsigned digests identify compiled code and are supporting evidence only; the su
 build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
 `bash scripts/release-check.sh` — currently **BLOCKED**.
 
-## Current candidate (2026-10-30, after the App Store completion instructions §2–§4)
+> **2026-10-31:** the owner adopted subscriptions (updated completion instructions §11). A billing change creates a
+> new candidate: `0d1ef99a` is superseded; the current candidate is the head after the §11 commit, and the Sandbox /
+> TestFlight purchase matrix (DISTRIBUTION_PACK §6) must run on it.
+
+## Current candidate (2026-10-31, after the App Store completion instructions §2–§5 and §11)
 
 | Field | Value |
 |---|---|
 | Branch / PR | `investigations-next`, PR #169 (open) |
-| Code commits since the last green head `4147e106` | `60c7421e` (§2 citation verification + §3 lossless handoffs, schema v168) · `a738c56b` (§4 one output service) · the §1/§5 commit that adds this section (Release excludes the acceptance fixture; gate manifest) |
+| Code commits since the last green head `4147e106` | `60c7421e` (§2 + §3, schema v168) · `a738c56b` (§4 one output service) · `7647249e` (§1 baseline, Release excludes the fixture) · `12aa3c71` (test-host isolation, Home first) · `933cedb3` (run-d fixes) · `0d1ef99a` (run-e fix) · the §11 subscription commit |
 | Schema | **v168** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
 | Hosted CI | **not yet run on these commits** — the last green head is `4147e106` (run 41051769092, seven jobs). Pushed in one batch with the next code change (Actions budget). |
 | Unsigned Release digests | **not yet built for this tree** — produced at freeze with the command in §6 and recorded here |

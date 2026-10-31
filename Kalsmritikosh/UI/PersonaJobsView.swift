@@ -343,6 +343,7 @@ public final class PersonaJobsModel {
 
     /// Open a matter by launching the selected persona's intake job in the chosen workspace.
     public func startMatter(actor: String, at date: Date) async {
+        guard PurchaseCenter.shared.allowPaidAction("start a matter") else { return }   // §11 — a paid action
         await ensureWorkspace()
         guard let intake = intakeJob, let wsID = selectedWorkspace else {
             lastError = "Choose a workspace and a persona first."; return
@@ -374,6 +375,7 @@ public final class PersonaJobsModel {
 
     /// Run a job against the open matter, reaching the real shared service.
     public func run(_ job: PersonaJob, actor: String, at date: Date) async {
+        guard PurchaseCenter.shared.allowPaidAction("run jobs") else { return }   // §11 — a paid action
         guard let caseID = activeCaseID, let wsID = selectedWorkspace else {
             lastError = "Open a matter first."; return
         }

@@ -73,6 +73,7 @@ final class CaseFileModel {
     /// Run a change, then reload; errors are shown and logged.
     func run(_ app: AppState, _ body: @escaping (CaseFileService) async throws -> Void) {
         guard let svc = app.caseFiles else { return }
+        guard PurchaseCenter.shared.allowPaidAction("edit the case file") else { return }   // §11 — a paid action; reading and exporting never ask
         busy = true
         Task {
             defer { busy = false }

@@ -229,8 +229,8 @@ public struct HomeView: View {
             HStack(alignment: .top, spacing: 16) {
                 promise("lock.shield", "100% on your Mac",
                         "Nothing ever leaves this computer — no cloud, no account, works offline forever.")
-                promise("creditcard", "Yours once",
-                        "One purchase. No subscription, no per-page fees, no surprise renewal.")
+                promise("creditcard", "One plain plan",
+                        "One edition, all nine personas, monthly or yearly. Cancel any time; your work stays readable and exportable.")
                 promise("square.and.arrow.up", "No lock-in",
                         "Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours.")
                 promise("checkmark.seal", "Answers you can check",

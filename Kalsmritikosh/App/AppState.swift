@@ -412,6 +412,7 @@ public final class AppState {
 
     public func ingestFiles(_ urls: [URL]) async {
         guard let ingest, !urls.isEmpty else { return }
+        guard PurchaseCenter.shared.allowPaidAction("add documents") else { return }   // §11 — a paid action
         if ProductModuleFlags.isEnabled(.importQueue) {
             importQueue.enqueue(urls, state: self)
             return
@@ -4922,6 +4923,7 @@ public final class AppState {
     @discardableResult
     public func ingestAllRoots() async -> Int {
         guard let ingest else { return 0 }
+        guard PurchaseCenter.shared.allowPaidAction("read your folders") else { return 0 }   // §11 — a paid action
         // Fresh pass — clear any prior Stop/Pause and mark running for the
         // live Pause/Resume/Stop controls.
         await ingestControl.reset()

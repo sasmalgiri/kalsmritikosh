@@ -19,7 +19,7 @@ enum IntentBridge {
 
     static func ready() throws -> AppState {
         guard ProductModuleFlags.isEnabled(.shortcutsActions) else { throw KalsmritikoshIntentError.switchedOff }
-        guard PurchaseCenter.shared.entitlement.allowsUse else { throw KalsmritikoshIntentError.notPurchased }
+        guard PurchaseCenter.shared.entitlement.allowsPaidUse else { throw KalsmritikoshIntentError.notPurchased }   // §11 — an intent that creates or analyses is a paid action
         guard let state = appState, state.database != nil else { throw KalsmritikoshIntentError.notReady }
         return state
     }

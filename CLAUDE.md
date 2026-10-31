@@ -9,7 +9,7 @@ This is NOT a chat-with-files RAG app. The intelligence lives in the database, n
 
 ## Authority chain (updated 2026-10-30)
 The current completion mandate is the owner's
-`Investigations_Made_Easy_App_Store_Completion_Instructions_2026-10-30.md` (outside the repo); its execution
+`Investigations_Made_Easy_App_Store_Completion_Instructions_2026-10-30-2.md` (outside the repo; the updated mandate with §11 subscriptions and §6 beginner help) plus the pricing/help strategy of the same date; its execution
 record is `docs/FINAL_BRIEF_EXECUTION.md` §E6, the candidate packet `docs/RELEASE_CANDIDATE.md`, the gates
 `ci/release-gates.json` (`bash scripts/release-check.sh`). Below it, the older chain (GOV-002, 2026-07-22) applies:
 The active plan is the **Production Readiness Instruction Pack** and the repo backlog, not

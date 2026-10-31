@@ -12,7 +12,7 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 - **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigations Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
 - **Category:** Productivity (secondary: Reference)
 - **Age rating:** 4+ (no objectionable content; user supplies their own files)
-- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigations Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
+- **Price:** **Free download; one edition, all nine personas, sold as an auto-renewable subscription** (SHIP_DECISIONS 2026-10-30): US $4.99/month or $39.99/year; India target ₹249/month or ₹1,999/year (verify the available price points in App Store Connect; never substitute silently); 14-day free introductory offer for eligible subscribers, then automatic renewal unless cancelled. One subscription group, two durations at one level: `ecosanskritiinnovation.Kalsmritikosh.edition.monthly`, `ecosanskritiinnovation.Kalsmritikosh.edition.annual`; 3-day paid-to-paid billing grace. Legacy non-consumables kept for compatibility only, not sold to new customers: `…trial14`, `…unlock` (permanent unlocks remain valid). Family Sharing is not advertised for the subscriptions. The iPhone/iPad app is free.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
   `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private`
@@ -72,7 +72,7 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 > • Keep your Macs and your iPhone or iPad in step through a folder you choose (iCloud Drive, Dropbox, a disk), encrypted with your passphrase. Scan paper on your phone straight into your archive.
 > • Take a signed, read-only snapshot to your iPhone or iPad with the companion viewer.
 >
-> **Try it free for 14 days, then buy it once — no subscription, no yearly fee.**
+> **Try every paid feature free for 14 days, then $4.99 a month or $39.99 a year (your storefront's price is shown in the app), renewing automatically unless cancelled. Cancel any time; your cases stay readable and exportable.**
 >
 > **No AI writes your answers unless you turn it on.** Out of the box, answers, search, timelines,
 > matrices, contradictions, gaps and cited reports all come from your evidence alone. Turn on
@@ -143,11 +143,15 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
 > citations. Work products export from the Studio/report screens.
 >
-> **Free trial and one purchase.** On first launch the app offers "Start free trial" (a free
-> non-consumable in-app purchase that starts a 14-day trial) or "Buy now" ($79 non-consumable that
-> unlocks everything for good). "Restore purchase" is on the same screen. After the trial, the main
-> window shows the purchase screen; Settings (backup and export) stays usable. To test in the
-> sandbox: start the trial, then buy; or buy directly. **No subscription, no other purchases.** **No model download** in this version. Minimum OS
+> **Subscription.** On first launch the app shows the subscription screen with the monthly and annual
+> plans at the storefront's own prices, the 14-day free trial for eligible accounts (StoreKit decides
+> eligibility), the price and period that follow, automatic renewal, how to cancel (at least a day
+> before the period ends, in the Apple Account), Restore purchases and Manage subscription. Help, the
+> isolated sample case and backup/recovery are reachable from that screen without subscribing. After a
+> plan ends, cases stay readable and exports, backups, recovery, Help and privacy controls keep working;
+> only creating, editing and analysing ask for a plan. To test in the sandbox: subscribe to either plan
+> (the trial applies once per account), cancel, let it lapse, restore. Permanent unlocks sold under the
+> earlier one-time offer are honoured. **No model download** in this version. Minimum OS
 > macOS 15.6. **By default no AI model is used**: answers are built from the person's documents by
 > keyword, structured-field and document matching. AI is optional (Settings → Modules → "Use AI to
 > write answers"): Apple's on-device model on macOS 26+ with Apple Intelligence, or the person's own

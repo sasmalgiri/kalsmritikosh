@@ -22,8 +22,13 @@ evidence-cited knowledge base — fully on your Mac, with no account and no data
 **Does my data go to the cloud?** No. The release build has no network provider; everything runs
 on your Mac. See the Privacy Policy.
 
-**Do I need an account or subscription?** No account. The App is a one-time purchase; there are no
-hidden in-app purchases.
+**Do I need an account or subscription?** No account, ever. Creating, editing and analysing need a
+subscription — monthly or annual, the same access either way, bought through Apple; eligible new
+subscribers get a 14-day free trial, after which the chosen plan renews automatically unless cancelled
+at least a day before the period ends (Apple Account → Subscriptions). Permanent unlocks bought under
+the earlier one-time offer stay valid. When no plan stands, your existing cases remain readable and
+export, complete backup, recovery, Help, privacy and erasure controls keep working; nothing is deleted
+because of billing. Optional Online AI uses your own provider account and may cost extra.
 
 **Why does an answer say "not found in the documents searched"?** The App only answers from
 evidence it can cite. If the fact isn't in your ingested files (or hasn't finished processing), it
