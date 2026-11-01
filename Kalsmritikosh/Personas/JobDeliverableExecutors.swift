@@ -341,7 +341,7 @@ public nonisolated enum PartiesIssuesExecutor {
                                      flags: flags, refs: Array(values.flatMap(\.refs).prefix(4)),
                                      fields: ["kind": "issue", "claim": label]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("Two name forms are listed as two parties until you merge them in identity resolution; a merge is recorded here with who made it and is reversible.")
         var next = ["Frame each issue; link each party row to its canonical entity and claim."]
         if rows.contains(where: { $0.flags.contains { $0.hasPrefix(lookalike) } }) { next.insert("Decide each look-alike pair in identity resolution (merge or keep separate).", at: 0) }
@@ -431,7 +431,7 @@ public nonisolated enum CareerExecutor {
             rows.append(JobResultRow(title: en.title, detail: names.isEmpty ? nil : "Names: " + names.joined(separator: ", "),
                                      date: JobText.day(en.date), flags: en.refs.isEmpty ? ["no source"] : [], refs: en.refs))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         let other = f.events.count + f.statedDates.count - entries.count
         if other > 0 { limitations.append("\(other) dated item(s) in the case are not career or education entries and are left out of this chronology.") }
         limitations.append("A gap is more than \(gapDays) days between an entry that ends something (left, resigned, graduated …) and the next dated entry; a start without a dated end is not a gap. It is the absence of a dated record, not a finding about what the person did.")
@@ -462,7 +462,7 @@ public nonisolated enum DocumentCodingExecutor {
             rows.append(JobResultRow(title: doc.name, detail: detail.isEmpty ? nil : detail.joined(separator: ". "), flags: flags,
                                      refs: [JobText.ref(doc, JobText.sentences(text).first ?? doc.name)]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld).map { $0 + " They are already outside any production." }
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts).map { $0 + " They are already outside any production." }
         limitations.append("A document coded privileged or partly privileged here is withheld from every production built in this ledger: it gets a slip sheet and a privilege-log line, never its text or native. A partly privileged document needs a redacted copy produced separately.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Code each document (issue codes, relevance, privilege); the coding takes effect on the next production run."]))
@@ -559,7 +559,7 @@ public nonisolated enum StatementComparisonExecutor {
                                          fields: ["point": label, "witness": name, "comparison": comparison, "event": label]))
             }
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if witnesses.count == 1 { limitations.append("Only one witness gives an attributed account; there is no second account to compare it with.") }
         if unassigned > 0 { limitations.append("\(unassigned) statement(s) name people but tie none of them to the reporting verb; they are left unassigned for you to attribute, not given to the nearest name.") }
         limitations.append("A speaker is read from the reporting verb (“X said”, “according to X”, “confirmed by X”, “said X” after a quote); a point groups statements by shared words, which can put two different events together — correct the point or the event field. “Same date/amount” means the same figure in both statements, not that they describe the same event or agree in meaning; a denial and an assertion that share a figure are shown as differing. Wording and meaning are yours to assess. A statement is what someone said, not what happened.")
@@ -620,7 +620,7 @@ public nonisolated enum WitnessProfileExecutor {
                                               "inconsistencies": inconsistencies.isEmpty ? "none found by date/amount comparison" : inconsistencies.map(\.title).joined(separator: "; ")]))
             rows += inconsistencies
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("Authorship is read from From/To lines and an opening “X wrote/said”; a document that only names the witness is listed as naming them. A statement's speaker is read from its reporting verb; a sentence that names the witness without tying them to the verb is not counted as theirs. Inconsistencies are found on dates and amounts only; wording is yours to compare.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Assess each witness from the quotes; an inconsistency is a difference to put to them, not a finding of untruth."]))
@@ -665,7 +665,7 @@ public nonisolated enum SourcedQuestionsExecutor {
                                      fields: ["topic": "Disputed: \(label)", "topics": "Disputed: \(label)", "disputed": parts.joined(separator: "; "),
                                               "questions": "Which is right: " + parts.joined(separator: " or ") + "?"]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("Every question here is written against one passage and cites it; a question you add without a passage cannot be accepted until a source is linked.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Order the outline; put each disputed point with both sources.",
@@ -708,7 +708,7 @@ public nonisolated enum WorkpaperExecutor {
                 }
             }
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if e.exports.isEmpty { limitations.append("No report has been exported for this case yet; its figures will be listed for tracing once one is.") }
         limitations.append("A figure traces when a workpaper states the same amount; a computed figure (a sum, a difference) needs a workpaper you add with its calculation and inputs.")
         var next = ["Sign off each workpaper after checking its inputs against the source."]
@@ -811,7 +811,7 @@ public nonisolated enum SourceFamilyExecutor {
             rows.append(JobResultRow(title: doc.name, detail: detailParts.joined(separator: " "), flags: flags, refs: [JobText.ref(doc, quote)],
                                      fields: ["family": family]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("“Shared text detected” means the same long sentences, or near-identical wording, appear in both sources — a candidate relationship (a wire story repeated, a rewrite), not proof of a common origin. “No shared text detected” means only that; it does not establish independence. Standard notices and footers most documents carry are excluded before grouping. Your confirmed lineage, with its rationale, is recorded separately in the Lineage field and the note.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Decide each source's lineage (independent, same origin, derivative, unknown) with the rationale in the note; record its relationship to the story and its protection; count one origin once when weighing corroboration."]))
@@ -836,7 +836,7 @@ public nonisolated enum SourceVaultExecutor {
             rows.append(JobResultRow(title: doc.name, detail: names.isEmpty ? nil : "Names: " + names.prefix(6).joined(separator: ", "),
                                      flags: flags, refs: [JobText.ref(doc, quote)]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("A source you mark protected needs its identity recorded here; that name is then kept out of every job-result and studio export of this ledger and masked in every cloud AI request (a request in which it would survive masking is not sent).")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Mark each protected source and record its identity; note each access to an original."]))
@@ -886,7 +886,7 @@ public nonisolated enum TranscriptionExecutor {
         guard !rows.isEmpty else {
             return JobText.blocked("The case's documents have no readable passage to transcribe or code.", "Add the recordings' transcripts, letters or notes as documents.")
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if attributed == 0 { limitations.append("No sentence is attributed to a speaker; every readable passage is listed instead.") }
         limitations.append("Each row is one passage: its original (cited), your transcription, and a translation only together with the transcription it was made from — the lineage original → transcription → translation stays on the row and in every export.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
@@ -936,7 +936,7 @@ public nonisolated enum AlternativeAccountsExecutor {
             return JobText.blocked("The case's documents state no fact two ways and give no cause, so no alternative account can be built from them.",
                                    "State the competing accounts yourself and link the evidence for and against each.")
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("Each opposing account is built from the documents that state its value and lists the documents that state otherwise; neither is preferred here.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Weigh the accounts; keep every competing interpretation with its evidence for and against."]))
@@ -964,7 +964,7 @@ public nonisolated enum AnnotatedEditionExecutor {
         guard !rows.isEmpty else {
             return JobText.blocked("The case's documents have no readable text to edit.", "Add the source texts (transcriptions or OCR) as documents.")
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if truncated > 0 { limitations.append("\(truncated) passage(s) beyond the first \(perDocument) per document (\(total) in all) are not listed in this run.") }
         limitations.append("Each passage is the source text verbatim with its exact version; an annotation is recorded on the passage it concerns and cannot be accepted on a row without one. State your editorial principles in the completion note.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
@@ -1021,7 +1021,7 @@ public nonisolated enum LineageExecutor {
             rows.append(JobResultRow(title: d.title, detail: "Names: " + who.joined(separator: ", "), date: JobText.day(d.date), flags: ["vital event"], refs: d.refs,
                                      fields: ["person": person, "relationship": "event: \(kind)", "relative": ""]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if !rows.contains(where: { $0.fields?["relative"]?.isEmpty == false }) { limitations.append("No sentence states a kinship between two named people; relationships you add by hand are drawn as unproven until a source is linked.") }
         limitations.append("The chart draws a relationship with a source as a solid line and one without a source as a dashed, unproven line; a stated relationship is what the document says, not a proven fact.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,

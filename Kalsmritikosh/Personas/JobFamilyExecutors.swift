@@ -112,8 +112,15 @@ nonisolated enum JobText {
         return value.refs.compactMap { document(of: $0, in: docs) }.filter { seen.insert($0.objectID).inserted }
     }
 
-    static func withheldLimitation(_ n: Int) -> [String] {
-        n > 0 ? ["\(n) case source(s) are not admitted by this job's access (privileged or above its sensitivity) and were not read."] : []
+    static func withheldLimitation(_ n: Int, facts: StudioCaseFacts? = nil) -> [String] {
+        var out = n > 0 ? ["\(n) case source(s) are not admitted by this job's access (privileged or above its sensitivity) and were not read."] : []
+        if let facts, facts.documentsNotRead > 0 {
+            out.append("\(facts.documentsNotRead) document(s) in this case are beyond the \(StudioCaseFacts.documentReadingLimit)-document reading limit: their names, amounts and dates were not read, so a person or date found only there is missing here and \"no date stated\" or \"uncorroborated\" may be wrong for them.")
+        }
+        if let facts, facts.eventsTruncated {
+            out.append("The case has more than \(StudioCaseFacts.eventLimit) dated events; only the first \(StudioCaseFacts.eventLimit) were read.")
+        }
+        return out
     }
 }
 
@@ -171,7 +178,7 @@ public nonisolated enum InventoryExecutor {
             rows.append(JobResultRow(title: title, detail: parts.isEmpty ? nil : parts.joined(separator: "; "),
                                      date: days.first, flags: flags, refs: [JobText.ref(doc, first)]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if unreadable > 0 { limitations.append("\(unreadable) document(s) could not be read; they stay listed and count as not reviewed.") }
         var next: [String] = []
         switch style {
@@ -194,7 +201,7 @@ public nonisolated enum InventoryExecutor {
         let rows = dates.map { d in
             JobResultRow(title: d.title, date: JobText.day(d.date), flags: [d.date < e.now ? "passed" : "upcoming"], refs: d.refs)
         }
-        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld),
+        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld, facts: e.facts),
                                          nextActions: ["Confirm each upcoming date against the original document before relying on it."]))
     }
 }
@@ -230,7 +237,7 @@ public nonisolated enum ReliabilityExecutor {
             let quote = JobText.sentences(e.texts[doc.objectID] ?? "").first ?? doc.name
             rows.append(JobResultRow(title: doc.name, detail: detail, flags: flags, refs: [JobText.ref(doc, quote)]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         limitations.append("Corroboration here means the same name, amount or date appears in another case document; it is not independence and it is not a reliability grade.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Grade each source's reliability and independence with your reasons; the grade is yours.",
@@ -300,7 +307,7 @@ public nonisolated enum IssueMatrixExecutor {
         let conflicts = rows.filter { $0.flags.contains { $0.hasPrefix("conflicting value") } }.count
         var next = ["Mark each fact or element supported, contradicted or unsupported; contrary evidence stays listed."]
         if conflicts > 0 { next.insert("Resolve or keep open \(conflicts) fact(s) the documents state differently.", at: 0) }
-        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld)
+        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld, facts: e.facts)
                                          + ["Only facts the ledger read from the documents are listed; elements you must prove that no document states do not appear and must be added by hand."],
                                          nextActions: next))
     }
@@ -331,7 +338,7 @@ public nonisolated enum StatementExecutor {
         guard !rows.isEmpty else {
             return JobText.blocked("The case's documents contain no quoted or attributed statement.", "Add the statements, transcripts or interview notes to the case.")
         }
-        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld)
+        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld, facts: e.facts)
                                          + ["A statement is what someone said, not what happened; corrections are added as new entries, never over the original."],
                                          nextActions: ["Confirm each speaker against the original; a sentence that does not name one stays unattributed."]))
     }
@@ -358,7 +365,7 @@ public nonisolated enum StatementExecutor {
             rows.append(JobResultRow(title: p.value, detail: refs.isEmpty ? "Named, but no passage found." : "\(refs.count) passage(s). Topics: " + topics.joined(separator: " / "),
                                      flags: flags, refs: Array((refs.isEmpty ? p.refs : refs).prefix(6))))
         }
-        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld),
+        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld, facts: e.facts),
                                          nextActions: ["Write each question against the passage it comes from; a disputed point is put with both sources.",
                                                        "Record each interview as it happens; an unanswered request is recorded as unanswered, never as an admission."]))
     }
@@ -385,7 +392,7 @@ public nonisolated enum CausationExecutor {
         }
         var next = ["Test each candidate cause against the evidence for and against it; a cause without evidence stays a hypothesis."]
         if askForAlternatives { next.append("Record at least one alternative explanation for each.") }
-        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld)
+        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld, facts: e.facts)
                                          + ["A document saying why something happened is a claim to test, not an established cause."],
                                          nextActions: next))
     }
@@ -438,7 +445,7 @@ public nonisolated enum MoneyExecutor {
                                              distinct == sum ? "no repeated statement" : "repeated statements counted once in the distinct figure",
                                              "a payment, its invoice and its refund are classified in the tracing schedule, not here"]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if left > 0 { limitations.append("\(left) amount(s) are left out of every total (no stated currency, or not one plain figure).") }
         limitations.append("A difference between figures is a difference to explain, not evidence of loss or fraud. The same amount in the same words filed in another document is one statement counted once; an invoice, the bank debit that paid it and a refund against it are different statements — classify them (payment, refund, invoice) in the tracing schedule before any gross or net figure is read.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
@@ -480,7 +487,7 @@ public nonisolated enum DisclosureExecutor {
             rows.append(JobResultRow(title: doc.name, detail: found.isEmpty ? "No identifier pattern found (patterns miss identifiers written in other forms)." : "Found: " + found.joined(separator: ", "),
                                      flags: flags, refs: [JobText.ref(doc, quote)]))
         }
-        var limitations = JobText.withheldLimitation(e.withheld).map { $0 + " They are not part of any disclosure." }
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts).map { $0 + " They are not part of any disclosure." }
         limitations.append("Pattern detection is a first pass; a person reviews every page. Effective redaction of produced bytes is verified by the production and redaction tools.")
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Clear, redact or withhold each document; anything not positively cleared stays withheld."]))
@@ -505,7 +512,7 @@ public nonisolated enum DataTableExecutor {
         let covered = Set((f.allFacts + f.statedAmounts).flatMap(\.refs).compactMap { JobText.document(of: $0, in: f.documents)?.objectID }
                           + f.statedDates.flatMap(\.refs).compactMap(\.objectID))
         let silent = f.documents.filter { !covered.contains($0.objectID) }.count
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if silent > 0 { limitations.append("\(silent) document(s) gave no structured value; an analysis over this table does not cover them.") }
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Define the analysis (filter, group, total); every result row keeps its source."]))
@@ -528,7 +535,7 @@ public nonisolated enum PublicationExecutor {
         guard !rows.isEmpty else {
             return JobText.blocked("The case states no fact and names no person, so there is nothing to check for publication.", "Add the story's claims and sources.")
         }
-        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld),
+        return (.draft, JobResultContent(rows: rows, limitations: JobText.withheldLimitation(e.withheld, facts: e.facts),
                                          nextActions: ["Publish, hold or kill is an editor's decision, recorded with reasons.",
                                                        "A claim without its required evidence or reply opportunity is held."]))
     }
@@ -579,7 +586,7 @@ public nonisolated enum IdentityCandidateExecutor {
                 }
             }
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if rows.isEmpty { limitations.append("No two names look alike; that does not prove they are different people.") }
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Decide each pair from the records (dates, places, relations); a merge is reversible."]))
@@ -612,7 +619,7 @@ public nonisolated enum ActionExecutor {
         guard !e.facts.documents.isEmpty else {
             return JobText.blocked("The case has no documents in scope, so no action follows from them.", "Record the actions your findings require by hand.")
         }
-        var limitations = JobText.withheldLimitation(e.withheld)
+        var limitations = JobText.withheldLimitation(e.withheld, facts: e.facts)
         if rows.isEmpty { limitations.append("The documents raise no open item by these checks; actions your findings require are added by hand.") }
         return (.draft, JobResultContent(rows: rows, limitations: limitations,
                                          nextActions: ["Give each action an owner and a due date and link it to its finding; it closes only with your note."]))

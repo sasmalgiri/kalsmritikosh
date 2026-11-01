@@ -216,15 +216,26 @@ public nonisolated struct StudioCaseFacts: Sendable {
     /// appears in — what a document dates even when no ledger event was recognised there.
     /// Relative dates ("today", "this morning") are never here: they resolve to the reading day.
     public let statedDates: [StudioCaseEvent]
+    /// Practitioner review 2026-11-02 (cross-persona blocker): documents in scope whose names, amounts and
+    /// dates were NOT read (beyond the reading limit), and whether the case's events were cut at their
+    /// limit. Every job states these in its limitations — a cap is never silent.
+    public let documentsNotRead: Int
+    public let eventsTruncated: Bool
 
     public init(caseTitle: String, parties: [StudioCaseValue], dates: [StudioCaseValue], amounts: [StudioCaseValue],
                 identifiers: [StudioCaseValue], documents: [StudioCaseDocument], events: [StudioCaseEvent],
                 allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = [],
-                statedDates: [StudioCaseEvent] = []) {
+                statedDates: [StudioCaseEvent] = [], documentsNotRead: Int = 0, eventsTruncated: Bool = false) {
         self.caseTitle = caseTitle; self.parties = parties; self.dates = dates; self.amounts = amounts
         self.identifiers = identifiers; self.documents = documents; self.events = events; self.allFacts = allFacts
         self.named = named; self.statedAmounts = statedAmounts; self.statedDates = statedDates
+        self.documentsNotRead = documentsNotRead; self.eventsTruncated = eventsTruncated
     }
+
+    /// How many documents' names, amounts and dates are read per case (was 60, arbitrary and silent).
+    public static let documentReadingLimit = 5_000
+    /// How many case events are read.
+    public static let eventLimit = 50_000
 
     public static let empty = StudioCaseFacts(caseTitle: "", parties: [], dates: [], amounts: [], identifiers: [],
                                               documents: [], events: [], allFacts: [])
@@ -321,7 +332,7 @@ public actor StudioCaseFactsReader {
         guard let entities else { return ([], [], []) }
         var named: [StudioCaseValue] = [], amounts: [StudioCaseValue] = [], dates: [StudioCaseEvent] = []
         var namedIndex: [String: Int] = [:], seenAmounts = Set<String>(), seenDates = Set<String>()
-        for id in objectIDs.sorted(by: { $0.uuidString < $1.uuidString }).prefix(60) {
+        for id in objectIDs.sorted(by: { $0.uuidString < $1.uuidString }).prefix(StudioCaseFacts.documentReadingLimit) {
             guard let content = try await objects.fetchContent(id: id) else { continue }
             for e in try await entities.findByMentionSource(id) where e.qualityTier != .t3 {
                 var v = e.value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -391,7 +402,9 @@ public actor StudioCaseFactsReader {
         // One case version per document, so every reference names the version it was read from.
         let versionOf = try await objects.sourceVersionsByObject(inSourceVersionIDs: sourceVersionIDs)
             .compactMapValues { $0.sorted { $0.uuidString < $1.uuidString }.first }
-        let caseEvents = try await events.forSourceVersions(sourceVersionIDs, limit: 400)
+        let rawEvents = try await events.forSourceVersions(sourceVersionIDs, limit: StudioCaseFacts.eventLimit)
+        let eventsTruncated = rawEvents.count >= StudioCaseFacts.eventLimit
+        let caseEvents = rawEvents
             .filter(\.hasTrustworthyDate)
             .sorted { $0.date < $1.date }
             .map { StudioCaseEvent(date: $0.date, title: $0.title,
@@ -406,7 +419,9 @@ public actor StudioCaseFactsReader {
         let (named, stated, statedDates) = try await namesAndAmounts(objectIDs: objectIDs, versionOf: versionOf)
         return StudioCaseFacts(caseTitle: caseTitle, parties: parties, dates: dates, amounts: amounts,
                                identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all,
-                               named: named, statedAmounts: stated, statedDates: statedDates)
+                               named: named, statedAmounts: stated, statedDates: statedDates,
+                               documentsNotRead: max(0, objectIDs.count - StudioCaseFacts.documentReadingLimit),
+                               eventsTruncated: eventsTruncated)
     }
 }
 
