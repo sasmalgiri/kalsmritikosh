@@ -78,7 +78,7 @@ public nonisolated enum ProceedingAnswerer {
     static func unwrap(_ q: String) -> String {
         // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
         // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do (?:you|we) know|do (?:you|we) have|have (?:you|we) got|is there|i(?:'m|’m| am) looking for (?:details|information|info|specifics) (?:on|about)|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do (?:you|we) know|do (?:you|we) have|have (?:you|we) got|is there|i(?:'m|’m| am) looking for (?:details|information|info|specifics) (?:on|about)|i(?:'m|’m| am) looking for(?=\s+the\s+(?:sentence|punishment|charges?|date|day|plea|verdict|outcome)\b)|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
@@ -120,7 +120,7 @@ public nonisolated enum ProceedingAnswerer {
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
         // "the date on which X was formally charged" (held-out chronology 10, 2026-10-29).
-        if q.range(of: #"^(?:exactly\s+|precisely\s+)?(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+|an?\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b|^(?:the\s+)?(?:exact\s+|precise\s+|specific\s+|actual\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:exactly\s+|precisely\s+)?(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+|an?\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b|^(?:the\s+|an?\s+)?(?:\w+\s+)?(?:date|day)\s+(?:on (?:record|file)\s+)?(?:for|of)\s+when\b|^(?:the\s+)?(?:exact\s+|precise\s+|specific\s+|actual\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
         }
         // "Is there any indication that X entered a guilty plea?" (held-out chronology 10, 2026-10-29).
@@ -496,6 +496,10 @@ public nonisolated enum ProceedingAnswerer {
             let otherCourt = #"(?i)\b(?:in|from)\s+(?:the\s+)?(?:[A-Z][a-z]+\s+)?(?:county|state|municipal|superior|circuit)\s+(?:case|court|charges?|prosecution)\b"#
             func score(_ c: Candidate) -> Int {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
+                    // ho15 adjudication E: "pleaded guilty to one count in a federal indictment" names no
+                    // offence — it cannot be the answer to what the person was charged with.
+                    - (c.sentence.range(of: #"(?i)\b(?:pleaded|pled|guilty|convicted)\b[^.]{0,40}\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+counts?\s+(?:in|of)\s+(?:a|an|the)\s+(?:federal\s+|superseding\s+)?(?:indictment|information|complaint)\b"#, options: .regularExpression) != nil
+                       && c.sentence.range(of: #"(?i)\bcounts? of\s+\w"#, options: .regularExpression) == nil ? 12 : 0)
                     - (relativeClauseOther(c.sentence) ? 9 : 0)
                     - (c.sentence.range(of: otherCourt, options: .regularExpression) != nil ? 6 : 0)
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)

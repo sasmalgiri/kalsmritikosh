@@ -237,6 +237,19 @@ public nonisolated enum ProceedingEventExtractor {
                 }
             }
         }
+        // ho15 adjudication H: in one release a charge, arrest, arraignment, plea or conviction cannot come
+        // after that release's sentencing, nor after the release itself — such a day is a misreading and
+        // the step keeps its sentence but loses the day.
+        let cal = Calendar(identifier: .gregorian)
+        func dateOf(_ d: DateComponents?) -> Date? { d.flatMap { cal.date(from: $0) } }
+        let sentencedDay = out.filter { $0.step == .sentenced }.compactMap { dateOf($0.day) }.min()
+        let printedDay = dateOf(printed).map { $0.addingTimeInterval(86_400) }
+        out = out.map { f in
+            guard [.charged, .arrested, .arraigned, .pleaded, .convicted].contains(f.step), let d = dateOf(f.day) else { return f }
+            if let s = sentencedDay, d > s { return Finding(step: f.step, day: nil, dayFromPrintedDate: false, sentence: f.sentence, detail: f.detail, reportedOn: f.reportedOn) }
+            if let p = printedDay, d > p { return Finding(step: f.step, day: nil, dayFromPrintedDate: false, sentence: f.sentence, detail: f.detail, reportedOn: f.reportedOn) }
+            return f
+        }
         return out.sorted { order($0) < order($1) }
     }
 
@@ -345,7 +358,8 @@ public nonisolated enum ProceedingEventExtractor {
     static let months: [String: Int] = [
         "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
     ]
-    static let monthPattern = #"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?"#
+    // "Oct. 21 and 22, 2015" / "May 3-5, 2019": a day range keeps its trailing year (ho15 adjudication H).
+    static let monthPattern = #"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*(?:and|-|–|through|to)\s*\d{1,2}(?:st|nd|rd|th)?)?(?:,?\s+(\d{4}))?"#
 
     /// "September 24, 2015" / "Sept. 24, 2015" (with year).
     static func fullDate(in text: String) -> DateComponents? {
@@ -373,27 +387,38 @@ public nonisolated enum ProceedingEventExtractor {
             // "announced today that Neal … was sentenced …. stated that on October 20, 2015, Neal sold …",
             // "Today's indictment alleges that Bagley stole … on June 22, 2014": a date inside a reported
             // statement or an account of the conduct is that conduct's day, not the step's (ho14 adjudication B).
-            return between.range(of: #"(?i)\b(?:stated|said|says|alleges?|alleged|alleging|admitted|according to|court (?:documents|records)|records show|evidence (?:showed|presented)|sold|stole|robbed|distributed|possessed|shot|killed|defrauded|received|transferred|wired)\b"#, options: .regularExpression) == nil
+            return between.range(of: #"(?i)\b(?:stated|said|says|alleges?|alleged|alleging|admitted|according to|court (?:documents|records)|records show|evidence (?:showed|presented)|sold|stole|robbed|distributed|possessed|shot|killed|defrauded|received|transferred|wired|selling|stealing|robbing|distributing|possessing|shooting|killing|defrauding|receiving|transferring|wiring|committing|manufacturing|carrying|using|making|smuggling|trafficking|embezzling)\b"#, options: .regularExpression) == nil
         }
         // "was sentenced today …, on December 15, 2023, Smith …" (two sentences a text conversion ran
         // together): "today"/"yesterday" attached to the step wins over a date further along.
         let attached = sentence.range(of: #"(?i)\b(?:sentenced|pleaded|pled|convicted|charged|indicted|arrested|arraigned|found guilty)\s+(?:\w+\s+){0,2}?(?:today|yesterday)\b"#, options: .regularExpression)
         if let re = try? NSRegularExpression(pattern: #"(?i)\bon\s+(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?"# + monthPattern + #"\b"#),
            let m = re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)).first(where: belongs),
-           attached.map({ NSRange($0, in: sentence).location > m.range.location }) ?? true,
+           // "was charged … with possessing … on June 25, 2013, and was sentenced today": a step that carries
+           // its own "today"/"yesterday" is dated by it — any explicit date in the sentence belongs to
+           // something else (ho15 adjudication B).
+           attached == nil,
            let month = months[String(ns.substring(with: m.range(at: 1)).lowercased().prefix(3))],
            let day = Int(ns.substring(with: m.range(at: 2))) {
-            let year = m.range(at: 3).location != NSNotFound ? Int(ns.substring(with: m.range(at: 3))) : printed?.year
+            var year = m.range(at: 3).location != NSNotFound ? Int(ns.substring(with: m.range(at: 3))) : printed?.year
+            // A date written without its year ("on October 11th") in a release printed January 16, 2014 is
+            // October 11, 2013 — a step reported by a release cannot come after it (ho15 adjudication H).
+            if m.range(at: 3).location == NSNotFound, let p = printed, let py = p.year, let pm = p.month, let pd = p.day,
+               month > pm || (month == pm && day > pd + 1) { year = py - 1 }
             if let year { return (DateComponents(year: year, month: month, day: day), false) }
         }
         // "was indicted in April 2016 and arrested yesterday": the step gives only a month, which a day
         // cannot represent — it stays undated rather than borrowing another verb's "yesterday" (ho14 B).
         if let end = stepEndUTF16, end <= ns.length,
-           ns.substring(from: end).range(of: #"(?i)^\s+in\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:of\s+)?(?:19|20)\d\d\b"#, options: .regularExpression) != nil {
+           ns.substring(from: end).range(of: #"(?i)^\s+(?:by\s+(?:a|the)\s+(?:federal\s+)?grand\s+jury\s+|on\s+(?:federal\s+)?charges\s+)?in\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:of\s+)?(?:19|20)\d\d\b"#, options: .regularExpression) != nil {
             return (nil, false)
         }
         guard let printed, let date = Calendar(identifier: .gregorian).date(from: printed) else { return (nil, false) }
-        if sentence.range(of: #"(?i)\btoday\b"#, options: .regularExpression) != nil { return (printed, true) }
+        // "was sentenced … on Friday, United States Attorney … announced today": "today" is the
+        // announcement's, the weekday is the step's (ho15 adjudication B).
+        let todayIsAnnouncement = sentence.range(of: #"(?i)\b(?:announced|said|stated|reported|confirmed)\s+today\b|\btoday\s+announced\b"#, options: .regularExpression) != nil
+        let stepWeekday = sentence.range(of: #"(?i)\b(?:sentenced|pleaded|pled|convicted|charged|indicted|arrested|arraigned|found guilty)\b[^.]{0,80}?\bon\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b(?!,?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))"#, options: .regularExpression) != nil
+        if sentence.range(of: #"(?i)\btoday\b"#, options: .regularExpression) != nil, !(todayIsAnnouncement && stepWeekday) { return (printed, true) }
         if sentence.range(of: #"(?i)\byesterday\b"#, options: .regularExpression) != nil,
            let y = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: date) {
             return (Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: y), true)
