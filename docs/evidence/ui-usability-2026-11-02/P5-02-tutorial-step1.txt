@@ -1,0 +1,257 @@
+AXWindow/AXStandardWindow title="Settings" id=<swiftui> [49,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1015,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1100x721]
+      AXGroup/AXHostingView [49,121 244x721]
+        AXScrollArea [49,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [69,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,302 228x38] actions=AXPress
+          AXButton desc="Work Center" help="Work Center — Run a guided workflow step by step — gated steps, per-field guidance, and a numbered document for every confirmed step" [57,343 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [57,384 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,797 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x721]
+      AXGroup/AXHostingView [49,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1108,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [341,172 760x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Settings" [365,196 102x31]
+          AXStaticText value="Investigations Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced." [365,233 707x26]
+          AXButton desc="Self-check found issues, 13/15 checks · all formats" help="Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds." [364,264 348x26] actions=AXPress
+          AXStaticText value="You" [365,314 24x16]
+          AXTextField [365,336 352x24] actions=AXConfirm
+          AXTextField [725,336 352x24] actions=AXConfirm
+          AXStaticText value="Recorded on every change, decision and export in your cases, and printed on notices and reports." [365,366 472x13]
+          AXImage desc="Exclamation Mark In A Filled Octagon" id=exclamationmark.octagon.fill [379,416 15x14]
+          AXStaticText value="Model won't run well" [406,415 133x16]
+          AXButton desc="Go Down" [1052,416 11x6] actions=AXPress
+          AXStaticText value="No reasoning model available — enable Local GGUF runtime for full quality answers." [406,435 505x16]
+          AXDisclosureTriangle value="0" desc="Answering & modes" [342,494 187x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Modules" [342,548 113x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Privacy" [342,602 106x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Background maintenance" [342,658 222x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Ingest options" [342,713 153x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Subscription" [342,768 143x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Your data" [342,823 119x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Help & feedback" [342,877 167x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Legal & privacy" [342,931 155x16] actions=AXPress
+          AXDisclosureTriangle value="1" desc="Advanced, Answering depth and diagnostics — power users only. The app works fully without touching these." [342,1007 534x33] actions=AXPress
+            AXImage desc="Wrench And Screwdriver Crossed" id=wrench.and.screwdriver [378,1015 16x16]
+            AXStaticText value="Advanced" [403,1007 71x19]
+            AXStaticText value="Answering depth and diagnostics — power users only. The app works fully without touching these." [403,1027 473x13]
+          AXStaticText value="Answering intelligence" [365,1056 162x19]
+          AXButton desc="Information about Speed vs. depth" id=info help="Shows what this does, what it needs and what follows" [533,1056 18x18] actions=AXPress
+          AXStaticText value="How the on-device brain composes answers. The deeper options give better, more faithful answers but run more model passes, so replies take longer. Turn them off for speed. All answers stay grounded in your evidence either way." [365,1085 690x26]
+          AXStaticText value="Answers come from your evidence only — no AI model is used. Turn on “Use AI to write answers” under Modules to choose on-device or your own cloud AI." [366,1136 701x26]
+          AXCheckBox value="1" desc="Show unconfirmed AI readings (marked)" [365,1202 264x16] actions=AXPress
+          AXStaticText value="When the evidence check cannot confirm what the AI read, show it anyway with the badge “Unverified — AI reading; evidence check failed” and no sources. Off = such readings are withheld and the answer falls back to checked material only. Keep this off for legal, compliance, or HR work." [365,1228 710x26]
+          AXCheckBox value="1" desc="Apple AI writes the final answer" [365,1279 211x16] actions=AXPress
+          AXStaticText value="The on-device model composes the answer prose from the experts' verified findings. Off = deterministic bullet answer from the ledger (fast)." [365,1306 680x13]
+          AXCheckBox value="1" desc="Parallel expert council (MoE)" [365,1329 194x16] actions=AXPress
+          AXStaticText value="A top-k gate runs specialist “super-experts” (Analyst, Skeptic, Historian, Connector, Quant) in parallel and folds their perspectives into the answer. Highest quality; adds several model passes (slower)." [365,1355 710x26]
+          AXCheckBox value="1" desc="Self-critique + refine" [365,1391 146x16] actions=AXPress
+          AXStaticText value="After drafting, the model fact-checks itself against the findings and revises. Improves faithfulness; adds ~2 model passes." [365,1417 588x13]
+          AXCheckBox value="1" desc="Relevance-gated experts" [365,1440 173x16] actions=AXPress
+          AXStaticText value="Only runs the experts that have supporting evidence for the question instead of all of them. Recommended on — faster with no quality loss." [365,1467 671x13]
+          AXStaticText value="Diagnostics" [365,1529 84x19]
+          AXImage desc="Exclamation Mark In A Filled Octagon" id=exclamationmark.octagon.fill [379,1570 22x21]
+          AXStaticText value="Release Readiness" [414,1568 133x19]
+          AXStaticText value="One button checks whether the app is ready to share. It runs the built-in tests and audits, then shows a single verdict — green means ready. Takes a couple of minutes; no internet." [414,1591 646x26]
+          AXButton desc="Check if ready to ship" [377,1627 185x29] actions=AXPress
+          AXButton desc="Full deep check (slow)" [377,1666 79x26] actions=AXPress
+          AXButton desc="Test on my real files" [472,1673 96x13] actions=AXPress
+          AXButton desc="Retrieval self-check" [584,1673 96x13] actions=AXPress
+          AXButton desc="Rebuild legal milestones" help="Scan ingested documents for legal/patent milestones (filed, hearing, objection, granted) and add them as dated events — the story spine." [696,1666 65x26] actions=AXPress
+          AXButton desc="Recover legacy .doc/.xls" help="Re-ingest legacy Word/Excel (.doc/.xls) files that failed before the real OLE2 parsers landed. Idempotent." [777,1673 117x13] actions=AXPress
+          AXButton desc="Wipe & re-ingest everything" help="Start fresh: erase all ingested data and re-ingest every source folder through the current pipeline. Destructive — clears the ledger (workspaces/reviews too). Runs in place; no relaunch needed." [910,1673 135x13] actions=AXPress
+          AXImage desc="Error" id=xmark.octagon.fill [378,1704 13x13]
+          AXStaticText value="RELEASE READY: NO" [399,1702 134x16]
+          AXStaticText value="· 0.1s · 15 checks" [539,1703 111x13]
+          AXStaticText value="✓" [381,1732 11x16]
+          AXStaticText value="Schema version" [401,1732 87x13]
+          AXStaticText value="schema head v168; migrations are a complete 1…168 sequence" [706,1732 359x13]
+          AXStaticText value="✓" [381,1750 11x16]
+          AXStaticText value="QueryCategoryClassifier (13 cases)" [401,1750 210x13]
+          AXStaticText value="all 13 question shapes classified correctly" [799,1750 266x13]
+          AXStaticText value="✓" [381,1768 11x16]
+          AXStaticText value="EvidenceRanker composite" [401,1768 148x13]
+          AXStaticText value="A=0.50 A=0.50 B=0.66 (B > A; all in [0,1])" [805,1768 260x13]
+          AXStaticText value="✓" [381,1786 11x16]
+          AXStaticText value="DatePrecision rendering" [401,1786 142x13]
+          AXStaticText value="day/month/year/decade phrasing intact" [836,1786 229x13]
+          AXStaticText value="✓" [381,1804 11x16]
+          AXStaticText value="ChatExportLoader regex (3 vendors)" [401,1804 210x13]
+          AXStaticText value="WhatsApp + Signal + Slack patterns all match" [793,1804 272x13]
+          AXStaticText value="✓" [381,1822 11x16]
+          AXStaticText value="IMessageLoader epoch (ns + sec)" [401,1822 192x13]
+          AXStaticText value="both columns converge on 2025-01-01 UTC" [823,1822 241x13]
+          AXStaticText value="✓" [381,1840 11x16]
+          AXStaticText value="Confidence aggregate clamp" [401,1840 161x13]
+          AXStaticText value="200×1.0 high-signal clamped to 0.980 < 0.99" [799,1840 266x13]
+          AXStaticText value="✓" [381,1858 11x16]
+          AXStaticText value="Reranker.questionShape (5 shapes)" [401,1858 204x13]
+          AXStaticText value="who/when/list/yes-no/statement all correct" [805,1858 260x13]
+          AXStaticText value="✓" [381,1876 11x16]
+          AXStaticText value="Convert exporters (PDF/RTF/PNG/DOCX/XLSX)" [401,1876 253x13]
+          AXStaticText value="all 5 formats produced valid output; DOCX/XLSX re-parsed as valid OOXML archives (parts present + main part decompresses)" [675,1876 389x13]
+          AXStaticText value="✓" [381,1894 11x16]
+          AXStaticText value="System modes + MoE council (all 3 modes)" [401,1894 247x13]
+          AXStaticText value="all 3 engines resolve with correct ingest policy; council gate returns 3 super-experts" [675,1894 389x13]
+          AXStaticText value="✓" [381,1912 11x16]
+          AXStaticText value="ProjectDelta fixture in bundle" [401,1912 185x13]
+          AXStaticText value="all 8 fixture files present" [898,1912 167x13]
+          AXStaticText value="✓" [381,1930 11x16]
+          AXStaticText value="PrivacyInfo.xcprivacy bundled" [401,1930 179x13]
+          AXStaticText value="PrivacyInfo.xcprivacy found in bundle" [836,1930 229x13]
+          AXStaticText value="✓" [381,1948 11x16]
+          AXStaticText value="Release capability profile" [401,1948 161x13]
+          AXStaticText value="live config matches locked v1 profile (ledger engine, zero-LLM ingest)" [632,1948 433x13]
+          AXStaticText value="✗" [381,1966 10x16]
+          AXStaticText value="Reasoning capability resolves" [401,1966 179x13]
+          AXStaticText value="no reasoning provider — install Ollama + pull a model, or add a cloud endpoint" [601,1966 464x13]
+          AXStaticText value="⚠" [381,1984 12x16]
+          AXStaticText value="Live data health (read-only)" [401,1984 173x13]
+          AXStaticText value="1 issue(s) flagged — see data-health-report.md" [780,1984 284x13]
+          AXDisclosureTriangle value="0" desc="More diagnostic tools (advanced)" [342,2024 253x15] actions=AXPress
+          AXStaticText value="Your AI model" [365,2093 99x19]
+          AXButton desc="Information about Pick the model that fits your Mac" id=info help="Shows what this does, what it needs and what follows" [472,2094 18x18] actions=AXPress
+          AXImage desc="Cpu Chip, Filled" id=cpu.fill [366,2124 13x13]
+          AXStaticText value="This Mac: Apple M4 · 16 GB RAM · medium tier" [389,2123 225x13]
+          AXStaticText value="Choose which model reasons over your archive. Auto adapts to your device; pick one to override." [365,2147 467x13]
+          AXButton desc="Auto — best fit for your device, Currently favours: Local GGUF runtime" [365,2171 712x51] actions=AXPress
+          AXButton desc="Cloud model (opt-in), large tier · 32K context · cloud, Fits your device" [365,2232 712x51] actions=AXPress
+          AXButton desc="Your cloud AI (Online mode), large tier · 200K context · cloud, Fits your device" [365,2293 712x51] actions=AXPress
+          AXButton desc="Local GGUF runtime, Recommended, medium tier · 8 GB RAM · 4K context · onDevice, Fits your device" [365,2354 712x51] actions=AXPress
+          AXButton desc="System language model, medium tier · 8K context · onDevice, Fits your device" [365,2415 712x51] actions=AXPress
+          AXStaticText value="Registered providers" [365,2514 149x19]
+          AXStaticText value="Cloud model (opt-in)" [365,2547 129x16]
+          AXStaticText value="cloud" [1046,2549 31x13]
+          AXStaticText value="extraction, longContext, reasoning, structuredOutput, summarization, textGeneration" [365,2565 410x13]
+          AXStaticText value="tier=large · context=32,768" [365,2580 167x13]
+          AXStaticText value="Local GGUF runtime" [365,2613 124x16]
+          AXStaticText value="onDevice" [1027,2615 49x13]
+          AXStaticText value="extraction, longContext, reasoning, structuredOutput, summarization, textGeneration" [365,2631 410x13]
+          AXStaticText value="tier=medium · context=4,096" [365,2646 167x13]
+          AXStaticText value="On-device sentence embedder" [365,2679 192x16]
+          AXStaticText value="onDevice" [1027,2681 49x13]
+          AXStaticText value="embedding" [365,2697 54x13]
+          AXStaticText value="tier=small · context=512" [365,2712 148x13]
+          AXStaticText value="System language model" [365,2745 148x16]
+          AXStaticText value="onDevice" [1027,2747 49x13]
+          AXStaticText value="classification, extraction, longContext, reasoning, structuredOutput, summarization, textGeneration, toolCalling" [365,2763 537x13]
+          AXStaticText value="tier=medium · context=8,192" [365,2778 167x13]
+          AXStaticText value="Your cloud AI (Online mode)" [365,2811 174x16]
+          AXStaticText value="cloud" [1046,2813 31x13]
+          AXStaticText value="extraction, longContext, reasoning, structuredOutput, summarization, textGeneration" [365,2829 410x13]
+          AXStaticText value="tier=large · context=2,00,000" [365,2844 179x13]
+          AXStaticText value="Your models" [365,2912 89x19]
+          AXStaticText value="Investigations Made Easy auto-detects models you've already installed (Ollama, MLX). You can also add .gguf files or your own cloud endpoint below." [365,2947 650x26]
+          AXImage desc="Cpu Chip" id=cpu [366,2991 13x13]
+          AXStaticText value="MLX checkpoints" [389,2989 107x16]
+          AXStaticText value="0 detected" [1024,2991 53x13]
+          AXStaticText value="Drop an MLX model directory into the folder below; Investigations Made Easy reads its config.json and registers it at the next launch." [365,3011 654x13]
+          AXButton desc="Open MLX Models folder" [365,3031 200x24] actions=AXPress
+          AXButton desc="Rescan" [573,3031 90x24] actions=AXPress
+          AXStaticText value="No MLX checkpoints registered." [365,3061 154x13]
+          AXImage desc="Document With A Plus Badge" id=doc.badge.plus [363,3116 14x16]
+          AXStaticText value="GGUF files" [387,3116 66x16]
+          AXStaticText value="0 added" [1037,3117 40x13]
+          AXStaticText value="Add any .gguf file (Hugging Face, TheBloke, custom builds). Investigations Made Easy parses its header for context-length + family." [365,3139 640x13]
+          AXButton desc="Add .gguf file…" [365,3158 139x24] actions=AXPress
+          AXStaticText value="No GGUF files added." [365,3188 104x13]
+          AXImage desc="Mostly Cloudy" id=cloud [366,3245 15x10]
+          AXStaticText value="Cloud endpoints" [390,3242 102x16]
+          AXStaticText value="0 added" [1037,3243 40x13]
+          AXStaticText value="Bring your own OpenAI / Anthropic / Azure / custom endpoint. API keys are stored in macOS Keychain. PrivacyGate still gates whether cloud calls are made." [365,3264 700x26]
+          AXTextField [373,3304 696x21] actions=AXConfirm
+          AXTextField value="https://api.openai.com/v1" [373,3329 696x21] actions=AXConfirm
+          AXTextField value="gpt-4o-mini" [373,3354 696x21] actions=AXConfirm
+          AXTextField/AXSecureTextField [373,3379 696x21] actions=AXConfirm
+          AXTextField value="128000" [373,3406 278x21] actions=AXConfirm
+          AXTextField value="openai" [659,3406 278x21] actions=AXConfirm
+          AXStaticText value="Tier" [946,3409 19x13]
+          AXPopUpButton value="large" [973,3404 96x24] actions=AXPress
+          AXButton desc="Add endpoint" [373,3432 128x24] actions=AXPress
+          AXStaticText value="No cloud endpoints added." [365,3470 130x13]
+          AXStaticText value="Pin a provider per capability" [365,3532 199x19]
+          AXStaticText value="Overrides the auto-recommendation. Choose "Auto" to let the registry rank by hardware + benchmark." [365,3559 494x13]
+          AXStaticText value="reasoning" [365,3584 67x15]
+          AXPopUpButton value="Auto" [553,3580 240x24] actions=AXPress
+          AXStaticText value="summarization" [365,3616 96x15]
+          AXPopUpButton value="Auto" [553,3612 240x24] actions=AXPress
+          AXStaticText value="extraction" [365,3648 74x15]
+          AXPopUpButton value="Auto" [553,3644 240x24] actions=AXPress
+          AXStaticText value="classification" [365,3680 104x15]
+          AXPopUpButton value="Auto" [553,3676 240x24] actions=AXPress
+          AXStaticText value="routing" [365,3712 52x15]
+          AXPopUpButton value="Auto" [553,3708 240x24] actions=AXPress
+          AXStaticText value="embedding" [365,3744 67x15]
+          AXPopUpButton value="Auto" [553,3740 240x24] actions=AXPress
+          AXStaticText value="Narrative Eval History" [365,3813 155x19]
+          AXStaticText value="Each run of the in-app SmokeTest with KALSMRITIKOSH_NARRATIVE_EVAL=1 lands here. Coverage / citation density / contradiction recall / confidence RMSE — arrows show movement vs the previous run." [365,3840 674x26]
+          AXImage desc="Chart Line" id=chart.line.uptrend.xyaxis [380,3886 14x12]
+          AXStaticText value="Narrative Eval" [404,3884 90x16]
+          AXStaticText value="0 runs" [1012,3885 31x13]
+          AXButton desc="Reload" [1052,3886 9x12] actions=AXPress
+          AXImage desc="Inbox" id=tray [700,3991 41x30]
+          AXStaticText value="No eval runs persisted yet." [627,4036 187x19]
+          AXStaticText value="Set KALSMRITIKOSH_NARRATIVE_EVAL=1 in the Run scheme's Environment, then run the in-app SmokeTest. Each run lands in this list." [487,4067 468x30]
+          AXScrollBar value="0" [1083,171 19x672]
+            AXValueIndicator value="0" [1092,175 6x110]
+            AXButton/AXIncrementPage [1092,285 6x553] actions=AXPress
+            AXButton/AXDecrementPage [1092,175 6x0] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXGroup id=tutorial.panel [1150,33 320x809]
+      AXStaticText value="Tutorial" [1165,99 61x13]
+      AXStaticText value="Step 1 of 10" id=tutorial.position [1376,100 57x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1442,100 13x13] actions=AXPress
+      AXStaticText value="You are in the sample case" [1164,124 171x16]
+      AXStaticText value="The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read." [1164,150 286x75]
+      AXStaticText value="What you should see" [1164,235 104x13]
+      AXStaticText value="Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened." [1164,250 280x39]
+      AXButton desc="Back" id=tutorial.back [1164,299 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Sources" [1218,299 91x20] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1411,299 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [49,33 1421x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [245,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [297,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [341,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [377,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Settings" [418,33 1004x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Settings" id=<swiftui> [49,33 1421x845] actions=AXRaise

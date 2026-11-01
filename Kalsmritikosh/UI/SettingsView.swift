@@ -142,7 +142,11 @@ public struct SettingsView: View {
                     Text("Investigations Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    // Usability evaluation 2026-11-02 (M4): a red developer self-check at the top of Settings
+                    // alarmed first-time users; the full self-test stays under Advanced ▸ Diagnostics.
+                    #if DEBUG
                     selfCheckChip
+                    #endif
                 }
                 InvestigatorProfileSection()
 
@@ -2507,8 +2511,9 @@ public struct SettingsView: View {
             // U-0 (privacy invariant closure): the old dev-only cloud toggle
             // was a false affordance — the product has no network entitlement
             // in any build, so there is nothing a switch could enable.
-            Label("This app has no network access; there is nothing to toggle.", systemImage: "lock.shield")
-            Text("Every model runs on this Mac. The app is built without the network permission, so no document, question, or answer can leave your computer.")
+            // Usability evaluation 2026-11-02: the statement must stay true with Online mode in the product.
+            Label("The app itself has no network permission. In Private mode — the default — nothing leaves this Mac.", systemImage: "lock.shield")
+            Text("Every on-device model runs on this Mac. Only if you turn on Online mode (Settings ▸ Modules ▸ Connection) can a request you approve be sent, through a separate sandboxed helper — to AI Included, your own AI provider, or a public-record lookup. Each send is shown to you first and recorded.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

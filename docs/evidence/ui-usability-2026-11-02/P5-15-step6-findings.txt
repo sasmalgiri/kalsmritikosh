@@ -1,0 +1,200 @@
+AXWindow/AXStandardWindow title="Findings" id=<swiftui> [49,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1015,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1100x721]
+      AXGroup/AXHostingView [49,121 244x721]
+        AXScrollArea [49,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [69,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Findings" help="Findings — Every fact by status — proven, inferred, contradicted, missing" [57,302 228x38] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,343 228x38] actions=AXPress
+          AXButton desc="Work Center" help="Work Center — Run a guided workflow step by step — gated steps, per-field guidance, and a numbered document for every confirmed step" [57,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,797 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x721]
+      AXGroup/AXHostingView [49,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1108,139 12x13] actions=AXCancel,AXPress
+        AXImage desc="Verified" id=checkmark.seal.fill [317,189 12x12] actions=AXCancel
+        AXStaticText value="3" [335,188 8x15] actions=AXCancel
+        AXStaticText value="Proven" [348,189 33x13] actions=AXCancel
+        AXImage desc="Person Cropped In A Circle With A Tick Badge" id=person.crop.circle.badge.checkmark [410,190 13x11] actions=AXCancel
+        AXStaticText value="0" [429,188 8x15] actions=AXCancel
+        AXStaticText value="Confirmed by you" [442,189 85x13] actions=AXCancel
+        AXImage desc="Magic Wand With Stars" id=wand.and.stars [558,190 10x10] actions=AXCancel
+        AXStaticText value="3" [575,188 8x15] actions=AXCancel
+        AXStaticText value="Inferred" [588,189 38x13] actions=AXCancel
+        AXImage desc="Warning" id=exclamationmark.triangle.fill [657,191 10x9] actions=AXCancel
+        AXStaticText value="14" [673,188 16x15] actions=AXCancel
+        AXStaticText value="Contradicted" [694,189 63x13] actions=AXCancel
+        AXImage desc="Question Mark In A Dashed Square" id=questionmark.square.dashed [789,191 9x9] actions=AXCancel
+        AXStaticText value="3" [805,188 8x15] actions=AXCancel
+        AXStaticText value="Missing" [818,189 37x13] actions=AXCancel
+        AXImage desc="Dotted Circle" id=circle.dotted [886,190 10x10] actions=AXCancel
+        AXStaticText value="27" [902,188 16x15] actions=AXCancel
+        AXStaticText value="Unverified" [923,189 49x13] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7ae70348d0> {pid=52913}" desc="View" [438,232 565x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Timeline" id=calendar.day.timeline.left [438,232 113x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=doc.text.magnifyingglass [551,232 113x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Contradictions" id=arrow.triangle.branch [664,232 113x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Missing Proof" id=questionmark.square.dashed [777,232 113x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Needs Review" id=checkmark.seal [890,232 113x24] actions=AXPress
+        AXScrollArea [293,269 856x573] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [326,295 789x1148] actions=AXScrollToTop,AXScrollToBottom
+            AXImage desc="Warning" id=exclamationmark.triangle.fill [326,303 16x14]
+            AXStaticText value="Conflicting dates for "Delivery delayed"" [361,295 230x15]
+            AXStaticText value="Conflicts with a second source; both claims are preserved and not reconciled automatically." [361,314 442x13]
+            AXStaticText value="2 Nov 2026" [362,331 76x13]
+            AXButton desc="2 sources" [449,332 68x13] actions=AXPress
+            AXButton desc="Review" [528,332 55x13] actions=AXPress
+            AXStaticText value="Contradicted" [1049,298 66x13]
+            AXImage desc="Warning" id=exclamationmark.triangle.fill [326,385 16x14]
+            AXStaticText value="Conflicting dates for "Contract modified"" [361,377 239x15]
+            AXStaticText value="Conflicts with a second source; both claims are preserved and not reconciled automatically." [361,396 442x13]
+            AXStaticText value="2 Nov 2026" [362,414 76x13]
+            AXButton desc="2 sources" [449,414 68x13] actions=AXPress
+            AXButton desc="Review" [528,414 55x13] actions=AXPress
+            AXStaticText value="Contradicted" [1049,380 66x13]
+            AXImage desc="Warning" id=exclamationmark.triangle.fill [326,468 16x14]
+            AXStaticText value="Conflicting dates for "Invoice issued"" [361,460 216x15]
+            AXStaticText value="Conflicts with a second source; both claims are preserved and not reconciled automatically." [361,479 442x13]
+            AXStaticText value="2 Nov 2026" [362,496 76x13]
+            AXButton desc="2 sources" [449,497 68x13] actions=AXPress
+            AXButton desc="Review" [528,497 55x13] actions=AXPress
+            AXStaticText value="Contradicted" [1049,463 66x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,550 15x15]
+            AXStaticText value="document title — Amendment No. 7 — Project Delta Master Supply Agreement" [361,542 450x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,561 231x13]
+            AXStaticText value="30 Oct 2026" [362,580 81x13]
+            AXStaticText value="100%" [459,580 29x13]
+            AXButton desc="Review" [505,580 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,545 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,635 15x15]
+            AXStaticText value="email date — Mon, 22 Jan 2024 10:14:00 +0000" [361,627 278x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,646 231x13]
+            AXStaticText value="30 Oct 2026" [362,665 81x13]
+            AXStaticText value="100%" [459,665 29x13]
+            AXButton desc="Review" [505,665 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,630 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,720 15x15]
+            AXStaticText value="email subject — Invoice No. 401 — Project Delta milestone 1" [361,712 344x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,731 231x13]
+            AXStaticText value="30 Oct 2026" [362,750 81x13]
+            AXStaticText value="100%" [459,750 29x13]
+            AXButton desc="Review" [505,750 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,715 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,805 15x15]
+            AXStaticText value="email to — ap@northwind.example" [361,797 199x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,816 231x13]
+            AXStaticText value="30 Oct 2026" [362,835 81x13]
+            AXStaticText value="100%" [459,835 29x13]
+            AXButton desc="Review" [505,835 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,800 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,890 15x15]
+            AXStaticText value="email from — ar@supplier-abc.com" [361,882 203x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,901 231x13]
+            AXStaticText value="30 Oct 2026" [362,920 81x13]
+            AXStaticText value="100%" [459,920 29x13]
+            AXButton desc="Review" [505,920 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,885 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,975 15x15]
+            AXStaticText value="email date — Fri, 14 Jun 2024 09:02:00 +0000" [361,967 270x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,986 231x13]
+            AXStaticText value="30 Oct 2026" [362,1005 81x13]
+            AXStaticText value="100%" [459,1005 29x13]
+            AXButton desc="Review" [505,1005 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,970 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,1060 15x15]
+            AXStaticText value="email subject — Invoice No. 432 — Project Delta milestone 2 — OVERDUE" [361,1052 422x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,1071 231x13]
+            AXStaticText value="30 Oct 2026" [362,1090 81x13]
+            AXStaticText value="100%" [459,1090 29x13]
+            AXButton desc="Review" [505,1090 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,1055 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,1145 15x15]
+            AXStaticText value="email to — ap@northwind.example" [361,1137 199x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,1156 231x13]
+            AXStaticText value="30 Oct 2026" [362,1175 81x13]
+            AXStaticText value="100%" [459,1175 29x13]
+            AXButton desc="Review" [505,1175 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,1140 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,1230 15x15]
+            AXStaticText value="email from — ar@supplier-abc.com" [361,1222 203x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,1241 231x13]
+            AXStaticText value="30 Oct 2026" [362,1260 81x13]
+            AXStaticText value="100%" [459,1260 29x13]
+            AXButton desc="Review" [505,1260 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,1225 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,1315 15x15]
+            AXStaticText value="document title — Master Supply Agreement — Project Delta" [361,1307 343x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,1326 231x13]
+            AXStaticText value="30 Oct 2026" [362,1345 81x13]
+            AXStaticText value="100%" [459,1345 29x13]
+            AXButton desc="Review" [505,1345 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,1310 52x13]
+            AXImage desc="Dotted Circle" id=circle.dotted [326,1400 15x15]
+            AXStaticText value="email date — Tue, 23 Apr 2024 09:55:00 +0000" [361,1392 278x15]
+            AXStaticText value="Asserted with no supporting evidence attached." [361,1411 231x13]
+            AXStaticText value="30 Oct 2026" [362,1430 81x13]
+            AXStaticText value="100%" [459,1430 29x13]
+            AXButton desc="Review" [505,1430 55x13] actions=AXPress
+            AXStaticText value="Unverified" [1063,1395 52x13]
+          AXScrollBar value="0" [1131,268 19x575]
+            AXValueIndicator value="0" [1140,272 6x81]
+            AXButton/AXIncrementPage [1140,353 6x485] actions=AXPress
+            AXButton/AXDecrementPage [1140,272 6x0] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXButton [594,477 10x22] actions=AXPress
+    AXGroup id=tutorial.panel [1150,33 320x809]
+      AXStaticText value="Tutorial" [1165,99 61x13]
+      AXStaticText value="Step 6 of 10" id=tutorial.position [1374,100 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the Tutorial." [1442,100 13x13] actions=AXPress
+      AXStaticText value="Review conflicting accounts" [1164,124 181x16]
+      AXStaticText value="Open Findings ▸ Contradictions. The first-lot delivery date was given as about 13 May 2024 (8 April email), then 28 May 2024 (18 April email and the amendment)." [1164,150 286x60]
+      AXStaticText value="What you should see" [1164,220 104x13]
+      AXStaticText value="A row “Conflicting dates for “Delivery delayed”” — “Conflicts with a second source; both claims are preserved and not reconciled automatically”, 2 sources, “Review”. An estimate that was later revised is shown as a conflict to review, not labelled wrong — you decide what it means and record why." [1164,235 292x65]
+      AXButton desc="Back" id=tutorial.back [1164,310 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Findings" [1218,310 91x21] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1411,310 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [49,33 1421x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [245,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [297,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [341,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [377,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+      AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Findings" [418,33 1004x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Findings" id=<swiftui> [49,33 1421x845] actions=AXRaise

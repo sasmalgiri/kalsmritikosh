@@ -1,0 +1,3 @@
+Mon Nov  2 03:47:49 IST 2026
+Pre-existing Debug instance pid 30817: no AX windows (menubar only), no ledger sqlite open (only .tipkit); not launched by this run; terminated with kill -TERM.
+Also running and NOT touched: pid 51430 ~/CaseBench/dd-ho16 bench host.

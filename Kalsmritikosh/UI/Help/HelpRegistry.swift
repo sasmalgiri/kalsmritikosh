@@ -264,6 +264,16 @@ public nonisolated enum HelpRegistry {
             controls: ["Read with AI…", "Translate into English with AI…", "Challenge this answer with AI…", "Draft a report paragraph with AI…"],
             destination: .sources, keywords: ["ocr", "scan", "translation", "devil's advocate", "review", "draft", "report"]),
         HelpTopic(
+            id: "task-protect-source", kind: .task, title: "Keep a confidential source's name out of everything you export or send",
+            summary: "Record the person once; their name and aliases are then replaced in every export, refused in sealed files, and masked in every Online send.",
+            steps: [
+                "Professional Jobs ▸ the Journalist profession ▸ run “Source-document vault” (or “Source map”) for the case.",
+                "In the vault result, set Protected identity to yes on the source's row and enter the person's name and any aliases in the Identity column (separate several with ;). In the Source map, set Protection to confidential source and fill “Identity to protect”.",
+                "From then on every report, copy and export replaces the name with [PROTECTED SOURCE] and checks that it is gone; a sealed or signed file (a receipt, a slice, a proof bundle) that would contain it is not exported at all.",
+                "Online sends mask the name whatever the masking setting; a send in which it would still be recoverable is refused."
+            ],
+            destination: .work, keywords: ["confidential", "source", "protect", "anonymous", "whistleblower", "redact", "identity", "journalist", "vault"]),
+        HelpTopic(
             id: "task-online-tools", kind: .task, title: "Online tools: exchange rates, sanctions, registries, courts, web capture, transcription",
             summary: "Public-record lookups and captures in Online mode, each shown to you before it is sent and recorded; results are leads, not findings.",
             steps: [

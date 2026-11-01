@@ -19,6 +19,10 @@ import SwiftUI
 
 public struct ReviewView: View {
     @Environment(AppState.self) private var appState
+    /// Usability evaluation 2026-11-02 (B3): each claim's source is named and opens at the claim.
+    @State private var sourceNames: [UUID: String] = [:]
+    @State private var viewingSource: ViewedSource?
+    struct ViewedSource: Identifiable { let id = UUID(); let url: URL; let objectID: UUID; let quote: String }
 
     private enum Mode: String, CaseIterable { case contradictions, gaps
         var title: String { self == .contradictions ? "Contradictions" : "Missing Evidence" }
@@ -54,6 +58,13 @@ public struct ReviewView: View {
         }
         .background(AuroraBackdrop(intensity: 0.5))
         .task { await reload() }
+        .sheet(item: $viewingSource) { v in
+            VStack(spacing: 0) {
+                SourceViewer(url: v.url, koID: v.objectID, quote: v.quote)
+                HStack { Spacer(); Button("Done") { viewingSource = nil }.keyboardShortcut(.defaultAction) }.padding(10)
+            }
+            .frame(minWidth: 720, minHeight: 520)
+        }
     }
 
     private var header: some View {
@@ -316,9 +327,24 @@ public struct ReviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
             Text(claim).font(.callout).textSelection(.enabled)
-            if evidence != nil {
-                Label("source on file", systemImage: "doc.text.magnifyingglass")
-                    .font(.caption2).foregroundStyle(.tertiary)
+            if let ev = evidence {
+                Button {
+                    Task {
+                        if let url = try? await appState.objects?.fetchSourceURL(id: ev) {
+                            viewingSource = ViewedSource(url: url, objectID: ev, quote: claim)
+                        }
+                    }
+                } label: {
+                    Label(sourceNames[ev] ?? "Open the source", systemImage: "doc.text.magnifyingglass").font(.caption2)
+                }
+                .buttonStyle(.link)
+                .help("Open this source at the passage that states the claim.")
+                .accessibilityIdentifier("review.contradiction.source")
+                .task(id: ev) {
+                    if sourceNames[ev] == nil, let names = try? await appState.objects?.sourceFilenames(for: [ev]) {
+                        sourceNames.merge(names) { a, _ in a }
+                    }
+                }
             } else {
                 Label("source not linked", systemImage: "questionmark.circle")
                     .font(.caption2).foregroundStyle(.tertiary)
