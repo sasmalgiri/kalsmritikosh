@@ -232,14 +232,50 @@ public nonisolated enum HelpRegistry {
             keywords: ["approve", "redact", "print", "copy", "report", "output"]),
         HelpTopic(
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
-            summary: "Private (the default) opens no connection for your documents. Online is optional and uses your own AI-provider account.",
+            summary: "Private (the default) opens no connection for your documents. Online is optional and uses AI Included or your own AI-provider account.",
             steps: [
-                "Settings ▸ Modules ▸ Connection switches Online on with your own Claude, OpenAI or Gemini key. A badge shows while it is on; one click returns to Private.",
+                "Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included (with an AI Included plan) or your own Claude, OpenAI or Gemini key. A badge shows while it is on; one click returns to Private.",
                 "Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked.",
-                "Each send is recorded before it leaves. Providers may retain what they receive under their own terms, and they bill your account — the subscription to this app includes no provider usage.",
+                "Each send is recorded before it leaves. Providers may retain what they receive under their own terms. With your own key they bill your account; AI Included questions are part of the AI Included plan.",
                 "Subscribing never turns Online on. The test host and the sample case never send anything."
             ],
             destination: .settings, keywords: ["cloud", "api key", "claude", "openai", "gemini", "network", "consent"]),
+        HelpTopic(
+            id: "task-ai-included", kind: .task, title: "AI Included: questions without an AI account of your own",
+            summary: "The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay; top-ups of 200 last 12 months.",
+            steps: [
+                "Choose an AI Included plan on the subscription screen (there is no free trial with AI Included). Then Settings ▸ Online ▸ Provider ▸ AI Included (Claude Opus 5).",
+                "Every send is still shown to you first and recorded. The relay checks the subscription with Apple, counts the question and passes the request to Anthropic; it keeps only counts.",
+                "Settings ▸ Online ▸ “Check questions left” shows this month's count; the button beside it buys 200 more through the App Store.",
+                "If the service's monthly capacity is reached, AI Included pauses until the 1st and says so; everything else keeps working and your own key can be used meanwhile.",
+                "Online AI is not offered for App Store accounts in mainland China."
+            ],
+            controls: ["Check questions left"],
+            destination: .settings, keywords: ["opus", "relay", "quota", "top-up", "questions left", "paused", "subscription", "country"]),
+        HelpTopic(
+            id: "task-online-ai-helps", kind: .task, title: "Read a scan, translate, challenge or draft with AI",
+            summary: "Online helps that work only from your documents and always say what they are: AI output is marked and is never the original or a finding.",
+            steps: [
+                "Sources ▸ Needs attention ▸ “Read with AI…” sends the page images of a scan the Mac could not read; the transcription is added as its own document that names the original.",
+                "In a document's details, “Translate into English with AI…” adds a marked English translation; quote the original, not the translation.",
+                "Right-click an answer: “Challenge this answer with AI…” lists weaknesses, other explanations and missing evidence from the answer's own passages; “Draft a report paragraph with AI…” writes a cited paragraph to edit.",
+                "Every point the AI makes is checked against the passages sent; invented passage labels and uncited sentences are flagged."
+            ],
+            controls: ["Read with AI…", "Translate into English with AI…", "Challenge this answer with AI…", "Draft a report paragraph with AI…"],
+            destination: .sources, keywords: ["ocr", "scan", "translation", "devil's advocate", "review", "draft", "report"]),
+        HelpTopic(
+            id: "task-online-tools", kind: .task, title: "Online tools: exchange rates, sanctions, registries, courts, web capture, transcription",
+            summary: "Public-record lookups and captures in Online mode, each shown to you before it is sent and recorded; results are leads, not findings.",
+            steps: [
+                "Sources ▸ “Online tools…” (Online mode only).",
+                "Exchange rate: an amount converted at the European Central Bank reference rate of a date, with a citation line.",
+                "Sanctions lists: the complete OFAC and UN lists are downloaded and searched on this Mac — the name you check is not sent. A match on a name is a possible match until identifiers agree.",
+                "Company registry (GLEIF) and court records (CourtListener): the name you search is sent to that service.",
+                "Capture a web page: the page as the site returned it, with a record of address, time, status and SHA-256, added to your archive.",
+                "Transcribe a recording: speaker labels and timecodes through AI Included or your Gemini key; the transcript is marked as AI output."
+            ],
+            controls: ["Online tools…"],
+            destination: .sources, keywords: ["fx", "currency", "ofac", "un", "sanctions", "lei", "company", "court", "capture", "web", "transcribe", "audio", "speakers"]),
         HelpTopic(
             id: "task-keys-backup-erase", kind: .task, title: "Encryption, backup, recovery key, erasure and holds",
             summary: "The ledger is encrypted on this Mac; a complete backup carries everything with a recovery key; erasure is complete or refused, and a hold you created blocks it.",

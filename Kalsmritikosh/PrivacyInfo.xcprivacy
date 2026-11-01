@@ -11,9 +11,10 @@
 
       Private mode (the default) runs entirely on-device. The main
       app has no network entitlement; the embedded network helper
-      (KalsmritikoshNetworkHelper) can reach only the three Online
-      providers, and only when the person turns Online mode on and
-      approves each send. See docs/DATA_FLOW_INVENTORY.md — the one
+      (KalsmritikoshNetworkHelper) can reach only the Online AI
+      providers, the AI Included relay, five public-record sources and
+      pages the person asks to capture — only in Online mode, each send
+      approved first. See docs/DATA_FLOW_INVENTORY.md — the one
       source for every privacy statement. All on-disk data
       is owned by the user and lives in the app sandbox container
       (~/Library/Containers/<bundle-id>/Data) or in user-selected
@@ -29,17 +30,57 @@
     <array/>
 
     <!--
-      Personal-data categories the app collects (= sends off-device).
-      OPEN DECISION (review L1, 2026-10-27): the publisher receives
-      nothing, but Online mode, when the person turns it on, sends the
-      question and, if allowed, document passages to the third-party
-      AI provider they chose. Whether that must be declared here (and
-      on the App Store label) is an owner/counsel decision recorded in
-      docs/DATA_FLOW_INVENTORY.md §4. The array stays empty until that
-      decision is made; it is NOT a finding that nothing leaves the Mac.
+      Personal-data categories the app collects (= sends off-device and
+      kept beyond the request). AGENT DETERMINATION 2026-11-01 (an agent
+      review, not a legal approval — docs/DISTRIBUTION_PACK.md §1): with
+      AI Included, approved questions, passages, page images and recordings
+      go through the publisher's relay to Anthropic / Google under the
+      publisher's account, and those providers may keep them up to 30 days
+      → Other User Content and Audio Data, not linked (the relay forwards
+      no identifier). The relay keeps the subscription's App Store
+      transaction number with question counts → Purchase History, linked.
+      All for App Functionality only; never tracking. Nothing is sent in
+      Private mode or without the person's approval of each send.
     -->
     <key>NSPrivacyCollectedDataTypes</key>
-    <array/>
+    <array>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeAudioData</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <true/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+    </array>
 
     <!--
       Required-reason API declarations (per

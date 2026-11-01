@@ -37,7 +37,7 @@
 </div></nav>
 <div class="wrap">
   <h1 data-claims-exempt="heading">Privacy Policy</h1>
-  <div class="date" data-claims-exempt="narrative">Last updated: 27 October 2026 · Publisher: Eco Sanskriti Innovation · Contact: sasmalgiri@gmail.com</div>
+  <div class="date" data-claims-exempt="narrative">Last updated: 1 November 2026 · Publisher: Eco Sanskriti Innovation · Contact: sasmalgiri@gmail.com</div>
 
   <div class="box" data-claim="privacy.never-leaves privacy.nothing-collected"><strong>The short version.</strong> Investigations Made Easy is a private, on-device application.
   <strong>In Private mode — the default — your documents, the knowledge built from them, your questions, and the answers never leave your Mac.</strong>
@@ -68,8 +68,9 @@
   is ordinary system behaviour when you open a cited source file or a link in another app.</p>
 
   <h2 data-claims-exempt="heading">Online mode (optional)</h2>
-  <p data-claim="privacy.online-opt-in">Online mode is off unless you turn it on (Settings ▸ Modules ▸ Connection). You then enter your own API key
-  for a cloud AI provider you choose — Anthropic, OpenAI or Google — and the key is stored in your Mac's Keychain.</p>
+  <p data-claim="privacy.online-opt-in">Online mode is off unless you turn it on (Settings ▸ Modules ▸ Connection). You then choose how AI is reached:
+  <strong>AI Included</strong> (part of the AI Included plans, below), or your own API key for a cloud AI provider you choose — Anthropic, OpenAI or Google —
+  stored in your Mac's Keychain.</p>
   <p data-claim="privacy.online-record-reading">Online mode has separate parts, each with its own switch. <strong>Understanding a question's wording</strong> sends only your
   question and the names of the fields your documents hold — never document text. <strong>Letting your cloud AI read the documents
   about a person</strong> (off until you turn it on) sends up to eight of the documents that name that person, up to 7,000 characters
@@ -82,15 +83,37 @@
   document text, and asks every time.</p>
   <p data-claim="privacy.consent-before-send">When an answer would be worded by that provider, the app first shows you exactly what would be sent —
   passages from your documents and your question, the destination and its size — and nothing is sent until you agree.
-  You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first. The text goes
-  directly from your Mac to that provider, under your own account and that provider's terms and privacy policy; it never
-  passes through any server of ours, and every send is recorded on your Mac. Only a separate, sandboxed helper inside the
-  app can connect, and only to those three providers over HTTPS. One click returns you to Private mode.</p>
+  You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first. With your own key,
+  the text goes directly from your Mac to that provider, under your own account and that provider's terms and privacy policy,
+  and never passes through any server of ours. Every send is recorded on your Mac. Only a separate, sandboxed helper inside the
+  app can connect, over HTTPS, and only to the destinations listed on this page. One click returns you to Private mode.</p>
+
+  <h2 data-claims-exempt="heading">AI Included</h2>
+  <p data-claim="privacy.ai-included-relay">With an AI Included plan, approved requests go from your Mac to our relay, which checks with Apple that your
+  AI Included subscription is active and passes the request on to Anthropic's commercial API (or, for transcribing a recording, to
+  Google's paid Gemini API) under our account. The relay identifies you only by the App Store transaction number of the subscription —
+  no name, email or Apple ID. It keeps only counts: how many questions you used this month, the top-ups you bought, and how much the
+  service spent. It never stores or logs a question, a passage, a recording or an answer. Anthropic and Google keep what they
+  receive under their commercial terms (Anthropic deletes inputs and outputs within 30 days by default, with stated exceptions;
+  neither uses them for training). Every AI Included send is shown to you first and recorded on your Mac, exactly as with your own key.</p>
+  <p data-claim="privacy.ai-by-country">Where generative AI services may not be offered — mainland China in this release — the app
+  switches Online AI off for App Store accounts of that country. The country is the one Apple sells in for your Apple account; the
+  app does not read your location or IP address.</p>
+
+  <h2 data-claims-exempt="heading">Online tools (optional)</h2>
+  <p data-claim="privacy.online-tools">In Online mode, Sources ▸ Online tools can look things up in public records. Exchange rates come from the
+  European Central Bank (the currency and date are sent). Sanctions checks download the complete public OFAC and UN lists and
+  search them on your Mac — <strong>the name you check is not sent</strong>. Company-registry (GLEIF) and court-record
+  (CourtListener) searches send the name you search to that service. A web capture fetches the https page you enter, from your
+  network. Recording transcription sends the recording to AI Included or to your own Gemini key. Each of these is shown to you
+  before it is sent (the list downloads carry nothing of yours) and recorded on your Mac.</p>
 
   <h2 data-claims-exempt="heading">Subscription, trial and purchase</h2>
   <p data-claim="privacy.purchase-by-apple">The subscription, its free introductory trial, renewals, refunds, restores and any earlier one-time purchase are handled by Apple through the App Store.
   Investigations Made Easy itself opens no connection for them and never sees your payment details; the App Store only tells the app
-  which verified plan or purchase this Apple account holds and until when. Subscribing turns nothing else on: it does not enable Online mode or send anything anywhere.</p>
+  which verified plan or purchase this Apple account holds and until when. Subscribing turns nothing else on: it does not enable Online mode or send anything anywhere. When you choose an AI Included
+  plan, the app asks the relay only whether AI Included is open to new subscribers this month; checking your remaining questions or
+  adding a top-up sends only the subscription's transaction number.</p>
 
   <h2 data-claims-exempt="heading">Sync through a folder (optional)</h2>
   <p data-claim="privacy.sync-encrypted">If you turn on sync, the app writes your notes, tags, groups, highlights, PDF marks and the

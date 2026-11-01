@@ -21,7 +21,7 @@ Resume from this table. A row is "done" only with a commit and a check that ran;
 | A4 | Read with AI: scans the Mac could not read, page images to the Online AI, transcription added as a marked document citing the original | A2 | agent | done (unit + provider path) | (A4 commit) | ScanRescueTests | live read on a real scan with AI Included after deploy |
 | A5–A7 | Translate into English (marked document); Challenge this answer (a review, never a finding); Draft a report paragraph — from cleared passages only, citations checked | A2 | agent | done (unit) | (A5–A7 commit) | AIAssistTests | live run with AI Included after deploy |
 | A8–A11 | ECB exchange rate at a date; OFAC + UN sanctions lists matched on the Mac; GLEIF registry; CourtListener; web capture with record; recording transcription with speakers | A2 | agent | done (unit + client path) | (A8–A11 commit) | OnlineToolsTests | live lookups against the real sources at release (network) |
-| A12 | Privacy label, terms, policy, Help for the online features | A4–A11 | agent | open | — | — | — |
+| A12 | Privacy label, terms, policy, Help for the online features | A4–A11 | agent | done (agent review; claims + help tests) | (A12 commit) | check-claims, HelpRegistryTests 10/10 | publisher legal name to match App Store Connect (docs say "Eco Sanskriti Innovation") |
 | UI-K | Run k (UI automation repair + journeys) | N2–N8 | agent | open | — | — | diagnose host-callback timeouts |
 | J-168 | 168 jobs / nine persona journeys on current code | UI-K | agent | open | — | — | — |
 | ACC | Scorer review on consumed data, freeze, fresh set, adjudication packs | N1–N8 | agent → adjudicators | open | — | — | — |

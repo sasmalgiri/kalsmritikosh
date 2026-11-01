@@ -39,8 +39,25 @@ The two outcomes for the owner and counsel to choose between, with App Review cl
 - **(b) Other User Content (+ Search History)** collected, linked, App Functionality, applying only when
   Online mode is used.
 
-The privacy manifest's `NSPrivacyCollectedDataTypes` stays empty, and is documented as an open
-decision, until they decide.
+### Agent determination — 2026-11-01 (AGENT REVIEW, not a human or legal approval)
+
+The owner directed (2026-11-01) that agents replace human and legal reviews, recorded as agent work.
+AI Included settles the open question above: the publisher now sends content to third parties under
+**its own** account, and they may keep it beyond the request (Anthropic: up to 30 days by default).
+Apple's definition of "collect" is met for that path. The App Store privacy label is therefore:
+
+| Data type (App Store Connect) | Collected when | Linked to the user? | Tracking? | Purpose |
+|---|---|---|---|---|
+| Other User Content (questions, document passages, page images) | AI Included or own-key Online AI, each send approved | **No** — the relay forwards no identifier to the provider | No | App Functionality |
+| Audio Data (recordings sent for transcription) | Transcription through AI Included or own Gemini key | **No** | No | App Functionality |
+| Purchase History (the AI Included subscription's App Store transaction number, with question counts) | AI Included use, status check, top-up | **Yes** (the relay keeps it with the counts) | No | App Functionality |
+
+Not declared, with reasons: Search History (questions are covered as Other User Content); Contacts,
+Location, Identifiers for tracking, Diagnostics (none sent); public-record lookups (GLEIF, CourtListener,
+ECB) are requests the person makes to those public services from their own Mac — the publisher has no
+partnership with them and receives nothing; the sanctions lists are downloads that carry nothing of the
+person's. The privacy manifest (`Kalsmritikosh/PrivacyInfo.xcprivacy`) declares the same three types.
+If App Review asks, the answers are in docs/privacy.html (sections "AI Included" and "Online tools").
 
 ## 2. Required-reason APIs — done
 

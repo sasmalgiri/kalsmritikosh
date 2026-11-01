@@ -67,7 +67,7 @@ Proof kinds:
 | `privacy.no-egress` | `no network connections` | ci:sensitive-export |
 | `privacy.on-device` | `100% on-device` | ci:sensitive-export |
 | `privacy.never-leaves` | `never leave your Mac` | ci:sensitive-export |
-| `privacy.no-servers` | `No servers. No accounts. No analytics` | ci:sensitive-export |
+| `privacy.no-servers` | `No accounts. No analytics` | ci:sensitive-export |
 | `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
@@ -82,6 +82,9 @@ Proof kinds:
 | `privacy.online-opt-in` | `Online mode is off unless you turn it on` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
 | `privacy.provider-terms` | `goes to OpenAI in this release` | grep:mayReceiveDocuments:Kalsmritikosh/Routing/Providers/Online/OnlineProviderKind.swift |
 | `privacy.consent-before-send` | `nothing is sent until you agree` | grep:OutboundConsentSheet:Kalsmritikosh |
+| `privacy.ai-included-relay` | `It keeps only counts` | grep:counts only:relay/src/index.ts |
+| `privacy.ai-by-country` | `switches Online AI off for App Store accounts` | grep:AI_BLOCKED_STOREFRONTS:relay/src/policy.ts |
+| `privacy.online-tools` | `the name you check is not sent` | test:client |
 | `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState.swift |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
 | `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |

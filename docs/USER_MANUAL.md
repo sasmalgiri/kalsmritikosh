@@ -124,14 +124,50 @@ Screen: **Cases**.
 
 ### Private and Online modes, and what a provider may charge
 
-Private (the default) opens no connection for your documents. Online is optional and uses your own AI-provider account.
+Private (the default) opens no connection for your documents. Online is optional and uses AI Included or your own AI-provider account.
 
-1. Settings ▸ Modules ▸ Connection switches Online on with your own Claude, OpenAI or Gemini key. A badge shows while it is on; one click returns to Private.
+1. Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included (with an AI Included plan) or your own Claude, OpenAI or Gemini key. A badge shows while it is on; one click returns to Private.
 2. Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked.
-3. Each send is recorded before it leaves. Providers may retain what they receive under their own terms, and they bill your account — the subscription to this app includes no provider usage.
+3. Each send is recorded before it leaves. Providers may retain what they receive under their own terms. With your own key they bill your account; AI Included questions are part of the AI Included plan.
 4. Subscribing never turns Online on. The test host and the sample case never send anything.
 
 Screen: **Settings**.
+
+### AI Included: questions without an AI account of your own
+
+The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay; top-ups of 200 last 12 months.
+
+1. Choose an AI Included plan on the subscription screen (there is no free trial with AI Included). Then Settings ▸ Online ▸ Provider ▸ AI Included (Claude Opus 5).
+2. Every send is still shown to you first and recorded. The relay checks the subscription with Apple, counts the question and passes the request to Anthropic; it keeps only counts.
+3. Settings ▸ Online ▸ “Check questions left” shows this month's count; the button beside it buys 200 more through the App Store.
+4. If the service's monthly capacity is reached, AI Included pauses until the 1st and says so; everything else keeps working and your own key can be used meanwhile.
+5. Online AI is not offered for App Store accounts in mainland China.
+
+Screen: **Settings**.
+
+### Read a scan, translate, challenge or draft with AI
+
+Online helps that work only from your documents and always say what they are: AI output is marked and is never the original or a finding.
+
+1. Sources ▸ Needs attention ▸ “Read with AI…” sends the page images of a scan the Mac could not read; the transcription is added as its own document that names the original.
+2. In a document's details, “Translate into English with AI…” adds a marked English translation; quote the original, not the translation.
+3. Right-click an answer: “Challenge this answer with AI…” lists weaknesses, other explanations and missing evidence from the answer's own passages; “Draft a report paragraph with AI…” writes a cited paragraph to edit.
+4. Every point the AI makes is checked against the passages sent; invented passage labels and uncited sentences are flagged.
+
+Screen: **Sources**.
+
+### Online tools: exchange rates, sanctions, registries, courts, web capture, transcription
+
+Public-record lookups and captures in Online mode, each shown to you before it is sent and recorded; results are leads, not findings.
+
+1. Sources ▸ “Online tools…” (Online mode only).
+2. Exchange rate: an amount converted at the European Central Bank reference rate of a date, with a citation line.
+3. Sanctions lists: the complete OFAC and UN lists are downloaded and searched on this Mac — the name you check is not sent. A match on a name is a possible match until identifiers agree.
+4. Company registry (GLEIF) and court records (CourtListener): the name you search is sent to that service.
+5. Capture a web page: the page as the site returned it, with a record of address, time, status and SHA-256, added to your archive.
+6. Transcribe a recording: speaker labels and timecodes through AI Included or your Gemini key; the transcript is marked as AI output.
+
+Screen: **Sources**.
 
 ### Encryption, backup, recovery key, erasure and holds
 
