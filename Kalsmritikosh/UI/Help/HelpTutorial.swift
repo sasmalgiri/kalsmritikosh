@@ -21,6 +21,8 @@
 //
 
 import SwiftUI
+import AppKit
+import os
 
 public nonisolated struct TutorialStep: Identifiable, Sendable, Equatable {
     public let id: String
@@ -120,6 +122,8 @@ public nonisolated enum HelpTutorial {
 /// The tutorial column beside the sample case while the tutorial runs. Back/Next, position, Show me,
 /// Stop; nothing advances by itself; keyboard-operable buttons; no motion.
 struct TutorialPanel: View {
+    /// The column's width, given by the window (UI run k: a fixed 320 pt overflowed an 1100-pt window).
+    var width: CGFloat = 320
     @State private var progress = HelpTutorial.progress
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -164,12 +168,42 @@ struct TutorialPanel: View {
                 .controlSize(.small)
             }
             .padding(14)
-            .frame(width: 320, alignment: .topLeading)
+            .frame(width: width, alignment: .topLeading)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(.regularMaterial)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("tutorial.panel")
             .transaction { $0.animation = nil }
         }
+    }
+}
+
+
+/// UI run k — widens the window for the tutorial column and gives the width back afterwards.
+@MainActor
+enum TutorialWindowRoom {
+    private static var added: CGFloat = 0
+
+    static func adjust(running: Bool, by extra: CGFloat) {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }),
+              let screen = window.screen ?? NSScreen.main else {
+            KalsmritikoshLog.app.error("Tutorial column: no window to widen")
+            return
+        }
+        var frame = window.frame
+        let visible = screen.visibleFrame
+        if running {
+            let target = min(visible.width, frame.width + extra)
+            added = max(0, target - frame.width)
+            guard added > 0 else { return }
+            frame.size.width = target
+            if frame.maxX > visible.maxX { frame.origin.x = max(visible.minX, visible.maxX - frame.width) }
+        } else {
+            guard added > 0 else { return }
+            frame.size.width = max(window.minSize.width, frame.width - added)
+            added = 0
+        }
+        window.setFrame(frame, display: true, animate: false)
+        KalsmritikoshLog.app.info("Tutorial column: window width \(window.frame.width, privacy: .public) (running \(running, privacy: .public))")
     }
 }

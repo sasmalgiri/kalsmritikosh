@@ -83,8 +83,9 @@ public struct QualityStrip: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-                // RC-5 — the receipt reads aloud as one sentence.
-                .accessibilityLabel("Answer receipt. " + QualityStrip.formatLine(answer))
+                // UI run k: no `.accessibilityLabel` here. Selectable text is AppKit-backed, and a SwiftUI label
+                // override on it sent the label resolver into unbounded recursion (main-thread stack overflow)
+                // whenever an assistive client read a fresh answer — the I-1 crash family. The line reads as itself.
             if !answer.contradictions.isEmpty {
                 Button {
                     conflictsExpanded.toggle()

@@ -522,21 +522,32 @@ public struct RootView: View {
             // macOS 26 split-view sizing already noted for the Ask surface). A flexible root has no ideal
             // height, so the window keeps its own size and the split view fills it.
             GeometryReader { geo in
+                // UI run k: both widths are given explicitly. Left to itself the split view kept its own
+                // minimum width beside the tutorial column, so the row overflowed the window — the sidebar
+                // was pushed off the left edge and Next / Stop off the right.
+                let tutorial = SampleArchiveMode.isActive && HelpTutorial.progress.isRunning
+                let panel = tutorial ? min(320, max(240, (geo.size.width * 0.28).rounded())) : 0
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         // §1.1 — the sample ledger announces itself on every screen.
                         if SampleArchiveMode.isActive { SampleArchiveBanner() }
                         main
                     }
+                    .frame(width: max(0, geo.size.width - (tutorial ? panel + 1 : 0)), height: geo.size.height)
+                    .clipped()
                     // §6.2 — the replayable tutorial is a column beside the sample case (UI run j: as an
                     // overlay it covered the Ask composer's Send button). It exists only in the sample
                     // mode, so replaying it cannot touch the person's own archive.
-                    if SampleArchiveMode.isActive && HelpTutorial.progress.isRunning {
+                    if tutorial {
                         Divider()
-                        TutorialPanel()
+                        TutorialPanel(width: panel)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+                // The split view keeps a minimum width of its own (about 1 040 pt), so the column needs
+                // room beside it: the window grows by the column's width while the tutorial runs (within
+                // the screen) and gives it back when it stops.
+                .onChange(of: tutorial) { _, running in TutorialWindowRoom.adjust(running: running, by: 321) }
             }
         }
     }

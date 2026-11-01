@@ -1,0 +1,37 @@
+header: 2026-11-01 23:18:47.00 +0530 1.0 1
+exception: {"codes": "0x0000000000000002, 0x000000016e6e3ff0", "message": "Could not determine thread index for stack guard region", "rawCodes": [2, 6147686384], "type": "EXC_BAD_ACCESS", "signal": "SIGSEGV", "subtype": "KERN_PROTECTION_FAILURE at 0x000000016e6e3ff0"}
+termination: {"flags": 0, "code": 11, "namespace": "SIGNAL", "indicator": "Segmentation fault: 11", "byProc": "exc handler", "byPid": 20478}
+asi: null
+faulting thread 0 None com.apple.main-thread
+  libobjc.A.dylib objc::DenseMapBase<objc::DenseMap<DisguisedPtr<objc_object>, objc::SmallDenseMap<void const*, objc::ObjcAssociation, 1u, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::SmallDenseMap<void const*, objc::ObjcAssociation, 1u, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::SmallDenseMap<void const*, objc::ObjcAssociation, 1u, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>, DisguisedPtr<objc_object>, objc::SmallDenseMap<void const*, objc::ObjcAssociation, 1u, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::SmallDenseMap<void const*, objc::ObjcAssociation, 1u, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::SmallDenseMap<void const*, objc::ObjcAssociation, 1u, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>::find(DisguisedPtr<objc_object> const&)  
+  libobjc.A.dylib objc_getAssociatedObject  
+  AppKit _NSAccessibilityOverrideValueForAttribute  
+  AppKit ___NSAccessibilityEntryPointValueForAttribute_block_invoke.772  
+  AppKit NSAccessibilityPerformEntryPointObject  
+  AppKit _NSAccessibilityEntryPointValueForAttribute  
+  SwiftUI PlatformAccessibilityElementProtocol<>.valueForAttribute<A>(_:asType:)  
+  SwiftUI AccessibilityNode.resolvedRole(forPlatformElement:)  
+  SwiftUI AccessibilityNode.labelExposedAs.getter  
+  SwiftUI AccessibilityNode.labelsToResolve.getter  
+  SwiftUI AccessibilityNode.accessibilityLabel()  
+  SwiftUI @objc AccessibilityNode.accessibilityLabel()  
+  SwiftUI closure #4 in AccessibilityNode.applyProperties(to:)  
+  SwiftUI partial apply for closure #4 in AccessibilityNode.applyProperties(to:)  
+  SwiftUI thunk for @escaping @callee_guaranteed () -> (@out Any?)  
+  AppKit _accessibilityGetAssociatedObjectForAttribute  
+  AppKit NSAccessibilityGetObjectValueForAttribute  
+  AppKit _NSAccessibilityOverrideValueForAttribute  
+  AppKit ___NSAccessibilityEntryPointValueForAttribute_block_invoke.772  
+  AppKit NSAccessibilityPerformEntryPointObject  
+  AppKit _NSAccessibilityEntryPointValueForAttribute  
+  SwiftUI PlatformAccessibilityElementProtocol<>.valueForAttribute<A>(_:asType:)  
+  SwiftUI AccessibilityNode.accessibilityLabel()  
+  SwiftUI @objc AccessibilityNode.accessibilityLabel()  
+  SwiftUI closure #4 in AccessibilityNode.applyProperties(to:)  
+  SwiftUI partial apply for closure #4 in AccessibilityNode.applyProperties(to:)  
+  SwiftUI thunk for @escaping @callee_guaranteed () -> (@out Any?)  
+  AppKit _accessibilityGetAssociatedObjectForAttribute  
+  AppKit NSAccessibilityGetObjectValueForAttribute  
+  AppKit _NSAccessibilityOverrideValueForAttribute  
+frames: 94
+[('_NSAccessibilityOverrideValueForAttribute', 6), ('___NSAccessibilityEntryPointValueForAttribute_block_invoke.7', 6), ('NSAccessibilityPerformEntryPointObject', 6), ('_NSAccessibilityEntryPointValueForAttribute', 6), ('PlatformAccessibilityElementProtocol<>.valueForAttribute<A>(', 5), ('AccessibilityNode.accessibilityLabel()', 5)]

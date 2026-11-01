@@ -22,6 +22,7 @@ GUARDS=(
   release-check-selftest.sh
   test-host-boundary.sh
   relay-host-match.sh
+  ax-label-recursion.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do

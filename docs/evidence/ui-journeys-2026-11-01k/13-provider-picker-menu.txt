@@ -1,0 +1,7 @@
+          AXStaticText value="Provider" [503,3228 50x16]
+          AXPopUpButton value="Claude (Anthropic)" [561,3224 162x24] actions=AXPress
+            AXMenu [549,787 163x82] actions=AXCancel
+              AXMenuItem title="Claude (Anthropic)" id=menuAction: [549,792 163x24] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="OpenAI" id=menuAction: [549,816 163x24] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="Gemini (Google)" id=menuAction: [549,840 163x24] actions=AXCancel,AXPress,AXPick
+          AXStaticText value="Anthropic's commercial API: by default, inputs and outputs are deleted within 30 days, with exceptions for usage-policy enforcement and legal requirements; zero retention needs a separate agreement. Under the commercial terms they are not used for training. This app's publisher receives nothing — that does not mean the provider keeps nothing." [503,3256 707x39]
