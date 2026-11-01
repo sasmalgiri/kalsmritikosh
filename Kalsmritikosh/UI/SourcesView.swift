@@ -310,7 +310,7 @@ public struct SourcesView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Needs attention — \(failedAttempts.count) file(s) could not be read", systemImage: "exclamationmark.triangle")
                     .font(.headline).foregroundStyle(.orange)
-                Text("These files are in the archive but hold no readable text, so no answer, job or report draws on them. Press Read again (text recognition can fail while the Mac is busy), re-scan with text (OCR), supply a readable copy, or record that the original is unreadable.")
+                Text("These files are in the archive but hold no readable text, so no answer, job or report draws on them. Press Read again (text recognition can fail while the Mac is busy), Read with AI (Online mode: the pages are read by your Online AI and added as a marked transcription), re-scan with text (OCR), supply a readable copy, or record that the original is unreadable.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if let readAgainResult { Text(readAgainResult).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("sources.readAgain.result") }
                 ForEach(failedAttempts) { a in
@@ -339,6 +339,22 @@ public struct SourcesView: View {
                                 .disabled(reason: readingAgain != nil ? "Another file is being read." : nil, remedy: "Wait for it to finish.",
                                           help: "Read this file again. A scan whose text recognition failed while the Mac was busy is often read the second time.")
                                 .accessibilityIdentifier("sources.readAgain")
+                                // A4 — scans the Mac could not read, read by the Online AI with consent.
+                                if ["pdf", "png", "jpg", "jpeg", "tif", "tiff", "heic", "gif", "bmp", "webp"].contains(url.pathExtension.lowercased()) {
+                                    Button("Read with AI…") {
+                                        Task {
+                                            readingAgain = a.url
+                                            readAgainResult = await appState.readWithAI(url)
+                                            readingAgain = nil
+                                            await refresh()
+                                        }
+                                    }
+                                    .controlSize(.small)
+                                    .disabled(reason: readingAgain != nil ? "Another file is being read." : (OnlineSettings.cloudAllowed ? nil : (AIRegion.current.explanation ?? "Online mode is off.")),
+                                              remedy: OnlineSettings.cloudAllowed ? "Wait for it to finish." : "Switch on Online mode in Settings ▸ Modules and choose AI Included or your own provider.",
+                                              help: "Send the page images to your Online AI (shown to you first) and add its transcription as a separate, clearly marked document that cites this file. The file itself is not changed.")
+                                    .accessibilityIdentifier("sources.readWithAI")
+                                }
                             }
                         }
                     }

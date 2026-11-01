@@ -65,6 +65,16 @@ public nonisolated struct OutboundHTTPRequest: Codable, Sendable {
     public let body: Data
 }
 
+/// A4 — one page image sent for reading (JPEG or PNG), alongside the text prompt.
+public nonisolated struct OutboundImage: Sendable, Equatable {
+    public let mediaType: String   // "image/jpeg" or "image/png"
+    public let data: Data
+    public let label: String       // e.g. "page 3", shown in the preview and the outbound record
+    public init(mediaType: String, data: Data, label: String) {
+        self.mediaType = mediaType; self.data = data; self.label = label
+    }
+}
+
 public nonisolated struct OutboundHTTPResponse: Codable, Sendable {
     public let status: Int
     public let body: Data
@@ -72,15 +82,30 @@ public nonisolated struct OutboundHTTPResponse: Codable, Sendable {
 
 public nonisolated enum OnlineRequestBuilder {
 
+    public enum BuildError: Error, LocalizedError, Equatable {
+        case imagesNotSupported(String)
+        public var errorDescription: String? {
+            switch self { case .imagesNotSupported(let p): return "\(p) is not set up to read page images in this release — nothing was sent." }
+        }
+    }
+
     public static func build(kind: OnlineProviderKind, model: String, apiKey: String,
-                             system: String?, prompt: String, maxTokens: Int) throws -> OutboundHTTPRequest {
+                             system: String?, prompt: String, maxTokens: Int,
+                             images: [OutboundImage] = []) throws -> OutboundHTTPRequest {
+        // A4 — page images go first, then the instruction (the order Anthropic recommends).
+        let anthropicContent: Any = images.isEmpty ? prompt as Any :
+            images.map { ["type": "image", "source": ["type": "base64", "media_type": $0.mediaType, "data": $0.data.base64EncodedString()]] as [String: Any] }
+            + [["type": "text", "text": prompt]]
+        let geminiParts: [[String: Any]] = images.map { ["inline_data": ["mime_type": $0.mediaType, "data": $0.data.base64EncodedString()]] }
+            + [["text": prompt]]
+        if !images.isEmpty, kind == .openai { throw BuildError.imagesNotSupported(kind.displayName) }
         switch kind {
         case .included:
             // The relay fixes the model and the output ceiling itself; it reads only these fields.
             var body: [String: Any] = [
                 "model": model,
                 "max_tokens": max(1024, min(maxTokens, 4096)),
-                "messages": [["role": "user", "content": prompt]]
+                "messages": [["role": "user", "content": anthropicContent]]
             ]
             if let system, !system.isEmpty { body["system"] = system }
             return try AIIncludedRelay.request("/v1/messages", subscription: apiKey, body: body)
@@ -90,7 +115,7 @@ public nonisolated enum OnlineRequestBuilder {
             var body: [String: Any] = [
                 "model": model,
                 "max_tokens": max(1024, min(maxTokens, 16_000)),
-                "messages": [["role": "user", "content": prompt]],
+                "messages": [["role": "user", "content": anthropicContent]],
                 "fallbacks": "default"
             ]
             if let system, !system.isEmpty { body["system"] = system }
@@ -113,7 +138,7 @@ public nonisolated enum OnlineRequestBuilder {
                 body: try JSONSerialization.data(withJSONObject: body))
         case .gemini:
             var body: [String: Any] = [
-                "contents": [["role": "user", "parts": [["text": prompt]]]],
+                "contents": [["role": "user", "parts": geminiParts]],
                 "generationConfig": ["maxOutputTokens": max(256, min(maxTokens, 16_000))]
             ]
             if let system, !system.isEmpty { body["systemInstruction"] = ["parts": [["text": system]]] }

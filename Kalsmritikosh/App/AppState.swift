@@ -468,6 +468,51 @@ public final class AppState {
         }
     }
 
+    /// A4 — Sources ▸ Needs attention ▸ Read with AI: a scan the Mac could not read is sent, page images
+    /// in batches, to the Online provider (each batch previewed and consented), and the transcription is
+    /// added as its own clearly named document that cites the original. Returns what happened.
+    public func readWithAI(_ url: URL) async -> String {
+        guard let ingest else { return "The ledger is not open yet." }
+        guard PurchaseCenter.shared.allowPaidAction("read your folders", importing: true) else { return PaidUse.refusal("read your folders", importing: true)?.reason ?? "Reading documents needs a subscription." }
+        guard OnlineSettings.cloudAllowed else {
+            return AIRegion.current.explanation ?? "Read with AI needs Online mode: switch it on in Settings ▸ Modules and choose AI Included or your own provider."
+        }
+        guard let provider = onlineProvider, await provider.isAvailable() else { return OnlineCloudProvider.OnlineError.notAvailable.localizedDescription }
+        var opened: URL?
+        for root in bookmarks.roots {
+            guard let r = try? bookmarks.resolve(root) else { continue }
+            if url.standardizedFileURL.path.hasPrefix(r.standardizedFileURL.path + "/") { opened = r; break }
+            bookmarks.stopAccessing(r)
+        }
+        defer { if let opened { bookmarks.stopAccessing(opened) } }
+        let scoped = opened == nil && url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let (images, total) = try ScanRescue.pageImages(of: url)
+            let originalSHA = ScanRescue.sha256(of: url)
+            var parts: [String] = []
+            for start in stride(from: 0, to: images.count, by: ScanRescue.pagesPerRequest) {
+                let batch = Array(images[start..<min(start + ScanRescue.pagesPerRequest, images.count)])
+                parts.append(try await provider.readPageImages(batch, fileName: url.lastPathComponent))
+            }
+            let body = parts.joined(separator: "\n\n")
+            guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return ScanRescue.RescueError.nothingReturned.localizedDescription }
+            let s = OnlineSnapshot.current()
+            let text = ScanRescue.document(original: url, originalSHA256: originalSHA, provider: s.kind.displayName, model: s.model,
+                                           pagesRead: images.count, totalPages: total, at: Date(), body: body)
+            let out = try ScanRescue.folder().appendingPathComponent(ScanRescue.fileName(for: url))
+            try text.write(to: out, atomically: true, encoding: .utf8)
+            let r = try await ingest.ingest(fileAt: out, intent: .fullAvailable)
+            await runPostIngestChecksSinceLast()
+            return "Added “\(out.lastPathComponent)”: \(r.chunkCount) passage\(r.chunkCount == 1 ? "" : "s") from \(images.count) page\(images.count == 1 ? "" : "s"). It is marked as an AI transcription — check it against the original."
+        } catch is CancellationError {
+            return "Stopped. Nothing was added."
+        } catch {
+            KalsmritikoshLog.app.error("Read with AI failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return "Not read with AI: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Device-suitable model install (consent-gated)
 
     /// User declined the suggested lighter model — hide the prompt for this session.
