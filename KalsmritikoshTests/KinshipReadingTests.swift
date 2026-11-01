@@ -30,4 +30,11 @@ struct KinshipReadingTests {
         #expect(E.relation(in: "Asha Rao was present when Meera Rao married Dev Sharma.", from: "Asha Rao", to: "Dev Sharma") == nil)
         #expect(E.relation(in: "Asha Rao was present when Meera Rao married Dev Sharma.", from: "Meera Rao", to: "Dev Sharma") == "married")
     }
+
+    @Test("Re-review 2026-11-02: a possessive names someone else — 'married Dev Sharma's sister' is not 'married Dev Sharma'")
+    func possessive() {
+        #expect(E.relation(in: "Asha Rao married Dev Sharma's sister in 1920.", from: "Asha Rao", to: "Dev Sharma") == nil)
+        #expect(E.relation(in: "Meera Rao, daughter of Asha Rao's brother, was born in 1901.", from: "Meera Rao", to: "Asha Rao") == nil)
+    }
 }
+

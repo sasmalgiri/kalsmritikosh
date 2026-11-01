@@ -7523,7 +7523,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.secure-share" : {
-    "purpose" : "Prepare a redacted copy to share — sensitive details masked and checked first, so nothing private leaks.",
+    "purpose" : "Prepare a sharing copy: only the items you clear are included, email addresses and phone numbers are masked, and you list any other redactions yourself.",
     "steps" : [
       {
         "fields" : [

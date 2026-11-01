@@ -386,8 +386,13 @@ private struct KnowledgeListView: View {
     }
 
     @MainActor
-    private func saveDossier(_ body: String, suggestedName: String) {
+    private func saveDossier(_ raw: String, suggestedName: String) {
         #if canImport(AppKit)
+        let body: String
+        switch ProtectedExport.prepare(raw) {
+        case .success(let safe): body = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let mdType = UTType(filenameExtension: "md") {
             panel.allowedContentTypes = [mdType]

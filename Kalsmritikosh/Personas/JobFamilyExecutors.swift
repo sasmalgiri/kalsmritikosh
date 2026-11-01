@@ -117,6 +117,9 @@ nonisolated enum JobText {
         if let facts, facts.documentsNotRead > 0 {
             out.append("\(facts.documentsNotRead) document(s) in this case are beyond the \(StudioCaseFacts.documentReadingLimit)-document reading limit: their names, amounts and dates were not read, so a person or date found only there is missing here and \"no date stated\" or \"uncorroborated\" may be wrong for them.")
         }
+        if let facts, facts.valuesTruncated {
+            out.append("The case names more than \(StudioCaseFacts.valueLimit) people, organisations or amounts, or states more than \(StudioCaseFacts.dateLimit) dates; those beyond the limit were not read, so a row may be missing for them.")
+        }
         if let facts, facts.eventsTruncated {
             out.append("The case has more than \(StudioCaseFacts.eventLimit) dated events; only the first \(StudioCaseFacts.eventLimit) were read.")
         }
@@ -171,7 +174,7 @@ public nonisolated enum InventoryExecutor {
             case .catalogue, .records: title = doc.name
             }
             if style == .records {
-                for d in dates where JobText.matches(d.title, #"expir|renew|valid until|due|deadline"#) {
+                for d in dates where JobText.matches(d.title, #"(?i)\b(?:expir\w*|renew\w*|valid (?:until|through|till)|due (?:on|by|date)|payment due|deadline)\b"#) {
                     flags.append((d.date < e.now ? "passed: " : "upcoming: ") + JobText.day(d.date))
                 }
             }

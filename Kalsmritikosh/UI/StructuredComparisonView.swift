@@ -148,7 +148,11 @@ public struct StructuredComparisonView: View {
 
     private func exportMarkdown(_ brief: ComparisonBrief) {
         #if canImport(AppKit)
-        let md = "# Comparison brief\n\n" + brief.text + "\n"
+        let md: String
+        switch ProtectedExport.prepare("# Comparison brief\n\n" + brief.text + "\n") {
+        case .success(let safe): md = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let mdType = UTType(filenameExtension: "md") { panel.allowedContentTypes = [mdType] }
         panel.nameFieldStringValue = "comparison-brief.md"

@@ -186,7 +186,8 @@ public nonisolated enum ChronologyExecutor {
                                      date: day, flags: ["date stated in text"], refs: d.refs))
         }
         rows.sort { $0.date == $1.date ? $0.title < $1.title : ($0.date ?? "") < ($1.date ?? "") }
-        var limitations: [String] = []
+        // Re-review 2026-11-02: the chronology states the reading limits too.
+        var limitations: [String] = JobText.withheldLimitation(0, facts: facts)
         let cited = Set((facts.events + facts.statedDates).flatMap(\.refs).compactMap(\.objectID))
         let silent = facts.documents.filter { !cited.contains($0.objectID) }
         if !silent.isEmpty {

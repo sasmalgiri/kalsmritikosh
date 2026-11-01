@@ -695,6 +695,11 @@ nonisolated enum JobResultMarkdown {
             out += "\n## Not included (rejected by the reviewer)\n" + rejected.map { "- \($0.title)\($0.note.map { " — \($0)" } ?? "")" }.joined(separator: "\n") + "\n"
         }
         if !r.content.nextActions.isEmpty { out += "\n## Next actions\n" + r.content.nextActions.map { "- \($0)" }.joined(separator: "\n") + "\n" }
+        // Re-review 2026-11-02 (Individual): a sharing copy also masks email addresses and phone numbers in
+        // what it carries; other details are masked by the person in the Redactions column.
+        if Self.disclosureRule[r.jobID] != nil {
+            out = PIIRedactor().redact(out, policy: RedactionPolicy(redactEmails: true, redactPhones: true, customTerms: [], token: "[MASKED]")).redactedText
+        }
         return out
     }
 }

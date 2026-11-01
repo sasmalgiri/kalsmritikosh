@@ -326,7 +326,9 @@ struct JobAcceptanceScenarioTests {
             let chart = LineageChart.mermaid(rows: r.content.rows) ?? ""
             return expect(daughter != nil && !(daughter?.refs.isEmpty ?? true), "a stated kinship is not drawn with its source")
                 + expect(r.content.rows.contains { $0.title == "Meera Rao — married — Dev Sharma" }, "a marriage stated by the register is not drawn")
-                + expect(chart.contains("-->") && !chart.contains("-.->"), "a sourced relationship drawn as unproven")
+                // Re-review 2026-11-02: a draft's sourced readings are "not yet reviewed" (dotted), never "unproven";
+                // only the researcher's acceptance draws them solid.
+                + expect(!chart.contains(LineageChart.unprovenLabel) && chart.contains(LineageChart.unreviewedLabel), "a sourced relationship drawn as unproven")
                 + expect(r.content.rows.contains { $0.flags.contains("vital event") && $0.date == "1990-05-02" }, "a birth is not on the timeline")
         }
         m["inv.data-lab"] = { r, e in

@@ -1441,6 +1441,8 @@ public final class AppState {
                 // PII-masking setting; a send in which one survives is refused.
                 // N7 — an unreadable register is an error the provider refuses on, never an empty list.
                 protectedNames: { [db] in try await JobResultRepository(database: db).protectedIdentityNames() })
+            // Re-review 2026-11-02: the in-memory register every synchronous export checks (nil = unreadable).
+            ProtectedIdentityCache.set(try? await JobResultRepository(database: db).protectedIdentityNames())
             self.onlineProvider = online
             await capabilities.register(online)
 

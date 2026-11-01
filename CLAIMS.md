@@ -65,14 +65,14 @@ Proof kinds:
 | `answers.refuses-unsupported` | `refuses when the record` | test:missingEvidenceIncomplete |
 | `journalism.reply-gate` | `right of reply enforced` | test:stages |
 | `privacy.no-egress` | `no network connections` | ci:sensitive-export |
-| `privacy.on-device` | `100% on-device` | ci:sensitive-export |
+| `privacy.on-device` | `on-device by default` | ci:sensitive-export |
 | `privacy.never-leaves` | `never leave your Mac` | ci:sensitive-export |
 | `privacy.no-servers` | `No accounts. No analytics` | ci:sensitive-export |
 | `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.nothing-collected` | `no servers that keep your content` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
-| `privacy.no-upload` | `Nothing is uploaded, ever` | ci:sensitive-export |
+| `privacy.no-upload` | `Nothing is uploaded unless you choose Online mode` | ci:sensitive-export |
 | `privacy.offline` | `Works fully offline` | ci:sensitive-export |
 | `privacy.no-copy` | `not copied to us` | ci:sensitive-export |
 | `privacy.local-only` | `stored in the app's encrypted local database` | ci:sensitive-export |

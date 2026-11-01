@@ -167,8 +167,11 @@ public actor JobResultRepository {
         if content.review == nil {
             content.rows = content.rows.map { r in var r = r; if r.sourced == nil && r.manual != true { r.sourced = r.generatedValues }; return r }
         }
-        return try await write(caseID: caseID, [Write(jobID: jobID, family: family, state: state, content: content, expectedCurrent: nil)],
-                               requireOpen: false, actor: actor, at: date)[0]
+        let id = try await write(caseID: caseID, [Write(jobID: jobID, family: family, state: state, content: content, expectedCurrent: nil)],
+                                 requireOpen: false, actor: actor, at: date)[0]
+        // Re-review 2026-11-02: a change to the protected-identity register reaches every export at once.
+        if jobID == "jrn.source-vault" || jobID == "jrn.source-map" { ProtectedIdentityCache.set(try? await protectedIdentityNames()) }
+        return id
     }
 
     private func write(caseID: UUID, _ writes: [Write], requireOpen: Bool, actor: String, at date: Date) async throws -> [UUID] {

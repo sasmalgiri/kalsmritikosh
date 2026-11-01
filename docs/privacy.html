@@ -99,7 +99,9 @@
   neither uses them for training). Every AI Included send is shown to you first and recorded on your Mac, exactly as with your own key.</p>
   <p data-claim="privacy.ai-by-country">Where generative AI services may not be offered — mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria and Cuba in this release — the app
   switches Online AI off for App Store accounts of that country. The country is the one Apple sells in for your Apple account; the
-  app does not read your location or IP address.</p>
+  app itself does not read your location or IP address. The AI Included relay, which runs on Cloudflare, also refuses requests that
+  arrive from those countries: Cloudflare sees each request's IP address and tells the relay only the country it comes from, which
+  the relay uses for that check and does not keep.</p>
 
   <h2 data-claims-exempt="heading">Online tools (optional)</h2>
   <p data-claim="privacy.online-tools">In Online mode, Sources ▸ Online tools can look things up in public records. Exchange rates come from the

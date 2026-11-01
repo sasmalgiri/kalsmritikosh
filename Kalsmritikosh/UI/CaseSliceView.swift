@@ -79,6 +79,11 @@ struct CaseSliceView: View {
             return
         }
         #if canImport(AppKit)
+        // Re-review 2026-11-02: a signed slice is not altered; one holding a protected identity is refused.
+        let check = JSONEncoder(); check.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if case .failure(let refusal) = ProtectedExport.prepare(String(decoding: (try? check.encode(slice)) ?? Data(), as: UTF8.self), refuseIfPresent: true) {
+            status = refusal.reason; return
+        }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "slice-\(tag).json"

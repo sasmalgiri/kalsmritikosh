@@ -167,7 +167,11 @@ public struct CrossDocumentMatrixView: View {
 
     private func exportMarkdown() {
         #if canImport(AppKit)
-        let md = CrossDocumentMatrix.markdown(query: query, rows: rows)
+        let md: String
+        switch ProtectedExport.prepare(CrossDocumentMatrix.markdown(query: query, rows: rows)) {
+        case .success(let safe): md = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let mdType = UTType(filenameExtension: "md") { panel.allowedContentTypes = [mdType] }
         let safe = query.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
@@ -197,6 +201,7 @@ public struct CrossDocumentMatrixView: View {
             let sealed = VerifiableReceipt.seal(title: "Cross-document matrix: \(q)", drafts: drafts)
             let json = ReceiptSigner.exportJSON(sealed)
             await MainActor.run {
+                if case .failure(let refusal) = ProtectedExport.prepare(json, refuseIfPresent: true) { refusal.present(); return }
                 let panel = NSSavePanel()
                 if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
                 let safe = q.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)

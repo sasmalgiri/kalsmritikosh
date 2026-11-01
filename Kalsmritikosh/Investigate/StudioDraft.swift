@@ -221,21 +221,26 @@ public nonisolated struct StudioCaseFacts: Sendable {
     /// limit. Every job states these in its limitations — a cap is never silent.
     public let documentsNotRead: Int
     public let eventsTruncated: Bool
+    /// Names, amounts or stated dates beyond their limits were not kept.
+    public let valuesTruncated: Bool
 
     public init(caseTitle: String, parties: [StudioCaseValue], dates: [StudioCaseValue], amounts: [StudioCaseValue],
                 identifiers: [StudioCaseValue], documents: [StudioCaseDocument], events: [StudioCaseEvent],
                 allFacts: [StudioCaseValue], named: [StudioCaseValue] = [], statedAmounts: [StudioCaseValue] = [],
-                statedDates: [StudioCaseEvent] = [], documentsNotRead: Int = 0, eventsTruncated: Bool = false) {
+                statedDates: [StudioCaseEvent] = [], documentsNotRead: Int = 0, eventsTruncated: Bool = false, valuesTruncated: Bool = false) {
         self.caseTitle = caseTitle; self.parties = parties; self.dates = dates; self.amounts = amounts
         self.identifiers = identifiers; self.documents = documents; self.events = events; self.allFacts = allFacts
         self.named = named; self.statedAmounts = statedAmounts; self.statedDates = statedDates
-        self.documentsNotRead = documentsNotRead; self.eventsTruncated = eventsTruncated
+        self.documentsNotRead = documentsNotRead; self.eventsTruncated = eventsTruncated; self.valuesTruncated = valuesTruncated
     }
 
     /// How many documents' names, amounts and dates are read per case (was 60, arbitrary and silent).
     public static let documentReadingLimit = 5_000
     /// How many case events are read.
     public static let eventLimit = 50_000
+    /// How many names and amounts, and how many stated dates, are kept per case (were 40 and 200, silently).
+    public static let valueLimit = 5_000
+    public static let dateLimit = 20_000
 
     public static let empty = StudioCaseFacts(caseTitle: "", parties: [], dates: [], amounts: [], identifiers: [],
                                               documents: [], events: [], allFacts: [])
@@ -259,6 +264,8 @@ public nonisolated struct StudioCaseFacts: Sendable {
 /// writes. The caller supplies the case's authorized source versions (the same scope the case's
 /// answers and findings use), so a studio never sees a document outside the case.
 public actor StudioCaseFactsReader {
+    /// Set by `namesAndAmounts` when a value limit cut the list (stated in every job's limitations).
+    private var valuesWereTruncated = false
     private let facts: GenericFactRepository
     private let events: EventsRepository
     private let objects: KnowledgeObjectRepository
@@ -372,7 +379,10 @@ public actor StudioCaseFactsReader {
                 }
             }
         }
-        return (Array(named.prefix(40)), Array(amounts.prefix(40)), Array(dates.prefix(200)))
+        // Re-review 2026-11-02: no silent value caps — the limits are high and any truncation is stated
+        // in every job's limitations (StudioCaseFacts.valuesTruncated).
+        valuesWereTruncated = named.count > StudioCaseFacts.valueLimit || amounts.count > StudioCaseFacts.valueLimit || dates.count > StudioCaseFacts.dateLimit
+        return (Array(named.prefix(StudioCaseFacts.valueLimit)), Array(amounts.prefix(StudioCaseFacts.valueLimit)), Array(dates.prefix(StudioCaseFacts.dateLimit)))
     }
 
     nonisolated static let partyFields: Set<String> = ["plaintiff", "defendant", "petitioner", "respondent", "appellant",
@@ -421,7 +431,7 @@ public actor StudioCaseFactsReader {
                                identifiers: identifiers, documents: documents, events: caseEvents, allFacts: all,
                                named: named, statedAmounts: stated, statedDates: statedDates,
                                documentsNotRead: max(0, objectIDs.count - StudioCaseFacts.documentReadingLimit),
-                               eventsTruncated: eventsTruncated)
+                               eventsTruncated: eventsTruncated, valuesTruncated: valuesWereTruncated)
     }
 }
 

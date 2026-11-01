@@ -44,7 +44,7 @@ public nonisolated enum IndividualPersonaPackage {
             job("applications",        "Applications & cases",     "Track applications and open cases.", .analysis),
             job("reminders",           "Important dates & renewals", "Keep the confirmed dates that matter — renewals, expiries, deadlines.", .analysis),
             job("emergency-pack",      "Emergency binder (ICE)",   "Assemble your in-case-of-emergency binder — what loved ones need, in one place.", .findings),
-            job("secure-share",        "Share safely (redacted)",  "Prepare a redacted copy to share — sensitive details masked.", .findings),
+            job("secure-share",        "Share safely (redacted)",  "Prepare a sharing copy: only the items you clear are included, email addresses and phone numbers are masked, and you list any other redactions yourself.", .findings),
             job("personal-chronology", "Personal chronology",      "See your personal timeline (undated labelled).", .linkage),
             job("legacy-archive",      "Legacy binder",            "Assemble the legacy binder — your records for the next generation, with a sealed receipt.", .findings),
             // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities

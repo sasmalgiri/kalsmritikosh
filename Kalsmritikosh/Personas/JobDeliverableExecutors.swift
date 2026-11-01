@@ -857,12 +857,12 @@ public nonisolated enum ProtectedIdentities {
         return out
     }
 
-    /// Source-map rows marked "confidential source" (a rejected row protects nothing): the source named by
-    /// the row's title, and any identity the row records.
+    /// Source-map rows marked "confidential source" (a rejected row protects nothing): the identity the row
+    /// records — the person, never the row's title, which is a document name (re-review 2026-11-02).
     public static func confidentialSources(in rows: [JobResultRow]) -> [String] {
         var out: [String] = []
         for r in rows where r.decision != .rejected && r.fields?["protection"] == "confidential source" {
-            for part in ([r.title] + (r.fields?["identity"] ?? "").split(separator: ";").map(String.init)) {
+            for part in (r.fields?["identity"] ?? "").split(separator: ";").map(String.init) {
                 let name = part.trimmingCharacters(in: .whitespacesAndNewlines)
                 if name.count >= 2, !out.contains(name) { out.append(name) }
             }
@@ -998,11 +998,11 @@ public nonisolated enum LineageExecutor {
     static func relation(in s: String, from a: String, to b: String) -> String? {
         let ea = NSRegularExpression.escapedPattern(for: a), eb = NSRegularExpression.escapedPattern(for: b)
         let link = #"(?:\s*,\s*|\s*\(\s*|\s+(?:is|was|were|became|being)\s+)(?:the\s+|a\s+|an\s+|his\s+|her\s+|their\s+)?(?:(?:eldest|youngest|elder|younger|only|first|second|third|fourth|adopted|step|natural|illegitimate|legitimate|surviving)\s+){0,2}"#
-        if let re = try? NSRegularExpression(pattern: ea + link + kin + #"\s+of\s+(?:the\s+)?(?:late\s+)?"# + eb + #"\b"#, options: [.caseInsensitive]),
+        if let re = try? NSRegularExpression(pattern: ea + link + kin + #"\s+of\s+(?:the\s+)?(?:late\s+)?"# + eb + #"\b(?!['’]s\b)"#, options: [.caseInsensitive]),
            let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)), let r = Range(m.range(at: 1), in: s) {
             return String(s[r]).lowercased() + " of"
         }
-        if JobText.matches(s, ea + #"\s+(?:was\s+|were\s+|had\s+been\s+)?married\s+(?:to\s+)?"# + eb + #"\b"#) { return "married" }
+        if JobText.matches(s, ea + #"\s+(?:was\s+|were\s+|had\s+been\s+)?married\s+(?:to\s+)?"# + eb + #"\b(?!['’]s\b)"#) { return "married" }
         return nil
     }
     static let vital = #"\b(born|birth|baptis|christen|married|marriage|wedding|died|death|buried|burial|funeral)\w*"#
@@ -1045,6 +1045,7 @@ public nonisolated enum LineageExecutor {
 /// The lineage chart of a family-lines result (Mermaid; dashed = no source).
 public nonisolated enum LineageChart {
     public static let unprovenLabel = "unproven — no source"
+    public static let unreviewedLabel = "stated in a source — not yet reviewed"
 
     public static func mermaid(rows: [JobResultRow]) -> String? {
         var ids: [String: String] = [:]
@@ -1056,7 +1057,11 @@ public nonisolated enum LineageChart {
         for r in rows where r.decision != .rejected {
             guard let a = r.fields?["person"], let b = r.fields?["relative"], let rel = r.fields?["relationship"], !a.isEmpty, !b.isEmpty else { continue }
             let label = rel.replacingOccurrences(of: "|", with: "/").replacingOccurrences(of: "\"", with: "'")
-            lines.append(r.refs.isEmpty ? "    \(id(a)) -.->|\"\(label) (\(unprovenLabel))\"| \(id(b))" : "    \(id(a)) -->|\"\(label)\"| \(id(b))")
+            // Re-review 2026-11-02 (GPS): solid only for a sourced relationship the researcher ACCEPTED; a sourced
+            // but unreviewed reading is dotted "not yet reviewed"; no source is dashed "unproven".
+            if r.refs.isEmpty { lines.append("    \(id(a)) -.->|\"\(label) (\(unprovenLabel))\"| \(id(b))") }
+            else if r.decision == .accepted { lines.append("    \(id(a)) -->|\"\(label)\"| \(id(b))") }
+            else { lines.append("    \(id(a)) -.->|\"\(label) (\(unreviewedLabel))\"| \(id(b))") }
         }
         guard !lines.isEmpty else { return nil }
         let nodes = ids.sorted { $0.value < $1.value }.map { "    \($0.value)[\"\($0.key.replacingOccurrences(of: "\"", with: "'"))\"]" }

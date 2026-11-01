@@ -483,7 +483,7 @@ A personal dispute — an insurance claim, a deposit, a job — your own file in
 10. Run “Applications & cases”: Track applications and open cases. Needs: Application documents.
 11. Run “Important dates & renewals”: Keep the confirmed dates that matter — renewals, expiries, deadlines. Needs: Documents with dates.
 12. Run “Emergency binder (ICE)”: Assemble your in-case-of-emergency binder — what loved ones need, in one place. Needs: Key documents.
-13. Run “Share safely (redacted)”: Prepare a redacted copy to share — sensitive details masked. Needs: Documents; recipients.
+13. Run “Share safely (redacted)”: Prepare a sharing copy: only the items you clear are included, email addresses and phone numbers are masked, and you list any other redactions yourself. Needs: Documents; recipients.
 14. Run “Personal chronology”: See your personal timeline (undated labelled). Needs: Events; dates.
 15. Run “Legacy binder”: Assemble the legacy binder — your records for the next generation, with a sealed receipt. Needs: Selected documents.
 16. Run “Ask my records”: Ask a question over your records — every answer cites its document. Needs: Question.

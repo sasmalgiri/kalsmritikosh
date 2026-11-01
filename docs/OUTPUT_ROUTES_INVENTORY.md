@@ -46,9 +46,19 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 23 | CitationBuilderView, FundFlowView, ComplianceBoardView, SavedQueriesView, DeepLink, MoveToNewMac, Settings | Copy | a citation string, fact/document ids, SOP handbook, a saved query, a link, a secret (concealed) | clipboard | — | no document text (ids/handbook/secret); unchanged |
 | 24 | DiagnosticsSendButton | Compose e-mail | diagnostics bundle | share | existing redaction of diagnostics | unchanged |
 | 25 | TranscriptsView | Export quotes… | quote book with Speaker column | file | AppState.protectedExportText (scrub + leak check, fails closed) — added 2026-11-02 after the agent practitioner review | protected |
-| 26 | AskView (answer menu) | Export verifiable receipt… | answer receipt JSON (question, answer, passages) | file | AppState.protectedExportText — added 2026-11-02 | protected |
+| 26 | AskView (answer menu) | Export verifiable receipt… | answer receipt JSON (question, answer, passages) | file | ProtectedExport.prepare(refuseIfPresent) — a sealed receipt is never altered after sealing; one holding a protected identity is refused (re-review 2026-11-02) | protected |
 | 27 | IssueChronologyView | Export chronology | issue chronology Markdown | file | AppState.protectedExportText — added 2026-11-02 | protected |
 | 28 | CaseStoryView | Save case story | case story Markdown / HTML | file | AppState.protectedExportText — added 2026-11-02 | protected |
+| 29 | CaseSliceView | Save slice | signed case slice JSON | file | ProtectedExport.prepare(refuseIfPresent) — a signed slice holding a protected identity is refused — added 2026-11-02 after the agent re-review | protected |
+| 30 | CrossDocumentMatrixView | Export Markdown | matrix Markdown | file | ProtectedExport.prepare (scrub + leak check) — added 2026-11-02 after the agent re-review | protected |
+| 31 | CrossDocumentMatrixView | Export receipt | sealed receipt JSON | file | ProtectedExport.prepare(refuseIfPresent) — added 2026-11-02 after the agent re-review | protected |
+| 32 | KnowledgeView | Save dossier | entity dossier Markdown | file | ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
+| 33 | NotebookView | Save investigation report | investigation report Markdown | file | ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
+| 34 | StructuredComparisonView | Export comparison brief | comparison brief Markdown | file | ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
+| 35 | WorkspacesView | Export report | work-product report | file | ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
+| 36 | WorkspacesView | Export receipt | sealed receipt JSON | file | ProtectedExport.prepare(refuseIfPresent) — added 2026-11-02 after the agent re-review | protected |
+| 37 | AskView (answer menu) | Copy answer | answer text | clipboard | clipboard — ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
+| 38 | AskView (answer menu) | Export proof bundle… | signed proof bundle | file | ProtectedExport.prepare(refuseIfPresent) on question, answer, passages and file names — added 2026-11-02 after the agent re-review | protected |
 
 ## Removed
 

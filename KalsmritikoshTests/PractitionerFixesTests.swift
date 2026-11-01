@@ -45,13 +45,16 @@ struct PractitionerFixesTests {
 
     @Test("Journalist: a source-map row marked confidential protects its source; every file export replaces it or exports nothing")
     func confidentialSourceProtectedInExports() async throws {
-        let rows = [JobResultRow(title: "Anna Novak (city hall clerk)", fields: ["protection": "confidential source"]),
-                    JobResultRow(title: "Daily Wire", fields: ["protection": "none"])]
-        #expect(ProtectedIdentities.confidentialSources(in: rows) == ["Anna Novak (city hall clerk)"])
+        // Re-review 2026-11-02: a source-map row's title is a DOCUMENT name; the person is the identity field.
+        let rows = [JobResultRow(title: "memo-from-city-hall.pdf", fields: ["protection": "confidential source", "identity": "Anna Novak; A. N."]),
+                    JobResultRow(title: "daily-wire-story.html", fields: ["protection": "none"])]
+        #expect(ProtectedIdentities.confidentialSources(in: rows) == ["Anna Novak", "A. N."], "the person, never the file name")
+        #expect(JobFields.completionProblems(job: "jrn.source-map", rows: [{ var r = JobResultRow(title: "memo.pdf", fields: ["protection": "confidential source"]); r.decision = .accepted; return r }()])
+                    .contains { $0.contains("needs the identity to protect") })
         let f = try await CaseErasureTests.boot()
         defer { try? FileManager.default.removeItem(at: f.temp) }
         try await JobResultRepository(database: f.db).save(caseID: f.caseA, jobID: "jrn.source-map", family: .reliabilityConflicts, state: .draft,
-                                                         content: JobResultContent(rows: [JobResultRow(title: "Anna Novak", fields: ["protection": "confidential source"])]),
+                                                         content: JobResultContent(rows: [JobResultRow(title: "memo.pdf", fields: ["protection": "confidential source", "identity": "Anna Novak"])]),
                                                          actor: "Tester")
         #expect(try await JobResultRepository(database: f.db).protectedIdentityNames().contains("Anna Novak"))
         switch await f.state.protectedExportText("Quote book: Anna Novak said the permit was backdated.") {
@@ -94,6 +97,38 @@ struct PractitionerFixesTests {
         let filled = JobFields.prefill(job: "ind.insurance", rows: [issued, plain], evidence: nil)
         #expect(filled[0].fields?["renewal"] == "2026-12-31", "the stated renewal date, not the issue date")
         #expect((filled[1].fields?["renewal"] ?? "").isEmpty, "no renewal sentence: left for the person")
+    }
+
+    @Test("Re-review: the synchronous export gate fails closed while the register is unknown, scrubs ordinary files and refuses sealed ones")
+    func exportGate() async {
+        await ProtectedIdentityCache.TestOverride.$names.withValue(nil) {
+            // nil override falls through to the shared cache; force the unknown case explicitly below.
+        }
+        await ProtectedIdentityCache.TestOverride.$names.withValue(["Anna Novak"]) {
+            guard case .success(let safe) = ProtectedExport.prepare("Anna Novak handed over the ledger.") else { Issue.record("scrub refused"); return }
+            #expect(!safe.contains("Anna Novak") && safe.contains("[PROTECTED SOURCE]"))
+            guard case .failure(let r) = ProtectedExport.prepare("{\"passage\":\"Anna Novak handed over the ledger.\"}", refuseIfPresent: true) else { Issue.record("sealed file altered"); return }
+            #expect(r.reason.contains("cannot be redacted after sealing"))
+            guard case .success(let clean) = ProtectedExport.prepare("{\"passage\":\"The ledger was handed over.\"}", refuseIfPresent: true) else { Issue.record("clean sealed refused"); return }
+            #expect(clean.contains("handed over"))
+        }
+        await ProtectedIdentityCache.TestOverride.$names.withValue([]) {
+            guard case .success = ProtectedExport.prepare("anything") else { Issue.record("no names should pass"); return }
+        }
+    }
+
+    @Test("Re-review: renewal needs a renewal word (not 'due to'); a sharing copy masks emails and phone numbers; truncated values are stated")
+    func reReviewIndividualAndLimits() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let rows = [JobResultRow(title: "Bank letter — write to anna@example.com or call +1 555 010 2030", fields: ["include": "include"])]
+        let rec = JobResultRecord(id: UUID(), caseID: UUID(), jobID: "ind.secure-share", family: "controlledDisclosure", state: .draft,
+                                  content: JobResultContent(rows: rows), createdBy: "me", createdAt: t)
+        let md = JobResultMarkdown.render(rec, title: "Share")
+        #expect(!md.contains("anna@example.com") && !md.contains("555 010 2030") && md.contains("[MASKED]"), "\(md)")
+        let f = StudioCaseFacts(caseTitle: "c", parties: [], dates: [], amounts: [], identifiers: [], documents: [], events: [],
+                                allFacts: [], valuesTruncated: true)
+        #expect(JobText.withheldLimitation(0, facts: f).contains { $0.contains("beyond the limit were not read") })
+        #expect(!JobText.matches("The policy lapsed due to non-payment on 2 May 2025.", #"(?i)\b(?:expir\w*|renew\w*|valid (?:until|through|till)|due (?:on|by|date)|payment due|deadline)\b"#))
     }
 }
 

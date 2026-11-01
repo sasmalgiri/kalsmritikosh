@@ -104,7 +104,9 @@ public nonisolated enum JobFields {
         m["jrn.source-map"] = [F("relationship", "Relationship"), F("family", "Text-similarity candidates (the app's reading)"),
                                F("lineage", "Confirmed lineage (your decision, rationale in the note)",
                                  .choice(["independent", "same origin (wire, syndication)", "derivative (rewrite)", "unknown"]), required: false),
-                               F("protection", "Protection", .choice(["none", "confidential source"]))]
+                               F("protection", "Protection", .choice(["none", "confidential source"])),
+                               // Re-review 2026-11-02: the PERSON to protect (the row's title is a document name).
+                               F("identity", "Identity to protect (names or aliases, ';'-separated)", required: false)]
         let factor: JobField.Kind = .choice(["supports", "neutral", "undermines"])
         m["hr.credibility"] = [F("consistency", "Consistency", factor), F("corroboration", "Corroboration", factor),
                                F("plausibility", "Plausibility", factor), F("reasons", "Reasons")]
@@ -291,6 +293,10 @@ public nonisolated enum JobFields {
         case "jrn.source-map":
             if accepted.contains(where: { !($0.fields?["lineage"] ?? "").isEmpty && $0.fields?["lineage"] != "unknown" && !note($0) }) {
                 out.append("A lineage decision (independent, same origin, derivative) needs its rationale in the note — the app's text reading is not a reason")
+            }
+            // Re-review 2026-11-02: the protected PERSON must be named.
+            if accepted.contains(where: { $0.fields?["protection"] == "confidential source" && ($0.fields?["identity"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }) {
+                out.append("A confidential source needs the identity to protect (the person's name or aliases), so it can be kept out of every export and cloud send")
             }
         case "fa.workpapers":
             if accepted.contains(where: { $0.flags.contains(WorkpaperExecutor.untraced) }) {

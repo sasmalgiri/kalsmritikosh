@@ -812,7 +812,11 @@ public struct WorkspacesView: View {
         let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
             : (ws.template == .legalMatter ? .legalExhibit : .footnote)
         let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: assembled.manifest)
-        let text = WorkProductExporter.render(doc, as: reportFormat)
+        let text: String
+        switch ProtectedExport.prepare(WorkProductExporter.render(doc, as: reportFormat)) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): await MainActor.run { reportStatus = refusal.reason }; return
+        }
         // Use the manifest's deduplicated finding count — a claim rendered in both the summary
         // and the chronology is ONE finding, not two.
         let findingCount = assembled.manifest.selectedFindingCount
@@ -887,6 +891,9 @@ public struct WorkspacesView: View {
             return
         }
         let json = ReceiptSigner.exportJSON(sealed)
+        if case .failure(let refusal) = ProtectedExport.prepare(json, refuseIfPresent: true) {
+            await MainActor.run { reportStatus = refusal.reason }; return
+        }
 
         #if canImport(AppKit)
         let panel = NSSavePanel()

@@ -170,6 +170,9 @@ struct JobDeliverableTests {
     func lineageChart() async throws {
         let e = JobAcceptanceScenarioTests.evidence(for: "gen.family-lines")
         var rows = LineageExecutor.run(e).content.rows
+        // Re-review 2026-11-02: an unreviewed reading is not drawn solid; an accepted one is.
+        #expect(LineageChart.mermaid(rows: rows)?.contains(LineageChart.unreviewedLabel) == true)
+        rows = rows.map { var r = $0; r.decision = .accepted; return r }
         var unproven = JobResultRow(title: "Dev Sharma — son of — Ravi Sharma", fields: ["person": "Dev Sharma", "relationship": "son of", "relative": "Ravi Sharma"])
         unproven.manual = true
         rows.append(unproven)

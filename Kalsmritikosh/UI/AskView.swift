@@ -569,7 +569,10 @@ public struct AskView: View {
                             Button {
                                 #if canImport(AppKit)
                                 NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(turn.body, forType: .string)
+                                switch ProtectedExport.prepare(turn.body) {
+                                case .success(let safe): NSPasteboard.general.clearContents(); NSPasteboard.general.setString(safe, forType: .string)
+                                case .failure(let refusal): refusal.present()
+                                }
                                 #endif
                             } label: { Label("Copy", systemImage: "doc.on.doc").labelStyle(.iconOnly)
                                     .imageScale(.small) }
@@ -786,6 +789,9 @@ public struct AskView: View {
                 return
             }
             #if canImport(AppKit)
+            // Re-review 2026-11-02: a signed proof bundle holding a protected identity is refused, never altered.
+            let content = ([question, answer.answerText ?? answer.body] + answer.citations.map(\.snippet) + Array(names.values)).joined(separator: "\n")
+            if case .failure(let refusal) = ProtectedExport.prepare(content, refuseIfPresent: true) { refusal.present(); return }
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true
             panel.canChooseFiles = false
@@ -839,12 +845,10 @@ public struct AskView: View {
     private func saveReceipt(_ raw: String, suggestedName: String) {
         #if canImport(AppKit)
         Task { @MainActor in
-        // Practitioner review 2026-11-02 — protected source identities never leave in a receipt.
-        let json: String
-        switch await appState.protectedExportText(raw) {
-        case .success(let safe): json = safe
-        case .failure(let refusal): refusal.present(); return
-        }
+        // Re-review 2026-11-02: a sealed receipt is never altered after sealing (that breaks verification and
+        // its passage hashes would confirm a guessed name) — one holding a protected identity is refused.
+        let json = raw
+        if case .failure(let refusal) = ProtectedExport.prepare(raw, refuseIfPresent: true) { refusal.present(); return }
         let panel = NSSavePanel()
         if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
         let safe = String(suggestedName.prefix(40))
