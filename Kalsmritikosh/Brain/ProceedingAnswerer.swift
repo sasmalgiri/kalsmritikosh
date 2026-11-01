@@ -120,7 +120,7 @@ public nonisolated enum ProceedingAnswerer {
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
         // "the date on which X was formally charged" (held-out chronology 10, 2026-10-29).
-        if q.range(of: #"^(?:exactly\s+|precisely\s+)?(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b|^(?:the\s+)?(?:exact\s+|precise\s+|specific\s+|actual\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:exactly\s+|precisely\s+)?(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+|an?\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b|^(?:the\s+)?(?:exact\s+|precise\s+|specific\s+|actual\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .when(step))
         }
         // "Is there any indication that X entered a guilty plea?" (held-out chronology 10, 2026-10-29).
@@ -471,13 +471,33 @@ public nonisolated enum ProceedingAnswerer {
             let printedYear: [UUID: Int] = Dictionary(uniqueKeysWithValues: about.compactMap { s in
                 ProceedingEventExtractor.printedDate(in: s.text)?.year.map { (s.objectID, $0) } })
             func oldConviction(_ c: Candidate) -> Bool {
+                // "In 1999, Underwood was convicted in Georgia of rape" in a 2018 release (ho14 adjudication A).
+                if let y = printedYear[c.objectID],
+                   let m = c.sentence.range(of: #"\b[Ii]n ((?:19|20)\d\d),?\s+[^.]{0,80}?\b(?:was|were|had been) (?:convicted|sentenced|found guilty)\b"#, options: .regularExpression),
+                   let year = Int(String(c.sentence[m]).components(separatedBy: CharacterSet.decimalDigits.inverted).first { $0.count == 4 } ?? ""),
+                   year <= y - 2 { return true }
                 guard let y = printedYear[c.objectID],
                       let m = c.sentence.range(of: #"\b(?:convicted|sentenced) (?:in|on) (?:[A-Z][a-z]+\.? \d{1,2}, )?((?:19|20)\d\d)\b"#, options: .regularExpression),
                       let year = Int(String(c.sentence[m]).components(separatedBy: CharacterSet.decimalDigits.inverted).filter { $0.count == 4 }.last ?? "") else { return false }
                 return year <= y - 2
             }
+            // "… with Charles Sanders, who pleaded guilty previously to his role in the crime": the relative
+            // clause's step belongs to the person it follows, not to the person asked (ho14 adjudication A).
+            func relativeClauseOther(_ sentence: String) -> Bool {
+                guard let re = try? NSRegularExpression(pattern: #"\b([A-Z][a-z'\-]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z'\-]+)?),\s+(?:\d{1,3},\s+)?who\s+(?:\w+\s+){0,2}(?:pleaded|pled|was (?:charged|convicted|sentenced|indicted))\b"#) else { return false }
+                for m in re.matches(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)) {
+                    guard let r = Range(m.range(at: 1), in: sentence) else { continue }
+                    let last = String(sentence[r]).split(separator: " ").last.map { $0.lowercased() } ?? ""
+                    if !surnames.contains(last) { return true }
+                }
+                return false
+            }
+            // "… in the Clay County case", "pleaded guilty in state court": a separate, non-federal prosecution.
+            let otherCourt = #"(?i)\b(?:in|from)\s+(?:the\s+)?(?:[A-Z][a-z]+\s+)?(?:county|state|municipal|superior|circuit)\s+(?:case|court|charges?|prosecution)\b"#
             func score(_ c: Candidate) -> Int {
                 (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
+                    - (relativeClauseOther(c.sentence) ? 9 : 0)
+                    - (c.sentence.range(of: otherCourt, options: .regularExpression) != nil ? 6 : 0)
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
                     - (oldConviction(c) ? 9 : 0)
                     + (!surnames.isEmpty && c.sentence.lowercased().range(of: namesPerson, options: .regularExpression) != nil ? 5 : 0)

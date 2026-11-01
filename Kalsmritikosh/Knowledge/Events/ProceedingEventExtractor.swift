@@ -54,7 +54,8 @@ public nonisolated enum ProceedingEventExtractor {
             // "made his initial appearance Monday on a federal charge" is the arraignment-stage step.
             case .arraigned: return #"\b(?:was|were) arraigned\b|\bmade (?:his|her|their|an) initial (?:court )?appearance\b"#
             // "entered a guilty plea to the charge", "entered a plea of guilty" (held-out chronology 10, 2026-10-29).
-            case .pleaded: return #"\b(?:pleaded|pled|pleads) guilty\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b"#
+            // "Patel plead guilty" (a common misspelling) and "… after pleading guilty to …" (ho14 adjudication D/F).
+            case .pleaded: return #"\b(?:pleaded|pled|pleads|plead) guilty\b|\b(?:after|upon|following) pleading guilty\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b"#
             // "A federal jury in Fresno today found Adam Alan Henry, 39, of Turlock, guilty of …" (held-out chronology 10).
             case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
@@ -187,7 +188,14 @@ public nonisolated enum ProceedingEventExtractor {
                 if step == .convicted || step == .sentenced,
                    s.range(of: #"\bpreviously (?:been )?convicted\b|\bprior (?:felony )?convictions?\b|\bwas on (?:probation|parole)\b"#, options: .regularExpression) != nil { continue }
                 if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
-                let (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
+                var (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
+                // "was sentenced today … after pleading guilty in March": the participle reports an EARLIER
+                // plea; the sentence's own day is the sentencing's (ho14 adjudication D). Undated unless the
+                // plea carries its own explicit date right after it.
+                if step == .pleaded, String(s[r]).range(of: #"pleading guilty"#, options: .regularExpression) != nil,
+                   String(s[r.upperBound...]).range(of: #"^[^.]{0,60}?\bon\s+"# + monthPattern, options: [.regularExpression, .caseInsensitive]) == nil {
+                    day = nil; relative = false
+                }
                 // One per step and day; undated mentions are kept apart (the one that states the offence may come second).
                 let key = step.rawValue + "|" + (day.map { "\($0.year ?? 0)-\($0.month ?? 0)-\($0.day ?? 0)" } ?? "?" + String(sentence.prefix(60)))
                 let finding = Finding(step: step, day: day, dayFromPrintedDate: relative, sentence: sentence.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -361,7 +369,11 @@ public nonisolated enum ProceedingEventExtractor {
         func belongs(_ m: NSTextCheckingResult) -> Bool {
             guard let end = stepEndUTF16, m.range.location > end else { return true }
             let between = ns.substring(with: NSRange(location: end, length: m.range.location - end))
-            return between.range(of: #"(?i)\b(?:pleaded|pled|pleading|indicted|charged|convicted|found guilty|arraigned|arrested|sentenced)\b"#, options: .regularExpression) == nil
+            if between.range(of: #"(?i)\b(?:pleaded|pled|pleading|indicted|charged|convicted|found guilty|arraigned|arrested|sentenced)\b"#, options: .regularExpression) != nil { return false }
+            // "announced today that Neal … was sentenced …. stated that on October 20, 2015, Neal sold …",
+            // "Today's indictment alleges that Bagley stole … on June 22, 2014": a date inside a reported
+            // statement or an account of the conduct is that conduct's day, not the step's (ho14 adjudication B).
+            return between.range(of: #"(?i)\b(?:stated|said|says|alleges?|alleged|alleging|admitted|according to|court (?:documents|records)|records show|evidence (?:showed|presented)|sold|stole|robbed|distributed|possessed|shot|killed|defrauded|received|transferred|wired)\b"#, options: .regularExpression) == nil
         }
         // "was sentenced today …, on December 15, 2023, Smith …" (two sentences a text conversion ran
         // together): "today"/"yesterday" attached to the step wins over a date further along.
@@ -373,6 +385,12 @@ public nonisolated enum ProceedingEventExtractor {
            let day = Int(ns.substring(with: m.range(at: 2))) {
             let year = m.range(at: 3).location != NSNotFound ? Int(ns.substring(with: m.range(at: 3))) : printed?.year
             if let year { return (DateComponents(year: year, month: month, day: day), false) }
+        }
+        // "was indicted in April 2016 and arrested yesterday": the step gives only a month, which a day
+        // cannot represent — it stays undated rather than borrowing another verb's "yesterday" (ho14 B).
+        if let end = stepEndUTF16, end <= ns.length,
+           ns.substring(from: end).range(of: #"(?i)^\s+in\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:of\s+)?(?:19|20)\d\d\b"#, options: .regularExpression) != nil {
+            return (nil, false)
         }
         guard let printed, let date = Calendar(identifier: .gregorian).date(from: printed) else { return (nil, false) }
         if sentence.range(of: #"(?i)\btoday\b"#, options: .regularExpression) != nil { return (printed, true) }
@@ -476,7 +494,11 @@ public nonisolated enum ProceedingEventExtractor {
         for m in re.matches(in: flat, range: NSRange(location: 0, length: ns.length)) {
             // "Mr. Smith", "U.S. Attorney", "St. Louis" do not end a sentence.
             let before = ns.substring(with: NSRange(location: max(0, m.range.location - 4), length: min(4, m.range.location)))
-            if before.range(of: #"(?:\b[A-Z][a-z]?|Mr|Ms|Mrs|Dr|St|Jr|Sr|No|U\.S|Inc|Co)\.$"#, options: .regularExpression) != nil { continue }
+            // "Kansas City, Mo. Today's indictment …": a state abbreviation right after "City," closes the
+            // dateline sentence (ho14 adjudication B) — it is not an initial.
+            let wider = ns.substring(with: NSRange(location: max(0, m.range.location - 12), length: min(12, m.range.location)))
+            let stateAfterCity = wider.range(of: #",\s(?:Ala|Ariz|Ark|Calif|Colo|Conn|Del|Fla|Ga|Ill|Ind|Kan|Kans|Ky|La|Md|Mass|Mich|Minn|Miss|Mo|Mont|Neb|Nev|Okla|Ore|Pa|Tenn|Tex|Va|Vt|Wash|Wis|Wyo|W\.Va|N\.[YJMHCD]|S\.[CD]|R\.I)\.$"#, options: .regularExpression) != nil
+            if !stateAfterCity, before.range(of: #"(?:\b[A-Z][a-z]?|Mr|Ms|Mrs|Dr|St|Jr|Sr|No|U\.S|Inc|Co)\.$"#, options: .regularExpression) != nil { continue }
             out.append(ns.substring(with: NSRange(location: start, length: m.range.location - start)))
             start = m.range.location + m.range.length
         }
