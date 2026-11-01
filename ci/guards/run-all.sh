@@ -20,6 +20,7 @@ GUARDS=(
   ledger-encryption.sh
   clipper-no-network.sh
   release-check-selftest.sh
+  test-host-boundary.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do

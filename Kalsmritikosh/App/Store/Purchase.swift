@@ -23,6 +23,9 @@
 
 import Foundation
 import StoreKit
+import AppKit
+import CryptoKit
+import Security
 import os
 
 nonisolated enum PurchaseProducts {
@@ -206,6 +209,14 @@ nonisolated enum Entitlement: Equatable, Sendable {
 }
 
 /// The last verified state, kept between launches (never an unverified or unlimited one).
+///
+/// N3 (mandate 2026-11-01): the cache is a convenience for an offline launch, not an authority.
+/// • It is sealed with an HMAC whose key lives in the Keychain, so an edited preference is ignored.
+/// • It never restores a permanent unlock: a real lifetime purchase is a signed transaction StoreKit
+///   keeps on this Mac and re-reads offline (`Transaction.currentEntitlements`), so the cache is not
+///   needed for it — and a forged one grants nothing.
+/// • A clock set back before the moment of verification is read as that moment, so it cannot extend a
+///   time-limited state.
 nonisolated struct CachedEntitlement: Codable, Equatable, Sendable {
     enum Kind: String, Codable { case legacyUnlocked, legacyTrial, introductoryTrial, subscribed, grace, billingRetry, lapsed, notStarted }
     var kind: Kind
@@ -229,30 +240,77 @@ nonisolated struct CachedEntitlement: Codable, Equatable, Sendable {
         }
     }
 
-    /// Back to an entitlement, applying the offline rule at `now`.
+    /// Back to an entitlement, applying the offline rule at `now` (never earlier than the verification).
     func entitlement(now: Date) -> Entitlement {
+        let at = max(now, verifiedAt)
         let p = plan.flatMap(SubscriptionPlan.init(rawValue:))
         let e: Entitlement
         switch kind {
-        case .legacyUnlocked: e = .legacyUnlocked
-        case .legacyTrial: e = .legacyTrial(endsAt: until ?? now)
-        case .introductoryTrial: e = .introductoryTrial(endsAt: until ?? now, plan: p ?? .monthly, willRenew: willRenew ?? true)
-        case .subscribed: e = .subscribed(expiresAt: until ?? now, plan: p ?? .monthly, willRenew: willRenew ?? true)
-        case .grace: e = .grace(until: until ?? now, plan: p ?? .monthly)
+        case .legacyUnlocked: return .unknown   // only StoreKit's signed transaction proves a permanent purchase
+        case .legacyTrial:
+            guard let until else { return .unknown }
+            e = .legacyTrial(endsAt: until)
+        case .introductoryTrial:
+            guard let until, let p else { return .unknown }
+            e = .introductoryTrial(endsAt: until, plan: p, willRenew: willRenew ?? true)
+        case .subscribed:
+            guard let until, let p else { return .unknown }
+            e = .subscribed(expiresAt: until, plan: p, willRenew: willRenew ?? true)
+        case .grace:
+            guard let until, let p else { return .unknown }
+            e = .grace(until: until, plan: p)
         case .billingRetry: e = .billingRetry(plan: p ?? .monthly)
         case .lapsed: e = .lapsed(reason: reason.flatMap(Entitlement.LapseReason.init(rawValue:)) ?? .expired)
         case .notStarted: e = .notStarted
         }
-        return e.asCached(now: now)
+        return e.asCached(now: at)
     }
 
-    static let key = "kalsmritikosh.purchase.verifiedEntitlement"
-    static func load(from defaults: UserDefaults = AppDefaults.store) -> CachedEntitlement? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(CachedEntitlement.self, from: data)
+    /// v2: an HMAC-sealed envelope (the v1 plain JSON is no longer read).
+    static let key = "kalsmritikosh.purchase.verifiedEntitlement.v2"
+
+    private struct Envelope: Codable { let payload: Data; let mac: Data }
+
+    static func load(from defaults: UserDefaults = AppDefaults.store, secret: Data? = PurchaseCacheSecret.key()) -> CachedEntitlement? {
+        guard let secret, let data = defaults.data(forKey: key),
+              let env = try? JSONDecoder().decode(Envelope.self, from: data) else { return nil }
+        let expected = Data(HMAC<SHA256>.authenticationCode(for: env.payload, using: SymmetricKey(data: secret)))
+        guard expected == env.mac else {
+            KalsmritikoshLog.app.error("Purchase cache failed its integrity check; ignored")
+            return nil
+        }
+        return try? JSONDecoder().decode(CachedEntitlement.self, from: env.payload)
     }
-    func save(to defaults: UserDefaults = AppDefaults.store) {
-        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.key) }
+
+    func save(to defaults: UserDefaults = AppDefaults.store, secret: Data? = PurchaseCacheSecret.key()) {
+        guard let secret, let payload = try? JSONEncoder().encode(self) else { return }
+        let mac = Data(HMAC<SHA256>.authenticationCode(for: payload, using: SymmetricKey(data: secret)))
+        if let data = try? JSONEncoder().encode(Envelope(payload: payload, mac: mac)) { defaults.set(data, forKey: Self.key) }
+    }
+}
+
+/// The key that seals the purchase cache: a per-installation random secret in the Keychain. The unit-test
+/// host uses a per-process key in memory, never the person's Keychain.
+nonisolated enum PurchaseCacheSecret {
+    private static let service = "ecosanskritiinnovation.Kalsmritikosh.purchaseCache"
+    private static let account = "hmac-v1"
+    private static let testKey = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+
+    static func key() -> Data? {
+        if TestHost.isActive { return testKey }
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                    kSecAttrAccount as String: account, kSecReturnData as String: true,
+                                    kSecMatchLimit as String: kSecMatchLimitOne]
+        var result: AnyObject?
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data { return data }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { return nil }
+        let secret = Data(bytes)
+        let add: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                  kSecAttrAccount as String: account, kSecValueData as String: secret,
+                                  kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        SecItemDelete(add as CFDictionary)
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess ? secret : nil
     }
 }
 
@@ -295,12 +353,92 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
     }
 }
 
+/// The paid-use boundary any layer can ask, on or off the main actor (N2/N4, mandate 2026-11-01).
+/// PurchaseCenter publishes its state here; services and repositories that create, edit or analyse call
+/// `require` at the operation itself, so no screen, menu, intent or importer can skip the decision.
+/// Time is applied at the moment of the check: an entitlement whose verified end has passed refuses
+/// even if the app has stayed open (and offline) since.
+nonisolated enum PaidUse {
+    struct Refused: LocalizedError, Equatable {
+        let what: String
+        let reason: String
+        var errorDescription: String? { reason }
+    }
+
+    private struct Snapshot: Sendable { var entitlement: Entitlement }
+    private static let snapshot = OSAllocatedUnfairLock(initialState: Snapshot(entitlement: TestHost.isActive ? .legacyUnlocked : .unknown))
+    /// The clock the boundary reads; tests inject one (never the Mac's clock settings).
+    nonisolated(unsafe) static var clock: @Sendable () -> Date = { Date() }
+
+    static func publish(_ e: Entitlement) { snapshot.withLock { $0.entitlement = e } }
+    static var current: Entitlement {
+        #if DEBUG
+        if let e = TestOverride.entitlement { return e }
+        #endif
+        return snapshot.withLock { $0.entitlement }
+    }
+
+    #if DEBUG
+    /// Per-task overrides for tests (Debug builds only): a test sets them for its own task, so suites
+    /// running in parallel never see each other's state, and nothing global is changed.
+    enum TestOverride {
+        @TaskLocal static var entitlement: Entitlement?
+        @TaskLocal static var sample: Bool?
+        @TaskLocal static var now: Date?
+    }
+    #endif
+
+    private static var sampleNow: Bool {
+        #if DEBUG
+        if let s = TestOverride.sample { return s }
+        #endif
+        return SampleArchiveMode.isActive
+    }
+    private static var clockNow: Date {
+        #if DEBUG
+        if let d = TestOverride.now { return d }
+        #endif
+        return clock()
+    }
+
+    /// nil when `what` may run now; otherwise the reason it may not.
+    /// `importing`: bringing documents in. The sample case is a preview of the bundled documents only —
+    /// it never takes the person's own files, whatever the subscription.
+    static func refusal(_ what: String, importing: Bool = false, sample: Bool? = nil,
+                        entitlement: Entitlement? = nil, now: Date? = nil) -> Refused? {
+        let sample = sample ?? sampleNow
+        if sample {
+            if importing {
+                return Refused(what: what, reason: "The sample case holds only its bundled documents. Choose “Back to my archive” to add your own.")
+            }
+            return nil   // working on the bundled sample is the free preview
+        }
+        let e = (entitlement ?? current).asCached(now: now ?? clockNow)
+        if e.allowsPaidUse { return nil }
+        return Refused(what: what, reason: "A subscription is needed to \(what). Your work stays readable and exportable; backups, recovery and Help stay open.")
+    }
+
+    /// Throws when `what` may not run now, and asks the window to show the subscription sheet.
+    static func require(_ what: String, importing: Bool = false) throws {
+        guard let refused = refusal(what, importing: importing) else { return }
+        #if DEBUG
+        if TestOverride.entitlement != nil { throw refused }   // a test's own state: no window to notify
+        #endif
+        Task { @MainActor in PurchaseCenter.shared.noteRefusal(refused) }
+        throw refused
+    }
+}
+
 @MainActor
 @Observable
 final class PurchaseCenter {
-    static let shared = PurchaseCenter()
+    static let shared = PurchaseCenter(publishes: true)
 
-    private(set) var entitlement: Entitlement = .unknown
+    private(set) var entitlement: Entitlement = .unknown {
+        didSet { if publishes { PaidUse.publish(entitlement) } }
+    }
+    /// The clock every decision reads; tests inject one (N2 — never the Mac's clock settings).
+    var clock: () -> Date = { PaidUse.clock() }
     private(set) var offers: [PlanOffer] = []
     /// The annual saving (per cent) when both storefront prices are known; shown second.
     private(set) var annualSavingPercent: Int?
@@ -317,24 +455,68 @@ final class PurchaseCenter {
 
     /// The unit-test host never talks to the App Store and is always unlocked — except a centre a
     /// test makes with `talksToStore: true` inside an `SKTestSession` (`PurchaseStoreKitTests`).
-    static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    /// In Release this is always false (`TestHost`): a shipped build never takes the store-less path.
+    static let isTestHost = TestHost.isActive
     private let talksToStore: Bool
     private var updates: Task<Void, Never>?
+    private var watchers: [Task<Void, Never>] = []
+    private var deadline: Task<Void, Never>?
     private var products: [String: Product] = [:]
 
-    init(talksToStore: Bool = false) { self.talksToStore = talksToStore || !Self.isTestHost }
+    /// Only the app's own centre feeds the `PaidUse` boundary; a centre a test makes stays private to it.
+    private let publishes: Bool
+
+    init(talksToStore: Bool = false, publishes: Bool = false) {
+        self.talksToStore = talksToStore || !Self.isTestHost
+        self.publishes = publishes
+    }
+
+    /// Set the state and arm the moment it ends on its own (N2): a trial, paid period or grace that runs
+    /// out while the app stays open — even offline — is applied then, not at the next launch.
+    func apply(_ e: Entitlement) {
+        if entitlement != e { entitlement = e }
+        deadline?.cancel()
+        guard let until = e.verifiedUntil else { deadline = nil; return }
+        let wait = max(0, until.timeIntervalSince(clock())) + 1
+        deadline = Task { [weak self] in
+            // Continuous time: a Mac asleep past the deadline wakes to the change (and wake re-checks too).
+            try? await Task.sleep(for: .seconds(min(wait, 86_400)))
+            guard !Task.isCancelled, let self else { return }
+            self.reevaluate()
+            if self.talksToStore { await self.refresh() } else { self.apply(self.entitlement) }
+        }
+    }
+
+    /// Apply the clock to the current verified state (expiry, end of trial, end of grace).
+    func reevaluate() {
+        let now = entitlement.asCached(now: clock())
+        if now != entitlement { apply(now) }
+    }
+
+    /// A refused paid action: the subscription sheet opens over the current screen, or — for an import in
+    /// the sample — the reason is shown instead.
+    func noteRefusal(_ r: PaidUse.Refused) {
+        if SampleArchiveMode.isActive { message = r.reason } else { paywallRequested = r.what }
+    }
 
     func start() {
-        if !talksToStore { entitlement = .legacyUnlocked; return }
+        if !talksToStore { apply(.legacyUnlocked); return }
         guard updates == nil else { return }
         // The last verified state carries the person through an offline launch, under its own rule.
-        if let cached = CachedEntitlement.load() { entitlement = cached.entitlement(now: Date()) }
+        if let cached = CachedEntitlement.load() { apply(cached.entitlement(now: clock())) }
         updates = Task { [weak self] in
             for await result in Transaction.updates {
                 if case .verified(let t) = result { await t.finish() }
                 await self?.refresh()
             }
         }
+        // Waking from sleep and coming back to the app re-apply the clock and ask the store again.
+        let wake = NSWorkspace.shared.notificationCenter.notifications(named: NSWorkspace.didWakeNotification)
+        let active = NotificationCenter.default.notifications(named: NSApplication.didBecomeActiveNotification)
+        watchers = [
+            Task { [weak self] in for await _ in wake { self?.reevaluate(); await self?.refresh() } },
+            Task { [weak self] in for await _ in active { self?.reevaluate(); await self?.refresh() } },
+        ]
         Task { await loadProducts(); await refresh() }
     }
 
@@ -384,7 +566,7 @@ final class PurchaseCenter {
 
     /// Read the signed transactions and renewal information StoreKit holds for this Apple account.
     func refresh() async {
-        if !talksToStore { entitlement = .legacyUnlocked; return }
+        if !talksToStore { apply(.legacyUnlocked); return }
         var records: [Entitlement.Record] = []
         var seen: [UInt64: Int] = [:]
         func record(_ t: Transaction) {
@@ -424,14 +606,14 @@ final class PurchaseCenter {
                 if renewal == nil || status.state == .subscribed || status.state == .inGracePeriod { renewal = ren }
             }
         }
-        let now = Date()
+        let now = clock()
         let fresh = Entitlement.evaluate(records: records, renewal: renewal, storeAnswered: !products.isEmpty, now: now)
         if fresh == .unknown {
             // The store did not answer: keep the cached verified state under its own rule.
-            entitlement = CachedEntitlement.load()?.entitlement(now: now) ?? .unknown
+            apply(CachedEntitlement.load()?.entitlement(now: now) ?? .unknown)
             return
         }
-        entitlement = fresh
+        apply(fresh)
         CachedEntitlement(fresh, at: now).save()
     }
 
@@ -499,14 +681,15 @@ final class PurchaseCenter {
     /// A paid action (create, edit, analyse) asks here first. When nothing paid stands, the paywall
     /// is requested and the action does not run. Reading, exporting, backing up, recovering, Help and
     /// privacy controls never ask.
+    /// The decision is `PaidUse.refusal` at this moment (N2): the clock is applied first, so an expired
+    /// period refuses even if no refresh ran since. §6.3/§6.11 — the isolated sample case is the free
+    /// preview of the bundled documents; it never takes the person's own files (`importing`, N4).
     @discardableResult
-    func allowPaidAction(_ what: String) -> Bool {
-        if entitlement.allowsPaidUse { return true }
-        // §6.3/§6.11 — the isolated sample case is the preview before any commitment: its ledger holds
-        // only the bundled documents, so working on it (the tutorial) needs no subscription. The
-        // person's own archive is never open in this mode.
-        if SampleArchiveMode.isActive { return true }
-        paywallRequested = what
+    func allowPaidAction(_ what: String, importing: Bool = false) -> Bool {
+        reevaluate()
+        guard let refused = PaidUse.refusal(what, importing: importing, entitlement: entitlement, now: clock()) else { return true }
+        noteRefusal(refused)
+        if talksToStore, !SampleArchiveMode.isActive { Task { await refresh() } }   // a renewal may already be on record
         return false
     }
 

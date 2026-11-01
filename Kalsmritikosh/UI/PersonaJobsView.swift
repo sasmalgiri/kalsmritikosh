@@ -92,6 +92,7 @@ public final class PersonaJobsModel {
     /// Record that a job does not apply to this matter, with the reason. Refused without a reason.
     /// Recorded in the case's log, so the decision is part of the record, not a hidden tick.
     public func markNotApplicable(_ job: PersonaJob, reason: String, actor: String, at date: Date) async {
+        do { try PaidUse.require("record a job as not applicable") } catch { lastError = error.localizedDescription; return }   // N4
         guard let caseID = activeCaseID else { lastError = "Open a matter first."; return }
         let r = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !r.isEmpty else { lastError = "\(job.title): say why it does not apply to this matter."; return }
@@ -189,6 +190,7 @@ public final class PersonaJobsModel {
     /// Each inclusion is a recorded case event; excluded sources stay excluded; the case revision
     /// moves, so approvals bound to the earlier scope are stale from here on.
     public func approveInclusion(_ approved: Set<UUID>, actor: String, at date: Date) async {
+        do { try PaidUse.require("change a case's documents") } catch { lastError = error.localizedDescription; return }   // N4
         guard let caseID = activeCaseID, let intake else { lastError = "Open a matter first."; return }
         guard !approved.isEmpty else { inclusionReview = nil; return }
         busy = true; defer { busy = false }

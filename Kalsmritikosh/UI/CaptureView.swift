@@ -61,6 +61,8 @@ extension AppState {
     /// folder could not be registered. Shared by the Capture window, the Services menu and the
     /// Share-extension inbox.
     func readCaptureIntake() async -> Int? {
+        // N4 — never in the sample case, and silent (no paywall) when nothing paid stands; the files wait.
+        guard PaidUse.refusal("read captured items", importing: true) == nil else { return nil }
         guard let folder = CaptureIntake.folder else { return nil }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let registered = bookmarks.roots.contains { root in

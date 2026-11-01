@@ -42,6 +42,7 @@ public actor InvestigationFindingsService {
     /// approve or close anything — approval is a separate recorded human decision (`approveFindings`).
     public func buildFindings(caseID: UUID, access: SensitiveAccessContext,
                               actor: String, at date: Date) async throws -> InvestigationFindings {
+        try PaidUse.require("build findings")
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationFindingsError.caseNotFound(caseID) }
         let workspaceID = record.caseHeader.workspaceID
         guard let workspace = try await workspaces.find(workspaceID) else {

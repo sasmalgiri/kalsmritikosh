@@ -372,6 +372,7 @@ public final class WorkProductHandoffModel {
 
     /// Record the human approval of the built findings run as the matter's findings.
     public func approve(actor: String, at date: Date) async {
+        do { try PaidUse.require("approve findings") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot, let f = built else { lastError = "Build findings first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for approval."; return }
@@ -483,6 +484,7 @@ public final class WorkProductHandoffModel {
 
     /// Withdraw a prior approval (a new recorded decision; the prior approval is preserved).
     public func withdraw(actor: String, at date: Date) async {
+        do { try PaidUse.require("withdraw findings") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot, let f = built else { lastError = "Build findings first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for withdrawal."; return }
@@ -512,6 +514,7 @@ public final class WorkProductHandoffModel {
     /// Close the matter by a recorded human decision. Accepted unresolved items are retained (honest closure).
     /// Optionally pins the built findings run + its receipt seal.
     public func close(actor: String, at date: Date) async {
+        do { try PaidUse.require("close a matter") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot else { lastError = "Load a matter first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for closure."; return }
@@ -533,6 +536,7 @@ public final class WorkProductHandoffModel {
 
     /// Reopen a closed matter by a recorded human decision; the prior closure is preserved.
     public func reopen(actor: String, at date: Date) async {
+        do { try PaidUse.require("reopen a matter") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot else { lastError = "Load a matter first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for reopening."; return }

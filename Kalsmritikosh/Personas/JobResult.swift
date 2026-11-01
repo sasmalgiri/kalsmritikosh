@@ -202,6 +202,7 @@ public actor JobResultRepository {
     @discardableResult
     public func saveReview(of base: JobResultRecord, rows: [JobResultRow], complete: Bool, note: String?,
                            actor: String, at date: Date = Date(), evidenceCheck: EvidenceCheck? = nil) async throws -> UUID {
+        try PaidUse.require("save a review")
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         // Each row's person entries are recomputed from its frozen source values.
         let rows = rows.map { r in var r = r; let p = r.personEntries(); r.assertions = p.isEmpty ? nil : p; return r }

@@ -412,7 +412,7 @@ public final class AppState {
 
     public func ingestFiles(_ urls: [URL]) async {
         guard let ingest, !urls.isEmpty else { return }
-        guard PurchaseCenter.shared.allowPaidAction("add documents") else { return }   // §11 — a paid action
+        guard PurchaseCenter.shared.allowPaidAction("add documents", importing: true) else { return }   // §11 — a paid action
         if ProductModuleFlags.isEnabled(.importQueue) {
             importQueue.enqueue(urls, state: self)
             return
@@ -445,7 +445,7 @@ public final class AppState {
     /// unchanged file whose last read failed is re-parsed, not skipped. Returns what happened.
     public func readAgain(_ url: URL) async -> String {
         guard let ingest else { return "The ledger is not open yet." }
-        guard PurchaseCenter.shared.allowPaidAction("read your folders") else { return "Reading documents needs a subscription." }
+        guard PurchaseCenter.shared.allowPaidAction("read your folders", importing: true) else { return PaidUse.refusal("read your folders", importing: true)?.reason ?? "Reading documents needs a subscription." }
         var opened: URL?
         for root in bookmarks.roots {
             guard let r = try? bookmarks.resolve(root) else { continue }
@@ -2351,6 +2351,9 @@ public final class AppState {
                 guard let watcher else { return }
                 for await event in watcher.events {
                     guard let ingest, let self else { return }
+                    // N4 — a background read is a paid import too: skipped silently (never a paywall from
+                    // a background task) when nothing paid stands, or in the sample case.
+                    if PaidUse.refusal("read your folders", importing: true) != nil { continue }
                     let discovered = event.urls.count
                     if discovered > 0 {
                         await MainActor.run { self.noteDiscoveredFiles(discovered) }
@@ -4102,6 +4105,7 @@ public final class AppState {
     }
 
     public func boostIngestForQuestion(_ question: String) async {
+        guard PaidUse.refusal("read your folders", importing: true) == nil else { return }   // N4 — silent in the background
         guard let ingest else { return }
         let nouns = Self.extractNouns(from: question)
         guard !nouns.isEmpty else { return }
@@ -4265,7 +4269,7 @@ public final class AppState {
     /// The preferences a full erase clears. In the test host (same bundle id as the app) this is a
     /// separate suite, so a test erase can never remove the owner's real preferences.
     nonisolated static let erasePreferences: UserDefaults =
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        TestHost.isActive
             // Per process: CI runs test hosts in parallel processes, and one host's erase must not
             // clear the preferences another host's test just wrote.
             ? (UserDefaults(suiteName: "kalsmritikosh.tests.erase.\(ProcessInfo.processInfo.processIdentifier)") ?? .standard) : .standard
@@ -4861,6 +4865,7 @@ public final class AppState {
     /// eval/smoke boots. The bulk of the work runs during `await ingest.ingest`,
     /// which releases MainActor, so the UI is not blocked.
     public func resumeInterruptedRuns() async {
+        guard PaidUse.refusal("read your folders", importing: true) == nil else { return }   // N4 — silent in the background
         guard let runs = ingestRuns, let ingest else { return }
         let resumable = (try? await runs.resumableRuns()) ?? []
         guard !resumable.isEmpty else { return }
@@ -4894,6 +4899,7 @@ public final class AppState {
 
     /// App Nap when the window lost focus.
     public func autoReingestEmptyRoots() async {
+        guard PaidUse.refusal("read your folders", importing: true) == nil else { return }   // N4 — silent in the background
         guard let ingest, let files else { return }
         // Fresh pass — clear any prior Stop/Pause and mark running for the
         // live Pause/Resume/Stop controls.
@@ -4967,7 +4973,7 @@ public final class AppState {
     @discardableResult
     public func ingestAllRoots() async -> Int {
         guard let ingest else { return 0 }
-        guard PurchaseCenter.shared.allowPaidAction("read your folders") else { return 0 }   // §11 — a paid action
+        guard PurchaseCenter.shared.allowPaidAction("read your folders", importing: true) else { return 0 }   // §11 — a paid action
         // Fresh pass — clear any prior Stop/Pause and mark running for the
         // live Pause/Resume/Stop controls.
         await ingestControl.reset()

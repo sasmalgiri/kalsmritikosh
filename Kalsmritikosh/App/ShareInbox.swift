@@ -93,6 +93,8 @@ nonisolated enum ShareInbox {
 extension AppState {
     /// Drain the Share inbox (when the module is on) and read the intake.
     func receiveSharedItems() async {
+        // N4 — the sample case never takes the person's shared items; they stay in the inbox for their archive.
+        guard !SampleArchiveMode.isActive else { return }
         ShareInbox.mirrorSwitch()
         // Items wait in the inbox until the ledger is open, so a drain never outruns the read.
         guard database != nil, ProductModuleFlags.isEnabled(.captureExtensions), let inbox = ShareInbox.inbox else { return }

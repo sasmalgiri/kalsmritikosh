@@ -22,7 +22,7 @@ nonisolated enum PendingRestore {
     /// test hosts in parallel processes sharing the app's defaults, and one host's restore must
     /// never consume another's schedule (nor the owner's).
     static let store: UserDefaults = {
-        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else { return .standard }
+        guard TestHost.isActive else { return .standard }
         return UserDefaults(suiteName: "kalsmritikosh.tests.pendingRestore.\(ProcessInfo.processInfo.processIdentifier)") ?? .standard
     }()
 

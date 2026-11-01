@@ -288,6 +288,7 @@ private struct KnowledgeListView: View {
     /// dossiers, but is NOT deleted (preserve-everything). Recorded in
     /// fact_reviews so it shows in the Audit trail and can be restored.
     private func reject(_ row: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         guard let entities = appState.entities else { return }
         try? await entities.setReviewStatus(row.id, "rejected")
         _ = try? await appState.factReviews?.record(FactReview(
@@ -299,6 +300,7 @@ private struct KnowledgeListView: View {
     }
 
     private func restore(_ row: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         guard let entities = appState.entities else { return }
         try? await entities.setReviewStatus(row.id, nil)
         _ = try? await appState.factReviews?.record(FactReview(
@@ -312,6 +314,7 @@ private struct KnowledgeListView: View {
     /// corrected spelling as an alias so lookups resolve, and record the
     /// correction in the Audit trail.
     private func applyCorrection(_ row: EntitySummaryRow, to newName: String) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         correcting = nil
         guard !trimmed.isEmpty, trimmed != row.value,
@@ -329,6 +332,7 @@ private struct KnowledgeListView: View {
     /// (mentions combine, old spelling resolves via alias), reversibly. Recorded
     /// in fact_reviews (.merge) for the Audit trail.
     private func mergeInto(_ loser: EntitySummaryRow, winner: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         merging = nil
         guard loser.id != winner.id, let entities = appState.entities else { return }
         do {
@@ -347,6 +351,7 @@ private struct KnowledgeListView: View {
 
     /// Reverse a merge — the loser reappears as its own entity. Recorded (.split).
     private func unmerge(_ row: EntitySummaryRow) async {
+        guard PurchaseCenter.shared.allowPaidAction("review people and organisations") else { return }   // N4
         guard let entities = appState.entities else { return }
         try? await entities.unmerge(loserID: row.id)
         _ = try? await appState.factReviews?.record(FactReview(

@@ -92,6 +92,7 @@ public actor WorkCenterRepository {
 
     /// Start a run: posts the WF- run document (status open).
     public func createRun(defID: String, title: String, actor: String, at date: Date) async throws -> WCDocument {
+        try PaidUse.require("start a work-center run")
         guard WCCatalog.definition(defID) != nil else { throw WorkCenterError.unknownDefinition(defID) }
         let id = UUID()
         try await database.withSavepoint("wcrun_\(id.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
@@ -116,6 +117,7 @@ public actor WorkCenterRepository {
     /// who/when attestation stamp can never be rewritten — the confirmed set
     /// is re-read inside the barrier so a racing confirm cannot be bypassed.
     public func saveFields(runID: UUID, seq: Int, values: [String: String], at date: Date) async throws {
+        try PaidUse.require("edit a work-center run")
         _ = try await requireRun(runID)   // friendly not-found error first
         try await database.withSavepoint("wcsave_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)") { db in
             let rows = try db.query(
@@ -142,6 +144,7 @@ public actor WorkCenterRepository {
     /// records the confirmation, and — when the step posts — issues the step
     /// its own numbered document. Returns (stepDoc?, updatedRun).
     public func confirmStep(runID: UUID, seq: Int, actor: String, at date: Date) async throws -> (WCDocument?, WCDocument) {
+        try PaidUse.require("complete a work-center step")
         let run = try await requireRun(runID)
         guard let defID = run.defID, let def = WCCatalog.definition(defID) else {
             throw WorkCenterError.unknownDefinition(run.defID ?? "nil")
@@ -268,6 +271,7 @@ public actor WorkCenterRepository {
 
     /// Rename a run (the "Client / matter" name) so it's findable later.
     public func rename(runID: UUID, title: String, at date: Date) async throws {
+        try PaidUse.require("rename a work-center run")
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         _ = try await requireRun(runID)
@@ -281,6 +285,7 @@ public actor WorkCenterRepository {
     /// system keys — a variant is a template, not a specific run's record.
     public func createVariant(defID: String, name: String, values: [Int: [String: String]],
                               actor: String, at date: Date) async throws -> WCDocument {
+        try PaidUse.require("save a work-center variant")
         guard WCCatalog.definition(defID) != nil else { throw WorkCenterError.unknownDefinition(defID) }
         let clean = values.mapValues { $0.filter { !WCReservedKey.isReserved($0.key) } }
             .filter { !$0.value.isEmpty }
@@ -315,7 +320,8 @@ public actor WorkCenterRepository {
     /// field values ride under seq 1, exactly like a captured document.
     public func createRecord(type: String, title: String, values: [String: String],
                              actor: String, at date: Date) async throws -> WCDocument {
-        try await capture(type: type, title: title, values: values, actor: actor, at: date)
+        try PaidUse.require("add a register entry")
+        return try await capture(type: type, title: title, values: values, actor: actor, at: date)
     }
 
     /// Edit a register record in place, sealing every changed field to the
@@ -327,6 +333,7 @@ public actor WorkCenterRepository {
     @discardableResult
     public func updateRecord(docID: UUID, title: String, values: [String: String],
                              editor: String, note: String, at date: Date) async throws -> Int {
+        try PaidUse.require("edit a register entry")
         _ = try await requireRun(docID)   // fail-closed: the record must exist
         return try await database.withSavepoint(
             "wcedit_\(docID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in

@@ -96,7 +96,7 @@ struct KalsmritikoshApp: App {
                     // W2-7 — when this process is only the unit-test host, never open the person's
                     // ledger: tests boot their own AppState on temporary ledgers. Booting the real
                     // one here would convert it with the TEST Keychain key and lock the person out.
-                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+                    if TestHost.isActive { return }
                     IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
                     CaptureServiceProvider.shared.install(appState: appState)   // W3-6 — Services menu
                     #if DEBUG
@@ -177,7 +177,7 @@ struct KalsmritikoshApp: App {
 final class AppTerminationGuard: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // The test host quits at the runner's request; it must never wait on a dialog.
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return .terminateNow }
+        if TestHost.isActive { return .terminateNow }
         Task { @MainActor in
             let saved = await Self.flushWithin(seconds: 5)
             if saved {

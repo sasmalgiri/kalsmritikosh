@@ -108,6 +108,7 @@ public nonisolated enum JobResultHandoff {
     public static func addToAllegation(_ record: JobResultRecord, row index: Int, allegationID: UUID, stance: GridStance,
                                        note: String?, results: JobResultRepository, caseFiles: CaseFileService,
                                        allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> [UUID] {
+        try PaidUse.require("carry a result into the case")
         let carried = try await carried(record, row: index, results: results)
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         let refs = carried.citations
@@ -129,6 +130,7 @@ public nonisolated enum JobResultHandoff {
     @discardableResult
     public static func addToChronology(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService,
                                        allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
+        try PaidUse.require("carry a result into the case")
         let carried = try await carried(record, row: index, results: results)
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         let refs = carried.citations

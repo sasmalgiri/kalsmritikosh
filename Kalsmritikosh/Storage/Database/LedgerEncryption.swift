@@ -83,7 +83,7 @@ public enum LedgerKeychain {
     /// lives only in memory for the life of the process: a test can never replace the person's
     /// key, and tests never wait on a Keychain that a headless CI runner cannot unlock (a locked
     /// keychain blocks the call, and with main-actor isolation that stalled every test).
-    static let usesMemoryStore = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    static let usesMemoryStore = TestHost.isActive
     private static let memory = MemoryKeyStore()
 
     /// The person's own ledger key, READ ONLY, even from the test host — for the owner-archive

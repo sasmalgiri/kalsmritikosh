@@ -119,7 +119,8 @@ struct PurchaseTests {
         #expect(cached.entitlement(now: day(31)) == .lapsed(reason: .expired))
         #expect(CachedEntitlement(.grace(until: day(3), plan: .annual), at: t0).entitlement(now: day(4)) == .lapsed(reason: .billingFailed))
         #expect(CachedEntitlement(.legacyTrial(endsAt: day(2)), at: t0).entitlement(now: day(3)) == .lapsed(reason: .legacyTrialEnded))
-        #expect(CachedEntitlement(.legacyUnlocked, at: t0).entitlement(now: day(9_999)) == .legacyUnlocked)
+        // N3: a permanent purchase is proved by StoreKit's signed transaction, never by the cache.
+        #expect(CachedEntitlement(.legacyUnlocked, at: t0).entitlement(now: day(9_999)) == .unknown)
         #expect(CachedEntitlement(.unknown, at: t0).entitlement(now: t0) == .notStarted, "an unknown state is never cached as access")
         // Round trip through the isolated preference store.
         let defaults = AppDefaults.store
@@ -186,3 +187,136 @@ struct PurchaseTests {
         #expect(settings["_billingGracePeriodEnabled"] as? Bool == true && settings["_billingGracePeriodInDays"] as? Int == 3)
     }
 }
+
+/// Autonomous completion mandate 2026-11-01 — N2 (expiry at the moment of use), N3 (the cache is not an
+/// authority) and N4 (one paid-use boundary, sample case never imports). Time is injected; the Mac's clock
+/// is never changed. Overrides are task-local, so these tests never disturb suites running alongside.
+@Suite("Entitlement at the moment of use, cache trust and the paid boundary")
+struct EntitlementBoundaryTests {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    private func at(_ s: Double) -> Date { t0.addingTimeInterval(s) }
+
+    @Test("An open app crossing the end of a trial, a paid period and a grace period refuses at that moment; cancelled-but-valid and a renewal keep access")
+    @MainActor func crossesBoundaries() {
+        var now = t0
+        let center = PurchaseCenter(talksToStore: false)
+        center.clock = { now }
+        // A trial that ends in an hour.
+        center.apply(.introductoryTrial(endsAt: at(3_600), plan: .monthly, willRenew: true))
+        #expect(center.allowPaidAction("edit"))
+        now = at(3_601)
+        #expect(!center.allowPaidAction("edit"), "the trial ended while the app stayed open")
+        #expect(center.entitlement == .lapsed(reason: .expired) && center.paywallRequested == "edit")
+        // A cancelled plan stays valid until its end; then it refuses.
+        center.paywallRequested = nil
+        center.apply(.subscribed(expiresAt: at(7_200), plan: .annual, willRenew: false))
+        #expect(center.allowPaidAction("edit"))
+        now = at(7_200)
+        #expect(!center.allowPaidAction("edit"))
+        // Grace ends: billing failed.
+        center.apply(.grace(until: at(9_000), plan: .monthly))
+        #expect(center.allowPaidAction("edit"))
+        now = at(9_000)
+        #expect(!center.allowPaidAction("edit") && center.entitlement == .lapsed(reason: .billingFailed))
+        // A renewal extends the period: access again.
+        center.apply(.subscribed(expiresAt: at(100_000), plan: .monthly, willRenew: true))
+        #expect(center.allowPaidAction("edit"))
+        // Reading never depends on any of this.
+        #expect(center.entitlement.allowsReadAccess)
+    }
+
+    @Test("The deadline flips the state on its own while the app stays open, with no paid action and no refresh")
+    @MainActor func deadlineFires() async throws {
+        let center = PurchaseCenter(talksToStore: false)
+        center.clock = { Date() }
+        center.apply(.subscribed(expiresAt: Date().addingTimeInterval(0.5), plan: .monthly, willRenew: true))
+        #expect(center.entitlement.allowsPaidUse)
+        try await Task.sleep(for: .seconds(2.5))
+        #expect(center.entitlement == .lapsed(reason: .expired), "\(center.entitlement)")
+    }
+
+    @Test("The boundary applies the clock at the moment of the check, refuses imports in the sample case and lets the sample be worked on")
+    func boundaryRules() {
+        let active = Entitlement.subscribed(expiresAt: at(60), plan: .monthly, willRenew: true)
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: active, now: at(59)) == nil)
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: active, now: at(60)) != nil, "expired at use, without a refresh")
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: .lapsed(reason: .revoked), now: t0) != nil)
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: .unknown, now: t0) != nil, "an unanswered store is not an unlock")
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: .legacyUnlocked, now: at(1e9)) == nil)
+        // The sample: working on the bundled documents is free; importing the person's files never is.
+        #expect(PaidUse.refusal("run jobs", sample: true, entitlement: .notStarted, now: t0) == nil)
+        #expect(PaidUse.refusal("add documents", importing: true, sample: true, entitlement: .legacyUnlocked, now: t0)?.reason.contains("Back to my archive") == true)
+        // The refusal says what stays free.
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: .notStarted, now: t0)?.reason.contains("readable and exportable") == true)
+    }
+
+    @Test("Operations refuse at their own boundary: a Work Center run, a dataset, a case and an import cannot bypass a lapsed state")
+    func serviceBoundary() async throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-paid-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let db = try Database(url: temp.appendingPathComponent("p.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        let wc = WorkCenterRepository(database: db)
+        let datasets = WorkbenchDatasetRepository(database: db)
+        let cases = InvestigationCaseRepository(database: db)
+        try await PaidUse.TestOverride.$entitlement.withValue(.lapsed(reason: .expired)) {
+            try await PaidUse.TestOverride.$sample.withValue(false) {
+                await #expect(throws: PaidUse.Refused.self) {
+                    _ = try await wc.createRun(defID: "x", title: "t", actor: "me", at: t0)
+                }
+                await #expect(throws: PaidUse.Refused.self) {
+                    _ = try await datasets.createDataset(workspaceID: UUID(), title: "d", mode: .simple, actor: "me", at: t0)
+                }
+                await #expect(throws: PaidUse.Refused.self) {
+                    _ = try await cases.createCase(workspaceID: UUID(), title: "c", actor: "me", at: t0)
+                }
+                #expect(PaidUse.refusal("read your folders", importing: true) != nil, "background reads skip silently")
+            }
+        }
+        // Verified active: the boundary lets the operation through to its own validation.
+        try await PaidUse.TestOverride.$entitlement.withValue(.subscribed(expiresAt: Date().addingTimeInterval(3_600), plan: .monthly, willRenew: true)) {
+            try await PaidUse.TestOverride.$sample.withValue(false) {
+                #expect(PaidUse.refusal("start a work-center run") == nil)
+            }
+        }
+    }
+
+    @Test("The cache is sealed: an edited preference, a forged lifetime unlock and a stale clock grant nothing")
+    func cacheTrust() throws {
+        let defaults = UserDefaults(suiteName: "pj-cache-\(UUID().uuidString)")!
+        let secret = Data(repeating: 7, count: 32)
+        let active = Entitlement.subscribed(expiresAt: at(86_400), plan: .monthly, willRenew: true)
+        CachedEntitlement(active, at: t0).save(to: defaults, secret: secret)
+        #expect(CachedEntitlement.load(from: defaults, secret: secret)?.entitlement(now: at(10)) == active)
+        // Another installation's key, or none: nothing loads.
+        #expect(CachedEntitlement.load(from: defaults, secret: Data(repeating: 8, count: 32)) == nil)
+        #expect(CachedEntitlement.load(from: defaults, secret: nil) == nil)
+        // Tampering with the stored bytes (the editable preference) breaks the seal.
+        var raw = try #require(defaults.data(forKey: CachedEntitlement.key))
+        raw[raw.count / 2] ^= 0x01
+        defaults.set(raw, forKey: CachedEntitlement.key)
+        #expect(CachedEntitlement.load(from: defaults, secret: secret) == nil)
+        // A forged permanent state, even correctly sealed, grants nothing: only StoreKit proves it.
+        CachedEntitlement(.legacyUnlocked, at: t0).save(to: defaults, secret: secret)
+        #expect(CachedEntitlement.load(from: defaults, secret: secret)?.entitlement(now: at(10)) == .unknown)
+        // A plain JSON preference in the old v1 format is not read.
+        defaults.set(try JSONEncoder().encode(CachedEntitlement(.legacyUnlocked, at: t0)), forKey: "kalsmritikosh.purchase.verifiedEntitlement")
+        CachedEntitlement(.notStarted, at: t0).save(to: defaults, secret: secret)
+        #expect(CachedEntitlement.load(from: defaults, secret: secret)?.entitlement(now: t0) == .notStarted)
+        // Clock rollback: the state is read as of the verification, never earlier — a cache verified after
+        // its own end stays lapsed when the clock is set back.
+        let late = CachedEntitlement(.subscribed(expiresAt: at(100), plan: .monthly, willRenew: true), at: at(200))
+        #expect(late.entitlement(now: t0) == .lapsed(reason: .expired))
+        // Malformed fields grant nothing.
+        var broken = CachedEntitlement(active, at: t0); broken.until = nil
+        #expect(broken.entitlement(now: t0) == .unknown)
+    }
+
+    @Test("Test-only configurations are reached through TestHost alone")
+    func testHostBoundary() {
+        #expect(TestHost.isActive, "this is the test host (Debug)")
+        #expect(PurchaseCenter.isTestHost == TestHost.isActive && AppDefaults.isTestHost == TestHost.isActive)
+    }
+}
+

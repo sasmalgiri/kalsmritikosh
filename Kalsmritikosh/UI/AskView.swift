@@ -500,6 +500,7 @@ public struct AskView: View {
         panel.allowedContentTypes = SourceType.attachableContentTypes
         panel.prompt = "Attach"
         panel.message = "Attach a supported document, spreadsheet, email, image, audio or video — it's ingested into your private archive and becomes citable evidence."
+        guard PurchaseCenter.shared.allowPaidAction("attach documents", importing: true) else { return }   // N4
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
             let attachment = AskAttachment(url: url, state: .ingesting)
@@ -943,6 +944,9 @@ public struct AskView: View {
     private func submit() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, !asking else { return }
+        // §11 — asking the archive is analysis, a paid action. Decided before anything is written (N4: it
+        // used to run after the question was saved, and a refusal left Ask stuck "asking").
+        guard PurchaseCenter.shared.allowPaidAction("ask questions") else { return }
         asking = true
         question = ""
         // Chips are transient composer UI; the attached files are already
@@ -985,11 +989,6 @@ public struct AskView: View {
             // so the brain's answer call runs in parallel — the user
             // sees something immediately, and the next time they ask the
             // boosted files are already in the canonical store.
-            // §11 — asking the archive is analysis, a paid action; the refusal opens the subscription screen.
-            guard await MainActor.run(body: { PurchaseCenter.shared.allowPaidAction("ask questions") }) else {
-                await MainActor.run { self.turns.removeAll { $0.id == placeholderID } }
-                return
-            }
             Task { await appState.boostIngestForQuestion(q) }
 
             // 3) The full brain answer is the ONLY LLM path (spec P1.3).

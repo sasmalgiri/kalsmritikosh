@@ -21,7 +21,7 @@ import Foundation
 
 public nonisolated enum AppDefaults {
     /// True when running inside the unit-test host.
-    public static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    public static let isTestHost = TestHost.isActive
 
     /// The suite a test host uses instead of the standard defaults (nil in the app).
     public static let testSuiteName: String? = isTestHost ? "kalsmritikosh.tests.prefs.\(ProcessInfo.processInfo.processIdentifier)" : nil

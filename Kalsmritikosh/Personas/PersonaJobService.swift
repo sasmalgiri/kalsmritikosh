@@ -94,6 +94,7 @@ public actor PersonaJobService {
     /// is one the persona actually declares, then dispatches by kind to the real implementation.
     @discardableResult
     public func launch(_ job: PersonaJob, context: PersonaJobLaunchContext) async throws -> PersonaJobLaunch {
+        try PaidUse.require("run jobs")
         let appID = ApplicationDefinitionID(rawValue: job.persona)
         guard catalog.latestApplication(id: appID) != nil else { throw PersonaJobError.unknownPersona(job.persona) }
         guard jobs(forPersona: appID).contains(where: { $0.id == job.id && $0.kind == job.kind }) else {

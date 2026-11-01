@@ -30,6 +30,7 @@ public actor InvestigationCaseRepository {
                            scopeStatement: String? = nil, outOfScopeStatement: String? = nil,
                            timeWindowStart: Date? = nil, timeWindowEnd: Date? = nil,
                            possibleDeadlineNote: String? = nil, actor: String, at date: Date) async throws -> InvestigationCase {
+        try PaidUse.require("open a case")
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { throw InvestigationCaseError.blankTitle }
         let cleanActor = actor.trimmingCharacters(in: .whitespacesAndNewlines)

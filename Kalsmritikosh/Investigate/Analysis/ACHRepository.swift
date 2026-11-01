@@ -83,6 +83,7 @@ public actor ACHRepository {
     @discardableResult
     public func save(_ a: ACHAnalysis, caseID: UUID? = nil, workspaceID: UUID? = nil,
                      actor: String, at date: Date = Date()) async throws -> Bool {
+        try PaidUse.require("edit analyses")
         let who = try Self.clean(actor)
         let sp = "ach_save_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         let encoded = Self.encodeParts(a)
@@ -111,6 +112,7 @@ public actor ACHRepository {
     /// File an analysis under a case (or take it out of one). Named `fileUnder` because the
     /// architecture guard reserves the word "assign" (as a method call) for the sensitive-scope mutation service.
     public func fileUnder(analysisID: UUID, caseID: UUID?, workspaceID: UUID?, actor: String, at date: Date = Date()) async throws {
+        try PaidUse.require("file an analysis")
         let who = try Self.clean(actor)
         try await database.withSavepoint("ach_assign_\(analysisID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
             try db.exec("UPDATE ach_analyses SET case_id = ?, workspace_id = ?, updated_by = ?, updated_at = MAX(updated_at, ?) WHERE id = ?;",

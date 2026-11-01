@@ -1097,6 +1097,7 @@ public struct WorkCenterView: View {
     }
 
     private func attachFiles(_ urls: [URL]) {
+        guard PurchaseCenter.shared.allowPaidAction("attach documents", importing: true) else { return }   // N4
         guard let run = activeRun, let def = run.defID.flatMap(WCCatalog.definition),
               let op = def.operations.first(where: { $0.seq == selectedSeq }) else { return }
         let new = urls.map {
