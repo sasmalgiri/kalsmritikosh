@@ -1,0 +1,19 @@
+archive: n=914 right=98.2% wrong=1.4% {'correct': 778, 'dump': 1, 'missed': 2, 'wrong': 13, 'honest-refusal': 120}
+   sentenced~p1 n=  60 right= 98.3%  {'correct': 59, 'dump': 1}
+   sentenced~p2 n=  60 right=100.0%  {'correct': 60}
+   timeline~p1 n=  60 right= 95.0%  {'correct': 57, 'wrong': 3}
+   timeline~p2 n=  60 right= 95.0%  {'correct': 57, 'wrong': 3}
+   count~p1   n=  60 right= 98.3%  {'correct': 59, 'wrong': 1}
+   count~p2   n=  60 right= 98.3%  {'correct': 59, 'wrong': 1}
+   office~p1  n=  60 right=100.0%  {'correct': 60}
+   office~p2  n=  60 right=100.0%  {'correct': 60}
+   absent~p1  n=  60 right=100.0%  {'honest-refusal': 60}
+   absent~p2  n=  60 right=100.0%  {'honest-refusal': 60}
+   plea~p1    n=  55 right= 98.2%  {'correct': 54, 'missed': 1}
+   plea~p2    n=  55 right= 98.2%  {'correct': 54, 'missed': 1}
+   charge~p1  n=  54 right= 96.3%  {'correct': 52, 'wrong': 2}
+   charge~p2  n=  54 right= 94.4%  {'correct': 51, 'wrong': 3}
+   sentence~p1 n=  37 right=100.0%  {'correct': 37}
+   sentence~p2 n=  37 right=100.0%  {'correct': 37}
+   charged~p1 n=  11 right=100.0%  {'correct': 11}
+   charged~p2 n=  11 right=100.0%  {'correct': 11}
