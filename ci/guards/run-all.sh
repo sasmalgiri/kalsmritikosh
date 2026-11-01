@@ -19,6 +19,7 @@ GUARDS=(
   reachability.sh
   ledger-encryption.sh
   clipper-no-network.sh
+  release-check-selftest.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do
