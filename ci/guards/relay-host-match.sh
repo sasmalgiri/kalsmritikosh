@@ -20,6 +20,14 @@ if [ -z "$appBlocked" ] || [ "$appBlocked" != "$relayBlocked" ]; then
   exit 1
 fi
 echo "ok: AI-blocked storefronts identical in app and relay ($appBlocked)"
+# A8–A10 — the public-record hosts, in the app (PublicSource.host) and the helper (lookupHosts).
+appLookup=$(sed -n '/public var host: String {/,/^    }/p' "$ROOT/Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift" | grep -oE '"[a-z0-9.-]+"' | tr -d '"' | sort -u | tr '\n' ' ')
+helperLookup=$(sed -n '/static let lookupHosts/,/\]/p' "$ROOT/KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift" | grep -oE '"[a-z0-9.-]+"' | tr -d '"' | sort -u | tr '\n' ' ')
+if [ -z "$appLookup" ] || [ "$appLookup" != "$helperLookup" ]; then
+  echo "FAIL: PublicSource hosts ($appLookup) != helper lookupHosts ($helperLookup)"
+  exit 1
+fi
+echo "ok: public-record hosts identical in app and helper ($appLookup)"
 if command -v node >/dev/null 2>&1; then
   major=$(node -p 'process.versions.node.split(".")[0]'); minor=$(node -p 'process.versions.node.split(".")[1]')
   if [ "$major" -gt 23 ] || { [ "$major" -eq 23 ] && [ "$minor" -ge 6 ]; }; then

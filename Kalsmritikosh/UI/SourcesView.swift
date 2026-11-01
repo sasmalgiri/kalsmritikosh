@@ -36,6 +36,8 @@ public struct SourcesView: View {
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     @State private var holdBlock: String?
+    /// A8–A11 — the Online tools sheet.
+    @State private var showOnlineTools = false
     /// Minimum-touch: drop folders anywhere on this screen to add them —
     /// no picker panel needed.
     @State private var dropTargeted = false
@@ -98,6 +100,7 @@ public struct SourcesView: View {
                 await refresh()
             }
         }
+        .sheet(isPresented: $showOnlineTools) { OnlineToolsView() }
         .alert("Legal hold", isPresented: Binding(get: { holdBlock != nil }, set: { if !$0 { holdBlock = nil } })) {
             Button("OK", role: .cancel) { holdBlock = nil }
         } message: {
@@ -173,6 +176,11 @@ public struct SourcesView: View {
                 ]
             )
             Spacer()
+            if ConnectivityMode.current == .online {
+                Button { showOnlineTools = true } label: { Label("Online tools…", systemImage: "globe") }
+                    .help("Exchange rate at a date, sanctions lists, company registry, court records, web capture and recording transcription.")
+                    .accessibilityIdentifier("sources.onlineTools")
+            }
             Button {
                 Task { await runIngestion() }
             } label: {

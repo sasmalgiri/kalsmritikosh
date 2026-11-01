@@ -19,6 +19,10 @@ struct OutboundHTTPRequest: Codable, Sendable {
     let url: String
     let headers: [String: String]
     let body: Data
+    /// A8–A10 — "GET" for public-record lookups and web capture; nil = POST (the AI providers).
+    var method: String? = nil
+    /// A9 — "capture": a page the person asked to capture (any HTTPS host, GET only).
+    var purpose: String? = nil
 }
 
 struct OutboundHTTPResponse: Codable, Sendable {

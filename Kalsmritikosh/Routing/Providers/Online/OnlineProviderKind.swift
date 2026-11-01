@@ -63,6 +63,13 @@ public nonisolated struct OutboundHTTPRequest: Codable, Sendable {
     public let url: String
     public let headers: [String: String]
     public let body: Data
+    /// A8–A10 — "GET" for public-record lookups and web capture; nil = POST (the AI providers).
+    public var method: String? = nil
+    /// A9 — "capture": a page the person asked to capture (any HTTPS host, GET only).
+    public var purpose: String? = nil
+    public init(url: String, headers: [String: String], body: Data, method: String? = nil, purpose: String? = nil) {
+        self.url = url; self.headers = headers; self.body = body; self.method = method; self.purpose = purpose
+    }
 }
 
 /// A4 — one page image sent for reading (JPEG or PNG), alongside the text prompt.
@@ -83,9 +90,12 @@ public nonisolated struct OutboundHTTPResponse: Codable, Sendable {
 public nonisolated enum OnlineRequestBuilder {
 
     public enum BuildError: Error, LocalizedError, Equatable {
-        case imagesNotSupported(String)
+        case imagesNotSupported(String), audioNotSupported(String)
         public var errorDescription: String? {
-            switch self { case .imagesNotSupported(let p): return "\(p) is not set up to read page images in this release — nothing was sent." }
+            switch self {
+            case .imagesNotSupported(let p): return "\(p) is not set up to read page images in this release — nothing was sent."
+            case .audioNotSupported(let p): return "\(p) does not transcribe recordings. Choose AI Included, or Gemini with your own key, in Settings ▸ Online — nothing was sent."
+            }
         }
     }
 
@@ -99,6 +109,17 @@ public nonisolated enum OnlineRequestBuilder {
         let geminiParts: [[String: Any]] = images.map { ["inline_data": ["mime_type": $0.mediaType, "data": $0.data.base64EncodedString()]] }
             + [["text": prompt]]
         if !images.isEmpty, kind == .openai { throw BuildError.imagesNotSupported(kind.displayName) }
+        // A11 — a recording: Gemini reads audio directly; AI Included sends it to the relay's transcription
+        // route (Gemini on the publisher's key, its own fixed prompt); Claude does not take audio.
+        if let audio = images.first(where: { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }) {
+            switch kind {
+            case .included:
+                return try AIIncludedRelay.request("/v1/transcribe", subscription: apiKey,
+                                                   body: ["audioBase64": audio.data.base64EncodedString(), "mimeType": audio.mediaType])
+            case .gemini: break
+            case .anthropic, .openai: throw BuildError.audioNotSupported(kind.displayName)
+            }
+        }
         switch kind {
         case .included:
             // The relay fixes the model and the output ceiling itself; it reads only these fields.

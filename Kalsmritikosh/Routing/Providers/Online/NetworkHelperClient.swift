@@ -44,15 +44,26 @@ public enum NetworkHelperError: Error, LocalizedError {
 
 public nonisolated enum NetworkHelperClient {
 
+    /// The same rule the helper applies: POST to the AI hosts only; GET to the public-record hosts, or to
+    /// a page the person asked to capture.
+    static func allows(host: String, method: String?, purpose: String?) -> Bool {
+        switch method {
+        case nil: return OnlineProviderKind.allowedHosts.contains(host)
+        case "GET": return PublicSource.allHosts.contains(host) || purpose == "capture"
+        default: return false
+        }
+    }
+
     public static func send(_ request: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {
         guard ConnectivityMode.onlineAvailableInThisBuild else { throw NetworkHelperError.unavailable }
-        guard let host = URL(string: request.url)?.host, OnlineProviderKind.allowedHosts.contains(host),
-              request.url.hasPrefix("https://") else {
+        guard let host = URL(string: request.url)?.host, request.url.hasPrefix("https://"),
+              Self.allows(host: host, method: request.method, purpose: request.purpose) else {
             throw NetworkHelperError.hostNotAllowed(URL(string: request.url)?.host ?? request.url)
         }
         // A3 — every AI destination (the providers and AI Included) is closed where the App Store
         // country does not allow generative AI; the check sits here so no caller can skip it.
-        if let why = AIRegion.current.explanation { throw NetworkHelperError.failed(why) }
+        // Public-record lookups and web capture are not AI and are not affected.
+        if OnlineProviderKind.allowedHosts.contains(host), let why = AIRegion.current.explanation { throw NetworkHelperError.failed(why) }
         let payload = try JSONEncoder().encode(request)
         guard #available(macOS 26.0, *) else { throw NetworkHelperError.unavailable }
         return try await sendViaHelper(payload)

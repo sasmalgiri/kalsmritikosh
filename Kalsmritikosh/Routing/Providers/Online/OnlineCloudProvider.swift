@@ -156,6 +156,21 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         return try await send(prompt: prompt, options: GenerationOptions(maxTokens: 8_000), carriesDocuments: true, images: images)
     }
 
+    /// A11 — transcribe a recording with speaker labels and timecodes (AI Included, or Gemini with the
+    /// person's own key). A document send: eligible, confirmed provider only; always previewed.
+    public func transcribeRecording(_ audio: OutboundImage, fileName: String) async throws -> String {
+        let s = seams.settings()
+        if let why = OnlineDocumentEligibility.refusal(kind: s.kind, confirmedTermsVersion: s.confirmedDocumentTerms) {
+            await log(s.kind, s.model, "", 0, 0, nil, "blocked", "provider not eligible for documents")
+            throw await fail(OnlineError.notEligibleForDocuments(why))
+        }
+        guard s.kind == .included || s.kind == .gemini else {
+            throw await fail(OnlineRequestBuilder.BuildError.audioNotSupported(s.kind.displayName))
+        }
+        let prompt = "Transcribe the recording “\(fileName)” verbatim. Label each turn with a speaker label (Speaker 1, Speaker 2, …) and a start time [mm:ss]. Do not summarise, translate, correct or add anything; mark inaudible parts as [inaudible]."
+        return try await send(prompt: prompt, options: GenerationOptions(maxTokens: 8_192), carriesDocuments: true, images: [audio])
+    }
+
     private func send(prompt: String, options: GenerationOptions, carriesDocuments: Bool,
                       images: [OutboundImage] = []) async throws -> String {
         let settings = seams.settings()
@@ -191,7 +206,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         // A4 — each image is listed (label, size, SHA-256) in what is previewed and recorded; the images
         // themselves cannot be masked, which the preview says.
         let imageManifest = images.map { img in
-            "[image \(img.label): \(img.mediaType), \(img.data.count) bytes, SHA-256 \(SHA256.hash(data: img.data).map { String(format: "%02x", $0) }.joined())]"
+            "[\(img.mediaType.hasPrefix("image/") ? "image" : "recording") \(img.label): \(img.mediaType), \(img.data.count) bytes, SHA-256 \(SHA256.hash(data: img.data).map { String(format: "%02x", $0) }.joined())]"
         }
         let shownText = ([sendSystem, sendPrompt].compactMap { $0 } + imageManifest).joined(separator: "\n\n")
         let bytes = shownText.utf8.count + images.reduce(0) { $0 + $1.data.count }
@@ -216,7 +231,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                                       text: shownText, bytes: bytes, maskedCount: mapping.count,
                                       carriesDocuments: carriesDocuments,
                                       providerTerms: carriesDocuments ? (images.isEmpty ? kind.documentTerms
-                                          : kind.documentTerms + " The \(images.count) page image(s) are sent as they are: names or details shown in them cannot be masked.") : nil,
+                                          : kind.documentTerms + " The \(images.count) attachment(s) (page images or a recording) are sent as they are: names or details shown or spoken in them cannot be masked.") : nil,
                                       aiIncluded: kind == .included)
         let beforeConsent = SendSettings(settings)
         guard await seams.consent(preview) else {
@@ -268,7 +283,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             try Task.checkCancellation()
             dispatched = true
             let response = try await Self.withDeadline(Self.replyDeadline) { [seams] in try await seams.transport(request) }
-            let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
+            // A11 — AI Included's transcription route answers in Gemini's form (its refusals in the relay's).
+            let isAudio = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
+            if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
+                throw OnlineRequestBuilder.ParseError.relay(why)
+            }
+            let text = try OnlineRequestBuilder.parse(kind: kind == .included && isAudio ? .gemini : kind, response: response)
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {

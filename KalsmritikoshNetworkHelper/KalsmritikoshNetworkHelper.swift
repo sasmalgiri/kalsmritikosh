@@ -18,6 +18,11 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
     /// (ci/guards/relay-host-match.sh checks the two).
     static let relayHost = ""
     static let allowedHosts: Set<String> = Set(["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com", relayHost].filter { !$0.isEmpty })
+    /// A8/A10 — public-record sources, read with GET only. Keep identical to `PublicSource.allHosts`.
+    static let lookupHosts: Set<String> = ["data-api.ecb.europa.eu", "sanctionslistservice.ofac.treas.gov", "scsanctions.un.org",
+                                           "api.gleif.org", "www.courtlistener.com"]
+    /// A9 — the most a captured page or a downloaded list may be.
+    static let maxResponseBytes = 40 * 1024 * 1024
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral          // no cookies, no cache on disk
@@ -30,18 +35,26 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
 
     func send(_ request: Data, reply: @escaping @Sendable (Data?, String?) -> Void) {
         guard let req = try? JSONDecoder().decode(OutboundHTTPRequest.self, from: request),
-              let url = URL(string: req.url), url.scheme == "https",
-              let host = url.host, Self.allowedHosts.contains(host) else {
+              let url = URL(string: req.url), url.scheme == "https", let host = url.host else {
+            reply(nil, "Refused: not an allowed HTTPS destination.")
+            return
+        }
+        // POST only to the AI hosts; GET only to the public-record hosts, or to a page the person asked
+        // to capture. Nothing else.
+        let isGet = req.method == "GET"
+        let allowed = isGet ? (Self.lookupHosts.contains(host) || req.purpose == "capture") : Self.allowedHosts.contains(host)
+        guard allowed, req.method == nil || isGet else {
             reply(nil, "Refused: not an allowed HTTPS destination.")
             return
         }
         var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = req.body
+        urlRequest.httpMethod = isGet ? "GET" : "POST"
+        if !isGet { urlRequest.httpBody = req.body }
         for (k, v) in req.headers { urlRequest.setValue(v, forHTTPHeaderField: k) }
         session.dataTask(with: urlRequest) { data, response, error in
             if let error { reply(nil, error.localizedDescription); return }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if (data?.count ?? 0) > Self.maxResponseBytes { reply(nil, "Refused: the reply is larger than \(Self.maxResponseBytes / 1_048_576) MB."); return }
             reply(try? JSONEncoder().encode(OutboundHTTPResponse(status: status, body: data ?? Data())), nil)
         }.resume()
     }
