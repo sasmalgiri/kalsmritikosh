@@ -33,7 +33,16 @@ nonisolated enum PurchaseProducts {
     static let monthly = "ecosanskritiinnovation.Kalsmritikosh.edition.monthly"
     static let annual = "ecosanskritiinnovation.Kalsmritikosh.edition.annual"
     static let introductoryTrialDays = 14
-    static var subscriptions: [String] { [monthly, annual] }
+    /// A2 (owner decision 2026-11-01) — AI Included: the same subscription group, one level higher
+    /// (everything in the edition plus 300 Claude Opus 5 questions a month through the publisher's
+    /// relay). No introductory offer: the free trial never includes the publisher's AI.
+    static let aiMonthly = "ecosanskritiinnovation.Kalsmritikosh.ai.monthly"
+    static let aiAnnual = "ecosanskritiinnovation.Kalsmritikosh.ai.annual"
+    /// Consumable: 200 more AI Included questions, valid 12 months (credited by the relay).
+    static let aiTopUp200 = "ecosanskritiinnovation.Kalsmritikosh.ai.topup200"
+    static let aiQuestionsPerMonth = 300
+    static let aiTopUpQuestions = 200
+    static var subscriptions: [String] { [monthly, annual, aiMonthly, aiAnnual] }
 
     /// Sold under the 2026-10-18 plan; kept for restore, reinstall and update — never a subscription.
     static let legacyUnlock = "ecosanskritiinnovation.Kalsmritikosh.unlock"
@@ -41,6 +50,8 @@ nonisolated enum PurchaseProducts {
     static let legacyTrialDays = 14
 
     static var all: [String] { subscriptions + [legacyUnlock, legacyTrial] }
+    /// Everything the App Store is asked for (the consumable top-up is never an entitlement record).
+    static var storeProducts: [String] { all + [aiTopUp200] }
 
     /// Apple's page for upgrading, downgrading or cancelling (the in-app sheet does not exist on macOS).
     static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
@@ -48,19 +59,47 @@ nonisolated enum PurchaseProducts {
     static let cancelInstructionsURL = URL(string: "https://support.apple.com/en-us/118428")!
 }
 
-/// Which duration a transaction is for.
+/// Which plan and duration a transaction is for.
 nonisolated enum SubscriptionPlan: String, Equatable, Sendable, CaseIterable {
-    case monthly, annual
+    case monthly, annual, aiMonthly, aiAnnual
     init?(productID: String) {
         switch productID {
         case PurchaseProducts.monthly: self = .monthly
         case PurchaseProducts.annual: self = .annual
+        case PurchaseProducts.aiMonthly: self = .aiMonthly
+        case PurchaseProducts.aiAnnual: self = .aiAnnual
         default: return nil
         }
     }
-    var productID: String { self == .monthly ? PurchaseProducts.monthly : PurchaseProducts.annual }
-    var periodNoun: String { self == .monthly ? "month" : "year" }
-    var label: String { self == .monthly ? "Monthly" : "Annual" }
+    var productID: String {
+        switch self {
+        case .monthly: return PurchaseProducts.monthly
+        case .annual: return PurchaseProducts.annual
+        case .aiMonthly: return PurchaseProducts.aiMonthly
+        case .aiAnnual: return PurchaseProducts.aiAnnual
+        }
+    }
+    var isAnnual: Bool { self == .annual || self == .aiAnnual }
+    /// AI Included: the publisher's Claude Opus 5 questions come with the plan.
+    var includesAI: Bool { self == .aiMonthly || self == .aiAnnual }
+    var periodNoun: String { isAnnual ? "year" : "month" }
+    var label: String {
+        switch self {
+        case .monthly: return "Monthly"
+        case .annual: return "Annual"
+        case .aiMonthly: return "AI Included monthly"
+        case .aiAnnual: return "AI Included annual"
+        }
+    }
+    /// The same plan with the other duration (for the annual saving).
+    var counterpart: SubscriptionPlan {
+        switch self {
+        case .monthly: return .annual
+        case .annual: return .monthly
+        case .aiMonthly: return .aiAnnual
+        case .aiAnnual: return .aiMonthly
+        }
+    }
 }
 
 /// Where this Apple account stands. Pure, so the rules are tested without StoreKit.
@@ -134,6 +173,15 @@ nonisolated enum Entitlement: Equatable, Sendable {
         }
     }
 
+    /// A2 — the publisher's AI questions come with the current state: a paid AI Included period or its
+    /// grace. Never a trial (the owner's rule: no included AI in the free trial), never a lapsed state.
+    var includesAI: Bool {
+        switch self {
+        case .subscribed(_, let p, _), .grace(_, let p): return p.includesAI
+        default: return false
+        }
+    }
+
     /// One verified StoreKit transaction (or legacy transaction), as the rules need it.
     struct Record: Equatable, Sendable {
         let productID: String
@@ -144,6 +192,16 @@ nonisolated enum Entitlement: Equatable, Sendable {
         let revoked: Bool
         /// Subscriptions: this transaction is the introductory free period.
         var isIntroductoryOffer: Bool = false
+        /// The App Store original transaction id (identifies an AI Included subscriber to the relay).
+        var originalID: UInt64? = nil
+    }
+
+    /// The AI Included subscription's original transaction id when `entitlement` includes AI — what the
+    /// relay is told, and nothing else about the person.
+    static func aiSubscriptionID(records: [Record], entitlement: Entitlement) -> String? {
+        guard entitlement.includesAI else { return nil }
+        let ai = records.filter { !$0.revoked && SubscriptionPlan(productID: $0.productID)?.includesAI == true }
+        return ai.max(by: { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) })?.originalID.map(String.init)
     }
 
     /// Verified renewal information for the subscription group (nil when StoreKit gave none).
@@ -335,12 +393,16 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
 
     /// The disclosure Apple's guidance and the instruction ask for, with real values.
     var disclosure: String {
-        let renew = "Renews automatically at \(displayPrice) per \(plan.periodNoun) unless cancelled at least a day before the period ends. Manage or cancel through your Apple Account."
+        var renew = "Renews automatically at \(displayPrice) per \(plan.periodNoun) unless cancelled at least a day before the period ends. Manage or cancel through your Apple Account."
+        if plan.includesAI { renew += " " + Self.aiTerms }
         if eligibleForTrial, let d = trialDays {
             return "\(d) days free, then \(displayPrice) per \(plan.periodNoun). \(renew)"
         }
         return "\(displayPrice) per \(plan.periodNoun), charged now. \(renew)"
     }
+
+    /// What AI Included is and is not, shown with every AI Included price.
+    static let aiTerms = "Includes \(PurchaseProducts.aiQuestionsPerMonth) Claude Opus 5 questions a month (unused ones do not carry over; 200 more can be bought, valid 12 months), answered through the publisher's service. The service has a monthly capacity: if it is reached, AI Included pauses until the 1st and everything else keeps working. Questions and passages go to Anthropic's commercial API; the publisher keeps only counts."
 
     /// The annual plan's saving against twelve monthly charges, from the two matching storefront
     /// prices; nil when the prices are not comparable numbers. Secondary information only.
@@ -351,6 +413,15 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
         let fraction = NSDecimalNumber(decimal: (twelve - annual) / twelve).doubleValue
         return Int((fraction * 100).rounded())
     }
+}
+
+/// A2 — the AI Included subscription number, readable from any layer (the Online provider sends it to
+/// the relay as its "key"). Published by PurchaseCenter only from verified transactions; nil whenever
+/// the current state does not include AI.
+nonisolated enum AIIncludedAccess {
+    private static let state = OSAllocatedUnfairLock<String?>(initialState: nil)
+    static func publish(_ id: String?) { state.withLock { $0 = id } }
+    static var subscriptionID: String? { state.withLock { $0 } }
 }
 
 /// The paid-use boundary any layer can ask, on or off the main actor (N2/N4, mandate 2026-11-01).
@@ -442,6 +513,16 @@ final class PurchaseCenter {
     private(set) var offers: [PlanOffer] = []
     /// The annual saving (per cent) when both storefront prices are known; shown second.
     private(set) var annualSavingPercent: Int?
+    /// The same for AI Included.
+    private(set) var aiAnnualSavingPercent: Int?
+    /// A2 — the 200-question top-up as the storefront sells it (nil until loaded).
+    private(set) var topUpPrice: String?
+    /// A2 — AI Included questions left this month, when last asked (Settings ▸ Online).
+    private(set) var aiStatus: AIIncludedRelay.Status?
+    /// The AI Included subscription number from verified transactions (nil when the state has no AI).
+    private(set) var aiSubscriptionID: String? {
+        didSet { if publishes { AIIncludedAccess.publish(aiSubscriptionID) } }
+    }
     /// True while the products could not be loaded: the paywall shows retry, never a made-up price.
     private(set) var productsUnavailable = false
     private(set) var busy = false
@@ -506,7 +587,12 @@ final class PurchaseCenter {
         if let cached = CachedEntitlement.load() { apply(cached.entitlement(now: clock())) }
         updates = Task { [weak self] in
             for await result in Transaction.updates {
-                if case .verified(let t) = result { await t.finish() }
+                // A top-up is finished only once the relay has credited it (after the refresh that
+                // confirms the AI Included subscription it belongs to).
+                if case .verified(let t) = result {
+                    if t.productID == PurchaseProducts.aiTopUp200 { await self?.refresh(); await self?.creditTopUp(t); continue }
+                    await t.finish()
+                }
                 await self?.refresh()
             }
         }
@@ -517,12 +603,12 @@ final class PurchaseCenter {
             Task { [weak self] in for await _ in wake { self?.reevaluate(); await self?.refresh() } },
             Task { [weak self] in for await _ in active { self?.reevaluate(); await self?.refresh() } },
         ]
-        Task { await loadProducts(); await refresh() }
+        Task { await loadProducts(); await refresh(); await creditPendingTopUps() }
     }
 
     func loadProducts() async {
         do {
-            let loaded = try await Product.products(for: PurchaseProducts.all)
+            let loaded = try await Product.products(for: PurchaseProducts.storeProducts)
             products = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
             var out: [PlanOffer] = []
             for plan in SubscriptionPlan.allCases {
@@ -542,10 +628,15 @@ final class PurchaseCenter {
                                      eligibleForTrial: eligible && intro != nil && intro?.paymentMode == .freeTrial, trialDays: days))
             }
             offers = out
-            productsUnavailable = out.count < SubscriptionPlan.allCases.count
+            // The edition's two plans must be there; AI Included is offered only when its products are.
+            productsUnavailable = out.filter { !$0.plan.includesAI }.count < 2
             if let m = products[PurchaseProducts.monthly], let a = products[PurchaseProducts.annual] {
                 annualSavingPercent = PlanOffer.annualSaving(monthly: m.price, annual: a.price)
             }
+            if let m = products[PurchaseProducts.aiMonthly], let a = products[PurchaseProducts.aiAnnual] {
+                aiAnnualSavingPercent = PlanOffer.annualSaving(monthly: m.price, annual: a.price)
+            }
+            topUpPrice = products[PurchaseProducts.aiTopUp200]?.displayPrice
         } catch {
             KalsmritikoshLog.app.error("App Store products unavailable: \(error.localizedDescription, privacy: .public)")
             productsUnavailable = true
@@ -572,7 +663,7 @@ final class PurchaseCenter {
         func record(_ t: Transaction) {
             let r = Entitlement.Record(productID: t.productID, purchaseDate: t.purchaseDate, originalPurchaseDate: t.originalPurchaseDate,
                                        expirationDate: t.expirationDate, revoked: t.revocationDate != nil,
-                                       isIntroductoryOffer: t.offer?.type == .introductory)
+                                       isIntroductoryOffer: t.offer?.type == .introductory, originalID: t.originalID)
             if let i = seen[t.id] {
                 // The same transaction read twice: a revocation seen on either read stands.
                 if r.revoked { records[i] = r }
@@ -611,15 +702,100 @@ final class PurchaseCenter {
         if fresh == .unknown {
             // The store did not answer: keep the cached verified state under its own rule.
             apply(CachedEntitlement.load()?.entitlement(now: now) ?? .unknown)
+            aiSubscriptionID = nil   // the relay re-checks with Apple anyway; offline nothing could reach it
             return
         }
         apply(fresh)
+        aiSubscriptionID = Entitlement.aiSubscriptionID(records: records, entitlement: fresh)
         CachedEntitlement(fresh, at: now).save()
     }
 
     /// Subscribe to a plan (StoreKit applies the introductory offer only to the eligible).
     func subscribe(_ plan: SubscriptionPlan) async {
+        // A2 — AI Included is not sold to someone new once the month's service capacity is nearly used
+        // (the relay says so; nothing about the person is sent). A current AI subscriber changing
+        // duration is not new.
+        if plan.includesAI, !entitlement.includesAI, talksToStore {
+            let open: Bool
+            do { open = try await AIIncludedRelay.sellable() } catch {
+                KalsmritikoshLog.app.error("AI Included availability check failed: \(error.localizedDescription, privacy: .public)")
+                message = "The AI Included service could not be reached to confirm it is open to new subscribers. Nothing was charged; try again in a minute, or choose a plan without AI Included."
+                return
+            }
+            guard open else {
+                message = "AI Included has reached this month's capacity and is not taking new subscribers until the 1st. Nothing was charged. The plans without AI Included are available, and Online mode can use your own AI key."
+                return
+            }
+        }
         await buy(products[plan.productID], what: "the \(plan.label.lowercased()) plan")
+    }
+
+    /// A2 — buy 200 more AI Included questions. The transaction is finished only once the relay has
+    /// credited it; one that could not be credited stays unfinished and is credited at the next launch.
+    func buyTopUp() async {
+        guard entitlement.includesAI, aiSubscriptionID != nil else {
+            message = "Extra questions are for AI Included subscribers. Subscribe to an AI Included plan first."
+            return
+        }
+        guard let product = products[PurchaseProducts.aiTopUp200] else {
+            message = "The App Store is not reachable right now, so the top-up cannot be confirmed. Try again in a moment."
+            return
+        }
+        busy = true
+        defer { busy = false }
+        do {
+            switch try await product.purchase() {
+            case .success(let verification):
+                guard case .verified(let t) = verification else {
+                    message = Self.message(for: .unverified, what: "the top-up")
+                    return
+                }
+                await creditTopUp(t)
+            case .userCancelled: break
+            case .pending: message = Self.message(for: .pending, what: "the top-up")
+            @unknown default: break
+            }
+        } catch {
+            KalsmritikoshLog.app.error("Top-up purchase failed: \(error.localizedDescription, privacy: .public)")
+            message = error.localizedDescription
+        }
+    }
+
+    /// Credit a verified top-up with the relay, then finish it. Never finished uncredited.
+    func creditTopUp(_ t: Transaction) async {
+        guard t.productID == PurchaseProducts.aiTopUp200 else { return }
+        if t.revocationDate != nil { await t.finish(); return }   // refunded: nothing to credit
+        guard let sub = aiSubscriptionID else {
+            message = "The top-up was bought; it will be added once AI Included is confirmed for this account."
+            return
+        }
+        do {
+            if try await AIIncludedRelay.creditTopUp(subscription: sub, transactionID: String(t.id)) {
+                await t.finish()
+                message = "\(PurchaseProducts.aiTopUpQuestions) questions added, valid for 12 months."
+                await refreshAIStatus()
+            }
+        } catch {
+            KalsmritikoshLog.app.error("Top-up credit failed: \(error.localizedDescription, privacy: .public)")
+            message = "The top-up was bought but the AI Included service could not add it yet (\(error.localizedDescription)). It is kept and added automatically next time the app opens."
+        }
+    }
+
+    /// Credit any bought-but-uncredited top-ups (an earlier credit failed, or the app quit).
+    func creditPendingTopUps() async {
+        guard talksToStore, aiSubscriptionID != nil else { return }
+        for await result in Transaction.unfinished {
+            if case .verified(let t) = result, t.productID == PurchaseProducts.aiTopUp200 { await creditTopUp(t) }
+        }
+    }
+
+    /// Ask the relay how many AI Included questions are left (one request carrying only the subscription number).
+    func refreshAIStatus() async {
+        guard let sub = aiSubscriptionID else { aiStatus = nil; return }
+        do { aiStatus = try await AIIncludedRelay.status(subscription: sub) } catch {
+            KalsmritikoshLog.app.error("AI Included status failed: \(error.localizedDescription, privacy: .public)")
+            message = error.localizedDescription
+        }
     }
 
     private func buy(_ product: Product?, what: String) async {

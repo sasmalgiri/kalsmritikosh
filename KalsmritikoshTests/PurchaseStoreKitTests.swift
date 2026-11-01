@@ -76,7 +76,14 @@ struct PurchaseStoreKitTests {
         defer { s.clearTransactions() }
         let c = await Self.centre()
         #expect(!c.productsUnavailable)
-        #expect(c.offers.map(\.plan) == [.monthly, .annual])
+        #expect(c.offers.map(\.plan) == [.monthly, .annual, .aiMonthly, .aiAnnual])
+        // A2 — AI Included: no introductory offer, its own prices and the AI terms with every price.
+        let aiMonthly = try #require(c.offers.first { $0.plan == .aiMonthly })
+        #expect(aiMonthly.displayPrice == "$24.99" && !aiMonthly.eligibleForTrial && aiMonthly.trialDays == nil)
+        #expect(aiMonthly.actionTitle == "Subscribe $24.99 per month")
+        #expect(aiMonthly.disclosure.contains("300 Claude Opus 5 questions a month") && aiMonthly.disclosure.contains("pauses until the 1st"))
+        #expect(c.aiAnnualSavingPercent == 17)
+        #expect(c.topUpPrice == "$14.99")
         let monthly = try #require(c.offers.first { $0.plan == .monthly })
         let annual = try #require(c.offers.first { $0.plan == .annual })
         #expect(monthly.displayPrice == "$4.99" && monthly.periodText == "1 month")
@@ -257,7 +264,7 @@ struct PurchaseStoreKitTests {
         #expect(c.entitlement.allowsPaidUse && !c.entitlement.leadsWithSubscriptionScreen)
         #expect(c.statusText.contains("no charge follows it"))
         // Still eligible for the subscription's introductory offer: the two products are unrelated.
-        let allEligible = c.offers.allSatisfy { $0.eligibleForTrial }
+        let allEligible = c.offers.filter { !$0.plan.includesAI }.allSatisfy { $0.eligibleForTrial }
         #expect(allEligible)
     }
 

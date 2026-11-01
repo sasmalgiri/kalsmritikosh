@@ -162,26 +162,37 @@ struct PurchaseTests {
         #expect(Entitlement.lapsed(reason: .expired).allowsReadAccess && Entitlement.notStarted.allowsReadAccess)
     }
 
-    @Test("The local StoreKit configuration: one group, monthly and annual at the same level with a two-week free introductory offer, 3-day grace, and the two legacy non-consumables kept as they were")
+    @Test("The local StoreKit configuration: one group — the edition (monthly, annual, two-week free introductory offer) one level below AI Included (monthly, annual, no free trial) — 3-day grace, the two legacy non-consumables kept as they were, and the 200-question consumable top-up")
     func storeKitConfiguration() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("StoreKit/Kalsmritikosh.storekit")
         let json = try #require(try JSONSerialization.jsonObject(with: try Data(contentsOf: url)) as? [String: Any])
         let products = try #require(json["products"] as? [[String: Any]])
-        #expect(Set(products.compactMap { $0["productID"] as? String }) == [PurchaseProducts.legacyUnlock, PurchaseProducts.legacyTrial])
-        for p in products { #expect(p["type"] as? String == "NonConsumable", "legacy ids are never repurposed") }
+        #expect(Set(products.compactMap { $0["productID"] as? String }) == [PurchaseProducts.legacyUnlock, PurchaseProducts.legacyTrial, PurchaseProducts.aiTopUp200])
+        for p in products {
+            let topUp = p["productID"] as? String == PurchaseProducts.aiTopUp200
+            #expect(p["type"] as? String == (topUp ? "Consumable" : "NonConsumable"), "legacy ids are never repurposed")
+            if topUp { #expect(p["displayPrice"] as? String == "14.99") }
+        }
         let groups = try #require(json["subscriptionGroups"] as? [[String: Any]])
         #expect(groups.count == 1)
         let subs = try #require(groups[0]["subscriptions"] as? [[String: Any]])
         #expect(Set(subs.compactMap { $0["productID"] as? String }) == Set(PurchaseProducts.subscriptions))
+        let prices = [PurchaseProducts.monthly: "4.99", PurchaseProducts.annual: "39.99",
+                      PurchaseProducts.aiMonthly: "24.99", PurchaseProducts.aiAnnual: "249.99"]
         for s in subs {
-            #expect(s["groupNumber"] as? Int == 1, "one access level")
+            let id = try #require(s["productID"] as? String)
+            let plan = try #require(SubscriptionPlan(productID: id))
+            #expect(s["groupNumber"] as? Int == (plan.includesAI ? 1 : 2), "AI Included is the higher level")
             #expect(s["familyShareable"] as? Bool == false, "not advertised for the new subscriptions")
-            let intro = try #require(s["introductoryOffer"] as? [String: Any])
-            #expect(intro["paymentMode"] as? String == "free" && intro["subscriptionPeriod"] as? String == "P2W")
-            let period = s["recurringSubscriptionPeriod"] as? String
-            #expect(period == (s["productID"] as? String == PurchaseProducts.monthly ? "P1M" : "P1Y"))
-            #expect(s["displayPrice"] as? String == (s["productID"] as? String == PurchaseProducts.monthly ? "4.99" : "39.99"))
+            if plan.includesAI {
+                #expect(s["introductoryOffer"] == nil, "no free trial includes the publisher's AI")
+            } else {
+                let intro = try #require(s["introductoryOffer"] as? [String: Any])
+                #expect(intro["paymentMode"] as? String == "free" && intro["subscriptionPeriod"] as? String == "P2W")
+            }
+            #expect(s["recurringSubscriptionPeriod"] as? String == (plan.isAnnual ? "P1Y" : "P1M"))
+            #expect(s["displayPrice"] as? String == prices[id])
         }
         let settings = try #require(json["settings"] as? [String: Any])
         #expect(settings["_billingGracePeriodEnabled"] as? Bool == true && settings["_billingGracePeriodInDays"] as? Int == 3)

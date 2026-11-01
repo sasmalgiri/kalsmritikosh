@@ -14,7 +14,10 @@ import Foundation
 import ExtensionFoundation
 
 final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked Sendable {
-    static let allowedHosts: Set<String> = ["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com"]
+    /// A2 — the publisher's AI Included relay, once deployed. Keep identical to `AIIncludedRelay.host`
+    /// (ci/guards/relay-host-match.sh checks the two).
+    static let relayHost = ""
+    static let allowedHosts: Set<String> = Set(["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com", relayHost].filter { !$0.isEmpty })
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral          // no cookies, no cache on disk

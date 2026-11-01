@@ -31,6 +31,21 @@
       "productID" : "ecosanskritiinnovation.Kalsmritikosh.unlock",
       "referenceName" : "Legacy permanent unlock",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "14.99",
+      "familyShareable" : false,
+      "internalID" : "7A1F3B42",
+      "localizations" : [
+        {
+          "description" : "200 more AI Included questions, valid for 12 months.",
+          "displayName" : "200 AI questions",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.topup200",
+      "referenceName" : "AI Included — 200-question top-up",
+      "type" : "Consumable"
     }
   ],
   "settings" : {
@@ -57,7 +72,7 @@
           "codeOffers" : [ ],
           "displayPrice" : "4.99",
           "familyShareable" : false,
-          "groupNumber" : 1,
+          "groupNumber" : 2,
           "internalID" : "7A1F3B30",
           "introductoryOffer" : {
             "internalID" : "7A1F3B32",
@@ -83,7 +98,7 @@
           "codeOffers" : [ ],
           "displayPrice" : "39.99",
           "familyShareable" : false,
-          "groupNumber" : 1,
+          "groupNumber" : 2,
           "internalID" : "7A1F3B31",
           "introductoryOffer" : {
             "internalID" : "7A1F3B33",
@@ -100,6 +115,48 @@
           "productID" : "ecosanskritiinnovation.Kalsmritikosh.edition.annual",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Edition — annual",
+          "subscriptionGroupID" : "21777001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [ ]
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7A1F3B40",
+          "localizations" : [
+            {
+              "description" : "Everything in the edition plus 300 Claude Opus 5 questions a month. Renews unless cancelled.",
+              "displayName" : "AI Included monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "AI Included — monthly",
+          "subscriptionGroupID" : "21777001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [ ]
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "249.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7A1F3B41",
+          "localizations" : [
+            {
+              "description" : "Everything in the edition plus 300 Claude Opus 5 questions a month. Renews unless cancelled.",
+              "displayName" : "AI Included annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "AI Included — annual",
           "subscriptionGroupID" : "21777001",
           "type" : "RecurringSubscription",
           "winbackOffers" : [ ]

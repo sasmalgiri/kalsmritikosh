@@ -191,7 +191,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         let preview = OutboundPreview(provider: kind.displayName, model: model, host: kind.host,
                                       text: shownText, bytes: bytes, maskedCount: mapping.count,
                                       carriesDocuments: carriesDocuments,
-                                      providerTerms: carriesDocuments ? kind.documentTerms : nil)
+                                      providerTerms: carriesDocuments ? kind.documentTerms : nil,
+                                      aiIncluded: kind == .included)
         let beforeConsent = SendSettings(settings)
         guard await seams.consent(preview) else {
             await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)

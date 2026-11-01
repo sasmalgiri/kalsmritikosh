@@ -187,7 +187,8 @@ export async function handle(req: Request, env: Env, d: Deps): Promise<Response>
     return refuse(REFUSALS.storeUnavailable());
   }
   const now = d.now(), month = monthKey(now);
-  if (req.method === "GET" && url.pathname === "/v1/status") {
+  // GET or POST: the app's network helper sends POST only.
+  if (url.pathname === "/v1/status") {
     const spentA = await d.store.spent(month, "anthropic");
     const b = budgets(env);
     return json({ active: true, remaining: await d.store.remaining(month, sub, now),
@@ -209,7 +210,7 @@ export async function publicSellable(env: Env, d: Deps): Promise<Response> {
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const deps: Deps = { store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() };
-    if (req.method === "GET" && new URL(req.url).pathname === "/v1/sellable") return publicSellable(env, deps);
+    if (new URL(req.url).pathname === "/v1/sellable") return publicSellable(env, deps);
     return handle(req, env, deps);
   },
 };

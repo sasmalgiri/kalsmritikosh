@@ -194,9 +194,26 @@ struct PurchaseScreen: View {
         if presentedAsSheet { dismiss() } else { store.gateDismissedThisLaunch = true }
     }
 
+    /// A2 — AI Included is shown only when this build can reach the publisher's relay.
+    private var visibleOffers: [PlanOffer] {
+        store.offers.filter { !$0.plan.includesAI || AIIncludedRelay.isConfigured }
+    }
+
     private var plans: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            planRow(visibleOffers.filter { !$0.plan.includesAI })
+            let ai = visibleOffers.filter(\.plan.includesAI)
+            if !ai.isEmpty {
+                Text("AI Included — everything above, plus \(PurchaseProducts.aiQuestionsPerMonth) Claude Opus 5 questions a month with no AI key or account of your own")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                planRow(ai)
+            }
+        }
+    }
+
+    private func planRow(_ offers: [PlanOffer]) -> some View {
         HStack(spacing: 12) {
-            ForEach(store.offers) { o in
+            ForEach(offers) { o in
                 Button { selected = o.plan } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -205,13 +222,17 @@ struct PurchaseScreen: View {
                             if selected == o.plan { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
                         }
                         Text("\(o.displayPrice) per \(o.plan.periodNoun)").font(.title3.weight(.semibold))
-                        if o.plan == .annual {
-                            Text("Charged once a year" + (store.annualSavingPercent.map { " · about \($0)% less than twelve monthly charges" } ?? ""))
+                        if o.plan.isAnnual {
+                            Text("Charged once a year" + ((o.plan.includesAI ? store.aiAnnualSavingPercent : store.annualSavingPercent).map { " · about \($0)% less than twelve monthly charges" } ?? ""))
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("Charged every month").font(.caption).foregroundStyle(.secondary)
                         }
-                        Text(o.eligibleForTrial ? "14-day free trial, then this price" : "No free trial on this account").font(.caption2).foregroundStyle(.secondary)
+                        if o.plan.includesAI {
+                            Text("\(PurchaseProducts.aiQuestionsPerMonth) AI questions a month · no free trial").font(.caption2).foregroundStyle(.secondary)
+                        } else {
+                            Text(o.eligibleForTrial ? "14-day free trial, then this price" : "No free trial on this account").font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                     .padding(12).frame(width: 220, alignment: .leading)
                     .background(selected == o.plan ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
@@ -238,12 +259,14 @@ struct PurchaseScreen: View {
         case .lapsed, .billingRetry:
             return "Every case stays readable; export, complete backup, recovery, Help and privacy controls keep working. A subscription is needed only to create, edit and analyse again."
         default:
-            return "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and annual plans give the same access."
+            return AIIncludedRelay.isConfigured
+                ? "Every persona and every job is included, on-device, with no AI key needed. AI Included adds Claude Opus 5 questions each month; or use Online AI with your own provider account (billed by that provider). Monthly and annual plans give the same access."
+                : "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and annual plans give the same access."
         }
     }
 
     private var footer: String {
-        "Payment, renewal, refunds and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode or send anything anywhere. The subscription works on the Macs signed in with your Apple account; your archive is not copied between them."
+        "Payment, renewal, refunds and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode or send anything anywhere (choosing AI Included asks the publisher's service only whether it is open to new subscribers). The subscription works on the Macs signed in with your Apple account; your archive is not copied between them."
     }
 }
 

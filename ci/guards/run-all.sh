@@ -21,6 +21,7 @@ GUARDS=(
   clipper-no-network.sh
   release-check-selftest.sh
   test-host-boundary.sh
+  relay-host-match.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do

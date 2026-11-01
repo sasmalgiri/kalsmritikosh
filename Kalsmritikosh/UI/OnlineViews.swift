@@ -20,7 +20,9 @@ struct OutboundConsentSheet: View {
                 Label("Send to \(preview.provider)?", systemImage: "icloud.and.arrow.up").font(.title3.bold())
                 InfoPopoverButton(topic: "task-private-online")   // §6.8 — Online sends
             }
-            Text("This text will be sent to \(preview.host) (model \(preview.model)) with your own key, and billed to your provider account. Nothing else leaves your Mac for this request.")
+            Text(preview.aiIncluded
+                 ? "This text will be sent through AI Included (\(preview.host)) to \(preview.model). It uses one of this month's AI Included questions; nothing is billed to you beyond the plan. Nothing else leaves your Mac for this request."
+                 : "This text will be sent to \(preview.host) (model \(preview.model)) with your own key, and billed to your provider account. Nothing else leaves your Mac for this request.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if preview.carriesDocuments {
@@ -113,9 +115,9 @@ struct OnlineSettingsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Online (your own key)").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Text("Online AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             Picker("Provider", selection: $kind) {
-                ForEach(OnlineProviderKind.allCases) { Text($0.displayName).tag($0) }
+                ForEach(OnlineProviderKind.allCases.filter(\.isSelectable)) { Text($0.displayName).tag($0) }
             }
             .onChange(of: kind) { _, k in
                 OnlineSettings.kind = k
@@ -132,24 +134,11 @@ struct OnlineSettingsSection: View {
                     set: { OnlineSettings.setDocumentTermsConfirmed($0, for: kind); documentTermsConfirmed = $0 }))
                     .font(.caption)
             }
-            TextField("Model name (from your provider)", text: $model)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { OnlineSettings.model = model }
-            HStack {
-                SecureField(hasKey ? "Key saved — paste a new one to replace" : "API key", text: $key)
-                    .textFieldStyle(.roundedBorder)
-                Button("Save key") {
-                    OnlineSettings.model = model
-                    hasKey = OnlineSettings.setAPIKey(key, for: kind) && !key.isEmpty
-                    key = ""
-                }
-                .disabled(key.isEmpty)
-                if hasKey {
-                    Button("Remove key") { OnlineSettings.setAPIKey(nil, for: kind); hasKey = false }
-                }
+            if kind.usesOwnKey {
+                ownKeyFields
+            } else {
+                AIIncludedStatusView(store: PurchaseCenter.shared)
             }
-            Text("The key is kept in your Mac's Keychain and sent only to \(kind.host).")
-                .font(.caption2).foregroundStyle(.secondary)
             Toggle("Ask before every send", isOn: $askEveryTime)
                 .onChange(of: askEveryTime) { _, v in OnlineSettings.askEveryTime = v }
             HStack {
@@ -176,6 +165,67 @@ struct OnlineSettingsSection: View {
                 HStack { Spacer(); Button("Done") { showLog = false }.keyboardShortcut(.defaultAction) }
             }
             .padding(16).frame(width: 620)
+        }
+    }
+
+    /// The person's own provider: model and key.
+    private var ownKeyFields: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Model name (from your provider)", text: $model)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { OnlineSettings.model = model }
+            HStack {
+                SecureField(hasKey ? "Key saved — paste a new one to replace" : "API key", text: $key)
+                    .textFieldStyle(.roundedBorder)
+                Button("Save key") {
+                    OnlineSettings.model = model
+                    hasKey = OnlineSettings.setAPIKey(key, for: kind) && !key.isEmpty
+                    key = ""
+                }
+                .disabled(key.isEmpty)
+                if hasKey {
+                    Button("Remove key") { OnlineSettings.setAPIKey(nil, for: kind); hasKey = false }
+                }
+            }
+            Text("The key is kept in your Mac's Keychain and sent only to \(kind.host).")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A2 — AI Included in Settings ▸ Online: whether it is active, questions left, and the 200-question top-up.
+struct AIIncludedStatusView: View {
+    let store: PurchaseCenter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if store.entitlement.includesAI {
+                if let s = store.aiStatus {
+                    Text("\(s.monthly) of \(PurchaseProducts.aiQuestionsPerMonth) questions left this month" + (s.topUps > 0 ? " · \(s.topUps) bought questions left" : ""))
+                        .font(.callout)
+                    if s.paused {
+                        Text("AI Included has reached this month's service capacity and is paused until the 1st. Everything else keeps working; your own key can be used meanwhile.")
+                            .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    Text("AI Included is active. Choose “Check questions left” to see this month's count.").font(.callout)
+                }
+                HStack {
+                    Button("Check questions left") { Task { await store.refreshAIStatus() } }.disabled(store.busy)
+                    Button("Buy \(PurchaseProducts.aiTopUpQuestions) more questions" + (store.topUpPrice.map { " (\($0))" } ?? "")) {
+                        Task { await store.buyTopUp() }
+                    }
+                    .disabled(store.busy || store.topUpPrice == nil)
+                    .help("A one-time App Store purchase; the questions stay valid for 12 months.")
+                }
+                Text("Checking sends only your App Store subscription number to the AI Included service — nothing from your cases.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Text("AI Included is not active for this Apple account. Choose an AI Included plan to use it, or pick another provider above and use your own key.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button("See plans") { store.paywallRequested = "use AI Included" }
+            }
+            if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }
     }
 }

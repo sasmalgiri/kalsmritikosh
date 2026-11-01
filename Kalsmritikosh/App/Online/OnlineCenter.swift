@@ -32,6 +32,7 @@ public nonisolated enum OnlineSettings {
 
     public static var model: String {
         get {
+            if !kind.usesOwnKey { return kind.defaultModel }   // AI Included: the relay's model, not a choice
             let stored = UserDefaults.standard.string(forKey: modelKey) ?? ""
             return stored.isEmpty ? kind.defaultModel : stored
         }
@@ -63,6 +64,8 @@ public nonisolated enum OnlineSettings {
     }
 
     public static func apiKey(for kind: OnlineProviderKind) -> String? {
+        // A2 — AI Included has no key on the Mac: the verified subscription number stands in for it.
+        if kind == .included { return AIIncludedRelay.isConfigured ? AIIncludedAccess.subscriptionID : nil }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                     kSecAttrService as String: keychainService,
                                     kSecAttrAccount as String: kind.rawValue,
@@ -76,6 +79,7 @@ public nonisolated enum OnlineSettings {
 
     @discardableResult
     public static func setAPIKey(_ key: String?, for kind: OnlineProviderKind) -> Bool {
+        guard kind.usesOwnKey else { return false }
         let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                    kSecAttrService as String: keychainService,
                                    kSecAttrAccount as String: kind.rawValue]
@@ -109,6 +113,8 @@ public struct OutboundPreview: Sendable, Identifiable {
     public var carriesDocuments: Bool = false
     /// The provider's retention / training terms, shown with a document send.
     public var providerTerms: String? = nil
+    /// A2 — sent through AI Included (one of the subscriber's monthly questions), not the person's own key.
+    public var aiIncluded: Bool = false
 }
 
 @MainActor

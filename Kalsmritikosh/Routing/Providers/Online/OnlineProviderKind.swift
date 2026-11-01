@@ -14,14 +14,24 @@ import Foundation
 
 public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case anthropic, openai, gemini
+    /// A2 — AI Included: Claude Opus 5 through the publisher's relay, for AI Included subscribers.
+    /// Its "key" is the App Store subscription number; the publisher's provider key never reaches the Mac.
+    case included
 
     public var id: String { rawValue }
+
+    /// Offered in Settings: AI Included only when this build has the relay's address.
+    public var isSelectable: Bool { self != .included || AIIncludedRelay.isConfigured }
+
+    /// The person brings their own key and chooses the model (false for AI Included).
+    public var usesOwnKey: Bool { self != .included }
 
     public var displayName: String {
         switch self {
         case .anthropic: return "Claude (Anthropic)"
         case .openai:    return "OpenAI"
         case .gemini:    return "Gemini (Google)"
+        case .included:  return "AI Included (Claude Opus 5)"
         }
     }
 
@@ -32,19 +42,20 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
         case .anthropic: return "api.anthropic.com"
         case .openai:    return "api.openai.com"
         case .gemini:    return "generativelanguage.googleapis.com"
+        case .included:  return AIIncludedRelay.host
         }
     }
 
     /// Prefilled model name; the user can change it in Settings.
     public var defaultModel: String {
         switch self {
-        case .anthropic: return "claude-opus-5"
+        case .anthropic, .included: return "claude-opus-5"
         case .openai:    return ""
         case .gemini:    return ""
         }
     }
 
-    public static let allowedHosts: Set<String> = Set(allCases.map(\.host))
+    public static let allowedHosts: Set<String> = Set(allCases.map(\.host).filter { !$0.isEmpty })
 }
 
 /// A fully built request, handed to the network helper as JSON.
@@ -64,6 +75,15 @@ public nonisolated enum OnlineRequestBuilder {
     public static func build(kind: OnlineProviderKind, model: String, apiKey: String,
                              system: String?, prompt: String, maxTokens: Int) throws -> OutboundHTTPRequest {
         switch kind {
+        case .included:
+            // The relay fixes the model and the output ceiling itself; it reads only these fields.
+            var body: [String: Any] = [
+                "model": model,
+                "max_tokens": max(1024, min(maxTokens, 4096)),
+                "messages": [["role": "user", "content": prompt]]
+            ]
+            if let system, !system.isEmpty { body["system"] = system }
+            return try AIIncludedRelay.request("/v1/messages", subscription: apiKey, body: body)
         case .anthropic:
             // Messages API. No sampling parameters (rejected on current models);
             // server-side fallbacks on refusal, per Anthropic's guidance for this model.
@@ -107,6 +127,8 @@ public nonisolated enum OnlineRequestBuilder {
 
     public enum ParseError: Error, LocalizedError, Equatable {
         case http(Int, String), refused(String), unreadable
+        /// A2 — the AI Included service declined (questions used up, paused for the month, not subscribed…).
+        case relay(String)
         /// K8 — 401/403: the key was refused; retrying will not help.
         case auth(Int)
         /// K8 — 429: the provider is limiting requests; try again later.
@@ -118,6 +140,7 @@ public nonisolated enum OnlineRequestBuilder {
             case .http(let code, let msg): return "The provider returned HTTP \(code): \(msg)"
             case .refused(let why):        return "The provider declined to answer: \(why)"
             case .unreadable:              return "The provider's reply could not be read."
+            case .relay(let why):          return why
             case .auth(let code):          return "The provider refused the API key (HTTP \(code)). Check the key and its access in Settings › Online."
             case .rateLimited:             return "The provider is limiting requests right now (HTTP 429). Nothing was answered; try again in a minute."
             case .server(let code):        return "The provider had an error (HTTP \(code)). Nothing was answered; try again later."
@@ -127,6 +150,9 @@ public nonisolated enum OnlineRequestBuilder {
 
     public static func parse(kind: OnlineProviderKind, response: OutboundHTTPResponse) throws -> String {
         let root = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any]
+        if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
+            throw ParseError.relay(why)
+        }
         switch response.status {
         case 401, 403: throw ParseError.auth(response.status)
         case 429: throw ParseError.rateLimited
@@ -140,7 +166,7 @@ public nonisolated enum OnlineRequestBuilder {
         }
         guard let root else { throw ParseError.unreadable }
         switch kind {
-        case .anthropic:
+        case .anthropic, .included:
             if root["stop_reason"] as? String == "refusal" {
                 let detail = (root["stop_details"] as? [String: Any])?["explanation"] as? String
                 throw ParseError.refused(detail ?? "refusal")
@@ -186,8 +212,8 @@ nonisolated extension OnlineProviderKind {
     /// false = no document excerpts are sent to this provider in this release.
     public var mayReceiveDocuments: Bool {
         switch self {
-        case .anthropic, .gemini: return true
-        case .openai:             return false
+        case .anthropic, .gemini, .included: return true
+        case .openai:                        return false
         }
     }
 
@@ -198,6 +224,8 @@ nonisolated extension OnlineProviderKind {
             return "Anthropic's commercial API: by default, inputs and outputs are deleted within 30 days, with exceptions for usage-policy enforcement and legal requirements; zero retention needs a separate agreement. Under the commercial terms they are not used for training. This app's publisher receives nothing — that does not mean the provider keeps nothing."
         case .gemini:
             return "Google Gemini API: only a PAID (billing-enabled) project. On the unpaid tier Google may use what you send to improve its products, including human review, and asks that sensitive or confidential information not be sent — case documents must not go to an unpaid key. Age, region and permitted-use conditions apply."
+        case .included:
+            return "AI Included sends the request through the publisher's relay to Anthropic's commercial API under the publisher's account. The relay keeps only counts (questions used, money spent) — never a question, passage or answer. Anthropic's commercial terms apply: by default inputs and outputs are deleted within 30 days, with exceptions for usage-policy enforcement and legal requirements, and are not used for training."
         case .openai:
             return "OpenAI: its API data-use and retention terms have not been reviewed for case material in this release, so no document text is sent to it. Questions alone may still be sent."
         }
@@ -208,6 +236,7 @@ nonisolated extension OnlineProviderKind {
         switch self {
         case .anthropic: return "My Anthropic account is on the commercial API terms, and I may send this case material to it"
         case .gemini:    return "My Gemini key belongs to a paid (billing-enabled) project, and I may send this case material to it"
+        case .included:  return "I may send this case material to Anthropic's commercial API through AI Included"
         case .openai:    return ""
         }
     }
