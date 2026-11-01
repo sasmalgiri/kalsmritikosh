@@ -23,11 +23,11 @@ Resume from this table. A row is "done" only with a commit and a check that ran;
 | A8–A11 | ECB exchange rate at a date; OFAC + UN sanctions lists matched on the Mac; GLEIF registry; CourtListener; web capture with record; recording transcription with speakers | A2 | agent | done (unit + client path) | (A8–A11 commit) | OnlineToolsTests | live lookups against the real sources at release (network) |
 | A12 | Privacy label, terms, policy, Help for the online features | A4–A11 | agent | done (agent review; claims + help tests) | (A12 commit) | check-claims, HelpRegistryTests 10/10 | publisher legal name to match App Store Connect (docs say "Eco Sanskriti Innovation") |
 | UI-K | Run k (UI automation repair + journeys) | N2–N8 | agent | done — K-1,2,4,5,6,9 pass; K-3 layout and K-8 AX crash found and fixed, re-checked | (run k commit) | docs/evidence/ui-journeys-2026-11-01k | K-8 with Online on; K-7 needs an unreadable scan in a sample |
-| J-168 | 168 jobs / nine persona journeys on current code | UI-K | agent | open | — | — | — |
+| J-168 | 168 jobs / nine persona journeys on current code | UI-K | agent | done at service level on 6d4bf0fd — 118/118 (168 contracts, every job launched through the production service, 97 executor scenarios, 9 persona simulations start to end) | 6d4bf0fd | JobContract, JobOutcomeMatrix, JobAcceptanceScenario, InvestigationCaseSimulation, PersonaJobsModel | per-persona UI walk to export not repeated on this build |
 | ACC | Scorer review on consumed data, freeze, fresh set, adjudication packs | N1–N8 | agent → adjudicators | open | — | — | — |
 | STUDY | Five-user + practitioner study materials | UI-K | agent → participants | open | — | — | — |
 | BUY | StoreKit / Sandbox / TestFlight purchase matrix | N2–N4, ARCH | agent | open | — | — | — |
-| SEC | Encryption, backup/restore, erasure, workload | — | agent | open | — | — | — |
+| SEC | Encryption, backup/restore, erasure, workload | — | agent | done (unit/integration) on 6d4bf0fd — 63/63 | 6d4bf0fd | LedgerEncryption(+Cost), Backup*(5), CompleteBackup, LiveBackupSnapshot, CaseErasure, ScaleRun | real-size workload on a signed build (ARCH) |
 | ARCH | Release archive, validation, upload, TestFlight acceptance | all engineering | agent | open | — | — | — |
 | LEGAL | Decision sheet, listing, privacy label, review notes | ARCH | agent → owner | open | — | — | — |
 | SUBMIT | App Review submission | everything | owner | open | — | — | — |
