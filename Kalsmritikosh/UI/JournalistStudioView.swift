@@ -246,8 +246,13 @@ public struct JournalistStudioView: View {
                     TextField("Sources supporting it", text: $c.sources).textFieldStyle(.roundedBorder).font(.caption)
                     TextField("Independent corroboration — or its absence (copies of one story are one source)", text: $c.corroboration).textFieldStyle(.roundedBorder).font(.caption)
                     HStack(spacing: 8) {
-                        Toggle("Adverse to someone", isOn: Binding(get: { c.adverse ?? (c.status?.mustBeLabelledAlleged == true) }, set: { c.adverse = $0 }))
-                            .toggleStyle(.checkbox).font(.caption)
+                        Picker("Adverse to someone named?", selection: $c.adverse) {
+                            Text("Not decided").tag(Bool?.none)
+                            Text("Yes — owed a reply").tag(Bool?.some(true))
+                            Text("No").tag(Bool?.some(false))
+                        }
+                        .font(.caption).frame(maxWidth: 300)
+                        .help("A claim adverse to someone named is owed a right of reply even when it is verified. Decide for every claim.")
                         TextField("Who it affects (comma-separated)", text: Binding(
                             get: { (c.affectedSubjects ?? []).joined(separator: ", ") },
                             set: { c.affectedSubjects = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }))

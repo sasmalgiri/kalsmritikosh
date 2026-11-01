@@ -313,6 +313,12 @@ public struct SIUStudioView: View {
             Text("Findings of fact").font(.callout.weight(.semibold))
             TextEditor(text: r.findingsOfFact).font(.body).frame(minHeight: 90)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+            Text("Contrary facts and innocent explanations considered").font(.callout.weight(.semibold))
+            Text("What cuts against the suspicion, and the innocent explanations for each red flag (see the red-flag worksheet's “innocent explanation” column). Required before an external referral.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: Binding(get: { r.wrappedValue.contraryFacts ?? "" }, set: { r.wrappedValue.contraryFacts = $0 }))
+                .font(.body).frame(minHeight: 70)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
             next(.disposition)
         }
     }
@@ -334,7 +340,9 @@ public struct SIUStudioView: View {
                     .tint(.orange)
             }
             if !r.wrappedValue.isComplete(.disposition) {
-                Label("The report unlocks when a disposition, its rationale, and the acknowledgment(s) are recorded.",
+                Label(r.wrappedValue.disposition?.isExternalReferral == true && (r.wrappedValue.contraryFacts ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                      ? "An external referral needs the contrary facts and innocent explanations considered (Discrepancies stage), as well as the rationale and acknowledgments."
+                      : "The report unlocks when a disposition, its rationale, and the acknowledgment(s) are recorded.",
                       systemImage: "lock.fill")
                     .font(.caption).foregroundStyle(.orange)
             }

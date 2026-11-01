@@ -40,7 +40,10 @@ public struct JClaim: Codable, Identifiable, Hashable, Sendable {
     public var adverse: Bool?
     public var affectedSubjects: [String]?
     public init(text: String = "") { self.text = text }
-    public var isComplete: Bool { !text.trimmed.isEmpty && status != nil && !sources.trimmed.isEmpty }
+    /// Practitioner review 2026-11-02 (Journalist blocker): whether the claim is adverse to someone named
+    /// must be DECIDED — a verified claim is still owed a right of reply when it is adverse, so leaving the
+    /// question unanswered no longer lets a verified adverse claim through without one.
+    public var isComplete: Bool { !text.trimmed.isEmpty && status != nil && !sources.trimmed.isEmpty && adverse != nil }
     /// The claim needs a reply: marked adverse, or (memos without the mark) short of verified.
     var needsReply: Bool { adverse ?? (status?.mustBeLabelledAlleged == true) }
 }

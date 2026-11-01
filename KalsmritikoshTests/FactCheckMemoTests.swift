@@ -22,13 +22,20 @@ struct FactCheckMemoTests {
         #expect(FactCheckMemo.Stage.allCases.map(\.title) == ["Story", "Claims", "Right of reply", "Memo"])
         // A fully-verified story needs no reply entries.
         var c = JClaim(text: "claim"); c.status = .verified; c.sources = "doc"
+        // Practitioner review 2026-11-02: whether it is adverse must be decided before the claim is complete…
+        #expect(!c.isComplete)
+        // …a verified claim adverse to no one needs no reply…
+        c.adverse = false
         m.claims = [c]
-        #expect(m.isComplete(.reply))
-        // A disputed claim makes the reply stage mandatory…
+        #expect(c.isComplete && m.isComplete(.reply))
+        // …but a VERIFIED claim adverse to someone is still owed one.
+        c.adverse = true; c.affectedSubjects = ["S"]; m.claims = [c]
+        #expect(!m.isComplete(.reply))
+        // A disputed claim adverse to S makes the reply stage mandatory…
         c.status = .disputed; m.claims = [c]
         #expect(!m.isComplete(.reply))
-        // …and satisfied by a complete entry.
-        var r = ReplyEntry(); r.subject = "S"; r.claimSummary = "put in full"; r.contactedDate = "2026-05-02"
+        // …and satisfied by a complete entry that puts it to S.
+        var r = ReplyEntry(); r.subject = "S"; r.claimSummary = "put in full"; r.contactedDate = "2026-05-02"; r.claimIDs = [c.id]
         m.replies = [r]
         #expect(m.isComplete(.reply))
         // The memo gates on both pre-publication checks.

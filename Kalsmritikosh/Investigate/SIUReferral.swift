@@ -102,6 +102,10 @@ public struct SIUReferral: Codable, Identifiable, Hashable, Sendable {
     // Stage 4 — Discrepancies + findings of fact.
     public var discrepancies: [SIUDiscrepancy] = []
     public var findingsOfFact: String = ""
+    /// Practitioner review 2026-11-02 (SIU blocker): the facts that cut AGAINST the suspicion and the
+    /// innocent explanations considered. Optional so referrals saved before it still open; an external
+    /// referral cannot be completed without it, and the report always prints the section.
+    public var contraryFacts: String?
 
     // Stage 5 — Disposition.
     public var disposition: SIUDisposition?
@@ -144,8 +148,9 @@ public struct SIUReferral: Codable, Identifiable, Hashable, Sendable {
         case .disposition:
             guard let d = disposition, !dispositionRationale.trimmed.isEmpty,
                   indicatorsNotProofAcknowledged else { return false }
-            // External referrals additionally require the good-faith confirmation.
-            return d.isExternalReferral ? goodFaithConfirmed : true
+            // External referrals additionally require the good-faith confirmation and the contrary facts /
+            // innocent explanations considered.
+            return d.isExternalReferral ? (goodFaithConfirmed && !(contraryFacts ?? "").trimmed.isEmpty) : true
         }
     }
     public var completionFraction: Double {
@@ -234,6 +239,8 @@ public enum SIUReportRenderer {
 
         // 5. Findings of fact.
         out += "## 5. Findings of fact\n\n\(s.findingsOfFact.trimmed.isEmpty ? "_Not stated._" : s.findingsOfFact)\n\n"
+        let contrary = (s.contraryFacts ?? "").trimmed
+        out += "### Contrary facts and innocent explanations considered\n\n\(contrary.isEmpty ? "_Not recorded._" : contrary)\n\n"
 
         // 6. Disposition.
         out += "## 6. Disposition\n\n"
