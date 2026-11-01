@@ -30,6 +30,9 @@ public struct AskView: View {
     /// can render the quality strip directly (instead of folding it
     /// into a plain-text body line).
     @State private var verifiedAnswers: [UUID: VerifiedAnswer] = [:]
+    /// A6 / A7 — the AI challenge or draft of an answer, shown in a sheet (never filed on its own).
+    @State private var aiReview: AIAssist.Review?
+    @State private var aiReviewMessage: String?
     /// GK — the general-knowledge blocks, keyed by the archive answer's turn.
     /// UI STATE ONLY, deliberately: never a persisted turn (the brain may read
     /// prior turns as context), never in the ledger, never exportable.
@@ -710,6 +713,12 @@ public struct AskView: View {
                     }
                 }
                 .frame(maxWidth: 620, alignment: .leading)
+                .sheet(item: Binding(get: { aiReview.map { AIReviewItem(review: $0) } }, set: { if $0 == nil { aiReview = nil } })) { item in
+                    AIReviewSheet(review: item.review) { aiReview = nil }
+                }
+                .alert("Online AI", isPresented: Binding(get: { aiReviewMessage != nil }, set: { if !$0 { aiReviewMessage = nil } })) {
+                    Button("OK", role: .cancel) { aiReviewMessage = nil }
+                } message: { Text(aiReviewMessage ?? "") }
                 .contextMenu {
                     if verifiedAnswers[turn.id] != nil {
                         Button {
@@ -728,6 +737,21 @@ public struct AskView: View {
                                 }
                             } label: {
                                 Label("Send to DEVONthink", systemImage: "square.and.arrow.up.on.square")
+                            }
+                        }
+                        // A6 / A7 — Online AI reviews of this answer from its own passages.
+                        if let verified = verifiedAnswers[turn.id], OnlineSettings.cloudAllowed {
+                            let idx = turns.firstIndex(where: { $0.id == turn.id })
+                            let q = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+                            Button {
+                                runAIReview(verified, question: q, draft: false)
+                            } label: {
+                                Label("Challenge this answer with AI…", systemImage: "exclamationmark.bubble")
+                            }
+                            Button {
+                                runAIReview(verified, question: q, draft: true)
+                            } label: {
+                                Label("Draft a report paragraph with AI…", systemImage: "doc.text")
                             }
                         }
                         // I-1 — a bundle anyone can verify without this app.
@@ -1387,3 +1411,68 @@ private struct AskAttachment: Identifiable {
 #endif
 
 
+
+
+// MARK: - A6 / A7 — AI review of an answer
+
+private struct AIReviewItem: Identifiable {
+    let id = UUID()
+    let review: AIAssist.Review
+}
+
+extension AskView {
+    fileprivate func runAIReview(_ verified: VerifiedAnswer, question: String, draft: Bool) {
+        Task { @MainActor in
+            do { aiReview = try await appState.reviewAnswerWithAI(verified, question: question, draft: draft) }
+            catch is CancellationError {}
+            catch { aiReviewMessage = error.localizedDescription }
+        }
+    }
+}
+
+/// Shows an AI challenge or draft with what it rests on and the citation check. Copy only — it is never
+/// saved as a finding or into a report by itself.
+struct AIReviewSheet: View {
+    let review: AIAssist.Review
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(review.kind, systemImage: "sparkles").font(.title3.bold())
+            if review.isFullyCited {
+                Label("Every point cites a passage that was sent.", systemImage: "checkmark.seal").font(.caption).foregroundStyle(.green)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    if !review.unknownCitations.isEmpty {
+                        Text("Cites passages that were never sent: \(review.unknownCitations.joined(separator: ", ")) — treat those points as unsupported.")
+                    }
+                    if !review.uncitedSentences.isEmpty {
+                        Text("\(review.uncitedSentences.count) sentence(s) cite no passage — treat them as unsupported.")
+                    }
+                }
+                .font(.caption).foregroundStyle(.orange)
+            }
+            ScrollView {
+                Text(review.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                Divider().padding(.vertical, 6)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(review.passages, id: \.label) { p in
+                        Text("[\(p.label)] \(p.source)").font(.caption.weight(.semibold))
+                        Text(p.text.prefix(600)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(minHeight: 320)
+            HStack {
+                Text("Written by an AI from the passages listed. Not a finding; check it before using any of it.").font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(review.text, forType: .string)
+                }
+                Button("Done", action: done).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16).frame(width: 680)
+    }
+}

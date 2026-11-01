@@ -67,6 +67,9 @@ struct DocumentInsightsPanel: View {
     @State private var docEntities: [Entity] = []
     @State private var related: [RelatedDocument] = []
     @State private var loading = true
+    /// A5 — the outcome of Translate with AI.
+    @State private var translating = false
+    @State private var translateResult: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -99,6 +102,17 @@ struct DocumentInsightsPanel: View {
                 if docEntities.isEmpty && related.isEmpty {
                     Text("No connections yet — entities and related documents appear as background analysis completes.")
                         .font(.caption).foregroundStyle(.tertiary)
+                }
+                // A5 — a document in another language, read into English by the Online AI.
+                if OnlineSettings.cloudAllowed {
+                    HStack {
+                        Button(translating ? "Translating…" : "Translate into English with AI…") {
+                            Task { translating = true; translateResult = await appState.translateWithAI(objectID: objectID); translating = false }
+                        }
+                        .controlSize(.small).disabled(translating)
+                        .help("Sends this document's text (shown to you first) to your Online AI and adds the English translation as a separate, marked document that cites this one. This document is not changed.")
+                        if let translateResult { Text(translateResult).font(.caption).foregroundStyle(.secondary) }
+                    }
                 }
             }
         }
