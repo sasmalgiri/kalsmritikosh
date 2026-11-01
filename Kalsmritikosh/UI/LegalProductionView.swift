@@ -14,8 +14,13 @@ import os
 
 extension AppState {
     /// Documents for a production: coded Responsive or Privileged (privileged ones are withheld).
-    func productionDocuments(tag: String?) async -> [ProductionDocument] {
-        guard let database else { return [] }
+    /// Practitioner review 2026-11-02 (Lawyer blocker): a production is for ONE matter. Every candidate —
+    /// review codes, tag, and the matter's own document coding — must be in that matter's authorised scope;
+    /// another matter's documents (privileged or not) are never produced, slip-sheeted or logged.
+    func productionDocuments(tag: String?, caseID: UUID) async -> [ProductionDocument] {
+        guard let database, let answers = investigationAnswers, let objects,
+              let context = try? await answers.scopeContext(caseID: caseID),
+              let inScope = try? await objects.objectIDs(inSourceVersionIDs: Set(context.scope.authorizedSourceVersionIDs)) else { return [] }
         var ids: Set<UUID> = []
         var privileged: Set<UUID> = []
         if let codes = try? await ReviewCodesRepository(database: database).current() {
@@ -30,9 +35,11 @@ extension AppState {
         // Release-block directive item 1 — a document coded privileged or partly privileged in a case's
         // document-coding result (law.document-coding) is withheld: slip sheet and privilege-log line,
         // never its text or native. The coding controls the production, not only the review codes.
-        if let coded = try? await JobResultRepository(database: database).codedPrivilegedObjectIDs() {
+        if let coded = try? await JobResultRepository(database: database).codedPrivilegedObjectIDs(caseID: caseID) {
             ids.formUnion(coded); privileged.formUnion(coded)
         }
+        ids.formIntersection(inScope)
+        privileged.formIntersection(inScope)
         guard !ids.isEmpty else { return [] }
         var out: [ProductionDocument] = []
         let list = Array(ids)
@@ -70,6 +77,9 @@ struct LegalProductionView: View {
     @State private var status: String?
     @State private var running = false
     @State private var holds: [LegalHold] = []
+    /// The matter being produced (required).
+    @State private var matters: [StudioCaseChoice] = []
+    @State private var matter: UUID?
     @State private var newHoldName = ""
 
     var body: some View {
@@ -77,8 +87,13 @@ struct LegalProductionView: View {
             Text("Legal production").font(.title3.bold())
             GroupBox("Production set") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Produces documents coded Responsive or Hot (Tools → Review coding), plus any with the tag below. Documents coded Privileged get a numbered slip sheet and a line in the privilege log.")
+                    Text("Produces, for the matter chosen below, the documents in that matter's scope coded Responsive or Hot (Tools → Review coding), plus any in scope with the tag below. Documents coded Privileged get a numbered slip sheet and a line in the privilege log. Documents outside the matter are never included.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Picker("Matter", selection: $matter) {
+                        Text("Choose the matter…").tag(UUID?.none)
+                        ForEach(matters) { Text($0.title).tag(Optional($0.id)) }
+                    }
+                    .frame(maxWidth: 420)
                     HStack {
                         TextField("Bates prefix", text: $prefix).frame(width: 120)
                         TextField("Also include tag (optional)", text: $tag).frame(width: 200)
@@ -92,7 +107,7 @@ struct LegalProductionView: View {
                     TextField("Also redact these terms (comma-separated)", text: $redactTerms)
                     HStack {
                         Button(running ? "Producing…" : "Choose folder and produce…") { Task { await produce() } }
-                            .disabled(running || prefix.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(running || matter == nil || prefix.trimmingCharacters(in: .whitespaces).isEmpty)
                         if let status { Text(status).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
                     }
                 }
@@ -128,7 +143,7 @@ struct LegalProductionView: View {
         }
         .padding(16)
         .frame(minWidth: 680, minHeight: 600)
-        .task { await loadHolds() }
+        .task { await loadHolds(); matters = await appState.studioCaseChoices(); if matters.count == 1 { matter = matters[0].id } }
     }
 
     private var repo: LegalProductionRepository? { appState.database.map { LegalProductionRepository(database: $0) } }
@@ -142,7 +157,8 @@ struct LegalProductionView: View {
         panel.prompt = "Produce here"
         guard panel.runModal() == .OK, let parent = panel.url else { return }
         running = true; defer { running = false }
-        let docs = await appState.productionDocuments(tag: tag.trimmingCharacters(in: .whitespaces))
+        guard let matter else { status = "Choose the matter to produce."; return }
+        let docs = await appState.productionDocuments(tag: tag.trimmingCharacters(in: .whitespaces), caseID: matter)
         guard !docs.isEmpty else { status = "Nothing to produce: no documents are coded Responsive, Hot or Privileged, or carry that tag."; return }
         let p = prefix.trimmingCharacters(in: .whitespaces)
         do {
@@ -171,7 +187,8 @@ struct LegalProductionView: View {
 
     private func createHold() async {
         guard let repo else { return }
-        let docs = await appState.productionDocuments(tag: tag.trimmingCharacters(in: .whitespaces))
+        guard let matter else { status = "Choose the matter to produce."; return }
+        let docs = await appState.productionDocuments(tag: tag.trimmingCharacters(in: .whitespaces), caseID: matter)
         guard !docs.isEmpty else { status = "Nothing to hold: code documents first or give a tag."; return }
         do {
             let id = try await repo.createHold(name: newHoldName.trimmingCharacters(in: .whitespaces))

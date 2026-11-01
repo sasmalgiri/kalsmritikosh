@@ -349,9 +349,13 @@ public actor JobResultRepository {
 
     /// Release-block directive item 1 — the documents every case's CURRENT document coding withholds
     /// from production (coded privileged or partly privileged; a rejected row codes nothing).
-    public func codedPrivilegedObjectIDs() async throws -> Set<UUID> {
+    /// Practitioner review 2026-11-02 (Lawyer blocker): `caseID` limits it to ONE matter's coding — a
+    /// production is for one matter and never lists another matter's privileged documents.
+    public func codedPrivilegedObjectIDs(caseID: UUID? = nil) async throws -> Set<UUID> {
         var out = Set<UUID>()
-        for r in try await rows("WHERE job_id = 'law.document-coding' AND state <> 'superseded'", []) {
+        let found = caseID.map { _ in "WHERE job_id = 'law.document-coding' AND state <> 'superseded' AND case_id = ?" }
+            ?? "WHERE job_id = 'law.document-coding' AND state <> 'superseded'"
+        for r in try await rows(found, caseID.map { [.uuid($0)] } ?? []) {
             out.formUnion(DocumentCodingProduction.withheld(in: r.content.rows))
         }
         return out
