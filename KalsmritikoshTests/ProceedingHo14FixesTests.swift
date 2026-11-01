@@ -87,4 +87,13 @@ struct ProceedingHo14FixesTests {
         let b = try charge(byrd, "Kevin Byrd")
         #expect(b.contains("armed bank robbery") && !b.contains("heroin"), "\(b)")
     }
+
+    @Test("C: the last-resort fallback reads the person a question names, so it keeps only that person's passages")
+    func fallbackPerson() {
+        #expect(DeterministicEvidenceFallback.personSurname(in: "Do we have a sentencing date for John Ross?") == "Ross")
+        #expect(DeterministicEvidenceFallback.personSurname(in: "When was John A. Ross sentenced?") == "Ross")
+        #expect(DeterministicEvidenceFallback.personSurname(in: "Who signed the master supply agreement?") == nil)
+        #expect(DeterministicEvidenceFallback.personSurname(in: "What does the Board Minutes say about Q3?") != "Ross")
+    }
 }
+

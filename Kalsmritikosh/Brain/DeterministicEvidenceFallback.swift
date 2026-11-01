@@ -15,6 +15,20 @@ import Foundation
 
 public enum DeterministicEvidenceFallback {
 
+    /// The surname of the person a question names ("… for John A. Ross?" → "Ross"), or nil.
+    static func personSurname(in question: String) -> String? {
+        let lead: Set<String> = ["When", "What", "Which", "Who", "Did", "Do", "Does", "Was", "Were", "Is", "Has", "Have", "How", "Why", "Where",
+                                 "Can", "Could", "Please", "Tell", "Give", "Show", "List", "The", "A", "An", "In", "On", "For"]
+        guard let re = try? NSRegularExpression(pattern: #"\b([A-Z][a-z'\-]+)(?:\s+[A-Z]\.)?\s+([A-Z][a-zA-Z'\-]{1,})\b"#) else { return nil }
+        let ns = question as NSString
+        for m in re.matches(in: question, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let first = ns.substring(with: m.range(at: 1)), last = ns.substring(with: m.range(at: 2))
+            if lead.contains(first) || lead.contains(last) { continue }
+            return last
+        }
+        return nil
+    }
+
     /// Build a grounded VerifiedAnswer from the retrieval set alone — no LLM.
     /// Returns nil only when there is genuinely nothing to show (no events and
     /// no chunks), in which case the caller keeps its honest refusal.
@@ -58,10 +72,19 @@ public enum DeterministicEvidenceFallback {
             }
         }
 
+        // ho14 adjudication C: a question about a named person ("Do we have a sentencing date for John
+        // Ross?") is answered only from passages that name that person — never from other cases' release
+        // headers that happened to share a word. Nothing about the person ⇒ nil (the honest not-found).
+        let surname = personSurname(in: question)
+        func aboutPerson(_ text: String) -> Bool {
+            guard let surname else { return true }
+            return text.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        }
         let events = Array(retrieval.events.prefix(12))
-            .filter { relevant($0.title) }
+            .filter { relevant($0.title) && aboutPerson($0.title + " " + ($0.summary ?? "")) }
             .sorted { $0.date < $1.date }
-        let chunks = Array(retrieval.chunks.prefix(8))
+        let chunks = Array(retrieval.chunks.prefix(8)).filter { aboutPerson($0.chunk.text) }
+        if surname != nil { leadTopic = leadTopic.flatMap { aboutPerson($0.subjectIdentifier + " " + $0.narrative) ? $0 : nil } }
         guard !events.isEmpty || !chunks.isEmpty || leadTopic != nil else { return nil }
 
         var citations: [VerifiedAnswer.Citation] = []
