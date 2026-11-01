@@ -638,6 +638,12 @@ extension JobResultModel {
 
 /// The exported form of a job result: state, review, rows with decisions and sources, limitations.
 nonisolated enum JobResultMarkdown {
+    /// Disclosure jobs: the field and the value that clears a row for sharing.
+    static let disclosureRule: [String: (key: String, cleared: String)] = [
+        "ind.secure-share": ("include", "include"),
+        "ind.health-scope": ("permission", "may share"),
+    ]
+
     static func render(_ r: JobResultRecord, title: String) -> String {
         var out = "# \(title)\n\nState: \(r.state.rawValue) · revision \(r.id.uuidString) · saved \(r.createdAt.formatted()) by \(r.createdBy)\n"
         if let review = r.content.review {
@@ -647,8 +653,19 @@ nonisolated enum JobResultMarkdown {
         if !r.content.limitations.isEmpty { out += "\n## Limitations\n" + r.content.limitations.map { "- \($0)" }.joined(separator: "\n") + "\n" }
         out += "\n## Result\n"
         // Rejected rows are not part of the result; they are listed apart so nothing is hidden.
-        let included = r.content.rows.filter { $0.decision != .rejected }
-        let rejected = r.content.rows.filter { $0.decision == .rejected }
+        var included = r.content.rows.filter { $0.decision != .rejected }
+        var rejected = r.content.rows.filter { $0.decision == .rejected }
+        // Practitioner review 2026-11-02 (Individual blocker): a disclosure copy carries ONLY the rows cleared
+        // to share. Withheld, undecided and rejected rows are left out entirely — not their titles, not their
+        // passages — and only counted.
+        var leftOut = 0
+        if let rule = Self.disclosureRule[r.jobID] {
+            let cleared = included.filter { $0.fields?[rule.key] == rule.cleared }
+            leftOut = included.count - cleared.count + rejected.count
+            included = cleared; rejected = []
+            out += "\nThis is a sharing copy: only the \(cleared.count) item(s) cleared to share are included."
+                + (leftOut > 0 ? " \(leftOut) item(s) not cleared to share are left out (their titles and passages are not in this file)." : "") + "\n"
+        }
         for (i, row) in included.enumerated() {
             let entries = Set(row.assertions ?? row.personEntries())
             out += "\n\(i + 1). \(row.date.map { "\($0) — " } ?? "")\(row.title)\(entries.contains("title") ? " [reviewer's entry]" : "")\n"

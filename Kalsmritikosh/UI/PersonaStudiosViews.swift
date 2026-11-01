@@ -395,9 +395,18 @@ public struct BinderStudioView: View {
             case .binder:
                 VStack(alignment: .leading, spacing: 12) {
                     StudioStageHeader("The binder", "Confirm it's current, then print it — a binder nobody can find or that's five years stale protects nobody.")
-                    Toggle("Reviewed within the last year", isOn: m.reviewedRecently)
+                    HStack {
+                        Button("I have reviewed it today — every person, number, address and location is current") {
+                            m.wrappedValue.lastReviewedAt = Date(); m.wrappedValue.reviewedRecently = true
+                        }
+                        if let at = m.wrappedValue.lastReviewedAt {
+                            Text("Last reviewed \(at.formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     if !m.wrappedValue.isComplete(.binder) {
-                        Label("The binder completes when the review is confirmed.", systemImage: "lock.fill")
+                        Label(m.wrappedValue.lastReviewedAt == nil ? "The binder completes when you confirm you have reviewed it."
+                                                                     : "The last review was more than a year ago — review it again before relying on it.",
+                              systemImage: "lock.fill")
                             .font(.caption).foregroundStyle(.orange)
                     }
                     Text("Binder preview").font(.callout.weight(.semibold))

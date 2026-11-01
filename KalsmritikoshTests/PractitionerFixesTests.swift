@@ -70,5 +70,30 @@ struct PractitionerFixesTests {
         }
         #expect(JobFields.specs["res.bibliography"]?.first { $0.key == "date" }?.kind == .historicalDate)
     }
+
+    @Test("Individual: a sharing copy holds only cleared rows; the binder prints its real review date; renewal comes only from a stated renewal date")
+    func individualFixes() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let rows = [JobResultRow(title: "Passport scan — share", fields: ["include": "include", "recipient": "Bank"]),
+                    JobResultRow(title: "Medical letter — SECRET DETAIL", fields: ["include": "withhold"]),
+                    JobResultRow(title: "Undecided tax notice", fields: [:])]
+        let rec = JobResultRecord(id: UUID(), caseID: UUID(), jobID: "ind.secure-share", family: "controlledDisclosure", state: .draft,
+                                  content: JobResultContent(rows: rows), createdBy: "me", createdAt: t)
+        let md = JobResultMarkdown.render(rec, title: "Share")
+        #expect(md.contains("Passport scan") && !md.contains("SECRET DETAIL") && !md.contains("Undecided tax notice"))
+        #expect(md.contains("2 item(s) not cleared to share are left out"))
+
+        var b = EmergencyBinder.sample(now: t)
+        b.lastReviewedAt = t.addingTimeInterval(-400 * 86_400)
+        let binder = EmergencyBinderRenderer.markdown(b, generatedAt: t)
+        #expect(!binder.contains("**Last reviewed:** " + { let f = DateFormatter(); f.dateStyle = .long; return f.string(from: t) }()))
+        #expect(binder.contains("Reviewed within the last year: **No"))
+
+        let issued = JobResultRow(title: "Policy", date: "2025-01-02", flags: ["upcoming: 2026-12-31"])
+        let plain = JobResultRow(title: "Policy", date: "2025-01-02")
+        let filled = JobFields.prefill(job: "ind.insurance", rows: [issued, plain], evidence: nil)
+        #expect(filled[0].fields?["renewal"] == "2026-12-31", "the stated renewal date, not the issue date")
+        #expect((filled[1].fields?["renewal"] ?? "").isEmpty, "no renewal sentence: left for the person")
+    }
 }
 

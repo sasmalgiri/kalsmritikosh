@@ -476,7 +476,17 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
     public var contacts: [BinderContact] = []
     public var items: [BinderItem] = []
     public var wishes: String = ""      // instructions / wishes for the reader
-    public var reviewedRecently = false // binders go stale — the real-life gate
+    public var reviewedRecently = false // kept for binders saved before lastReviewedAt; no longer decides anything
+    /// Practitioner review 2026-11-02 (Individual blocker): WHEN the owner last confirmed the binder is current.
+    /// The binder is current only within a year of it; the hardcopy prints this date, never the export date.
+    public var lastReviewedAt: Date?
+
+    public static let freshnessDays = 365
+    /// Reviewed within the last year, as of `now` (a binder saved before the date was recorded must be reviewed once).
+    public func isFresh(now: Date = Date()) -> Bool {
+        guard let at = lastReviewedAt else { return false }
+        return now.timeIntervalSince(at) <= Double(Self.freshnessDays) * 86_400 && at <= now.addingTimeInterval(86_400)
+    }
 
     public init(title: String, now: Date) { self.title = title; createdAt = now; updatedAt = now }
 
@@ -504,7 +514,7 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
         case .people: return !contacts.isEmpty && contacts.allSatisfy(\.isComplete)
         case .documents: return !items.isEmpty && items.allSatisfy(\.isComplete)
         case .wishes: return !wishes.trimmed.isEmpty
-        case .binder: return reviewedRecently
+        case .binder: return isFresh()
         }
     }
     public var completionFraction: Double { Double(Stage.allCases.filter { isComplete($0) }.count) / 4 }
@@ -521,6 +531,7 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
         b.items = [i1, i2, i3]
         b.wishes = "If I'm incapacitated: contact Dr. Physician first, then L. Counsel. The insurance policy covers the mortgage — claim before selling anything."
         b.reviewedRecently = true
+        b.lastReviewedAt = now
         StudioAudit.record(&b.history, "Worked example created", at: now)
         return b
     }
@@ -531,14 +542,14 @@ public enum EmergencyBinderRenderer {
         let df = DateFormatter(); df.dateStyle = .long
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Emergency Binder — \(b.title.trimmed.isEmpty ? "Untitled" : b.title)\n\n"
-        out += "**Owner:** \(b.owner.dash) · **Last reviewed:** \(df.string(from: generatedAt))\n\n"
+        out += "**Owner:** \(b.owner.dash) · **Last reviewed:** \(b.lastReviewedAt.map { df.string(from: $0) } ?? "never recorded")\n\n"
         out += "_The point of this binder is findability in an emergency: where each thing lives, and who can reach it._\n\n---\n\n"
         out += "## 1. Key people\n\n| Name | Role | Reach |\n|---|---|---|\n"
         for c in b.contacts { out += "| \(c.name.dash) | \(c.role.dash) | \(c.reach.dash) |\n" }
         out += "\n## 2. Documents & accounts\n\n| Item | Where it lives | Who can access |\n|---|---|---|\n"
         for i in b.items { out += "| \(i.item.dash) | \(i.location.dash) | \(i.access.dash) |\n" }
         out += "\n## 3. Instructions\n\n\(b.wishes.dashText)\n\n"
-        out += "Reviewed within the last year: **\(b.reviewedRecently ? "Yes" : "No — review it; binders go stale")**\n\n"
+        out += "Reviewed within the last year: **\(b.isFresh(now: generatedAt) ? "Yes" : "No — review it before relying on it; binders go stale (old addresses, numbers and locations)")**\n\n"
         out += "---\n\nPrepared by **\(b.owner.dash)**\n"
         out += StudioAudit.appendix(b.history)
         return out

@@ -172,7 +172,11 @@ struct PersonaDeliverables2Tests {
         #expect(b.isComplete(.wishes))
         #expect(!b.isComplete(.binder))
         b.reviewedRecently = true
+        #expect(!b.isComplete(.binder), "practitioner review 2026-11-02: a tick with no date proves nothing")
+        b.lastReviewedAt = Date()
         #expect(b.isComplete(.binder))
+        b.lastReviewedAt = Date().addingTimeInterval(-400 * 86_400)
+        #expect(!b.isComplete(.binder), "a review more than a year old has expired")
     }
 
     @Test("Binder hardcopy: people → documents & locations → instructions")

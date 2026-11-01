@@ -388,7 +388,11 @@ struct JobAcceptanceScenarioTests {
         if let entry = done.content.rows.first(where: { $0.decision == .accepted && !($0.assertions ?? []).isEmpty }) {
             #expect(md.contains("[reviewer's entry"), "\(job): reviewer entries not marked (\(entry.assertions ?? []))")
         }
-        if rows.count > 1, let last = rows.last {
+        if JobResultMarkdown.disclosureRule[job] != nil, rows.count > 1, let last = rows.last {
+            // Practitioner review 2026-11-02: a sharing copy leaves out every row not cleared to share — a
+            // rejected row's title is not in the file at all, only counted.
+            #expect(!md.contains(last.title) && md.contains("not cleared to share are left out"), "\(job): a row not cleared to share is in the sharing copy")
+        } else if rows.count > 1, let last = rows.last {
             let result = md.components(separatedBy: "## Not included").first ?? md
             #expect(!result.contains("\n\(rows.count). ") && md.contains("## Not included") && md.contains(last.title),
                     "\(job): a rejected row was exported as part of the result")

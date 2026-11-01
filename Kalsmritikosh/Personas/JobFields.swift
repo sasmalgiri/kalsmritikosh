@@ -28,6 +28,10 @@ public nonisolated struct JobField: Sendable, Hashable, Codable {
     public enum Prefill: String, Sendable, Hashable, Codable {
         case rowTitle, rowDate, rowDetail, names, document, sourceVersion, contentHash, exhibitNumber, bates,
              amount, currency, firstSentence, constantOpen, methodID
+        /// Practitioner review 2026-11-02 (Individual blocker): a date only from a sentence that says it is a
+        /// renewal, expiry, "valid until" or due date (the register's "upcoming:"/"passed:" flags) — never the
+        /// document's earliest date, which is usually its issue date. Blank when no sentence says so.
+        case statedRenewalDate
     }
     public init(_ key: String, _ label: String, _ kind: Kind = .text, required: Bool = true, prefill: Prefill? = nil) {
         self.key = key; self.label = label; self.kind = kind; self.required = required; self.prefill = prefill
@@ -88,7 +92,7 @@ public nonisolated enum JobFields {
                                       F("current", "Current", .choice(["yes", "no"])), F("expiry", "Expiry", .date, required: false)]
         m["ind.property"] = [F("asset", "Asset"), F("document", "Document", prefill: .document), F("date", "Date", .date, prefill: .rowDate), F("status", "Status")]
         m["ind.insurance"] = [F("policy", "Policy"), F("insurer", "Insurer"), F("cover", "Cover"),
-                              F("renewal", "Renewal", .date, prefill: .rowDate), F("document", "Document", prefill: .document)]
+                              F("renewal", "Renewal", .date, prefill: .statedRenewalDate), F("document", "Document", prefill: .document)]
         m["ind.applications"] = [F("application", "Application or dispute"), F("submitted", "Submitted", .date, prefill: .rowDate),
                                  F("status", "Status"), F("document", "Document", prefill: .document)]
         m["ind.document-vault"] = [F("original", "Original", prefill: .document), F("hash", "SHA-256", prefill: .contentHash),
@@ -196,6 +200,11 @@ public nonisolated enum JobFields {
                 switch f.prefill {
                 case .rowTitle?: value = row.title
                 case .rowDate?: value = row.date
+                case .statedRenewalDate?:
+                    value = row.flags.lazy.compactMap { flag -> String? in
+                        for p in ["upcoming: ", "passed: "] where flag.hasPrefix(p) { return String(flag.dropFirst(p.count)) }
+                        return nil
+                    }.max()
                 case .rowDetail?: value = row.detail
                 case .names?: value = row.detail.map { $0.replacingOccurrences(of: "Names: ", with: "") }
                 case .document?: value = doc?.name ?? row.title
