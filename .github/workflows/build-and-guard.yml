@@ -137,6 +137,10 @@ jobs:
         timeout-minutes: 75
         env:
           NSUnbufferedIO: YES
+          # The hosted runner does not service StoreKit test sessions: PurchaseStoreKitTests hung batch 9
+          # until the 75-minute limit on 6fccbd29, 547ff645 and 37baf589. That suite runs on a Mac with
+          # Xcode and the flows are proven again in Sandbox/TestFlight (release gate "storekit").
+          TEST_RUNNER_KALS_HOSTED_CI: "1"
         run: |
           set -o pipefail
           # No deployment-target override: the uniform 15.6 floor (GOV-004) executes

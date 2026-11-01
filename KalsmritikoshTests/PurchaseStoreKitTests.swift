@@ -16,7 +16,9 @@ import StoreKitTest
 import Testing
 @testable import Kalsmritikosh
 
-@Suite(.serialized)
+@Suite(.serialized,
+       .disabled(if: ProcessInfo.processInfo.environment["KALS_HOSTED_CI"] != nil,
+                 "the hosted CI runner does not service StoreKit test sessions (the suite hung there); run on a Mac with Xcode — the flows are proven again in Sandbox/TestFlight"))
 @MainActor
 struct PurchaseStoreKitTests {
     /// A fresh session on the committed configuration: no transactions, dialogs off. Every test also
