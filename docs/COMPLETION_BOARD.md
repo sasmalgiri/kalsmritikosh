@@ -7,10 +7,10 @@ Resume from this table. A row is "done" only with a commit and a check that ran;
 | ID | Task | Depends on | Owner | Status | Commit | Check / evidence | Next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | CI-0 | Current CI on the candidate (build-and-test failed on 6fccbd29 and 547ff645) | — | agent | open | — | run 41264235747 | read the failure, fix, re-run |
-| N1 | Release checker false passes (NOT APPROVED, bad/empty manifest, unknown kind, mktemp failure) | — | agent | open | — | — | rewrite checker + negative fixtures in CI |
-| N2 | Entitlement expiry enforced at the moment of use; deadline timer; injected clock | — | agent | open | — | — | — |
-| N3 | Cached entitlement not an authority; test bypass unreachable in Release | N2 | agent | open | — | — | — |
-| N4 | Paid-action boundary complete (Work Center, DataLab, sample exemption) | N2 | agent | open | — | — | — |
+| N1 | Release checker false passes (NOT APPROVED, bad/empty manifest, unknown kind, mktemp failure) | — | agent | done | 718b1ccc | 15 fixtures, guard release-check-selftest | re-run on CI (macOS) |
+| N2 | Entitlement expiry enforced at the moment of use; deadline timer; injected clock | — | agent | done (unit) | see N3 row | EntitlementBoundaryTests, PurchaseStoreKitTests | Sandbox/TestFlight under BUY |
+| N3 | Cached entitlement not an authority; test bypass unreachable in Release | N2 | agent | done (unit + guard) | (N2–N4 commit) | cacheTrust, test-host-boundary guard | Release launch with test env var (ARCH) |
+| N4 | Paid-action boundary complete (Work Center, DataLab, sample exemption) | N2 | agent | done (service + unit) | (N2–N4 commit) | serviceBoundary + 85 suites | UI check under UI-K; remaining minor surfaces (tags, collections, highlights, PDF marks, notes, screening) still UI-only ungated — listed |
 | N5 | Handoff uses the persisted row; reports print every citation | — | agent | open | — | — | — |
 | N6 | Output packages revalidated at release | — | agent | open | — | — | — |
 | N7 | Unreadable protection data blocks send/export; corrupt result rows surfaced | — | agent | open | — | — | — |
