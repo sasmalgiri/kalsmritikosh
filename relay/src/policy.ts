@@ -57,7 +57,8 @@ export type Refusal =
   | { code: "capacity-paused"; message: string }
   | { code: "too-large"; message: string }
   | { code: "bad-request"; message: string }
-  | { code: "store-unavailable"; message: string };
+  | { code: "store-unavailable"; message: string }
+  | { code: "region-unavailable"; message: string };
 
 export const REFUSALS = {
   notSubscribed: (): Refusal => ({ code: "not-subscribed", message: "AI Included is not active for this Apple account. Subscribe, restore your purchase, or add your own AI key in Settings." }),
@@ -66,7 +67,11 @@ export const REFUSALS = {
   tooLarge: (): Refusal => ({ code: "too-large", message: "This request is larger than AI Included accepts. Select fewer passages and try again." }),
   badRequest: (why: string): Refusal => ({ code: "bad-request", message: `The request was not in the expected form: ${why}` }),
   storeUnavailable: (): Refusal => ({ code: "store-unavailable", message: "The App Store could not confirm the subscription just now. Nothing was sent; try again in a minute." }),
+  regionUnavailable: (): Refusal => ({ code: "region-unavailable", message: "AI Included is not available where this request comes from. Nothing was sent; everything else in the app keeps working." }),
 };
+
+/** The same countries as AI_BLOCKED_STOREFRONTS, as the two-letter codes Cloudflare reports for a request. */
+export const AI_BLOCKED_REQUEST_COUNTRIES: readonly string[] = ["CN", "HK", "MO", "RU", "BY", "VE", "AF", "MM", "YE", "IR", "KP", "SY", "CU"];
 
 /** HTTP status for each refusal. */
 export function statusFor(r: Refusal): number {
@@ -77,6 +82,7 @@ export function statusFor(r: Refusal): number {
     case "too-large": return 413;
     case "bad-request": return 400;
     case "store-unavailable": return 503;
+    case "region-unavailable": return 451;
   }
 }
 
@@ -106,7 +112,7 @@ export interface AppleTransaction {
 }
 
 /** A3 — App Store storefronts where generative AI is off. Keep identical to AIRegion.blocked in the app. */
-export const AI_BLOCKED_STOREFRONTS: readonly string[] = ["CHN"];
+export const AI_BLOCKED_STOREFRONTS: readonly string[] = ["CHN", "HKG", "MAC", "RUS", "BLR", "VEN", "AFG", "MMR", "YEM", "IRN", "PRK", "SYR", "CUB"];
 
 /** Apple's subscription status values (App Store Server API). */
 export const APPLE_STATUS = { active: 1, expired: 2, billingRetry: 3, gracePeriod: 4, revoked: 5 } as const;

@@ -242,13 +242,13 @@ public nonisolated enum HelpRegistry {
             destination: .settings, keywords: ["cloud", "api key", "claude", "openai", "gemini", "network", "consent"]),
         HelpTopic(
             id: "task-ai-included", kind: .task, title: "AI Included: questions without an AI account of your own",
-            summary: "The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay; top-ups of 200 last 12 months.",
+            summary: "The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay, within a monthly capacity shared by all subscribers; top-ups of 200 last 12 months.",
             steps: [
                 "Choose an AI Included plan on the subscription screen (there is no free trial with AI Included). Then Settings ▸ Online ▸ Provider ▸ AI Included (Claude Opus 5).",
                 "Every send is still shown to you first and recorded. The relay checks the subscription with Apple, counts the question and passes the request to Anthropic; it keeps only counts.",
                 "Settings ▸ Online ▸ “Check questions left” shows this month's count; the button beside it buys 200 more through the App Store.",
-                "If the service's monthly capacity is reached, AI Included pauses until the 1st and says so; everything else keeps working and your own key can be used meanwhile.",
-                "Online AI is not offered for App Store accounts in mainland China."
+                "All subscribers share one monthly service capacity: if it is reached, AI Included pauses until the 1st and says so, even if you have questions left; everything else keeps working and your own key can be used meanwhile.",
+                "Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country. You must be 18 or older to use it."
             ],
             controls: ["Check questions left"],
             destination: .settings, keywords: ["opus", "relay", "quota", "top-up", "questions left", "paused", "subscription", "country"]),

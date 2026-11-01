@@ -81,7 +81,7 @@ struct PurchaseStoreKitTests {
         let aiMonthly = try #require(c.offers.first { $0.plan == .aiMonthly })
         #expect(aiMonthly.displayPrice == "$24.99" && !aiMonthly.eligibleForTrial && aiMonthly.trialDays == nil)
         #expect(aiMonthly.actionTitle == "Subscribe $24.99 per month")
-        #expect(aiMonthly.disclosure.contains("300 Claude Opus 5 questions a month") && aiMonthly.disclosure.contains("pauses until the 1st"))
+        #expect(aiMonthly.disclosure.contains("up to 300 questions a month") && aiMonthly.disclosure.contains("share one monthly service capacity") && aiMonthly.disclosure.contains("pauses until the 1st"))
         #expect(c.aiAnnualSavingPercent == 17)
         #expect(c.topUpPrice == "$14.99")
         let monthly = try #require(c.offers.first { $0.plan == .monthly })

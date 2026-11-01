@@ -204,7 +204,7 @@ struct PurchaseScreen: View {
             planRow(visibleOffers.filter { !$0.plan.includesAI })
             let ai = visibleOffers.filter(\.plan.includesAI)
             if !ai.isEmpty {
-                Text("AI Included — everything above, plus \(PurchaseProducts.aiQuestionsPerMonth) Claude Opus 5 questions a month with no AI key or account of your own")
+                Text("AI Included — everything above, plus up to \(PurchaseProducts.aiQuestionsPerMonth) Claude Opus 5 questions a month with no AI key or account of your own, within a monthly service capacity shared by all subscribers")
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 planRow(ai)
             }
@@ -229,7 +229,7 @@ struct PurchaseScreen: View {
                             Text("Charged every month").font(.caption).foregroundStyle(.secondary)
                         }
                         if o.plan.includesAI {
-                            Text("\(PurchaseProducts.aiQuestionsPerMonth) AI questions a month · no free trial").font(.caption2).foregroundStyle(.secondary)
+                            Text("Up to \(PurchaseProducts.aiQuestionsPerMonth) AI questions a month · shared capacity · no free trial").font(.caption2).foregroundStyle(.secondary)
                         } else {
                             Text(o.eligibleForTrial ? "14-day free trial, then this price" : "No free trial on this account").font(.caption2).foregroundStyle(.secondary)
                         }

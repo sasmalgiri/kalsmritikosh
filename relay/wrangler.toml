@@ -4,6 +4,10 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
 # No request logging: the relay keeps counts only, never content.
+# Daily retention purge (privacy policy: counts kept 13 months).
+[triggers]
+crons = ["0 3 * * *"]
+
 [observability]
 enabled = false
 

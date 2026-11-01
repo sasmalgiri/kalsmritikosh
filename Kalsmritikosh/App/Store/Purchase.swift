@@ -402,7 +402,7 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
     }
 
     /// What AI Included is and is not, shown with every AI Included price.
-    static let aiTerms = "Includes \(PurchaseProducts.aiQuestionsPerMonth) Claude Opus 5 questions a month (unused ones do not carry over; 200 more can be bought, valid 12 months), answered through the publisher's service. The service has a monthly capacity: if it is reached, AI Included pauses until the 1st and everything else keeps working. Questions and passages go to Anthropic's commercial API; the publisher keeps only counts."
+    static let aiTerms = "Includes up to \(PurchaseProducts.aiQuestionsPerMonth) questions a month answered by Claude Opus 5 (Anthropic; if Anthropic declines a request, another Claude model may answer it), and transcription of recordings by Google Gemini, through the publisher's service. All AI Included subscribers share one monthly service capacity: when it is used up, AI Included pauses until the 1st of the next month (UTC), even if you have questions left, and everything else keeps working. Unused questions do not carry over; 200 more can be bought, valid 12 months. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts."
 
     /// The annual plan's saving against twelve monthly charges, from the two matching storefront
     /// prices; nil when the prices are not comparable numbers. Secondary information only.

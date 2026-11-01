@@ -135,13 +135,13 @@ Screen: **Settings**.
 
 ### AI Included: questions without an AI account of your own
 
-The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay; top-ups of 200 last 12 months.
+The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay, within a monthly capacity shared by all subscribers; top-ups of 200 last 12 months.
 
 1. Choose an AI Included plan on the subscription screen (there is no free trial with AI Included). Then Settings ▸ Online ▸ Provider ▸ AI Included (Claude Opus 5).
 2. Every send is still shown to you first and recorded. The relay checks the subscription with Apple, counts the question and passes the request to Anthropic; it keeps only counts.
 3. Settings ▸ Online ▸ “Check questions left” shows this month's count; the button beside it buys 200 more through the App Store.
-4. If the service's monthly capacity is reached, AI Included pauses until the 1st and says so; everything else keeps working and your own key can be used meanwhile.
-5. Online AI is not offered for App Store accounts in mainland China.
+4. All subscribers share one monthly service capacity: if it is reached, AI Included pauses until the 1st and says so, even if you have questions left; everything else keeps working and your own key can be used meanwhile.
+5. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country. You must be 18 or older to use it.
 
 Screen: **Settings**.
 

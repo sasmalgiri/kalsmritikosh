@@ -28,6 +28,12 @@ When 90 % of the month's Anthropic budget is spent, the app stops offering AI In
 5. `npm run deploy` — note the printed address (`https://kals-ai-relay.<you>.workers.dev`) and give
    it to the agent; the app is built with it.
 
+## Retention and requests
+A daily job (cron in `wrangler.toml`) deletes monthly counts older than 13 months, top-up records 25 months after
+purchase, and Apple's status answers after a day — as the privacy policy states. If a subscriber asks for their
+record to be deleted (they give their App Store order number; find the original transaction id in App Store Connect):
+`npx wrangler d1 execute kals-relay --remote --command "DELETE FROM usage WHERE sub='<id>'; DELETE FROM topups WHERE sub='<id>'; DELETE FROM status_cache WHERE sub='<id>'"`.
+
 ## Tests
 `npm test` (Node 24, no dependencies): quota, top-ups credited once, refunds, sandbox fallback,
 grace period, the cap under 40 concurrent requests, and that nothing a request contains is stored.

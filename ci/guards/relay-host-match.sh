@@ -13,7 +13,7 @@ if [ "$app" != "$helper" ]; then
 fi
 echo "ok: relay host identical in app and helper ('${app:-not configured}')"
 # A3 — the blocked storefronts, in the app and in the relay.
-appBlocked=$(sed -n '/static let blocked/,/\]/p' "$ROOT/Kalsmritikosh/App/Store/AIRegion.swift" | grep -oE '"[A-Z]{3}"' | tr -d '"' | sort | tr '\n' ' ')
+appBlocked=$(sed -n '/static let blocked/,/return list/p' "$ROOT/Kalsmritikosh/App/Store/AIRegion.swift" | grep -oE '"[A-Z]{3}"' | tr -d '"' | sort | tr '\n' ' ')
 relayBlocked=$(grep -E 'AI_BLOCKED_STOREFRONTS' "$ROOT/relay/src/policy.ts" | grep -oE '"[A-Z]{3}"' | tr -d '"' | sort | tr '\n' ' ')
 if [ -z "$appBlocked" ] || [ "$appBlocked" != "$relayBlocked" ]; then
   echo "FAIL: AIRegion.blocked ($appBlocked) != AI_BLOCKED_STOREFRONTS ($relayBlocked)"

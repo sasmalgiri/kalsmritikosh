@@ -71,7 +71,7 @@ Proof kinds:
 | `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
-| `privacy.nothing-collected` | `no servers that receive your content` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
+| `privacy.nothing-collected` | `no servers that keep your content` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.no-upload` | `Nothing is uploaded, ever` | ci:sensitive-export |
 | `privacy.offline` | `Works fully offline` | ci:sensitive-export |
 | `privacy.no-copy` | `not copied to us` | ci:sensitive-export |

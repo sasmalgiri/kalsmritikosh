@@ -227,7 +227,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         }
 
         // 3. Consent (O-5) — not switchable.
-        let preview = OutboundPreview(provider: kind.displayName, model: model, host: kind.host,
+        // B2 (agent legal review): AI Included sends a recording to Google Gemini, not to Claude — the
+        // preview names the provider and model that will actually receive it.
+        let isRecording = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
+        let shownProvider = kind == .included && isRecording ? "AI Included → Google Gemini (transcription)" : kind.displayName
+        let shownModel = kind == .included && isRecording ? "Gemini (chosen by the AI Included service)" : model
+        let preview = OutboundPreview(provider: shownProvider, model: shownModel, host: kind.host,
                                       text: shownText, bytes: bytes, maskedCount: mapping.count,
                                       carriesDocuments: carriesDocuments,
                                       providerTerms: carriesDocuments ? (images.isEmpty ? kind.documentTerms

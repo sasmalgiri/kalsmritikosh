@@ -21,6 +21,9 @@ export interface Store {
   /** Apple's last answer about this subscriber (re-asked after STATUS_TTL_MS). */
   cachedStatus(sub: string): Promise<{ active: boolean; checkedAt: number } | null>;
   cacheStatus(sub: string, active: boolean, at: number): Promise<void>;
+  /** Retention (privacy policy): drop months before `oldestMonth`, top-ups bought before `topUpsBefore`
+   *  (ms), and status answers older than `statusBefore` (ms). */
+  purge(oldestMonth: string, topUpsBefore: number, statusBefore: number): Promise<void>;
 }
 
 const topUpCutoff = (now: Date) => now.getTime() - TOPUP_VALID_DAYS * 86_400_000;
@@ -74,6 +77,12 @@ export class MemoryStore implements Store {
     if (this.topups.has(transactionId)) return false;
     this.topups.set(transactionId, { sub, purchasedAt, remaining: TOPUP_QUESTIONS });
     return true;
+  }
+  async purge(oldestMonth: string, topUpsBefore: number, statusBefore: number): Promise<void> {
+    for (const k of [...this.spend.keys()]) if (k.split("|")[0] < oldestMonth) this.spend.delete(k);
+    for (const k of [...this.usage.keys()]) if (k.split("|")[0] < oldestMonth) this.usage.delete(k);
+    for (const [k, t] of [...this.topups.entries()]) if (t.purchasedAt < topUpsBefore) this.topups.delete(k);
+    for (const [k, s] of [...this.status.entries()]) if (s.checkedAt < statusBefore) this.status.delete(k);
   }
   async remaining(month: string, sub: string, now: Date): Promise<{ monthly: number; topUps: number }> {
     const cutoff = topUpCutoff(now);
@@ -135,6 +144,12 @@ export class D1Store implements Store {
     const r = await this.db.prepare("INSERT OR IGNORE INTO topups (transaction_id, sub, purchased_at, remaining) VALUES (?1, ?2, ?3, ?4)")
       .bind(transactionId, sub, purchasedAt, TOPUP_QUESTIONS).run();
     return r.meta.changes === 1;
+  }
+  async purge(oldestMonth: string, topUpsBefore: number, statusBefore: number): Promise<void> {
+    await this.db.prepare("DELETE FROM spend WHERE month < ?1").bind(oldestMonth).run();
+    await this.db.prepare("DELETE FROM usage WHERE month < ?1").bind(oldestMonth).run();
+    await this.db.prepare("DELETE FROM topups WHERE purchased_at < ?1").bind(topUpsBefore).run();
+    await this.db.prepare("DELETE FROM status_cache WHERE checked_at < ?1").bind(statusBefore).run();
   }
   async remaining(month: string, sub: string, now: Date): Promise<{ monthly: number; topUps: number }> {
     const u = await this.db.prepare("SELECT used FROM usage WHERE month = ?1 AND sub = ?2").bind(month, sub).first<{ used: number }>();

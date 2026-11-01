@@ -1,3 +1,5 @@
+> **SUPERSEDED 2026-11-02 — do not paste.** Prices, privacy label, review notes and seller here are out of date ($79 one-time, "Data Not Collected"). The only App Store Connect paste source is `release/APP_STORE_LISTING.md`.
+
 # App Store metadata — v1.0
 
 > **The paste source is `release/APP_STORE_LISTING.md`** (name, subtitle, promo, description,

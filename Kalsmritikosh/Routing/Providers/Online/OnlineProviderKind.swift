@@ -271,7 +271,7 @@ nonisolated extension OnlineProviderKind {
         case .gemini:
             return "Google Gemini API: only a PAID (billing-enabled) project. On the unpaid tier Google may use what you send to improve its products, including human review, and asks that sensitive or confidential information not be sent — case documents must not go to an unpaid key. Age, region and permitted-use conditions apply."
         case .included:
-            return "AI Included sends the request through the publisher's relay to Anthropic's commercial API under the publisher's account. The relay keeps only counts (questions used, money spent) — never a question, passage or answer. Anthropic's commercial terms apply: by default inputs and outputs are deleted within 30 days, with exceptions for usage-policy enforcement and legal requirements, and are not used for training."
+            return "AI Included sends the request through the publisher's relay under the publisher's account: questions, passages and page images to Anthropic's commercial API (Claude Opus 5; if Anthropic declines a request, another Claude model may answer it), and recordings to Google's paid Gemini API for transcription. The relay keeps only counts (questions used, money spent) — never a question, passage, image, recording or answer. The providers' commercial terms apply: Anthropic deletes inputs and outputs within 30 days by default, with exceptions for usage-policy enforcement and legal requirements; neither provider uses them for training."
         case .openai:
             return "OpenAI: its API data-use and retention terms have not been reviewed for case material in this release, so no document text is sent to it. Questions alone may still be sent."
         }
@@ -282,7 +282,7 @@ nonisolated extension OnlineProviderKind {
         switch self {
         case .anthropic: return "My Anthropic account is on the commercial API terms, and I may send this case material to it"
         case .gemini:    return "My Gemini key belongs to a paid (billing-enabled) project, and I may send this case material to it"
-        case .included:  return "I may send this case material to Anthropic's commercial API through AI Included"
+        case .included:  return "I may send this case material to Anthropic's and Google's commercial APIs through AI Included"
         case .openai:    return ""
         }
     }

@@ -22,9 +22,17 @@ import os
 nonisolated enum AIRegion {
     /// App Store storefronts (ISO 3166-1 alpha-3) where generative AI is switched off, and why.
     /// Keep identical to AI_BLOCKED_STOREFRONTS in relay/src/policy.ts (ci/guards/relay-host-match.sh).
-    static let blocked: [String: String] = [
-        "CHN": "Generative AI services offered in mainland China need a filing and approval this app does not have.",
-    ]
+    /// Owner decision 2026-11-02 (agent legal review): mainland China, plus the countries where Anthropic
+    /// and Google do not offer their AI services (anthropic.com/supported-countries,
+    /// ai.google.dev/gemini-api/docs/available-regions, read 2026-11-01).
+    static let blocked: [String: String] = {
+        let notServed = "The AI providers this app uses do not offer their services there."
+        var list: [String: String] = [
+            "CHN": "Generative AI services offered in mainland China need a filing and approval this app does not have.",
+        ]
+        for code in ["HKG", "MAC", "RUS", "BLR", "VEN", "AFG", "MMR", "YEM", "IRN", "PRK", "SYR", "CUB"] { list[code] = notServed }
+        return list
+    }()
 
     enum Decision: Equatable, Sendable {
         case allowed

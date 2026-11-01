@@ -63,7 +63,7 @@ public nonisolated enum AIIncludedRelay {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               let error = root["error"] as? [String: Any],
               let code = error["code"] as? String,
-              ["not-subscribed", "quota-used", "capacity-paused", "too-large", "bad-request", "store-unavailable"].contains(code),
+              ["not-subscribed", "quota-used", "capacity-paused", "too-large", "bad-request", "store-unavailable", "region-unavailable"].contains(code),
               let message = error["message"] as? String else { return nil }
         return message
     }

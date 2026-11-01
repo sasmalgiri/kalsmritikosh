@@ -3,7 +3,9 @@
 _Draft copy + review notes for App Store Connect (REL-005). Owner fills the bracketed items,
 adds screenshots, and submits. Every claim below is deliberately kept within the "Do NOT claim"
 list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. Last reviewed
-2026-10-24 (R-2 App Review 2.3.1 pass: evidence-only answers by default, English only, no judgement promised)._
+2026-10-24 (R-2 App Review 2.3.1 pass: evidence-only answers by default, English only, no judgement promised);
+updated 2026-11-02 for AI Included, the Online tools, 18+ and the agent legal review (`docs/agent-reviews/legal-privacy.md`).
+This file is the ONLY paste source for App Store Connect; `APP_STORE_METADATA.md` is superseded._
 
 ## Metadata
 
@@ -11,8 +13,10 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 - **Subtitle (≤30 chars):** `From evidence to findings`
 - **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigations Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
 - **Category:** Productivity (secondary: Reference)
-- **Age rating:** 4+ (no objectionable content; user supplies their own files)
+- **Age rating:** **18+** (owner decision 2026-11-02): Google's Gemini API requires users 18+, Anthropic restricts minors, and the web-capture tool gives unrestricted web access. In the questionnaire answer "Unrestricted Web Access: Yes" and set the age to 18+.
+- **Seller / copyright:** Shrabani Sasmal (the individual Apple Developer account; owner decision 2026-11-02) — the same name on the website, terms, privacy policy and in the app.
 - **Price:** **Free download; one edition, all nine personas, sold as an auto-renewable subscription** (SHIP_DECISIONS 2026-10-30): US $4.99/month or $39.99/year; India target ₹249/month or ₹1,999/year (verify the available price points in App Store Connect; never substitute silently); 14-day free introductory offer for eligible subscribers, then automatic renewal unless cancelled. One subscription group, two durations at one level: `ecosanskritiinnovation.Kalsmritikosh.edition.monthly`, `ecosanskritiinnovation.Kalsmritikosh.edition.annual`; 3-day paid-to-paid billing grace. Legacy non-consumables kept for compatibility only, not sold to new customers: `…trial14`, `…unlock` (permanent unlocks remain valid). Family Sharing is not advertised for the subscriptions. The iPhone/iPad app is free.
+  **AI Included** (same group, one level higher, NO introductory offer): `ecosanskritiinnovation.Kalsmritikosh.ai.monthly` US $24.99 / ₹1,999 and `…ai.annual` US $249.99 / ₹19,999; consumable top-up `…ai.topup200` US $14.99 / ₹1,199 (200 questions, valid 12 months). Sold as **"up to 300 questions a month, subject to a monthly service capacity shared by all subscribers"** (owner decision 2026-11-02). Attach the AI Included products to the submission ONLY once the relay is deployed and its address is in the build (`AIIncludedRelay.host`); otherwise leave them unattached.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
   `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private`
@@ -47,8 +51,8 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 > disk. There's no account, no sign-in, and no analytics. By default your files and questions
 > never leave your device. By default answers come from your evidence only: every answer is a
 > value or a passage your documents state, with its source, or an honest "the documents don't say".
-> If you choose, turn on AI — Apple's on-device model, or your own cloud AI key, where you see
-> exactly what would be sent before anything leaves your Mac.
+> If you choose, turn on AI — Apple's on-device model, AI Included, or your own cloud AI key — and
+> you see exactly what would be sent before anything leaves your Mac.
 >
 > **What you can do**
 > • Cases: intake, triage, plan, tasks and reminders, people and interviews, exhibits, holds, redaction log, review batches with a second-person check, chronology, journal and an append-only case log.
@@ -71,8 +75,12 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 > • Clip any page from Safari: the page, your selection, or a clean Markdown copy.
 > • Keep your Macs and your iPhone or iPad in step through a folder you choose (iCloud Drive, Dropbox, a disk), encrypted with your passphrase. Scan paper on your phone straight into your archive.
 > • Take a signed, read-only snapshot to your iPhone or iPad with the companion viewer.
+> • Online tools (optional): exchange rates at a date from the European Central Bank, sanctions-list checks searched on your Mac, company-registry and court-record lookups, web-page capture with a timestamped record, and recording transcription with speaker labels.
+> • AI helps (optional, Online): read a scan your Mac could not, translate a document into English, challenge an answer, or draft a cited report paragraph — always marked as AI output.
 >
 > **Try every paid feature free for 14 days, then $4.99 a month or $39.99 a year (your storefront's price is shown in the app), renewing automatically unless cancelled. Cancel any time; your cases stay readable and exportable.**
+>
+> **AI Included** ($24.99 a month or $249.99 a year, no free trial) adds up to 300 Claude Opus 5 questions a month without an AI account of your own, within a monthly service capacity shared by all subscribers — when it is reached, AI Included pauses until the 1st and everything else keeps working. Not available in every country.
 >
 > **No AI writes your answers unless you turn it on.** Out of the box, answers, search, timelines,
 > matrices, contradictions, gaps and cited reports all come from your evidence alone. Turn on
@@ -91,16 +99,22 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 > decide findings, guilt or outcomes — you do. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
 
-## Privacy nutrition labels — DECISION PENDING (counsel + owner)
+## Privacy nutrition labels — agent determination 2026-11-02 (agent review, not counsel; owner direction 2026-11-01)
 
-- The publisher collects nothing: no account, analytics, crash reporter, ads or tracking; the main app has no network
-  entitlement. Online mode (off by default) sends the person's chosen text to the AI provider *they* chose, under their
-  own key and that provider's terms, after per-send consent.
-- The label answer is **not yet recorded**: either "Data Not Collected" with the Online-mode disclosure above, or
-  "Other User Content, linked, App Functionality, Online mode only". See `docs/legal/LEGAL_PRIVACY_DECISION_SHEET.md`
-  L-1 and `docs/DISTRIBUTION_PACK.md` §1. The sentence that stood here before ("Data Not Collected" as settled) was
-  withdrawn on 2026-10-28 and must not be pasted into App Store Connect until the decision is recorded in
-  `release/approvals/legal-privacy.md`.
+Answer in App Store Connect ▸ App Privacy: **"Yes, we collect data"**, with exactly these types (no tracking for any):
+
+| Data type | Linked to the user? | Purpose | Why |
+|---|---|---|---|
+| User Content ▸ Other User Content (questions, document passages) | No | App Functionality | AI Included sends approved text through the relay to Anthropic / Google, which may keep it up to 30 days |
+| User Content ▸ Emails or Text Messages (passages from mail and chats) | No | App Functionality | same path, when the passages come from email or messages |
+| User Content ▸ Photos or Videos (page images, video recordings) | No | App Functionality | Read with AI and transcription of video |
+| User Content ▸ Audio Data (recordings) | No | App Functionality | transcription through AI Included (Gemini) |
+| Identifiers ▸ User ID (the AI Included subscription's App Store transaction number) | Yes | App Functionality | the relay keeps it with the month's counts |
+| Purchases ▸ Purchase History (AI Included subscription and top-ups) | Yes | App Functionality | the relay verifies them with Apple and keeps top-up records |
+| Usage Data ▸ Product Interaction (questions used this month) | Yes | App Functionality | the relay's counts |
+
+`Kalsmritikosh/PrivacyInfo.xcprivacy` declares the same seven types; `docs/DISTRIBUTION_PACK.md` §1 and
+`docs/privacy.html` give the reasoning and the user-facing text. Private mode, the default, sends nothing.
 
 ## URLs
 
@@ -130,14 +144,21 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > **core processing is on-device**. The app starts in **Private mode**, in which it makes no network
 > connections at all; its knowledge base is encrypted at rest with a key kept in the Keychain.
 >
-> **Online mode (optional, off by default).** Settings ▸ Modules ▸ Connection ▸ Online. The user
-> enters their own API key for Anthropic, OpenAI or Google Gemini. Before any text is sent, a
-> consent screen shows the exact text, the destination host and its size; nothing is sent unless
-> the user presses Send. Network access is confined to the bundled, sandboxed extension
-> KalsmritikoshNetworkHelper, which may only make HTTPS requests to those three hosts; the main
-> app has no network entitlement. To test: switch to Online, enter a key, ask a question, and
-> observe the consent screen. (Cloud AI is used only when "Use AI to write answers" is also on —
-> see below.)
+> **Online mode (optional, off by default).** Settings ▸ Modules ▸ Connection ▸ Online, then Settings ▸
+> Online: **AI Included** (AI Included plans) or the user's own API key for Anthropic, OpenAI or Google Gemini.
+> Before anything is sent, a consent screen shows the exact text (and any page image or recording), the
+> destination and its size; nothing is sent unless the user presses Send, and every send is recorded in
+> Settings ▸ Online ▸ What was sent. Network access is confined to the bundled, sandboxed extension
+> KalsmritikoshNetworkHelper: HTTPS POST only to the AI providers and the AI Included relay, and HTTPS GET only
+> to five public-record sources (data-api.ecb.europa.eu, sanctionslistservice.ofac.treas.gov, scsanctions.un.org,
+> api.gleif.org, www.courtlistener.com) or a page the user asks to capture; the main app has no network
+> entitlement. **AI Included** sends approved requests through the publisher's relay (Cloudflare Worker), which
+> checks the subscription with the App Store Server API and forwards to Anthropic (Claude Opus 5) or, for
+> recordings, Google Gemini under the publisher's account; it keeps only counts. Online AI is switched off for
+> App Store accounts in CN, HK, MO, RU, BY, VE, AF, MM, YE, IR, KP, SY, CU (the providers' supported-country lists).
+> To test: switch to Online, choose a provider, ask a question, and observe the consent screen.
+> **Online tools** (Sources ▸ Online tools…): exchange rate, sanctions lists (downloaded and searched on the Mac),
+> company registry, court records, web capture, transcription — each previewed before it is sent.
 >
 > **To demo:** launch → Sources → add the included demo folder (or any folder of documents) →
 > "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
@@ -170,5 +191,6 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 - [x] Does not promise judgement (no "proves", "determines guilt", "finds the truth", "solves"); says every finding is the investigator's (App Review 2.3.1, R-2 2026-10-24).
 - [x] States English only for this version (SHIP_DECISIONS 2026-10-23).
 - [x] Quotes no accuracy figures (measured figures live in docs/CASE_BENCH_AI_ROUNDS.md only).
-- [x] Does not claim "no network" falsely (accurate: Private mode — the default — makes no connections; Online mode is opt-in, user-keyed and consented per send; no downloader).
-- [x] Zero-data-collection claim is accurate (no telemetry/analytics/account exist).
+- [x] Does not claim "no network" falsely (accurate: Private mode — the default — makes no connections; Online mode is opt-in and consented per send).
+- [x] Makes no zero-data-collection claim (AI Included sends approved content to providers; the label declares it). No telemetry, analytics or account exist.
+- [x] Says "up to 300" and "shared monthly capacity" wherever AI Included's allowance appears; never promises 300.

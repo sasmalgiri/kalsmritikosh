@@ -6,7 +6,7 @@
 // money back. Nothing a request or answer contains is stored or logged — counts only.
 
 import {
-  ANTHROPIC_OPUS5, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, REFUSALS, type Prices, type Provider, type Refusal,
+  AI_BLOCKED_REQUEST_COUNTRIES, ANTHROPIC_OPUS5, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, REFUSALS, type Prices, type Provider, type Refusal,
   actualCost, grantsAI, maxTokensForText, monthKey, sellable, statusFor, usd, validTopUp, PRODUCTS,
 } from "./policy.ts";
 import { D1Store, type D1Like, type QuestionSource, type Store } from "./store.ts";
@@ -180,6 +180,9 @@ async function topUp(req: Request, sub: string, env: Env, d: Deps): Promise<Resp
 export async function handle(req: Request, env: Env, d: Deps): Promise<Response> {
   const url = new URL(req.url);
   const sub = req.headers.get("x-kals-subscription")?.trim() ?? "";
+  // A3 — refused by where the request comes from (Cloudflare's country), as well as by the App Store storefront.
+  const from = req.headers.get("cf-ipcountry")?.toUpperCase() ?? "";
+  if (AI_BLOCKED_REQUEST_COUNTRIES.includes(from)) return refuse(REFUSALS.regionUnavailable());
   if (!/^[0-9]{1,32}$/.test(sub)) return refuse(REFUSALS.notSubscribed());
   try {
     if (!(await subscribed(sub, env, d))) return refuse(REFUSALS.notSubscribed());
@@ -207,7 +210,18 @@ export async function publicSellable(env: Env, d: Deps): Promise<Response> {
   return json({ sellable: sellable(spentA, budgets(env).anthropic) });
 }
 
+/** Retention, as the privacy policy states: monthly counts for 13 months, top-up records for 13 months after their
+ *  12-month validity, Apple's status answers for a day. Runs daily (wrangler.toml cron). */
+export async function purgeOld(d: Deps): Promise<void> {
+  const now = d.now();
+  const oldest = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 13, 1));
+  await d.store.purge(monthKey(oldest), now.getTime() - 25 * 30 * 86_400_000, now.getTime() - 86_400_000);
+}
+
 export default {
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    await purgeOld({ store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() });
+  },
   async fetch(req: Request, env: Env): Promise<Response> {
     const deps: Deps = { store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() };
     if (new URL(req.url).pathname === "/v1/sellable") return publicSellable(env, deps);

@@ -1,7 +1,7 @@
 // AI Included relay tests — Node's built-in runner, a fake Apple and fake providers. Run: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handle, publicSellable, type Env, type Deps } from "../src/index.ts";
+import { handle, publicSellable, purgeOld, type Env, type Deps } from "../src/index.ts";
 import { MemoryStore } from "../src/store.ts";
 import { APPLE_STATUS, MONTHLY_QUESTIONS, PRODUCTS, grantsAI, monthKey, sellable, usd } from "../src/policy.ts";
 
@@ -161,6 +161,14 @@ test("new buyers are not offered AI Included once 90% of the month's budget is s
   assert.equal(r.sellable, false);
 });
 
+test("A3: a request from a blocked country is refused before Apple or a provider is asked", async () => {
+  const w = world(); const s = await setup(w);
+  const r = new Request("https://relay.test/v1/messages", { method: "POST", headers: { "x-kals-subscription": SUB, "cf-ipcountry": "ru" }, body: JSON.stringify(question) });
+  const res = await handle(r, s.env, s.deps);
+  assert.equal(res.status, 451);
+  assert.equal(w.appleCalls + w.providerBodies.length, 0);
+});
+
 test("the subscription rules: only AI Included products grant it, revoked never does", () => {
   const tx = { productId: PRODUCTS.aiAnnual, originalTransactionId: "1", transactionId: "1", purchaseDate: 0, expiresDate: NOW.getTime() + 1 };
   assert.equal(grantsAI(APPLE_STATUS.active, tx, NOW), true);
@@ -168,4 +176,18 @@ test("the subscription rules: only AI Included products grant it, revoked never 
   assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, revocationDate: 1 }, NOW), false);
   assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, storefront: "CHN" }, NOW), false, "A3: no AI where the storefront blocks it");
   assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, storefront: "IND" }, NOW), true);
+});
+
+test("retention: counts older than 13 months, expired top-ups and day-old status answers are deleted", async () => {
+  const s = await setup(world());
+  s.store.usage.set(`2025-09|${SUB}`, 5); s.store.usage.set(`2025-10|${SUB}`, 7); s.store.usage.set(`${monthKey(NOW)}|${SUB}`, 1);
+  s.store.spend.set("2025-09|anthropic", 100); s.store.spend.set(`${monthKey(NOW)}|anthropic`, 10);
+  s.store.topups.set("old", { sub: SUB, purchasedAt: NOW.getTime() - 800 * 86_400_000, remaining: 3 });
+  s.store.topups.set("new", { sub: SUB, purchasedAt: NOW.getTime() - 10 * 86_400_000, remaining: 200 });
+  s.store.status.set("x", { active: true, checkedAt: NOW.getTime() - 2 * 86_400_000 });
+  await purgeOld(s.deps);
+  assert.deepEqual([...s.store.usage.keys()].sort(), [`2025-10|${SUB}`, `${monthKey(NOW)}|${SUB}`]);
+  assert.deepEqual([...s.store.spend.keys()], [`${monthKey(NOW)}|anthropic`]);
+  assert.deepEqual([...s.store.topups.keys()], ["new"]);
+  assert.equal(s.store.status.size, 0);
 });
