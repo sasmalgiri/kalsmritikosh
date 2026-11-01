@@ -44,7 +44,8 @@ public struct PDFLoader: Ingestor {
         var pageOffsets: [Int] = []
         var ocrPagesUsed = 0
         #if canImport(Vision)
-        let recognitionFailuresBefore = VisionPerform.failureCount()
+        // N8 — this document's own recognitions (not the process-wide count another file can move).
+        let tally = VisionPerform.Tally()
         #endif
 
         for index in 0..<document.pageCount {
@@ -67,7 +68,11 @@ public struct PDFLoader: Ingestor {
             // OCR output with no letter or digit (a table pass that returned separators only, a
             // recogniser that returned nothing readable) is no text (held-out chronology 10,
             // 2026-10-29: two PDFs came back as empty knowledge objects with no error).
+            #if canImport(Vision)
+            var ocrText = await VisionPerform.tallying(tally) { await renderAndOCR(page: page, index: index) }
+            #else
             var ocrText = await renderAndOCR(page: page, index: index)
+            #endif
             if ocrText.rangeOfCharacter(from: .alphanumerics) == nil { ocrText = "" }
             if !ocrText.isEmpty {
                 combined.append(ocrText)
@@ -88,7 +93,8 @@ public struct PDFLoader: Ingestor {
             // Text recognition itself failed (not a page without text): say so, so the file is listed
             // with the real reason and "Read again" can succeed once the Mac is less busy.
             #if canImport(Vision)
-            let failed = VisionPerform.failureCount() - recognitionFailuresBefore
+            if Task.isCancelled { throw CancellationError() }
+            let failed = tally.failed
             if failed > 0 {
                 throw IngestorError.parseFailure(url, reason: "text recognition failed on \(failed) page(s) — the Mac may have been busy; use Read again in Sources ▸ Needs attention")
             }

@@ -456,7 +456,9 @@ public final class AppState {
         let scoped = opened == nil && url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            let r = try await ingest.ingest(fileAt: url, intent: .fullAvailable)
+            let r = try await IngestCoordinator.$explicitReread.withValue(true) {
+                try await ingest.ingest(fileAt: url, intent: .fullAvailable)
+            }
             await runPostIngestChecksSinceLast()
             if r.processingStatus == .failed { return "Still unreadable: \(r.processingDetail ?? "no reason recorded")" }
             return "Read \(url.lastPathComponent): \(r.chunkCount) passage\(r.chunkCount == 1 ? "" : "s")."
@@ -1017,6 +1019,9 @@ public final class AppState {
         databaseURL: URL? = nil,
         suppressAutoReingest: Bool = false
     ) async {
+        // N8 — a compiled text-recognition cache marked as incomplete is removed now, before any document
+        // is read (never under a running recognition).
+        VisionPerform.rebuildCompiledModelCacheIfMarked()
         do {
             // ── Storage ──────────────────────────────────────────────
             // `databaseURL` lets callers (Gate1Baseline) point AppState

@@ -83,9 +83,10 @@ public struct PDFStructuralParser: StructuralParser {
 
             // Native layer missing or garbled → render + OCR this page.
             #if canImport(AppKit)
-            let failedBefore = VisionPerform.failureCount()
-            let (ocrText, ocrGrid) = await Self.renderAndOCR(page: page, ocr: ocr)
-            let recognitionFailed = VisionPerform.failureCount() > failedBefore
+            // N8 — this page's own recognitions, not the process-wide count.
+            let pageTally = VisionPerform.Tally()
+            let (ocrText, ocrGrid) = await VisionPerform.tallying(pageTally) { await Self.renderAndOCR(page: page, ocr: ocr) }
+            let recognitionFailed = pageTally.failed > 0
             if !ocrText.isEmpty || !ocrGrid.isEmpty {
                 ocrPages += 1
                 for (p, para) in Self.paragraphize(ocrText).enumerated() {

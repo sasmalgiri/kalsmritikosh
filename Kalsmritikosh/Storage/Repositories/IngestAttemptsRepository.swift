@@ -120,6 +120,18 @@ public actor IngestAttemptsRepository {
         return rows.first?.string(0) == Status.failed.rawValue
     }
 
+    /// How many processing outcomes in a row, counting back from the latest, were failures for this URL.
+    public func failureStreak(url: URL) async -> Int {
+        let rows = (try? await database.query("""
+        SELECT status FROM ingest_file_attempts
+        WHERE url = ? AND status IN \(Self.processingOutcomes)
+        ORDER BY attempted_at DESC LIMIT 20;
+        """, [.text(url.absoluteString)])) ?? []
+        var n = 0
+        for r in rows { if r.string(0) == Status.failed.rawValue { n += 1 } else { break } }
+        return n
+    }
+
     /// Count of files whose latest PROCESSING outcome failed — a Sources signal.
     public func failedCount() async -> Int {
         let rows = (try? await database.query("""

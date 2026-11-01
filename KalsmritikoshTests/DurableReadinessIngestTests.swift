@@ -202,4 +202,23 @@ struct DurableReadinessIngestTests {
         let again = try await rig.coordinator.ingest(fileAt: ok)
         #expect(again.processingStatus == .unchanged)
     }
+
+    @Test("N8: a folder pass re-reads a failed file a bounded number of times; Read again always tries")
+    @MainActor func passiveRereadIsBounded() async throws {
+        let rig = try await makeRig()
+        let url = rig.dir.appendingPathComponent("blank-scan-2.pdf")
+        let image = NSImage(size: NSSize(width: 300, height: 300))
+        image.lockFocus(); NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 300, height: 300).fill(); image.unlockFocus()
+        let doc = PDFDocument(); doc.insert(try #require(PDFPage(image: image)), at: 0)
+        #expect(doc.write(to: url))
+        // The first read and the passive re-reads up to the limit each fail on their own.
+        for _ in 0..<IngestCoordinator.passiveRereadLimit {
+            #expect(try await rig.coordinator.ingest(fileAt: url).processingStatus == .failed)
+        }
+        // Past the limit, a folder pass leaves it as it is (unchanged, still listed as failed).
+        #expect(try await rig.coordinator.ingest(fileAt: url).processingStatus == .unchanged)
+        // Read again is explicit: it reads the file whatever the streak.
+        let again = try await IngestCoordinator.$explicitReread.withValue(true) { try await rig.coordinator.ingest(fileAt: url) }
+        #expect(again.processingStatus == .failed)
+    }
 }

@@ -175,6 +175,10 @@ public actor IngestCoordinator {
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
+    /// Consecutive failed reads after which a folder pass stops re-reading an unchanged file (N8).
+    nonisolated static let passiveRereadLimit = 3
+    /// Set by Sources ▸ Read again for its own ingest: re-read whatever the failure streak.
+    @TaskLocal nonisolated static var explicitReread = false
     /// A2 §7.6 — parent→child source provenance (email→attachment, …). nil =
     /// relations not recorded.
     private let sourceRelations: SourceRelationsRepository?
@@ -1476,8 +1480,14 @@ public actor IngestCoordinator {
         // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser. Except an
         // unchanged file whose last read FAILED: it is read again (the failure may have been the Mac's
         // state — text recognition under load — not the file), so "Read again" and a re-import work.
-        let rereadFailed = handle.outcome == .unchanged && !isMember
-            ? (await ingestAttempts?.lastProcessingFailed(url: url) ?? false) : false
+        // N8 — bounded: a folder pass re-reads such a file while it has failed fewer than
+        // `passiveRereadLimit` times in a row (so a permanently unreadable file is not re-OCR'd on every
+        // pass); Sources ▸ Read again (`explicitReread`) always tries.
+        var rereadFailed = false
+        if handle.outcome == .unchanged, !isMember, await ingestAttempts?.lastProcessingFailed(url: url) == true {
+            let streak = await ingestAttempts?.failureStreak(url: url) ?? 0
+            rereadFailed = Self.explicitReread || streak < Self.passiveRereadLimit
+        }
         guard handle.shouldProcess || rereadFailed else {
             let status: IngestAttemptsRepository.Status =
                 handle.outcome == .moved ? .moved : (handle.outcome == .aliased ? .aliased : .unchanged)
