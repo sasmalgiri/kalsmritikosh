@@ -11,10 +11,15 @@ Resume from this table. A row is "done" only with a commit and a check that ran;
 | N2 | Entitlement expiry enforced at the moment of use; deadline timer; injected clock | — | agent | done (unit) | see N3 row | EntitlementBoundaryTests, PurchaseStoreKitTests | Sandbox/TestFlight under BUY |
 | N3 | Cached entitlement not an authority; test bypass unreachable in Release | N2 | agent | done (unit + guard) | (N2–N4 commit) | cacheTrust, test-host-boundary guard | Release launch with test env var (ARCH) |
 | N4 | Paid-action boundary complete (Work Center, DataLab, sample exemption) | N2 | agent | done (service + unit) | (N2–N4 commit) | serviceBoundary + 85 suites | UI check under UI-K; remaining minor surfaces (tags, collections, highlights, PDF marks, notes, screening) still UI-only ungated — listed |
-| N5 | Handoff uses the persisted row; reports print every citation | — | agent | open | — | — | — |
-| N6 | Output packages revalidated at release | — | agent | open | — | — | — |
-| N7 | Unreadable protection data blocks send/export; corrupt result rows surfaced | — | agent | open | — | — | — |
-| N8 | OCR: test VNRequest.cancel, per-request failure attribution, page-level outcomes | — | agent | open | — | — | — |
+| N5 | Handoff uses the persisted row; reports print every citation | — | agent | done (unit) | 41224c66 | JobResultHandoff, CaseFile citations | — |
+| N6 | Output packages revalidated at release | — | agent | done (unit) | 41224c66 | CaseOutputService.release | — |
+| N7 | Unreadable protection data blocks send/export; corrupt result rows surfaced | — | agent | done (unit) | 41224c66 | protectionUnreadable, strict JobResult rows | — |
+| N8 | OCR: test VNRequest.cancel, per-request failure attribution, page-level outcomes | — | agent | done (unit; mid-request cancel unmeasurable — page reads in 63 ms) | 443bb0fa | VisionPerform tally | — |
+| A1 | AI Included relay (Cloudflare Worker): Apple-verified subscribers, 300/month + top-ups, hard caps $20 Anthropic / $5 Gemini, counts only | — | agent | done (10 node tests) | e7368c8f | relay/test | owner deploys (relay/README.md) |
+| A2 | AI Included in the app: plans, top-up, relay provider, paywall, Settings | A1 | agent | done (unit + StoreKit 41/42; grace test fails identically on baseline — environment) | 52ef33ce | AIIncludedTests, PurchaseTests, PurchaseStoreKitTests | relay host set after deploy |
+| A3 | Per-country AI switch (StoreKit Storefront; China mainland off) | A2 | agent | open | — | — | — |
+| A4–A11 | Vision scan rescue, translation, challenge my conclusion, drafting, public-record checks, web capture, historical FX, Gemini transcription | A2 | agent | open | — | — | — |
+| A12 | Privacy label, terms, policy, Help for the online features | A4–A11 | agent | open | — | — | — |
 | UI-K | Run k (UI automation repair + journeys) | N2–N8 | agent | open | — | — | diagnose host-callback timeouts |
 | J-168 | 168 jobs / nine persona journeys on current code | UI-K | agent | open | — | — | — |
 | ACC | Scorer review on consumed data, freeze, fresh set, adjudication packs | N1–N8 | agent → adjudicators | open | — | — | — |
