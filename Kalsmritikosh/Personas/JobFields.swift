@@ -15,7 +15,10 @@ import Foundation
 public nonisolated struct JobField: Sendable, Hashable, Codable {
     /// B2 — `.date` is a real calendar day (yyyy-mm-dd), `.amount` one exact amount, `.currency` an
     /// ISO 4217 code; a nonempty value that does not parse does not complete the field.
-    public enum Kind: Sendable, Hashable, Codable { case text, date, choice([String]), amount, currency }
+    /// `historicalDate` (practitioner review 2026-11-02, Researcher blocker): a date as sources really give
+    /// it — a year, a year and month, a full day, "c." / "before" / "after" a year, a range, or "n.d." —
+    /// so no source is forced to an invented exact day.
+    public enum Kind: Sendable, Hashable, Codable { case text, date, choice([String]), amount, currency, historicalDate }
     public let key: String
     public let label: String
     public let kind: Kind
@@ -77,7 +80,7 @@ public nonisolated enum JobFields {
         m["law.document-coding"] = [F("issues", "Issue codes"), F("relevance", "Relevance", .choice(["relevant", "not relevant", "needs review"])),
                                     F("privilege", "Privilege", .choice(["none", "privileged", "partly privileged"]))]
         m["res.bibliography"] = [F("author", "Author", prefill: .names), F("title", "Title", prefill: .document),
-                                 F("date", "Date", .date, prefill: .rowDate), F("absent", "Cited but absent", .choice(["no", "yes"]))]
+                                 F("date", "Date", .historicalDate, prefill: .rowDate), F("absent", "Cited but absent", .choice(["no", "yes"]))]
         m["res.edition"] = [F("text", "Source text", prefill: .firstSentence), F("annotation", "Annotation"),
                             F("apparatus", "Apparatus", required: false), F("lineage", "Lineage (version)", prefill: .sourceVersion)]
         m["gen.originals"] = [F("citation", "Citation", prefill: .rowTitle), F("repository", "Repository"), F("hash", "Image / file hash", prefill: .contentHash)]
@@ -320,9 +323,36 @@ public nonisolated enum JobFields {
         case .text: return nil
         case .choice(let options): return options.contains(v) ? nil : "not one of the listed choices"
         case .date: return isoDay(v) == nil ? "not a calendar date (yyyy-mm-dd)" : nil
+        case .historicalDate: return isHistoricalDate(v) ? nil : "not a date as written in sources (1771, 1771-03, 1771-03-04, c. 1771, 1770–1775, n.d.)"
         case .amount: return FAMoney.value(of: v) == nil ? "not one exact amount (e.g. 1,250.00)" : nil
         case .currency: return Self.currencyCodes.contains(v.uppercased()) && v.count == 3 ? nil : "not an ISO currency code (e.g. USD)"
         }
+    }
+
+    /// A year, year-month or full day (each must be a real date), optionally after "c.", "ca.", "circa",
+    /// "before" or "after"; a range of two of those joined by "–", "-" or "to"; or "n.d." / "undated".
+    public static func isHistoricalDate(_ s: String) -> Bool {
+        let v = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if ["n.d.", "n.d", "nd", "undated", "no date"].contains(v) { return true }
+        func one(_ raw: String) -> Bool {
+            var t = raw.trimmingCharacters(in: .whitespaces)
+            for p in ["circa ", "ca. ", "c. ", "c.", "ca.", "before ", "after "] where t.hasPrefix(p) {
+                t = String(t.dropFirst(p.count)).trimmingCharacters(in: .whitespaces); break
+            }
+            let parts = t.split(separator: "-", omittingEmptySubsequences: false)
+            guard (1...3).contains(parts.count), parts[0].count == 4, let y = Int(parts[0]), y > 0 else { return false }
+            if parts.count == 1 { return true }
+            guard parts[1].count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return false }
+            return parts.count == 2 || isoDay(t) != nil
+        }
+        for sep in ["–", "—", " to "] where v.contains(sep) {
+            let ends = v.components(separatedBy: sep)
+            return ends.count == 2 && one(ends[0]) && one(ends[1])
+        }
+        // "1770-1775": two four-digit years around a hyphen (a single "1771-03" is a month).
+        let hy = v.split(separator: "-").map(String.init)
+        if hy.count == 2, hy[0].count == 4, hy[1].count == 4, Int(hy[0]) != nil, Int(hy[1]) != nil { return true }
+        return one(v)
     }
 
     /// "2026-02-30" is not a day; only a date that round-trips is.

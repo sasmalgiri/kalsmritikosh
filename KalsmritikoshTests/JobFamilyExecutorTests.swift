@@ -176,6 +176,7 @@ struct JobFamilyExecutorTests {
         case .text: return "recorded by the reviewer"
         case .amount: return "1,250.00"
         case .currency: return "USD"
+        case .historicalDate: return "1771-03"
         }
     }
 

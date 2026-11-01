@@ -509,6 +509,8 @@ struct JobResultView: View {
                             .labelsHidden().frame(maxWidth: 240)
                         case .date:
                             TextField("yyyy-mm-dd", text: binding).font(.caption).frame(maxWidth: 140)
+                        case .historicalDate:
+                            TextField("1771, 1771-03, c. 1771, 1770–1775 or n.d.", text: binding).font(.caption).frame(maxWidth: 220)
                         case .amount:
                             TextField("1,250.00", text: binding).font(.caption.monospacedDigit()).frame(maxWidth: 160)
                         case .currency:

@@ -108,6 +108,7 @@ struct JobAcceptanceScenarioTests {
     static func value(_ f: JobField, job: String, row: Int) -> String {
         switch f.kind {
         case .date: return "2026-06-1\(row % 10)"
+        case .historicalDate: return "c. 1771"
         case .amount: return "1,000.00"
         case .currency: return "INR"
         case .choice(let options):

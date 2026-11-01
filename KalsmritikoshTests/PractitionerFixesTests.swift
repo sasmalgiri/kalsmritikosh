@@ -59,5 +59,16 @@ struct PractitionerFixesTests {
         case .failure(let r): Issue.record("refused: \(r.reason)")
         }
     }
+
+    @Test("Researcher: a bibliography date is accepted as sources give it — year, month, day, circa, range, n.d. — and nonsense is still refused")
+    func historicalDates() {
+        for ok in ["1771", "1771-03", "1771-03-04", "c. 1771", "circa 1771", "before 1800", "1770–1775", "1770-1775", "1770 to 1775", "n.d.", "Undated"] {
+            #expect(JobFields.invalidReason(.historicalDate, ok) == nil, "\(ok)")
+        }
+        for bad in ["1771-13", "1771-02-30", "seventeen", "71", "1770–", "yesterday"] {
+            #expect(JobFields.invalidReason(.historicalDate, bad) != nil, "\(bad)")
+        }
+        #expect(JobFields.specs["res.bibliography"]?.first { $0.key == "date" }?.kind == .historicalDate)
+    }
 }
 
