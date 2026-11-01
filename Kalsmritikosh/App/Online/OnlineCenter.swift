@@ -95,7 +95,8 @@ public nonisolated enum OnlineSettings {
 
     /// Online answers may run: mode in force, module on, and a key for the chosen provider.
     public static var cloudAllowed: Bool {
-        ConnectivityMode.current == .online && ProductModuleFlags.isEnabled(.onlineAnswers)
+        // A3 — and only where the App Store country allows generative AI.
+        ConnectivityMode.current == .online && ProductModuleFlags.isEnabled(.onlineAnswers) && AIRegion.allowsAI
     }
 }
 

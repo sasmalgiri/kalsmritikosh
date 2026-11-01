@@ -105,4 +105,27 @@ struct AIIncludedTests {
         if !AIIncludedRelay.isConfigured { #expect(OnlineSettings.apiKey(for: .included) == nil) }
         #expect(OnlineProviderKind.included.defaultModel == "claude-opus-5")
     }
+
+    @Test("A3: AI is off by App Store country — blocked and unknown countries refuse, every AI send refuses there, settings and plans follow")
+    func regionSwitch() async throws {
+        #expect(AIRegion.decision(countryCode: "USA") == .allowed)
+        #expect(AIRegion.decision(countryCode: "ind") == .allowed)
+        guard case .blocked(let c, _) = AIRegion.decision(countryCode: "CHN") else { Issue.record("CHN must be blocked"); return }
+        #expect(c == "CHN")
+        #expect(AIRegion.decision(countryCode: nil) == .unknown && AIRegion.decision(countryCode: "").explanation != nil,
+                "an unanswered store never opens a blocked feature")
+        #expect(AIRegion.allowsAI, "the unit-test host reads as an allowed storefront")
+        try await AIRegion.TestOverride.$country.withValue("CHN") {
+            #expect(!AIRegion.allowsAI && !OnlineSettings.cloudAllowed)
+            #expect(!OnlineProviderKind.included.isSelectable)
+            let req = try OnlineRequestBuilder.build(kind: .anthropic, model: "claude-opus-5", apiKey: "k", system: nil, prompt: "p", maxTokens: 10)
+            do {
+                _ = try await NetworkHelperClient.send(req)
+                Issue.record("an AI send must not leave in a blocked country")
+            } catch let e as NetworkHelperError {
+                // A build without the helper refuses first; with it, the region refusal is the reason.
+                if case .failed(let why) = e { #expect(why.contains("not available for App Store accounts in this country")) }
+            }
+        }
+    }
 }

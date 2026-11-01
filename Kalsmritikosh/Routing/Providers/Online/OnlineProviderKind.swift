@@ -21,7 +21,7 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
     public var id: String { rawValue }
 
     /// Offered in Settings: AI Included only when this build has the relay's address.
-    public var isSelectable: Bool { self != .included || AIIncludedRelay.isConfigured }
+    public var isSelectable: Bool { self != .included || (AIIncludedRelay.isConfigured && AIRegion.allowsAI) }
 
     /// The person brings their own key and chooses the model (false for AI Included).
     public var usesOwnKey: Bool { self != .included }

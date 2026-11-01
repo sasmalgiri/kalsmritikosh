@@ -583,6 +583,7 @@ final class PurchaseCenter {
     func start() {
         if !talksToStore { apply(.legacyUnlocked); return }
         guard updates == nil else { return }
+        AIRegion.start()
         // The last verified state carries the person through an offline launch, under its own rule.
         if let cached = CachedEntitlement.load() { apply(cached.entitlement(now: clock())) }
         updates = Task { [weak self] in
@@ -715,6 +716,10 @@ final class PurchaseCenter {
         // A2 — AI Included is not sold to someone new once the month's service capacity is nearly used
         // (the relay says so; nothing about the person is sent). A current AI subscriber changing
         // duration is not new.
+        if plan.includesAI, let why = AIRegion.current.explanation {
+            message = why
+            return
+        }
         if plan.includesAI, !entitlement.includesAI, talksToStore {
             let open: Bool
             do { open = try await AIIncludedRelay.sellable() } catch {

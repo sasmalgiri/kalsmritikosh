@@ -17,7 +17,7 @@ Resume from this table. A row is "done" only with a commit and a check that ran;
 | N8 | OCR: test VNRequest.cancel, per-request failure attribution, page-level outcomes | — | agent | done (unit; mid-request cancel unmeasurable — page reads in 63 ms) | 443bb0fa | VisionPerform tally | — |
 | A1 | AI Included relay (Cloudflare Worker): Apple-verified subscribers, 300/month + top-ups, hard caps $20 Anthropic / $5 Gemini, counts only | — | agent | done (10 node tests) | e7368c8f | relay/test | owner deploys (relay/README.md) |
 | A2 | AI Included in the app: plans, top-up, relay provider, paywall, Settings | A1 | agent | done (unit + StoreKit 41/42; grace test fails identically on baseline — environment) | 52ef33ce | AIIncludedTests, PurchaseTests, PurchaseStoreKitTests | relay host set after deploy |
-| A3 | Per-country AI switch (StoreKit Storefront; China mainland off) | A2 | agent | open | — | — | — |
+| A3 | Per-country AI switch (StoreKit Storefront; China mainland off) | A2 | agent | done (unit) | (A3 commit) | AIIncludedTests/regionSwitch, relay grantsAI | other countries: provider supported-region list to re-check at release |
 | A4–A11 | Vision scan rescue, translation, challenge my conclusion, drafting, public-record checks, web capture, historical FX, Gemini transcription | A2 | agent | open | — | — | — |
 | A12 | Privacy label, terms, policy, Help for the online features | A4–A11 | agent | open | — | — | — |
 | UI-K | Run k (UI automation repair + journeys) | N2–N8 | agent | open | — | — | diagnose host-callback timeouts |

@@ -116,6 +116,10 @@ struct OnlineSettingsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Online AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            if let why = AIRegion.current.explanation {
+                Label(why, systemImage: "globe").font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Picker("Provider", selection: $kind) {
                 ForEach(OnlineProviderKind.allCases.filter(\.isSelectable)) { Text($0.displayName).tag($0) }
             }

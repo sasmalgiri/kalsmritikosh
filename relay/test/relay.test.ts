@@ -166,4 +166,6 @@ test("the subscription rules: only AI Included products grant it, revoked never 
   assert.equal(grantsAI(APPLE_STATUS.active, tx, NOW), true);
   assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, expiresDate: NOW.getTime() - 1 }, NOW), false);
   assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, revocationDate: 1 }, NOW), false);
+  assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, storefront: "CHN" }, NOW), false, "A3: no AI where the storefront blocks it");
+  assert.equal(grantsAI(APPLE_STATUS.active, { ...tx, storefront: "IND" }, NOW), true);
 });

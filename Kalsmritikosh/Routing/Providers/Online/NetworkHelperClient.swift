@@ -50,6 +50,9 @@ public nonisolated enum NetworkHelperClient {
               request.url.hasPrefix("https://") else {
             throw NetworkHelperError.hostNotAllowed(URL(string: request.url)?.host ?? request.url)
         }
+        // A3 — every AI destination (the providers and AI Included) is closed where the App Store
+        // country does not allow generative AI; the check sits here so no caller can skip it.
+        if let why = AIRegion.current.explanation { throw NetworkHelperError.failed(why) }
         let payload = try JSONEncoder().encode(request)
         guard #available(macOS 26.0, *) else { throw NetworkHelperError.unavailable }
         return try await sendViaHelper(payload)

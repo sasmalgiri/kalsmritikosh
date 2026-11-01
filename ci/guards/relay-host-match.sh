@@ -12,6 +12,14 @@ if [ "$app" != "$helper" ]; then
   exit 1
 fi
 echo "ok: relay host identical in app and helper ('${app:-not configured}')"
+# A3 — the blocked storefronts, in the app and in the relay.
+appBlocked=$(sed -n '/static let blocked/,/\]/p' "$ROOT/Kalsmritikosh/App/Store/AIRegion.swift" | grep -oE '"[A-Z]{3}"' | tr -d '"' | sort | tr '\n' ' ')
+relayBlocked=$(grep -E 'AI_BLOCKED_STOREFRONTS' "$ROOT/relay/src/policy.ts" | grep -oE '"[A-Z]{3}"' | tr -d '"' | sort | tr '\n' ' ')
+if [ -z "$appBlocked" ] || [ "$appBlocked" != "$relayBlocked" ]; then
+  echo "FAIL: AIRegion.blocked ($appBlocked) != AI_BLOCKED_STOREFRONTS ($relayBlocked)"
+  exit 1
+fi
+echo "ok: AI-blocked storefronts identical in app and relay ($appBlocked)"
 if command -v node >/dev/null 2>&1; then
   major=$(node -p 'process.versions.node.split(".")[0]'); minor=$(node -p 'process.versions.node.split(".")[1]')
   if [ "$major" -gt 23 ] || { [ "$major" -eq 23 ] && [ "$minor" -ge 6 ]; }; then

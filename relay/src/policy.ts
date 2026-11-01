@@ -102,7 +102,11 @@ export interface AppleTransaction {
   expiresDate?: number;      // ms since epoch (subscriptions)
   purchaseDate: number;      // ms since epoch
   revocationDate?: number;   // set when refunded or revoked
+  storefront?: string;       // ISO 3166-1 alpha-3 App Store country of the purchase
 }
+
+/** A3 — App Store storefronts where generative AI is off. Keep identical to AIRegion.blocked in the app. */
+export const AI_BLOCKED_STOREFRONTS: readonly string[] = ["CHN"];
 
 /** Apple's subscription status values (App Store Server API). */
 export const APPLE_STATUS = { active: 1, expired: 2, billingRetry: 3, gracePeriod: 4, revoked: 5 } as const;
@@ -111,6 +115,7 @@ export const APPLE_STATUS = { active: 1, expired: 2, billingRetry: 3, gracePerio
 export function grantsAI(status: number, tx: AppleTransaction, now: Date): boolean {
   if (tx.productId !== PRODUCTS.aiMonthly && tx.productId !== PRODUCTS.aiAnnual) return false;
   if (tx.revocationDate) return false;
+  if (tx.storefront && AI_BLOCKED_STOREFRONTS.includes(tx.storefront.toUpperCase())) return false;
   if (status === APPLE_STATUS.active) return (tx.expiresDate ?? 0) > now.getTime();
   return status === APPLE_STATUS.gracePeriod;
 }

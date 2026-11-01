@@ -196,7 +196,7 @@ struct PurchaseScreen: View {
 
     /// A2 — AI Included is shown only when this build can reach the publisher's relay.
     private var visibleOffers: [PlanOffer] {
-        store.offers.filter { !$0.plan.includesAI || AIIncludedRelay.isConfigured }
+        store.offers.filter { !$0.plan.includesAI || (AIIncludedRelay.isConfigured && AIRegion.allowsAI) }
     }
 
     private var plans: some View {
