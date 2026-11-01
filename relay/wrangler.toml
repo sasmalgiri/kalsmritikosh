@@ -1,0 +1,25 @@
+# AI Included relay — Cloudflare Worker (free plan is enough at launch).
+name = "kals-ai-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# No request logging: the relay keeps counts only, never content.
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kals-relay"
+database_id = "REPLACE_AFTER_wrangler_d1_create"
+
+[vars]
+BUNDLE_ID = "ecosanskritiinnovation.Kalsmritikosh"
+ANTHROPIC_BUDGET_USD = "20"   # owner decision 2026-11-01: hard monthly cap
+GEMINI_BUDGET_USD = "5"       # owner decision 2026-11-01: hard monthly cap
+ANTHROPIC_MODEL = "claude-opus-5"
+GEMINI_MODEL = "gemini-2.5-flash"
+# Conservative Gemini prices (micro-dollars per token); keep at or above Google's published price.
+GEMINI_INPUT_MICRO_PER_TOKEN = "3"
+GEMINI_OUTPUT_MICRO_PER_TOKEN = "10"
+# Secrets (set with `npx wrangler secret put NAME`, never committed):
+#   ANTHROPIC_API_KEY, GEMINI_API_KEY, APPLE_ISSUER_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
