@@ -976,6 +976,22 @@ public nonisolated enum AnnotatedEditionExecutor {
 
 public nonisolated enum LineageExecutor {
     static let kin = #"(daughter|son|wife|husband|widow|widower|mother|father|brother|sister|child|grandson|granddaughter|grandfather|grandmother|nephew|niece|uncle|aunt|cousin|parent)"#
+
+    /// The kinship a sentence states from `a` to `b`, or nil. Practitioner review 2026-11-02 (Genealogist
+    /// blocker): only the two forms that bind the kin word to `a` — an appositive ("A, daughter of B") or a
+    /// copula ("A was the eldest son of B") — and "A married B" / "A was married to B". Nothing may stand
+    /// between A and the kin word but those connectors, so another person's relationship in the same
+    /// sentence ("Ravi Rao, son of Asha Rao and husband of Meera Rao") is never moved onto A.
+    static func relation(in s: String, from a: String, to b: String) -> String? {
+        let ea = NSRegularExpression.escapedPattern(for: a), eb = NSRegularExpression.escapedPattern(for: b)
+        let link = #"(?:\s*,\s*|\s*\(\s*|\s+(?:is|was|were|became|being)\s+)(?:the\s+|a\s+|an\s+|his\s+|her\s+|their\s+)?(?:(?:eldest|youngest|elder|younger|only|first|second|third|fourth|adopted|step|natural|illegitimate|legitimate|surviving)\s+){0,2}"#
+        if let re = try? NSRegularExpression(pattern: ea + link + kin + #"\s+of\s+(?:the\s+)?(?:late\s+)?"# + eb + #"\b"#, options: [.caseInsensitive]),
+           let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)), let r = Range(m.range(at: 1), in: s) {
+            return String(s[r]).lowercased() + " of"
+        }
+        if JobText.matches(s, ea + #"\s+(?:was\s+|were\s+|had\s+been\s+)?married\s+(?:to\s+)?"# + eb + #"\b"#) { return "married" }
+        return nil
+    }
     static let vital = #"\b(born|birth|baptis|christen|married|marriage|wedding|died|death|buried|burial|funeral)\w*"#
 
     public static func run(_ e: JobEvidence) -> JobRun {
@@ -990,13 +1006,7 @@ public nonisolated enum LineageExecutor {
                 let here = persons.filter { s.range(of: $0.value, options: .caseInsensitive) != nil }.map(\.value)
                 guard here.count >= 2 else { continue }
                 for a in here { for b in here where a != b {
-                    let ea = NSRegularExpression.escapedPattern(for: a), eb = NSRegularExpression.escapedPattern(for: b)
-                    var relation: String?
-                    if let re = try? NSRegularExpression(pattern: ea + #"\b[^.]{0,40}?\b"# + kin + #"\b\s+of\s+(?:the\s+)?(?:late\s+)?"# + eb, options: [.caseInsensitive]),
-                       let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)), let r = Range(m.range(at: 1), in: s) {
-                        relation = String(s[r]).lowercased() + " of"
-                    } else if JobText.matches(s, ea + #"\b[^.]{0,30}?\bmarried\b[^.]{0,30}?"# + eb) { relation = "married" }
-                    guard let relation, seen.insert("\(a)|\(relation)|\(b)".lowercased()).inserted else { continue }
+                    guard let relation = Self.relation(in: s, from: a, to: b), seen.insert("\(a)|\(relation)|\(b)".lowercased()).inserted else { continue }
                     rows.append(JobResultRow(title: "\(a) — \(relation) — \(b)", detail: "Stated in \(doc.name).", flags: ["stated by a source"],
                                              refs: [JobText.ref(doc, s)], fields: ["person": a, "relationship": relation, "relative": b]))
                 } }
