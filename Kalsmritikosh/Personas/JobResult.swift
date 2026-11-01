@@ -8,10 +8,21 @@
 //
 
 import Foundation
+import os
 
 public nonisolated enum JobResultError: Error, Equatable, LocalizedError {
     case caseGone
-    public var errorDescription: String? { "The case no longer exists, so this result was not saved." }
+    /// N5/N7 (mandate 2026-11-01): a saved result that cannot be decoded, or whose payload no longer
+    /// matches its recorded digest. It is never dropped silently — the read fails and names it; nothing is
+    /// removed, and nothing that depends on it (a protected-identity register, a handoff) proceeds.
+    case unreadable(resultID: UUID, jobID: String)
+    public var errorDescription: String? {
+        switch self {
+        case .caseGone: return "The case no longer exists, so this result was not saved."
+        case .unreadable(let id, let job):
+            return "A saved result of “\(job)” could not be read or failed its integrity check (\(id.uuidString.prefix(8))). It is kept as it is; nothing that depends on it was done. Restore from a backup or run the job again."
+        }
+    }
 }
 
 public nonisolated enum JobResultExportError: Error, Equatable, LocalizedError {
@@ -357,14 +368,38 @@ public actor JobResultRepository {
         return out
     }
 
+    /// One saved result by id, decoded and integrity-checked (nil when no such row exists).
+    public func record(id: UUID) async throws -> JobResultRecord? {
+        try await rows("WHERE id = ?", [.uuid(id)]).first
+    }
+
+    /// Every matching row, decoded and checked against its recorded payload digest. A row that cannot be
+    /// decoded or whose payload no longer matches is an error naming it (N5/N7) — never silently skipped,
+    /// which would turn a damaged protected-identity register into "no protected names" or let an older
+    /// revision stand in for the current one.
     private func rows(_ clause: String, _ params: [SQLValue]) async throws -> [JobResultRecord] {
-        try await database.query("SELECT id, case_id, job_id, family, state, payload_json, created_by, created_at FROM job_results \(clause);", params)
-            .compactMap { r in
-                guard let id = r.uuid(0), let caseID = r.uuid(1), let job = r.string(2), let family = r.string(3),
-                      let state = r.string(4).flatMap(JobResultState.init(rawValue:)), let json = r.string(5),
-                      let content = try? JSONDecoder().decode(JobResultContent.self, from: Data(json.utf8)),
-                      let by = r.string(6), let at = r.date(7) else { return nil }
-                return JobResultRecord(id: id, caseID: caseID, jobID: job, family: family, state: state, content: content, createdBy: by, createdAt: at)
+        let found = try await database.query("SELECT id, case_id, job_id, family, state, payload_json, created_by, created_at, payload_sha256 FROM job_results \(clause);", params)
+        var out: [JobResultRecord] = []
+        for r in found {
+            let id = r.uuid(0) ?? UUID(), job = r.string(2) ?? "unknown job"
+            guard let rid = r.uuid(0), let caseID = r.uuid(1), let family = r.string(3),
+                  let state = r.string(4).flatMap(JobResultState.init(rawValue:)), let json = r.string(5),
+                  let by = r.string(6), let at = r.date(7) else {
+                KalsmritikoshLog.app.error("job result \(id.uuidString, privacy: .public) has missing or invalid columns")
+                throw JobResultError.unreadable(resultID: id, jobID: job)
             }
+            let payload = Data(json.utf8)
+            if let recorded = r.string(8), StudioRecordRepository.sha256(payload) != recorded {
+                KalsmritikoshLog.app.error("job result \(rid.uuidString, privacy: .public) payload does not match its recorded digest")
+                throw JobResultError.unreadable(resultID: rid, jobID: job)
+            }
+            let content: JobResultContent
+            do { content = try JSONDecoder().decode(JobResultContent.self, from: payload) } catch {
+                KalsmritikoshLog.app.error("job result \(rid.uuidString, privacy: .public) could not be decoded: \(String(describing: error), privacy: .public)")
+                throw JobResultError.unreadable(resultID: rid, jobID: job)
+            }
+            out.append(JobResultRecord(id: rid, caseID: caseID, jobID: job, family: family, state: state, content: content, createdBy: by, createdAt: at))
+        }
+        return out
     }
 }

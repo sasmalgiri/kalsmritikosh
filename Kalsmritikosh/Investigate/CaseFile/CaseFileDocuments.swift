@@ -93,6 +93,23 @@ public nonisolated enum CaseFileDocuments {
         let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short; return f
     }()
     static func d(_ date: Date?) -> String { date.map { day.string(from: $0) } ?? "—" }
+
+    /// Every citation after the first, printed in full (N5, mandate 2026-11-01): its quoted passage and
+    /// where it is — source version, document and block — so the report can be checked outside the app.
+    /// A count of hidden citations ("+ 2 more") is not a checkable account.
+    static func furtherCitations(_ refs: [StudioEvidenceRef]) -> String {
+        guard refs.count > 1 else { return "" }
+        return refs.dropFirst().enumerated().map { i, r -> String in
+            var line = "\n  - Citation \(i + 2) of \(refs.count):"
+            if let q = r.quote, !q.isEmpty { line += " “\(q)”" } else { line += " (no quoted passage)" }
+            var at: [String] = []
+            if let v = r.sourceVersionID { at.append("version \(v.uuidString)") }
+            if let o = r.objectID { at.append("document \(o.uuidString.prefix(8))") }
+            if let b = r.blockID { at.append("block \(b.uuidString.prefix(8))") }
+            if !at.isEmpty { line += " [\(at.joined(separator: "; "))]" }
+            return line
+        }.joined()
+    }
     static func t(_ date: Date?) -> String { date.map { stamp.string(from: $0) } ?? "—" }
 
     static func footer(_ by: String, _ at: Date) -> String {
@@ -286,7 +303,7 @@ public nonisolated enum CaseFileDocuments {
                 var line = "- \(d(e.eventDate)): \(e.text)" + (e.quote.map { " — “\($0)”" } ?? "")
                 if e.evidenceRef != nil || !e.citations.isEmpty { line += " (\(e.support.label))" }
                 line += e.evidenceRef.map { " [\($0)]" } ?? ""
-                if e.citations.count > 1 { line += " + \(e.citations.count - 1) more citation(s)" }
+                line += Self.furtherCitations(e.citations)
                 if let origin = e.origin {
                     line += " (from \(origin)"
                     if let rs = e.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { line += "; \(rs.label)" }
@@ -301,7 +318,7 @@ public nonisolated enum CaseFileDocuments {
             var line = "- \(i.text)" + (i.quote.map { " — “\($0)”" } ?? "")
             if i.evidenceRef != nil || !i.citations.isEmpty { line += " (\(i.support.label))" }
             line += i.evidenceRef.map { " [\($0)]" } ?? ""
-            if i.citations.count > 1 { line += " + \(i.citations.count - 1) more citation(s)" }
+            line += Self.furtherCitations(i.citations)
             if let origin = i.origin {
                 line += " (from \(origin)"
                 if let rs = i.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { line += "; \(rs.label)" }

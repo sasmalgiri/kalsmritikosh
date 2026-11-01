@@ -61,9 +61,12 @@ public nonisolated enum CaseOutputError: LocalizedError, Equatable, Sendable {
     case writtenBytesDiffer
     case writeFailed(String)
     case emptyContent
+    /// N7 — the protected-identity register could not be read: nothing leaves.
+    case protectionUnreadable
 
     public var errorDescription: String? {
         switch self {
+        case .protectionUnreadable: return "Nothing was released: the register of protected source identities could not be read, so the content could not be checked for them."
         case .caseGone: return "Nothing was released: the case no longer exists."
         case .scopeUnavailable: return "Nothing was released: the case's access policy could not be read, so the content could not be re-checked."
         case .custodyUnreadable: return "Nothing was released: the custody record could not be read, and a custody report must not present an empty record."
@@ -95,6 +98,8 @@ public nonisolated struct CaseOutputPackage: Sendable, Equatable {
     public let custodyIncomplete: Bool
     public let actor: String
     public let preparedAt: Date
+    /// N6 — every citation the content rests on, re-checked at the moment of release.
+    public var citations: [StudioEvidenceRef] = []
 }
 
 /// What happened to a release.
@@ -205,7 +210,8 @@ public actor CaseOutputService {
             if kind.carriesDraftBanner { text = Self.draftBanner + text }
             text = try await protect(text)
             return CaseOutputPackage(id: UUID(), caseID: caseID, kind: kind, route: route, text: text, data: Data(text.utf8), digest: StudioRecordRepository.sha256(Data(text.utf8)),
-                                     scopeFingerprint: fingerprint, approved: false, custodyIncomplete: custodyIncomplete, actor: actor, preparedAt: Date())
+                                     scopeFingerprint: fingerprint, approved: false, custodyIncomplete: custodyIncomplete, actor: actor, preparedAt: Date(),
+                                     citations: citations)
         } catch {
             await recordRefusal(caseID: caseID, kind: kind, route: route, actor: actor, error)
             throw error
@@ -225,7 +231,8 @@ public actor CaseOutputService {
             }
             let text = try await protect(raw)
             return CaseOutputPackage(id: UUID(), caseID: caseID, kind: kind, route: route, text: text, data: Data(text.utf8), digest: StudioRecordRepository.sha256(Data(text.utf8)),
-                                     scopeFingerprint: fingerprint, approved: false, custodyIncomplete: false, actor: actor, preparedAt: Date())
+                                     scopeFingerprint: fingerprint, approved: false, custodyIncomplete: false, actor: actor, preparedAt: Date(),
+                                     citations: citations)
         } catch {
             if let caseID { await recordRefusal(caseID: caseID, kind: kind, route: route, actor: actor, error) }
             throw error
@@ -245,12 +252,13 @@ public actor CaseOutputService {
                 guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
                 fingerprint = try await revalidate(caseID: caseID, citations: citations)
             }
-            let names = try await results.protectedIdentityNames()
+            let names = try await protectedNames()
             let joined = texts.joined(separator: "\n")
             let leaks = RedactionVerifier().leaks(in: joined, protectedTerms: names, artifact: "export")
             guard leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(leaks.count) }
             return CaseOutputPackage(id: UUID(), caseID: caseID, kind: kind, route: route, text: joined, data: data, digest: StudioRecordRepository.sha256(data),
-                                     scopeFingerprint: fingerprint, approved: false, custodyIncomplete: false, actor: actor, preparedAt: Date())
+                                     scopeFingerprint: fingerprint, approved: false, custodyIncomplete: false, actor: actor, preparedAt: Date(),
+                                     citations: citations)
         } catch {
             if let caseID { await recordRefusal(caseID: caseID, kind: kind, route: route, actor: actor, error) }
             throw error
@@ -273,17 +281,47 @@ public actor CaseOutputService {
 
     /// Protected source identities never leave the app — in titles, notes, quotes or free text.
     private func protect(_ text: String) async throws -> String {
-        let names = try await results.protectedIdentityNames()
+        let names = try await protectedNames()
         let scrubbed = ProtectedIdentities.scrub(text, names: names)
         guard scrubbed.leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(scrubbed.leaks.count) }
         return scrubbed.text
     }
 
+    /// The protected-identity register, read fail-closed (N7): unreadable is an error, never "no names".
+    private func protectedNames() async throws -> [String] {
+        do { return try await results.protectedIdentityNames() } catch {
+            KalsmritikoshLog.app.error("Case output: protected-identity register unreadable: \(String(describing: error), privacy: .public)")
+            throw CaseOutputError.protectionUnreadable
+        }
+    }
+
     // MARK: - Release
 
+    /// N6 — the authoritative check at the moment content leaves, inside the operation that releases it:
+    /// the case still exists (not erased), every cited source is still cleared for export, the protection
+    /// register is readable and no name protected NOW appears in the content. A package prepared before a
+    /// source was withdrawn, a name protected or the case erased is refused here, not released.
+    func authorizeRelease(_ pkg: CaseOutputPackage) async throws {
+        if let caseID = pkg.caseID {
+            guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
+            _ = try await revalidate(caseID: caseID, citations: pkg.citations)
+        }
+        let names = try await protectedNames()
+        let leaks = RedactionVerifier().leaks(in: pkg.text, protectedTerms: names, artifact: "export")
+        guard leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(leaks.count) }
+    }
+
+    private func refused(_ pkg: CaseOutputPackage, _ error: Error) async -> CaseOutputReceipt {
+        if let caseID = pkg.caseID { await recordRefusal(caseID: caseID, kind: pkg.kind, route: pkg.route, actor: pkg.actor, error) }
+        return CaseOutputReceipt(id: pkg.id, status: .refused, fileName: nil, fileSHA256: nil, recorded: pkg.caseID != nil, pendingRetained: false,
+                                 detail: error.localizedDescription)
+    }
+
     /// Write the package to `url` atomically, read it back, and record the digest of the bytes on
-    /// disk. A mismatch or a write error is recorded as failed and is not an export.
+    /// disk. A mismatch or a write error is recorded as failed and is not an export. Nothing is written
+    /// unless the release is authorised now (N6).
     public func write(_ pkg: CaseOutputPackage, to url: URL) async -> CaseOutputReceipt {
+        do { try await authorizeRelease(pkg) } catch { return await refused(pkg, error) }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
@@ -303,11 +341,19 @@ public actor CaseOutputService {
         return await record(pkg, status: .written, fileName: url.lastPathComponent, fileSHA256: pkg.digest, detail: nil)
     }
 
-    /// Record a copy, print or share of the package after the action completed. The digest recorded
-    /// is that of the released text; the app never sees the printer's or the recipient's bytes.
-    public func released(_ pkg: CaseOutputPackage) async -> CaseOutputReceipt {
-        await record(pkg, status: .released, fileName: nil, fileSHA256: nil,
-                     detail: "\(pkg.route.rawValue): digest of the released text, not of the \(pkg.route == .print ? "printer's" : "recipient's") bytes")
+    /// Copy, print or share (N6): authorise first, then `deliver` puts the protected text on the clipboard,
+    /// the printer or the share sheet (true when it actually left — a cancelled print dialog is false), then
+    /// the release is recorded. Nothing is handed to `deliver` when the release is refused, so a log can
+    /// never follow a disclosure that should not have happened. The digest recorded is that of the
+    /// released text; the app never sees the printer's or the recipient's bytes.
+    public func release(_ pkg: CaseOutputPackage, deliver: @MainActor @Sendable (String) -> Bool) async -> CaseOutputReceipt {
+        do { try await authorizeRelease(pkg) } catch { return await refused(pkg, error) }
+        guard await deliver(pkg.text) else {
+            return CaseOutputReceipt(id: pkg.id, status: .failed, fileName: nil, fileSHA256: nil, recorded: false, pendingRetained: false,
+                                     detail: "Not released (cancelled or not available); nothing was recorded.")
+        }
+        return await record(pkg, status: .released, fileName: nil, fileSHA256: nil,
+                            detail: "\(pkg.route.rawValue): digest of the released text, not of the \(pkg.route == .print ? "printer's" : "recipient's") bytes")
     }
 
     // MARK: - Records

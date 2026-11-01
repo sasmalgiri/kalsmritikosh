@@ -135,6 +135,35 @@ struct JobDeliverableTests {
         #expect(spy.count == 1, "no dispatch with a recoverable protected identity")
         let log = try await OutboundLogRepository(database: db).recent()
         #expect(log.contains { $0.outcome == "blocked" && ($0.detail ?? "").contains("protected source identity") })
+
+        // N7 — the register unreadable (a source-vault failure while the outbound log still works): not
+        // "no names", but no send — before the preview, and again if it fails while the dialog is open.
+        struct RegisterUnreadable: Error {}
+        let unreadable = OnlineCloudProvider(outboundLog: OutboundLogRepository(database: db), knownNames: { [] },
+                                             protectedNames: { throw RegisterUnreadable() },
+                                             seams: .init(settings: { snapshot }, consent: { _ in true },
+                                                          transport: { req in spy.hit(req.body); return OutboundHTTPResponse(status: 200, body: reply) }))
+        await #expect(throws: OnlineCloudProvider.OnlineError.self) {
+            _ = try await unreadable.generateQuestionOnly(prompt: "What was the figure?", options: GenerationOptions(maxTokens: 64, temperature: 0.2, systemPrompt: nil, sourceClearance: nil))
+        }
+        #expect(spy.count == 1, "nothing dispatched when the register cannot be read")
+        let calls = Counter()
+        let flaky = OnlineCloudProvider(outboundLog: OutboundLogRepository(database: db), knownNames: { [] },
+                                        protectedNames: { if calls.next() > 1 { throw RegisterUnreadable() }; return [] },
+                                        seams: .init(settings: { snapshot }, consent: { _ in true },
+                                                     transport: { req in spy.hit(req.body); return OutboundHTTPResponse(status: 200, body: reply) }))
+        await #expect(throws: OnlineCloudProvider.OnlineError.self) {
+            _ = try await flaky.generateQuestionOnly(prompt: "What was the figure?", options: GenerationOptions(maxTokens: 64, temperature: 0.2, systemPrompt: nil, sourceClearance: nil))
+        }
+        #expect(spy.count == 1, "a register lost during the consent dialog also stops the send")
+        let after = try await OutboundLogRepository(database: db).recent()
+        #expect(after.filter { $0.outcome == "blocked" && ($0.detail ?? "").contains("register unreadable") }.count == 2)
+    }
+
+    /// A thread-safe call counter for the register stand-in.
+    final class Counter: @unchecked Sendable {
+        private let lock = NSLock(); private var n = 0
+        func next() -> Int { lock.lock(); defer { lock.unlock() }; n += 1; return n }
     }
 
     @Test("The lineage chart draws a sourced relationship solid and a hand-added one without a source dashed as unproven; the export carries the chart")

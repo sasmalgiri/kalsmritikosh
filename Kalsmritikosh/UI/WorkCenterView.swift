@@ -1328,9 +1328,13 @@ public struct WorkCenterView: View {
         Task { @MainActor in
             do {
                 let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .clipboard, actor: who, citations: [], text: text)
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(pkg.text, forType: .string)
-                _ = await outputs.released(pkg)
+                // N6 — authorised by the service at the moment of release, then copied.
+                let r = await outputs.release(pkg) { t in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(t, forType: .string)
+                    return true
+                }
+                if r.status == .refused { NSAlert(error: NSError(domain: "CaseOutput", code: 1, userInfo: [NSLocalizedDescriptionKey: r.summary])).runModal() }
             } catch {
                 KalsmritikoshLog.ui.error("Work Center copy refused: \(error.localizedDescription, privacy: .public)")
                 NSAlert(error: error).runModal()
@@ -1346,7 +1350,10 @@ public struct WorkCenterView: View {
         Task { @MainActor in
             do {
                 let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .print, actor: who, citations: [], text: text)
-                if AppPrinting.run(text: pkg.text, jobTitle: jobTitle, monospace: monospace, fontSize: monospace ? 10 : 9) == .printed { _ = await outputs.released(pkg) }
+                let r = await outputs.release(pkg) { t in
+                    AppPrinting.run(text: t, jobTitle: jobTitle, monospace: monospace, fontSize: monospace ? 10 : 9) == .printed
+                }
+                if r.status == .refused { NSAlert(error: NSError(domain: "CaseOutput", code: 1, userInfo: [NSLocalizedDescriptionKey: r.summary])).runModal() }
             } catch {
                 KalsmritikoshLog.ui.error("Work Center print refused: \(error.localizedDescription, privacy: .public)")
                 NSAlert(error: error).runModal()

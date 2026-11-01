@@ -1389,7 +1389,8 @@ public final class AppState {
                 },
                 // Protected source identities (jrn.source-vault): masked in every send, whatever the
                 // PII-masking setting; a send in which one survives is refused.
-                protectedNames: { [db] in (try? await JobResultRepository(database: db).protectedIdentityNames()) ?? [] })
+                // N7 — an unreadable register is an error the provider refuses on, never an empty list.
+                protectedNames: { [db] in try await JobResultRepository(database: db).protectedIdentityNames() })
             self.onlineProvider = online
             await capabilities.register(online)
 

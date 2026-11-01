@@ -69,7 +69,7 @@ struct CaseOutputServiceTests {
         // Copy and print record the digest of the released text, and say it is not the printer's bytes.
         let copy = try await r.outputs.prepareText(caseID: r.f.caseID, kind: .achReport, route: .clipboard, actor: "Ada", citations: [], text: "ACH about Meera Iyer")
         #expect(copy.text == "ACH about [PROTECTED SOURCE]")
-        let released = await r.outputs.released(copy)
+        let released = await r.outputs.release(copy) { _ in true }
         #expect(released.status == .released && released.recorded && released.fileSHA256 == nil && released.detail?.contains("not of the recipient's bytes") == true)
         #expect(try await r.outputs.outputs(caseID: r.f.caseID).first?.route == .clipboard)
     }
@@ -150,7 +150,7 @@ struct CaseOutputServiceTests {
         // Content with no case is still protected but is not recorded anywhere, and says so.
         let loose = try await r.outputs.prepareText(caseID: nil, kind: .achReport, route: .clipboard, actor: "Ada", citations: [], text: "Notes on Meera Iyer")
         #expect(loose.text == "Notes on [PROTECTED SOURCE]" && loose.scopeFingerprint == nil)
-        let looseReceipt = await r.outputs.released(loose)
+        let looseReceipt = await r.outputs.release(loose) { _ in true }
         #expect(!looseReceipt.recorded && looseReceipt.detail?.contains("no case to record it in") == true)
         // A binary document: protected text first, then the bytes; a name that survives in any input refuses it.
         let cell = try await r.outputs.protectedText("Paid by Meera Iyer")
@@ -167,4 +167,58 @@ struct CaseOutputServiceTests {
         await #expect(throws: CaseOutputError.emptyContent) { _ = try await r.outputs.prepareText(caseID: r.f.caseID, kind: .holdNotice, route: .file, actor: "Ada", citations: [], text: "  ") }
         await #expect(throws: CaseOutputError.caseGone) { _ = try await r.outputs.prepare(caseID: UUID(), kind: .caseLog, route: .file, actor: "Ada") { CaseFileDocuments.actionLogCSV($0) } }
     }
+
+    /// Records whether the copy/print step was reached.
+    @MainActor final class Delivered { var called = false }
+
+    @Test("N6/N7: a package prepared before a source was labelled privileged, a name protected, the case erased or the protection register damaged is refused AT RELEASE — no file is written and nothing reaches the clipboard")
+    @MainActor func stalePackageRefusedAtRelease() async throws {
+        // 1. Prepared, then the cited source is labelled privileged: the write refuses and no file appears.
+        let r = try await rig()
+        defer { try? FileManager.default.removeItem(at: r.temp) }
+        let pkg = try await r.outputs.prepare(caseID: r.f.caseID, kind: .caseFileReport, route: .file, actor: "Ada") { CaseFileDocuments.caseFileReport($0, by: "Ada") }
+        #expect(!pkg.citations.isEmpty, "the package keeps what it rests on")
+        _ = try await SensitiveScopeRepository(database: r.f.db).assign(
+            target: SensitiveScopeTarget(kind: .sourceVersion, id: r.passage.version), sensitivity: .confidential,
+            authority: .userConfirmed(actorID: "Ada", confirmationID: UUID(), privileged: true), reason: "legal advice")
+        let url = r.temp.appendingPathComponent("stale.md")
+        let w = await r.outputs.write(pkg, to: url)
+        #expect(w.status == .refused && w.detail?.contains("no longer cleared") == true)
+        #expect(!FileManager.default.fileExists(atPath: url.path), "no bytes left the app")
+
+        // 2. Prepared for the clipboard, then a name in it becomes protected: refused, the copy never runs.
+        let r2 = try await rig()
+        defer { try? FileManager.default.removeItem(at: r2.temp) }
+        let copy = try await r2.outputs.prepareText(caseID: r2.f.caseID, kind: .achReport, route: .clipboard, actor: "Ada",
+                                                    citations: [StudioEvidenceRef(sourceVersionID: r2.passage.version, quote: "shouted")],
+                                                    text: "ACH: Sam Okafor was off shift")
+        let vault = JobResultRow(title: "Source", detail: "", fields: ["protected": "yes", "identity": "Sam Okafor"])
+        _ = try await JobResultRepository(database: r2.f.db).save(caseID: r2.f.caseID, jobID: "jrn.source-vault", family: .interviewsQuotes, state: .draft,
+                                                                  content: JobResultContent(rows: [vault]), actor: "Ada")
+        let flag = Delivered()
+        let c = await r2.outputs.release(copy) { _ in flag.called = true; return true }
+        #expect(c.status == .refused && !flag.called)
+
+        // 3. The case erased after preparation (modelled by a package for a case that no longer exists).
+        let gone = CaseOutputPackage(id: UUID(), caseID: UUID(), kind: .caseFileReport, route: .file, text: "x", data: Data("x".utf8),
+                                     digest: StudioRecordRepository.sha256(Data("x".utf8)), scopeFingerprint: nil, approved: false,
+                                     custodyIncomplete: false, actor: "Ada", preparedAt: Date())
+        let g = await r2.outputs.write(gone, to: r2.temp.appendingPathComponent("gone.md"))
+        #expect(g.status == .refused && g.detail?.contains("no longer exists") == true)
+
+        // 4. The protected-identity register damaged after preparation (its payload no longer matches its
+        //    digest): the register is unreadable, so nothing is released — never "no names to protect".
+        let r3 = try await rig()
+        defer { try? FileManager.default.removeItem(at: r3.temp) }
+        let p3 = try await r3.outputs.prepareText(caseID: r3.f.caseID, kind: .achReport, route: .clipboard, actor: "Ada", citations: [], text: "ACH")
+        try await r3.f.db.exec("UPDATE job_results SET payload_json = REPLACE(payload_json, 'Meera', 'Mira') WHERE job_id = 'jrn.source-vault';", [])
+        await #expect(throws: JobResultError.self) { _ = try await JobResultRepository(database: r3.f.db).protectedIdentityNames() }
+        let flag3 = Delivered()
+        let d3 = await r3.outputs.release(p3) { _ in flag3.called = true; return true }
+        #expect(d3.status == .refused && d3.detail?.contains("protected source identities could not be read") == true && !flag3.called)
+        await #expect(throws: CaseOutputError.protectionUnreadable) {
+            _ = try await r3.outputs.prepareText(caseID: r3.f.caseID, kind: .achReport, route: .clipboard, actor: "Ada", citations: [], text: "ACH")
+        }
+    }
+
 }

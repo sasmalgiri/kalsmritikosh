@@ -710,15 +710,18 @@ public struct ACHMatrixView: View {
                     guard let destination else { return }
                     notice = await outputs.write(pkg, to: destination).summary
                 case .clipboard:
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(pkg.text, forType: .string)
-                    notice = "Copied. " + (await outputs.released(pkg).summary)
-                case .print:
-                    switch AppPrinting.run(text: pkg.text, jobTitle: "ACH — \(title)", fontSize: 10) {
-                    case .printed: notice = "Printed. " + (await outputs.released(pkg).summary)
-                    case .cancelled: notice = "Print cancelled; nothing was recorded."
-                    case .notAvailable: notice = AppPrinting.unavailableMessage
+                    // N6 — the service authorises at the moment of release, then the text is copied.
+                    let r = await outputs.release(pkg) { text in
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                        return true
                     }
+                    notice = r.status == .released ? "Copied. " + r.summary : r.summary
+                case .print:
+                    let r = await outputs.release(pkg) { text in
+                        AppPrinting.run(text: text, jobTitle: "ACH — \(title)", fontSize: 10) == .printed
+                    }
+                    notice = r.status == .released ? "Printed. " + r.summary : r.summary
                 case .share:
                     break
                 }

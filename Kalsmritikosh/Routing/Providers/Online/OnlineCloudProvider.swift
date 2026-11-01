@@ -34,7 +34,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// Release-block directive item 1 — the protected source identities recorded in the ledger's
     /// source vaults (jrn.source-vault). Always masked, whatever the PII-masking setting; a request in
     /// which one would still be recoverable after masking is not sent.
-    private let protectedNames: @Sendable () async -> [String]
+    private let protectedNames: @Sendable () async throws -> [String]
     private let seams: Seams
 
     /// What the send reads from outside the actor: the Online settings, the person's consent and the
@@ -56,7 +56,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     public init(outboundLog: OutboundLogRepository?, knownNames: @escaping @Sendable () async -> [String],
-                protectedNames: @escaping @Sendable () async -> [String] = { [] }, seams: Seams = .live) {
+                protectedNames: @escaping @Sendable () async throws -> [String] = { [] }, seams: Seams = .live) {
         self.outboundLog = outboundLog
         self.knownNames = knownNames
         self.protectedNames = protectedNames
@@ -78,6 +78,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         case notAvailable, declined, limitReached(Int), notEligibleForDocuments(String), documentsNotCleared
         /// A protected source identity (jrn.source-vault) would still be recoverable after masking.
         case protectedIdentity(Int)
+        /// N7 — the protected-identity register could not be read or failed its integrity check: not
+        /// knowing which names to protect is never "no names to protect".
+        case protectionUnreadable
         /// K8 — no reply within the deadline; nothing was answered.
         case timedOut
         /// K8 — the outbound record could not be written, so nothing was sent.
@@ -93,6 +96,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             case .changedDuringConsent(let what): return "Not sent: \(what) changed while you were reviewing the request. Ask again to review it with the current settings."
             case .documentsNotCleared: return "Not sent: the passages were not checked for privilege and sensitivity before this request was built."
             case .protectedIdentity(let n): return "Not sent: \(n) protected source identity(ies) would still be recoverable in the request after masking."
+            case .protectionUnreadable: return "Not sent: the register of protected source identities could not be read, so the request could not be checked for them. Restore the case's source vault or run it again."
             case .notAvailable:       return "Online mode is not set up (choose a provider, model and key in Settings)."
             case .declined:           return "You chose not to send this to the cloud."
             case .limitReached(let c): return "Today's online limit (\(c) bytes) has been reached."
@@ -147,7 +151,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         var sendPrompt = prompt
         var sendSystem = options.systemPrompt
         var mapping: [String: String] = [:]
-        let protected = await protectedNames()
+        let protected: [String]
+        do { protected = try await protectedNames() } catch {
+            await log(kind, model, "", 0, 0, nil, "blocked", "protected-identity register unreadable")
+            throw await fail(OnlineError.protectionUnreadable)
+        }
         var maskNames = protected
         if ProductModuleFlags.isEnabled(.onlinePIIMasking) { maskNames += await knownNames() }
         if !maskNames.isEmpty {
@@ -201,6 +209,20 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         if let clearance = options.sourceClearance, let why = await clearance.stillCleared() {
             await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "sources changed during consent")
             throw await fail(OnlineError.changedDuringConsent(why))
+        }
+
+        // N7 — the protection register is read again at the send boundary: a name protected while the
+        // dialog was open, or a register that became unreadable, stops the send.
+        do {
+            let now = try await protectedNames()
+            let late = RedactionVerifier().leaks(in: shownText, protectedTerms: now, artifact: "request")
+            if !late.isEmpty {
+                await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "protected identity added during consent")
+                throw await fail(OnlineError.protectedIdentity(late.count))
+            }
+        } catch let e as OnlineError { throw e } catch {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "protected-identity register unreadable")
+            throw await fail(OnlineError.protectionUnreadable)
         }
 
         // A7 — a cancel during the dialog or the checks: nothing is sent.

@@ -90,16 +90,38 @@ public nonisolated enum JobResultHandoff {
         }
     }
 
-    /// Validate the row against the LEDGER: the record must be the case's saved current revision for
-    /// its job (not an unsaved working copy, not a superseded one), and its digest is read from the
-    /// ledger, not supplied by the caller.
+    /// Validate the row against the LEDGER and carry the LEDGER's row (N5, mandate 2026-11-01): the saved
+    /// record is loaded by id — integrity-checked against its digest — and must belong to the same case and
+    /// job and be the current revision; the row text, references, decision and the result state all come
+    /// from that saved revision. The caller's copy is only the pointer: if its row or state differs from
+    /// what was saved, that is an unsaved edit and nothing is carried (save the review first).
     public static func carried(_ record: JobResultRecord, row index: Int, results: JobResultRepository) async throws -> CarriedRow {
-        guard record.content.rows.indices.contains(index) else { throw JobResultHandoffError.rowOutOfRange }
-        guard try await results.latest(caseID: record.caseID, jobID: record.jobID)?.id == record.id,
-              let digest = try await results.payloadSHA256(id: record.id) else { throw CaseFileError.staleResultRevision }
-        let row = record.content.rows[index]
-        return CarriedRow(row: row, index: index, reviewState: reviewState(record, row: row), digest: digest,
-                          origin: origin(jobID: record.jobID, resultID: record.id, row: index))
+        guard let saved = try await results.record(id: record.id),
+              saved.caseID == record.caseID, saved.jobID == record.jobID,
+              try await results.latest(caseID: saved.caseID, jobID: saved.jobID)?.id == saved.id,
+              let digest = try await results.payloadSHA256(id: saved.id) else { throw CaseFileError.staleResultRevision }
+        guard saved.content.rows.indices.contains(index) else { throw JobResultHandoffError.rowOutOfRange }
+        let row = saved.content.rows[index]
+        if !record.content.rows.indices.contains(index) || record.content.rows[index] != row || record.state != saved.state {
+            throw JobResultExportError.unsavedEdits
+        }
+        return CarriedRow(row: row, index: index, reviewState: reviewState(saved, row: row), digest: digest,
+                          origin: origin(jobID: saved.jobID, resultID: saved.id, row: index))
+    }
+
+    /// Verify EVERY citation of a carried row (N5), not only the first. The recorded support is the primary
+    /// citation's when all verify; otherwise the first that does not, naming which citation it is.
+    static func verifyAll(_ refs: [StudioEvidenceRef], caseID: UUID, caseFiles: CaseFileService) async -> CaseEvidenceSupport? {
+        guard !refs.isEmpty else { return nil }
+        var primary: CaseEvidenceSupport?
+        for (i, ref) in refs.enumerated() {
+            let v = await caseFiles.verify(reference: ref.sourceVersionID?.uuidString ?? "", passage: ref, caseID: caseID)
+            if i == 0 { primary = v.support }
+            if case .unverified(let why) = v.support {
+                return .unverified(refs.count > 1 ? "citation \(i + 1) of \(refs.count): \(why)" : why)
+            }
+        }
+        return primary
     }
 
     /// Add the row to an allegation: ONE verified link per citation (both sides of a disagreement
@@ -135,12 +157,10 @@ public nonisolated enum JobResultHandoff {
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         let refs = carried.citations
         let primary = refs.first
-        let support = await primary.asyncMap { ref -> CaseEvidenceVerification in
-            await caseFiles.verify(reference: ref.sourceVersionID?.uuidString ?? "", passage: ref, caseID: record.caseID)
-        }
+        let support = await verifyAll(refs, caseID: record.caseID, caseFiles: caseFiles)
         return try await caseFiles.file.addJournal(caseID: record.caseID, kind: .chronology, text: Self.text(of: carried.row), eventDate: Self.date(of: carried.row),
                                                    evidenceRef: primary?.sourceVersionID?.uuidString, quote: primary?.quote, origin: carried.origin,
-                                                   citations: refs, support: support?.support, reviewState: carried.reviewState.rawValue,
+                                                   citations: refs, support: support, reviewState: carried.reviewState.rawValue,
                                                    originDigest: carried.digest, allowDuplicate: allowDuplicate, actor: actor, at: date)
     }
 
@@ -150,20 +170,19 @@ public nonisolated enum JobResultHandoff {
     public static func addToReport(_ record: JobResultRecord, row index: Int, include: Bool, allegationID: UUID? = nil,
                                    results: JobResultRepository, caseFiles: CaseFileService,
                                    allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
+        try PaidUse.require("carry a result into the case")
         let carried = try await carried(record, row: index, results: results)
         if include, carried.reviewState == .rejected { throw CaseFileError.rejectedRowNotEvidence }
         let reason = carried.row.note?.trimmingCharacters(in: .whitespacesAndNewlines)
         if !include, (reason ?? "").isEmpty { throw JobResultHandoffError.reasonRequired }
         let refs = carried.citations
         let primary = refs.first
-        let support = await primary.asyncMap { ref -> CaseEvidenceVerification in
-            await caseFiles.verify(reference: ref.sourceVersionID?.uuidString ?? "", passage: ref, caseID: record.caseID)
-        }
+        let support = await verifyAll(refs, caseID: record.caseID, caseFiles: caseFiles)
         return try await caseFiles.file.addReportItem(caseID: record.caseID, allegationID: allegationID, text: Self.text(of: carried.row), quote: primary?.quote,
                                                       evidenceRef: primary?.sourceVersionID?.uuidString, origin: carried.origin,
                                                       included: include, exclusionReason: include ? nil : reason,
                                                       citations: refs, reviewState: carried.reviewState.rawValue, originDigest: carried.digest,
-                                                      support: support?.support, allowDuplicate: allowDuplicate, actor: actor, at: date)
+                                                      support: support, allowDuplicate: allowDuplicate, actor: actor, at: date)
     }
 }
 

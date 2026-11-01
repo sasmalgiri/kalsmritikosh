@@ -385,7 +385,9 @@ struct CaseFileTests {
         #expect(report.contains("## Reviewed results included in this report") && report.contains("## Provisional material included in this report"))
         #expect(report.contains("(from \(origin0); accepted on review; revision \(digest.prefix(12)))"))
         #expect(report.contains("(from \(origin1); provisional — not yet decided on review; revision \(digest.prefix(12)))"))
-        #expect(report.contains("+ 1 more citation(s)"), "the second passage is not lost in the report")
+        // N5 — the second passage is printed in full with its locator, not counted.
+        #expect(report.contains("Citation 2 of 2: “\(q2)” [version \(vikram.version.uuidString)"), "the second passage is in the report itself")
+        #expect(!report.contains("more citation(s)"))
         #expect(report.contains("## Material excluded from this report\n- \(JobResultHandoff.text(of: row3)) [\(asha.version.uuidString)] — excluded: Duplicate of the attested statement already in the case"))
         // A newer saved run supersedes the origin: the report says so instead of showing the old revision as current.
         _ = try await results.save(caseID: f.caseID, jobID: "hr.statements", family: .interviewsQuotes, state: .draft, content: JobResultContent(rows: [row1]), actor: "Ada")
