@@ -107,14 +107,22 @@ struct IssueChronologyView: View {
         entries = await appState.chronology()
     }
 
-    private func save(_ text: String, name: String) {
+    private func save(_ raw: String, name: String) {
         #if canImport(AppKit)
+        Task { @MainActor in
+        // Practitioner review 2026-11-02 — protected source identities never leave in a chronology.
+        let text: String
+        switch await appState.protectedExportText(raw) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try Data(text.utf8).write(to: url, options: .atomic) }
         catch { KalsmritikoshLog.ui.error("Chronology export failed: \(error.localizedDescription, privacy: .public)") }
+        }
         #endif
     }
 }

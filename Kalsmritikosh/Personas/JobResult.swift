@@ -364,11 +364,17 @@ public actor JobResultRepository {
     /// The protected identities every case's CURRENT source vault records (all cases when `caseID`
     /// is nil): the names kept out of exports and masked in cloud sends.
     public func protectedIdentityNames(caseID: UUID? = nil) async throws -> [String] {
+        // Practitioner review 2026-11-02 (Journalist blocker): a source-map row marked "confidential source"
+        // protects its source too — not only the source vault.
+        let jobs = "job_id IN ('jrn.source-vault', 'jrn.source-map') AND state <> 'superseded'"
         let records: [JobResultRecord]
-        if let caseID { records = try await rows("WHERE case_id = ? AND job_id = 'jrn.source-vault' AND state <> 'superseded'", [.uuid(caseID)]) }
-        else { records = try await rows("WHERE job_id = 'jrn.source-vault' AND state <> 'superseded'", []) }
+        if let caseID { records = try await rows("WHERE case_id = ? AND " + jobs, [.uuid(caseID)]) }
+        else { records = try await rows("WHERE " + jobs, []) }
         var out: [String] = []
-        for r in records { for n in ProtectedIdentities.names(in: r.content.rows) where !out.contains(n) { out.append(n) } }
+        for r in records {
+            let found = r.jobID == "jrn.source-map" ? ProtectedIdentities.confidentialSources(in: r.content.rows) : ProtectedIdentities.names(in: r.content.rows)
+            for n in found where !out.contains(n) { out.append(n) }
+        }
         return out
     }
 

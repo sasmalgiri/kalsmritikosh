@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -103,15 +104,24 @@ public struct CaseStoryView: View {
         }
     }
 
-    private func save(_ text: String, ext: String, type: String) {
+    private func save(_ raw: String, ext: String, type: String) {
         #if canImport(AppKit)
+        Task { @MainActor in
+        // Practitioner review 2026-11-02 — protected source identities never leave in a case story.
+        let text: String
+        switch await appState.protectedExportText(raw) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let t = UTType(filenameExtension: type) { panel.allowedContentTypes = [t] }
         let safe = subject.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
         panel.nameFieldStringValue = "case-story-\(safe.isEmpty ? "subject" : safe).\(ext)"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? text.write(to: url, atomically: true, encoding: .utf8)
+        do { try text.write(to: url, atomically: true, encoding: .utf8) }
+        catch { KalsmritikoshLog.ui.error("Case story export failed: \(error.localizedDescription, privacy: .public)") }
+        }
         #endif
     }
 

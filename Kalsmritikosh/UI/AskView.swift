@@ -836,8 +836,15 @@ public struct AskView: View {
     }
 
     @MainActor
-    private func saveReceipt(_ json: String, suggestedName: String) {
+    private func saveReceipt(_ raw: String, suggestedName: String) {
         #if canImport(AppKit)
+        Task { @MainActor in
+        // Practitioner review 2026-11-02 — protected source identities never leave in a receipt.
+        let json: String
+        switch await appState.protectedExportText(raw) {
+        case .success(let safe): json = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
         let safe = String(suggestedName.prefix(40))
@@ -848,6 +855,7 @@ public struct AskView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try json.write(to: url, atomically: true, encoding: .utf8) }
         catch { KalsmritikoshLog.ui.error("Answer receipt export failed: \(String(describing: error), privacy: .public)") }
+        }
         #endif
     }
 

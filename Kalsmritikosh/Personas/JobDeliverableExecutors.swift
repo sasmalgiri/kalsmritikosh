@@ -857,6 +857,19 @@ public nonisolated enum ProtectedIdentities {
         return out
     }
 
+    /// Source-map rows marked "confidential source" (a rejected row protects nothing): the source named by
+    /// the row's title, and any identity the row records.
+    public static func confidentialSources(in rows: [JobResultRow]) -> [String] {
+        var out: [String] = []
+        for r in rows where r.decision != .rejected && r.fields?["protection"] == "confidential source" {
+            for part in ([r.title] + (r.fields?["identity"] ?? "").split(separator: ";").map(String.init)) {
+                let name = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                if name.count >= 2, !out.contains(name) { out.append(name) }
+            }
+        }
+        return out
+    }
+
     /// Replace every protected name in `text`; returns nil when a name is still recoverable afterwards.
     public static func scrub(_ text: String, names: [String], token: String = "[PROTECTED SOURCE]") -> (text: String, leaks: [RedactionVerifier.Leak]) {
         guard !names.isEmpty else { return (text, []) }

@@ -42,5 +42,22 @@ struct PractitionerFixesTests {
         let old = try JSONDecoder().decode(SIUReferral.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(old.contraryFacts == nil)
     }
+
+    @Test("Journalist: a source-map row marked confidential protects its source; every file export replaces it or exports nothing")
+    func confidentialSourceProtectedInExports() async throws {
+        let rows = [JobResultRow(title: "Anna Novak (city hall clerk)", fields: ["protection": "confidential source"]),
+                    JobResultRow(title: "Daily Wire", fields: ["protection": "none"])]
+        #expect(ProtectedIdentities.confidentialSources(in: rows) == ["Anna Novak (city hall clerk)"])
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        try await JobResultRepository(database: f.db).save(caseID: f.caseA, jobID: "jrn.source-map", family: .reliabilityConflicts, state: .draft,
+                                                         content: JobResultContent(rows: [JobResultRow(title: "Anna Novak", fields: ["protection": "confidential source"])]),
+                                                         actor: "Tester")
+        #expect(try await JobResultRepository(database: f.db).protectedIdentityNames().contains("Anna Novak"))
+        switch await f.state.protectedExportText("Quote book: Anna Novak said the permit was backdated.") {
+        case .success(let safe): #expect(!safe.contains("Anna Novak") && safe.contains("[PROTECTED SOURCE]"))
+        case .failure(let r): Issue.record("refused: \(r.reason)")
+        }
+    }
 }
 

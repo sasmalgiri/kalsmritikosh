@@ -45,6 +45,10 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 22 | QueryView / HighlightsView / RedactionView | fileExporter | query results / highlights / redacted document | file | — (RedactionView writes the REDACTED document) | archive-level; unchanged |
 | 23 | CitationBuilderView, FundFlowView, ComplianceBoardView, SavedQueriesView, DeepLink, MoveToNewMac, Settings | Copy | a citation string, fact/document ids, SOP handbook, a saved query, a link, a secret (concealed) | clipboard | — | no document text (ids/handbook/secret); unchanged |
 | 24 | DiagnosticsSendButton | Compose e-mail | diagnostics bundle | share | existing redaction of diagnostics | unchanged |
+| 25 | TranscriptsView | Export quotes… | quote book with Speaker column | file | AppState.protectedExportText (scrub + leak check, fails closed) — added 2026-11-02 after the agent practitioner review | protected |
+| 26 | AskView (answer menu) | Export verifiable receipt… | answer receipt JSON (question, answer, passages) | file | AppState.protectedExportText — added 2026-11-02 | protected |
+| 27 | IssueChronologyView | Export chronology | issue chronology Markdown | file | AppState.protectedExportText — added 2026-11-02 | protected |
+| 28 | CaseStoryView | Save case story | case story Markdown / HTML | file | AppState.protectedExportText — added 2026-11-02 | protected |
 
 ## Removed
 
