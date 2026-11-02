@@ -94,7 +94,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W1-1", group: "Search & organise", title: "Advanced search syntax",
                         detail: "AND, OR, NOT, \"exact phrase\", NEAR/5, wildcards and field filters such as from:, date:, type:, tag: and entity:. An operator the app does not understand is reported, never silently treated as a word.",
                         whenOff: "Plain keyword search, as before.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .searchCoverageBadge:
             return Spec(planID: "W1-2", group: "Search & organise", title: "Search coverage badge",
                         detail: "Under every result list: which fields matched and how much of the archive was searchable for this query, naming any source still being indexed.",
@@ -109,7 +109,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W1-4", group: "Search & organise", title: "Tags",
                         detail: "Tag documents, facts and entities; use a tag as a search or question scope. Tags are your organisation only — they never change what the evidence says.",
                         whenOff: "Tags are hidden but kept; turning this back on restores them.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .deepLinks:
             return Spec(planID: "W1-5", group: "Integration", title: "Links to passages (kalsmritikosh://)",
                         detail: "Copy a link to a document, an exact passage, a citation or a saved answer and paste it into any app; opening it jumps to that place, or says plainly that it is no longer in this archive.",
@@ -233,7 +233,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W2-1", group: "Writing", title: "Highlights and notes",
                         detail: "Highlight and annotate any passage. Notes are stored beside the source, never written into it, and count as your own confirmed or corrected evidence.",
                         whenOff: "Highlights are hidden but kept.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .emailAuthenticity:
             return Spec(planID: "W2-2", group: "Email evidence", title: "Email authenticity checks",
                         detail: "Checks DKIM and ARC signatures and S/MIME, and reads hidden time values in message identifiers. No internet lookups: keys come from the message or from you.",
@@ -501,7 +501,7 @@ nonisolated public enum ModulePreset {
             extra = [.reviewCoding, .issueChronology, .legalProduction, .caseSlices, .proofBundles, .gapMap, .exportFormats]
         case "investigation":
             extra = [.emailAuthenticity, .mailRecovery, .timelineGraph, .communicationAnalysis, .livingDossiers,
-                     .watchlists, .proactiveAlerts, .imageIntelligence]
+                     .watchlists, .proactiveAlerts, .imageIntelligence] + investigatorBasics
         case "journalism":
             extra = [.liveFactCheck, .statementDrift, .gapMap, .proofBundles, .watchlists, .proactiveAlerts]
         case "research":
@@ -511,8 +511,17 @@ nonisolated public enum ModulePreset {
         default:
             extra = []
         }
-        return (everyone + extra).filter { !$0.spec.preview && $0.spec.implemented && !$0.alsoInDevonthink }
+        // The investigation role is the main app (owner decision 2026-11-03): its own tools are switched
+        // on even where DEVONthink has a similar feature. Other roles keep the companion rule.
+        let companionExempt: Set<ProductModule> = id == "investigation" ? Set(extra) : []
+        return (everyone + extra).filter {
+            !$0.spec.preview && $0.spec.implemented && (!$0.alsoInDevonthink || companionExempt.contains($0))
+        }
     }
+
+    /// Owner decision 2026-11-03: investigators get search syntax, tags and highlights by default — the
+    /// basics competing investigation tools (Datashare, Magnet Review, Casefleet) treat as standard.
+    public static let investigatorBasics: [ProductModule] = [.advancedSearchSyntax, .userTags, .annotations]
 
     /// Switch on the persona's modules (never switches anything off).
     public static func apply(persona id: String) {

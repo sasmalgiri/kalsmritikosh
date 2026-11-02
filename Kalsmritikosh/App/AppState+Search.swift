@@ -41,6 +41,9 @@ extension AppState {
     /// (the caller then uses plain keyword search, as before).
     public func advancedSearch(_ query: String, limit: Int = 40) async -> (compiled: CompiledSearch, hits: [Chunk])? {
         guard ProductModuleFlags.isEnabled(.advancedSearchSyntax), let chunks else { return nil }
+        // With the module on by default (2026-11-03), a query typed as plain words keeps the plain
+        // search — any informative word, ranked — instead of requiring every word, "was" included.
+        guard AdvancedSearchCompiler.usesSyntax(query) else { return nil }
         let compiled = AdvancedSearchCompiler.compile(query)
         guard !compiled.isEmpty else { return (compiled, []) }
         do {
