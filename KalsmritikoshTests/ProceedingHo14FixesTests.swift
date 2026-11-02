@@ -288,5 +288,31 @@ struct ProceedingHo14FixesTests {
         #expect(ProceedingAnswerer.parse(n("I need a count — how many press releases are about Craig Cinelli?"))?.ask == .documentCount)
         #expect(ProceedingAnswerer.parse(n("Could you count up the press releases that mention Jose Tavares?"))?.ask == .documentCount)
     }
+
+    // MARK: ho19 adjudication (docs/agent-reviews/accuracy-adjudication-ho19.md), on 6a029132.
+
+    @Test("ho19 C: 'the charge date for X' asks when; 'Adkins' case' names Adkins")
+    func ho19Parsing() {
+        let n = QuestionCanonicalizer.normalize
+        #expect(ProceedingAnswerer.parse(n("What was the charge date for Michael Kimbrew?"))?.ask == .when(.charged))
+        #expect(ProceedingAnswerer.person(in: "Which office was responsible for Jeff Allen Adkins' case?") == "Jeff Allen Adkins")
+    }
+
+    @Test("ho19 K/N: a lead with 'Mass.,' or a judge as subject, an abbreviation in the headline, 'the Indictment of X'")
+    func ho19Leads() {
+        let woodhead = "Friday, December 15, 2017\nFormer Attleboro Police Sgt. Sentenced for Attempting to Receive Child Pornography\nPROVIDENCE – A former Attleboro, Mass., police sergeant was sentenced today to 70 months in federal prison.\nRichard F. Woodhead, 54, of South Attleboro, Mass., pleaded guilty in August."
+        #expect(day(X.findings(in: woodhead, person: "Richard F. Woodhead").first { $0.step == .sentenced }) == "2017-12-15")
+        #expect(X.headline(of: woodhead) == "Former Attleboro Police Sgt. Sentenced for Attempting to Receive Child Pornography")
+        let craig = "Thursday, May 11, 2023\nDrug Dealer Sentenced to 35 Years in Prison for Overdoses in St. Charles\nST. LOUIS – U.S. District Judge Henry E. Autrey on Wednesday sentenced a man who provided the drugs that caused one fatal and two nonfatal overdoses to 35 years in prison.\nLedra A. Craig, 30, of St. Louis, was convicted in January."
+        #expect(day(X.findings(in: craig, person: "Ledra A. Craig").first { $0.step == .sentenced }) == "2023-05-10")
+        let pully = "Thursday, May 9, 2013\nIndictment announced of two individuals\nRichard S. Hartunian, United States Attorney for the Northern District of New York, announced today the Indictment of Mark Pullyblank, 52, of Caledonia, NY, and William Clements, 52, of Victor, New York."
+        #expect(day(X.findings(in: pully, person: "Mark Pullyblank").first { $0.step == .charged }) == "2013-05-09")
+    }
+
+    @Test("ho19: a prosecutor's later employer is not the case's office")
+    func ho19LaterEmployer() {
+        let text = "District of Columbia\nJune 3, 2013\nDistrict Man Found Guilty\nHe also expressed appreciation to Assistant U.S. Attorney Michael Ortwein (now with the U.S. Attorney’s Office for the Eastern District of Michigan), who secured the indictment in the case."
+        #expect(!ProceedingAnswerer.offices(in: text).contains { $0.contains("Eastern District of Michigan") })
+    }
 }
 

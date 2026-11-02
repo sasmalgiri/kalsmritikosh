@@ -49,7 +49,8 @@ public nonisolated enum ProceedingEventExtractor {
         public var pattern: String {
             switch self {
             // "charged in a criminal complaint", "charged by a superseding indictment" (held-out chronology 13, 2026-10-30).
-            case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:(?:federal|criminal|superseding|sealed|one-count|two-count|\d+-count) )*(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
+            // "announced today the Indictment of Mark Pullyblank, 52, …" (ho19 adjudication N).
+            case .charged: return #"\b(?:was|were|has been|have been|been) (?:arrested and )?(?:indicted|charged)\b|\bthe (?:unsealing of the )?(?:indictment|arrest and indictment) of\b|\barrested and charged\b|\b(?:indicted|charged) (?:by|in) (?:a|an|the) (?:(?:federal|criminal|superseding|sealed|one-count|two-count|\d+-count) )*(?:grand jury|indictment|complaint|information)\b|\ba (?:federal )?grand jury (?:returned|handed up) an indictment\b|\b(?:indictment|complaint|information)\b[^.]{0,80}\bcharg(?:es|ed|ing)\b"#
             case .arrested: return #"\b(?:was|were|has been) arrested\b"#
             // "made his initial appearance Monday on a federal charge" is the arraignment-stage step.
             case .arraigned: return #"\b(?:was|were) arraigned\b|\bmade (?:his|her|their|an) initial (?:court )?appearance\b"#
@@ -119,8 +120,15 @@ public nonisolated enum ProceedingEventExtractor {
             mentionsFully(((text as NSString).substring(with: m.range)).lowercased(), tokens: tokens) } ?? false
         var descriptiveLead: Int?
         // "Baltimore, Maryland – Today, a recidivist sex offender pled guilty …" (ho16 adjudication K).
-        if introductions <= 1 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:Today|Yesterday|Earlier today),\s+(?=[at]))?(?:An?|The|an?|the)\s(?:[A-Za-z\-]+,?\s){0,6}(?:man|woman|offender|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
+        if introductions <= 1 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:Today|Yesterday|Earlier today),\s+(?=[at]))?(?:An?|The|an?|the)\s(?:[A-Za-z.\-]+,?\s){0,6}(?:man|woman|offender|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
            i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
+            descriptiveLead = i
+        }
+        // "U.S. District Judge Henry E. Autrey on Wednesday sentenced a man who provided the drugs …" (ho19
+        // adjudication K): the judge is the subject, the defendant the descriptive object.
+        if descriptiveLead == nil, introductions <= 1 || firstIntroducedIsAsked,
+           let i = all.prefix(8).firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:U\.S\.|Chief|Senior|Federal)\s+)*(?:District\s+|Magistrate\s+|Circuit\s+)?Judge\s+(?:[A-Z][\w.'’-]*\s+){1,4}(?:(?:on\s+)?(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|yesterday)\s+)?(?:sentenced|convicted|found)\s+(?:an?|the)\s+(?:[A-Za-z.\-]+,?\s){0,5}(?:man|woman|resident|defendant|dealer|felon|offender|trafficker|doctor|officer|executive|teen|teenager|person)\b"#, options: .regularExpression) != nil }),
+           all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
         // "Two Florida women pleaded guilty today …" followed by "Analay Rico, 37, … and Daylen Diaz,
@@ -300,7 +308,10 @@ public nonisolated enum ProceedingEventExtractor {
             // A lead paragraph ("PROVIDENCE, R.I. – …") is not a headline.
             if line.range(of: #"^[A-Z][A-Z .,'\-]{2,40}(?:,|\s[–—-])"#, options: .regularExpression) != nil { return nil }
             // Nor is a body paragraph: a headline does not end with a full stop or hold sentence breaks.
-            if line.hasSuffix(".") || line.range(of: #"[a-z0-9)][.!?]\s+[A-Z]"#, options: .regularExpression) != nil { return nil }
+            // "… in St. Charles", "Former Police Sgt. Sentenced …": an abbreviation's stop is not a sentence break
+            // (ho19 adjudication K).
+            let probe = line.replacingOccurrences(of: #"\b(St|Mt|Ft|Dr|Jr|Sr|Mr|Ms|Mrs|Sgt|Lt|Capt|Gov|Sen|Rep|No|Co|Inc|Corp|Det|Ofc)\."#, with: "$1", options: .regularExpression)
+            if probe.hasSuffix(".") || probe.range(of: #"[a-z0-9)][.!?]\s+[A-Z]"#, options: .regularExpression) != nil { return nil }
             return line
         }
         return nil

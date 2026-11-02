@@ -65,7 +65,8 @@ public nonisolated enum ProceedingAnswerer {
         for m in re.matches(in: question, range: NSRange(location: 0, length: ns.length)) {
             var words = ns.substring(with: m.range(at: 1)).components(separatedBy: .whitespaces).filter { !$0.isEmpty }
             // "Christi Machala's sentencing": the possessive is not part of the name.
-            if let last = words.last, let r = last.range(of: #"['’]s$"#, options: .regularExpression), r.lowerBound > last.startIndex {
+            // "Jeff Allen Adkins' case" (ho19 adjudication C): an s-apostrophe is a possessive too.
+            if let last = words.last, let r = last.range(of: #"['’]s?$"#, options: .regularExpression), r.lowerBound > last.startIndex {
                 words[words.count - 1] = String(last[..<r.lowerBound])
             }
             while let f = words.first, skip.contains(f) { words.removeFirst() }
@@ -120,7 +121,7 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
         // "What were the charges brought against X?", "What exact charges were filed against X?"
-        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b|^(?:exactly\s+)?what\b.*\b(?:charged with|indicted (?:for|on))\b|^(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*charges?\s+(?:that were\s+)?(?:filed|brought|laid|lodged)\s+against\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b(?!\s+(?:date|day)\b)|^(?:exactly\s+)?what\b.*\b(?:charged with|indicted (?:for|on))\b|^(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*charges?\s+(?:that were\s+)?(?:filed|brought|laid|lodged)\s+against\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .chargedWith)
         }
         // ho17 adjudication C — a last resort for wordings the patterns above do not anchor ("I need to
@@ -236,7 +237,9 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "… an initiative by the U.S. Attorney’s Office for the Southern District of Mississippi" in a release
         // headed by an investigating agency: the prosecuting office is the district's (ho18 adjudication O).
-        if let r = text.range(of: #"\b(?:U\.S\.|United States) Attorney[’']s Office for the (?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression),
+        // "(now with the U.S. Attorney's Office for the Eastern District of Michigan)" is a prosecutor's later
+        // employer, not this case's office (ho19 adjudication, partly).
+        if let r = text.range(of: #"(?<!now with the )(?<!formerly with the )(?<!previously with the )(?<!detailed from the )\b(?:U\.S\.|United States) Attorney[’']s Office for the (?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression),
            let d = text[r].range(of: #"(?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
             let district = String(text[r][d])
             if !out.contains(where: { $0.contains(district) }) { out.append("the U.S. Attorney's Office for the \(district)") }
@@ -250,6 +253,17 @@ public nonisolated enum ProceedingAnswerer {
         }
         // An investigating agency (FBI, DEA, ATF, Marshals, an Inspector General) investigates; when a district
         // office is named too, the agency is not given as the prosecuting office.
+        // An office named only as someone's later or earlier employer ("(now with the U.S. Attorney's Office for
+        // the Eastern District of Michigan)") is not this case's office, whichever reader found it.
+        out.removeAll { office in
+            guard let d = office.range(of: #"District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) else { return false }
+            let district = NSRegularExpression.escapedPattern(for: String(office[d]))
+            guard let any = try? NSRegularExpression(pattern: district),
+                  let employer = try? NSRegularExpression(pattern: #"(?i)\b(?:now|formerly|previously|currently) (?:with|at) the [^()]{0,80}"# + district) else { return false }
+            let range = NSRange(text.startIndex..., in: text)
+            let all = any.numberOfMatches(in: text, range: range)
+            return all > 0 && all == employer.numberOfMatches(in: text, range: range)
+        }
         let agency = #"^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Office of the Inspector General)"#
         if out.contains(where: { $0.contains("District of") }) {
             out.removeAll { $0.range(of: agency, options: .regularExpression) != nil }
