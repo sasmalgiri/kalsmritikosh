@@ -41,7 +41,7 @@ public nonisolated enum ProceedingAnswerer {
         // Claude-reworded closed-case questions, 2026-10-26. The plea verb before "charges": "did X
         // plead guilty to the charges?" asks about the plea (held-out chronology 11, 2026-10-30).
         ("plead guilty", .pleaded), ("pleaded guilty", .pleaded), ("pled guilty", .pleaded), ("plea of guilty", .pleaded),
-        ("pleading guilty", .pleaded), ("pleading", .pleaded),
+        ("pleading guilty", .pleaded),
         ("sentencing", .sentenced), ("guilty plea", .pleaded), ("indictment", .charged), ("conviction", .convicted),
         ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged), ("charging", .charged),
         ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),

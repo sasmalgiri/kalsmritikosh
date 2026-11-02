@@ -91,6 +91,7 @@ Proof kinds:
 | `privacy.purchase-by-apple` | `handled by Apple through the App Store` | grep:Transaction.currentEntitlements:Kalsmritikosh/App/Store/Purchase.swift |
 | `privacy.sync-encrypted` | `encrypted with your passphrase` | test:blobs |
 | `privacy.clipper-no-fetch` | `The Safari clipper downloads nothing` | grep:clipper-no-network.sh:ci/guards/run-all.sh |
+| `accuracy.declared` | `at most 3 % of answers wrong per answering path is the bar` | grep:at most 3 % of answers wrong, per answering path:docs/ACCURACY.md |
 
 Coverage boundary (eighth–tenth audits, stated honestly): the registry
 registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the

@@ -121,7 +121,7 @@ nonisolated enum JobText {
             out.append("The case names more than \(StudioCaseFacts.valueLimit) people, organisations or amounts, or states more than \(StudioCaseFacts.dateLimit) dates; those beyond the limit were not read, so a row may be missing for them.")
         }
         if let facts, facts.eventsTruncated {
-            out.append("The case has more than \(StudioCaseFacts.eventLimit) dated events; only the first \(StudioCaseFacts.eventLimit) were read.")
+            out.append("The case has more than \(StudioCaseFacts.eventLimit) dated events; only the \(StudioCaseFacts.eventLimit) most recent were read, so earlier events may be missing here.")
         }
         return out
     }

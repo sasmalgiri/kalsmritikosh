@@ -31,6 +31,8 @@ nonisolated enum StateQuestionAnswerer {
     enum Outcome {
         case stated(Clause)
         case onlyOpposite([Clause])
+        /// Some documents state it, others the opposite: both are shown, never one chosen.
+        case conflicting(stated: Clause, opposite: Clause)
     }
 
     /// States and the words that say the opposite of each, beyond "un<state>" and "not <state>".
@@ -73,7 +75,10 @@ nonisolated enum StateQuestionAnswerer {
     static func statesOpposite(_ clause: String, _ a: Asked) -> Bool {
         let c = clause.lowercased()
         let s = NSRegularExpression.escapedPattern(for: a.state)
-        if c.range(of: #"\bun"# + s + #"\b|\bnot\s+(?:yet\s+|been\s+|yet\s+been\s+|been\s+fully\s+|fully\s+)?"# + s + #"\b|\bnever\s+(?:been\s+)?"# + s + #"\b"#, options: .regularExpression) != nil { return true }
+        // "hasn't been paid", "wasn't paid", "not yet paid", "never paid", "nobody paid", "no payment" —
+        // contractions and negative subjects say the opposite too (candidate re-review U-B1).
+        let negation = #"(?:not|n['’]t|never|no\s+one|nobody|none)"#
+        if c.range(of: #"\bun"# + s + #"\b|"# + negation + #"\s+(?:\w+\s+){0,3}?"# + s + #"\b"#, options: .regularExpression) != nil { return true }
         return (opposites[a.state] ?? []).contains { c.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }
     }
 
@@ -85,8 +90,13 @@ nonisolated enum StateQuestionAnswerer {
         return c.range(of: #"\b(?:will|would|should|must|to|if|unless|once|until|when|expected to|scheduled to)\s+(?:be\s+|have\s+been\s+)?"# + NSRegularExpression.escapedPattern(for: a.state) + #"\b"#, options: .regularExpression) == nil
     }
 
+    /// A sentence's clauses: split at ";", line breaks and a following label ("… overdue. Risk: …"). A
+    /// question or a "whether/if" clause asks about the state and states nothing (U-B1).
     static func clauses(of sentence: String) -> [String] {
-        sentence.components(separatedBy: CharacterSet(charactersIn: ";\n")).map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.count >= 8 }
+        sentence.replacingOccurrences(of: #"\s+(?=[A-Z][a-z]+:\s)"#, with: "\n", options: .regularExpression)
+            .components(separatedBy: CharacterSet(charactersIn: ";\n"))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.count >= 8 && !$0.hasSuffix("?") && $0.range(of: #"(?i)\b(?:whether|if)\b"#, options: .regularExpression) == nil }
     }
 
     static func answer(_ a: Asked, chunks: [RetrievedChunk]) -> Outcome? {
@@ -107,6 +117,7 @@ nonisolated enum StateQuestionAnswerer {
                 }
             }
         }
+        if let stated, let against = opposite.first { return .conflicting(stated: stated, opposite: against) }
         if let stated { return .stated(stated) }
         return opposite.isEmpty ? nil : .onlyOpposite(Array(opposite.prefix(3)))
     }
@@ -118,6 +129,8 @@ nonisolated enum StateQuestionAnswerer {
             return "Yes — the documents say \(thing) was \(a.state): \u{201C}\(c.text)\u{201D}"
         case .onlyOpposite(let cs):
             return "No document found records \(thing) as \(a.state). They say: " + cs.map { "\u{201C}\($0.text)\u{201D}" }.joined(separator: " / ")
+        case .conflicting(let yes, let no):
+            return "The documents disagree about whether \(thing) was \(a.state). One says: \u{201C}\(yes.text)\u{201D} Another says: \u{201C}\(no.text)\u{201D}"
         }
     }
 }

@@ -998,11 +998,12 @@ public nonisolated enum LineageExecutor {
     static func relation(in s: String, from a: String, to b: String) -> String? {
         let ea = NSRegularExpression.escapedPattern(for: a), eb = NSRegularExpression.escapedPattern(for: b)
         let link = #"(?:\s*,\s*|\s*\(\s*|\s+(?:is|was|were|became|being)\s+)(?:the\s+|a\s+|an\s+|his\s+|her\s+|their\s+)?(?:(?:eldest|youngest|elder|younger|only|first|second|third|fourth|adopted|step|natural|illegitimate|legitimate|surviving)\s+){0,2}"#
-        if let re = try? NSRegularExpression(pattern: ea + link + kin + #"\s+of\s+(?:the\s+)?(?:late\s+)?"# + eb + #"\b(?!['’]s\b)"#, options: [.caseInsensitive]),
+        // A name must start at a word start: "Pasha Rao" does not contain "Asha Rao" (candidate re-review).
+        if let re = try? NSRegularExpression(pattern: #"(?<![\w'’-])"# + ea + link + kin + #"\s+of\s+(?:the\s+)?(?:late\s+)?"# + eb + #"\b(?!['’]s\b)"#, options: [.caseInsensitive]),
            let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)), let r = Range(m.range(at: 1), in: s) {
             return String(s[r]).lowercased() + " of"
         }
-        if JobText.matches(s, ea + #"\s+(?:was\s+|were\s+|had\s+been\s+)?married\s+(?:to\s+)?"# + eb + #"\b(?!['’]s\b)"#) { return "married" }
+        if JobText.matches(s, #"(?<![\w'’-])"# + ea + #"\s+(?:was\s+|were\s+|had\s+been\s+)?married\s+(?:to\s+)?"# + eb + #"\b(?!['’]s\b)"#) { return "married" }
         return nil
     }
     static let vital = #"\b(born|birth|baptis|christen|married|marriage|wedding|died|death|buried|burial|funeral)\w*"#

@@ -1,6 +1,6 @@
 # Output routes — inventory and protection (App Store completion §4)
 
-Date: 2026-10-30. Source tree after the §4 commit on `investigations-next`.
+Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap). Source tree on `investigations-next`.
 
 Every route by which case content can leave the app, the service that authorises and protects it,
 what that service does, and the test that proves it. "Protected" means: content frozen, cited
@@ -40,7 +40,7 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 17 | WorkCenterView | Copy Report / Print; Summary copy/print | work-center run report | clipboard, print | CaseOutputService.prepareText(.workCenterReport) | protected (no case record) |
 | 18 | StudioOutputsView | Export… | briefing / FAQ / mind map (archive-level) | file | CaseOutputService.prepareText(.studioBriefing) | protected (no case record) |
 | 19 | ExportCenterView | Export table | ledger tables with a signed receipt (recovery/support export, §4 item 8) | file | LedgerExportRenderer + VerifiableReceipt | recovery export; not case-scoped; privacy controls = the ledger's own labels; unchanged |
-| 20 | AskView | Copy answer | an answer's text (archive Q&A, no case) | clipboard | — | archive-level; protected names: not scrubbed (gap, see below) |
+| 20 | AskView | Copy answer | an answer's text, plain, with its sources by file name (archive Q&A, no case) | clipboard | ProtectedExport.prepare (scrub + leak check, fails closed) — since the re-review 2026-11-02; same route as 37 | protected |
 | 21 | ConvertView | Copy / Save output | a converted document's text | clipboard, file | — | archive-level document conversion; the person already has the document; unchanged |
 | 22 | QueryView / HighlightsView / RedactionView | fileExporter | query results / highlights / redacted document | file | — (RedactionView writes the REDACTED document) | archive-level; unchanged |
 | 23 | CitationBuilderView, FundFlowView, ComplianceBoardView, SavedQueriesView, DeepLink, MoveToNewMac, Settings | Copy | a citation string, fact/document ids, SOP handbook, a saved query, a link, a secret (concealed) | clipboard | — | no document text (ids/handbook/secret); unchanged |
@@ -58,6 +58,9 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 35 | WorkspacesView | Export report | work-product report | file | ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
 | 36 | WorkspacesView | Export receipt | sealed receipt JSON | file | ProtectedExport.prepare(refuseIfPresent) — added 2026-11-02 after the agent re-review | protected |
 | 37 | AskView (answer menu) | Copy answer | answer text | clipboard | clipboard — ProtectedExport.prepare — added 2026-11-02 after the agent re-review | protected |
+| 39 | AskView (answer header and menu) | Save / Save answer as text… | question, plain answer and sources by file name (.txt) | file | ProtectedExport.prepare — added 2026-11-02 (user evaluation M2) | protected |
+| 40 | AskView (answer menu) | Send to DEVONthink | answer note Markdown with passage links, handed to DEVONthink (or shown in Finder) | file (another app) | ProtectedExport.prepare in AppState.sendToDevonthink — added 2026-11-02 (candidate re-review P-B1); a refusal sends nothing | protected |
+| 41 | AskView (AI review sheet) | Copy | an Online-AI review / draft paragraph | clipboard | ProtectedExport.prepare — added 2026-11-02 (candidate re-review P-B1) | protected |
 | 38 | AskView (answer menu) | Export proof bundle… | signed proof bundle | file | ProtectedExport.prepare(refuseIfPresent) on question, answer, passages and file names — added 2026-11-02 after the agent re-review | protected |
 
 ## Removed
@@ -69,9 +72,9 @@ direct `NSSavePanel` + `write` path remains in the case file screen.
 
 - Route 14: the findings export is protected by its own check and redaction policy but is not yet
   recorded in `case_document_outputs`; its hand-off model records the outcome.
-- Route 20: an archive-level answer copied from Ask is not scrubbed of protected source identities.
-  The protected-identity register is a case artefact (`jrn.source-vault`); Ask runs outside cases.
-  Decision needed: scrub globally (cheap, may surprise) or leave archive Q&A outside the policy.
+- Print (routes 11, 13, 17): the app has no `com.apple.security.print` entitlement, so the sandbox refuses
+  the print panel; the app says printing is not available in this build and to export instead (owner decision
+  pending on adding the entitlement).
 - Print and clipboard routes record the digest of the released text; the app never sees the
   printer's or the recipient's bytes, and the record says so.
 

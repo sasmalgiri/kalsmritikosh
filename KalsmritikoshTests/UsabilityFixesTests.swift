@@ -68,4 +68,29 @@ struct UsabilityFixesTests {
         // "will be paid" is not paid.
         #expect(StateQuestionAnswerer.answer(asked, chunks: [chunk("Invoice 432 will be paid next week.")]).map { _ in true } == nil)
     }
+
+    @Test("U-B1: 'hasn't been paid', 'wasn't paid', 'nobody paid' and a question about payment are never a Yes; disagreement shows both")
+    func invoiceNegations() throws {
+        let asked = try #require(StateQuestionAnswerer.parse("Was invoice 432 paid?"))
+        for text in ["Invoice 432 hasn't been paid yet.", "Invoice 432 wasn't paid by the due date.", "Nobody paid invoice 432 before the audit."] {
+            let outcome = StateQuestionAnswerer.answer(asked, chunks: [chunk(text)])
+            guard case .onlyOpposite? = outcome else { Issue.record("\(text) → \(String(describing: outcome))"); continue }
+        }
+        #expect(StateQuestionAnswerer.answer(asked, chunks: [chunk("Has invoice 432 been paid? Please confirm.")]).map { _ in true } == nil)
+        let both = [chunk("Invoice 432 was paid in full on July 2, 2024."), chunk("Invoice 432 remains unpaid as of June 14, 2024.")]
+        let outcome = try #require(StateQuestionAnswerer.answer(asked, chunks: both))
+        #expect(StateQuestionAnswerer.render(outcome, asked).hasPrefix("The documents disagree"), "\(StateQuestionAnswerer.render(outcome, asked))")
+        // A label after the clause is not part of it.
+        let digest = [chunk("- Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. Risk: schedule slip")]
+        let d = try #require(StateQuestionAnswerer.answer(asked, chunks: digest))
+        #expect(!StateQuestionAnswerer.render(d, asked).contains("Risk"))
+    }
+
+    @Test("A no-model answer is not labelled AI-assisted")
+    func noModelFooter() {
+        let a = VerifiedAnswer(body: "No document found records invoice 432 as paid.\n\n(Quoted verbatim from the cited documents; no model was consulted.)",
+                               citations: [], confidence: Confidence(0.75), refused: false, refusalReason: nil)
+        #expect(QualityStrip.usedNoModel(a))
+        #expect(!QualityStrip.usedNoModel(VerifiedAnswer(body: "Prose.", citations: [], confidence: Confidence(0.75), refused: false, refusalReason: nil)))
+    }
 }

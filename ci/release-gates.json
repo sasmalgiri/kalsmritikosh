@@ -74,7 +74,7 @@
     },
     {
       "id": "accuracy-adjudication",
-      "title": "Independent adjudication of the held-out sets; ≤1 % wrong per mode and family on frozen code",
+      "title": "Independent adjudication of a fresh held-out set on frozen code; ≤3 % wrong per mode and family (owner decision 2026-11-02, raised from ≤1 % and declared in docs/ACCURACY.md)",
       "kind": "human",
       "required": true
     },

@@ -1002,15 +1002,12 @@ public struct RootView: View {
     /// any already pinned under GO TO (Home + the group primaries + work
     /// surfaces) — so a recent never duplicates a permanent row. Empty until
     /// there is real, non-duplicate history.
-    /// Shown in the screens' own fixed order, not newest first: rows that swapped places on every visit
-    /// moved the target out from under the pointer (user evaluation 2026-11-02, M5).
+    /// The shortcuts under the persona header are a FIXED set — the work most people come back to. A
+    /// recently-visited list changed its rows on every screen change and pushed the permanent rows below
+    /// it up and down (user evaluation 2026-11-02, M5; again in the agent UI run on f766b035).
     private var recentDestinations: [Destination] {
         let permanent = permanentSidebarDestinations
-        let recent = Set(recentDestinationsBlob.split(separator: ",")
-            .compactMap { Destination(rawValue: String($0)) }
-            .filter { !permanent.contains($0) }
-            .prefix(4))
-        return Destination.allCases.filter { recent.contains($0) }
+        return [Destination.work, .cases, .review, .guide].filter { !permanent.contains($0) }
     }
 
     /// Record a visit: newest first, deduplicated, capped.

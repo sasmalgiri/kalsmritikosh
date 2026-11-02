@@ -913,6 +913,7 @@ public struct EvidenceVerifier: Verifier {
             switch outcome {
             case .stated(let c): cited = [c]
             case .onlyOpposite(let cs): cited = cs
+            case .conflicting(let yes, let no): cited = [yes, no]
             }
             KalsmritikoshLog.brain.info("StateQuestionAnswerer: \(asked.state, privacy: .public) from \(cited.count, privacy: .public) clause(s)")
             return VerifiedAnswer(

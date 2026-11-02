@@ -38,6 +38,13 @@ public struct QualityStrip: View {
         self.onEvidenceTap = onEvidenceTap
     }
 
+    /// True only when the answer itself records that no model took part: its reasoning trace lists no model
+    /// call, or its composer stamped the no-model receipt. Unknown stays "AI-assisted" (the cautious label).
+    static func usedNoModel(_ answer: VerifiedAnswer) -> Bool {
+        if let trace = answer.reasoningTrace { return trace.llmPurposes.isEmpty }
+        return answer.body.contains("no model was consulted")
+    }
+
     /// Closed-corpus answer-state chip (Ledger-AI v28). Colour-codes the
     /// verdict so the user sees at a glance whether the archive actually
     /// supports the answer. Hidden when `.unknown` (gate not run yet).
@@ -117,7 +124,7 @@ public struct QualityStrip: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.caption2)
                     .foregroundStyle(.orange)
-                Text(LegalNotice.answerFooter)
+                Text(Self.usedNoModel(answer) ? LegalNotice.recordAnswerFooter : LegalNotice.answerFooter)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

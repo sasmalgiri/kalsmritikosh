@@ -1531,8 +1531,11 @@ struct AIReviewSheet: View {
                 Text("Written by an AI from the passages listed. Not a finding; check it before using any of it.").font(.caption2).foregroundStyle(.secondary)
                 Spacer()
                 Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(review.text, forType: .string)
+                    // The same protected-identity gate as every copy and export (candidate re-review P-B1).
+                    switch ProtectedExport.prepare(review.text) {
+                    case .success(let safe): NSPasteboard.general.clearContents(); NSPasteboard.general.setString(safe, forType: .string)
+                    case .failure(let refusal): refusal.present()
+                    }
                 }
                 Button("Done", action: done).keyboardShortcut(.defaultAction)
             }
