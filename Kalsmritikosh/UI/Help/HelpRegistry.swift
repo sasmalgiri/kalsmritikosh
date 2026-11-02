@@ -204,10 +204,11 @@ public nonisolated enum HelpRegistry {
             steps: [
                 "Timeline: filter by date, entity or event kind; open an event for its participants and source. Date precision travels with the event (a month-only date is shown as such).",
                 "From a job result, “Add to chronology” carries a reviewed row, with its citations and review state, into the case chronology.",
+                "From a cited passage or a search hit, “Add to case chronology…” makes an entry in the case you choose, with the passage as its citation; the date is filled in only when the passage states one full date. A source the case does not include is refused, and the same passage is not added twice. In the case file's chronology, “Open source” opens the entry's passage.",
                 "Competing Hypotheses: list the explanations, mark each piece of evidence consistent, inconsistent or not assessed. The matrix prefers the hypothesis with the fewest inconsistencies and says when there is no preference; “not assessed” is never counted as neutral support.",
                 "A gap in the timeline is a gap in the record, not proof that nothing happened; it tells you what to collect next."
             ],
-            controls: ["Add to chronology"], destination: .timeline, keywords: ["ach", "hypotheses", "timeline", "chronology", "alternative explanation"]),
+            controls: ["Add to chronology", "Add to case chronology…", "Open source"], destination: .timeline, keywords: ["ach", "hypotheses", "timeline", "chronology", "alternative explanation"]),
         HelpTopic(
             id: "task-money", kind: .task, title: "Money: amounts, duplicates, refunds and currencies",
             summary: "Amounts are read with their currency and the document they came from; matching figures are shown as matches for you to classify, never as proof.",

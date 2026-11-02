@@ -1205,6 +1205,8 @@ struct CaseChronologyTab: View {
     @State private var when = Date()
     @State private var text = ""
     @State private var ref = ""
+    /// G1 — the cited passage a chronology entry opens at.
+    @State private var openedPassage: OpenedSource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1228,6 +1230,12 @@ struct CaseChronologyTab: View {
             list("Chronology (investigator entries)", s.journal.filter { $0.kind == .chronology })
             list("Journal", s.journal.filter { $0.kind == .note }.reversed())
         }
+        .sheet(item: $openedPassage) { opened in
+            VStack(spacing: 0) {
+                EvidenceViewer(citation: opened.citation)
+                HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
+            }
+        }
     }
 
     private func list(_ title: String, _ entries: [CaseJournalEntry]) -> some View {
@@ -1249,6 +1257,14 @@ struct CaseChronologyTab: View {
                         if let q = e.quote { Text("“\(q)”").font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                     }
                     Spacer()
+                    if let target = PassageChronology.openTarget(for: e, objectForVersion: model.objectByVersion) {
+                        Button("Open source") {
+                            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: target.objectID, snippet: target.quote ?? ""))
+                        }
+                        .buttonStyle(.borderless).font(.caption)
+                        .help("Open the source this entry cites, at the quoted passage.")
+                        .accessibilityIdentifier("chronology.entry.openSource")
+                    }
                     Button("Retract") {
                         let id = e.id
                         model.run(appState) { try await $0.file.retractJournal(caseID: model.caseID, id: id, actor: model.actor) }

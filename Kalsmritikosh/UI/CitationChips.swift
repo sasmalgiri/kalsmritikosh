@@ -33,6 +33,8 @@ public struct CitationChips: View {
 
     @Environment(AppState.self) private var appState
     @State private var names: [UUID: String] = [:]
+    /// G1 — the passage being added to a case chronology from a chip's menu.
+    @State private var chronologyPassage: ChronologyPassage?
 
     public init(citations: [VerifiedAnswer.Citation],
                 onOpen: @escaping @MainActor (VerifiedAnswer.Citation) -> Void) {
@@ -81,6 +83,13 @@ public struct CitationChips: View {
                                     appState.copyLink(objectID: citation.objectID, quote: citation.snippet)
                                 }
                             }
+                            // G1 — make a chronology entry from this passage, linked to it.
+                            if !citation.snippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Button("Add to case chronology…") {
+                                    chronologyPassage = ChronologyPassage(objectID: citation.objectID, quote: citation.snippet)
+                                }
+                                .accessibilityIdentifier("citation.chip.\(index).addToChronology")
+                            }
                         }
                     }
                 }
@@ -88,6 +97,9 @@ public struct CitationChips: View {
             .task(id: sources.map(\.objectID)) {
                 let ids = Set(sources.map(\.objectID))
                 names = (try? await appState.objects?.sourceFilenames(for: ids)) ?? [:]
+            }
+            .sheet(item: $chronologyPassage) { p in
+                AddPassageToChronologySheet(passage: p) { chronologyPassage = nil }
             }
         }
     }
@@ -210,6 +222,8 @@ public enum CitedPassageLocator {
 public struct CitationSourceSheet: View {
     let target: CitationOpenTarget
     let onDone: () -> Void
+    /// G1 — the passage being added to a case chronology from this sheet.
+    @State private var chronologyPassage: ChronologyPassage?
 
     public init(target: CitationOpenTarget, onDone: @escaping () -> Void) {
         self.target = target
@@ -224,6 +238,13 @@ public struct CitationSourceSheet: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
+                if let quote = target.quote, !quote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button("Add to case chronology…") {
+                        chronologyPassage = ChronologyPassage(objectID: target.objectID, quote: quote)
+                    }
+                    .help("Make a chronology entry in a case from this passage, with the passage as its citation.")
+                    .accessibilityIdentifier("citation.source.addToChronology")
+                }
                 Button("Done", action: onDone)
                     .keyboardShortcut(.cancelAction)
             }
@@ -240,5 +261,8 @@ public struct CitationSourceSheet: View {
             SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
         }
         .frame(minWidth: 640, minHeight: 480)
+        .sheet(item: $chronologyPassage) { p in
+            AddPassageToChronologySheet(passage: p) { chronologyPassage = nil }
+        }
     }
 }

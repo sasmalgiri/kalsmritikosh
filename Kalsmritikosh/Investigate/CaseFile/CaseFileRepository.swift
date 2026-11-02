@@ -930,6 +930,20 @@ public actor CaseFileRepository {
         guard try !db.query(sql + " LIMIT 1;", [.uuid(id), .uuid(caseID)]).isEmpty else { throw CaseFileError.notInCase(what, id) }
     }
 
+    /// G1 — the source version to cite for a document in this case: a version of the document's file
+    /// that is inside the case's scope when there is one, otherwise its current version (which the case
+    /// then refuses, with the reason — the scope is never widened). Nil when the document has none.
+    public func sourceVersionToCite(objectID: UUID, caseID: UUID) async throws -> UUID? {
+        try await database.withSavepoint("cf_svc_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            let versions = try db.query("""
+                SELECT sv.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id
+                 WHERE ko.id = ? ORDER BY sv.is_current DESC, sv.created_at DESC;
+                """, [.uuid(objectID)]).compactMap { $0.uuid(0) }
+            for v in versions where try CaseEvidenceReference.problem(v.uuidString, caseID: caseID, in: db) == nil { return v }
+            return versions.first
+        }
+    }
+
     /// A new reference must resolve in this case (brief §4): an in-scope source version, a live exhibit
     /// of this case, or an explicit investigator note. `sourceOnly` admits only a source version.
     private static func requireResolvable(_ db: isolated Database, _ raw: String, caseID: UUID, sourceOnly: Bool = false) throws {
