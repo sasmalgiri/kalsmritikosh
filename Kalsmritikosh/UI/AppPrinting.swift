@@ -78,6 +78,9 @@ enum AppPrinting {
         let margin = CGPoint(x: info.leftMargin, y: info.topMargin)
         let area = CGSize(width: page.width - info.leftMargin - info.rightMargin, height: page.height - info.topMargin - info.bottomMargin)
         let storage = NSTextStorage(attributedString: source)
+        // Paper is white whatever the appearance: in Dark Mode the view's text colour is white, which drew
+        // invisible pages (agent UI run on 82127048).
+        storage.addAttribute(.foregroundColor, value: NSColor.black, range: NSRange(location: 0, length: storage.length))
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
         let data = NSMutableData()
@@ -158,14 +161,19 @@ enum AppPrinting {
             panel.allowedContentTypes = [.pdf]
             panel.nameFieldStringValue = String(jobTitle.replacingOccurrences(of: "/", with: "-").prefix(80)) + ".pdf"
             panel.canCreateDirectories = true
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            do {
-                try data.write(to: url, options: .atomic)
-                saved = true
-                NSApp.stopModal()
-            } catch {
-                KalsmritikoshLog.ui.error("Print preview: saving the PDF failed: \(error.localizedDescription, privacy: .public)")
-                NSAlert(error: error).runModal()
+            // A sheet on the preview window, not a second modal loop: from a screen already inside a modal
+            // session (the ACH sheet) a nested runModal returned at once and nothing was saved (UI run).
+            guard let window else { return }
+            panel.beginSheetModal(for: window) { [self] response in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try data.write(to: url, options: .atomic)
+                    saved = true
+                    NSApp.stopModal()
+                } catch {
+                    KalsmritikoshLog.ui.error("Print preview: saving the PDF failed: \(error.localizedDescription, privacy: .public)")
+                    NSAlert(error: error).runModal()
+                }
             }
         }
 

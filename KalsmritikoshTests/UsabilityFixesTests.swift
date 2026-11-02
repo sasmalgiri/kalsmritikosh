@@ -104,4 +104,11 @@ struct UsabilityFixesTests {
         #expect(doc.string?.contains("Line 400") == true)
         #expect(AppPrinting.Outcome.savedAsPDF.released && !AppPrinting.Outcome.cancelled.released)
     }
+
+    @Test("A claim in the ledger's words opens at the source line sharing its words and date")
+    func claimLineFallback() throws {
+        let mail = try fixture("supplier_abc_22.eml")
+        #expect(CitedPassageLocator.claimPassage("Contract modified on Apr 8, 2024", in: mail)?.hasPrefix("Date: Mon, 08 Apr 2024") == true)
+        #expect(CitedPassageLocator.bestSharedLine("Zebra quartz", in: mail) == nil)
+    }
 }

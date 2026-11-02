@@ -41,6 +41,9 @@ public struct QualityStrip: View {
     /// True only when the answer itself records that no model took part: its reasoning trace lists no model
     /// call, or its composer stamped the no-model receipt. Unknown stays "AI-assisted" (the cautious label).
     static func usedNoModel(_ answer: VerifiedAnswer) -> Bool {
+        // AI off and Online off: no model can have taken part in any answer (agent UI run on 82127048: rule
+        // answers still read "AI-assisted" because their trace or body carries no no-model marker).
+        if EvidenceOnlyRelease.enforced && !OnlineSettings.cloudAllowed { return true }
         if let trace = answer.reasoningTrace { return trace.llmPurposes.isEmpty }
         return answer.body.contains("no model was consulted")
     }

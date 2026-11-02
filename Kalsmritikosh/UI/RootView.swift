@@ -686,7 +686,15 @@ public struct RootView: View {
                 VStack(spacing: 0) {
                     appHeader
                     Divider()
-                    detail
+                    // Every screen is pinned to the real detail viewport. On macOS 26 the split-view detail
+                    // proposes pathological sizes to non-scroll content; a screen whose content grew taller
+                    // than the window was drawn above it (Verify Receipt, Case Story, Cross-Doc Matrix,
+                    // Reasoning Studio — agent UI runs on the candidate) and moved the sidebar rows with it.
+                    GeometryReader { viewport in
+                        detail
+                            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
+                            .clipped()
+                    }
                 }
                 .navigationTitle(selection?.title ?? "Investigations Made Easy")
                 .toolbar {

@@ -137,7 +137,7 @@ public enum CitedPassageLocator {
         var count = words.count
         while count > 0 {
             let probe = words.prefix(count).joined(separator: " ")
-            guard probe.count >= minimumProbe else { return nil }
+            guard probe.count >= minimumProbe else { break }
             if let r = locate(probe, in: source), let range = Range(r, in: source) {
                 let start = source[..<range.lowerBound].lastIndex(where: \.isNewline).map { source.index(after: $0) } ?? source.startIndex
                 let end = source[range.upperBound...].firstIndex(where: \.isNewline) ?? source.endIndex
@@ -146,7 +146,30 @@ public enum CitedPassageLocator {
             }
             count -= 1
         }
-        return nil
+        return bestSharedLine(claim, in: source)
+    }
+
+    /// Fallback when no run of the claim's words occurs: the source line sharing the most of the claim's
+    /// words and numbers (numbers compared without leading zeros, so "Apr 8, 2024" meets "08 Apr 2024"),
+    /// at least two of them — "Contract modified on Apr 8, 2024" opens at the e-mail's "Date:" line
+    /// (agent UI run on 82127048). Nil when no line shares two.
+    nonisolated static func bestSharedLine(_ claim: String, in source: String) -> String? {
+        func tokens(_ t: String) -> Set<String> {
+            Set(t.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).compactMap { w -> String? in
+                guard !w.isEmpty else { return nil }
+                if w.allSatisfy(\.isNumber) { let n = w.drop { $0 == "0" }; return n.isEmpty ? "0" : String(n) }
+                return w.count >= 3 && !["the", "and", "for", "was", "were", "with", "from"].contains(w) ? w : nil
+            })
+        }
+        let wanted = tokens(claim)
+        var best: (score: Int, line: String)?
+        for raw in source.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let score = tokens(line).intersection(wanted).count
+            if score >= 2, score > (best?.score ?? 0) { best = (score, line) }
+        }
+        return best?.line
     }
 
     /// Lower-cased, whitespace runs collapsed to one space.
