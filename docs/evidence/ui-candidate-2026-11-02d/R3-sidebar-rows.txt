@@ -1,0 +1,20 @@
+R3-01-home	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-02-ask	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-03-cases	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-04-case-overview	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-05-jobs	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-06-workcenter	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 List the sources & people, 2 Nov 2026 at 4:46 AM · Shirshendu Sasmaly=373 Map the relationships, 2 Nov 2026 at 4:47 AM · Shirshendu Sasmaly=420 Note source protectiony=467 Produce the source map, Complete the previous step first.y=500 
+R3-07-knowledge	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-08-query	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-09-reasoning	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-10-matrix	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-11-review	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-12-findings	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-13-timeline	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-14-settings	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-15-verify	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-16-casestory	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-17-files	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-18-outputs	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-19-guide	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
+R3-20-ach	PERSONA · INVESTIGATORy=284 Professional Jobsy=302 Casesy=343 Reviewy=384 Guidey=425 GO TOy=478 Homey=496 Ask, ⌘1y=537 Projectsy=578 Files, ⌘6y=619 Outputsy=660 Settings, ⌘9y=713 
