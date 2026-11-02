@@ -78,13 +78,14 @@ public nonisolated enum ProceedingAnswerer {
     static func unwrap(_ q: String) -> String {
         // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
         // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
-        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me)|do (?:you|we) know|do (?:you|we) have|have (?:you|we) got|is there|i(?:'m|’m| am) looking for (?:details|information|info|specifics) (?:on|about)|i(?:'m|’m| am) looking for(?=\s+the\s+(?:sentence|punishment|charges?|date|day|plea|verdict|outcome)\b)|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me|identify|name)|do (?:you|we) know|do (?:you|we) have|have (?:you|we) got|is there|i(?:'m|’m| am) looking for (?:details|information|info|specifics) (?:on|about)|i(?:'m|’m| am) looking for(?=\s+the\s+(?:sentence|punishment|charges?|date|day|plea|verdict|outcome)\b)|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
         guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
         return String(q[r.upperBound...])
     }
 
     public static func parse(_ question: String) -> Parsed? {
-        let full = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        // "the specific charge(s) brought against X" (ho16 adjudication C).
+        let full = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "(s)", with: "s")
         let q = unwrap(full)
         // A quoted title names a release, not a person.
         guard !question.contains("\""), !question.contains("“"), let name = person(in: question) else { return nil }
@@ -109,7 +110,7 @@ public nonisolated enum ProceedingAnswerer {
         }
         // "Which office prosecuted X?" — the office the person's own releases name.
         // "Which prosecutorial office handled the case against X?" (held-out chronology 9, 2026-10-29).
-        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+|prosecutorial\s+|prosecution\s+|government\s+)?(?:office|agency|prosecutors?(?:['’]s)?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible|took(?: on)?|oversaw|led|ran|managed|in charge)\b|\bwho prosecuted\b|\bprosecut(?:ing|orial) (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought|took on)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+|prosecutorial\s+|prosecution\s+|government\s+)?(?:office|agency|prosecutors?(?:['’]s)?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible|took(?: on)?|oversaw|led|ran|managed|in charge)\b|\bwho prosecuted\b|\bprosecut(?:ing|orial) (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought|took on)\b|^(?:the\s+)?(?:\w+\s+)?office\s+responsible\s+for\s+(?:prosecuting|handling|bringing|the (?:case|prosecution))\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .office)
         }
         // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
@@ -124,7 +125,7 @@ public nonisolated enum ProceedingAnswerer {
             return Parsed(person: name, ask: .when(step))
         }
         // "Is there any indication that X entered a guilty plea?" (held-out chronology 10, 2026-10-29).
-        if q.range(of: #"^(?:did|was|were|has|have|is)\b|^(?:any|an?)\s+(?:indication|record|evidence|sign|mention|confirmation)\s+(?:(?:indicating|showing|confirming|suggesting)\s+)?(?:that|of|whether)\b"#, options: .regularExpression) != nil {
+        if q.range(of: #"^(?:did|was|were|has|have|is)\b|^(?:(?:any|an?|some)\s+)?(?:indication|record|evidence|sign|mention|confirmation|proof)\s+(?:(?:indicating|showing|confirming|suggesting)\s+)?(?:that|of|whether)\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .whether(step))
         }
         // The same yes/no question behind a courtesy wrapper: "I'm trying to confirm: did X plead
@@ -165,9 +166,19 @@ public nonisolated enum ProceedingAnswerer {
         return out
     }
 
-    static func quote(_ s: String) -> String {
-        let t = s.count > 320 ? String(s.prefix(320)) + "…" : s
-        return "\u{201C}\(t)\u{201D}"
+    /// A long sentence is cut to 320 characters. With `around` (the asked person's surname), the cut keeps
+    /// the clause after that name: in a three-defendant lead the person's own offence follows their name
+    /// and must not be cut away (ho16 adjudication T).
+    static func quote(_ s: String, around surname: String? = nil) -> String {
+        guard s.count > 320 else { return "\u{201C}\(s)\u{201D}" }
+        if let surname, !surname.isEmpty,
+           let r = s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: [.regularExpression, .caseInsensitive]),
+           s.distance(from: s.startIndex, to: r.upperBound) > 200 {
+            let start = s.index(r.lowerBound, offsetBy: -min(120, s.distance(from: s.startIndex, to: r.lowerBound)))
+            let window = s[start...].prefix(320)
+            return "\u{201C}…\(window)\(window.endIndex < s.endIndex ? "…" : "")\u{201D}"
+        }
+        return "\u{201C}\(s.prefix(320))…\u{201D}"
     }
 
     /// A heading line that is only an office or agency name ("Western District of New York").
@@ -208,6 +219,13 @@ public nonisolated enum ProceedingAnswerer {
     /// A prior record in a sentence, not the offence charged ("possession of ammunition by a
     /// convicted felon" and "a firearm for a person she knew to be a convicted felon" are offences).
     static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )(?<!as a )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
+
+    /// A charge named without its offence: "to a charge stemming from …", "on federal charges in July",
+    /// "on charges related to …" (the offence is stated, if at all, elsewhere).
+    static let genericCharge = #"(?i)\b(?:to|on|with|of)\s+(?:an?\s+|one\s+|the\s+|multiple\s+|several\s+)?(?:federal\s+|criminal\s+|state\s+|related\s+)*charges?\s+(?:stemming from|related to|relating to|arising (?:out of|from)|in connection with|connected (?:to|with)|tied to|in (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|in (?:19|20)\d\d|last\b|earlier\b|and\b|,|\.|$)"#
+
+    /// A sentence about a separate (earlier or other) case of the same person.
+    static let separateCase = #"(?i)\b(?:in|on) (?:a|an) (?:separate|unrelated|earlier|prior|previous|different|other) (?:federal |state )?(?:case|matter|prosecution|proceeding)\b|\bin another (?:case|matter|prosecution)\b"#
 
     /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
     /// `complete` is false when the documents searched were capped: a count is then a floor.
@@ -303,7 +321,11 @@ public nonisolated enum ProceedingAnswerer {
         guard !about.isEmpty else { return nil }   // no document names the person: the normal pipeline decides
         switch parsed.ask {
         case .when(let step):
-            let hits = found.filter { $0.1.step == step }
+            // "In a separate case, Farnell was sentenced … on March 9, 2012": another case's step answers
+            // only when the documents record no step of this case (ho16 adjudication A).
+            let stepHits = found.filter { $0.1.step == step }
+            let ownHits = stepHits.filter { $0.1.sentence.range(of: Self.separateCase, options: .regularExpression) == nil }
+            let hits = ownHits.isEmpty ? stepHits : ownHits
             guard let best = hits.first(where: { $0.1.day != nil }) ?? hits.first else {
                 // Asked when X was charged, the documents only report the arrest or arraignment:
                 // say so, with that day — never present it as the charge.
@@ -383,7 +405,15 @@ public nonisolated enum ProceedingAnswerer {
             }
             return refuse("The documents that name \(name) don't say whether \(name) " + (step == .pleaded ? "pleaded guilty." : "was \(step.phrase)."))
         case .sentenceImposed:
-            let terms = found.filter { $0.1.step == .sentenced && $0.1.detail != nil }
+            let allTerms = found.filter { $0.1.step == .sentenced && $0.1.detail != nil }
+            // A term from a separate case ("In a separate case, Farnell was sentenced … to 13 years") is not
+            // this case's sentence (ho16 adjudication A); said as such when it is the only term on record.
+            let ownTerms = allTerms.filter { $0.1.sentence.range(of: Self.separateCase, options: .regularExpression) == nil }
+            if ownTerms.isEmpty, let other = allTerms.first {
+                let text = "The documents state a sentence for \(name) only in a separate case: \(quote(other.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([other]), confidence: Confidence(0.6))
+            }
+            let terms = ownTerms
             guard let hit = terms.first else {
                 return refuse("The documents that name \(name) don't state a sentence for \(name).")
             }
@@ -414,9 +444,9 @@ public nonisolated enum ProceedingAnswerer {
             // Judge Daniel P. Jordan III to commercial driver's license fraud").
             // "indicted on Aug. 7, 2008" states a day, not an offence; "charged … with Tyson Depina and
             // Eric Desousa" names co-defendants, not an offence (held-out chronology 10, 2026-10-29).
-            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b"#
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b|\b(?:on|with) (?:federal |criminal |state )?charges? of\b|\bcharg(?:ed|es)\b[^.]{0,80}\bwith\s+(?-i:(?:Attempted\s+|Aggravated\s+)?(?:Production|Possession|Distribution|Receipt|Transfer|Transportation|Conspiracy|Coercion|Enticement|Wire|Mail|Bank|Sexual|Murder|Robbery|Assault|Theft|Fraud|Money|Kidnapping|Arson|Felon|Bribery|Extortion)\b)"#
             // Words an offence is stated in; a sentence of charges that has none is a weaker candidate.
-            let offenceWords = #"(?i)\b(?:counts? of|conspir\w*|fraud\w*|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearms?|guns?|ammunition|weapons?|narcotics?|cocaine|heroin|methamphetamine|fentanyl|marijuana|pornograph\w*|exploit\w*|sexual\w*|minor|child\w*|prostitution|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse|threat\w*|counterfeit\w*|forg\w*|stolen|identity theft|wire|mail|bank|tax|immigration|alien|hate crime|civil rights|espionage|terror\w*|corrupt\w*)\b"#
+            let offenceWords = #"(?i)\b(?:counts? of|manslaughter|homicide|conspir\w*|fraud\w*|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearms?|guns?|ammunition|weapons?|narcotics?|cocaine|heroin|methamphetamine|fentanyl|marijuana|pornograph\w*|exploit\w*|sexual\w*|minor|child\w*|prostitution|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse|threat\w*|counterfeit\w*|forg\w*|stolen|identity theft|wire|mail|bank|tax|immigration|alien|hate crime|civil rights|espionage|terror\w*|corrupt\w*)\b"#
             // "In addition, the indictment charges …" is a supplementary count, not the charge asked about.
             let supplementary = #"(?i)^\W*(?:in addition|additionally|also|further)\b"#
             // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge;
@@ -500,6 +530,10 @@ public nonisolated enum ProceedingAnswerer {
                     // offence — it cannot be the answer to what the person was charged with.
                     - (c.sentence.range(of: #"(?i)\b(?:pleaded|pled|guilty|convicted)\b[^.]{0,40}\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+counts?\s+(?:in|of)\s+(?:a|an|the)\s+(?:federal\s+|superseding\s+)?(?:indictment|information|complaint)\b"#, options: .regularExpression) != nil
                        && c.sentence.range(of: #"(?i)\bcounts? of\s+\w"#, options: .regularExpression) == nil ? 12 : 0)
+                    // ho16 adjudication E: "pled guilty today to a charge stemming from a fatal shooting", "was
+                    // indicted on federal charges in July" name a charge but no offence.
+                    - (c.sentence.range(of: Self.genericCharge, options: .regularExpression) != nil
+                       && c.sentence.range(of: offenceWords, options: .regularExpression) == nil ? 12 : 0)
                     - (relativeClauseOther(c.sentence) ? 9 : 0)
                     - (c.sentence.range(of: otherCourt, options: .regularExpression) != nil ? 6 : 0)
                     - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
@@ -552,7 +586,7 @@ public nonisolated enum ProceedingAnswerer {
                                           confidence: Confidence(0.75))
                 }
             }
-            let text = "The documents say: \(quote(hit.sentence))"
+            let text = "The documents say: \(quote(hit.sentence, around: surname))"
             return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
                                   citations: [VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String(hit.sentence.prefix(200)))],
                                   confidence: Confidence(0.75))

@@ -135,5 +135,85 @@ struct ProceedingHo14FixesTests {
         #expect(ProceedingAnswerer.parse(n("Is there a date on record for when John Ross was pardoned?"))?.ask == .when(.pardoned))
         #expect(ProceedingAnswerer.parse(n("I'm looking for the sentence that John Ross received — what was it?")) != nil)
     }
+
+    // MARK: ho16 adjudication (docs/agent-reviews/accuracy-adjudication-ho16.md), answered wrongly on f0bb8bfd.
+
+    @Test("ho16 B: 'announced today that X was sentenced yesterday afternoon' is yesterday; 'was sentenced March 16, 2017' is that day")
+    func ho16Dates() {
+        let nosack = "Friday, November 20, 2015\nStephen R. Wigginton, United States Attorney for the Southern District of Illinois, announced today that Patrick A. Nosack, 34, of Henderson, Nevada, was sentenced yesterday afternoon to thirty months in federal prison."
+        #expect(day(X.findings(in: nosack, person: "Patrick A. Nosack").first { $0.step == .sentenced }) == "2015-11-19")
+        let gray = "October 12, 2017\nAaron J. Gray, 40, of Mobile, was sentenced March 16, 2017, to 60 months in prison."
+        #expect(day(X.findings(in: gray, person: "Aaron J. Gray").first { $0.step == .sentenced }) == "2017-03-16")
+    }
+
+    @Test("ho16 K: 'Today, a recidivist sex offender pled guilty' is the named defendant's plea; a component heading is not the headline")
+    func ho16AnonymousLead() throws {
+        let text = """
+        U.S. Department of Justice
+        Federal Bureau of Investigation (FBI)
+        FOR IMMEDIATE RELEASE
+        Monday, March 2, 2026
+
+        Repeat Sex Offender Pleads Guilty to Sexual Exploitation of a Child
+
+        Baltimore, Maryland – Today, a recidivist sex offender pled guilty in federal court to more child sex abuse crimes.
+         Patrick Daniel McKernan, 45, of Pasadena, Maryland, is charged with the sexual exploitation of a child.
+         In 2016, McKernan was convicted of possession of child sexual abuse material in the Circuit Court for Anne Arundel County, Maryland.
+        """
+        #expect(X.headline(of: text) == "Repeat Sex Offender Pleads Guilty to Sexual Exploitation of a Child")
+        let plea = X.findings(in: text, person: "Patrick Daniel McKernan").first { $0.step == .pleaded }
+        #expect(day(plea) == "2026-03-02")
+        let a = try #require(ProceedingAnswerer.answer(.init(person: "Patrick Daniel McKernan", ask: .whether(.pleaded)), sources: [.init(objectID: UUID(), text: text)]))
+        #expect(a.body.hasPrefix("Yes"), "\(a.body)")
+    }
+
+    @Test("ho16 K: 'An Allegheny County man was indicted … on charges of distribution …' answers what the named man was charged with")
+    func ho16LeadCharge() throws {
+        let text = """
+        Thursday, July 3, 2014
+        Glassport Man Charged With Distribution And Possession Of Child Pornography
+        PITTSBURGH – An Allegheny County man was indicted on June 24, 2014, by a federal grand jury in Pittsburgh on charges of distribution and possession of material depicting the sexual exploitation of a minor, United States Attorney David J. Hickton announced today.
+        The three-count indictment named Michael George Hadam, 59, of Glassport, Pa., as the sole defendant.
+        """
+        let a = try #require(ProceedingAnswerer.answer(.init(person: "Michael George Hadam", ask: .chargedWith), sources: [.init(objectID: UUID(), text: text)]))
+        #expect(!a.refused && a.body.contains("distribution and possession"), "\(a.body)")
+    }
+
+    @Test("ho16 E: 'a charge stemming from a fatal shooting' and 'indicted on federal charges in July' name no offence")
+    func ho16GenericCharge() throws {
+        let franklin = """
+        Friday, June 14, 2013
+        WASHINGTON – Decordre Franklin, 25, of Washington, D.C., pled guilty today to a charge stemming from a fatal shooting that took place earlier this year in Northeast Washington.
+        Franklin pled guilty in the Superior Court of the District of Columbia to voluntary manslaughter while armed in the slaying of Irving Jones.
+        """
+        let a = try #require(ProceedingAnswerer.answer(.init(person: "Decordre Franklin", ask: .chargedWith), sources: [.init(objectID: UUID(), text: franklin)]))
+        #expect(a.body.contains("voluntary manslaughter"), "\(a.body)")
+        let sisk = """
+        Monday, August 21, 2023
+        BRUNSWICK, GA: Todd Eric Sisk, 48, of Baxley, Ga., is charged via federal indictment with Attempted Production of Child Pornography, which carries a mandatory minimum sentence.
+        Sisk was indicted on federal charges in July, and currently is in custody awaiting further court proceedings.
+        """
+        let b = try #require(ProceedingAnswerer.answer(.init(person: "Todd Eric Sisk", ask: .chargedWith), sources: [.init(objectID: UUID(), text: sisk)]))
+        #expect(b.body.contains("Attempted Production"), "\(b.body)")
+    }
+
+    @Test("ho16 A: a separate case's sentence is not this case's; T: the quote keeps the person's own clause")
+    func ho16SeparateCaseAndQuote() throws {
+        let r1 = "January 7, 2013\nJohn David Farnell, 61, of Fulton, pleaded guilty today to bank robbery. In a separate case, Farnell was sentenced in the Eastern District of Missouri on March 9, 2012, to 13 years and six months in federal prison without parole."
+        let r2 = "April 1, 2013\nJohn David Farnell, 61, of Fulton, was sentenced by U.S. District Judge Brian C. Wimes to five years and 10 months in federal prison without parole. In a separate case, Farnell was sentenced in the Eastern District of Missouri on March 9, 2012, to 13 years and six months in federal prison without parole."
+        let sources: [ProceedingAnswerer.Source] = [.init(objectID: UUID(), text: r1), .init(objectID: UUID(), text: r2)]
+        let a = try #require(ProceedingAnswerer.answer(.init(person: "John David Farnell", ask: .sentenceImposed), sources: sources))
+        #expect(a.body.contains("five years and 10 months") && !a.body.contains("13 years and six months"), "\(a.body)")
+        let long = "HUNTINGTON, W.Va. – Today, Talon Aaron McIntosh, also known as “Trey” and “T,” 28, and Mario Alonzo Pettway III, also known as “Mike,” 23, both of Detroit, Michigan, pleaded guilty to distribution of a quantity of methamphetamine and Ladonna Rae Abner, 49, of Nitro, pleaded guilty to distribution of a quantity of fentanyl, a Schedule II controlled substance."
+        #expect(ProceedingAnswerer.quote(long, around: "abner").contains("distribution of a quantity of fentanyl"))
+    }
+
+    @Test("ho16 C: 'identify the office responsible for prosecuting', 'confirmation that', 'charge(s)' parse")
+    func ho16Parsing() {
+        let n = QuestionCanonicalizer.normalize
+        #expect(ProceedingAnswerer.parse(n("Can you identify the office responsible for prosecuting Tajuana L. Sullivan?"))?.ask == .office)
+        #expect(ProceedingAnswerer.parse(n("Do we have confirmation that Tyler Taylor pled guilty?"))?.ask == .whether(.pleaded))
+        #expect(ProceedingAnswerer.parse(n("I'd like to know the specific charge(s) brought against John B. Hart."))?.ask == .chargedWith)
+    }
 }
 

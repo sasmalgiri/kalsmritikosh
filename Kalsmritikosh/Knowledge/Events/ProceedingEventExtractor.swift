@@ -81,7 +81,8 @@ public nonisolated enum ProceedingEventExtractor {
     }
 
     /// Words that make a sentence about the future or a possibility, not a step taken.
-    static let notYet = #"(?i)\b(?:scheduled to|will be|faces?|facing|could|would|may(?!\s+\d)|might|agreed to|expected to|is set to|set for|awaiting|faces up to|maximum|up to \d+ years)\b"#
+    // "the joint recommendation … is for Bynum to be sentenced to 16 years" (ho16 adjudication F).
+    static let notYet = #"(?i)\b(?:to be sentenced|scheduled to|will be|faces?|facing|could|would|may(?!\s+\d)|might|agreed to|expected to|is set to|set for|awaiting|faces up to|maximum|up to \d+ years)\b"#
 
     /// The steps the text reports for `person` (the name as asked), earliest first, one per step and day.
     public static func findings(in text: String, person: String) -> [Finding] {
@@ -116,7 +117,8 @@ public nonisolated enum ProceedingEventExtractor {
         let firstIntroducedIsAsked = introductionMatches.first.map { m in
             mentionsFully(((text as NSString).substring(with: m.range)).lowercased(), tokens: tokens) } ?? false
         var descriptiveLead: Int?
-        if introductions <= 1 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:An?|The)\s(?:[A-Za-z\-]+,?\s){0,6}(?:man|woman|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
+        // "Baltimore, Maryland – Today, a recidivist sex offender pled guilty …" (ho16 adjudication K).
+        if introductions <= 1 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:Today|Yesterday|Earlier today),\s+(?=[at]))?(?:An?|The|an?|the)\s(?:[A-Za-z\-]+,?\s){0,6}(?:man|woman|offender|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
            i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
@@ -263,7 +265,8 @@ public nonisolated enum ProceedingEventExtractor {
             // that happens to end in "… U.S. Probation Office" is not one (held-out chronology 10).
             guard words >= 4, line.count <= 200,
                   line.range(of: #"(?i)^(?:u\.s\. department|department of|united states attorney|for immediate release|office of|(?:(?:northern|southern|eastern|western|middle|central)\s+)?district of\b)"#, options: .regularExpression) == nil,
-                  words > 7 || line.range(of: #"(?i)\b(?:division|office|bureau|department|section)$"#, options: .regularExpression) == nil,
+                  // "Federal Bureau of Investigation (FBI)" heads a component's release (ho16 adjudication K).
+                  words > 7 || line.range(of: #"(?i)(?:\b(?:division|office|bureau|department|section|administration|service)|\([a-z]{2,6}\))$"#, options: .regularExpression) == nil,
                   fullDate(in: line) == nil || line.count > 40 else { continue }
             // A lead paragraph ("PROVIDENCE, R.I. – …") is not a headline.
             if line.range(of: #"^[A-Z][A-Z .,'\-]{2,40}(?:,|\s[–—-])"#, options: .regularExpression) != nil { return nil }
@@ -407,6 +410,17 @@ public nonisolated enum ProceedingEventExtractor {
                month > pm || (month == pm && day > pd + 1) { year = py - 1 }
             if let year { return (DateComponents(year: year, month: month, day: day), false) }
         }
+        // "Gray was sentenced March 16, 2017": a full date right after the step verb, without "on" (ho16 B′).
+        if attached == nil, let end = stepEndUTF16, end <= ns.length,
+           let re = try? NSRegularExpression(pattern: #"(?i)^,?\s+(?:(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+)?"# + monthPattern + #"\b"#),
+           let m = re.firstMatch(in: ns.substring(from: end), range: NSRange(location: 0, length: ns.length - end)),
+           m.range(at: 3).location != NSNotFound {
+            let tail = ns.substring(from: end) as NSString
+            if let month = months[String(tail.substring(with: m.range(at: 1)).lowercased().prefix(3))],
+               let day = Int(tail.substring(with: m.range(at: 2))), let year = Int(tail.substring(with: m.range(at: 3))), (1...31).contains(day) {
+                return (DateComponents(year: year, month: month, day: day), false)
+            }
+        }
         // "was indicted in April 2016 and arrested yesterday": the step gives only a month, which a day
         // cannot represent — it stays undated rather than borrowing another verb's "yesterday" (ho14 B).
         if let end = stepEndUTF16, end <= ns.length,
@@ -414,6 +428,15 @@ public nonisolated enum ProceedingEventExtractor {
             return (nil, false)
         }
         guard let printed, let date = Calendar(identifier: .gregorian).date(from: printed) else { return (nil, false) }
+        // "announced today that Nosack … was sentenced yesterday afternoon": the relative day attached to
+        // the step is the step's; the announcement's "today" is not (ho16 adjudication B).
+        if let attached {
+            if sentence[attached].lowercased().hasSuffix("yesterday") {
+                if let y = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: date) {
+                    return (Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: y), true)
+                }
+            } else { return (printed, true) }
+        }
         // "was sentenced … on Friday, United States Attorney … announced today": "today" is the
         // announcement's, the weekday is the step's (ho15 adjudication B).
         let todayIsAnnouncement = sentence.range(of: #"(?i)\b(?:announced|said|stated|reported|confirmed)\s+today\b|\btoday\s+announced\b"#, options: .regularExpression) != nil
