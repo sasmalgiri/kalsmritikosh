@@ -243,5 +243,50 @@ struct ProceedingHo14FixesTests {
         // Not a step question: left to the normal pipeline.
         #expect(ProceedingAnswerer.parse(n("What did Tony Newton say after he was sentenced?")) == nil)
     }
+
+    // MARK: ho18 adjudication (docs/agent-reviews/accuracy-adjudication-ho18.md), answered wrongly on 2e70e537.
+
+    @Test("ho18 P: a possessive's conspirators, a co-defendant's headline and a wife's plea are not the person's steps")
+    func ho18OtherPeople() throws {
+        let tavares = "Wednesday, October 30, 2024\nNew Jersey Man Convicted for Stealing COVID-19 Unemployment Benefits\nJose Tavares, 45, of Perth Amboy, was convicted today of conspiracy. Tavares’ conspirators, Yanira Abreu, 43, of Keasby, New Jersey, and Christopher Valerio, 34, of Perth Amboy, New Jersey, have each previously pleaded guilty and were sentenced by Judge Kirsch in the same scheme."
+        let tf = X.findings(in: tavares, person: "Jose Tavares")
+        #expect(!tf.contains { $0.step == .sentenced } && !tf.contains { $0.step == .pleaded }, "\(tf.map(\.step))")
+        let paul = """
+        Wednesday, April 30, 2025
+        Charlotte Man Sentenced To Prison For His Role In Multi-Million Dollar Bank Fraud Scheme
+        CHARLOTTE, N.C. – A Charlotte man was sentenced to prison today for his role in a multi-million dollar bank fraud scheme. Bruce Howard Marko, 66, of Charlotte, was sentenced to 10 years in prison.
+        Marko’s three co-defendants, Kotto Yaphet Paul, 50, of Waxhaw, N.C., Latoya Tamieka Ford, 50, of Covington, Georgia, and Love Norman, 50, of West Palm Beach, Florida, have each pleaded guilty to wire fraud and bank fraud conspiracy and are awaiting sentencing.
+        """
+        #expect(!X.findings(in: paul, person: "Kotto Yaphet Paul").contains { $0.step == .sentenced })
+        let wife = """
+        Tuesday, June 21, 2016
+        Husband, Wife Plead Guilty to Meth Conspiracy
+        Miguel Flores-Ramirez, 33, of Clark, pleaded guilty before U.S. Magistrate Judge Matt J. Whitworth today to the charge contained in an Oct. 1, 2014, federal indictment, conspiracy to distribute methamphetamine.
+        His wife, Kena Marie Flores-Ramirez, pleaded guilty on May 19, 2016, to her role in the conspiracy.
+        """
+        let a = try #require(ProceedingAnswerer.answer(.init(person: "Miguel Flores-Ramirez", ask: .chargedWith), sources: [.init(objectID: UUID(), text: wife)]))
+        #expect(!a.body.contains("His wife"), "\(a.body)")
+    }
+
+    @Test("ho18 B/H/A: a relative clause's plea date, an offence's date and a prior record are not the step's day")
+    func ho18Dates() {
+        let harris = "February 28, 2018\nPine Bluff Man Sentenced to Prison\nElbert Harris, 61, of Pine Bluff, was sentenced today. Judge Baker sentenced Harris, who pleaded guilty to conspiring to commit wire fraud on October 10, 2017, to 33 months’ imprisonment, to be followed by three years of supervised release."
+        let hs = X.findings(in: harris, person: "Elbert Harris").filter { $0.step == .sentenced }
+        #expect(!hs.contains { day($0) == "2017-10-10" }, "\(hs.map { day($0) ?? "-" })")
+        let robbery = "June 24, 2022\nThree Men Indicted\nJohn Doe Smith, 30, of Mobile, and two others were indicted today for conspiring and attempting to commit a robbery of a jewelry store on March 14, 2022."
+        #expect(X.findings(in: robbery, person: "John Doe Smith").first { $0.step == .charged }.map { day($0) } != "2022-03-14")
+        let prior = "July 29, 2015\nAggravated felon pleads guilty\nTimoteo Gonzalez-Leiva, 42, of Honduras, pleaded guilty today to illegal reentry. He was arrested in March of 1998 for first degree robbery in Delaware and sentenced to two years in prison."
+        #expect(!X.findings(in: prior, person: "Timoteo Gonzalez-Leiva").contains { $0.step == .sentenced })
+    }
+
+    @Test("ho18 O/C: the district office outranks an agency heading; two count wordings parse")
+    func ho18OfficeAndCounts() {
+        let text = "Bureau of Alcohol, Tobacco, Firearms and Explosives\nSeptember 2, 2020\nJackson Man Sentenced\nThis case was prosecuted as part of Project Safe Neighborhoods, an initiative by the U.S. Attorney’s Office for the Southern District of Mississippi."
+        let offices = ProceedingAnswerer.offices(in: text)
+        #expect(offices.contains { $0.contains("Southern District of Mississippi") } && !offices.contains { $0.hasPrefix("Bureau of Alcohol") }, "\(offices)")
+        let n = QuestionCanonicalizer.normalize
+        #expect(ProceedingAnswerer.parse(n("I need a count — how many press releases are about Craig Cinelli?"))?.ask == .documentCount)
+        #expect(ProceedingAnswerer.parse(n("Could you count up the press releases that mention Jose Tavares?"))?.ask == .documentCount)
+    }
 }
 

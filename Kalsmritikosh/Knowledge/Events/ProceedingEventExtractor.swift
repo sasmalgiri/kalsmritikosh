@@ -175,9 +175,13 @@ public nonisolated enum ProceedingEventExtractor {
                     let before = named.contains { m in
                         guard m.lowerBound < r.lowerBound else { return false }
                         let between = s[m.upperBound..<r.lowerBound]
+                        // "Tavares’ conspirators, Yanira Abreu … were sentenced": the people the possessive
+                        // names took the step, not the person (ho18 adjudication P).
+                        if between.range(of: #"^['’]s?\s+(?:\w+\s+){0,2}?(?:co-?conspirators?|conspirators?|co-?defendants?|accomplices?|associates?|partners?|wife|husband|brother|sister|son|daughter|father|mother|employees?|company|attorneys?|lawyers?)\b"#,
+                                         options: .regularExpression) != nil { return false }
                         // "Steed and her co-defendant Upchurch were sentenced" is both of them.
                         if s[r].hasPrefix("were") { return true }
-                        return between.range(of: #"\b(?:co-?defendants?|co-?conspirators?|associates?|accomplices?|partners?|wife|husband|brother|sister|son|daughter|father|mother)\b"#,
+                        return between.range(of: #"\b(?:co-?defendants?|co-?conspirators?|conspirators?|associates?|accomplices?|partners?|wife|husband|brother|sister|son|daughter|father|mother)\b"#,
                                              options: .regularExpression) == nil
                     }
                     let rightAfter = named.contains { $0.lowerBound >= r.lowerBound && s.distance(from: r.lowerBound, to: $0.lowerBound) <= 60 }
@@ -191,7 +195,22 @@ public nonisolated enum ProceedingEventExtractor {
                 if step == .convicted || step == .sentenced,
                    s.range(of: #"\bpreviously (?:been )?convicted\b|\bconvicted previously\b|\bprior (?:felony )?convictions?\b|\bwas on (?:probation|parole)\b"#, options: .regularExpression) != nil { continue }
                 if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
-                var (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
+                // "He was arrested in March of 1998 … and sentenced to two years" in a 2015 release: a sentence
+                // whose only years lie ten or more years before the release is the person's earlier record,
+                // not a step of this case (ho18 adjudication A). A later release restating this case's own
+                // sentence (a pardon, an appeal) states it unconditionally and is kept when it says "this case"
+                // or names the release's own matter; a decade is the margin that keeps such restatements.
+                if step == .sentenced || step == .convicted, let py = printed?.year {
+                    let years = s.matches(of: /\b(19|20)\d\d\b/).compactMap { Int(String(s[$0.range])) }
+                    if !years.isEmpty, years.allSatisfy({ $0 <= py - 10 }),
+                       s.range(of: #"\b(?:pardon\w*|commut\w*|appeal\w*|this case)\b"#, options: .regularExpression) == nil { continue }
+                }
+                // The step's day is read after its VERB: in "Judge Baker sentenced Harris, who pleaded guilty …
+                // on October 10, 2017, to 33 months" the date lies inside the sentencing pattern but belongs to
+                // the relative clause's plea (ho18 adjudication B).
+                let verbEnd = s[r].range(of: #"\b(?:sentenced|pleaded|pled|pleads|pleading|convicted|found guilty|charged|indicted|arrested|arraigned|acquitted|pardoned|released|verdicts?)\b"#, options: .regularExpression)
+                    .map { s.distance(from: s.startIndex, to: $0.upperBound) } ?? s.distance(from: s.startIndex, to: r.upperBound)
+                var (day, relative) = stepDay(sentence, printed: printed, stepEnd: verbEnd)
                 // "was sentenced today … after pleading guilty in March": the participle reports an EARLIER
                 // plea; the sentence's own day is the sentencing's (ho14 adjudication D). Undated unless the
                 // plea carries its own explicit date right after it.
@@ -216,12 +235,21 @@ public nonisolated enum ProceedingEventExtractor {
         // A release's headline states its step ("Man Arrested for Possession …") while its lead only
         // says what happened in court that day ("Kenneth James … made his initial appearance"): the
         // step is reported on the document's printed date, undated in itself.
-        if let title = headline(of: text), mentionsFully(String(lower.prefix(1500)), tokens: tokens) {
+        // "Charlotte Man Sentenced …" over Marko's sentencing, where Paul is one of three co-defendants "awaiting
+        // sentencing": the headline is about the release's own subject (ho18 adjudication P).
+        let awaits = all.contains { sentence in
+            let l = sentence.lowercased()
+            return surnames.contains(where: { l.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil })
+                && l.range(of: #"\b(?:awaiting|awaits|pending) sentencing\b|\bscheduled to be sentenced\b|\bwill be sentenced\b"#, options: .regularExpression) != nil
+        }
+        if let title = headline(of: text), mentionsFully(String(lower.prefix(1500)), tokens: tokens),
+           introductions <= 1 || firstIntroducedIsAsked {
             let t = title.lowercased()
             let headlineSteps: [(String, Step)] = [("sentenced", .sentenced), ("pleads guilty", .pleaded), ("pleaded guilty", .pleaded),
                                                    ("convicted", .convicted), ("found guilty", .convicted), ("indicted", .charged),
                                                    ("charged", .charged), ("arrested", .arrested), ("acquitted", .acquitted), ("pardoned", .pardoned)]
-            if let step = headlineSteps.first(where: { t.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil })?.1 {
+            if let step = headlineSteps.first(where: { t.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil })?.1,
+               !(step == .sentenced && awaits) {
                 // "Owner … Sentenced to 113 Months in Prison" — the headline's term, when no sentence
                 // in the body states one for this person.
                 let detail = step == .sentenced ? sentenceDetail(title) : nil
@@ -391,7 +419,7 @@ public nonisolated enum ProceedingEventExtractor {
             // "announced today that Neal … was sentenced …. stated that on October 20, 2015, Neal sold …",
             // "Today's indictment alleges that Bagley stole … on June 22, 2014": a date inside a reported
             // statement or an account of the conduct is that conduct's day, not the step's (ho14 adjudication B).
-            return between.range(of: #"(?i)\b(?:stated|said|says|alleges?|alleged|alleging|admitted|according to|court (?:documents|records)|records show|evidence (?:showed|presented)|sold|stole|robbed|distributed|possessed|shot|killed|defrauded|received|transferred|wired|selling|stealing|robbing|distributing|possessing|shooting|killing|defrauding|receiving|transferring|wiring|committing|manufacturing|carrying|using|making|smuggling|trafficking|embezzling)\b"#, options: .regularExpression) == nil
+            return between.range(of: #"(?i)\b(?:stated|said|says|alleges?|alleged|alleging|admitted|according to|court (?:documents|records)|records show|evidence (?:showed|presented)|sold|stole|robbed|distributed|possessed|shot|killed|defrauded|received|transferred|wired|selling|stealing|robbing|distributing|possessing|shooting|killing|defrauding|receiving|transferring|wiring|committing|manufacturing|carrying|using|making|smuggling|trafficking|embezzling|conspiring|attempting|commit|threatening|stemming from|arising (?:out of|from)|in connection with|relat(?:ed|ing) to)\b"#, options: .regularExpression) == nil
         }
         // "was sentenced today …, on December 15, 2023, Smith …" (two sentences a text conversion ran
         // together): "today"/"yesterday" attached to the step wins over a date further along.

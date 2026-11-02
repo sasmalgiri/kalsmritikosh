@@ -99,7 +99,11 @@ public nonisolated enum ProceedingAnswerer {
         // "public statements or press releases" (held-out chronology 11, 2026-10-30).
         let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+|public\s+)?(?:(?:statements|notices|bulletins)\s+(?:or|and)\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements|statements)\b"#
         // "a count of how many press releases reference X" — the count phrase may wrap the how-many one.
+        // "I need a count — how many press releases are about X?", "Could you count up the press releases that
+        // mention X?" (ho18 adjudication C).
         if q.range(of: #"^(?:roughly\s+|approximately\s+|about\s+|around\s+)?how many\s+"# + documents, options: .regularExpression) != nil
+            || q.range(of: #"\bhow many\s+"# + documents, options: .regularExpression) != nil
+            || q.range(of: #"\bcount(?:\s+up)?\s+(?:the\s+|all\s+(?:the\s+)?|how many\s+)?"# + documents, options: .regularExpression) != nil
             || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?(?:how many\s+)?"# + documents, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .documentCount)
         }
@@ -230,12 +234,25 @@ public nonisolated enum ProceedingAnswerer {
         if let announced = IssuingOfficeGate.office(in: text), !out.contains(where: { announced.contains($0) || $0.contains(announced) }) {
             out.append(announced)
         }
+        // "… an initiative by the U.S. Attorney’s Office for the Southern District of Mississippi" in a release
+        // headed by an investigating agency: the prosecuting office is the district's (ho18 adjudication O).
+        if let r = text.range(of: #"\b(?:U\.S\.|United States) Attorney[’']s Office for the (?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression),
+           let d = text[r].range(of: #"(?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
+            let district = String(text[r][d])
+            if !out.contains(where: { $0.contains(district) }) { out.append("the U.S. Attorney's Office for the \(district)") }
+        }
         if let r = text.range(of: #"(?i)\bprosecut\w*\b[^.]{0,120}?\bfor the ((?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
             let span = String(text[r])
             if let d = span.range(of: #"(?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
                 let district = String(span[d])
                 if !out.contains(where: { $0.contains(district) }) { out.append("the U.S. Attorney's Office for the \(district)") }
             }
+        }
+        // An investigating agency (FBI, DEA, ATF, Marshals, an Inspector General) investigates; when a district
+        // office is named too, the agency is not given as the prosecuting office.
+        let agency = #"^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Office of the Inspector General)"#
+        if out.contains(where: { $0.contains("District of") }) {
+            out.removeAll { $0.range(of: agency, options: .regularExpression) != nil }
         }
         return out
     }
@@ -497,6 +514,9 @@ public nonisolated enum ProceedingAnswerer {
                     guard let verb = low.range(of: statesOffence, options: .regularExpression),
                           let at = low.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: .regularExpression),
                           at.lowerBound < verb.lowerBound else { continue }
+                    // "His wife, Kena Marie Flores-Ramirez, pleaded guilty …" is not Miguel Flores-Ramirez's plea
+                    // (ho18 adjudication P): the surname follows another given name.
+                    if sent.count == low.count, ProceedingEventExtractor.namesSomeoneElse(sent, at: NSRange(at, in: low), asked: ProceedingEventExtractor.nameTokens(parsed.person)) { continue }
                     if !candidates.contains(where: { $0.sentence == sent }) { candidates.append(Candidate(sentence: sent, objectID: src.objectID, rank: 2)) }
                 }
             }
