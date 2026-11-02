@@ -3298,6 +3298,12 @@ public final class AppState {
     /// no ledger is wired or persistence failed.
     @discardableResult
     public func recordAnswer(question: String, answer: VerifiedAnswer) async -> UUID? {
+        // The brain already committed this answer's durable revision (AEE-M2): writing it again made
+        // every answer appear twice in the Answer Journal (user evaluation 2026-11-02, minor 4).
+        if let committed = answer.ledgerAnswerID {
+            await systemEngine?.onAnswer(answer)
+            return committed
+        }
         guard let snapshots = corpusSnapshots, let ledger = answerLedger else { return nil }
         let snapshot = await currentCorpusSnapshot()
         var persistedID: UUID?

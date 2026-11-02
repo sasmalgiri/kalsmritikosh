@@ -339,6 +339,18 @@ public final class PersonaJobsModel {
         }
     }
 
+    /// The sidebar focus (GuideContent.personas) closest to a Professional Jobs profession.
+    static func guidePersona(for id: ApplicationDefinitionID) -> String? {
+        switch id.rawValue.components(separatedBy: ".").last ?? "" {
+        case "lawyer": return "legal"
+        case "investigator", "siu", "compliance", "forensicaccountant": return "investigation"
+        case "journalist": return "journalism"
+        case "researcher", "genealogist": return "research"
+        case "individual", "contentcreator": return "general"
+        default: return nil
+        }
+    }
+
     static let lastPersonaKey = "kalsmritikosh.jobs.lastPersona"
     static let lastMatterKey = "kalsmritikosh.jobs.lastMatter"
 
@@ -346,6 +358,11 @@ public final class PersonaJobsModel {
         selectedPersona = id
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastPersonaKey)
         UserDefaults.standard.removeObject(forKey: Self.lastMatterKey)
+        // The sidebar's "PERSONA · …" label follows the profession picked here; it kept reading
+        // "RESEARCHER" whatever was chosen (user evaluation 2026-11-02, minor 9).
+        if !TestHost.isActive, let guide = Self.guidePersona(for: id) {
+            UserDefaults.standard.set(guide, forKey: "kalsmritikosh.persona")
+        }
         activeCaseID = nil; activeMatterTitle = nil; lastOutcome = nil; lastError = nil
         ranJobs = []
         scopePreview = nil; lastScopeChange = nil; inclusionReview = nil
