@@ -587,6 +587,14 @@ public struct AskView: View {
                             .buttonStyle(.borderless)
                             .foregroundStyle(.secondary)
                             .help("Copy this answer")
+                            // M2: saving an answer was only a right-click "receipt" in JSON; a plain save is here.
+                            Button {
+                                saveAnswerText(for: turn)
+                            } label: { Label("Save", systemImage: "square.and.arrow.down").labelStyle(.iconOnly)
+                                    .imageScale(.small) }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("Save this answer, with its sources, as a text file")
                         }
                     }
                     // U-1 — ANSWER/EVIDENCE SEPARATION. The Answer section
@@ -733,9 +741,14 @@ public struct AskView: View {
                 .contextMenu {
                     if verifiedAnswers[turn.id] != nil {
                         Button {
+                            saveAnswerText(for: turn)
+                        } label: {
+                            Label("Save answer as text…", systemImage: "square.and.arrow.down")
+                        }
+                        Button {
                             exportAnswerReceipt(for: turn)
                         } label: {
-                            Label("Export verifiable receipt…", systemImage: "checkmark.seal")
+                            Label("Export verifiable receipt (for checking later)…", systemImage: "checkmark.seal")
                         }
                         // W3-2 — hand the answer to DEVONthink with links back to each passage.
                         if ProductModuleFlags.isEnabled(.sendToDevonthink), let verified = verifiedAnswers[turn.id] {
@@ -818,6 +831,36 @@ public struct AskView: View {
         }
     }
 
+    /// Save the answer as plain text with its question and its sources by file name (user evaluation
+    /// 2026-11-02, M2), through the same protected-export gate as Copy.
+    private func saveAnswerText(for turn: ConversationTurn) {
+        #if canImport(AppKit)
+        let idx = turns.firstIndex(where: { $0.id == turn.id })
+        let question = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+        let ids = Array(Set((verifiedAnswers[turn.id]?.citations ?? []).map(\.objectID)))
+        let body = turn.body
+        Task { @MainActor in
+            let names = ids.isEmpty ? [:] : ((try? await appState.objects?.sourceFilenames(for: Set(ids))) ?? [:])
+            let answer = AnswerCopyText.make(body: body, sourceNames: ids.compactMap { names[$0] })
+            let text = (question.isEmpty ? "" : "Question: \(question)\n\n") + answer + "\n"
+            let safeText: String
+            switch ProtectedExport.prepare(text) {
+            case .success(let s): safeText = s
+            case .failure(let refusal): refusal.present(); return
+            }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.plainText]
+            let safe = String(question.prefix(40)).replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            panel.nameFieldStringValue = "Answer — \(safe.isEmpty ? "untitled" : safe).txt"
+            panel.canCreateDirectories = true
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do { try safeText.write(to: url, atomically: true, encoding: .utf8) }
+            catch { KalsmritikoshLog.ui.error("Answer save failed: \(String(describing: error), privacy: .public)") }
+        }
+        #endif
+    }
+
     /// Export a tamper-evident receipt for this answer: the answer text plus each
     /// supporting citation's verbatim snippet + source, chained so any later edit
     /// breaks the seal. Re-checkable offline in Verify Receipt.
@@ -862,7 +905,8 @@ public struct AskView: View {
         let safe = String(suggestedName.prefix(40))
             .replacingOccurrences(of: "/", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "answer" : safe).json"
+        panel.nameFieldStringValue = "Verifiable receipt — \(safe.isEmpty ? "answer" : safe).json"
+        panel.message = "A sealed record of this answer and its passages. Open it later in Verify Receipt to check nothing was changed. To keep a readable copy, use Save answer as text."
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try json.write(to: url, atomically: true, encoding: .utf8) }

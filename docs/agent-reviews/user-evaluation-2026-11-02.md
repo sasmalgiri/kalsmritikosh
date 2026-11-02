@@ -149,4 +149,6 @@ Mean of the agent estimates: 47 (below the conventional 68 "average" line).
 | M4 rest | Advanced is collapsed each time Settings opens (no longer remembered); the red "Model won't run well" banner is not shown when AI is off (no model is needed); the AI-composition toggles ("Apple AI writes the final answer", council, self-critique) are hidden when no AI model is used | build |
 | M5 sidebar reorders; persona reset | the recently-opened rows keep the screens' fixed order; Professional Jobs remembers the profession last picked there and reopens the matter that was open | PersonaJobsModelTests green (restore is off in the test host) |
 
-Still open: M2 receipt save panel (technical JSON name, old default folder) and M3 passage-dump answers to "who signed" / "was invoice 432 paid" — the answer composer for document questions, not the proceeding answerer; the minor items 1–10.
+M2 (save): a Save button beside Copy and "Save answer as text…" in the answer's menu write the question, the plain answer and its sources to a .txt (protected-export gate); the receipt is named "Verifiable receipt — …json" and its panel says what it is for. The old default folder was the evaluator's own last-used folder (macOS remembers it), not an app default.
+
+Still open: M3 passage-dump answers to "who signed" / "was invoice 432 paid" — the answer composer for document questions, not the proceeding answerer; the minor items 1–10.
