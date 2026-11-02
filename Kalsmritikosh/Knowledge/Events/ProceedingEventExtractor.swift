@@ -57,7 +57,8 @@ public nonisolated enum ProceedingEventExtractor {
             // "Patel plead guilty" (a common misspelling) and "… after pleading guilty to …" (ho14 adjudication D/F).
             case .pleaded: return #"\b(?:pleaded|pled|pleads|plead) guilty\b|\b(?:after|upon|following) pleading guilty\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b"#
             // "A federal jury in Fresno today found Adam Alan Henry, 39, of Turlock, guilty of …" (held-out chronology 10).
-            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
+            // "A federal jury delivered a guilty verdict yesterday against X … for …" (ho17 adjudication A).
+            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bguilty verdicts?\b[^.]{0,30}?\bagainst\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
             case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
@@ -188,7 +189,7 @@ public nonisolated enum ProceedingEventExtractor {
                 // A prior record ("had been previously convicted in 2007 … for which he was sentenced to
                 // 12 to 15 months") is background, not a step of this case (held-out chronology 11).
                 if step == .convicted || step == .sentenced,
-                   s.range(of: #"\bpreviously (?:been )?convicted\b|\bprior (?:felony )?convictions?\b|\bwas on (?:probation|parole)\b"#, options: .regularExpression) != nil { continue }
+                   s.range(of: #"\bpreviously (?:been )?convicted\b|\bconvicted previously\b|\bprior (?:felony )?convictions?\b|\bwas on (?:probation|parole)\b"#, options: .regularExpression) != nil { continue }
                 if step == .pleaded, s.range(of: #"\bnot guilty\b"#, options: .regularExpression) != nil { continue }
                 var (day, relative) = stepDay(sentence, printed: printed, stepEnd: s.distance(from: s.startIndex, to: r.upperBound))
                 // "was sentenced today … after pleading guilty in March": the participle reports an EARLIER

@@ -41,6 +41,7 @@ public nonisolated enum ProceedingAnswerer {
         // Claude-reworded closed-case questions, 2026-10-26. The plea verb before "charges": "did X
         // plead guilty to the charges?" asks about the plea (held-out chronology 11, 2026-10-30).
         ("plead guilty", .pleaded), ("pleaded guilty", .pleaded), ("pled guilty", .pleaded), ("plea of guilty", .pleaded),
+        ("pleading guilty", .pleaded), ("pleading", .pleaded),
         ("sentencing", .sentenced), ("guilty plea", .pleaded), ("indictment", .charged), ("conviction", .convicted),
         ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged), ("charging", .charged),
         ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),
@@ -118,6 +119,17 @@ public nonisolated enum ProceedingAnswerer {
         if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b|^(?:exactly\s+)?what\b.*\b(?:charged with|indicted (?:for|on))\b|^(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*charges?\s+(?:that were\s+)?(?:filed|brought|laid|lodged)\s+against\b"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .chargedWith)
         }
+        // ho17 adjudication C — a last resort for wordings the patterns above do not anchor ("I need to
+        // identify the office that prosecuted X — can you confirm that?", "I need to know specifically what X
+        // was charged with"): unanswered, they fell through to passage composers that mixed in other cases.
+        if q.range(of: #"\b(?:office|agency|district)\b[^?]{0,40}\b(?:prosecut\w*|handl\w*|brought)\b|\bprosecut(?:ed|ing) (?:office|agency)\b"#, options: .regularExpression) != nil,
+           !Self.asksSomethingElse(q) {
+            return Parsed(person: name, ask: .office)
+        }
+        if q.range(of: #"\bwhat\b[^?]{0,80}\b(?:charged with|indicted (?:for|on)|accused of)\b|\bwhat\b[^?]{0,40}\b(?:charges?|offen[cs]es?|crimes?)\b[^?]{0,20}\b(?:against|faced|filed)\b"#, options: .regularExpression) != nil,
+           !Self.asksSomethingElse(q) {
+            return Parsed(person: name, ask: .chargedWith)
+        }
         guard let step else { return nil }
         // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
         // "the date on which X was formally charged" (held-out chronology 10, 2026-10-29).
@@ -134,7 +146,24 @@ public nonisolated enum ProceedingAnswerer {
         if full.range(of: #"(?:[:;,—–]|\s-)\s*(?:did|was|were|has|have)\s|\b(?:whether|if)\s+(?!.*\b(?:when|what date|which day)\b)"#, options: .regularExpression) != nil {
             return Parsed(person: name, ask: .whether(step))
         }
+        // ho17 adjudication C, last resort: "Please pull the record showing when X was sentenced", "I'm trying
+        // to find the date X was pardoned — can you confirm?", "Do you happen to know when X was sentenced?"
+        // A question about the step's day is a when-question wherever its wording puts it; one that only
+        // names the step ("the record of X's sentencing") asks whether it happened.
+        guard !Self.asksSomethingElse(q) else { return nil }
+        if q.range(of: #"\b(?:when|what date|which date|what day|which day|the date|the day|on what)\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .when(step))
+        }
+        if q.range(of: #"\b(?:record|evidence|confirmation|proof|indication|documents? (?:showing|that show))\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .whether(step))
+        }
         return nil
+    }
+
+    /// A question about something other than the step itself — what was said, why, how, a reaction — is
+    /// not read by the last-resort rules above.
+    static func asksSomethingElse(_ q: String) -> Bool {
+        q.range(of: #"\b(?:why|how|say|said|says|think|thought|feel|felt|react\w*|respon\w*|explain\w*|describe|tell me about|what happened)\b"#, options: .regularExpression) != nil
     }
 
     public struct Source: Sendable {
@@ -218,7 +247,8 @@ public nonisolated enum ProceedingAnswerer {
 
     /// A prior record in a sentence, not the offence charged ("possession of ammunition by a
     /// convicted felon" and "a firearm for a person she knew to be a convicted felon" are offences).
-    static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )(?<!as a )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
+    // "Tate was also convicted previously in Minnesota federal court for …" (ho17 adjudication A).
+    static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|(?:was |had been |also )*convicted previously|previously (?:been )?sentenced|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )(?<!as a )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
 
     /// A charge named without its offence: "to a charge stemming from …", "on federal charges in July",
     /// "on charges related to …" (the offence is stated, if at all, elsewhere).
@@ -444,7 +474,7 @@ public nonisolated enum ProceedingAnswerer {
             // Judge Daniel P. Jordan III to commercial driver's license fraud").
             // "indicted on Aug. 7, 2008" states a day, not an offence; "charged … with Tyson Depina and
             // Eric Desousa" names co-defendants, not an offence (held-out chronology 10, 2026-10-29).
-            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b|\b(?:on|with) (?:federal |criminal |state )?charges? of\b|\bcharg(?:ed|es)\b[^.]{0,80}\bwith\s+(?-i:(?:Attempted\s+|Aggravated\s+)?(?:Production|Possession|Distribution|Receipt|Transfer|Transportation|Conspiracy|Coercion|Enticement|Wire|Mail|Bank|Sexual|Murder|Robbery|Assault|Theft|Fraud|Money|Kidnapping|Arson|Felon|Bribery|Extortion)\b)"#
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b|\b(?:on|with) (?:federal |criminal |state )?charges? of\b|\bguilty verdicts?\b[^.]{0,30}?\bagainst\b[^.]{0,120}?\b(?:for|of|on)\b|\bcharg(?:ed|es)\b[^.]{0,80}\bwith\s+(?-i:(?:Attempted\s+|Aggravated\s+)?(?:Production|Possession|Distribution|Receipt|Transfer|Transportation|Conspiracy|Coercion|Enticement|Wire|Mail|Bank|Sexual|Murder|Robbery|Assault|Theft|Fraud|Money|Kidnapping|Arson|Felon|Bribery|Extortion)\b)"#
             // Words an offence is stated in; a sentence of charges that has none is a weaker candidate.
             let offenceWords = #"(?i)\b(?:counts? of|manslaughter|homicide|conspir\w*|fraud\w*|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearms?|guns?|ammunition|weapons?|narcotics?|cocaine|heroin|methamphetamine|fentanyl|marijuana|pornograph\w*|exploit\w*|sexual\w*|minor|child\w*|prostitution|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse|threat\w*|counterfeit\w*|forg\w*|stolen|identity theft|wire|mail|bank|tax|immigration|alien|hate crime|civil rights|espionage|terror\w*|corrupt\w*)\b"#
             // "In addition, the indictment charges …" is a supplementary count, not the charge asked about.

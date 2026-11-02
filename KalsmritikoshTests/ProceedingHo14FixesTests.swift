@@ -215,5 +215,33 @@ struct ProceedingHo14FixesTests {
         #expect(ProceedingAnswerer.parse(n("Do we have confirmation that Tyler Taylor pled guilty?"))?.ask == .whether(.pleaded))
         #expect(ProceedingAnswerer.parse(n("I'd like to know the specific charge(s) brought against John B. Hart."))?.ask == .chargedWith)
     }
+
+    // MARK: ho17 adjudication (docs/agent-reviews/accuracy-adjudication-ho17.md), answered wrongly on b1022f77.
+
+    @Test("ho17 A: 'also convicted previously in Minnesota federal court' is a prior case, not the charge; the jury's verdict states it")
+    func ho17PriorConviction() throws {
+        let text = """
+        Wednesday, April 20, 2016
+        Charlotte Pimp Convicted Of Sex Trafficking Of A Minor
+        CHARLOTTE, N.C. – A federal jury delivered a guilty verdict yesterday against Kenwaniee Vontorian Tate, 40, of Charlotte, for sex trafficking of a minor by fraud, force and coercion and sex trafficking of a minor while being required to register as a sex offender under North Carolina law, announced Jill Westmoreland Rose, U.S. Attorney for the Western District of North Carolina.
+        Tate was also convicted previously in Minnesota federal court for conspiracy to commit sex trafficking of a minor for his involvement in a sex trafficking ring that trafficked juvenile females from Minnesota to Las Vegas, Nevada, to engage in commercial sex acts.
+        """
+        let a = try #require(ProceedingAnswerer.answer(.init(person: "Kenwaniee Vontorian Tate", ask: .chargedWith), sources: [.init(objectID: UUID(), text: text)]))
+        #expect(!a.body.contains("convicted previously"), "\(a.body)")
+        #expect(a.body.contains("by fraud, force and coercion"), "\(a.body)")
+    }
+
+    @Test("ho17 C: six wordings that fell through to passage dumps parse to their ask")
+    func ho17Parsing() {
+        let n = QuestionCanonicalizer.normalize
+        #expect(ProceedingAnswerer.parse(n("Is there any record of Jason Anthony Barrett pleading guilty?"))?.ask == .whether(.pleaded))
+        #expect(ProceedingAnswerer.parse(n("I need to know specifically what Jodia Campbell was charged with."))?.ask == .chargedWith)
+        #expect(ProceedingAnswerer.parse(n("I need to identify the office that prosecuted Raekwon Malik Harrod — can you confirm that?"))?.ask == .office)
+        #expect(ProceedingAnswerer.parse(n("Please pull the record showing when Kraig Antonio Davis was sentenced."))?.ask == .when(.sentenced))
+        #expect(ProceedingAnswerer.parse(n("I'm trying to find the date Kraig Antonio Davis was pardoned — can you confirm?"))?.ask == .when(.pardoned))
+        #expect(ProceedingAnswerer.parse(n("Do you happen to know when Tony Newton was sentenced?"))?.ask == .when(.sentenced))
+        // Not a step question: left to the normal pipeline.
+        #expect(ProceedingAnswerer.parse(n("What did Tony Newton say after he was sentenced?")) == nil)
+    }
 }
 
