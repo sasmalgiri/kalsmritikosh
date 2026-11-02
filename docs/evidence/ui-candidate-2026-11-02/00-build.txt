@@ -1,0 +1,14 @@
+Mon Nov  2 15:28:37 IST 2026
+5e754a59de394ae302e10f3e2602b1370456b392
+diff f766b035..HEAD -- Kalsmritikosh:
+(empty above = identical app code)
+ M Kalsmritikosh.xcodeproj/xcuserdata/shirshendusasmal.xcuserdatad/xcschemes/xcschememanagement.plist
+ M Kalsmritikosh/InfoPlist.xcstrings
+ M KalsmritikoshShare/InfoPlist.xcstrings
+?? docs/evidence/ui-candidate-2026-11-02/
+Working tree also has Xcode-made edits to InfoPlist.xcstrings (display-name string 'Investigations Made Easy' -> 'Kalsmritikosh', state new) — localisation metadata, not app code.
+launch Mon Nov  2 15:28:51 IST 2026: open -n -a "/Users/shirshendusasmal/Library/Developer/Xcode/DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app" --args -kalsmritikosh.sampleArchiveMode YES
+82834 /Users/shirshendusasmal/Library/Developer/Xcode/DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh -kalsmritikosh.sampleArchiveMode YES
+Mon Nov  2 15:41:39 IST 2026 note: after the first right-click attempt Xcode (pid 24918) was frontmost; screenshot showed Xcode with no open menu; app re-activated; from here every CGEvent is preceded by activate+front check in the same command.
+Mon Nov  2 15:43:01 IST 2026 note: a Dock context menu for Xcode was found open after the second right-click attempt (cause not established); dismissed by a left click on empty Ask area; no item chosen; Xcode still registered (lsappinfo).
+Mon Nov  2 15:43:18 IST 2026 note: Xcode became frontmost again during the third right-click attempt (full-screen shot shows Xcode, no menu open). CGEvent right-clicks abandoned; AX actions only from here.

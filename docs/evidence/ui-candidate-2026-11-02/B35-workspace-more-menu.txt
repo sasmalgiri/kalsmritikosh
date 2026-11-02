@@ -1,0 +1,3 @@
+              AXMenuItem title="Archive" id=menuAction: [1288,222 140x24] actions=AXCancel,AXPress,AXPick
+              AXMenuItem id=_popUpItemAction: [1288,246 140x11] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="Delete workspace" id=menuAction: [1288,257 140x24] actions=AXCancel,AXPress,AXPick
