@@ -418,7 +418,7 @@ public struct SIUStudioView: View {
             guard let pkg = await storage.package(v, app: appState, authorise: .init(provenance: v.provenance, values: v.gateValues, privileged: SIUReferral.needsPrivilegedSources), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
-            if AppPrinting.run(text: pkg.text, jobTitle: "SIU Report — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            if AppPrinting.run(text: pkg.text, jobTitle: "SIU Report — \(v.title)").released { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
             #endif
         }
     }

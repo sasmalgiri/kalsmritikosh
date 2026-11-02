@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import PDFKit
 @testable import Kalsmritikosh
 
 @Suite("Usability evaluation 2026-11-02 fixes")
@@ -92,5 +93,15 @@ struct UsabilityFixesTests {
                                citations: [], confidence: Confidence(0.75), refused: false, refusalReason: nil)
         #expect(QualityStrip.usedNoModel(a))
         #expect(!QualityStrip.usedNoModel(VerifiedAnswer(body: "Prose.", citations: [], confidence: Confidence(0.75), refused: false, refusalReason: nil)))
+    }
+
+    @Test("Print preview (owner decision 2026-11-02): the text is drawn as PDF pages in the app, no printing system")
+    @MainActor func printPreviewPages() throws {
+        let long = (1...400).map { "Line \($0): the quoted passage and its source." }.joined(separator: "\n")
+        let data = try #require(AppPrinting.pdfData(AppPrinting.textView(long, monospace: true, fontSize: 9)))
+        let doc = try #require(PDFDocument(data: data))
+        #expect(doc.pageCount > 1)
+        #expect(doc.string?.contains("Line 400") == true)
+        #expect(AppPrinting.Outcome.savedAsPDF.released && !AppPrinting.Outcome.cancelled.released)
     }
 }

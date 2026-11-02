@@ -720,12 +720,14 @@ public struct ACHMatrixView: View {
                 case .print:
                     // Candidate UI run (B11): a build without the print entitlement read only "Not
                     // released (cancelled or not available)" — say WHICH, so the person knows to export.
+                    // Owner decision 2026-11-02: without the print entitlement Print opens the print preview;
+                    // saving the pages as a PDF is the release.
                     let printable = AppPrinting.isEntitled
                     let r = await outputs.release(pkg) { text in
-                        AppPrinting.run(text: text, jobTitle: "ACH — \(title)", fontSize: 10) == .printed
+                        AppPrinting.run(text: text, jobTitle: "ACH — \(title)", fontSize: 10).released
                     }
-                    notice = r.status == .released ? "Printed. " + r.summary
-                        : (r.status == .failed && !printable ? AppPrinting.unavailableMessage : r.summary)
+                    notice = r.status == .released ? (printable ? "Printed. " : "Saved as PDF from the print preview. ") + r.summary
+                        : (printable ? r.summary : "Print preview closed — nothing was saved or recorded.")
                 case .share:
                     break
                 }

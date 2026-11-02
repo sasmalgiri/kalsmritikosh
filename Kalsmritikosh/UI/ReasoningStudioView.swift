@@ -757,7 +757,7 @@ public struct ReasoningStudioView: View {
             guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
-            if AppPrinting.run(text: pkg.text, jobTitle: "Root-Cause Analysis — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+            if AppPrinting.run(text: pkg.text, jobTitle: "Root-Cause Analysis — \(v.title)").released { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
             #endif
         }
     }

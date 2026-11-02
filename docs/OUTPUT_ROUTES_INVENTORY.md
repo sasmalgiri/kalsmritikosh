@@ -72,9 +72,10 @@ direct `NSSavePanel` + `write` path remains in the case file screen.
 
 - Route 14: the findings export is protected by its own check and redaction policy but is not yet
   recorded in `case_document_outputs`; its hand-off model records the outcome.
-- Print (routes 11, 13, 17): the app has no `com.apple.security.print` entitlement, so the sandbox refuses
-  the print panel; the app says printing is not available in this build and to export instead (owner decision
-  pending on adding the entitlement).
+- Print (routes 11, 13, 17): owner decision 2026-11-02 — no `com.apple.security.print` entitlement. Every Print
+  button opens a **print preview** (AppPrinting): the same released text laid out as PDF pages drawn in the app,
+  with "Save as PDF…"; only a saved PDF is recorded as a release, closing the preview records nothing. The person
+  prints the PDF from any app.
 - Print and clipboard routes record the digest of the released text; the app never sees the
   printer's or the recipient's bytes, and the record says so.
 

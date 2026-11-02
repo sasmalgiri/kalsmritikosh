@@ -466,7 +466,7 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
             #if os(macOS)
             case "print":
                 // A cancelled print dialog, or a build that cannot print, records nothing.
-                if AppPrinting.run(text: pkg.text, jobTitle: "\(config.name) — \(v.title)") == .printed { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
+                if AppPrinting.run(text: pkg.text, jobTitle: "\(config.name) — \(v.title)").released { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
             #endif
             default: break
             }

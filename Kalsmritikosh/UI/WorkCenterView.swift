@@ -1351,7 +1351,7 @@ public struct WorkCenterView: View {
             do {
                 let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .print, actor: who, citations: [], text: text)
                 let r = await outputs.release(pkg) { t in
-                    AppPrinting.run(text: t, jobTitle: jobTitle, monospace: monospace, fontSize: monospace ? 10 : 9) == .printed
+                    AppPrinting.run(text: t, jobTitle: jobTitle, monospace: monospace, fontSize: monospace ? 10 : 9).released
                 }
                 if r.status == .refused { NSAlert(error: NSError(domain: "CaseOutput", code: 1, userInfo: [NSLocalizedDescriptionKey: r.summary])).runModal() }
             } catch {
