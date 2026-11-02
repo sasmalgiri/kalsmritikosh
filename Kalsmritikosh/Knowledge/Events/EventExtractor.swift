@@ -152,6 +152,11 @@ public struct RuleEventExtractor: EventExtractor {
                 if kind == .contractSigned, let who = Self.extractSignatory(from: object.content) {
                     attributes["signatory"] = AnyCodable(.string(who))
                 }
+                // Candidate UI run (A4) — WHICH invoice / contract / order this event is about, so
+                // the contradiction detector never pairs two differently identified subjects.
+                if let ref = SubjectReference.reference(for: kind, marker: marker, in: object.content) {
+                    attributes[SubjectReference.attributeKey] = AnyCodable(.string(ref))
+                }
                 events.append(.init(
                     kind: kind,
                     date: primaryDate,

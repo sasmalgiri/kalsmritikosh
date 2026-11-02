@@ -329,9 +329,11 @@ public struct ReviewView: View {
             Text(claim).font(.callout).textSelection(.enabled)
             if let ev = evidence {
                 Button {
+                    // A4 — open at the SOURCE's own line for the claim (the ledger's phrasing is not
+                    // in the file, so quoting it highlighted nothing).
                     Task {
-                        if let url = try? await appState.objects?.fetchSourceURL(id: ev) {
-                            viewingSource = ViewedSource(url: url, objectID: ev, quote: claim)
+                        if let opened = await ContradictionSides.open(claim: claim, objectID: ev, appState: appState) {
+                            viewingSource = ViewedSource(url: opened.url, objectID: ev, quote: opened.quote ?? claim)
                         }
                     }
                 } label: {

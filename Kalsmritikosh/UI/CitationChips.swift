@@ -127,6 +127,28 @@ public enum CitedPassageLocator {
         return nil
     }
 
+    /// Candidate UI run (A4) — a contradiction's claim is the ledger's phrasing ("Invoice issued on
+    /// May 30, 2024"), not the source's words, so `locate` finds nothing and the source opened with
+    /// nothing highlighted. This returns the SOURCE's own line that states the claim: the longest
+    /// leading run of the claim's words (at least `minimumProbe` characters) found in the text, widened
+    /// to its line. Nil when not even that is found — the viewer then opens un-highlighted, honestly.
+    public nonisolated static func claimPassage(_ claim: String, in source: String) -> String? {
+        let words = normalize(claim).split(separator: " ")
+        var count = words.count
+        while count > 0 {
+            let probe = words.prefix(count).joined(separator: " ")
+            guard probe.count >= minimumProbe else { return nil }
+            if let r = locate(probe, in: source), let range = Range(r, in: source) {
+                let start = source[..<range.lowerBound].lastIndex(where: \.isNewline).map { source.index(after: $0) } ?? source.startIndex
+                let end = source[range.upperBound...].firstIndex(where: \.isNewline) ?? source.endIndex
+                let line = source[start..<end].trimmingCharacters(in: .whitespaces)
+                return line.isEmpty ? nil : line
+            }
+            count -= 1
+        }
+        return nil
+    }
+
     /// Lower-cased, whitespace runs collapsed to one space.
     nonisolated static func normalize(_ s: String) -> String {
         normalizeWithMap(s).text

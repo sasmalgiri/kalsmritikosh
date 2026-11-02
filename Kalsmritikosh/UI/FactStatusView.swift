@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import os
 
 public struct FactStatusView: View {
     @Environment(AppState.self) private var appState
@@ -25,6 +26,9 @@ public struct FactStatusView: View {
     /// A5.8 — latest human-review verdict per fact id, so a row can show its
     /// verdict and offer to undo it (append-only reversal).
     @State private var reviews: [UUID: FactReview] = [:]
+    /// Candidate UI run (A4) — the conflict behind each contradiction row, so its review form and
+    /// evidence list can name both sources and open each at the passage that states its claim.
+    @State private var contradictionsByID: [UUID: Contradiction] = [:]
 
     public init() {}
 
@@ -63,11 +67,11 @@ public struct FactStatusView: View {
         }
         .task { await load() }
         .sheet(item: $evidenceFor) { item in
-            EvidenceSheet(item: item)
+            EvidenceSheet(item: item, contradiction: contradictionsByID[item.id])
                 .environment(appState)
         }
         .sheet(item: $reviewing) { item in
-            ReviewSheet(item: item) { Task { await load() } }
+            ReviewSheet(item: item, contradiction: contradictionsByID[item.id]) { Task { await load() } }
                 .environment(appState)
         }
     }
@@ -388,6 +392,7 @@ public struct FactStatusView: View {
         )
         items = classified
         reviews = latestReviews
+        contradictionsByID = Dictionary(cons.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         loading = false
     }
 
@@ -410,10 +415,14 @@ public struct FactStatusView: View {
 /// points at a real object — no dead links.
 private struct EvidenceSheet: View {
     let item: FactStatusItem
+    /// The conflict behind a contradiction row (A4): each source opens at its own claim.
+    var contradiction: Contradiction? = nil
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     @State private var objects: [KnowledgeObject] = []
+    /// The source passage each object is opened at (its side's claim, located in its own text).
+    @State private var quotes: [KnowledgeObject.ID: String] = [:]
     @State private var withheldCount = 0
     @State private var loading = true
 
@@ -432,7 +441,7 @@ private struct EvidenceSheet: View {
                 } else {
                     List(objects) { ko in
                         NavigationLink {
-                            SourceViewer(url: ko.sourceFile, koID: ko.id)
+                            SourceViewer(url: ko.sourceFile, koID: ko.id, quote: quotes[ko.id])
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "doc.text")
@@ -470,6 +479,14 @@ private struct EvidenceSheet: View {
                 }
             }
             objects = loaded
+            if let contradiction {
+                for ko in loaded {
+                    if let claim = ContradictionSides.claim(of: contradiction, for: ko.id),
+                       let passage = CitedPassageLocator.claimPassage(claim, in: ko.content) {
+                        quotes[ko.id] = passage
+                    }
+                }
+            }
             withheldCount = withheld
             loading = false
         }
@@ -482,9 +499,15 @@ private struct EvidenceSheet: View {
 /// `fact_reviews` row. Nothing is overwritten; the prior value is captured.
 private struct ReviewSheet: View {
     let item: FactStatusItem
+    /// Candidate UI run (A4) — the conflict under review: the form names both sources and opens
+    /// each at its claim, as the Review screen's claim boxes do (UI/ReviewView.swift).
+    let contradiction: Contradiction?
     let onDone: () -> Void
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+
+    @State private var sourceNames: [UUID: String] = [:]
+    @State private var viewingSource: ContradictionSides.OpenedSource?
 
     @State private var action: FactReview.Action = .accept
     @State private var reason: String = ""
@@ -525,6 +548,12 @@ private struct ReviewSheet: View {
                     Text(item.title).font(.callout.weight(.medium))
                     Text(item.reason).font(.caption).foregroundStyle(.secondary)
                 }
+                if let contradiction {
+                    Section("Sources") {
+                        sideRow("Claim A", claim: contradiction.claimA, evidence: contradiction.evidenceA)
+                        sideRow("Claim B", claim: contradiction.claimB, evidence: contradiction.evidenceB)
+                    }
+                }
                 Section("Verdict") {
                     Picker("Action", selection: $action) {
                         ForEach(availableActions, id: \.self) { a in
@@ -556,6 +585,42 @@ private struct ReviewSheet: View {
             }
         }
         .frame(minWidth: 480, minHeight: 400)
+        .task {
+            guard let contradiction, let repo = appState.objects else { return }
+            let ids = Set([contradiction.evidenceA, contradiction.evidenceB].compactMap { $0 })
+            do { sourceNames = try await repo.sourceFilenames(for: ids) } catch {
+                KalsmritikoshLog.app.error("Review sheet: source names failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        .sheet(item: $viewingSource) { v in
+            VStack(spacing: 0) {
+                SourceViewer(url: v.url, koID: v.objectID, quote: v.quote)
+                HStack { Spacer(); Button("Done") { viewingSource = nil }.keyboardShortcut(.defaultAction) }.padding(10)
+            }
+            .frame(minWidth: 720, minHeight: 520)
+        }
+    }
+
+    /// One side of the conflict: its claim, and its source by name — opening at the claim.
+    @ViewBuilder
+    private func sideRow(_ title: String, claim: String, evidence: UUID?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+            Text(claim).font(.callout).textSelection(.enabled)
+            if let ev = evidence {
+                Button {
+                    Task { viewingSource = await ContradictionSides.open(claim: claim, objectID: ev, appState: appState) }
+                } label: {
+                    Label(sourceNames[ev] ?? "Open the source", systemImage: "doc.text.magnifyingglass").font(.caption2)
+                }
+                .buttonStyle(.link)
+                .help("Open this source at the passage that states the claim.")
+                .accessibilityIdentifier("findings.review.source")
+            } else {
+                Label("source not linked", systemImage: "questionmark.circle")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
     }
 
     private func save() async {
@@ -575,5 +640,36 @@ private struct ReviewSheet: View {
         saving = false
         onDone()
         dismiss()
+    }
+}
+
+// MARK: - Contradiction sides
+
+/// Candidate UI run (A4) — shared by the Findings review form and the Review screen: which claim a
+/// source stands behind, and how to open that source at the passage stating it.
+enum ContradictionSides {
+    struct OpenedSource: Identifiable { let id = UUID(); let url: URL; let objectID: UUID; let quote: String? }
+
+    /// The claim the given evidence object supports in this conflict, if it is one of its sides.
+    nonisolated static func claim(of c: Contradiction, for objectID: UUID) -> String? {
+        if c.evidenceA == objectID { return c.claimA }
+        if c.evidenceB == objectID { return c.claimB }
+        return nil
+    }
+
+    /// Resolve the source and the passage in it that states `claim` (the source's own words, so the
+    /// viewer can highlight it). Nil when the source cannot be reopened.
+    @MainActor
+    static func open(claim: String, objectID: UUID, appState: AppState) async -> OpenedSource? {
+        guard let repo = appState.objects else { return nil }
+        do {
+            guard let url = try await repo.fetchSourceURL(id: objectID) else { return nil }
+            let content = try await repo.load(id: objectID)?.content ?? ""
+            let quote = CitedPassageLocator.claimPassage(claim, in: content) ?? claim
+            return OpenedSource(url: url, objectID: objectID, quote: quote)
+        } catch {
+            KalsmritikoshLog.app.error("Contradiction source open failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }

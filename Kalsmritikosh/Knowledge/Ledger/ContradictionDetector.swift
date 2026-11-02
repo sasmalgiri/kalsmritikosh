@@ -19,6 +19,10 @@
 //      excluded — comparing them by day would manufacture false conflicts.
 //    * A conflict needs TWO distinct source objects.
 //    * Output is capped so one pathological title can't flood the ledger.
+//    * Same identified subject (candidate UI run 2026-11-02, A4): a generic
+//      title ("Invoice issued") does not say WHICH invoice. Two events whose
+//      sources identify DIFFERENT subjects (invoice 401 vs invoice 432) are
+//      two facts, never a conflict — see `subjectGroups` / SubjectReference.
 //
 
 import Foundation
@@ -54,7 +58,9 @@ public nonisolated struct ContradictionDetector: Sendable {
         let tolerance = toleranceDays * 86_400
         var out: [Contradiction] = []
 
-        for (_, group) in groups {
+        // A4 — one title group per identified subject (invoice 401 never pairs with invoice 432).
+        let subjectGroups = groups.values.flatMap { Self.subjectGroups($0, ref: SubjectReference.reference(of:)) }
+        for group in subjectGroups {
             guard group.count >= 2 else { continue }
             let sorted = group.sorted { $0.date < $1.date }
             guard let earliest = sorted.first, let latest = sorted.last else { continue }
@@ -80,7 +86,7 @@ public nonisolated struct ContradictionDetector: Sendable {
             ))
             if out.count >= limit { break }
         }
-        return out
+        return Self.uniquePairs(out)
     }
 
     /// A5.6 — SAME-EVENT AMOUNT CONFLICT. When two independent sources describe
@@ -117,7 +123,9 @@ public nonisolated struct ContradictionDetector: Sendable {
         }
 
         var out: [Contradiction] = []
-        for (_, group) in groups {
+        // A4 — one title group per identified subject (see detectEventDateConflicts).
+        let subjectGroups = groups.values.flatMap { Self.subjectGroups($0, ref: { SubjectReference.reference(of: $0.0) }) }
+        for group in subjectGroups {
             guard group.count >= 2 else { continue }
             // Compare the smallest vs largest amount within the SAME currency.
             let byCurrency = Dictionary(grouping: group, by: { $0.2 })
@@ -146,7 +154,7 @@ public nonisolated struct ContradictionDetector: Sendable {
             }
             if out.count >= limit { break }
         }
-        return out
+        return Self.uniquePairs(out)
     }
 
     /// A5.6 — SAME-EVENT LOCATION CONFLICT. Two independent sources place what
@@ -177,6 +185,7 @@ public nonisolated struct ContradictionDetector: Sendable {
                 for j in (i + 1)..<group.count {
                     let a = group[i], b = group[j]
                     guard a.1 != b.1, a.0.sourceObjectID != b.0.sourceObjectID else { continue }
+                    guard Self.sameSubject(a.0, b.0) else { continue }
                     out.append(Contradiction(
                         kind: .location,
                         description: "Conflicting locations for \"\(a.0.title)\"",
@@ -382,6 +391,33 @@ public nonisolated struct ContradictionDetector: Sendable {
     }
 
     // MARK: Helpers
+
+    /// Candidate UI run (A4) — two events can describe the same occurrence only when their sources
+    /// do not identify DIFFERENT subjects. Same reference, or at least one side unidentified
+    /// (title-only grouping, as before) — but "invoice 401" and "invoice 432" never pair.
+    static func sameSubject(_ a: Event, _ b: Event) -> Bool {
+        guard let ra = SubjectReference.reference(of: a), let rb = SubjectReference.reference(of: b) else { return true }
+        return ra == rb
+    }
+
+    /// Split one title group into same-subject groups: one per identified subject (its own events
+    /// plus the unidentified ones, which may be any of them); the whole group when nothing in it is
+    /// identified. Two differently identified events never share a group.
+    static func subjectGroups<T>(_ group: [T], ref: (T) -> String?) -> [[T]] {
+        let refs = Set(group.compactMap(ref))
+        guard !refs.isEmpty else { return [group] }
+        return refs.sorted().map { r in group.filter { ref($0) == nil || ref($0) == r } }
+    }
+
+    /// The same pair of sources found through two subject groups (an unidentified event sits in
+    /// each) is ONE conflict, kept once.
+    private static func uniquePairs(_ found: [Contradiction]) -> [Contradiction] {
+        var seen = Set<String>()
+        return found.filter { c in
+            let pair = [c.evidenceA?.uuidString ?? "", c.evidenceB?.uuidString ?? ""].sorted()
+            return seen.insert("\(c.kind.rawValue)|\(c.claimA)|\(c.claimB)|\(pair[0])|\(pair[1])").inserted
+        }
+    }
 
     /// Attribution verbs whose meaning negates the claim they introduce. The
     /// StatementExtractor's verb set is otherwise affirming (said/confirmed/…).

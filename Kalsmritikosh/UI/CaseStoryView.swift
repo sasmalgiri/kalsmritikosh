@@ -25,24 +25,31 @@ public struct CaseStoryView: View {
     public init() {}
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            if generating {
-                ProgressView("Assembling the story from your documents…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let markdown {
-                result(markdown)
-            } else if didRun {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents.",
-                          systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
-                    FirstRunHint(message: "If the archive is still empty, add your files first — stories are built only from what's been read.")
+        // Candidate UI run (2026-11-02): this screen drew BLANK — on macOS 26 the split-view detail
+        // proposes a pathological size to non-scroll content, the wrapped text's minimum height grew
+        // the whole split view (2 478 pt) and the window showed only its middle. Pinned to the real
+        // viewport (as Ask is), the content's size can no longer drive the container's.
+        GeometryReader { viewport in
+            VStack(alignment: .leading, spacing: 12) {
+                header
+                if generating {
+                    ProgressView("Assembling the story from your documents…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let markdown {
+                    result(markdown)
+                } else if didRun {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents.",
+                              systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
+                        FirstRunHint(message: "If the archive is still empty, add your files first — stories are built only from what's been read.")
+                    }
+                    Spacer()
+                } else {
+                    Spacer()
                 }
-                Spacer()
-            } else {
-                Spacer()
             }
+            .padding(16)
+            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
         }
-        .padding(16)
         .navigationTitle("Case Story")
     }
 

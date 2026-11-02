@@ -718,10 +718,14 @@ public struct ACHMatrixView: View {
                     }
                     notice = r.status == .released ? "Copied. " + r.summary : r.summary
                 case .print:
+                    // Candidate UI run (B11): a build without the print entitlement read only "Not
+                    // released (cancelled or not available)" — say WHICH, so the person knows to export.
+                    let printable = AppPrinting.isEntitled
                     let r = await outputs.release(pkg) { text in
                         AppPrinting.run(text: text, jobTitle: "ACH — \(title)", fontSize: 10) == .printed
                     }
-                    notice = r.status == .released ? "Printed. " + r.summary : r.summary
+                    notice = r.status == .released ? "Printed. " + r.summary
+                        : (r.status == .failed && !printable ? AppPrinting.unavailableMessage : r.summary)
                 case .share:
                     break
                 }

@@ -3640,7 +3640,7 @@ public final class AppState {
         guard let events, let contradictions else { return 0 }
         let activity = beginProcess("Scanning for contradictions")
         defer { finishProcess(activity) }
-        let recent = (try? await events.recent(limit: 2_000)) ?? []
+        let recent = await withSubjectReferences((try? await events.recent(limit: 2_000)) ?? [])
         let detector = ContradictionDetector()
         // A5.6 — date + amount detectors over the same event set.
         var found = detector.detectEventDateConflicts(recent)
@@ -3669,6 +3669,35 @@ public final class AppState {
         self.proactiveContradictionCount = openCount
         KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflict(s) (date + amount + location + signature + causal + statement)")
         return found.count
+    }
+
+    /// Candidate UI run (A4) — events extracted before SubjectReference existed carry no subject
+    /// identifier, so the detector could not tell invoice 401 from invoice 432. Read it from the
+    /// event's own source now (only for kinds that name an identified subject, once per source).
+    private func withSubjectReferences(_ events: [Event]) async -> [Event] {
+        guard let objects else { return events }
+        var contentBySource: [KnowledgeObject.ID: String] = [:]
+        var out: [Event] = []
+        out.reserveCapacity(events.count)
+        for event in events {
+            guard SubjectReference.reference(of: event) == nil,
+                  SubjectReference.family(for: event.kind) != nil else { out.append(event); continue }
+            if contentBySource[event.sourceObjectID] == nil {
+                do {
+                    contentBySource[event.sourceObjectID] = try await objects.load(id: event.sourceObjectID)?.content ?? ""
+                } catch {
+                    KalsmritikoshLog.knowledge.error("Subject reference: source load failed: \(error.localizedDescription, privacy: .public)")
+                    contentBySource[event.sourceObjectID] = ""
+                }
+            }
+            let content = contentBySource[event.sourceObjectID] ?? ""
+            if let ref = SubjectReference.reference(for: event.kind, marker: event.summary, in: content) {
+                out.append(event.addingAttributes([SubjectReference.attributeKey: AnyCodable(.string(ref))]))
+            } else {
+                out.append(event)
+            }
+        }
+        return out
     }
 
     /// Data-grounded "questions from your archive" (NotebookLM-style suggestions,
