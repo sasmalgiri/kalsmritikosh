@@ -123,10 +123,42 @@ enum AppPrinting {
         }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.title = "Print preview — \(jobTitle)"
-        let pdfView = PDFView()
-        pdfView.document = document
-        pdfView.autoScales = true
-        pdfView.displayMode = .singlePageContinuous
+        // The pages as images, drawn now: a PDFView renders its tiles asynchronously and inside the modal
+        // preview they never appeared (blank pages on screen while the saved PDF was correct — agent UI
+        // runs on 82127048 and 8de27cf8).
+        let pages = NSStackView()
+        pages.orientation = .vertical
+        pages.spacing = 12
+        pages.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            let image = page.thumbnail(of: NSSize(width: bounds.width * 1.5, height: bounds.height * 1.5), for: .mediaBox)
+            let imageView = NSImageView(image: image)
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.wantsLayer = true
+            imageView.layer?.backgroundColor = NSColor.white.cgColor
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            imageView.widthAnchor.constraint(equalToConstant: 612).isActive = true
+            imageView.heightAnchor.constraint(equalToConstant: 612 * bounds.height / max(bounds.width, 1)).isActive = true
+            imageView.setAccessibilityLabel("Page \(index + 1) of \(document.pageCount)")
+            pages.addArrangedSubview(imageView)
+        }
+        let pdfView = NSScrollView()
+        pdfView.hasVerticalScroller = true
+        pdfView.drawsBackground = true
+        pdfView.backgroundColor = .underPageBackgroundColor
+        let flipped = FlippedView()
+        flipped.translatesAutoresizingMaskIntoConstraints = false
+        pages.translatesAutoresizingMaskIntoConstraints = false
+        flipped.addSubview(pages)
+        NSLayoutConstraint.activate([
+            pages.topAnchor.constraint(equalTo: flipped.topAnchor), pages.bottomAnchor.constraint(equalTo: flipped.bottomAnchor),
+            pages.centerXAnchor.constraint(equalTo: flipped.centerXAnchor),
+            flipped.widthAnchor.constraint(greaterThanOrEqualTo: pages.widthAnchor),
+        ])
+        pdfView.documentView = flipped
+        flipped.widthAnchor.constraint(equalTo: pdfView.contentView.widthAnchor).isActive = true
         let note = NSTextField(labelWithString: "Printing from this app is not available. Save the pages as a PDF and print the file from any app.")
         note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         note.textColor = .secondaryLabelColor
@@ -148,6 +180,9 @@ enum AppPrinting {
         window.orderOut(nil)
         return handler.saved ? .savedAsPDF : .cancelled
     }
+
+    /// Top-down coordinates for the scrolled page stack (first page at the top).
+    final class FlippedView: NSView { override var isFlipped: Bool { true } }
 
     /// Button targets for the modal preview window.
     final class PreviewHandler: NSObject {

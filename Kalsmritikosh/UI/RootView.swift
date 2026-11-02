@@ -686,15 +686,7 @@ public struct RootView: View {
                 VStack(spacing: 0) {
                     appHeader
                     Divider()
-                    // Every screen is pinned to the real detail viewport. On macOS 26 the split-view detail
-                    // proposes pathological sizes to non-scroll content; a screen whose content grew taller
-                    // than the window was drawn above it (Verify Receipt, Case Story, Cross-Doc Matrix,
-                    // Reasoning Studio — agent UI runs on the candidate) and moved the sidebar rows with it.
-                    GeometryReader { viewport in
-                        detail
-                            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .top)
-                            .clipped()
-                    }
+                    detail
                 }
                 .navigationTitle(selection?.title ?? "Investigations Made Easy")
                 .toolbar {
@@ -1460,13 +1452,16 @@ public struct RootView: View {
         case .notebook:     NotebookView()
         case .dossier:      DossierView()
         case .explore:      ExplorerView()
-        case .matrix:       CrossDocumentMatrixView()
+        // Pinned to the real viewport like Ask: on macOS 26 their content's height grew the split view and
+        // the screen was drawn above the window (agent UI run on 82127048). Pinning EVERY screen pushed
+        // Work Center's and Knowledge's own columns under the sidebar (run on 8de27cf8), so only these are.
+        case .matrix:       GeometryReader { g in CrossDocumentMatrixView().frame(width: g.size.width, height: g.size.height, alignment: .topLeading) }
         case .compareDocs:  StructuredComparisonView()
         case .connections:  ConnectionFinderView()
         case .fundFlow:     FundFlowView()
         case .emailThreads: EmailThreadsView()
         case .story:        CaseStoryView()
-        case .reasoning:    ReasoningStudioView()
+        case .reasoning:    GeometryReader { g in ReasoningStudioView().frame(width: g.size.width, height: g.size.height, alignment: .topLeading) }
         case .hypotheses:   ACHMatrixView()
         case .hrStudio:     WorkplaceStudioView()
         case .privilegeStudio: PrivilegeLogStudioView()

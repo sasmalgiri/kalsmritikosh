@@ -9,6 +9,7 @@
 import Testing
 import Foundation
 import PDFKit
+import AppKit
 @testable import Kalsmritikosh
 
 @Suite("Usability evaluation 2026-11-02 fixes")
@@ -103,6 +104,15 @@ struct UsabilityFixesTests {
         #expect(doc.pageCount > 1)
         #expect(doc.string?.contains("Line 400") == true)
         #expect(AppPrinting.Outcome.savedAsPDF.released && !AppPrinting.Outcome.cancelled.released)
+        // What the preview window shows: the page drawn as an image now, with dark text on it.
+        let page = try #require(doc.page(at: 0))
+        let image = page.thumbnail(of: NSSize(width: 612, height: 792), for: .mediaBox)
+        let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        var dark = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 3) { for y in stride(from: 0, to: rep.pixelsHigh, by: 3) {
+            if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.brightnessComponent < 0.4 { dark += 1 }
+        } }
+        #expect(dark > 200, "the preview page shows no text (\(dark) dark samples)")
     }
 
     @Test("A claim in the ledger's words opens at the source line sharing its words and date")
