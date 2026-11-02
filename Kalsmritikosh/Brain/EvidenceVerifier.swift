@@ -1200,7 +1200,9 @@ public struct EvidenceVerifier: Verifier {
                 footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — \(phrase).")
             }
         } else if report.agreementScore <= 0.6 {
-            footerParts.append("Note: your sources disagree on some of these points.")
+            // User evaluation 2026-11-02, M3: a low agreement score among the readings is not a recorded
+            // contradiction, and "your sources disagree" beside "Conflicts: 0" told the reader two things.
+            footerParts.append("Note: the readings of these sources only partly agree — check the cited passages before relying on this.")
         }
         let body: String
         if footerParts.isEmpty {

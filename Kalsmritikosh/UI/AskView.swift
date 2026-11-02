@@ -568,10 +568,18 @@ public struct AskView: View {
                         if !turn.body.isEmpty {
                             Button {
                                 #if canImport(AppKit)
-                                NSPasteboard.general.clearContents()
-                                switch ProtectedExport.prepare(turn.body) {
-                                case .success(let safe): NSPasteboard.general.clearContents(); NSPasteboard.general.setString(safe, forType: .string)
-                                case .failure(let refusal): refusal.present()
+                                // User evaluation 2026-11-02, M2: the copy kept markdown ("**Effective Date:**") and
+                                // named no source file. It is now plain text ending with the sources by name.
+                                let ids = Array(Set((verifiedAnswers[turn.id]?.citations ?? []).map(\.objectID)))
+                                let body = turn.body
+                                Task { @MainActor in
+                                    let names = ids.isEmpty ? [:] : ((try? await appState.objects?.sourceFilenames(for: Set(ids))) ?? [:])
+                                    let text = AnswerCopyText.make(body: body, sourceNames: ids.compactMap { names[$0] })
+                                    NSPasteboard.general.clearContents()
+                                    switch ProtectedExport.prepare(text) {
+                                    case .success(let safe): NSPasteboard.general.setString(safe, forType: .string)
+                                    case .failure(let refusal): refusal.present()
+                                    }
                                 }
                                 #endif
                             } label: { Label("Copy", systemImage: "doc.on.doc").labelStyle(.iconOnly)
@@ -1486,5 +1494,25 @@ struct AIReviewSheet: View {
             }
         }
         .padding(16).frame(width: 680)
+    }
+}
+
+/// The text "Copy this answer" puts on the clipboard: the answer without markdown marks, then the
+/// sources it cites by file name (user evaluation 2026-11-02, M2).
+nonisolated enum AnswerCopyText {
+    static func make(body: String, sourceNames: [String]) -> String {
+        var lines = body.components(separatedBy: "\n").map { line -> String in
+            var l = line.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
+            if let r = l.range(of: #"^#{1,6}\s+"#, options: .regularExpression) { l.removeSubrange(r) }
+            return l
+        }
+        while lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeLast() }
+        let names = Array(NSOrderedSet(array: sourceNames).compactMap { $0 as? String }).sorted()
+        if !names.isEmpty {
+            lines.append("")
+            lines.append(names.count == 1 ? "Source: \(names[0])" : "Sources:")
+            if names.count > 1 { lines += names.map { "• \($0)" } }
+        }
+        return lines.joined(separator: "\n")
     }
 }

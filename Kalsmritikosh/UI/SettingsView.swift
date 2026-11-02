@@ -108,7 +108,9 @@ public struct SettingsView: View {
     /// the app auto-selects the best model for the device. Those sections live
     /// under a collapsed "Advanced" disclosure, off by default.
     @AppStorage(FeatureFlags.aiModeKey) private var aiModeRaw = AIMode.guided.rawValue
-    @AppStorage("kalsmritikosh.settings.showAdvanced") private var showAdvanced = false
+    // Collapsed every time Settings opens (user evaluation 2026-11-02, M4: a remembered expansion put
+    // "RELEASE READY: NO" and "Wipe & re-ingest everything" in front of a first-time user).
+    @State private var showAdvanced = false
     /// Collapses the many individual diagnostic tools so only the single
     /// "release readiness" check is prominent. Off by default.
     @AppStorage("kalsmritikosh.settings.showMoreDiagnostics") private var showMoreDiagnostics = false
@@ -152,7 +154,9 @@ public struct SettingsView: View {
 
                 // ── Everyday settings — each category collapsed behind its
                 //    header so Settings opens minimal. Click a header to expand.
-                if let advice = appState.modelChoiceAdvice, advice.severity != .ok {
+                // M4: with AI off (the evidence-only default) no model is needed, so a red "Model won't run
+                // well" is a false alarm.
+                if !EvidenceOnlyRelease.enforced, let advice = appState.modelChoiceAdvice, advice.severity != .ok {
                     modelChoiceBanner(advice)
                 }
                 #if DEBUG
@@ -2396,6 +2400,9 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 2)
 
+            // M4: these shape what an AI model writes; with no model in use they were a contradiction
+            // ("Apple AI writes the final answer" ticked under "no AI model is used").
+            if !EvidenceOnlyRelease.enforced {
             Toggle("Apple AI writes the final answer", isOn: Binding(
                 get: { FeatureFlags.shared.llmAnswerSynthesis },
                 set: { FeatureFlags.shared.llmAnswerSynthesis = $0 }
@@ -2419,6 +2426,7 @@ public struct SettingsView: View {
             Text("After drafting, the model fact-checks itself against the findings and revises. Improves faithfulness; adds ~2 model passes.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            }
 
             Toggle("Relevance-gated experts", isOn: Binding(
                 get: { FeatureFlags.shared.expertRelevanceGating },

@@ -249,6 +249,7 @@ public final class PersonaJobsModel {
     /// person approves them (I1).
     public func openMatter(_ matter: InvestigationCase) {
         activeCaseID = matter.id
+        UserDefaults.standard.set(matter.id.uuidString, forKey: Self.lastMatterKey)
         activeMatterTitle = matter.title
         lastOutcome = "Resumed matter \"\(matter.title)\""
         lastError = nil
@@ -318,18 +319,33 @@ public final class PersonaJobsModel {
             ProductModuleFlags.isEnabled(.contentCreatorPersona) || $0.id != ContentCreatorPersonaPackage.applicationID
         }
         if selectedPersona == nil {
-            // D1 — open with the persona onboarding chose for the first case.
+            // User evaluation 2026-11-02, M5: leaving Professional Jobs and coming back reset the profession
+            // the person had picked (and with it the job they were on). The last profession picked here
+            // comes back; failing that, D1 — the persona onboarding chose for the first case.
+            // (The unit-test host shares one defaults domain across suites, so it never restores.)
+            let last = TestHost.isActive ? nil : UserDefaults.standard.string(forKey: Self.lastPersonaKey)
             let chosen = UserDefaults.standard.string(forKey: AppState.investigationPersonaKey)
-            selectedPersona = personas.first { $0.id.rawValue == chosen }?.id ?? personas.first?.id
+            selectedPersona = personas.first { $0.id.rawValue == last }?.id
+                ?? personas.first { $0.id.rawValue == chosen }?.id ?? personas.first?.id
         }
         workspaceList = (try? await workspaces.all(includeArchived: false)) ?? []
         if selectedWorkspace == nil { selectedWorkspace = workspaceList.first?.id }
         await reloadJobs()
         await reloadMatters()
+        // The matter that was open comes back open too.
+        if activeCaseID == nil, !TestHost.isActive, let raw = UserDefaults.standard.string(forKey: Self.lastMatterKey),
+           let matter = openMatters.first(where: { $0.id.uuidString == raw }) {
+            openMatter(matter)
+        }
     }
+
+    static let lastPersonaKey = "kalsmritikosh.jobs.lastPersona"
+    static let lastMatterKey = "kalsmritikosh.jobs.lastMatter"
 
     public func select(persona id: ApplicationDefinitionID) async {
         selectedPersona = id
+        UserDefaults.standard.set(id.rawValue, forKey: Self.lastPersonaKey)
+        UserDefaults.standard.removeObject(forKey: Self.lastMatterKey)
         activeCaseID = nil; activeMatterTitle = nil; lastOutcome = nil; lastError = nil
         ranJobs = []
         scopePreview = nil; lastScopeChange = nil; inclusionReview = nil

@@ -88,16 +88,19 @@ public struct CasesView: View {
                             if let k = CaseTemplate.template(id: r.kind) { Text(k.title).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
                     }
+                    // The case name is the column people read; the fixed columns beside it left it about 15 pt
+                    // wide in a normal window, so every name showed as "…" (user evaluation 2026-11-02, M1).
+                    .width(min: 200, ideal: 300)
                     TableColumn("Stage") { r in StageChip(stage: r.stage) }.width(110)
                     TableColumn("Severity") { r in Text(r.severity?.label ?? "—").foregroundStyle(severityColor(r.severity)) }.width(80)
-                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(120)
+                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(min: 70, ideal: 110)
                     TableColumn("Next due") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.nextDue.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—")
                                 .foregroundStyle((r.nextDue ?? .distantFuture) < Date() ? .red : .primary)
                             if let t = r.nextTask { Text(t).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
-                    }.width(min: 140, ideal: 200)
+                    }.width(min: 110, ideal: 180)
                     TableColumn("Tasks") { r in
                         HStack(spacing: 4) {
                             Text("\(r.openTasks) open")

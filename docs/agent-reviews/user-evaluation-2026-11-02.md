@@ -138,3 +138,15 @@ Mean of the agent estimates: 47 (below the conventional 68 "average" line).
 - The case-name column may be widenable by dragging; that was not tried.
 - Online mode was not exercised, by instruction.
 - P1's wall-clock time includes about 38 minutes of tool-harness stalls that had nothing to do with the app.
+
+## Fixes after the evaluation (second commit, 2026-11-02)
+
+| finding | fix | verified by |
+|---|---|---|
+| M1 case names "…" | Cases table: the Case column has a minimum width of 200 pt (ideal 300); Owner and Next due shrink first | build; to re-check in the next UI run |
+| M2 copy loses the source | "Copy this answer" puts plain text (no `**`/`#` marks) on the clipboard, ending "Source: contract.md" / "Sources: • …" by file name, through the same protected-export gate | UsabilityFixesTests.copiedAnswer |
+| M3 "sources disagree" beside "Conflicts: 0" | the low-agreement note no longer claims a disagreement: "the readings of these sources only partly agree — check the cited passages before relying on this" (recorded contradictions still show as conflicts) | build; Citation/Slot/Patent verifier suites green |
+| M4 rest | Advanced is collapsed each time Settings opens (no longer remembered); the red "Model won't run well" banner is not shown when AI is off (no model is needed); the AI-composition toggles ("Apple AI writes the final answer", council, self-critique) are hidden when no AI model is used | build |
+| M5 sidebar reorders; persona reset | the recently-opened rows keep the screens' fixed order; Professional Jobs remembers the profession last picked there and reopens the matter that was open | PersonaJobsModelTests green (restore is off in the test host) |
+
+Still open: M2 receipt save panel (technical JSON name, old default folder) and M3 passage-dump answers to "who signed" / "was invoice 432 paid" — the answer composer for document questions, not the proceeding answerer; the minor items 1–10.
