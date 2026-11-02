@@ -584,28 +584,29 @@ public struct PersonaJobsView: View {
     private func personaPicker(_ model: PersonaJobsModel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Choose a professional focus").font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(model.personas, id: \.id) { p in
-                        let selected = model.selectedPersona == p.id
-                        Button {
-                            Task { await model.select(persona: p.id) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(p.label).font(.callout.weight(.semibold))
-                                if let d = p.detail {
-                                    Text(d).font(.caption2).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: 220, alignment: .leading)
-                                }
+            // A wrapping grid: in a sideways scroller most professions started out of view with no sign they
+            // were there (user evaluation 2026-11-02, minor 8).
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 10, alignment: .leading)],
+                      alignment: .leading, spacing: 10) {
+                ForEach(model.personas, id: \.id) { p in
+                    let selected = model.selectedPersona == p.id
+                    Button {
+                        Task { await model.select(persona: p.id) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(p.label).font(.callout.weight(.semibold))
+                            if let d = p.detail {
+                                Text(d).font(.caption2).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: 220, alignment: .leading)
                             }
-                            .padding(10)
-                            .frame(width: 240, alignment: .leading)
-                            .background(selected ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10)
-                                .stroke(selected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: 1))
                         }
-                        .buttonStyle(.plain)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(selected ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.04),
+                                    in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .stroke(selected ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

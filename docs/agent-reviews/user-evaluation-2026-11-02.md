@@ -157,4 +157,6 @@ Minor 4 (each answer twice in the Answer Journal): the brain already commits the
 
 Minor 7 (part): the Settings texts "Coalesce email threads (Move A)", "Show low-quality (T3) entities", "HISTORY Phase A", "KO" and "knowledge.sqlite" are now plain words (guide and manual follow).
 
-Still open: minor items 1–3, 5, 6, 7 (other screens), 8, 10.
+Minor 8: the profession cards in Professional Jobs wrap in a grid instead of a sideways scroller, so all of them are in view.
+
+Still open: minor items 1–3, 5, 6, 7 (other screens), 10.
