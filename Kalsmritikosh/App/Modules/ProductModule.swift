@@ -320,7 +320,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .watchlists:
             return Spec(planID: "N-3", group: "Investigation", title: "Watchlists",
-                        detail: "Import a list of people or companies and find them in your archive, including other spellings; every match opens its source.",
+                        detail: "Paste or import a list of names, phone numbers and email addresses and screen it against the whole archive or one case: per term, the documents and mentions found as a named entity (including other spellings) or as words in the text, the terms with no match, a passage per document that opens its source, and a CSV export.",
                         whenOff: "Lists are kept but not matched.",
                         implemented: true)
         case .reviewCoding:
