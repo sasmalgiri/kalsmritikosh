@@ -155,4 +155,6 @@ M3 (dumps), root cause traced by an agent read-only and fixed: with no model, th
 
 Minor 4 (each answer twice in the Answer Journal): the brain already commits the answer's durable revision (AEE-M2) and Ask then persisted it again — Ask now binds the turn to the committed revision. Minor 9: the sidebar's "PERSONA · …" now follows the profession picked in Professional Jobs. The prefilled own name on attestation fields (e.g. conflict-of-interest) is the Mac user's own name for their own sign-off — kept, not a defect.
 
-Still open: minor items 1–3, 5–8, 10.
+Minor 7 (part): the Settings texts "Coalesce email threads (Move A)", "Show low-quality (T3) entities", "HISTORY Phase A", "KO" and "knowledge.sqlite" are now plain words (guide and manual follow).
+
+Still open: minor items 1–3, 5, 6, 7 (other screens), 8, 10.

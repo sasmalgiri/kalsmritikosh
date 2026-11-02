@@ -1770,7 +1770,7 @@ public struct SettingsView: View {
                 Image(systemName: "externaldrive.badge.timemachine").foregroundStyle(Theme.brand)
                 Text("Back up your knowledge base").font(.title3.bold())
             }
-            Text("Save a copy of your extracted ledger (knowledge.sqlite) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused.")
+            Text("Save a copy of everything the app has read and recorded (your ledger) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
@@ -2527,21 +2527,21 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
-            Toggle("Coalesce email threads (Move A)", isOn: $threadCoalescing)
+            Toggle("Keep each email thread as one document", isOn: $threadCoalescing)
                 .onChange(of: threadCoalescing) { _, newValue in
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.moveA.threadCoalescing")
                 }
-            Text("When on, email ingest folds an entire reply chain into a single KO instead of one KO per message. Memory distillation gets the whole conversation in one shot; storage drops on busy mailboxes. **Requires re-ingest of affected mailboxes** to take effect.")
+            Text("When on, a whole reply chain is read as one document instead of one document per message — summaries see the whole conversation, and busy mailboxes take less space. **Mailboxes already added must be added again** for this to apply.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 4)
 
-            Toggle("Show low-quality (T3) entities in results", isOn: $showT3InResults)
+            Toggle("Show low-quality names in results", isOn: $showT3InResults)
                 .onChange(of: showT3InResults) { _, newValue in
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.history.showT3InResults")
                 }
-            Text("HISTORY Phase A. When off, the retriever filters out entities tagged T3 (mail-server hostnames like `Tyzpr01mb4530`, weekday tokens, base64-ish IDs) from results — they stay on disk, just don't pollute answers. Flip on to see everything every extractor produced.")
+            Text("When off, names that are almost certainly not people or organisations — mail-server names like `Tyzpr01mb4530`, weekday words, long random IDs — are left out of results. They are kept, not deleted. Turn on to see everything that was read.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

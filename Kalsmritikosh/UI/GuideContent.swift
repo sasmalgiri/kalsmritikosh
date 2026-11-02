@@ -189,8 +189,8 @@ enum GuideContent {
         #if DEBUG
         items.append(("Allow cloud providers (dev builds)", "Dev-only toggle for developer cloud testing; separate from Online mode."))
         #endif
-        items.append(("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
-        items.append(("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
+        items.append(("Keep each email thread as one document", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
+        items.append(("Show low-quality names in results", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
         return items
     }
 
