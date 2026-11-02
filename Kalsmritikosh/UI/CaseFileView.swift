@@ -31,6 +31,18 @@ final class CaseFileModel {
     var custodyReadFailed = false
     /// Stored evidence references that no longer resolve in this case (brief §4 repair queue).
     var unresolvedRefs: [UnresolvedCaseReference] = []
+    /// N1 — cross-case deconfliction: this case's entities also seen in other cases or in no case (counts
+    /// and case names only), read once per opening (it scans every case's scope) and on "Check again".
+    var deconfliction: CaseDeconflictionReport?
+    var deconflictionContext: CaseDeconflictionContext?
+    var deconflictionError: String?
+    /// A linked case person's overlap (person id → counts).
+    var personOverlaps: [UUID: CaseOverlapEntity] = [:]
+    /// An unlinked case person's exact matches among the case's entities (person id → choices).
+    var linkChoices: [UUID: [CaseEntityCandidate]] = [:]
+    /// The cases the Cases screen can open (an archived case is named, not opened).
+    var openableCases: Set<UUID> = []
+    var openCase: ((UUID) -> Void)?
 
     init(caseID: UUID, workspaceID: UUID) { self.caseID = caseID; self.workspaceID = workspaceID }
 
@@ -65,8 +77,56 @@ final class CaseFileModel {
             if named == nil, let title = snapshot?.caseHeader.title {   // read once: it scans every case document
                 named = await app.studioCaseFacts(StudioCaseChoice(id: caseID, workspaceID: workspaceID, title: title), includePrivileged: false)
             }
+            await loadDeconfliction(app, refresh: false)
         } catch {
             report(error)
+        }
+    }
+
+    /// N1 — the deconfliction report (once, or again on request) and the people's links and counts.
+    func loadDeconfliction(_ app: AppState, refresh: Bool) async {
+        guard let db = app.database, let people = snapshot?.people else { return }
+        let tool = CaseDeconfliction(database: db)
+        do {
+            if refresh || deconflictionContext == nil {
+                let ctx = try await tool.prepare(caseID: caseID)
+                deconflictionContext = ctx
+                deconfliction = try await tool.report(ctx)
+            }
+            guard let ctx = deconflictionContext else { return }
+            let overlaps = try await tool.overlaps(ctx, entityIDs: Set(people.compactMap(\.entityID)))
+            var byPerson: [UUID: CaseOverlapEntity] = [:]
+            var choices: [UUID: [CaseEntityCandidate]] = [:]
+            for p in people {
+                if let e = p.entityID {
+                    if let o = overlaps[e] { byPerson[p.id] = o }
+                } else {
+                    let m = try await tool.matches(ctx, name: p.name, contact: p.contact)
+                    let c = CaseDeconfliction.choices(byName: m.byName, byContact: m.byContact)
+                    if !c.isEmpty { choices[p.id] = c }
+                }
+            }
+            personOverlaps = byPerson
+            linkChoices = choices
+            deconflictionError = nil
+        } catch {
+            KalsmritikoshLog.app.error("Case deconfliction failed: \(String(describing: error), privacy: .public)")
+            deconflictionError = "Other cases could not be checked: \(error.localizedDescription)"
+        }
+    }
+
+    /// N1 — the entity a newly added person is linked to: their ONE exact match in this case's documents
+    /// (name, or the contact when the name matches nothing); nil when none or several match.
+    func entityToLink(_ app: AppState, name: String, contact: String?) async -> UUID? {
+        guard let db = app.database else { return nil }
+        let tool = CaseDeconfliction(database: db)
+        do {
+            let ctx: CaseDeconflictionContext
+            if let c = deconflictionContext { ctx = c } else { ctx = try await tool.prepare(caseID: caseID); deconflictionContext = ctx }
+            return try await tool.autoLinkEntity(ctx, name: name, contact: contact)
+        } catch {
+            KalsmritikoshLog.app.error("Case person link lookup failed: \(String(describing: error), privacy: .public)")
+            return nil
         }
     }
 
@@ -186,8 +246,13 @@ public struct CaseFileView: View {
     @State private var tab: CaseFileTab = .overview
     let onBack: () -> Void
 
-    public init(caseID: UUID, workspaceID: UUID, onBack: @escaping () -> Void) {
-        _model = State(initialValue: CaseFileModel(caseID: caseID, workspaceID: workspaceID))
+    /// `openCase` opens another case from this one (N1 deconfliction); `openableCases` are those it can open.
+    public init(caseID: UUID, workspaceID: UUID, openableCases: Set<UUID> = [], openCase: ((UUID) -> Void)? = nil,
+                onBack: @escaping () -> Void) {
+        let model = CaseFileModel(caseID: caseID, workspaceID: workspaceID)
+        model.openableCases = openableCases
+        model.openCase = openCase
+        _model = State(initialValue: model)
         self.onBack = onBack
     }
 
@@ -796,7 +861,10 @@ struct CasePeopleTab: View {
                     TextField("Contact", text: $contact).frame(width: 180)
                     Button("Add") {
                         let n = name, r = role, c = opt(contact)
-                        model.run(appState) { _ = try await $0.file.addPerson(caseID: model.caseID, name: n, role: r, entityID: nil, contact: c, notes: nil, actor: model.actor) }
+                        model.run(appState) { svc in
+                            let entity = await model.entityToLink(appState, name: n, contact: c)   // N1 — one exact match only
+                            _ = try await svc.file.addPerson(caseID: model.caseID, name: n, role: r, entityID: entity, contact: c, notes: nil, actor: model.actor)
+                        }
                         name = ""; contact = ""
                     }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -811,6 +879,7 @@ struct CasePeopleTab: View {
                                 let n = s.contacts.filter { $0.personID == p.id }.count
                                 if n > 0 { Text("\(n) contact(s)").font(.caption).foregroundStyle(.secondary) }
                                 Spacer()
+                                personLink(p)
                                 Button("Plan interview") {
                                     let pid = p.id
                                     model.run(appState) { _ = try await $0.file.addInterview(caseID: model.caseID, personID: pid, questions: nil, actor: model.actor) }
@@ -824,6 +893,7 @@ struct CasePeopleTab: View {
                     }
                 }
             }
+            CaseDeconflictionSection(model: model)
             if let named = model.named?.named, !named.isEmpty {
                 CaseSection(title: "Named in the case documents", subtitle: "People and organisations the documents name. Add the ones who matter, in the role you decide.") {
                     let have = Set(s.people.map { $0.name.lowercased() })
@@ -841,7 +911,10 @@ struct CasePeopleTab: View {
                                     ForEach(CasePersonRole.allCases) { r in
                                         Button(r.label) {
                                             let name = n.value
-                                            model.run(appState) { _ = try await $0.file.addPerson(caseID: model.caseID, name: name, role: r, entityID: nil, contact: nil, notes: nil, actor: model.actor) }
+                                            model.run(appState) { svc in
+                                                let entity = await model.entityToLink(appState, name: name, contact: nil)   // N1 — one exact match only
+                                                _ = try await svc.file.addPerson(caseID: model.caseID, name: name, role: r, entityID: entity, contact: nil, notes: nil, actor: model.actor)
+                                            }
                                         }
                                     }
                                 }.fixedSize()
@@ -886,6 +959,97 @@ struct CasePeopleTab: View {
         .sheet(item: $editing) { iv in
             InterviewEditor(model: model, s: s, interview: iv) { editing = nil }.environment(appState)
         }
+    }
+
+    /// N1 — a linked person's counts elsewhere, or the exact matches an unlinked person can be linked to.
+    @ViewBuilder private func personLink(_ p: CasePerson) -> some View {
+        if p.entityID != nil {
+            if let o = model.personOverlaps[p.id] {
+                Text(o.isOnlyInThisCase ? "Only in this case" : "Also: \(o.summary)")
+                    .font(.caption).foregroundStyle(o.isOnlyInThisCase ? Color.secondary : Color.orange)
+                    .lineLimit(2).frame(maxWidth: 360, alignment: .trailing)
+                    .accessibilityIdentifier("case.person.overlap")
+            }
+            Menu("Linked") {
+                Button("Unlink from the entity") {
+                    var q = p; q.entityID = nil
+                    let row = q
+                    model.run(appState) { try await $0.file.updatePerson(row, actor: model.actor) }
+                }
+            }.fixedSize().accessibilityIdentifier("case.person.linked")
+        } else if let choices = model.linkChoices[p.id], !choices.isEmpty {
+            Menu("Link to…") {
+                ForEach(choices) { c in
+                    Button("\(c.value) (\(c.kindLabel))") {
+                        var q = p; q.entityID = c.id
+                        let row = q
+                        model.run(appState) { try await $0.file.updatePerson(row, actor: model.actor) }
+                    }
+                }
+            }.fixedSize().accessibilityIdentifier("case.person.linkTo")
+        }
+    }
+}
+
+/// N1 — "Also in other cases": this case's people, organisations, phone numbers and email addresses that
+/// other cases' documents, or documents in no case, also mention. Counts and case names only.
+struct CaseDeconflictionSection: View {
+    @Environment(AppState.self) private var appState
+    let model: CaseFileModel
+
+    var body: some View {
+        CaseSection(title: "Also in other cases",
+                    subtitle: "People, organisations, phone numbers and email addresses in this case's documents that also appear in another case on this Mac, or in documents that are in no case. Counts and case names only — nothing from another case's documents is shown.") {
+            if let e = model.deconflictionError {
+                Text(e).font(.caption).foregroundStyle(.red)
+            } else if let r = model.deconfliction {
+                if r.entities.isEmpty {
+                    Text(r.entitiesChecked == 0
+                         ? "This case's documents name no people, organisations, phone numbers or email addresses yet."
+                         : "None of the \(r.entitiesChecked) names, numbers and addresses in this case's documents appear in another case or in documents outside every case.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("case.deconfliction.none")
+                }
+                ForEach(r.entities) { e in row(e) }
+                if r.capped {
+                    Text("Showing the first \(r.entities.count) of \(r.totalOverlapping), most other cases first.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("case.deconfliction.capped")
+                }
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            Button("Check again") { Task { await model.loadDeconfliction(appState, refresh: true) } }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("case.deconfliction.refresh")
+        }
+        .accessibilityIdentifier("case.deconfliction")
+    }
+
+    private func row(_ e: CaseOverlapEntity) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(e.value).bold()
+                Text(e.kindLabel).font(.caption).foregroundStyle(.secondary)
+                Text("· \(e.documentsInThisCase) document\(e.documentsInThisCase == 1 ? "" : "s") in this case").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(e.otherCases) { c in
+                if model.openableCases.contains(c.caseID), let open = model.openCase {
+                    Button(c.phrase) { open(c.caseID) }
+                        .buttonStyle(.link).font(.caption)
+                        .help("Open \(c.title)")
+                        .accessibilityIdentifier("case.deconfliction.openCase")
+                } else {
+                    Text(c.phrase).font(.caption)
+                }
+            }
+            if e.documentsInNoCase > 0 {
+                Text("\(e.documentsInNoCase) document\(e.documentsInNoCase == 1 ? "" : "s") in no case").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("case.deconfliction.entity")
     }
 }
 
