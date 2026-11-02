@@ -1,0 +1,20 @@
+# SOP Compliance Board — 2 November 2026
+
+| SOP | Governing body | Edition implemented | Enforced in | Verified | Check |
+|---|---|---|---|---|---|
+| PRISMA statement | PRISMA Group (BMJ) | PRISMA 2020 | Evidence Review Studio — screening funnel | 2026-08-23 | ✓ current |
+| GRADE certainty of evidence | GRADE Working Group | GRADE handbook (current) | Evidence Review Studio — synthesis gate | 2026-08-23 | ✓ current |
+| 8D problem solving (dual root cause) | Industry (Ford G8D lineage / ISO 9001 CAPA) | G8D — occurrence + escape cause | Reasoning Studio — RCA conclusion + cause→action linkage | 2026-08-23 | ✓ current |
+| Analysis of Competing Hypotheses | Heuer, CIA tradecraft | Heuer 1999 | Hypotheses (ACH) studio — matrix, diagnosticity, no-verdict rule | 2026-08-23 | ✓ current |
+| Source reliability scale | NATO (Admiralty code) | STANAG A–F × 1–6 | Source reliability rating — AdmiraltyCode | 2026-08-23 | ✓ current |
+| Privilege log requirements | US Federal Rules of Civil Procedure | FRCP 26(b)(5)(A), 2015 am. | Privilege Log Studio — describe-without-revealing gates | 2026-08-23 | ✓ current |
+| Expert report contents | US FRCP + Daubert | FRCP 26(a)(2)(B); Daubert (1993) | Forensic Studio — 8-section report, method justification | 2026-08-23 | ✓ current |
+| Insurance fraud reporting | NAIC / NICB | NAIC Insurance Fraud Prevention Model Act (Model 680) + NICB indicators; a model act, not adopted identically in every state | SIU Studio — red flags, good-faith referral gate | 2026-10-27 | ✓ current |
+| Genealogical Proof Standard | Board for Certification of Genealogists | GPS, 5 elements (2019 ed.) | Proof Argument Studio — five-element gates | 2026-08-23 | ✓ current |
+| Endorsement & disclosure guides | US FTC | Guides, 2023 revision | Publish Package Studio — disclosure gate | 2026-08-23 | ✓ current |
+| Digital evidence handling | SWGDE / NIST (intl. ISO/IEC 27037) | SWGDE best practices (current) | Chain of custody — CustodyEvent, early hashing | 2026-08-23 | ✓ current |
+| AI transparency disclosure | EU AI Act | Art. 50 (in force 2026-08) | Point-of-use AI disclosure — answers + report page 1 | 2026-08-23 | ✓ current |
+
+Periodic checks are on-device reminders; re-verification is a human act against the governing body's current text, recorded with a date.
+
+_Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body._

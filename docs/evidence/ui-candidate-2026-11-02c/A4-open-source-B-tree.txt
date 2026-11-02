@@ -1,0 +1,135 @@
+AXWindow/AXStandardWindow title="Review" id=<swiftui> [0,33 1470x847] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x723]
+      AXGroup/AXHostingView [0,121 244x723]
+        AXScrollArea [0,121 244x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,799 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x723]
+      AXGroup/AXHostingView [0,121 1470x723]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXImage desc="Checkmark In A Speech Bubble" id=checkmark.bubble [259,198 14x13] actions=AXCancel
+        AXStaticText value="Review" [283,182 88x31] actions=AXCancel
+        AXButton desc="Reload" [1445,198 9x12] actions=AXCancel,AXPress
+        AXStaticText value="Resolve conflicts and follow up on missing evidence. Every decision is recorded and reversible; nothing changes your sources." [283,214 609x13] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7533030690> {pid=3485}" [728,235 258x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Contradictions" id=exclamationmark.arrow.triangle.2.circlepath [728,235 129x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Missing Evidence" id=questionmark.folder [857,235 129x24] actions=AXPress
+        AXButton desc="Start review queue (2 to go)" help="Start review queue — Walks you through the items needing review one at a time — decide with the number keys and it advances for you automatically." [258,267 185x20] actions=AXCancel,AXPress
+        AXScrollArea [447,298 820x546] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [475,328 764x351] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="Date" [481,328 23x13]
+            AXStaticText value="High" [524,328 23x13]
+            AXStaticText value="2 Nov 2026" [1181,328 57x13]
+            AXStaticText value="Conflicting dates for "Contract modified"" [475,353 239x15]
+              AXStaticText value="Conflicting dates for "Contract modified"" [475,353 239x15]
+            AXStaticText value="Claim A" [485,388 39x13]
+            AXStaticText value="Contract modified on Jan 12, 2024" [485,405 196x15]
+              AXStaticText value="Contract modified on Jan 12, 2024" [485,405 196x15]
+            AXLink desc="amendment-7.md" id=review.contradiction.source help="Open this source at the passage that states the claim." [486,424 105x13] actions=AXPress
+            AXStaticText value="Claim B" [872,388 39x13]
+            AXStaticText value="Contract modified on Apr 8, 2024" [872,405 190x15]
+              AXStaticText value="Contract modified on Apr 8, 2024" [872,405 190x15]
+            AXLink desc="supplier_abc_22.eml" id=review.contradiction.source help="Open this source at the passage that states the claim." [873,424 121x13] actions=AXPress
+            AXStaticText value="Decision" [475,464 41x13]
+            AXPopUpButton value="Unresolved" [551,458 207x24] actions=AXPress
+            AXStaticText value="Date" [481,524 23x13]
+            AXStaticText value="High" [524,524 23x13]
+            AXStaticText value="2 Nov 2026" [1181,524 57x13]
+            AXStaticText value="Conflicting dates for "Delivery delayed"" [475,549 230x15]
+              AXStaticText value="Conflicting dates for "Delivery delayed"" [475,549 230x15]
+            AXStaticText value="Claim A" [485,584 39x13]
+            AXStaticText value="Delivery delayed on Apr 8, 2024" [485,601 181x15]
+              AXStaticText value="Delivery delayed on Apr 8, 2024" [485,601 181x15]
+            AXLink desc="supplier_abc_22.eml" id=review.contradiction.source help="Open this source at the passage that states the claim." [486,621 121x13] actions=AXPress
+            AXStaticText value="Claim B" [872,584 39x13]
+            AXStaticText value="Delivery delayed on Jun 14, 2024" [872,601 187x15]
+              AXStaticText value="Delivery delayed on Jun 14, 2024" [872,601 187x15]
+            AXLink desc="invoice-432.eml" id=review.contradiction.source help="Open this source at the passage that states the claim." [873,621 98x13] actions=AXPress
+            AXStaticText value="Decision" [475,660 41x13]
+            AXPopUpButton value="Unresolved" [551,655 207x24] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,855 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,854 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,850 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Review" [369,33 1053x52] actions=AXPress
+  AXSheet [375,196 720x520] actions=AXRaise
+    AXGroup/AXHostingView [375,196 720x520]
+      AXMenuButton title="Open" [1053,204 34x14] actions=AXPress
+      AXScrollArea [375,196 720x476] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXTextArea value="From: maria.lopez@supplier-abc.com
+To: john.carter@northwind.example
+Cc: program-office@northwind.example
+Subject: Project Delta — material certification delays affecting first lot
+Date: Mon, 08 Apr 2024 17:43:00 +0000
+
+John,
+
+Updating you on Project Delta first-lot status. Our titanium alloy vendor reported delivery delayed by 18 days on the certified material lot earmarked for the 8 turbine blade assemblies. Without certified stock we can't start machining.
+
+We expect the certified material on 2024-04-22. After receipt, machining + heat treatment + inspection runs ~3 weeks. That puts the fir" [375,202 720x470]
+        AXScrollBar value="0" [1077,202 19x470]
+      AXButton desc="Done" [1029,682 56x24] actions=AXPress
+AXSheet [375,196 720x520] actions=AXRaise
+  AXGroup/AXHostingView [375,196 720x520]
+    AXMenuButton title="Open" [1053,204 34x14] actions=AXPress
+    AXScrollArea [375,196 720x476] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXTextArea value="From: maria.lopez@supplier-abc.com
+To: john.carter@northwind.example
+Cc: program-office@northwind.example
+Subject: Project Delta — material certification delays affecting first lot
+Date: Mon, 08 Apr 2024 17:43:00 +0000
+
+John,
+
+Updating you on Project Delta first-lot status. Our titanium alloy vendor reported delivery delayed by 18 days on the certified material lot earmarked for the 8 turbine blade assemblies. Without certified stock we can't start machining.
+
+We expect the certified material on 2024-04-22. After receipt, machining + heat treatment + inspection runs ~3 weeks. That puts the fir" [375,202 720x470]
+      AXScrollBar value="0" [1077,202 19x470]
+    AXButton desc="Done" [1029,682 56x24] actions=AXPress
+FOCUSED: AXSheet [375,196 720x520] actions=AXRaise
