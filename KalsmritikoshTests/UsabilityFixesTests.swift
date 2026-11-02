@@ -24,4 +24,48 @@ struct UsabilityFixesTests {
         #expect(two == "Yes.\n\nSources:\n• a.pdf\n• b.pdf")
         #expect(AnswerCopyText.make(body: "Yes.", sourceNames: []) == "Yes.")
     }
+
+    private func chunk(_ text: String) -> RetrievedChunk {
+        RetrievedChunk(chunk: Chunk(objectID: UUID(), ordinal: 0, text: text, characterRange: 0..<text.count),
+                       score: 1, viaLayer: .metadata)
+    }
+
+    private func fixture(_ name: String) throws -> String {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Kalsmritikosh/Resources/Fixtures/ProjectDelta/\(name)")
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    @Test("M3: 'Who signed the master supply agreement?' quotes the agreement's signing sentence, never a heading")
+    func whoSigned() throws {
+        let chunks = [chunk(try fixture("amendment-7.md")), chunk(try fixture("contract.md"))]
+        let q = try #require(SentenceQuoteComposer.compose(question: "Who signed the master supply agreement?", chunks: chunks))
+        #expect(q.sentence.contains("John Carter") && q.sentence.contains("Maria Lopez"), "\(q.sentence)")
+        #expect(q.sentence.contains("12th day of January 2024"), "the agreement's own signing, not the amendment's: \(q.sentence)")
+    }
+
+    @Test("M3: a title's dash is not a field separator")
+    func titleDash() {
+        #expect(OpenFieldExtractor.fields(in: "Amendment No. 7 — Project Delta Master Supply Agreement", kind: .documentTitle).isEmpty)
+        #expect(OpenFieldExtractor.fields(in: "Invoice: 432", kind: .documentTitle).count == 1)
+    }
+
+    @Test("M3: 'Was invoice 432 paid?' — only clauses about 432 count; the unpaid record is quoted, never 'invoice 401 paid'")
+    func invoiceState() throws {
+        let asked = try #require(StateQuestionAnswerer.parse("Was invoice 432 paid?"))
+        #expect(asked == .init(noun: "invoice", number: "432", state: "paid"))
+        #expect(StateQuestionAnswerer.parse("Has invoice #432 been paid?")?.number == "432")
+        #expect(StateQuestionAnswerer.parse("Was the meeting good?") == nil)
+        let chunks = [chunk(try fixture("supplier_abc_25.eml")), chunk(try fixture("invoice-432.eml")), chunk(try fixture("invoice-401.eml"))]
+        let outcome = try #require(StateQuestionAnswerer.answer(asked, chunks: chunks))
+        let text = StateQuestionAnswerer.render(outcome, asked)
+        #expect(text.hasPrefix("No document found records invoice 432 as paid"), "\(text)")
+        #expect(text.contains("remains unpaid") && !text.contains("401"), "\(text)")
+        // Paid on record: Yes, quoted.
+        let paid = [chunk("Invoice 432 was paid in full on July 2, 2024 by wire transfer.")]
+        guard case .stated(let c)? = StateQuestionAnswerer.answer(asked, chunks: paid) else { Issue.record("expected stated"); return }
+        #expect(c.text.contains("paid in full"))
+        // "will be paid" is not paid.
+        #expect(StateQuestionAnswerer.answer(asked, chunks: [chunk("Invoice 432 will be paid next week.")]).map { _ in true } == nil)
+    }
 }

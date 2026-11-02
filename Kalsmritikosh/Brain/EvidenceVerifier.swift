@@ -894,8 +894,36 @@ public struct EvidenceVerifier: Verifier {
         // prose (an FM sentence carries no frame prefix).
         let framePrefixes = ["The source says:", "Reported:", "Corroborated:", "Derived:", "User-confirmed:", "Inference:", "Conflicting accounts:"] // jargon-ok: DETECTOR list — recognizes legacy frames; the banned token is never produced
         let substantiveDocClaims = claims.filter { !$0.supportingObjectIDs.isEmpty }
+        // A model-free expert's claim that is only the head of a retrieved passage ("chunk.text.prefix(220)")
+        // is a dump too, not composed prose (user evaluation 2026-11-02, M3: such claims kept the quote floor
+        // and the honest not-found from running, and five passage heads were joined as the answer).
+        func squash(_ t: String) -> String { t.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        let passageHeads = retrieval.chunks.map { squash($0.chunk.text) }
         let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
-            framePrefixes.contains { c.statement.hasPrefix($0) }
+            if framePrefixes.contains(where: { c.statement.hasPrefix($0) }) { return true }
+            let st = squash(c.statement.trimmingCharacters(in: CharacterSet(charactersIn: "…. ")))
+            return st.count >= 40 && passageHeads.contains { $0.hasPrefix(st) }
+        }
+        // "Was invoice 432 paid?" — a yes/no about one identified thing's state, from the clauses that name it
+        // (user evaluation 2026-11-02, M3: answered with a dump of three emails). Preempts only a dump.
+        if slot == nil, claimsAreDumpOnly, let asked = StateQuestionAnswerer.parse(intent.rawQuestion),
+           let outcome = StateQuestionAnswerer.answer(asked, chunks: retrieval.chunks) {
+            let text = StateQuestionAnswerer.render(outcome, asked)
+            let cited: [StateQuestionAnswerer.Clause]
+            switch outcome {
+            case .stated(let c): cited = [c]
+            case .onlyOpposite(let cs): cited = cs
+            }
+            KalsmritikoshLog.brain.info("StateQuestionAnswerer: \(asked.state, privacy: .public) from \(cited.count, privacy: .public) clause(s)")
+            return VerifiedAnswer(
+                body: text + "\n\n(Quoted verbatim from the cited documents; no model was consulted.)",
+                answerText: text,
+                intentKind: intentKindRaw,
+                citations: cited.map { VerifiedAnswer.Citation(objectID: $0.chunk.objectID, chunkID: $0.chunk.id, snippet: String($0.text.prefix(180))) },
+                confidence: Confidence(0.75),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
         }
         // A1 (module .actorComposer) — a who-did-this question is answered by the
         // passage that NAMES THE ACTING PARTY performing the action, not a field

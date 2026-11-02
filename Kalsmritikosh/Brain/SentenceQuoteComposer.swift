@@ -90,6 +90,13 @@ public enum SentenceQuoteComposer {
                 underAccountHeading: lead.headed)
         }
 
+        // An actor question ("Who signed the master supply agreement?") is answered only by a sentence that
+        // carries the question's own action verb and names someone; a heading that shares the topic words
+        // ("Amendment No. 7 — Project Delta Master Supply Agreement") answers nothing (user evaluation
+        // 2026-11-02, M3). The sentence's own topic words count double, so the agreement's signing sentence
+        // outranks an amendment's.
+        let selector = PassageAnswerSelector()
+        let askedVerbs = QuestionShapeRouter.detect(question) == .actor ? selector.actionVerbStems(in: question) : []
         var best: (score: Int, tiebreak: String, sentence: String, chunk: Chunk)?
         for rc in chunks {
             // Chunk-level context: a record document ("Date of birth: 23 August
@@ -116,7 +123,14 @@ public enum SentenceQuoteComposer {
                 let strong = overlap >= minOverlap || reason >= 4
                 let contextual = (overlap >= 1 || reason > 0) && chunkOverlap >= 3
                 guard strong || contextual else { continue }
-                let score = overlap * 2 + (hasValue ? 1 : 0) + (contextual && !strong ? 2 : 0) + reason
+                var agentBonus = 0
+                if !askedVerbs.isEmpty {
+                    guard !askedVerbs.isDisjoint(with: selector.actionVerbStems(in: sentence)), selector.containsNamedActor(sentence) else { continue }
+                    // The sentence names WHO acted: "… by John Carter …", "John Carter signed …" — not only a
+                    // name in passing ("This amendment to the Project Delta supply agreement (signed …)").
+                    if Self.namesTheAgent(sentence) { agentBonus = 4 }
+                }
+                let score = overlap * 2 + (hasValue ? 1 : 0) + (contextual && !strong ? 2 : 0) + reason + (askedVerbs.isEmpty ? 0 : overlap) + agentBonus
                 // Total order: score, then the sentence text (stable content key).
                 if best == nil || score > best!.score
                     || (score == best!.score && sentence < best!.tiebreak) {
@@ -141,6 +155,12 @@ public enum SentenceQuoteComposer {
             objectID: hit.chunk.objectID,
             chunkID: hit.chunk.id,
             receiptLine: "Quoted verbatim from the cited document; no model was consulted.")
+    }
+
+    /// "… by John Carter (Procurement Director) and …", "Maria Lopez signed …": an agent named as one.
+    nonisolated static func namesTheAgent(_ sentence: String) -> Bool {
+        sentence.range(of: #"\bby\s+(?:(?:Mr|Ms|Mrs|Dr)\.?\s+)?[A-Z][\w'’-]+(?:\s+[A-Z]\.?)?\s+[A-Z][\w'’-]+"#, options: .regularExpression) != nil
+            || sentence.range(of: #"^\W*(?:[A-Z][\w'’-]+\s+){1,3}(?:\([^)]{0,60}\)\s+)?(?:has\s+|had\s+|have\s+)?[a-z]+ed\b"#, options: .regularExpression) != nil
     }
 
     /// `sentence` and what follows it up to the end of its paragraph (a line break), at most ~400

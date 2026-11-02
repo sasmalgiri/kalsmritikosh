@@ -178,6 +178,10 @@ public enum OpenFieldExtractor {
     /// caller does not need to know the policy.
     public nonisolated static func fields(in text: String, kind: EvidenceBlockKind) -> [OpenField] {
         guard let blockConfidence = confidence(for: kind) else { return [] }
+        // A title's dash joins a title and its subtitle ("Amendment No. 7 — Project Delta Master Supply
+        // Agreement"), it does not introduce a value: splitting it minted the field "amendmentno7" that
+        // answers then quoted (user evaluation 2026-11-02, M3). Headings are the document's structure.
+        let titleBlock = [EvidenceBlockKind.documentTitle, .sectionHeading, .slideTitle].contains(kind)
         var out: [OpenField] = []
         var seenFieldIDs = Set<String>()
 
@@ -193,7 +197,7 @@ public enum OpenFieldExtractor {
                 line = label + ": " + line
             }
             guard line.count >= minimumLabelCharacters + 2 else { continue }
-            guard let pair = split(line) else { continue }
+            guard let pair = split(line, dashes: !titleBlock) else { continue }
             guard isLabelLike(pair.label),
                   isValueLike(pair.value) || (statesAReason(pair.label) && isReasonValue(pair.value)) else { continue }
 
@@ -224,8 +228,8 @@ public enum OpenFieldExtractor {
     /// "Address: 12 Main St, Pune: 411001" has one label and one value; taking
     /// the last separator would make "411001" the value of a label containing a
     /// street address.
-    nonisolated static func split(_ line: String) -> (label: String, value: String)? {
-        guard let idx = line.firstIndex(where: { separators.contains($0) }) else { return nil }
+    nonisolated static func split(_ line: String, dashes: Bool = true) -> (label: String, value: String)? {
+        guard let idx = line.firstIndex(where: { separators.contains($0) && (dashes || ($0 != "—" && $0 != "–")) }) else { return nil }
         let label = String(line[line.startIndex..<idx]).trimmingCharacters(in: .whitespaces)
         // A dateline is not a label: "SAN FRANCISCO – Jose Alvarado … was sentenced" (case bench
         // 2026-10-24 minted the field "sanfrancisco"). A capitalised place before a dash opens a
