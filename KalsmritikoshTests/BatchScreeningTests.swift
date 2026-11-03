@@ -166,6 +166,56 @@ import Testing
         #expect(email.documents[0].highlight == "rverma@example.com")
     }
 
+    /// UI check G3: a result opened contract.md with nothing marked — "Maria Lopez" (11 characters) is
+    /// shorter than the passage locator's minimum probe, so passing it alone as the quote found nothing.
+    /// The open target now carries the passage (to find the place) and the matched words (to mark).
+    @Test func openTargetMarksTheMatchedWordsInsideThePassage() async throws {
+        let md = """
+            # Master Supply Agreement — Project Delta
+
+            ## Signatures
+
+            This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties.
+            """
+        let ns = md as NSString
+        #expect(CitedPassageLocator.locate("Maria Lopez", in: md) == nil, "the name alone is below the locator's minimum probe")
+        // The chunk text as the chunker builds it (heading and paragraph joined, no "##").
+        let chunk = "Master Supply Agreement — Project Delta\nSignatures\nThis agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties."
+        let term = try #require(ScreeningTermClassifier.classify("Maria Lopez"))
+        let hit = try #require(BatchScreening.textHits(term, in: chunk))
+        let doc = ScreeningDocument(objectID: UUID(), name: "contract.md", mentions: 1, passage: BatchScreening.snippet(chunk, around: hit.range),
+                                    highlight: hit.highlight, foundBy: [.textMatch], variants: ["text match — exact words"])
+        let quote = try #require(doc.openQuote)
+        #expect(!quote.hasPrefix("…") && !quote.hasSuffix("…"))
+        let focus = try #require(doc.highlight)
+        let r = try #require(CitedPassageLocator.locate(focus: focus, near: quote, in: md))
+        #expect(ns.substring(with: r) == "Maria Lopez")
+
+        // The words inside the passage are marked, not an earlier use of the same name elsewhere.
+        let twice = "Maria Lopez called on Monday.\n\nLater the contract was signed by John Carter and Maria Lopez on Friday at noon."
+        let passage = "Later the contract was signed by John Carter and Maria Lopez on Friday"
+        let second = try #require(CitedPassageLocator.locate(focus: "maria  lopez", near: passage, in: twice))
+        #expect(second.location > 20 && (twice as NSString).substring(with: second) == "Maria Lopez")
+        // No passage found: the words' first place; words not in the text: nothing.
+        #expect(CitedPassageLocator.locate(focus: "Maria Lopez", near: "nowhere in this text at all", in: twice)?.location == 0)
+        #expect(CitedPassageLocator.locate(focus: "Zygmunt Nobody", near: passage, in: twice) == nil)
+    }
+
+    @Test func entityOnlyHitHighlightsTheMentionAsWritten() async throws {
+        let r = try await rig()
+        // The extractor read "Doe, Jane" in C as a mention of the entity "Jane Doe".
+        let jane = try #require(try await r.db.query("SELECT id FROM entities WHERE value = 'Jane Doe';").first?.uuid(0))
+        try await r.db.exec("INSERT INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id) VALUES (?,?,?,?,?,?);",
+                            [.uuid(UUID()), .uuid(jane), .text("person"), .text("Doe, Jane"), .text("doe, jane"), .uuid(r.koC)])
+        let report = try await r.screening.run(lines: ["Jane Doe"], scope: .unscoped, scopeLabel: "Whole archive", visible: Self.everything)
+        let inC = try #require(report.results[0].documents.first { $0.objectID == r.koC })
+        #expect(inC.foundBy == [.namedEntity])
+        #expect(inC.highlight == "Doe, Jane")
+        let text = "The lease was signed by Doe, Jane in March."
+        let range = try #require(CitedPassageLocator.locate(focus: "Doe, Jane", near: inC.openQuote, in: text))
+        #expect((text as NSString).substring(with: range) == "Doe, Jane")
+    }
+
     @Test func caseScopeExcludesOutOfScopeDocuments() async throws {
         let r = try await rig()
         let report = try await r.screening.run(lines: Self.terms, scope: .authorizing([r.vA, r.vB]), scopeLabel: "Case “Lease”",

@@ -304,7 +304,10 @@ public struct SearchView: View {
                 }
                 // G1 — make a chronology entry from this passage, linked to it.
                 Button {
-                    chronologyPassage = ChronologyPassage(objectID: chunk.objectID, quote: chunk.text)
+                    // Pinned to the chunk's block when it is made of exactly one; a chunk packed from several
+                    // blocks is verified against the span of blocks that holds its words.
+                    chronologyPassage = ChronologyPassage(objectID: chunk.objectID, quote: chunk.text,
+                                                          blockID: chunk.evidenceBlockIDs.count == 1 ? chunk.evidenceBlockIDs.first : nil)
                 } label: {
                     Label("Add to case chronology…", systemImage: "calendar.badge.plus").font(.caption2)
                 }

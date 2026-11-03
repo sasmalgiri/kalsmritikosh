@@ -251,7 +251,8 @@ struct WatchlistView: View {
                     problem = "The source of “\(d.name)” could not be found."
                     return
                 }
-                openSource = CitationOpenTarget(url: url, objectID: d.objectID, quote: d.highlight)
+                // The passage locates where in the document; the matched words are what is marked in it.
+                openSource = CitationOpenTarget(url: url, objectID: d.objectID, quote: d.openQuote ?? d.highlight, focus: d.highlight)
             } catch {
                 KalsmritikoshLog.ui.error("Watchlist open source failed: \(error.localizedDescription, privacy: .public)")
                 problem = "The source could not be opened: \(error.localizedDescription)"

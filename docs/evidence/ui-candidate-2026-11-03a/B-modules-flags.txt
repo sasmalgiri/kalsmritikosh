@@ -1,0 +1,6 @@
+AXCheckBox value="0" desc="Who talks to whom, A communication graph with message counts and volume over time, and a mark
+AXCheckBox value="0" desc="Watchlists, Paste or import a list of names, phone numbers and email addresses and screen it 
+AXCheckBox value="1" desc="Advanced search syntax, AND, OR, NOT, "exact phrase", NEAR/5, wildcards and field filters suc
+AXCheckBox value="1" desc="Highlights and notes, Highlight and annotate any passage. Notes are stored beside the source,
+AXCheckBox value="1" desc="Tags, Tag documents, facts and entities; use a tag as a search or question scope. Tags are yo
+AXCheckBox value="0" desc="Timeline and relationship views, An interactive timeline and a graph of people and organisati

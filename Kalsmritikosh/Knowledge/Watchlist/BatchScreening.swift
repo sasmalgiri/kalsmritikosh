@@ -149,6 +149,12 @@ public nonisolated struct ScreeningDocument: Sendable, Hashable, Identifiable {
     public let variants: [String]
     public var id: UUID { objectID }
     public var howFound: String { variants.joined(separator: "; ") }
+    /// What the source opens at: the passage without the excerpt's ellipses (the viewer locates it in
+    /// the document), with `highlight` as the exact words marked inside it. Nil when there is no passage.
+    public var openQuote: String? {
+        let q = passage.trimmingCharacters(in: CharacterSet(charactersIn: "…").union(.whitespacesAndNewlines))
+        return q.isEmpty ? nil : q
+    }
 }
 
 public nonisolated struct ScreeningTermResult: Sendable, Identifiable {
@@ -263,6 +269,9 @@ public nonisolated struct BatchScreening: Sendable {
         var highlight: String?
         var foundBy: [ScreeningFoundBy] = []
         var variants: [String] = []
+        /// The entities found in this document, for highlighting their mention when the term's own
+        /// words are not in its passages.
+        var entityIDs: [UUID] = []
         mutating func add(_ way: ScreeningFoundBy, _ variant: String) {
             if !foundBy.contains(way) { foundBy.append(way) }
             if !variants.contains(variant) { variants.append(variant) }
@@ -297,6 +306,7 @@ public nonisolated struct BatchScreening: Sendable {
                         guard versionOK[ko] == true else { continue }   // outside the case: never searched
                     }
                     docs[ko, default: Acc()].entityMentions += Int(r.int(1) ?? 1)
+                    if docs[ko]?.entityIDs.contains(entityID) == false { docs[ko]?.entityIDs.append(entityID) }
                     docs[ko, default: Acc()].add(.namedEntity, "named entity — " + variant)
                 }
             }
@@ -312,7 +322,7 @@ public nonisolated struct BatchScreening: Sendable {
             }
             // Passages for entity-only documents.
             for (ko, acc) in docs where acc.passage == nil {
-                let p = try await passage(for: term, objectID: ko, scope: scope)
+                let p = try await passage(for: term, objectID: ko, scope: scope, entityIDs: acc.entityIDs)
                 docs[ko]?.passage = p.passage
                 docs[ko]?.highlight = p.highlight
             }
@@ -513,6 +523,17 @@ public nonisolated struct BatchScreening: Sendable {
         return out
     }
 
+    /// Where one of an entity's mention surfaces (as the extractor read it in this document) is written
+    /// in `text` — longest surface first, case-insensitive, any spacing or punctuation between its words.
+    static func mentionRange(_ surfaces: [String], in text: String) -> Range<String.Index>? {
+        for surface in surfaces.sorted(by: { $0.count > $1.count }) {
+            let normalized = WatchlistMatcher.normalize(surface)
+            guard !normalized.isEmpty else { continue }
+            if let r = nameRange(normalized, in: text) { return r }
+        }
+        return nil
+    }
+
     /// About 240 characters around the hit, whitespace collapsed.
     static func snippet(_ text: String, around range: Range<String.Index>?) -> String {
         let window = 120
@@ -529,9 +550,11 @@ public nonisolated struct BatchScreening: Sendable {
 
     // MARK: Documents
 
-    /// A passage of `objectID` for an entity-only hit: the first live passage stating the term, else
-    /// the first live passage (case scope: only passages whose version is in scope, or unversioned).
-    private func passage(for term: ScreeningTerm, objectID: UUID, scope: RetrievalSourceScope) async throws -> (passage: String, highlight: String?) {
+    /// A passage of `objectID` for an entity-only hit: the first live passage stating the term, else the
+    /// first stating one of the entities' mentions as written in this document (highlighted as written),
+    /// else the first live passage (case scope: only passages whose version is in scope, or unversioned).
+    private func passage(for term: ScreeningTerm, objectID: UUID, scope: RetrievalSourceScope,
+                         entityIDs: [UUID] = []) async throws -> (passage: String, highlight: String?) {
         let rows = try await database.query("""
             SELECT text, source_version_id FROM chunks
             WHERE object_id = ? AND review_status IS NULL AND superseded_by_run IS NULL
@@ -542,6 +565,15 @@ public nonisolated struct BatchScreening: Sendable {
             return r.string(0)
         }
         for t in texts { if let h = Self.textHits(term, in: t) { return (Self.snippet(t, around: h.range), h.highlight) } }
+        if !entityIDs.isEmpty {
+            let marks = entityIDs.map { _ in "?" }.joined(separator: ",")
+            let surfaces = try await database.query(
+                "SELECT DISTINCT surface FROM entity_mentions WHERE source_object_id = ? AND entity_id IN (\(marks)) LIMIT 50;",
+                [SQLValue.uuid(objectID)] + entityIDs.map { SQLValue.uuid($0) }).compactMap { $0.string(0) }
+            for t in texts {
+                if let hit = Self.mentionRange(surfaces, in: t) { return (Self.snippet(t, around: hit), String(t[hit])) }
+            }
+        }
         return (texts.first.map { Self.snippet($0, around: nil) } ?? "", nil)
     }
 

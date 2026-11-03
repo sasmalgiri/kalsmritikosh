@@ -127,18 +127,54 @@ public nonisolated struct CaseEvidenceVerifier: Sendable {
             // A pinned block or document: the studios' rules decide.
             if ref.blockID != nil || ref.objectID != nil {
                 if let why = await StudioEvidenceResolver.check(ref, value: quote, kind: .text, ctx) {
+                    // A document pinned without a block: its stored text may lay the words out differently
+                    // from the parsed blocks the passage was read from (an email's header lines, a markdown
+                    // heading's "##"). The same words across that document's consecutive blocks in this
+                    // version are the same passage — the check the passage got when it was added.
+                    if ref.blockID == nil, let object = ref.objectID, why == StudioEvidenceResolver.quoteNotInDocument,
+                       await Self.spanContaining(StudioEvidenceResolver.norm(quote), in: blocksForVersion(version), object: object) != nil {
+                        return CaseEvidenceVerification(support: .documentary(version: version, object: object, block: nil), passage: ref)
+                    }
                     return CaseEvidenceVerification(support: .unverified(why), passage: passage)
                 }
                 return CaseEvidenceVerification(support: .documentary(version: version, object: ref.objectID, block: ref.blockID), passage: ref)
             }
             // No locator: find the quoted words in the version's own blocks; pin the one place they are.
             let needle = StudioEvidenceResolver.norm(quote)
-            let hits = await blocksForVersion(version).filter { StudioEvidenceResolver.norm($0.text).contains(needle) }
-            guard let hit = hits.first else {
-                return CaseEvidenceVerification(support: .unverified("the quoted words are not in the cited source"), passage: passage)
+            let blocks = await blocksForVersion(version)
+            if let hit = blocks.first(where: { StudioEvidenceResolver.norm($0.text).contains(needle) }) {
+                let resolved = StudioEvidenceRef(sourceVersionID: version, objectID: hit.object ?? ref.objectID, blockID: hit.id, quote: quote)
+                return CaseEvidenceVerification(support: .documentary(version: version, object: resolved.objectID, block: hit.id), passage: resolved)
             }
-            let resolved = StudioEvidenceRef(sourceVersionID: version, objectID: hit.object ?? ref.objectID, blockID: hit.id, quote: quote)
-            return CaseEvidenceVerification(support: .documentary(version: version, object: resolved.objectID, block: hit.id), passage: resolved)
+            // A passage the app assembled from several consecutive blocks of one document (a search chunk
+            // packs a heading with its paragraph, or an email's header lines): verified against that span,
+            // pinned to the document — no single block holds the words, so none is named.
+            if let span = Self.spanContaining(needle, in: blocks, object: nil) {
+                let resolved = StudioEvidenceRef(sourceVersionID: version, objectID: span.object ?? ref.objectID, blockID: nil, quote: quote)
+                return CaseEvidenceVerification(support: .documentary(version: version, object: resolved.objectID, block: nil), passage: resolved)
+            }
+            return CaseEvidenceVerification(support: .unverified("the quoted words are not in the cited source"), passage: passage)
         }
+    }
+
+    /// The first run of consecutive blocks (in reading order, all of one document — `object` when given)
+    /// whose texts, joined and normalised like the quote, contain `needle`. Nil when none does.
+    static func spanContaining(_ needle: String, in blocks: [(id: UUID, object: UUID?, text: String)], object: UUID?) -> (first: UUID, object: UUID?)? {
+        guard !needle.isEmpty else { return nil }
+        let normed = blocks.map { (id: $0.id, object: $0.object, text: StudioEvidenceResolver.norm($0.text)) }
+        for start in normed.indices {
+            let owner = normed[start].object
+            if let object, owner != object { continue }
+            var joined = normed[start].text
+            if joined.contains(needle) { return (normed[start].id, owner) }
+            var end = start + 1
+            // Extend while the span could still contain the needle starting inside the first block.
+            while end < normed.count, normed[end].object == owner, joined.count < needle.count + normed[start].text.count {
+                joined += joined.isEmpty ? normed[end].text : " " + normed[end].text
+                if joined.contains(needle) { return (normed[start].id, owner) }
+                end += 1
+            }
+        }
+        return nil
     }
 }

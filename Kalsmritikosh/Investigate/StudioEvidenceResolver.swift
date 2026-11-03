@@ -60,6 +60,9 @@ public nonisolated enum StudioFieldKind: Sendable, Equatable {
 
 public nonisolated enum StudioEvidenceResolver {
 
+    /// Why a document-pinned reference failed: its stored text does not hold the quoted words.
+    public static let quoteNotInDocument = "the quoted words are not in the cited document"
+
     public static let notAssigned = "the draft is not assigned to a case, so its sources cannot be checked — use Fill from case"
 
     /// Field path → why its documentary support did not resolve. Only fields the gate would count as
@@ -116,7 +119,7 @@ public nonisolated enum StudioEvidenceResolver {
                 }
             }
             guard let text = await c.objectText(object) else { return "the cited document cannot be read" }
-            guard norm(text).contains(q) else { return "the quoted words are not in the cited document" }
+            guard norm(text).contains(q) else { return quoteNotInDocument }
             return supports(value, kind: kind, quote: quote)
         }
         if let version = ref.sourceVersionID {

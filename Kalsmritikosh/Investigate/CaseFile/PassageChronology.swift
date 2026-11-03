@@ -93,9 +93,23 @@ public nonisolated enum PassageChronology {
         }
         guard let version else { throw PassageChronologyError.noSourceVersion }
         let asked = StudioEvidenceRef(sourceVersionID: version, objectID: blockID == nil ? nil : objectID, blockID: blockID, quote: quote)
-        let verification = await caseFiles.verify(reference: version.uuidString, passage: asked, caseID: caseID)
+        var verification = await caseFiles.verify(reference: version.uuidString, passage: asked, caseID: caseID)
+        // A block named by a caller that did not name the version (a search hit's own block) may belong to
+        // another version of the source than the one the case cites: the same words are then looked for
+        // in the cited version itself. The words are always checked; nothing is marked verified without them.
+        if blockID != nil, sourceVersionID == nil, !verification.support.isDocumentary {
+            let unpinned = StudioEvidenceRef(sourceVersionID: version, quote: quote)
+            let retry = await caseFiles.verify(reference: version.uuidString, passage: unpinned, caseID: caseID)
+            if retry.support.isDocumentary { verification = retry }
+        }
         var citation = verification.passage ?? asked
         if citation.objectID == nil { citation.objectID = objectID }
+        // What is stored is re-verified later (the case file, the report): it must verify the same way
+        // now, so the label shown at add time is the one the report prints.
+        if citation != (verification.passage ?? asked) {
+            verification = await caseFiles.verify(reference: version.uuidString, passage: citation, caseID: caseID)
+            if let p = verification.passage { citation = p }
+        }
         let origin = Self.origin(caseID: caseID, sourceVersionID: version, blockID: citation.blockID, quote: quote)
         do {
             let id = try await caseFiles.file.addJournal(caseID: caseID, kind: .chronology, text: text, eventDate: eventDate,

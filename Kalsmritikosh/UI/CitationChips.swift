@@ -24,6 +24,9 @@ public struct CitationOpenTarget: Identifiable, Hashable {
     public let url: URL
     public let objectID: UUID
     public let quote: String?
+    /// The exact matched words to mark inside the quoted passage (a screened name, too short to be
+    /// found on its own). Nil: the whole quote is marked.
+    public var focus: String? = nil
 }
 
 /// One chip per distinct cited source, numbered in first-citation order.
@@ -139,6 +142,29 @@ public enum CitedPassageLocator {
         return nil
     }
 
+    /// The exact words `focus` (a screened name, phone or address — often shorter than `minimumProbe`)
+    /// where they occur inside the located `quote` passage; else their first occurrence in the text.
+    /// Whitespace- and case-tolerant like `locate`. Nil when the words are not in the text at all.
+    public nonisolated static func locate(focus: String, near quote: String?, in haystack: String) -> NSRange? {
+        let probe = normalize(focus).trimmingCharacters(in: .whitespaces)
+        guard !probe.isEmpty else { return nil }
+        let (normHay, map) = normalizeWithMap(haystack)
+        let passage = quote.flatMap { locate($0, in: haystack) }
+        var first: NSRange?
+        var from = normHay.startIndex
+        while from < normHay.endIndex, let r = normHay.range(of: probe, range: from..<normHay.endIndex) {
+            let lo = normHay.distance(from: normHay.startIndex, to: r.lowerBound)
+            let hi = normHay.distance(from: normHay.startIndex, to: r.upperBound)
+            guard lo < map.count, hi - 1 < map.count, hi > lo else { break }
+            let found = NSRange(location: map[lo].lowerBound, length: map[hi - 1].upperBound - map[lo].lowerBound)
+            guard let passage else { return found }
+            if found.location >= passage.location, NSMaxRange(found) <= NSMaxRange(passage) { return found }
+            if first == nil { first = found }
+            from = r.upperBound
+        }
+        return first
+    }
+
     /// Candidate UI run (A4) — a contradiction's claim is the ledger's phrasing ("Invoice issued on
     /// May 30, 2024"), not the source's words, so `locate` finds nothing and the source opened with
     /// nothing highlighted. This returns the SOURCE's own line that states the claim: the longest
@@ -252,13 +278,13 @@ public struct CitationSourceSheet: View {
             Divider()
             // W2-1 — highlights and notes beside the source (never written into it).
             if ProductModuleFlags.isEnabled(.annotations) {
-                AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.quote)
+                AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.focus ?? target.quote)
                 Divider()
             }
             if ProductModuleFlags.isEnabled(.notesImport) {
                 NoteLinksStrip(objectID: target.objectID)
             }
-            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
+            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus)
         }
         .frame(minWidth: 640, minHeight: 480)
         .sheet(item: $chronologyPassage) { p in

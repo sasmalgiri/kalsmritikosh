@@ -1371,6 +1371,8 @@ struct CaseChronologyTab: View {
     @State private var ref = ""
     /// G1 — the cited passage a chronology entry opens at.
     @State private var openedPassage: OpenedSource?
+    /// The source document an entry opens, highlighted at its quote (as an Ask citation opens).
+    @State private var openSource: CitationOpenTarget?
     /// N3 — the entry a person is marking verified, or withdrawing the verification of.
     @State private var attesting: FactAttestationRequest?
 
@@ -1414,6 +1416,36 @@ struct CaseChronologyTab: View {
                 HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
             }
         }
+        // The cited document itself, at the quoted words — SourceViewer applies the same screen
+        // authorisation (sensitivity / scope) EvidenceViewer does before anything renders.
+        .sheet(item: $openSource) { target in
+            CitationSourceSheet(target: target) { openSource = nil }
+        }
+    }
+
+    /// Open the entry's source document highlighted at the quote. When the document's file cannot be
+    /// found, the quote alone is shown (the earlier evidence sheet), so the button never does nothing.
+    private func open(objectID: UUID, quote: String?) {
+        Task { @MainActor in
+            let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: objectID) {
+                    openSource = CitationOpenTarget(url: url, objectID: objectID, quote: (trimmed?.isEmpty ?? true) ? nil : trimmed)
+                    return
+                }
+                KalsmritikoshLog.ui.info("Chronology open source: no source file for \(objectID.uuidString, privacy: .public)")
+            } catch {
+                KalsmritikoshLog.ui.error("Chronology open source failed: \(error.localizedDescription, privacy: .public)")
+            }
+            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: objectID, snippet: trimmed ?? ""))
+        }
+    }
+
+    /// The date column of an entry: a chronology entry with no date says so (the report prints "—"),
+    /// never the day it was added; a journal note is dated by when it was written.
+    nonisolated static func dateColumn(_ e: CaseJournalEntry) -> String {
+        if let d = e.eventDate { return CaseFileDocuments.d(d) }
+        return e.kind == .chronology ? "No date" : CaseFileDocuments.d(e.createdAt)
     }
 
     private func list(_ title: String, _ entries: [CaseJournalEntry]) -> some View {
@@ -1421,7 +1453,8 @@ struct CaseChronologyTab: View {
             if entries.isEmpty { Text("Nothing yet.").foregroundStyle(.secondary) }
             ForEach(entries) { e in
                 HStack(alignment: .top) {
-                    Text(CaseFileDocuments.d(e.eventDate ?? e.createdAt)).font(.caption.monospacedDigit()).frame(width: 100, alignment: .leading)
+                    Text(Self.dateColumn(e)).font(.caption.monospacedDigit()).frame(width: 100, alignment: .leading)
+                        .foregroundStyle(e.eventDate == nil && e.kind == .chronology ? Color.secondary : Color.primary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(e.text)
                         HStack(spacing: 6) {
@@ -1444,7 +1477,7 @@ struct CaseChronologyTab: View {
                     if e.kind == .chronology { attestButtons(e) }
                     if let target = PassageChronology.openTarget(for: e, objectForVersion: model.objectByVersion) {
                         Button("Open source") {
-                            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: target.objectID, snippet: target.quote ?? ""))
+                            open(objectID: target.objectID, quote: target.quote)
                         }
                         .buttonStyle(.borderless).font(.caption)
                         .help("Open the source this entry cites, at the quoted passage.")
