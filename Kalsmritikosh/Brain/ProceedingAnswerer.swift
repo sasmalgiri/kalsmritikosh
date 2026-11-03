@@ -412,6 +412,96 @@ public nonisolated enum ProceedingAnswerer {
         sources.filter { namesFully($0.text, person: person) }.map(\.objectID)
     }
 
+    // MARK: - P2 self-check: the stated value belongs to the asked person
+
+    /// A sentence saying the person's case is still open: a plea, verdict or sentence read from a headline
+    /// or lead that does not name them is then someone else's ("Rapids Theatre owner pleads guilty …" in
+    /// the release that says "Charges remain pending against Roberto Soliman").
+    static let stillPending = #"(?i)\b(?:charges?|case|counts?|indictment)\s+(?:\w+\s+){0,3}?(?:remains?|is|are|still)\s+(?:still\s+)?pending\b|\bpending against\b|\bawait(?:s|ing)\s+trial\b"#
+
+    /// The clauses of a sentence a semicolon or "while"/"whereas" joins ("A was sentenced to six years;
+    /// B … was sentenced to three years").
+    static func clauses(of sentence: String) -> [String] {
+        sentence.components(separatedBy: ";").flatMap { $0.components(separatedBy: #", while "#) }
+            .flatMap { $0.components(separatedBy: ", whereas ") }
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// True when `clause` names the person: in full, or by surname not preceded by another given name.
+    static func clauseNames(_ clause: String, person: String) -> Bool {
+        if namesFully(clause, person: person) { return true }
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard let surname = tokens.last,
+              let re = try? NSRegularExpression(pattern: #"(?i)(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: surname) + #"(?![\p{L}])"#) else { return false }
+        let ns = clause as NSString
+        return re.matches(in: clause, range: NSRange(location: 0, length: ns.length)).contains {
+            !ProceedingEventExtractor.namesSomeoneElse(clause, at: $0.range, asked: tokens)
+        }
+    }
+
+    /// The person a clause introduces as its subject ("Shawn C. Simon, 41, of Charleston, …") — the first
+    /// "Name, NN," before the step's verb — or nil.
+    static func introducedSubject(_ clause: String) -> String? {
+        guard let r = clause.range(of: #"(?:Mc|Mac|De|O'|O’)?[A-Z][a-z'’\-]+(?:\s+(?:[A-Z]\.|(?:Mc|Mac|De|O'|O’)?[A-Z][a-z'’\-]+)){1,3}(?=,\s+(?:a\s+)?\d{1,3},)"#, options: .regularExpression) else { return nil }
+        return String(clause[r])
+    }
+
+    /// The finding when its step (and term) is the person's; a term corrected to the person's own clause;
+    /// nil when the step belongs to someone else in the sentence or contradicts the person's open case.
+    static func bound(_ f: ProceedingEventExtractor.Finding, person: String, documentText: String) -> ProceedingEventExtractor.Finding? {
+        let outcome: Set<ProceedingEventExtractor.Step> = [.pleaded, .convicted, .sentenced]
+        // 1. An unnamed headline or lead ("… owner pleads guilty …") against the person's open case.
+        if outcome.contains(f.step), !clauseNames(f.sentence, person: person),
+           ProceedingEventExtractor.sentences(of: documentText).contains(where: { clauseNames($0, person: person) && $0.range(of: stillPending, options: .regularExpression) != nil }) {
+            return nil
+        }
+        guard clauseNames(f.sentence, person: person) else { return f }   // a lead or headline: kept as read
+        let parts = clauses(of: f.sentence)
+        let pattern = f.step.pattern
+        // 2. Several clauses: the step (and its term) is read from the clause naming the person. A clause
+        //    opening with "he"/"she" continues the person's clause before it.
+        if parts.count > 1 {
+            var own: [String] = []
+            var previousOwn = false
+            for c in parts {
+                let named = clauseNames(c, person: person)
+                let continues = previousOwn && c.range(of: #"^(?:and\s+)?(?:he|she|the defendant)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+                if named || continues { own.append(c) }
+                previousOwn = named || continues
+            }
+            let stating = own.filter { $0.lowercased().range(of: pattern, options: .regularExpression) != nil }
+            guard let clause = stating.first else { return nil }
+            if introducedSubject(clause).map({ !clauseNames($0, person: person) }) ?? false, !namesFully(clause, person: person) { return nil }
+            guard f.step == .sentenced else { return f }
+            let term = ProceedingEventExtractor.sentenceDetail(clause)
+            if term == f.detail { return f }
+            return ProceedingEventExtractor.Finding(step: f.step, day: f.day, dayFromPrintedDate: f.dayFromPrintedDate, sentence: f.sentence,
+                                                    detail: term, reportedOn: f.reportedOn)
+        }
+        // 3. One clause whose introduced subject is someone else, the person only mentioned in passing
+        //    ("Shawn C. Simon, 41, … drove the getaway car for Miller and Williams and was sentenced … to 22
+        //    months"): the step is the subject's. "X, 41, and Y, 39, were sentenced" names both as subjects.
+        let low = f.sentence.lowercased()
+        if outcome.contains(f.step), let subject = introducedSubject(f.sentence), !clauseNames(subject, person: person),
+           low.count == f.sentence.count, let verb = low.range(of: pattern, options: .regularExpression),
+           !String(low[verb]).hasPrefix("were") {
+            let before = String(f.sentence.prefix(low.distance(from: low.startIndex, to: verb.lowerBound)))
+            // The person named in full before the verb, or introduced as a subject too ("…, and Michael
+            // Williams, 44, of Logan, …"), keeps the step theirs.
+            let surname = NSRegularExpression.escapedPattern(for: ProceedingEventExtractor.nameTokens(person).last ?? "")
+            let personIntroduced = before.range(of: #"(?i)\b"# + surname + #",\s+(?:a\s+)?\d{1,3},"#, options: .regularExpression) != nil
+            if !personIntroduced, !namesFully(before, person: person), before.lowercased().contains(ProceedingEventExtractor.nameTokens(person).last ?? "\u{0}") {
+                return nil
+            }
+        }
+        // 4. The term stated must be in the sentence quoted.
+        if let d = f.detail, !f.sentence.contains(d) {
+            return ProceedingEventExtractor.Finding(step: f.step, day: f.day, dayFromPrintedDate: f.dayFromPrintedDate, sentence: f.sentence,
+                                                    detail: nil, reportedOn: f.reportedOn)
+        }
+        return f
+    }
+
     /// `identicalCopies`: further files byte-identical to the documents that name the person (stored once).
     public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true, identicalCopies: Int = 0) -> VerifiedAnswer? {
         // Only documents that name THIS person in full: a release naming "Brock Taylor" or "Christopher Lee
@@ -433,6 +523,9 @@ public nonisolated enum ProceedingAnswerer {
             // read under that alias.
             for n in [parsed.person] + aliases {
                 let fs = ProceedingEventExtractor.findings(in: s.text, person: n)
+                // P2 self-check: each step (and a sentencing's term) must be the person's own — the clause
+                // that states it is about them, not a co-defendant named in the same sentence.
+                    .compactMap { Self.bound($0, person: n, documentText: s.text) }
                 if !fs.isEmpty { for f in fs { all.append((s.objectID, f)) }; break }
             }
         }

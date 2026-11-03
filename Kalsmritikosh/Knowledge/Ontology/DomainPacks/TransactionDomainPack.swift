@@ -63,7 +63,9 @@ public enum TransactionDomainPack {
         // Acceptance case 2026-10-30 (D-8): `[\d,]+` kept a comma that followed the figure ("₹10,000,")
         // — the figure is digits with its grouping, Indian (2,40,000) or Western (240,000), never
         // ending in a separator.
-        if let amount = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?"#, in: text) {
+        // P2 (real-case evaluation 2026-11-03): "$50k" was read as "$50" and "$1 million" as "$1" — the
+        // scale word is part of the amount, and the stored value spells it out ("$50,000").
+        if let amount = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?(?:\s?(?:million|billion|thousand|mn|bn|k)(?![a-z]))?"#, in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: normalize(amount),
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],
@@ -125,7 +127,24 @@ public enum TransactionDomainPack {
     }
 
     nonisolated static func normalize(_ amount: String) -> String {
-        amount.replacingOccurrences(of: " ", with: "")
+        let compact = amount.replacingOccurrences(of: " ", with: "")
+        guard let scale = compact.range(of: #"(?i)(million|billion|thousand|mn|bn|k)$"#, options: .regularExpression),
+              let digits = compact[..<scale.lowerBound].range(of: #"\d[\d,]*(?:\.\d+)?$"#, options: .regularExpression),
+              let n = Double(compact[digits].replacingOccurrences(of: ",", with: "")) else { return compact }
+        let factor: Double
+        switch compact[scale].lowercased() {
+        case "billion", "bn": factor = 1e9
+        case "million", "mn": factor = 1e6
+        default: factor = 1e3
+        }
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.maximumFractionDigits = 2
+        f.groupingSeparator = ","
+        f.usesGroupingSeparator = true
+        let spelled = f.string(from: NSNumber(value: n * factor)) ?? compact
+        return String(compact[..<digits.lowerBound]) + spelled
     }
 
     nonisolated static func currencyUnit(_ amount: String) -> String? {

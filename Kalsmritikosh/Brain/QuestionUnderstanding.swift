@@ -24,8 +24,23 @@ import os
 
 public nonisolated enum QuestionUnderstanding {
 
-    /// The field chosen for a question by step 2 or 3, read by `SlotFieldResolver` for the rest of
-    /// that answer. Keyed by the question text; only the most recent few are kept.
+    /// One answer's interpretation: the field (or gate) steps 2–3 chose, read by `SlotFieldResolver` and
+    /// the gates for the rest of THAT answer only. P2 (real-case evaluation 2026-11-03): the choice was a
+    /// process-wide table keyed by the question's text, so the same wording asked in another case — or
+    /// again later — reused a field chosen for different documents ("conflicting values for amount" for a
+    /// payout question in another case). Each answer now binds its own session (MasterBrain.answerStream),
+    /// so a choice never crosses answers, cases or scopes.
+    public final class Session: Sendable {
+        fileprivate let fields = OSAllocatedUnfairLock(initialState: [String: String]())
+        fileprivate let gates = OSAllocatedUnfairLock(initialState: [String: GateIntent]())
+        public init() {}
+    }
+
+    /// The session of the answer being computed (nil outside an answer).
+    @TaskLocal public static var session: Session?
+
+    /// Outside any answer session (direct callers, unit tests) the choice lives in this small table,
+    /// keyed by the question; inside a session it is never written or read.
     private static let chosen = OSAllocatedUnfairLock(initialState: [String: String]())
 
     /// Keyed case- and space-insensitively: callers pass the question as asked or lowercased.
@@ -34,7 +49,8 @@ public nonisolated enum QuestionUnderstanding {
     }
 
     public static func interpretedField(for question: String) -> String? {
-        chosen.withLock { $0[key(question)] }
+        if let session { return session.fields.withLock { $0[key(question)] } }
+        return chosen.withLock { $0[key(question)] }
     }
 
     /// Remembered when the interpreter found that no field on file answers the question.
@@ -54,10 +70,12 @@ public nonisolated enum QuestionUnderstanding {
 
     /// The gate the interpreter chose for this question, if any.
     public static func gateIntent(for question: String) -> GateIntent? {
-        intents.withLock { $0[key(question)] }
+        if let session { return session.gates.withLock { $0[key(question)] } }
+        return intents.withLock { $0[key(question)] }
     }
 
     static func remember(_ intent: GateIntent?, for question: String) {
+        if let session { session.gates.withLock { $0[key(question)] = intent }; return }
         intents.withLock { table in
             if table.count > 64 { table.removeAll() }
             table[key(question)] = intent
@@ -65,6 +83,7 @@ public nonisolated enum QuestionUnderstanding {
     }
 
     static func remember(_ field: String?, for question: String) {
+        if let session { session.fields.withLock { $0[key(question)] = field }; return }
         chosen.withLock { table in
             if table.count > 64 { table.removeAll() }
             table[key(question)] = field

@@ -739,7 +739,8 @@ public struct EvidenceVerifier: Verifier {
             documentsSearched: searchedScope,
             archivePassages: totals?.passages,
             scoreByObject: scoreByObject,
-            salienceByObject: meanSalienceByObject)
+            salienceByObject: meanSalienceByObject,
+            question: intent.rawQuestion)
         // Case bench 2026-10-20: "none of the 53 documents searched carries a decision date"
         // was said about a decision whose first lines state its date — no extractor had filed
         // it as a field, and the absence sentence pre-empted the passages that show it. An

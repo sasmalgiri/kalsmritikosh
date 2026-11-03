@@ -517,12 +517,71 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
                                   answerState: .notFound)
         }
         // The rules said something the reader did not find stated: both shown, never at full confidence.
-        body = "Needs review — " + body + "\n\n" + rulesLines(rules) + "\n\n" + receipt(passages: passages.count)
+        body = "Needs review — the AI reading could not confirm this. The AI reader found no passage stating it among the \(passages.count) passage\(passages.count == 1 ? "" : "s") it read"
+        body += dropped > 0 ? " (\(dropped) proposed statement\(dropped == 1 ? "" : "s") did not check out against the documents)." : "."
+        body += "\n\n" + rulesLines(rules) + "\n\n" + receipt(passages: passages.count)
         let c = VerifiedAnswer.Contradiction(description: "The AI reader found no passage stating what the evidence-only reading gives.",
                                              claimA: "Not stated in the passages read", claimB: String(answerPart(of: rules).prefix(600)))
         return VerifiedAnswer(body: body, answerText: String(answerPart(of: rules).prefix(600)), intentKind: needsReviewKind,
                               citations: merged(rules.citations, Array(shown)), confidence: Confidence(min(rules.confidence.value, 0.35)),
                               contradictions: [c], source: .experts, answerState: .partiallySupported)
+    }
+
+    // MARK: - P2: the cross-check of a proceeding (record) answer
+
+    /// The person's documents cut into passages for the reader: windows of whole sentences (at most
+    /// `passageCharacters`), only those naming the person, the ones holding the asked step's words first.
+    public static func passages(from sources: [ProceedingAnswerer.Source], person: String, stepWords: [String] = [],
+                                fileNames: [UUID: String] = [:]) -> [Passage] {
+        var focused: [Passage] = [], rest: [Passage] = []
+        for source in sources {
+            var window = ""
+            func flush() {
+                let text = window.trimmingCharacters(in: .whitespacesAndNewlines)
+                window = ""
+                guard !text.isEmpty, ProceedingAnswerer.clauseNames(text, person: person) else { return }
+                let p = Passage(objectID: source.objectID, text: text, fileName: fileNames[source.objectID])
+                let low = text.lowercased()
+                if stepWords.contains(where: { low.contains($0) }) { focused.append(p) } else { rest.append(p) }
+            }
+            for sentence in ProceedingEventExtractor.rawSentences(of: source.text) {
+                if window.count + sentence.count + 1 > passageCharacters { flush() }
+                window += (window.isEmpty ? "" : " ") + sentence
+            }
+            flush()
+        }
+        return focused + rest
+    }
+
+    /// The rules' proceeding answer after the AI reading cross-checked it (nil: nothing was sent — the
+    /// rules answer stands as it is):
+    ///   • the reading verified and agrees → the rules answer, marked confirmed;
+    ///   • it verified and disagrees → "Needs review" with both readings (the composer's answer);
+    ///   • it found nothing stated while the rules state a value → "Needs review — the AI reading could
+    ///     not confirm this", lower confidence;
+    ///   • the rules refused and the reading verified an answer → the verified reading;
+    ///   • the reader failed → the rules answer, flagged.
+    public static func crossChecked(_ outcome: Outcome, rules: VerifiedAnswer) -> VerifiedAnswer? {
+        switch outcome {
+        case .notSent:
+            return nil
+        case .failed(let reason):
+            return flagged(rules, reason: reason)
+        case .notStated(let a):
+            // Both say the documents don't state it: the rules' honest wording stands.
+            return rules.refused ? rules : a
+        case .answered(let a):
+            if a.intentKind == needsReviewKind || rules.refused || rules.citations.isEmpty { return a }
+            let note = "\n\n(Confirmed by the AI reading — every quote checked against its source: " + String((a.answerText ?? "").prefix(300)) + ")"
+            var out = VerifiedAnswer(body: rules.body + note, answerText: rules.answerText, intentKind: rules.intentKind,
+                                     citations: merged(rules.citations, a.citations), confidence: rules.confidence,
+                                     contradictions: rules.contradictions, refused: false, refusalReason: nil, report: rules.report,
+                                     walkSteps: rules.walkSteps, source: rules.source,
+                                     reasoningTrace: ModelUseLabel.adding("answer.verifiedReading", to: rules.reasoningTrace),
+                                     answerState: rules.answerState, ledgerAnswerID: rules.ledgerAnswerID)
+            out.resolvedQuestion = rules.resolvedQuestion
+            return out
+        }
     }
 
     /// The pipeline's answer, said to be the evidence-only reading because the AI reading failed.

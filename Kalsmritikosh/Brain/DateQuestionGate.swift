@@ -94,8 +94,32 @@ public nonisolated enum DateQuestionGate {
         }
     }
 
-    /// The answer as it should be recorded.
-    public static func apply(question: String, _ answer: VerifiedAnswer) -> VerifiedAnswer {
+    /// A clock time: "1100:26" (an accident report's hhmm:ss), "15:27", "07:53:10", "11:01 a.m.", "about 1101
+    /// eastern daylight time", "at 0930 local".
+    static let timePattern = #"(?i)(?<![\d:.,/])(?:\d{4}:[0-5]\d|(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s?[ap]\.?m\.?)?|\d{1,2}\s?[ap]\.m\.)(?![\d:])|\b(?:about|approximately|around|at|by|until|before|after)\s+(?:[01]\d|2[0-3])[0-5]\d(?=\s+(?:eastern|central|mountain|pacific|alaska|hawaii|atlantic|local|coordinated|zulu|utc|edt|est|cdt|cst|mdt|mst|pdt|pst|hours?|hrs)\b)"#
+
+    /// The first clock time in the text, as written (without a leading "about"/"at").
+    static func clockTime(in text: String) -> String? {
+        guard let r = text.range(of: timePattern, options: .regularExpression) else { return nil }
+        return String(text[r]).replacingOccurrences(of: #"(?i)^(?:about|approximately|around|at|by|until|before|after)\s+"#, with: "", options: .regularExpression)
+    }
+
+    /// The date of the source sentence that also gives a clock time ("On July 7, 2015, about 1101 eastern
+    /// daylight time, …") — the day the document's timed events happened, when it says so.
+    static func dateOfTimedEvents(in texts: [String]) -> String? {
+        for text in texts {
+            for sentence in text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) where containsDay(sentence) && sentence.range(of: timePattern, options: .regularExpression) != nil {
+                if let r = sentence.range(of: #"(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:,?\s+\d{4})?\b|\b\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+\d{4})?\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"#, options: .regularExpression) {
+                    return String(sentence[r])
+                }
+            }
+        }
+        return nil
+    }
+
+    /// The answer as it should be recorded. `sourceTexts`: the cited documents, read for the date of
+    /// timed events when the answer gives only a time.
+    public static func apply(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
         guard asksWhen(question), !answer.refused else { return answer }
         let said = answer.answerText ?? answer.body
         let hasDate = containsDate(said) || containsDate(answer.body)
@@ -122,6 +146,20 @@ public nonisolated enum DateQuestionGate {
                                   ledgerAnswerID: answer.ledgerAnswerID)
         }
         guard !hasDate else { return answer }
+        // P2 (real-case evaluation 2026-11-03): "When did the controller tell the pilot to turn left?" was
+        // refused as having no date while the cited passage said "At 1100:26 …". A when-question answered
+        // by a clock time is answered with that time — and with the date when the document states the day
+        // of its timed events — unless it asks for a day or a publication date.
+        if !asksDay(question), !asksPublicationDate(question),
+           let time = clockTime(in: said) ?? clockTime(in: answer.body) ?? answer.citations.lazy.compactMap({ clockTime(in: $0.snippet) }).first {
+            let day = dateOfTimedEvents(in: answer.citations.map(\.snippet) + sourceTexts)
+            let lead = "The documents give the time: \(time)" + (day.map { ", on \($0) (the date the same document gives for these events)" } ?? " (no date is stated with it)") + "."
+            return VerifiedAnswer(body: lead + "\n\n" + answer.body, answerText: lead, intentKind: answer.intentKind, citations: answer.citations,
+                                  confidence: answer.confidence, contradictions: answer.contradictions, refused: false,
+                                  refusalReason: nil, report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
+                                  reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
+                                  ledgerAnswerID: answer.ledgerAnswerID)
+        }
         var text = "The documents don't give a date for this."
         if let rel = relativeSentence(in: answer.body) {
             text += " The source only says \u{201C}\(rel)\u{201D}, without a calendar date."

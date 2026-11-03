@@ -356,6 +356,10 @@ public actor MasterBrain {
                 // background embedding/enrichment drain yields to the user's question.
                 await self.priorityGate?.beginInteractive()
                 defer { let g = self.priorityGate; Task { await g?.endInteractive() } }
+                // P2 — one interpretation session per answer: a field the interpreter chooses for this
+                // question is read only by this answer's resolver and gates, never by another case's or a
+                // later answer's (QuestionUnderstanding.Session).
+                await QuestionUnderstanding.$session.withValue(QuestionUnderstanding.Session()) {
 
                 // §8.4 `.unsupported` — a conversational/meta utterance is not a
                 // question about the archive: refuse honestly BEFORE any retrieval.
@@ -497,6 +501,7 @@ public actor MasterBrain {
                     }
                 }
                 continuation.finish()
+                }
             }
         }
     }
@@ -1548,7 +1553,8 @@ public actor MasterBrain {
                 facts: retrieval.genericFacts,
                 evaluations: retrieval.claimEvaluations,
                 authorityObjectIDs: retrieval.authorityObjectIDs,
-                documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count))
+                documentsSearched: max(1, Set(retrieval.chunks.map(\.chunk.objectID)).count),
+                question: intent.rawQuestion)
         else { return false }
         let clean = !slot.isNotFound && !slot.isConflict && slot.singleCanonicalValue && slot.structuredSource
         if !clean {
@@ -1794,7 +1800,7 @@ public actor MasterBrain {
         // question before the date gate looks at it (closed-case simulation, 2026-10-26).
         let recordLined = RecordLineGate.apply(question: question, verified, sourceTexts: officeSources)
         let gated = CountQuestionGate.apply(question: question,
-                                            IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, recordLined),
+                                            IssuingOfficeGate.apply(question: question, DateQuestionGate.apply(question: question, recordLined, sourceTexts: officeSources),
                                                                     sourceTexts: officeSources))
         // Wide case bench 2026-10-25: a yes/no question is answered yes or no; a question about
         // something the documents never mention is answered "not mentioned".
@@ -2233,7 +2239,10 @@ public actor MasterBrain {
             // decides (an unknown document is denied); with no label source wired, nothing is sent.
             var cloudSources: [ProceedingAnswerer.Source] = []
             var cloudClearance: CloudSourceClearance?
-            if interpreterModelsAllowed, recordExtractor != nil, VerifiedRecordExtractor.handles(parsed.ask) {
+            // P2 — the composer reads the same cleared documents to cross-check the rules answer.
+            let crossCheckable = Self.crossCheckable(parsed.ask)
+            if interpreterModelsAllowed,
+               (recordExtractor != nil && VerifiedRecordExtractor.handles(parsed.ask)) || (answerComposer != nil && crossCheckable) {
                 let cloudScope = SensitiveScope(
                     workspaceID: access.scope.workspaceID, maximumSensitivity: min(access.scope.maximumSensitivity, CloudSourceGate.cloudCeiling),
                     permitsPrivilegedMaterial: false, purpose: .prompt)
@@ -2262,6 +2271,22 @@ public actor MasterBrain {
             }
             if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete, identicalCopies: copies) {
                 KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")
+                // P2 (real-case evaluation 2026-11-03: about 14 wrong rules answers shipped when the extractor
+                // verified nothing — a co-defendant's term, a headline's plea). With the reader available, the
+                // composer reads the person's cleared documents as the cross-check: agreement confirms the
+                // rules answer, disagreement or nothing found shows "Needs review" with both, never the rules
+                // value alone at full confidence.
+                if interpreterModelsAllowed, crossCheckable, let answerComposer, !cloudSources.isEmpty {
+                    let stepWords = Self.stepWords(parsed.ask)
+                    let passages = VerifiedAnswerComposer.passages(from: cloudSources, person: parsed.person, stepWords: stepWords,
+                                                                   fileNames: await fileNames(for: cloudSources.map(\.objectID)))
+                    let outcome = await answerComposer.compose(question: intent.rawQuestion, passages: passages, rules: answered,
+                                                               clearance: cloudClearance)
+                    if let checked = VerifiedAnswerComposer.crossChecked(outcome, rules: answered) {
+                        KalsmritikoshLog.brain.info("proceeding answer: cross-checked by the verified reading → \(VerifiedAnswerComposer.writer(of: checked), privacy: .public)")
+                        return checked
+                    }
+                }
                 return answered
             }
         }
@@ -2478,6 +2503,47 @@ public actor MasterBrain {
         // result → review-ready → verifiedFinal) BEFORE verifiedFinal is emitted. The old
         // best-effort persistAnswerLedger(...) call is removed to avoid a duplicate answer row.
         return tagged
+    }
+
+    /// P2 — the proceeding asks the verified reading cross-checks: a value or yes/no about the person
+    /// (a timeline, a count or an office list is not one claim to confirm).
+    nonisolated static func crossCheckable(_ ask: ProceedingAnswerer.Ask) -> Bool {
+        switch ask {
+        case .when, .whether, .sentenceImposed, .chargedWith: return true
+        case .office, .timeline, .documentCount: return false
+        }
+    }
+
+    /// Words that put a passage about the asked step first.
+    nonisolated static func stepWords(_ ask: ProceedingAnswerer.Ask) -> [String] {
+        switch ask {
+        case .when(let step), .whether(let step):
+            switch step {
+            case .pleaded: return ["plead", "pled", "guilty"]
+            case .sentenced: return ["sentenc"]
+            case .charged: return ["charg", "indict"]
+            case .convicted: return ["convict", "guilty", "verdict"]
+            default: return [step.rawValue.prefix(5).lowercased()]
+            }
+        case .sentenceImposed: return ["sentenc"]
+        case .chargedWith: return ["charg", "indict", "plead", "pled"]
+        case .office, .timeline, .documentCount: return []
+        }
+    }
+
+    /// The documents' file names, for the reader's sources (empty when unreadable).
+    private func fileNames(for ids: [UUID]) async -> [UUID: String] {
+        guard let objects, !ids.isEmpty else { return [:] }
+        do {
+            var out: [UUID: String] = [:]
+            for row in try await objects.documentHeads(for: Set(ids), headCharacters: 1) {
+                if let name = row.fileName { out[row.objectID] = name }
+            }
+            return out
+        } catch {
+            KalsmritikoshLog.brain.error("proceeding cross-check: file names unreadable: \(String(describing: error), privacy: .public)")
+            return [:]
+        }
     }
 
     /// P1 — the passages this question retrieved, in the pipeline's order, cleared for the cloud (privileged
