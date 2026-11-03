@@ -41,6 +41,20 @@ struct ProceedingSharedNamePartTests {
 
     // MARK: - Naming (pure)
 
+    @Test("A four-word name keeps its last word behind a capitalised question word (ho22 adjudication X)")
+    func fourWordNameBehindQuestionWord() {
+        let name = "Arturo Carlos Murillo Prijic"
+        for q in ["When Arturo Carlos Murillo Prijic was sentenced?", "What Arturo Carlos Murillo Prijic was charged with?",
+                  "Did Arturo Carlos Murillo Prijic enter a guilty plea?", "Did Arturo Carlos Murillo Prijic plead guilty or not?",
+                  "When was Arturo Carlos Murillo Prijic sentenced?", "Can you tell me the date on which Arturo Carlos Murillo Prijic was sentenced?"] {
+            #expect(ProceedingAnswerer.person(in: q) == name, "\(q)")
+        }
+        // Shorter names are unchanged.
+        #expect(ProceedingAnswerer.person(in: "When was Jonathan Taylor sentenced?") == "Jonathan Taylor")
+        #expect(ProceedingAnswerer.person(in: "Did Gary L. Smith plead guilty?") == "Gary L. Smith")
+        #expect(ProceedingAnswerer.person(in: "When Christi Machala's sentencing took place?") == "Christi Machala")
+    }
+
     @Test("A full name is the person; one shared part with a different full name is not")
     func namesFully() {
         typealias P = ProceedingAnswerer

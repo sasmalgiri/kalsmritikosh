@@ -52,12 +52,15 @@ public nonisolated enum ProceedingAnswerer {
     ]
 
     /// A person's name in the question: two to four capitalised words ("Christi Machala", "Alexandria
-    /// Jasmine Estep", "Gary L. Smith"), not the question's own first word.
+    /// Jasmine Estep", "Gary L. Smith", "Arturo Carlos Murillo Prijic"), not the question's own first word.
     static func person(in question: String) -> String? {
         // "Jose Garcia-Zamora", "Mary O'Neil-Smith": a hyphen may join two capitalised parts.
         // "McKinney", "DeShawn", "O'Brien": a capital may follow a short prefix inside the name.
         let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’]+(?:-[A-Z][a-z'’]+)?"#
-        let pattern = #"(?<![A-Za-z])("# + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,3})(?:,?\s+(?:Jr|Sr|II|III)\.?)?"#
+        // Up to five words: a capitalised question word ("When", "Did", "What") is matched with the name and
+        // removed below, so a four-word name keeps its last word (ho22 adjudication X: "When Arturo Carlos
+        // Murillo Prijic was sentenced?" read as "Arturo Carlos Murillo", then refused as nobody's name).
+        let pattern = #"(?<![A-Za-z])("# + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,4})(?:,?\s+(?:Jr|Sr|II|III)\.?)?"#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = question as NSString
         let skip: Set<String> = ["When", "Did", "Was", "Were", "What", "Which", "Who", "How", "Give", "Tell", "Show", "List", "Has", "Is",
