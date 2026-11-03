@@ -60,16 +60,20 @@ struct CaseContradictionFinderTests {
         #expect(c.id == p.contradiction().id)   // stable: a rerun adds nothing twice
     }
 
-    @Test("Logan: who spread the fuel and which camera recorded it differ across releases")
+    @Test("Logan: who spread the fuel differs across releases; two cameras that caught two different things do not")
     func loganRoleAndCamera() {
         let docs = [Self.doc(Self.release1), Self.doc(Self.release4), Self.doc(Self.release5)]
         let found = F.ruleFindings(docs)
         let role = found.filter { $0.kind == .role }
         #expect(role.count == 1)
         #expect(role.first.map { [$0.valueA, $0.valueB].contains { $0.contains("Williams") } } == true)
-        let camera = found.filter { $0.kind == .account }
-        #expect(camera.count == 1)
-        #expect(camera.first.map { Set([$0.valueA, $0.valueB]) == ["317’s security camera", "the Logan County Courthouse video security system"] } == true)
+        // Real-case v2 (2026-11-04, investigator memo): the restaurant camera "caught the three culprits", the
+        // courthouse system "caught the explosion" — two recordings of two things, both true.
+        #expect(found.filter { $0.kind == .account }.isEmpty)
+        // The same thing caught on two different cameras is a pair.
+        let x = Self.doc("The explosion was caught on 317’s security camera.")
+        let y = Self.doc("The explosion was caught on the Logan County Courthouse video security system.")
+        #expect(F.ruleFindings([x, y]).filter { $0.kind == .account }.count == 1)
     }
 
     @Test("A later account stated as a correction is not flagged by the rules")

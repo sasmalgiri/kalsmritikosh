@@ -275,6 +275,9 @@ struct CaseDraftTests {
         let before = r.sent.all.count
         let offline = try await r.svc.buildDrafts(caseID: r.caseID, useAI: false)
         #expect(r.sent.all.count == before && offline.calls == 0 && !offline.timeline.isEmpty)
+        // Real-case v2 (2026-11-04): the drafts carry an interview plan for each of the case's subjects.
+        #expect(Set(offline.interviews.map(\.person)) == ["Guy R. Miller", "Shawn C. Simon"], "\(offline.interviews.map(\.person))")
+        #expect(offline.interviews.allSatisfy { !$0.questions.isEmpty && $0.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) } })
         // The interview plan: the document outside the case is neither used nor sent.
         let iv = try await r.svc.draftInterview(caseID: r.caseID, person: "Guy R. Miller", useAI: false)
         #expect(!iv.questions.isEmpty && iv.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) })

@@ -127,7 +127,9 @@ public actor LLMNarrativeComposer: NarrativeComposer {
             provider = nil
         }
         if provider == nil {
-            downgrades.append("No reasoning provider available — chapters ship without LLM prose")
+            // Real-case v2 interim review (2026-11-04): "No reasoning provider available" was printed while the
+            // person's Online reader was set up (it is not a history-composing provider) — say what is true.
+            downgrades.append("No model wrote prose for these chapters — each line is the documents' own dated entry")
         }
 
         var chapters: [NarrativeChapter] = []
@@ -199,7 +201,9 @@ public actor LLMNarrativeComposer: NarrativeComposer {
             provider = nil
         }
         if provider == nil {
-            downgrades.append("No reasoning provider available — chapters ship without LLM prose")
+            // Real-case v2 interim review (2026-11-04): "No reasoning provider available" was printed while the
+            // person's Online reader was set up (it is not a history-composing provider) — say what is true.
+            downgrades.append("No model wrote prose for these chapters — each line is the documents' own dated entry")
         }
 
         // Compose chapter by chapter, verifying citations + surfacing

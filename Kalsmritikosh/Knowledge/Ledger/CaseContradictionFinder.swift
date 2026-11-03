@@ -47,6 +47,9 @@ public nonisolated enum CaseContradictionFinder {
 
     public enum Kind: String, Sendable, CaseIterable, Codable {
         case amount, date, role, count, age, account
+        /// A sentence's length (real-case v2, 2026-11-04: "13 months" and "a year and a day" for one
+        /// sentence were never paired).
+        case term
 
         public var label: String {
             switch self {
@@ -56,6 +59,7 @@ public nonisolated enum CaseContradictionFinder {
             case .count: return "Count"
             case .age: return "Age"
             case .account: return "Account"
+            case .term: return "Sentence"
             }
         }
 
@@ -65,7 +69,7 @@ public nonisolated enum CaseContradictionFinder {
             case .amount: return .amount
             case .date: return .date
             case .role, .account: return .testimony
-            case .count: return .other
+            case .count, .term: return .other
             case .age: return .identity
             }
         }
@@ -78,6 +82,7 @@ public nonisolated enum CaseContradictionFinder {
             case "number", "quantity": self = .count
             case "actor", "who", "identity": self = .role
             case "location", "place", "testimony", "description", "event": self = .account
+            case "sentence", "duration", "prison term", "length": self = .term
             default: return nil
             }
         }
@@ -128,7 +133,7 @@ public nonisolated enum CaseContradictionFinder {
                 let a = CaseContradictionFinder.number(valueA), b = CaseContradictionFinder.number(valueB)
                 if let a, let b, max(a, b) > 0, abs(a - b) / max(a, b) > 0.25 { return .high }
                 return .medium
-            case .role, .account, .date, .count, .age: return .medium
+            case .role, .account, .date, .count, .age, .term: return .medium
             }
         }
 
@@ -197,10 +202,17 @@ public nonisolated enum CaseContradictionFinder {
         init(documents: [Document]) {
             var perDoc: [[String]] = []
             var all: [String] = []
+            // Real-case v2 (2026-11-04): "Attorneys Jason S. Gould", "Charge James E. Dennehy" (from "Special
+            // Agent in Charge James E. Dennehy") — a title read into the name; the person is the name after it.
+            var raw: [String: String] = [:]   // as written → without its leading title
             for d in documents {
                 let names = ProceedingEventExtractor.rawSentences(of: d.text).flatMap { Self.fullNames(in: $0).map(\.name) }
                 perDoc.append(names)
-                all += names
+                for n in names where raw[n.lowercased()] == nil {
+                    let bare = Self.strippingTitles(n)
+                    raw[n.lowercased()] = bare
+                    all.append(bare)
+                }
             }
             var unique: [String] = []
             var seen = Set<String>()
@@ -209,14 +221,40 @@ public nonisolated enum CaseContradictionFinder {
             for n in unique {
                 let t = ProceedingEventExtractor.nameTokens(n)
                 guard t.count >= 2 else { continue }
+                // "Michael D. Williams" and "Michael Williams", "Guy R. Miller, Jr." and "Guy Miller": one subject.
                 let supersets = tokens.indices.filter { tokens[$0].last == t.last && Set(t).isSubset(of: Set(tokens[$0])) }
                 if supersets.count == 1 { byFull[n.lowercased()] = supersets[0]; continue }
                 if supersets.count > 1 { continue }   // ambiguous: names two subjects
                 canonicals.append(n); tokens.append(t); byFull[n.lowercased()] = canonicals.count - 1
             }
+            for (written, bare) in raw where byFull[written] == nil {
+                if let c = byFull[bare.lowercased()] { byFull[written] = c }
+            }
             for (i, names) in perDoc.enumerated() {
                 for n in names { if let c = byFull[n.lowercased()] { fullInDoc[c, default: []].insert(i) } }
             }
+        }
+
+        /// Leading title words a capitalised run carries before the person's own name.
+        static let leadingTitles: Set<String> = [
+            "attorney", "attorneys", "charge", "judge", "judges", "justice", "magistrate", "agent", "agents", "special", "director",
+            "inspector", "inspectors", "general", "chief", "sheriff", "deputy", "officer", "detective", "sergeant", "lieutenant",
+            "captain", "commissioner", "prosecutor", "prosecutors", "counsel", "senator", "governor", "mayor", "president",
+            "secretary", "trooper", "investigator", "acting", "assistant", "senior", "trial", "litigation", "district", "court",
+            "defendant", "defendants", "co-defendant", "codefendant", "victim", "witness", "former", "principal", "associate",
+            "superintendent", "postal", "chairman", "chairwoman", "ceo", "dr", "mr", "mrs", "ms",
+        ]
+
+        /// The name without the title words before it ("Attorneys Jason S. Gould" → "Jason S. Gould"); the
+        /// name itself when fewer than two words would remain.
+        static func strippingTitles(_ name: String) -> String {
+            var words = name.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+            var dropped = false
+            while words.count > 2, let f = words.first,
+                  leadingTitles.contains(f.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".,"))) {
+                words.removeFirst(); dropped = true
+            }
+            return dropped ? words.joined(separator: " ") : name
         }
 
         func canonical(full name: String) -> Int? { byFull[name.lowercased()] }
@@ -294,10 +332,15 @@ public nonisolated enum CaseContradictionFinder {
         let subject: String
         let value: String
         var number: Double? = nil
-        var approximate = false
+        /// How the figure is stated: exactly, approximately, as a lower bound ("more than") or an upper one.
+        var bound: Bound = .exact
         var actors: Set<String> = []
         var day: VerifiedAnswerComposer.Day? = nil
         var tokens: Set<String> = []
+        /// What the statement is about beyond its subject (the thing a camera caught).
+        var about: Set<String> = []
+        /// A sentence length, in months and days.
+        var term: Duration? = nil
     }
 
     static let correctionPattern = #"(?i)\b(?:correct(?:ed|ion|ing|s)?|previously (?:reported|stated|announced|said|described)|earlier (?:release|report|announcement|statement|reported|stated|account)|contrary to|in fact|actually|clarif(?:y|ies|ied|ication)|was incorrect|were incorrect|erroneous(?:ly)?|mistaken(?:ly)?|misstated|amended)\b"#
@@ -337,6 +380,7 @@ public nonisolated enum CaseContradictionFinder {
                 out += stepDates(sentence, doc: i, mentions: mentions, names: names)
                 out += roles(sentence, doc: i, mentions: mentions)
                 out += recordings(sentence, doc: i)
+                out += terms(sentence, doc: i, mentions: mentions, names: names, text: d.text)
             }
         }
         return out
@@ -371,7 +415,7 @@ public nonisolated enum CaseContradictionFinder {
             let before = ns.substring(to: m.range.location)
             out.append(Statement(doc: doc, sentence: s, kind: .amount, attribute: "amount paid to them", subjectKey: "p\(c)",
                                  subject: names.canonicals[c], value: display(amount), number: amount,
-                                 approximate: before.range(of: approxPattern, options: .regularExpression) != nil))
+                                 bound: bound(before: before)))
         }
         return out
     }
@@ -418,7 +462,7 @@ public nonisolated enum CaseContradictionFinder {
             guard near.count == 1, let m = near.first, let amount = money(ns.substring(with: m.range)) else { continue }
             out.append(Statement(doc: doc, sentence: s, kind: .amount, attribute: attribute, subjectKey: "p\(c)",
                                  subject: names.canonicals[c], value: display(amount), number: amount,
-                                 approximate: ns.substring(to: m.range.location).range(of: approxPattern, options: .regularExpression) != nil))
+                                 bound: bound(before: ns.substring(to: m.range.location))))
         }
         return out
     }
@@ -512,6 +556,8 @@ public nonisolated enum CaseContradictionFinder {
             if actors.isEmpty {
                 actors = mentions.filter { m in
                     guard m.range.location < a.range.location else { return false }
+                    // "Shawn C. Simon, 41, of Charleston" — a town, not an actor.
+                    if ns.substring(to: m.range.location).range(of: #"(?i)\b(?:of|in|from|near)\s+$"#, options: .regularExpression) != nil { return false }
                     let after = ns.substring(from: m.range.location + m.range.length)
                     return after.range(of: #"^\s*(?:,\s*)?(?:recruited|hired|paid|asked|directed|instructed|enlisted|convinced|persuaded|had|got|told|ordered)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
                 }
@@ -540,8 +586,259 @@ public nonisolated enum CaseContradictionFinder {
         let tokens = Set(phrase.lowercased().replacingOccurrences(of: "’s", with: "").replacingOccurrences(of: "'s", with: "")
             .split { !$0.isLetter && !$0.isNumber }.map(String.init)).subtracting(recordingGeneric)
         guard !tokens.isEmpty else { return [] }
+        // What was caught: "The three culprits were caught on 317's camera" and "The explosion was caught on
+        // the courthouse video" record two things, both true (real-case v2, 2026-11-04).
+        let clause = ns.substring(to: m.range.location).components(separatedBy: CharacterSet(charactersIn: ",;")).last ?? ""
+        let about = ContradictionDetector.contentWords(clause).subtracting(recordingGeneric).subtracting(["was", "were", "been", "being", "is", "are"])
         return [Statement(doc: doc, sentence: s, kind: .account, attribute: "", subjectKey: "recorded", subject: "what recorded it",
-                          value: phrase, tokens: tokens)]
+                          value: phrase, tokens: tokens, about: about)]
+    }
+
+    // MARK: - Sentence lengths
+
+    /// A sentence's length: months and days ("a year and a day" = 12 months 1 day; "13 months" = 13 months).
+    struct Duration: Hashable, CustomStringConvertible {
+        let months: Int
+        let days: Int
+        var description: String {
+            var parts: [String] = []
+            if months > 0 { parts.append(months == 1 ? "1 month" : "\(months) months") }
+            if days > 0 { parts.append(days == 1 ? "1 day" : "\(days) days") }
+            return parts.isEmpty ? "0 days" : parts.joined(separator: " and ")
+        }
+    }
+
+    static let durationUnit = #"(?:\d{1,3}|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty(?:-(?:one|two|three|four|five|six|seven|eight|nine))?|thirty|forty|fifty|sixty)[\s-]+(?:years?|months?|weeks?|days?)\b"#
+
+    /// The length a phrase states at its start ("13 months in prison", "a year and a day", "seven years and
+    /// three months", "46-month"), or nil.
+    static func duration(_ phrase: String) -> Duration? {
+        let p = phrase.lowercased().trimmingCharacters(in: .whitespaces)
+        let pattern = "^(?:to\\s+)?(?:serve\\s+|spend\\s+)?(?:an?\\s+(?:total|term|period)\\s+of\\s+)?(" + durationUnit + "(?:(?:,\\s*|\\s+)(?:and\\s+)?" + durationUnit + "){0,2})"
+        guard let r = p.range(of: pattern, options: .regularExpression) else { return nil }
+        var months = 0, days = 0
+        for m in matches(durationUnit, in: String(p[r])) {
+            let part = (String(p[r]) as NSString).substring(with: m.range)
+            let words = part.split { $0 == " " || $0 == "-" }.map(String.init)
+            guard let head = words.first, let unit = words.last else { continue }
+            let n = Int(head) ?? (["a": 1, "an": 1, "one": 1][head]) ?? VerifiedAnswerComposer.numberWords[words.dropLast().joined(separator: "-")].map(Int.init)
+                ?? VerifiedAnswerComposer.numberWords[head].map(Int.init) ?? 0
+            if unit.hasPrefix("year") { months += 12 * n }
+            else if unit.hasPrefix("month") { months += n }
+            else if unit.hasPrefix("week") { days += 7 * n }
+            else { days += n }
+        }
+        return months + days > 0 ? Duration(months: months, days: days) : nil
+    }
+
+    /// Words that make a sentence's term not this case's prison term: a maximum the law allows, a
+    /// resentencing, supervised release or probation alone.
+    static let notATerm = #"(?i)\b(?:faces?|facing|up to|maximum|minimum|could|would|may(?!\s+\d)|resentenc\w*|reduced|commut\w*|vacat\w*|appeal\w*|if convicted|will be|scheduled|set to)\b"#
+
+    /// "Vernell Burris, Jr., … was sentenced today to serve 13 months in prison": the person the clause's
+    /// own sentencing is about, with its term — the term never moves to another person of the sentence
+    /// ("Simon … was sentenced to 22 months" is not Miller's or Williams's term).
+    static func terms(_ s: String, doc: Int, mentions: [Names.Mention], names: Names, text: String) -> [Statement] {
+        guard s.range(of: #"(?i)\bsentenced\b"#, options: .regularExpression) != nil else { return [] }
+        var out: [Statement] = []
+        var offset = 0
+        let ns = s as NSString
+        for clause in ProceedingAnswerer.clauses(of: s) {
+            let start = ns.range(of: clause, options: [], range: NSRange(location: offset, length: ns.length - offset)).location
+            guard start != NSNotFound else { continue }
+            offset = start + (clause as NSString).length
+            let cs = clause as NSString
+            guard let verb = matches(#"(?i)\bsentenced\b"#, in: clause).first,
+                  clause.range(of: notATerm, options: .regularExpression) == nil,
+                  let detail = ProceedingEventExtractor.sentenceDetail(clause),
+                  detail.range(of: #"(?i)^[^,;]{0,40}\b(?:probation|supervised release|home (?:detention|confinement))\b"#, options: .regularExpression) == nil
+                    || detail.range(of: #"(?i)\b(?:prison|imprisonment|incarceration|jail|custody)\b"#, options: .regularExpression) != nil,
+                  let term = duration(detail) else { continue }
+            // The clause's subject: its introduced person, else the people before the verb ("A and B were
+            // sentenced to …" both), else the person right after it ("Judge X sentenced Y to …").
+            let local = mentions.filter { $0.canonical != nil && $0.range.location >= start && $0.range.location < start + cs.length }
+                .map { (m: $0, at: $0.range.location - start) }
+            var subjects: [Int] = []
+            if let intro = ProceedingAnswerer.introducedSubject(clause), let c = names.canonical(full: intro) ?? names.canonical(full: CaseContradictionFinder.Names.strippingTitles(intro)) {
+                subjects = [c]
+            } else {
+                let before = local.filter { $0.at < verb.range.location }
+                let plural = cs.substring(to: verb.range.location).range(of: #"(?i)\bwere\s+(?:\w+\s+){0,2}$"#, options: .regularExpression) != nil
+                if plural { subjects = before.compactMap(\.m.canonical) }
+                else if let first = before.first?.m.canonical { subjects = [first] }
+                else if let after = local.first(where: { $0.at > verb.range.location && $0.at - verb.range.location - verb.range.length <= 3 }), let c = after.m.canonical {
+                    subjects = [c]
+                }
+            }
+            for c in Array(Set(subjects)).sorted() {
+                let person = names.canonicals[c]
+                if let role = ProceedingRoleClassifier.role(of: person, in: text), role.takesNoSteps { continue }
+                out.append(Statement(doc: doc, sentence: s, kind: .term, attribute: "prison term", subjectKey: "p\(c)",
+                                     subject: person, value: detail.count <= 60 ? detail : term.description, term: term))
+            }
+        }
+        return out
+    }
+
+    // MARK: - Explained differences (real-case v2, 2026-11-04)
+    //
+    // Pairs the real cases showed are not contradictions: the case growing between an early and a later
+    // release ("over $500K" then "more than $2 million"; "two victims" then "four victims"), an agreed fee
+    // against what was paid or lost, figures of different records (two recall events' product counts), the
+    // send dates of two messages, an office's holder or a person's title changing. Both passes use these.
+
+    enum Bound { case exact, approximate, lower, upper }
+
+    static let lowerBoundWords = #"(?i)\b(?:more than|over|at least|in excess of|exceeding|upwards of|greater than|no less than|not less than)\s*$"#
+    static let upperBoundWords = #"(?i)\b(?:less than|under|up to|no more than|fewer than|below|at most)\s*$"#
+    static let approximateWords = #"(?i)\b(?:approximately|about|nearly|roughly|around|almost|some|close to|an estimated|estimated|an approximate)\s*$"#
+
+    /// How the words just before a figure state it.
+    static func bound(before: String) -> Bound {
+        let tail = String(before.suffix(40))
+        if tail.range(of: lowerBoundWords, options: .regularExpression) != nil { return .lower }
+        if tail.range(of: upperBoundWords, options: .regularExpression) != nil { return .upper }
+        if tail.range(of: approximateWords, options: .regularExpression) != nil { return .approximate }
+        return .exact
+    }
+
+    /// Both statements can be true of one figure: "more than $750,000" and "more than $1 million" can.
+    static func compatible(_ x: Double, _ bx: Bound, _ y: Double, _ by: Bound) -> Bool {
+        func span(_ v: Double, _ b: Bound) -> ClosedRange<Double> {
+            switch b {
+            case .exact: return (v * 0.995)...(v * 1.005)
+            case .approximate: return (v * 0.85)...(v * 1.15)
+            case .lower: return v...Double.greatestFiniteMagnitude
+            case .upper: return 0...v
+            }
+        }
+        return span(x, bx).overlaps(span(y, by))
+    }
+
+    /// The case grew between the documents: the later one gives the higher figure. Nil when either
+    /// document's date is unknown or both are the same day.
+    static func grew(_ x: Double, dateX: Date?, _ y: Double, dateY: Date?) -> Bool {
+        guard let dx = dateX, let dy = dateY, abs(dx.timeIntervalSince(dy)) >= 86_400 else { return false }
+        return dx < dy ? y > x : x > y
+    }
+
+    /// Record identifiers a document states of itself: "Event ID: 70738", "recall event 70738", "Case
+    /// Number: 13-336". Kind → value.
+    static func recordIDs(_ text: String) -> [String: String] {
+        var out: [String: String] = [:]
+        let head = String(text.prefix(3_000))
+        let pattern = #"(?im)^\s*(?:[A-Za-z .]{0,30}?\s)?(event id|recall event|recall number|event number|case (?:no\.?|number)|docket (?:no\.?|number)|file (?:no\.?|number)|report (?:no\.?|number))\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\-:./]{1,40})"#
+        for m in matches(pattern, in: head) {
+            let ns = head as NSString
+            let label = ns.substring(with: m.range(at: 1)).lowercased()
+            let value = ns.substring(with: m.range(at: 2)).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".:,"))
+            let kind = label.contains("event") ? "event" : label.hasPrefix("recall") ? "recall"
+                : (label.hasPrefix("case") || label.hasPrefix("docket")) ? "case" : label.components(separatedBy: " ").first ?? label
+            if out[kind] == nil { out[kind] = value }
+        }
+        return out
+    }
+
+    /// The two documents identify themselves as different records of one kind (two recall events, two
+    /// court cases): their figures are not two accounts of one fact.
+    static func differentRecords(_ a: String, _ b: String) -> String? {
+        let x = recordIDs(a), y = recordIDs(b)
+        for (kind, v) in x { if let w = y[kind], w != v { return "\(kind) \(v) vs \(w)" } }
+        return nil
+    }
+
+    /// A message header line ("Date: Fri, 9 Nov 2001 …", "X-From: …"): the date it carries is a send date.
+    static let headerLine = #"(?im)^\s*(?:date|sent|from|to|cc|subject|x-from|x-to|x-cc|received)\s*:|\bx-from\s*:|-0[0-9]00 \((?:pst|pdt|est|edt|cst|cdt|mst|mdt)\)"#
+
+    /// A date the sentence gives as planned, not as what happened ("is set to be sentenced on May 28").
+    static let scheduled = #"(?i)\b(?:will be|is set to|are set to|set for|scheduled|is to be|are to be|faces?|facing|when (?:he|she|they) (?:is|are) sentenced|expected to|awaiting|pending)\b"#
+
+    /// The events a sentence dates, by their word.
+    static func eventWords(_ s: String) -> Set<String> {
+        let l = s.lowercased()
+        let table: [(String, String)] = [
+            (#"\bsentenc\w*"#, "sentenced"), (#"\bplead\w*|\bpled\b|\bplea\b"#, "plea"), (#"\bconvict\w*|\bfound guilty\b|\bverdict"#, "convicted"),
+            (#"\bindict\w*|\bcharg\w*|\bcomplaint\b"#, "charged"), (#"\barrest\w*"#, "arrested"), (#"\brecall\w*"#, "recall"),
+            (#"\bterminat\w*"#, "terminated"), (#"\bclassif\w*"#, "classified"), (#"\bcollid\w*|\bcollision\b|\bcrash\w*"#, "collision"),
+            (#"\bfire\b|\bblaze\b|\bburn\w*|\bexplo\w*"#, "fire"), (#"\bresign\w*"#, "resigned"), (#"\bmeet\w*|\bmet\b"#, "met"),
+            (#"\bsigned\b|\bsigning\b"#, "signed"), (#"\bfiled\b|\bfiling\b"#, "filed"), (#"\bhired\b|\bhiring\b"#, "hired"),
+            (#"\bpaid\b|\bpayment\b|\bwired\b|\btransferr\w*"#, "paid"), (#"\bborn\b|\bbirth"#, "born"), (#"\bdied\b|\bdeath\b|\bkilled\b"#, "died"),
+        ]
+        return Set(table.compactMap { l.range(of: $0.0, options: .regularExpression) != nil ? $0.1 : nil })
+    }
+
+    /// What an amount is in its sentence: agreed, paid, a loss, restitution, forfeiture, a fine, a fee,
+    /// loans, sales — by the label right after it ("$750,000 in EIDLs") or the nearest word before it.
+    static func amountRole(_ value: String, in quote: String) -> String? {
+        let q = quote as NSString
+        var at = q.range(of: value, options: .caseInsensitive)
+        if at.location == NSNotFound, let target = VerifiedAnswerComposer.values(in: value).money.first {
+            at = matches(moneyPattern, in: quote).first { money(q.substring(with: $0.range)) == target }?.range ?? at
+        }
+        guard at.location != NSNotFound else { return nil }
+        let before = String(q.substring(to: at.location).suffix(160)).lowercased()
+        let after = String(q.substring(from: at.location + at.length).prefix(40)).lowercased()
+        let agreed = #"\b(?:agreed to pay|agreed to|promised(?: to pay)?|owed|to pay|would pay|demanded|charged (?:a|an|the))\b"#
+        if before.range(of: agreed + #"[^$]{0,60}$"#, options: .regularExpression) != nil { return "agreed" }
+        let labels: [(String, String)] = [
+            // "$1 Million Advance Fee Scheme" names the scheme's size; "received $120,000 from the scheme" does not.
+            (#"^\s*(?:(?!(?:from|by|through|via|in|of|for|with|to|the|a|an)\b)[\w\-“”"'’]+\s+){0,3}?(?:schemes?|scams?|ponzi|frauds?|conspiracy)\b"#, "scheme"),
+            (#"^\s*(?:in\s+)?(?:court-ordered\s+)?restitution"#, "restitution"), (#"^\s*(?:in\s+)?forfeit"#, "forfeiture"),
+            (#"^\s*(?:in\s+)?(?:criminal\s+)?fines?\b"#, "fine"), (#"^\s*(?:in|of)?\s*(?:[\w-]+\s+){0,2}?(?:fees?)\b|^\s*for\s+(?:the\s+|a\s+|an\s+)?(?:[\w-]+\s+){0,2}?fees?\b"#, "fee"),
+            (#"^\s*(?:in\s+)?(?:[\w-]+\s+){0,3}?(?:loans?|eidls?|grants?|benefits|relief funds?|unemployment)\b"#, "loan"),
+            (#"^\s*(?:in\s+)?(?:annual\s+)?(?:sales|revenue)"#, "sales"), (#"^\s*(?:in\s+)?loss(?:es)?\b"#, "loss"),
+        ]
+        if let l = labels.first(where: { after.range(of: $0.0, options: .regularExpression) != nil }) { return l.1 }
+        let words: [(String, String)] = [
+            (#"\brestitution\b"#, "restitution"), (#"\bforfeit\w*|\bseized\b"#, "forfeiture"), (#"\bfine[sd]?\b|\bpenalt\w*"#, "fine"),
+            (#"\bfees?\b"#, "fee"), (#"\bloans?\b|\beidls?\b|\bgrants?\b"#, "loan"), (#"\bsales\b|\brevenue\b"#, "sales"),
+            (#"\b(?:paid|pays|paying|wired|sent|transferred|received|receiving|accepted|deposited|gave|disbursed|provided)\b"#, "paid"),
+            (#"\bdefraud\w*|\bout of\b|\bloss(?:es)?\b|\blost\b|\bstole\b|\bstolen\b|\bswindl\w*|\bembezzl\w*|\bobtain\w*|\bmisappropriat\w*"#, "loss"),
+        ]
+        var best: (end: Int, role: String)?
+        for (pattern, role) in words {
+            if let last = matches(pattern, in: before).last {
+                let end = last.range.location + last.range.length
+                if best == nil || end > best!.end { best = (end, role) }
+            }
+        }
+        return best?.role
+    }
+
+    /// What a count counts: its noun ("victims", "defendants", "product records") and the step it is of
+    /// ("charged", "convicted") — "22 individuals charged" and "24 defendants convicted" count different things.
+    static func countRole(_ value: String, in quote: String) -> (noun: String?, step: String?) {
+        let q = quote.lowercased()
+        // The count's own figure (digits or a number word) in the quote, and the noun after it.
+        let figure = value.lowercased().split(whereSeparator: { $0 == " " || $0 == "-" }).map(String.init)
+            .first { Double($0.replacingOccurrences(of: ",", with: "")) != nil || VerifiedAnswerComposer.numberWords[$0] != nil }
+        var noun: String?
+        if let figure, let r = q.range(of: #"(?<![\p{L}\d,.])"# + NSRegularExpression.escapedPattern(for: figure) + #"(?![\p{L}\d,])"#, options: .regularExpression) {
+            let people: Set<String> = ["individuals", "individual", "defendants", "defendant", "people", "persons", "men", "women", "others",
+                                       "co-defendants", "codefendants", "co-conspirators", "conspirators"]
+            for w in q[r.upperBound...].prefix(80).split(whereSeparator: { !$0.isLetter && $0 != "-" }).map(String.init).prefix(5) {
+                if ["of", "the", "individual", "separate", "known", "other", "additional", "more", "new", "total"].contains(w) { continue }
+                noun = people.contains(w) ? "people" : (w.hasSuffix("s") ? String(w.dropLast()) : w)
+                break
+            }
+        }
+        let steps: [(String, String)] = [(#"\b(?:charg\w*|indict\w*|accused)\b"#, "charged"), (#"\b(?:convicted|found guilty|pleaded|pled)\b"#, "convicted"),
+                                         (#"\bsentenced\b"#, "sentenced"), (#"\barrested\b"#, "arrested")]
+        let found = steps.filter { q.range(of: $0.0, options: .regularExpression) != nil }.map(\.1)
+        // The step a sentence reports is the count's own only for a count of people ("24 defendants who have
+        // been convicted"); "defrauded four victims" in an indictment release is not a count of charges.
+        return (noun, (noun == nil || noun == "people") && found.count == 1 ? found[0] : nil)
+    }
+
+    /// Two role-or-account values that are an office or a title ("Special Agent in Charge … Dennehy" vs
+    /// "… Crouch", "Senior Litigation Counsel" vs "Trial Attorney"): who holds an office and what a person's
+    /// title is change between documents written years apart.
+    static let officeWords = #"(?i)\b(?:attorneys?|counsel|director|agents?|special agent|in charge|judge|justice|inspector|chief|commissioner|sheriff|prosecutors?|secretary|head of|deputy|officer|chairman|president|superintendent|administrator|trustee)\b"#
+
+    /// Kinds whose figure is an aggregate of the case (it can grow as the case does).
+    static func aggregate(_ attribute: String, role: String?) -> Bool {
+        if attribute == "amount paid to them" { return false }
+        return !["agreed", "paid", "restitution", "forfeiture", "fine", "fee"].contains(role ?? "")
     }
 
     // MARK: - Rules: compare
@@ -557,6 +854,7 @@ public nonisolated enum CaseContradictionFinder {
         case .role: return s.actors.sorted().joined(separator: "+")
         case .account: return s.tokens.sorted().joined(separator: "+")
         case .date: return s.value
+        case .term: return s.term?.description ?? s.value
         default: return s.number.map { String(format: "%.2f", $0) } ?? s.value
         }
     }
@@ -587,6 +885,9 @@ public nonisolated enum CaseContradictionFinder {
             for (x, i) in docs.enumerated() {
                 for j in docs[(x + 1)...] {
                     guard let a = perDoc[i], let b = perDoc[j], documents[i].objectID != documents[j].objectID else { continue }
+                    // Two documents that identify themselves as different records (two recall events, two court
+                    // cases) give figures of different things.
+                    guard differentRecords(documents[i].text, documents[j].text) == nil else { continue }
                     guard let note = conflict(a, b, documents: documents) else { continue }
                     let pairKey = [valueKey(a), valueKey(b)].sorted().joined(separator: "|") + "|" + key
                     let sentencePair = [normalized(a.sentence), normalized(b.sentence)].sorted().joined(separator: "|")
@@ -607,12 +908,16 @@ public nonisolated enum CaseContradictionFinder {
     /// Nil when the two do not conflict; otherwise a note ("" for none).
     static func conflict(_ a: Statement, _ b: Statement, documents: [Document]) -> String? {
         switch a.kind {
-        case .amount:
+        case .amount, .count:
             guard let x = a.number, let y = b.number, max(x, y) > 0 else { return nil }
-            let tolerance = (a.approximate || b.approximate) ? 0.15 : 0.01
-            return abs(x - y) / max(x, y) > tolerance ? "" : nil
-        case .count:
-            guard let x = a.number, let y = b.number else { return nil }
+            // Both can be true ("more than $750,000" / "more than $1 million"; "about $50,000" / "$52,000").
+            if compatible(x, a.bound, y, b.bound) { return nil }
+            // The case grew: a later release gives the higher victims, counts or loss (a payment to someone
+            // does not grow).
+            if aggregate(a.attribute, role: nil), grew(x, dateX: documents[a.doc].date, y, dateY: documents[b.doc].date) { return nil }
+            return ""
+        case .term:
+            guard let x = a.term, let y = b.term else { return nil }
             return x != y ? "" : nil
         case .date:
             guard let x = a.day, let y = b.day else { return nil }
@@ -632,6 +937,8 @@ public nonisolated enum CaseContradictionFinder {
                   !a.tokens.intersection(b.tokens).subtracting(["spread", "spreading", "gasoline", "fuel", "set", "fire"]).isEmpty else { return nil }
             return ""
         case .account:
+            // Two recordings of one thing (both say what was caught, and it is the same).
+            guard !a.about.isEmpty, !b.about.isEmpty, !a.about.isDisjoint(with: b.about) else { return nil }
             return a.tokens.isDisjoint(with: b.tokens) ? "" : nil
         }
     }
@@ -740,7 +1047,7 @@ public nonisolated enum CaseContradictionFinder {
         let names = Names(documents: allDocuments)
         let docIndex: [UUID: Int] = Dictionary(allDocuments.enumerated().map { ($0.element.objectID, $0.offset) }, uniquingKeysWith: { a, _ in a })
         for pair in parsed.pairs ?? [] {
-            switch check(pair, batch: batch, names: names, docIndex: docIndex) {
+            switch check(pair, batch: batch, names: names, docIndex: docIndex, documents: allDocuments) {
             case .success(let f): if !out.verified.contains(f) { out.verified.append(f) }
             case .failure(let why): out.dropped.append(why.reason + " — " + label(pair, batch: batch))
             }
@@ -762,9 +1069,9 @@ public nonisolated enum CaseContradictionFinder {
         return "about \(about.isEmpty ? "?" : about) (\(pair.kind ?? "no kind")): \(short(pair.value_a)) [passage \(pair.a?.passage.map(String.init) ?? "?")] vs \(short(pair.value_b)) [passage \(pair.b?.passage.map(String.init) ?? "?")]; quotes \u{201C}\(short(pair.a?.quote))\u{201D} / \u{201C}\(short(pair.b?.quote))\u{201D}"
     }
 
-    static func check(_ pair: Pair, batch: Batch, names: Names, docIndex: [UUID: Int]) -> Result<Finding, Dropped> {
+    static func check(_ pair: Pair, batch: Batch, names: Names, docIndex: [UUID: Int], documents: [Document] = []) -> Result<Finding, Dropped> {
         func drop(_ r: String) -> Result<Finding, Dropped> { .failure(Dropped(reason: r)) }
-        guard let kind = Kind(loose: pair.kind) else { return drop("no kind") }
+        guard var kind = Kind(loose: pair.kind) else { return drop("no kind") }
         guard let na = pair.a?.passage, let nb = pair.b?.passage, (1...batch.passages.count).contains(na), (1...batch.passages.count).contains(nb)
         else { return drop("passage not sent") }
         let qa = VerifiedAnswerComposer.cleanQuote(pair.a?.quote ?? ""), qb = VerifiedAnswerComposer.cleanQuote(pair.b?.quote ?? "")
@@ -793,7 +1100,14 @@ public nonisolated enum CaseContradictionFinder {
         guard !va.isEmpty, !vb.isEmpty else { return drop("no differing values") }
         guard present(va, in: qa), present(vb, in: qb) else { return drop("a value is not in its quote") }
         let xa = VerifiedAnswerComposer.values(in: va), xb = VerifiedAnswerComposer.values(in: vb)
+        // Two lengths of a sentence ("13 months" / "a year and a day"): compared as lengths.
+        if let da = duration(va), let db = duration(vb) {
+            guard da != db else { return drop("the values do not differ (\(da) both)") }
+            kind = .term
+        }
         switch kind {
+        case .term:
+            guard duration(va) != nil, duration(vb) != nil else { return drop("the values are not lengths of a sentence") }
         case .amount, .count, .age:
             // Different when neither side's figures are contained in the other's: "$400 to $2,000" vs
             // "$400-$900" share an endpoint and still differ (smoke 2026-11-03); "$50,000" vs "$50,000" never.
@@ -803,6 +1117,13 @@ public nonisolated enum CaseContradictionFinder {
             guard let da = xa.dates.first, let db = xb.dates.first, da != db else { return drop("the dates do not differ") }
         case .role, .account:
             guard normalized(va) != normalized(vb), !present(va, in: qb), !present(vb, in: qa) else { return drop("the values do not differ") }
+        }
+        // 4b. Differences the documents explain (real-case v2, 2026-11-04).
+        let docA = docIndex[pa.objectID].flatMap { documents.indices.contains($0) ? documents[$0] : nil }
+        let docB = docIndex[pb.objectID].flatMap { documents.indices.contains($0) ? documents[$0] : nil }
+        if let why = explained(kind: kind, about: pair.about ?? batch.subject ?? "", qa: qa, qb: qb, va: va, vb: vb,
+                               contextA: ca, contextB: cb, docA: docA, docB: docB) {
+            return drop("explained: " + why)
         }
         // 5. The same subject: a person named in both passages (in full, or by the surname the case gives
         //    one person), and neither sentence about someone else of that surname; an event named in both.
@@ -829,6 +1150,67 @@ public nonisolated enum CaseContradictionFinder {
         }
         return .success(Finding(kind: kind, subject: subject, attribute: "", quoteA: qa, quoteB: qb, objectA: pa.objectID, objectB: pb.objectID,
                                 versionA: pa.sourceVersionID, versionB: pb.sourceVersionID, valueA: va, valueB: vb, provenance: .aiRead))
+    }
+
+    /// Why a verified pair is not a contradiction after all, or nil (the rules' own reasons, applied to
+    /// the reader's pair).
+    static func explained(kind: Kind, about: String, qa: String, qb: String, va: String, vb: String,
+                          contextA: [String], contextB: [String], docA: Document?, docB: Document?) -> String? {
+        let sa = ([qa] + contextA).joined(separator: " "), sb = ([qb] + contextB).joined(separator: " ")
+        if let a = docA, let b = docB, let ids = differentRecords(a.text, b.text) {
+            return "values of different records (\(ids))"
+        }
+        switch kind {
+        case .date:
+            if [qa, qb].contains(where: { $0.range(of: headerLine, options: .regularExpression) != nil }) {
+                return "the send dates of two different messages"
+            }
+            if [sa, sb].contains(where: { $0.range(of: scheduled, options: .regularExpression) != nil }) {
+                return "a scheduled date, which can move — not a date of what happened"
+            }
+            let ea = eventWords(qa).union(eventWords(contextA.joined(separator: " "))), eb = eventWords(qb).union(eventWords(contextB.joined(separator: " ")))
+            if ea.isEmpty || eb.isEmpty || ea.isDisjoint(with: eb) { return "dates of different events" }
+        case .amount:
+            let ra = amountRole(va, in: qa) ?? amountRole(va, in: sa), rb = amountRole(vb, in: qb) ?? amountRole(vb, in: sb)
+            if let ra, let rb, ra != rb { return "different amounts (\(ra) vs \(rb))" }
+            if let x = VerifiedAnswerComposer.values(in: va).money.first ?? VerifiedAnswerComposer.values(in: va).numbers.first,
+               let y = VerifiedAnswerComposer.values(in: vb).money.first ?? VerifiedAnswerComposer.values(in: vb).numbers.first {
+                if compatible(x, bound(of: va, in: qa), y, bound(of: vb, in: qb)) { return "both can be true (a bound, not an exact figure)" }
+                if aggregate("", role: ra ?? rb), grew(x, dateX: docA?.date, y, dateY: docB?.date) {
+                    return "the case grew between the documents (the later one gives the higher figure)"
+                }
+            }
+        case .count:
+            let ra = countRole(va, in: qa), rb = countRole(vb, in: qb)
+            if (ra.noun != nil && rb.noun != nil && ra.noun != rb.noun) || (ra.step != nil && rb.step != nil && ra.step != rb.step) {
+                let a = [ra.noun, ra.step].compactMap { $0 }.joined(separator: " "), b = [rb.noun, rb.step].compactMap { $0 }.joined(separator: " ")
+                return "different counts (\(a) vs \(b))"
+            }
+            if let x = VerifiedAnswerComposer.values(in: va).numbers.first, let y = VerifiedAnswerComposer.values(in: vb).numbers.first {
+                if compatible(x, bound(of: va, in: qa), y, bound(of: vb, in: qb)) { return "both can be true (a bound, not an exact figure)" }
+                if grew(x, dateX: docA?.date, y, dateY: docB?.date) { return "the case grew between the documents (the later one gives the higher count)" }
+            }
+        case .role, .account:
+            if [about, va, vb].contains(where: { $0.range(of: officeWords, options: .regularExpression) != nil }) {
+                return "an office's holder or a person's title can change between documents"
+            }
+        case .age, .term:
+            break
+        }
+        return nil
+    }
+
+    /// How a value is stated in its quote (the words before it).
+    static func bound(of value: String, in quote: String) -> Bound {
+        // "more than $750,000" as the value itself, else the words before the figure in the quote.
+        let lead = String(value.prefix { !$0.isNumber && $0 != "$" })
+        if !lead.trimmingCharacters(in: .whitespaces).isEmpty, case let b = bound(before: lead), b != .exact { return b }
+        let q = quote as NSString
+        var r = q.range(of: value, options: .caseInsensitive)
+        if r.location == NSNotFound, let figure = value.range(of: #"\$?\s?\d[\d,.]*"#, options: .regularExpression) {
+            r = q.range(of: String(value[figure]))
+        }
+        return r.location == NSNotFound ? .exact : bound(before: q.substring(to: r.location))
     }
 
     static func fragments(_ quote: String) -> [String] {

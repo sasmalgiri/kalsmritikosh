@@ -136,14 +136,24 @@ struct VerifiedAnswerComposerTests {
         guard case .notStated(let b) = C.decide(reply: Self.reply([], status: "not_stated"), question: "Was Mignott acquitted?",
                                                passages: [Self.mignott], person: nil, rules: nil) else { Issue.record("expected not-stated"); return }
         #expect(b.refused)
-        // An off-target rules passage is never shipped at full confidence beside it.
+        // An on-target rules reading the reader could not confirm is never shipped at full confidence beside it.
         guard case .notStated(let c) = C.decide(reply: Self.reply([], status: "not_stated"), question: "Was Mignott acquitted?",
-                                               passages: [Self.mignott], person: nil, rules: Self.rules("Mignott was arrested on May 2, 2020.", confidence: 0.8)) else {
+                                               passages: [Self.mignott], person: nil, rules: Self.rules("Mignott was acquitted on May 2, 2020.", confidence: 0.8)) else {
             Issue.record("expected not-stated"); return
         }
         #expect(C.writer(of: c) == "needs-review")
         #expect(c.confidence.value <= 0.35)
-        #expect(c.body.contains("Evidence-only reading: Mignott was arrested on May 2, 2020."))
+        #expect(c.body.contains("Evidence-only reading: Mignott was acquitted on May 2, 2020."))
+        // An off-target one (an arrest for an acquittal question) is no competing reading at all
+        // (real-case v2 interim review 2026-11-04): the honest not-stated answer, with a quiet note.
+        guard case .notStated(let d) = C.decide(reply: Self.reply([], status: "not_stated"), question: "Was Mignott acquitted?",
+                                               passages: [Self.mignott], person: nil, rules: Self.rules("Mignott was arrested on May 2, 2020.", confidence: 0.8)) else {
+            Issue.record("expected not-stated"); return
+        }
+        #expect(d.refused)
+        #expect(C.writer(of: d) == "ai-not-stated")
+        #expect(!d.body.contains("Evidence-only reading"))
+        #expect(d.body.contains(C.offTargetNote))
     }
 
     @Test("The rules reading disagrees → needs review, both readings shown with their quotes, lower confidence")

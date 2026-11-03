@@ -263,6 +263,103 @@ public nonisolated enum OnlineRequestBuilder {
     }
 }
 
+// MARK: - Why a call failed, in the person's words (real-case v2 interim review 2026-11-04, item 7)
+//
+// The answer said "the AI reader did not answer" while the provider had said "HTTP 400: Your credit
+// balance is too low to access the Anthropic API" — only the run summary knew. Every failure is
+// classified here, next to the parse that produced it, so the answer's note and the Online status bar
+// can say what happened and what to do. Never the key: anything shaped like one is hidden.
+
+public nonisolated enum OnlineFailure: String, Sendable, Equatable, CaseIterable {
+    case noCredit, invalidKey, rateLimited, network, timeout, cutOff, declined, refused, providerError, notSent, unreadable, other
+
+    /// Anthropic: a too-low credit balance comes back as 400 invalid_request_error with this message;
+    /// billing problems as 402 billing_error. Other providers word it as quota / billing.
+    static let creditPattern = #"(?i)credit balance|insufficient (?:credit|funds|balance|quota)|billing|purchase credits|exceeded your current quota|payment required"#
+    static let keyPattern = #"(?i)invalid (?:x-)?api[- ]?key|api key not valid|incorrect api key|authentication_error|permission_error|unauthori[sz]ed"#
+
+    public static func classify(_ error: Error) -> OnlineFailure {
+        if let p = error as? OnlineRequestBuilder.ParseError {
+            switch p {
+            case .auth: return .invalidKey
+            case .rateLimited: return .rateLimited
+            case .server: return .providerError
+            case .cutOff: return .cutOff
+            case .refused: return .refused
+            case .unreadable: return .unreadable
+            case .relay(let why): return classify(text: why) ?? .other
+            case .http(let code, let message):
+                if code == 402 { return .noCredit }
+                return classify(text: message) ?? (code == 408 ? .timeout : .other)
+            }
+        }
+        if let o = error as? OnlineCloudProvider.OnlineError {
+            switch o {
+            case .timedOut: return .timeout
+            case .declined: return .declined
+            default: return .notSent
+            }
+        }
+        if error is NetworkHelperError { return .network }
+        if let u = error as? URLError { return u.code == .timedOut ? .timeout : .network }
+        if (error as NSError).domain == NSURLErrorDomain { return .network }
+        return classify(text: (error as? LocalizedError)?.errorDescription ?? String(describing: error)) ?? .other
+    }
+
+    static func classify(text: String) -> OnlineFailure? {
+        if text.range(of: creditPattern, options: .regularExpression) != nil { return .noCredit }
+        if text.range(of: keyPattern, options: .regularExpression) != nil { return .invalidKey }
+        if text.range(of: #"(?i)rate[_ ]limit|too many requests"#, options: .regularExpression) != nil { return .rateLimited }
+        if text.range(of: #"(?i)overloaded"#, options: .regularExpression) != nil { return .providerError }
+        if text.range(of: #"(?i)timed out|deadline"#, options: .regularExpression) != nil { return .timeout }
+        return nil
+    }
+
+    /// What the person is told, in the answer's note ("The AI reading could not be used — …").
+    public var summary: String {
+        switch self {
+        case .noCredit:      return "your AI account has no credit left — top it up with the provider; until then answers are evidence-only"
+        case .invalidKey:    return "the provider refused your API key — check the key in Settings › Online"
+        case .rateLimited:   return "the provider is limiting requests right now — try again in a minute"
+        case .network:       return "this Mac could not reach the provider (network)"
+        case .timeout:       return "the provider did not reply in time"
+        case .cutOff:        return "the provider's reply was cut off before any answer text"
+        case .declined:      return "you chose not to send it"
+        case .refused:       return "the provider declined to answer"
+        case .providerError: return "the provider had an error"
+        case .notSent:       return "nothing was sent"
+        case .unreadable:    return "the provider's reply could not be read"
+        case .other:         return "the AI reader did not answer"
+        }
+    }
+
+    /// A problem with the person's account that lasts beyond one question: shown as a banner until dismissed.
+    public var banner: String? {
+        switch self {
+        case .noCredit:   return "Your AI account has no credit — answers are evidence-only until it is topped up."
+        case .invalidKey: return "Your AI provider refused the API key — answers are evidence-only until the key in Settings › Online is fixed."
+        default:          return nil
+        }
+    }
+
+    /// The answer's note: the classified reason and the provider's own short words (key-shaped text hidden).
+    public static func note(for error: Error) -> String {
+        let kind = classify(error)
+        let detail = scrubbed((error as? LocalizedError)?.errorDescription ?? "")
+        guard !detail.isEmpty, [.noCredit, .invalidKey, .rateLimited, .providerError, .refused, .other].contains(kind) else { return kind.summary }
+        return kind.summary + " (the provider said: \u{201C}" + String(detail.prefix(160)) + "\u{201D})"
+    }
+
+    /// Anything shaped like an API key replaced, whitespace squashed.
+    public static func scrubbed(_ s: String) -> String {
+        var out = s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        for pattern in [#"sk-[A-Za-z0-9_\-]{8,}"#, #"AIza[0-9A-Za-z_\-]{20,}"#, #"(?i)(?:x-api-key|api[_-]?key|bearer)\s*[:=]?\s*[A-Za-z0-9_\-\.]{16,}"#] {
+            out = out.replacingOccurrences(of: pattern, with: "[key hidden]", options: .regularExpression)
+        }
+        return out
+    }
+}
+
 // MARK: - Which providers may receive case documents (ship-readiness review L2)
 //
 // Sending a person's documents is not the same decision as sending a question. An opt-in switch is not

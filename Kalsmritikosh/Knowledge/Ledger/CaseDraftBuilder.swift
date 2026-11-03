@@ -66,13 +66,14 @@ public nonisolated enum CaseDraftPartyKind: String, Sendable, Codable { case per
 /// One person or organisation of the case.
 public nonisolated struct CaseDraftCastMember: Sendable, Equatable, Identifiable, Codable {
     public enum Group: String, Sendable, Codable, CaseIterable {
-        case defendants, others, officials, organisations
+        case defendants, others, officials, organisations, otherMatters
         public var title: String {
             switch self {
             case .defendants: return "Defendants and subjects"
             case .others: return "Victims, witnesses and others named"
             case .officials: return "Officials (judges, prosecutors, investigators, counsel)"
             case .organisations: return "Organisations"
+            case .otherMatters: return "People of other matters these documents also name"
             }
         }
     }
@@ -90,10 +91,14 @@ public nonisolated struct CaseDraftCastMember: Sendable, Equatable, Identifiable
     /// Where the person first appears (a sentence naming them in full), when no role quote is known.
     public let firstQuote: String?
     public let firstObjectID: UUID?
+    /// A defendant of another matter the case's documents also name (an archive-wide sweep release, another
+    /// person's case): not one of the case's subjects (real-case v2, 2026-11-04).
+    public var otherMatter = false
 
     public var isOfficial: Bool { role?.isOfficial == true }
     public var group: Group {
         if kind == .organisation { return .organisations }
+        if otherMatter { return .otherMatters }
         if role == .defendant { return .defendants }
         if isOfficial { return .officials }
         return .others
@@ -160,6 +165,8 @@ public nonisolated struct CaseDrafts: Sendable {
     public var agreedWithRules = 0
     public var dropped: [String] = []
     public var notSentReason: String?
+    /// The interview plan for each of the case's subjects, drafted by the rules with the drafts.
+    public var interviews: [CaseInterviewDraft] = []
     public init() {}
 }
 
@@ -271,6 +278,129 @@ public nonisolated enum CaseDraftBuilder {
         return tokens.contains(where: placeWords.contains)
     }
 
+    /// Words a capitalised run that is not a person carries ("Avoid Concept", "Pilots' Role", "Daily Update",
+    /// "Launch Date", "Paycheck Protection Program") — the shape check; the evidence check below is the rule.
+    static let commonNouns: Set<String> = [
+        "program", "programs", "concept", "role", "roles", "update", "updates", "date", "dates", "launch", "daily", "weekly", "monthly",
+        "security", "operations", "protection", "aid", "relief", "loans", "loan", "disaster", "injury", "region", "division",
+        "discipline", "professional", "scheme", "fee", "advance", "million", "billion", "based", "grant", "venue", "manual", "circular",
+        "glossary", "display", "performance", "traffic", "advisories", "advisory", "information", "avoidance", "collision", "air",
+        "aircraft", "depot", "inspectors", "theater", "theatre", "entertainment", "report", "reports", "release", "statement", "act",
+        "policy", "plan", "fund", "account", "accounts", "market", "markets", "currencies", "traded", "trading", "energy", "news",
+        "summary", "review", "meeting", "conference", "call", "team", "project", "system", "systems", "control", "service", "center",
+        "centre", "station", "base", "force", "army", "navy", "corps", "branch", "unit", "task", "office", "committee", "agreement",
+        "contract", "order", "notice", "letter", "memo", "email", "message", "subject", "re", "fw", "fwd", "attachment", "page",
+        "section", "chapter", "part", "item", "list", "table", "figure", "exhibit", "appendix", "note", "notes", "record", "records",
+        "product", "products", "recall", "recalls", "event", "events", "classification", "status", "pattern", "distribution",
+    ]
+
+    /// A two-to-four-word name of a person's shape: no title, office, place or common-noun word.
+    static func personShaped(_ name: String) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(name)
+        guard (2...5).contains(tokens.count), !notAPerson(name), !isOrganisation(name) else { return false }
+        return !tokens.contains(where: commonNouns.contains) && !name.hasSuffix("-")
+    }
+
+    /// A sentence in which the name acts, or is described, as a person: introduced with an age, called
+    /// Mr./Ms., the subject of "said / told / wrote / testified …", "according to", a message's sender or
+    /// recipient, or "X, the company's owner". Real-case v2 (2026-11-04): the cast held "Avoid Concept",
+    /// "Daily Update", "Launch Date" — capitalised runs no sentence treats as a person.
+    static func actsAsPerson(_ name: String, in texts: [String]) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(name)
+        guard let first = tokens.first, let last = tokens.last, tokens.count >= 2 else { return false }
+        let full = ProceedingRoleClassifier.fullNamePattern(first: first, last: last)
+        let sur = #"(?i:\b"# + ProceedingRoleClassifier.loose(last) + #"\b)"#
+        let patterns = [
+            full + #",\s+(?:(?i:jr|sr)\.?,\s+)?(?:a\s)?\d{1,3},"#,
+            #"(?i:\b(?:mr|mrs|ms|dr)\.?)\s+(?:"# + full + "|" + sur + ")",
+            full + #",?\s+(?i:said|says|told|wrote|writes|testified|stated|explained|added|admitted|asked|replied|resigned|reported|responded|noted|recalled|warned|confirmed|denied|agreed|signed|sent|e-?mailed|called|met|who|whose)\b"#,
+            #"(?i:\b(?:according to|said|told|asked|wrote to|met with|e-?mailed|signed by)\s+)"# + full,
+            #"(?im)^\s*(?:x-)?(?:from|to|cc|sent by)\s*:[^\n]*"# + full,
+            #"(?im)^\s*(?:x-)?(?:from|to|cc)\s*:[^\n]*\b"# + ProceedingRoleClassifier.loose(last) + #",\s*"# + ProceedingRoleClassifier.loose(first) + #"\b"#,
+            full + #",\s+(?i:(?:the|a|an|his|her|their)\s+(?:[a-z’'\-]+\s+){0,3}(?:owner|president|founder|manager|employee|director|officer|executive|ceo|cfo|pilot|controller|accountant|lawyer|partner|wife|husband|son|daughter|brother|sister|mother|father|friend|associate|co-?defendant|co-?conspirator|victim|witness|salesman|saleswoman|representative|analyst|vice president|chairman|treasurer|secretary|consultant|broker|agent|nurse|doctor|physician|teacher|student|resident))\b"#,
+            sur + #"['’]s\s+(?i:wife|husband|son|daughter|brother|sister|mother|father|home|house|residence|attorney|lawyer|company|business|plea|sentence|arrest)\b"#,
+        ]
+        return texts.contains { text in patterns.contains { text.range(of: $0, options: .regularExpression) != nil } }
+    }
+
+    // MARK: - The case's subjects
+
+    /// Who the case is about: the defendants of its main matter. A case's documents can also name another
+    /// matter's people — an archive-wide sweep release listing other schemes, another person who shares the
+    /// subject's name (a crash victim named "Mohamed Kamara") — and those must not reach the chronology, the
+    /// leads or the findings as the case's own (real-case v2, 2026-11-04).
+    public struct Subjects: Sendable {
+        /// Name keys (given name + surname tokens) of the case's subjects.
+        public var keys: Set<String> = []
+        /// Name keys of the defendants of other matters.
+        public var otherMatters: Set<String> = []
+        /// For each defendant's key, the documents (indices) in which that name is this person.
+        public var documents: [String: Set<Int>] = [:]
+        public var isEmpty: Bool { keys.isEmpty }
+        /// Indices of the documents about the case's subjects.
+        public var subjectDocuments: Set<Int> { keys.reduce(into: Set<Int>()) { $0.formUnion(documents[$1] ?? []) } }
+        public func isSubject(_ name: String) -> Bool { keys.contains(CaseDraftBuilder.nameKey(name)) }
+        public func isOtherMatter(_ name: String) -> Bool { otherMatters.contains(CaseDraftBuilder.nameKey(name)) }
+    }
+
+    /// "Michael D. Williams" and "Michael Williams" (and "Guy R. Miller, Jr." and "Guy Miller") share a key.
+    public static func nameKey(_ name: String) -> String {
+        let t = ProceedingEventExtractor.nameTokens(Names.strippingTitles(name))
+        guard let f = t.first, let l = t.last else { return name.lowercased() }
+        return f + " " + l
+    }
+
+    /// The case's subjects among `defendants`: people linked by the documents that name them together form
+    /// a matter; the matter covering the most documents is the case's, and a matter covering a third of the main
+    /// matter's documents or fewer is another matter. Ties keep every tied matter. In a
+    /// document where the subject's name is a victim's or a witness's, it is another person of that name.
+    public static func subjects(_ docs: [Document], defendants: [String]) -> Subjects {
+        var out = Subjects()
+        var people: [String] = []
+        var seen = Set<String>()
+        for d in defendants where seen.insert(nameKey(d)).inserted { people.append(d) }
+        guard !people.isEmpty else { return out }
+        var docsOf: [Set<Int>] = []
+        for person in people {
+            var own = Set<Int>()
+            for (i, d) in docs.enumerated() where ProceedingAnswerer.namesFully(d.text, person: person) {
+                if let r = ProceedingRoleClassifier.role(of: person, in: d.text), r == .victim || r == .witness { continue }
+                own.insert(i)
+            }
+            docsOf.append(own)
+            out.documents[nameKey(person)] = own
+        }
+        // Matters: people whose documents meet.
+        var parent = Array(people.indices)
+        func root(_ i: Int) -> Int { var i = i; while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }; return i }
+        for i in people.indices { for j in people.indices where j > i && !docsOf[i].isDisjoint(with: docsOf[j]) { parent[root(j)] = root(i) } }
+        var matters: [Int: [Int]] = [:]
+        for i in people.indices { matters[root(i), default: []].append(i) }
+        let coverage = matters.mapValues { $0.reduce(into: Set<Int>()) { $0.formUnion(docsOf[$1]) }.count }
+        let main = coverage.values.max() ?? 0
+        for (r, members) in matters {
+            let c = coverage[r] ?? 0
+            let other = c < main && c * 3 <= main
+            for m in members {
+                if other { out.otherMatters.insert(nameKey(people[m])) } else { out.keys.insert(nameKey(people[m])) }
+            }
+        }
+        return out
+    }
+
+    /// The case's subjects, from its cast.
+    static func subjects(_ docs: [Document], cast: [CaseDraftCastMember]) -> Subjects {
+        subjects(docs, defendants: cast.filter { $0.kind == .person && $0.role == .defendant }.map(\.name))
+    }
+
+    /// The people an interview plan is drafted for: the case's subjects, else (no defendants) the people
+    /// named in two or more documents who are not officials.
+    public static func interviewPeople(_ cast: [CaseDraftCastMember], limit: Int = 6) -> [String] {
+        let subjects = cast.filter { $0.kind == .person && $0.role == .defendant && !$0.otherMatter }.map(\.name)
+        if !subjects.isEmpty { return Array(subjects.prefix(limit)) }
+        return Array(cast.filter { $0.kind == .person && !$0.isOfficial && !$0.otherMatter && $0.documentCount >= 2 }.map(\.name).prefix(limit))
+    }
+
     /// The first sentence of `text` naming `name` in full (that carries the role's wording, when given).
     static func sentence(naming name: String, in text: String, supporting role: ProceedingRole? = nil) -> String? {
         ProceedingEventExtractor.rawSentences(of: text).first { s in
@@ -312,12 +442,18 @@ public nonisolated enum CaseDraftBuilder {
                 quote = reading.quote; quoteObject = reading.objectID; provenance = .aiRead
             }
             guard kind == .organisation || role != nil || inDocs.count >= 2 else { continue }
+            // A person needs a person's shape and a sentence treating them as one (or a stated role).
+            if kind == .person, role == nil, !personShaped(name) || !actsAsPerson(name, in: inDocs.map { docs[$0].text }) { continue }
             let dates = inDocs.compactMap { docs[$0].date }
             let first = sentence(naming: name, in: docs[firstDoc].text)
             out.append(CaseDraftCastMember(
                 name: name, kind: kind, role: role, roleQuote: quote, roleObjectID: quote == nil ? nil : quoteObject,
                 roleProvenance: quote == nil ? nil : provenance, firstAppearance: dates.min(), lastAppearance: dates.max(),
                 documentCount: inDocs.count, firstQuote: first, firstObjectID: first == nil ? nil : docs[firstDoc].objectID))
+        }
+        let subjects = Self.subjects(docs, cast: out)
+        for i in out.indices where out[i].kind == .person && out[i].role == .defendant && subjects.isOtherMatter(out[i].name) {
+            out[i].otherMatter = true
         }
         let order = CaseDraftCastMember.Group.allCases
         out.sort { a, b in
@@ -332,13 +468,18 @@ public nonisolated enum CaseDraftBuilder {
     // MARK: - Chronology (rules)
 
     /// The dated proceeding steps of the case's defendants, earliest first, one per person, step and day.
+    /// Only the case's subjects, each from the documents in which the name is that person; a sentence's term is
+    /// the one its clause gives the person ("Simon … 22 months" is not Miller's or Williams's term).
     public static func timeline(_ docs: [Document], cast: [CaseDraftCastMember], limit: Int = 120) -> [CaseDraftTimelineItem] {
-        let defendants = cast.filter { $0.kind == .person && $0.role == .defendant }.map(\.name)
+        let defendants = cast.filter { $0.kind == .person && $0.role == .defendant && !$0.otherMatter }.map(\.name)
+        let subjects = Self.subjects(docs, cast: cast)
         var out: [CaseDraftTimelineItem] = []
         var seen = Set<String>()
         for person in defendants {
-            for d in docs {
-                for f in ProceedingEventExtractor.findings(in: d.text, person: person) {
+            let own = subjects.documents[nameKey(person)]
+            for (i, d) in docs.enumerated() where own?.contains(i) ?? true {
+                for raw in ProceedingEventExtractor.findings(in: d.text, person: person) {
+                    guard let f = ProceedingAnswerer.bound(raw, person: person, documentText: d.text) else { continue }
                     guard let day = f.day, let y = day.year, let m = day.month, let dd = day.day else { continue }
                     guard seen.insert("\(person.lowercased())|\(f.step.rawValue)|\(y)-\(m)-\(dd)").inserted else { continue }
                     var what = "\(person) \(f.step.phrase)"
@@ -369,9 +510,11 @@ public nonisolated enum CaseDraftBuilder {
         var out: [CaseDraftLead] = []
         let byObject = Dictionary(docs.map { ($0.objectID, $0) }, uniquingKeysWith: { a, _ in a })
         let officials = Set(cast.filter { $0.role?.takesNoSteps == true }.map { $0.name.lowercased() })
-        // 1. Proceeding gaps (sentenced with no plea or verdict, no charging document, a sentence scheduled).
+        let subjects = Self.subjects(docs, cast: cast)
+        // 1. Proceeding gaps (sentenced with no plea or verdict, no charging document, a sentence scheduled) —
+        //    of the case's subjects only, one per person (name variants are one person).
         for g in GapDetector().detectProceedingGaps(texts: docs.map { ($0.objectID, $0.text) }) {
-            guard let person = g.nearEntity, !officials.contains(person.lowercased()),
+            guard let person = g.nearEntity, !officials.contains(person.lowercased()), !subjects.isOtherMatter(person),
                   let anchor = g.evidenceObjectID, let doc = byObject[anchor],
                   let quote = sentence(naming: person, in: doc.text) else { continue }
             let records: String
@@ -382,7 +525,7 @@ public nonisolated enum CaseDraftBuilder {
                                      records: records, quote: quote, objectID: anchor))
         }
         // 2. A defendant whose outcome (a plea, verdict, dismissal or sentence) no document records.
-        for member in cast where member.kind == .person && member.role == .defendant {
+        for member in cast where member.kind == .person && member.role == .defendant && !member.otherMatter {
             let person = member.name
             var steps = Set<ProceedingEventExtractor.Step>()
             var anchor: (String, UUID)?
@@ -414,19 +557,44 @@ public nonisolated enum CaseDraftBuilder {
             out.append(CaseDraftLead(
                 id: id("c", c.id.uuidString), source: .contradiction,
                 notEstablished: "The documents disagree, and which account is right is not established: \(summary)",
-                records: records(forContradiction: kind), quote: c.claimA, objectID: a,
+                records: records(forContradiction: kind, quotes: [c.claimA, c.claimB, summary]), quote: c.claimA, objectID: a,
                 otherQuote: c.claimB.isEmpty ? nil : c.claimB, otherObjectID: c.evidenceB))
         }
         var seen = Set<String>()
         return Array(out.filter { seen.insert($0.id).inserted }.prefix(limit))
     }
 
-    static func records(forContradiction kind: String) -> String {
-        switch kind.lowercased() {
-        case "amount": return "The payment, bank or financial records behind both figures."
-        case "date": return "The court docket or the dated record of the event."
-        case "age": return "An identity record (date of birth) for the person."
-        case "count": return "The charging document or the underlying list both counts rely on."
+    /// The kind of record a contradiction's two quotes come from — the records that would settle it are of
+    /// that kind: "the charging document" for a recall, "the court docket" for two e-mails, never (real-case
+    /// v2, 2026-11-04).
+    enum RecordDomain { case proceeding, recall, messages, generic }
+
+    static func domain(_ quotes: [String]) -> RecordDomain {
+        let t = quotes.joined(separator: "\n")
+        if t.range(of: CaseContradictionFinder.headerLine, options: .regularExpression) != nil
+            || t.range(of: #"[\w.+-]+@[\w-]+\.[\w.]+"#, options: .regularExpression) != nil { return .messages }
+        if t.range(of: #"(?i)\b(?:recall\w*|enforcement report|product records?|recalling firm|lot (?:no|number|code)s?|fda|distribution pattern)\b"#, options: .regularExpression) != nil { return .recall }
+        if t.range(of: #"(?i)\b(?:indict\w*|charg\w*|plead\w*|pled|convict\w*|sentenc\w*|defendants?|court|prosecut\w*|attorney|arrest\w*|guilty|restitution)\b"#, options: .regularExpression) != nil { return .proceeding }
+        return .generic
+    }
+
+    static func records(forContradiction kind: String, quotes: [String] = []) -> String {
+        let d = domain(quotes)
+        switch (kind.lowercased(), d) {
+        case ("amount", .proceeding): return "The payment, bank or financial records behind both figures."
+        case ("amount", .recall): return "The recall records (the enforcement report and the firm's distribution records) behind both figures."
+        case ("amount", .messages): return "The original messages, their attachments and the financial records they refer to."
+        case ("amount", .generic): return "The financial or source records behind both figures."
+        case ("date", .proceeding): return "The court docket or the dated record of the event."
+        case ("date", .recall): return "The recall records (the enforcement report and the recall notice) that date the event."
+        case ("date", .messages): return "The original messages with their full headers, from the mailbox they came from."
+        case ("date", .generic): return "The dated record of the event (a log, report or filing)."
+        case ("age", _): return "An identity record (date of birth) for the person."
+        case ("count", .proceeding): return "The charging document or the underlying list both counts rely on."
+        case ("count", .recall): return "The recall's product list (the enforcement report) both counts rely on."
+        case ("count", .messages): return "The messages and the lists or attachments both counts rely on."
+        case ("count", .generic): return "The underlying list or record both counts rely on."
+        case ("sentence", _): return "The judgment or the sentencing record (the court docket) for the person."
         default: return "The primary record both accounts rely on (a recording, report, filing or statement)."
         }
     }
@@ -601,8 +769,13 @@ public nonisolated enum CaseDraftBuilder {
         var out = TimelineVerification()
         guard let parsed = decode(TimelineReply.self, reply) else { out.unreadable = true; return out }
         let byObject = Dictionary(documents.map { ($0.objectID, $0) }, uniquingKeysWith: { a, _ in a })
+        let docIndex = Dictionary(documents.enumerated().map { ($0.element.objectID, $0.offset) }, uniquingKeysWith: { a, _ in a })
+        let subjects = Self.subjects(documents, cast: cast)
+        let about = About(subjects: subjects, docIndex: docIndex,
+                          people: cast.filter { $0.kind == .person && !$0.otherMatter && ($0.documentCount >= 2 || $0.role == .defendant) }.map(\.name),
+                          others: cast.filter { $0.otherMatter }.map(\.name))
         for e in parsed.events ?? [] {
-            switch checkEvent(e, batch: batch, byObject: byObject, cast: cast) {
+            switch checkEvent(e, batch: batch, byObject: byObject, cast: cast, about: about) {
             case .success(let item): if !out.items.contains(where: { $0.id == item.id }) { out.items.append(item) }
             case .failure(let why): out.dropped.append("event: " + why.reason)
             }
@@ -629,7 +802,21 @@ public nonisolated enum CaseDraftBuilder {
         return .success((quote, passage, context))
     }
 
-    static func checkEvent(_ e: Event, batch: Batch, byObject: [UUID: Document], cast: [CaseDraftCastMember]) -> Result<CaseDraftTimelineItem, Dropped> {
+    /// What a drafted event must be about: the case's subjects (from the documents about them) or, in a case
+    /// with no defendants, any of the case's people when the item is years older than its document.
+    struct About {
+        var subjects = Subjects()
+        var docIndex: [UUID: Int] = [:]
+        var people: [String] = []
+        var others: [String] = []
+    }
+
+    /// Years an event may precede its document before it must name one of the case's people to stay ("Published:
+    /// May 24, 1996 — a favorite dish" quoted in a 2001 campaign e-mail of an Enron case).
+    static let olderItemYears = 3.0
+
+    static func checkEvent(_ e: Event, batch: Batch, byObject: [UUID: Document], cast: [CaseDraftCastMember],
+                           about: About = About()) -> Result<CaseDraftTimelineItem, Dropped> {
         func drop(_ r: String) -> Result<CaseDraftTimelineItem, Dropped> { .failure(Dropped(reason: r)) }
         let located: (String, Passage, [String])
         switch locate(e.quote, passage: e.passage, in: batch.passages) {
@@ -665,6 +852,23 @@ public nonisolated enum CaseDraftBuilder {
             if isStep, let role = [castRole, docRole].compactMap({ $0 }).first(where: \.takesNoSteps) {
                 return drop("\(who) is the \(role.label), not the person a proceeding step happened to")
             }
+        }
+        // 4. About the case (real-case v2, 2026-11-04): not another matter's document or person.
+        let basis = ([quote] + context).joined(separator: " ")
+        if !about.subjects.isEmpty, let di = about.docIndex[passage.objectID] {
+            guard about.subjects.subjectDocuments.contains(di) else { return drop("not about the case's subjects (a document of another matter)") }
+            if !who.isEmpty, about.subjects.isOtherMatter(who) { return drop("\(who) is a person of another matter, not one of the case's subjects") }
+            if who.isEmpty, about.others.contains(where: { ProceedingAnswerer.namesFully(basis, person: $0) }),
+               !about.people.contains(where: { ProceedingAnswerer.namesFully(basis, person: $0) }) {
+                return drop("about a person of another matter, not one of the case's subjects")
+            }
+        }
+        if let docDate = byObject[passage.objectID]?.date,
+           let eventDate = Calendar(identifier: .gregorian).date(from: DateComponents(year: y, month: d.month, day: dd)),
+           docDate.timeIntervalSince(eventDate) > olderItemYears * 365.25 * 86_400,
+           !about.people.contains(where: { ProceedingAnswerer.namesFully(basis, person: $0) }),
+           who.isEmpty || !about.people.contains(where: { $0.caseInsensitiveCompare(who) == .orderedSame }) {
+            return drop("an item from years before its document, about none of the case's people")
         }
         return .success(CaseDraftTimelineItem(
             id: id("t", passage.objectID.uuidString, normalized(quote), "\(y)-\(d.month)-\(dd)"), year: y, month: d.month, day: dd,

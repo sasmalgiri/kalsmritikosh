@@ -84,8 +84,14 @@ struct OnlineStatusBar: View {
             }
             if let failure = status.lastFailure {
                 HStack(spacing: 8) {
-                    Label("The online answer did not go through: \(failure)", systemImage: "exclamationmark.icloud")
-                        .font(.caption).lineLimit(2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let banner = status.accountBanner {
+                            Label(banner, systemImage: "creditcard.trianglebadge.exclamationmark")
+                                .font(.caption.weight(.semibold)).lineLimit(2)
+                        }
+                        Label("The online answer did not go through: \(failure)", systemImage: "exclamationmark.icloud")
+                            .font(.caption).lineLimit(2)
+                    }
                     Spacer()
                     if ConnectivityMode.current == .online {
                         Button("Switch to Private") { ConnectivityMode.set(.privateMode); status.clear(); version &+= 1 }

@@ -154,11 +154,17 @@ public final class OnlineStatus {
     public static let shared = OnlineStatus()
     public private(set) var lastFailure: String?
     public private(set) var lastFailureAt: Date?
+    /// What kind of failure it was (no credit, key refused …); an account problem shows a lasting banner.
+    public private(set) var lastFailureKind: OnlineFailure?
 
-    public func recordFailure(_ reason: String) {
+    public func recordFailure(_ reason: String, kind: OnlineFailure? = nil) {
         lastFailure = reason
         lastFailureAt = Date()
+        lastFailureKind = kind
     }
 
-    public func clear() { lastFailure = nil; lastFailureAt = nil }
+    /// The account-level banner for the last failure, if it was one ("Your AI account has no credit …").
+    public var accountBanner: String? { lastFailureKind?.banner }
+
+    public func clear() { lastFailure = nil; lastFailureAt = nil; lastFailureKind = nil }
 }

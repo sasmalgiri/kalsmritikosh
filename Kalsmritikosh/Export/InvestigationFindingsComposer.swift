@@ -125,7 +125,45 @@ public struct InvestigationFindingsComposer: WorkProductSectionComposer {
             if value.range(of: #"(?i)\besq\b"#, options: .regularExpression) != nil { return false }
             return true
         }
-        return collapsingStepDiscrepancies(kept)
+        return collapsingStepDiscrepancies(withoutOtherMatters(kept))
+    }
+
+    static let stepStatement = #"\s(?:charged|arrested|arraigned|pleaded guilty|convicted|acquitted|sentenced|pardoned|released)\.?$"#
+
+    static func isStep(_ c: Claim) -> Bool {
+        c.subjectID != nil && c.derivedFrom.contains(where: { $0.kind == .event }) && c.statement.range(of: stepStatement, options: .regularExpression) != nil
+    }
+
+    /// Real-case v2 (2026-11-04): the findings listed "Judge John Michael Vazquez convicted" (the entity's name
+    /// carries the title) and the steps of other matters' people a case's documents also name — "Nakita
+    /// Walker convicted" from a crash release, "Suliaman Kamara sentenced" from a 2013 release — among the
+    /// case's own. A step row of a titled official goes; people whose step rows cite documents together form
+    /// a matter, and a matter covering a third of the main matter's documents or fewer is another matter's: its step rows go. Ties keep every tied matter.
+    static func withoutOtherMatters(_ rendered: [(selected: SelectedClaim, claim: WorkProductClaim)]) -> [(selected: SelectedClaim, claim: WorkProductClaim)] {
+        var docsOf: [String: Set<UUID>] = [:]
+        for pair in rendered where isStep(pair.selected.resolved.claim) {
+            let c = pair.selected.resolved.claim
+            guard ProceedingRoleClassifier.titleRole(c.subjectLabel) == nil else { continue }
+            docsOf[CaseDraftBuilder.nameKey(c.subjectLabel), default: []].formUnion(c.evidence.map(\.objectID))
+        }
+        let people = docsOf.keys.sorted()
+        var parent = Array(people.indices)
+        func root(_ i: Int) -> Int { var i = i; while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }; return i }
+        for i in people.indices { for j in people.indices where j > i && !(docsOf[people[i]] ?? []).isDisjoint(with: docsOf[people[j]] ?? []) { parent[root(j)] = root(i) } }
+        var coverage: [Int: Set<UUID>] = [:]
+        for i in people.indices { coverage[root(i), default: []].formUnion(docsOf[people[i]] ?? []) }
+        let main = coverage.values.map(\.count).max() ?? 0
+        var other = Set<String>()
+        for i in people.indices {
+            let c = coverage[root(i)]?.count ?? 0
+            if c < main, c * 3 <= main { other.insert(people[i]) }
+        }
+        return rendered.filter { pair in
+            let c = pair.selected.resolved.claim
+            guard isStep(c) else { return true }
+            if ProceedingRoleClassifier.titleRole(c.subjectLabel) != nil { return false }
+            return !other.contains(CaseDraftBuilder.nameKey(c.subjectLabel))
+        }
     }
 
     /// "Guy R. Miller sentenced" from two documents, dated May 28 and May 29: one row, at the earlier

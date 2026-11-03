@@ -549,6 +549,11 @@ public actor MasterBrain {
         // step by step from the documents that name them — not a history of the whole archive
         // (closed-case simulation 2026-10-26 answered "History of the user's archive …").
         if ProceedingAnswerer.parse(question) != nil { return nil }
+        // Real-case v2 interim review (2026-11-04): "How many people were killed …, and what happened to the
+        // F-16 pilot?", "Is Maurice Mills connected to …?", "How much money did Glick move through …?"
+        // came back as "History of the user's archive" dumps — a weak trigger word ("happened to",
+        // "connected", "through") is not a history question. Only an explicit history ask takes this path.
+        if !Self.asksForHistory(question) { return nil }
 
         await sessionProfile?.recordTurn(
             question: question,
@@ -2503,6 +2508,19 @@ public actor MasterBrain {
         // result → review-ready → verifiedFinal) BEFORE verifiedFinal is emitted. The old
         // best-effort persistAnswerLedger(...) call is removed to avoid a duplicate answer row.
         return tagged
+    }
+
+    /// An explicit ask for a history, timeline or story — not a field question that happens to carry
+    /// "what happened to", "connected" or "through".
+    nonisolated static func asksForHistory(_ question: String) -> Bool {
+        let q = question.lowercased()
+        let strong = #"\b(?:history|timeline|chronolog\w*|reconstruct\w*|story|narrat\w*|evolv\w*|evolution|sequence of events|over time|before and after|trace|chain of)\b|\bwhat changed\b|\bled to\b|\b(?:delayed|slipped|blocked)\b"#
+        if q.range(of: strong, options: .regularExpression) != nil { return true }
+        // "What happened in Project Delta?" asks for an account; "What happened to the recorder?" and a
+        // field question with "what happened" in a second clause do not.
+        guard q.contains("what happened"), !q.contains("what happened to") else { return false }
+        let field = #"^\s*(?:how (?:many|much|old|long)|who|whom|when|where|which|did|does|do|was|were|is|are|has|have|had)\b"#
+        return q.range(of: field, options: .regularExpression) == nil
     }
 
     /// P2 — the proceeding asks the verified reading cross-checks: a value or yes/no about the person

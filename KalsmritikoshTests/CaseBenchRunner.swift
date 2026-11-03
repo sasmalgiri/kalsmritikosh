@@ -82,6 +82,10 @@ struct CaseBenchRunner {
         /// Why each failed reader call failed, and why each role reading was dropped.
         var failures: [String] = []
         var roleDropped: [String] = []
+        /// The interview plan drafted for each of the case's subjects (rules).
+        struct Question: Encodable { let question: String; let quote: String; let doc: String; let basis: String; let otherQuote: String? }
+        struct Interview: Encodable { let person: String; let questions: [Question] }
+        var interviews: [Interview] = []
     }
     struct ContradictionLine: Encodable {
         let kind: String; let provenance: String; let description: String
@@ -515,7 +519,9 @@ struct CaseBenchRunner {
                 documents: d.documents, readerAvailable: d.readerAvailable, verified: d.verified, agreedWithRules: d.agreedWithRules,
                 dropped: d.dropped.count, droppedReasons: Array(d.dropped.prefix(40)), calls: d.calls, roleBatches: d.roleBatches,
                 roleReadings: d.roleReadings, failedCalls: d.failedCalls, passagesSent: d.passagesSent, deniedForCloud: d.deniedForCloud,
-                notSent: d.notSentReason, failures: d.failures, roleDropped: Array(d.roleDropped.prefix(40)))
+                notSent: d.notSentReason, failures: d.failures, roleDropped: Array(d.roleDropped.prefix(40)),
+                interviews: d.interviews.map { iv in .init(person: iv.person, questions: iv.questions.map {
+                    .init(question: $0.question, quote: $0.quote, doc: caseOf[$0.objectID] ?? "?", basis: $0.basis.rawValue, otherQuote: $0.otherQuote) }) })
             let findings = try await findingsService.buildFindings(caseID: c.id, access: exportAccess, actor: "case-bench", at: now)
             let product = findings.assembled.workProduct
             let claims = product.sections.flatMap(\.claims)

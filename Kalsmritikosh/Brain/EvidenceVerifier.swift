@@ -940,7 +940,8 @@ public struct EvidenceVerifier: Verifier {
                 var body = SentenceQuoteComposer.render(quoted)
                 body += "\n\n(\(quoted.receiptLine))"
                 KalsmritikoshLog.brain.info("Actor composer: named-actor answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
-                return VerifiedAnswer(
+                // Real-case v2 interim review (2026-11-04): an off-target passage is the closest passage, not 0.8.
+                return EvidenceOnTarget.checked(question: intent.rawQuestion, VerifiedAnswer(
                     body: body,
                     answerText: SentenceQuoteComposer.render(quoted),
                     intentKind: intentKindRaw,
@@ -949,7 +950,7 @@ public struct EvidenceVerifier: Verifier {
                     confidence: Confidence(0.8),
                     contradictions: effectiveReport.contradictions,
                     refused: false,
-                    report: effectiveReport)
+                    report: effectiveReport), chunks: retrieval.chunks)
             }
         }
         // An account question ("What did NHTSA find in …?") answered by the document's own account
@@ -994,7 +995,9 @@ public struct EvidenceVerifier: Verifier {
             if let about = resolvedCharter?.footerText { body += "\n\n" + about }
             body += "\n\n(\(quoted.receiptLine))"
             KalsmritikoshLog.brain.info("SentenceQuoteComposer: quoted answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
-            return VerifiedAnswer(
+            // Real-case v2 interim review (2026-11-04): a title line, another record's passage or one that
+            // gives no asked value is shown as the closest passage at low confidence, never at 0.8.
+            return EvidenceOnTarget.checked(question: intent.rawQuestion, VerifiedAnswer(
                 body: body,
                 answerText: SentenceQuoteComposer.render(quoted),
                 intentKind: intentKindRaw,
@@ -1003,7 +1006,7 @@ public struct EvidenceVerifier: Verifier {
                 confidence: Confidence(0.8),
                 contradictions: effectiveReport.contradictions,
                 refused: false,
-                report: effectiveReport)
+                report: effectiveReport), chunks: retrieval.chunks)
         }
 
         // P5 residual — THE "Reported:" KILL: a question that asks for one

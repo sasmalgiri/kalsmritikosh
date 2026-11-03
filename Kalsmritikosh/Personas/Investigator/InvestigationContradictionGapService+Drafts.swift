@@ -111,7 +111,16 @@ extension InvestigationContradictionGapService {
             }
             out.timeline = CaseDraftBuilder.sorted(out.timeline)
         }
-        KalsmritikoshLog.knowledge.info("case drafts: \(out.timeline.count, privacy: .public) chronology item(s), \(out.cast.count, privacy: .public) in the cast, \(out.leads.count, privacy: .public) lead(s); AI \(out.verified, privacy: .public) verified, \(out.dropped.count, privacy: .public) dropped, \(out.calls + out.roleBatches, privacy: .public) call(s), \(out.failedCalls, privacy: .public) failed")
+        // The interview plan for each of the case's subjects (rules, on the Mac) — real-case v2 (2026-11-04):
+        // no plan was ever produced unless a person was picked; "Draft questions with AI" adds the reader's.
+        for person in CaseDraftBuilder.interviewPeople(out.cast) {
+            var plan = CaseInterviewDraft()
+            plan.person = person
+            plan.readerAvailable = out.readerAvailable
+            plan.questions = CaseDraftBuilder.interviewQuestions(person: person, docs: docs, contradictions: contradictions, timeline: out.timeline)
+            if !plan.questions.isEmpty { out.interviews.append(plan) }
+        }
+        KalsmritikoshLog.knowledge.info("case drafts: \(out.timeline.count, privacy: .public) chronology item(s), \(out.cast.count, privacy: .public) in the cast, \(out.leads.count, privacy: .public) lead(s), \(out.interviews.count, privacy: .public) interview plan(s); AI \(out.verified, privacy: .public) verified, \(out.dropped.count, privacy: .public) dropped, \(out.calls + out.roleBatches, privacy: .public) call(s), \(out.failedCalls, privacy: .public) failed")
         return out
     }
 

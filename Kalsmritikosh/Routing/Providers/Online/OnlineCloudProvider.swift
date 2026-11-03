@@ -364,9 +364,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     private func fail(_ error: Error) async -> Error {
-        let reason = error.localizedDescription
-        KalsmritikoshLog.routing.error("Online answer failed: \(reason, privacy: .public)")
-        await MainActor.run { OnlineStatus.shared.recordFailure(reason) }
+        let reason = OnlineFailure.scrubbed(error.localizedDescription)
+        let kind = OnlineFailure.classify(error)
+        KalsmritikoshLog.routing.error("Online answer failed (\(kind.rawValue, privacy: .public)): \(reason, privacy: .public)")
+        await MainActor.run { OnlineStatus.shared.recordFailure(reason, kind: kind) }
         return error
     }
 

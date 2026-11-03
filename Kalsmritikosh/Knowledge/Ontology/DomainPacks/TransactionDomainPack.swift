@@ -65,7 +65,8 @@ public enum TransactionDomainPack {
         // ending in a separator.
         // P2 (real-case evaluation 2026-11-03): "$50k" was read as "$50" and "$1 million" as "$1" — the
         // scale word is part of the amount, and the stored value spells it out ("$50,000").
-        if let amount = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?(?:\s?(?:million|billion|thousand|mn|bn|k)(?![a-z]))?"#, in: text) {
+        if let matched = firstMatch(#"(?:₹|\brs\.?|\binr|\$)\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?(?:\s?(?:million|billion|thousand|mn|bn|k)(?![a-z]))?"#, in: text) {
+            let amount = rangeScaled(matched, in: text)
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: normalize(amount),
                                      unit: currencyUnit(amount), status: .sourceAsserted,
                                      confidence: 0.8, sourceBlockIDs: [blockID],
@@ -124,6 +125,19 @@ public enum TransactionDomainPack {
             }
         }
         return nil
+    }
+
+    /// Real-case v2 (2026-11-04): "approximately $10 to $12 million in sales per year" was stored as "$10" —
+    /// the scale word after a range's upper end belongs to its lower end too ("$10 to $12 million" starts at
+    /// $10,000,000). An amount that already carries its scale is returned as it is.
+    nonisolated static func rangeScaled(_ amount: String, in text: String) -> String {
+        guard amount.range(of: #"(?i)(?:million|billion|thousand|mn|bn|k)$"#, options: .regularExpression) == nil else { return amount }
+        let pattern = NSRegularExpression.escapedPattern(for: amount)
+            + #"\s*(?:to|-|–|—|or|and)\s*(?:₹|\brs\.?\s?|\$)?\s?\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?\s?(million|billion|thousand|mn|bn)(?![a-z])"#
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let m = re.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)),
+              m.range(at: 1).location != NSNotFound else { return amount }
+        return amount + " " + (text as NSString).substring(with: m.range(at: 1)).lowercased()
     }
 
     nonisolated static func normalize(_ amount: String) -> String {

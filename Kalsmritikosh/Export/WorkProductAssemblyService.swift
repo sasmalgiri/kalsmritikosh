@@ -215,7 +215,7 @@ public actor WorkProductAssemblyService {
             // claims before its text can reach the report.
             let permitted = try await disclosurePermittedObjects(
                 allowed: allowedObjectIDs, selected: context.selectedClaims,
-                access: access, caseScoped: caseAuthorizedVersionIDs != nil)
+                access: access, caseAuthorizedVersionIDs: caseAuthorizedVersionIDs)
             let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims,
                                                            permittedObjectIDs: permitted)
             let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
@@ -303,17 +303,31 @@ public actor WorkProductAssemblyService {
 
     // MARK: - F22 disclosure authorization
 
-    /// The evidence objects a disclosure may cite. A case export may cite only the objects its
-    /// case-authorized, sensitivity-filtered claims already cite (conflict evidence carries no
-    /// source version, so version-exact case authority cannot be checked any other way). A
+    /// The evidence objects a disclosure may cite. A case export may cite the objects its
+    /// case-authorized, sensitivity-filtered claims already cite, and the case's own documents whose
+    /// current version the case authorizes and the sensitivity scope permits (conflict evidence carries
+    /// no source version; the object's current version is what its text is). A
     /// workspace export may cite workspace objects the sensitivity scope permits. Fails CLOSED
     /// on a missing repository or resolution error, like `scopeFilter`.
     private func disclosurePermittedObjects(allowed: Set<UUID>, selected: [SelectedClaim],
                                             access: SensitiveAccessContext,
-                                            caseScoped: Bool) async throws -> Set<UUID> {
-        if caseScoped {
-            return Set(selected.flatMap { $0.resolved.claim.evidence.map(\.objectID) }).intersection(allowed)
+                                            caseAuthorizedVersionIDs: Set<UUID>?) async throws -> Set<UUID> {
+        if let caseAuthorizedVersionIDs {
+            // Real-case v2 (2026-11-04): a conflict side from a case document that no selected claim happens
+            // to cite was printed as "An opposing source outside this export's scope disagrees (withheld)"
+            // although every document was in the case. A side stands when its document is one of the case's
+            // authorized versions AND the export's sensitivity scope permits it — the same `case ∩
+            // SensitiveScope` the claims pass — or when a selected (already scoped) claim cites it.
+            let cited = Set(selected.flatMap { $0.resolved.claim.evidence.map(\.objectID) }).intersection(allowed)
+            // Version-exact: only objects whose file's current version is an authorized one.
+            let caseObjects = try await knowledgeObjects.currentVersionObjectIDs(inSourceVersionIDs: caseAuthorizedVersionIDs).intersection(allowed)
+            return cited.union(try await sensitivityPermitted(caseObjects.subtracting(cited), access: access))
         }
+        return try await sensitivityPermitted(allowed, access: access)
+    }
+
+    /// The objects the access's sensitivity scope permits (a label that does not resolve is not permitted).
+    private func sensitivityPermitted(_ allowed: Set<UUID>, access: SensitiveAccessContext) async throws -> Set<UUID> {
         guard !allowed.isEmpty else { return [] }
         guard let repository = sensitiveScopes else { throw WorkProductAssemblyError.scopedAccessDenied }
         let targets = allowed.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }

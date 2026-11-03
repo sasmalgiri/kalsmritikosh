@@ -132,6 +132,47 @@ struct InvestigationFindingsServiceTests {
         #expect(!citedVersions.contains(b.svID))
     }
 
+    /// A case document with no extracted fact (no claim cites it): file + KO + current version only.
+    private func seedBareDocument(_ r: Rig, text: String) async throws -> (fileID: UUID, koID: UUID, svID: UUID) {
+        let fileID = UUID(), koID = UUID(), svID = UUID()
+        try await r.db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);", [.uuid(fileID), .text("file:///\(fileID).txt"), .text("text")])
+        try await r.db.exec("INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at) VALUES (?,?,?,?,?,?);",
+                            [.uuid(koID), .uuid(fileID), .text("txt"), .text(text), .real(0), .real(0)])
+        try await r.db.exec("""
+            INSERT INTO source_versions (id, logical_source_id, document_id, content_hash, valid_from, is_current, created_at)
+            VALUES (?,?,?,?,?,1,?);
+            """, [.uuid(svID), .uuid(fileID), .uuid(UUID()), .text(String(repeating: "c", count: 64)), .real(0), .real(0)])
+        return (fileID, koID, svID)
+    }
+
+    @Test("Real-case v2: a conflict side from an in-case document no selected claim cites is shown, not 'outside this export's scope'; an out-of-case side stays withheld")
+    func inCaseConflictSideShown() async throws {
+        let r = try await rig()
+        let a = try await seedFact(r, value: "Linick lived in Setauket, New York.")
+        let b = try await seedBareDocument(r, text: "Richard Linick, 73, of Coram, New York")
+        let out = try await seedBareDocument(r, text: "Richard Linick, 75, of Albany, New York")
+        let ws = try await makeWorkspace(r, files: [a.fileID, b.fileID, out.fileID])
+        _ = try await r.producer.backfill(at: t0)
+        let c = try await makeCase(r, ws: ws.id, authorize: [a.svID, b.svID])
+        let claimIDs = try await ClaimRepository(database: r.db).claimIDs(citingObject: a.koID)
+        #expect(!claimIDs.isEmpty)
+        let contradictions = ContradictionsRepository(database: r.db)
+        let links = ClaimContradictionRepository(database: r.db)
+        let inCase = Contradiction(kind: .location, description: "Account — Richard Linick: Setauket vs Coram.", claimA: "Linick lived in Setauket, New York.",
+                                   claimB: "Richard Linick, 73, of Coram, New York", evidenceA: a.koID, evidenceB: b.koID, severity: .medium, detectedAt: t0)
+        let outside = Contradiction(kind: .location, description: "Account — Richard Linick: Setauket vs Albany.", claimA: "Linick lived in Setauket, New York.",
+                                    claimB: "Richard Linick, 75, of Albany, New York", evidenceA: a.koID, evidenceB: out.koID, severity: .medium, detectedAt: t0)
+        await contradictions.insertMany([inCase, outside])
+        for id in claimIDs { try await links.link(claimID: id, contradictionID: inCase.id); try await links.link(claimID: id, contradictionID: outside.id) }
+
+        let findings = try await r.service.buildFindings(caseID: c.id, access: exportAccess(ws.id), actor: "lead", at: t0)
+        let text = (findings.assembled.workProduct.sections.flatMap(\.claims).map(\.text)
+            + findings.assembled.workProduct.sections.flatMap(\.preamble)).joined(separator: "\n")
+        #expect(text.contains("of Coram, New York"), "\(text)")
+        #expect(!text.contains("of Albany, New York"), "\(text)")
+        #expect(text.contains(DisclosureSelectionService.withheldSide), "the out-of-case side stays withheld")
+    }
+
     @Test("Approval is an explicit human decision (rationale + actor required); building findings never approves")
     func approvalRequiresHumanDecision() async throws {
         let r = try await rig()

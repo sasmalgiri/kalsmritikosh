@@ -150,8 +150,11 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             KalsmritikoshLog.brain.info("verified reading cancelled before a reply")
             return .notSent
         } catch {
-            KalsmritikoshLog.brain.error("verified reading failed: \(String(describing: error), privacy: .public)")
-            return .failed(reason: "the AI reader did not answer")
+            // Real-case v2 interim review (2026-11-04): the reason ("HTTP 400: Your credit balance is too
+            // low …") was only in the run summary; the answer said "the AI reader did not answer".
+            let note = OnlineFailure.note(for: error)
+            KalsmritikoshLog.brain.error("verified reading failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
+            return .failed(reason: note)
         }
         return Self.decide(reply: reply, question: question, passages: passages, person: person, rules: rules)
     }
@@ -166,13 +169,29 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         if !check.dropped.isEmpty {
             KalsmritikoshLog.brain.info("verified reading: \(check.verified.count, privacy: .public) claim(s) verified, \(check.dropped.count, privacy: .public) dropped (\(check.dropped.joined(separator: "; "), privacy: .public))")
         }
-        let answeredRules = rules.flatMap { !$0.refused && !$0.citations.isEmpty ? $0 : nil }
+        var answeredRules = rules.flatMap { !$0.refused && !$0.citations.isEmpty ? $0 : nil }
+        // Real-case v2 interim review (2026-11-04): a disagreement is raised only against an evidence-only
+        // reading that is ON TARGET for the question (EvidenceOnTarget) — "Date: 12/12/2013." for "When was
+        // the fire set?" or a sentencing sentence for "Who was charged?" is no competing value.
+        var rulesOffTarget: String?
+        if let r = answeredRules {
+            let cited = Set(r.citations.map(\.objectID))
+            let recordTexts = passages.filter { cited.contains($0.objectID) }.map(\.text)
+            if let why = EvidenceOnTarget.offTargetReason(question: question, answer: r, recordTexts: recordTexts, mode: .crossCheck) {
+                KalsmritikoshLog.brain.info("verified reading: evidence-only reading off target (\(why, privacy: .public)) — not a competing value")
+                rulesOffTarget = why
+                answeredRules = nil
+            }
+        }
         guard !check.verified.isEmpty else {
-            return .notStated(notStated(question: question, passages: passages, dropped: check.dropped.count, rules: answeredRules))
+            var a = notStated(question: question, passages: passages, dropped: check.dropped.count, rules: answeredRules)
+            if rulesOffTarget != nil { a = noted(a, offTargetNote) }
+            return .notStated(a)
         }
         let ai = answered(check.verified, passages: passages, dropped: check.dropped.count)
+        if rulesOffTarget != nil { return .answered(noted(ai, offTargetNote)) }
         guard let answeredRules else { return .answered(ai) }
-        if disagree(aiText: ai.answerText ?? ai.body, rules: answeredRules) {
+        if disagree(aiText: ai.answerText ?? ai.body, rules: answeredRules, question: question) {
             return .answered(needsReview(ai: ai, verified: check.verified, passages: passages, rules: answeredRules))
         }
         // Verified and in agreement with the evidence-only reading: the pipeline's confidence stands.
@@ -426,6 +445,41 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return nil
     }
 
+    /// The quiet note on an answer whose evidence-only reading did not answer the question.
+    static let offTargetNote = "(The evidence-only reading did not answer this question, so it is not shown as a competing value.)"
+
+    static func noted(_ a: VerifiedAnswer, _ note: String) -> VerifiedAnswer {
+        var out = VerifiedAnswer(body: a.body + "\n\n" + note, answerText: a.answerText, intentKind: a.intentKind, citations: a.citations,
+                                 confidence: a.confidence, contradictions: a.contradictions, refused: a.refused,
+                                 refusalReason: a.refusalReason, report: a.report, walkSteps: a.walkSteps, source: a.source,
+                                 reasoningTrace: a.reasoningTrace, answerState: a.answerState, ledgerAnswerID: a.ledgerAnswerID)
+        out.resolvedQuestion = a.resolvedQuestion
+        return out
+    }
+
+    /// The two readings disagree about what the question ASKS (real-case v2 interim review 2026-11-04:
+    /// ages and counts that happen to be in both readings are not the answer to "Who was charged …?").
+    /// With a question, only the asked kinds are compared — a date for when, an amount for how much, a
+    /// number for how many / what sentence, a surname for who, yes/no for a yes/no question; a question
+    /// asking for none of them gives no value disagreement. Without one, every kind (the older rule).
+    static func disagree(aiText: String, rules: VerifiedAnswer, question: String) -> Bool {
+        let asked = EvidenceOnTarget.asked(question)
+        let a = values(in: aiText), r = values(in: answerPart(of: rules))
+        if asked.contains(.yesNo), let x = a.yesNo, let y = r.yesNo, x != y { return true }
+        if asked.contains(.date), !a.dates.isEmpty, !r.dates.isEmpty,
+           !a.dates.contains(where: { d in r.dates.contains { $0.month == d.month && ($0.day == nil || d.day == nil || $0.day == d.day) && ($0.year == nil || d.year == nil || $0.year == d.year) } }) {
+            return true
+        }
+        if asked.contains(.amount), !a.money.isEmpty, !r.money.isEmpty, a.money.isDisjoint(with: r.money) { return true }
+        if asked.contains(.number), !asked.contains(.amount), !a.numbers.isEmpty, !r.numbers.isEmpty, a.numbers.isDisjoint(with: r.numbers) { return true }
+        if asked.contains(.person) {
+            func surnames(_ t: String) -> Set<String> { Set(names(in: t).compactMap { $0.split(separator: " ").last.map { $0.lowercased() } }) }
+            let x = surnames(aiText), y = surnames(answerPart(of: rules))
+            if !x.isEmpty, !y.isEmpty, x.isDisjoint(with: y) { return true }
+        }
+        return false
+    }
+
     /// Dates, amounts, numbers or yes/no the two readings both give — with nothing in common.
     static func disagree(aiText: String, rules: VerifiedAnswer) -> Bool {
         let a = values(in: aiText), r = values(in: answerPart(of: rules))
@@ -571,7 +625,9 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             // Both say the documents don't state it: the rules' honest wording stands.
             return rules.refused ? rules : a
         case .answered(let a):
-            if a.intentKind == needsReviewKind || rules.refused || rules.citations.isEmpty { return a }
+            // The rules answer did not answer the question: the verified reading is the answer, never a
+            // "confirmation" of an off-target rules value.
+            if a.intentKind == needsReviewKind || rules.refused || rules.citations.isEmpty || a.body.contains(offTargetNote) { return a }
             let note = "\n\n(Confirmed by the AI reading — every quote checked against its source: " + String((a.answerText ?? "").prefix(300)) + ")"
             var out = VerifiedAnswer(body: rules.body + note, answerText: rules.answerText, intentKind: rules.intentKind,
                                      citations: merged(rules.citations, a.citations), confidence: rules.confidence,

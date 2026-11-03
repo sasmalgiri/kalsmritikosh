@@ -69,6 +69,10 @@ public nonisolated enum ProceedingRoleClassifier {
 
     /// The role `person` (a full name) holds in `text`, or nil when the text states none.
     public static func role(of person: String, in text: String) -> ProceedingRole? {
+        // Real-case v2 (2026-11-04): "Judge John Michael Vazquez convicted" — the ledger's entity carried the
+        // title in its name, so no pattern found "Judge Judge …" and the "were convicted" lead went to him.
+        // A title the name itself starts with is the role.
+        if let titled = titleRole(person) { return titled }
         let tokens = ProceedingEventExtractor.nameTokens(person)
         guard let first = tokens.first, let last = tokens.last, tokens.count >= 2 else { return nil }
         let full = fullNamePattern(first: first, last: last)
@@ -113,6 +117,10 @@ public nonisolated enum ProceedingRoleClassifier {
         ]
         if counselSignals.contains(where: has) { return .counsel }
         let agentTitles = [
+            // "Special Inspector General for the Troubled Asset Relief Program (SIGTARP) Christy Romero",
+            // "Inspector General Romero", "(SIGTARP) Christy Romero" — an inspector general is an official.
+            #"(?i:(?:special\s+|deputy\s+|acting\s+|assistant\s+)*inspectors?\s+general(?:\s+for\s+(?:the\s+)?[\w’'&,\-\s]{2,80}?)?(?:\s*\([A-Za-z\-]{2,12}\))?)"#,
+            #"\([A-Z][A-Z\-]{1,11}\)"#,
             #"(?i:(?:acting\s+)?(?:assistant\s+)?special\s+agents?(?:[-\s]+in[-\s]+charge)?)"#,
             #"(?i:(?:fbi|dea|atf|irs|hsi|secret\s+service)\s+(?:special\s+)?agents?|(?:police\s+)?(?:chief|commissioner|inspector|detective|investigator|trooper|sheriff))"#,
             #"(?i:investigated\s+by|under\s+the\s+direction\s+of)"#,
@@ -121,7 +129,11 @@ public nonisolated enum ProceedingRoleClassifier {
             || has(full + #",\s+(?i:(?:acting\s+)?(?:director|special\s+agent|inspector|chief|commissioner)\b)"#) {
             return .agent
         }
-        if has(#"(?i:\bvictims?)\s+"# + full) || has(full + #",\s+(?i:the\s+victim)"#) { return .victim }
+        // "… and Christy Romero made the announcement": the announcers of a release are its officials.
+        if has(full + #"\s+(?i:made\s+the\s+announcement|announced\s+(?:today|the\s+(?:charges|sentence|plea|indictment|verdict)))"#) { return .agent }
+        // "the vehicular deaths of Mohamed Kamara, …", "killed Jane Roe", "Jane Roe was killed" — a victim.
+        if has(#"(?i:\bvictims?|\bdeaths?\s+of|\bkilled|\bkilling|\bmurder(?:ed|ing)?\s+of|\bmurdered|\binjured)\s+"# + listed + full)
+            || has(full + #",\s+(?i:the\s+victim)"#) || has(full + #"(?:,[^.;]{0,60},)?\s+(?i:(?:was|were)\s+killed|died)\b"#) { return .victim }
         if has(#"(?i:\bwitness(?:es)?)\s+"# + full) || has(full + #"\s+(?i:testified)"#) { return .witness }
         return nil
     }
@@ -134,6 +146,22 @@ public nonisolated enum ProceedingRoleClassifier {
     }
 
     // MARK: - patterns
+
+    /// The role a title at the start of the name itself states ("Judge John Michael Vazquez", "Special Agent
+    /// in Charge James E. Dennehy", "Attorney General Eric Holder"), or nil. "Former Judge X" is not one.
+    static func titleRole(_ person: String) -> ProceedingRole? {
+        let words = person.lowercased().components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'-")).inverted).filter { !$0.isEmpty }
+        guard words.count >= 3, let head = words.first, head != "former" else { return nil }
+        switch head {
+        case "judge", "justice", "magistrate": return .judge
+        case "prosecutor", "ausa", "attorney", "attorneys": return .prosecutor
+        case "agent", "inspector", "sheriff", "detective", "investigator", "trooper", "commissioner": return .agent
+        case "special" where ["agent", "agents", "inspector"].contains(words[1]): return .agent
+        case "chief" where ["judge", "justice"].contains(words[1]): return .judge
+        case "counsel": return .counsel
+        default: return nil
+        }
+    }
 
     static func loose(_ token: String) -> String {
         NSRegularExpression.escapedPattern(for: token).replacingOccurrences(of: #"\-"#, with: "-").replacingOccurrences(of: "-", with: #"[\s-]?"#)
