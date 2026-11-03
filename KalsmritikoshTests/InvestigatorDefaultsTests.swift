@@ -30,6 +30,32 @@ import Testing
         }
     }
 
+    @Test func earlierInvestigatorGetsTheRoleToolsOnce() {
+        let store = AppDefaults.store
+        let keys = ModulePreset.modules(forPersona: "investigation").map { "kalsmritikosh.product.\($0.rawValue)" }
+            + [ModulePreset.personaKey, ModulePreset.investigationPresetRevisionKey]
+        let saved = keys.map { store.object(forKey: $0) }
+        defer { for (k, v) in zip(keys, saved) { if let v { store.set(v, forKey: k) } else { store.removeObject(forKey: k) } } }
+
+        // Another role: nothing changes.
+        store.set("legal", forKey: ModulePreset.personaKey)
+        store.removeObject(forKey: ModulePreset.investigationPresetRevisionKey)
+        ProductModuleFlags.setEnabled(.watchlists, false)
+        #expect(!ModulePreset.refreshInvestigationRole(store))
+        #expect(!ProductModuleFlags.isEnabled(.watchlists))
+
+        // An Investigator from before: the role's tools come on once, including one stored as off.
+        store.set("investigation", forKey: ModulePreset.personaKey)
+        #expect(ModulePreset.refreshInvestigationRole(store))
+        #expect(ProductModuleFlags.isEnabled(.watchlists))
+        #expect(ProductModuleFlags.isEnabled(.communicationAnalysis))
+
+        // Afterwards the person's choice stands: turned off, it stays off at the next launch.
+        ProductModuleFlags.setEnabled(.watchlists, false)
+        #expect(!ModulePreset.refreshInvestigationRole(store))
+        #expect(!ProductModuleFlags.isEnabled(.watchlists))
+    }
+
     @Test func plainWordsAreNotSyntax() {
         for q in ["was invoice 432 paid and delivered", "who signed the contract or the amendment",
                   "not paid", "meeting at 10:30", "Re: invoice", "budget - draft", "-", "*", "John Carter"] {

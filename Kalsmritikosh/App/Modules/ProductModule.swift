@@ -528,6 +528,23 @@ nonisolated public enum ModulePreset {
         for m in modules(forPersona: id) { ProductModuleFlags.setEnabled(m, true) }
     }
 
+    static let personaKey = "kalsmritikosh.persona"
+    static let investigationPresetRevisionKey = "kalsmritikosh.preset.investigation.revision"
+    /// Raised when the investigation role gains tools (2026-11-03: its listed relationship/timeline views were
+    /// never switched on, and search syntax, tags and highlights joined it).
+    static let investigationPresetRevision = 2
+
+    /// Someone who chose the investigation role before its tools changed gets them once, at launch — the same
+    /// switch-on-only preset as choosing the role again. Anything they turn off afterwards stays off.
+    @discardableResult
+    public static func refreshInvestigationRole(_ store: UserDefaults = AppDefaults.store) -> Bool {
+        guard store.string(forKey: personaKey) == "investigation",
+              store.integer(forKey: investigationPresetRevisionKey) < investigationPresetRevision else { return false }
+        apply(persona: "investigation")
+        store.set(investigationPresetRevision, forKey: investigationPresetRevisionKey)
+        return true
+    }
+
     /// For someone using Kalsmritikosh on its own, without DEVONthink: the features DEVONthink
     /// also has (tags, highlights, smart collections, capture, Spotlight and the rest), which the
     /// companion positioning otherwise leaves off. Built, non-preview modules only.

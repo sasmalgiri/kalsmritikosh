@@ -50,6 +50,7 @@ struct KalsmritikoshApp: App {
         }
         #endif
         DiagnosticsReporter.shared.start()   // U-4 — MetricKit crash/hang reports, saved on this Mac only
+        ModulePreset.refreshInvestigationRole()   // an earlier Investigator gets the role's current tools, once
     }
 
     var body: some Scene {
