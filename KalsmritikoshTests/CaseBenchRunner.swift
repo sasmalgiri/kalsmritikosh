@@ -39,6 +39,9 @@ struct CaseBenchRunner {
         let aiCalls: [String: Int]
         /// The question as the app answered it, when it was rewritten (normalised or canonical form).
         var resolved: String? = nil
+        /// Which path wrote the answer (VerifiedAnswerComposer.writer): "ai-verified", "needs-review",
+        /// "ai-not-stated", "rules-ai-failed" or "rules".
+        var writer: String? = nil
     }
     struct CaseResult: Encodable {
         let `case`: String; let source: String
@@ -255,19 +258,28 @@ struct CaseBenchRunner {
         let brain = await state.brain
         // CASEBENCH_CLOUD_KEY_FILE — the cloud step of the understanding cascade, measured with the
         // owner's Claude key (read from a file outside the repo; the app itself reaches the cloud only
-        // through its network helper, which a test host does not have). Answers stay evidence-only:
-        // only the question's wording goes to the model, never a document.
+        // through its network helper, which a test host does not have). The question's wording goes to
+        // the interpreter and rewriter; the retrieved passages go to the record extractor and the verified
+        // answer composer, whose every claim is checked against its passage. Without a key the readers
+        // the app installed at boot stand (no Online provider here → nothing is sent, evidence-only).
         if let keyFile = Self.env["CASEBENCH_CLOUD_KEY_FILE"],
            let key = try? String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
             let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-opus-5"
             let send: @Sendable (String) async throws -> String = { prompt in try await BenchClaude.send(prompt, key: key, model: model) }
-            await brain.setQuestionInterpreters(onDevice: nil, cloud: CloudQuestionInterpreter(generate: send))
-            await brain.setQuestionRewriters(onDevice: nil, cloud: CloudQuestionRewriter(generate: send))
             // Verified record extraction reads the person's documents — a stronger reader than the
             // question rewriter; every answer it proposes is checked verbatim against the documents.
             let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-opus-5"
-            await brain.setRecordExtractor(VerifiedRecordExtractor { prompt in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) })
-            await brain.setInterpreterModelsAllowedOverride(true)
+            // P1 — the verified answer composer reads the retrieved passages with the same model; every
+            // claim it writes is checked against its passage. One reader set for the archive brain and,
+            // through the app's holder, for every case-scoped brain.
+            let readers = CloudReaders(
+                interpreterCloud: CloudQuestionInterpreter(generate: send),
+                rewriterCloud: CloudQuestionRewriter(generate: send),
+                recordExtractor: VerifiedRecordExtractor { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) },
+                answerComposer: VerifiedAnswerComposer { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) },
+                modelsAllowedOverride: true)
+            state.cloudReaderHolder.set(readers)
+            await brain.setCloudReaders(readers)
         }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         func ask(_ id: String, _ q: String) async -> AnswerResult {
@@ -286,7 +298,8 @@ struct CaseBenchRunner {
                                 cited: a.citations.map { caseOfObject[$0.objectID] ?? "?" },
                                 snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
                                 confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s),
-                                aiCalls: calls, resolved: a.resolvedQuestion == q ? nil : a.resolvedQuestion)
+                                aiCalls: calls, resolved: a.resolvedQuestion == q ? nil : a.resolvedQuestion,
+                                writer: VerifiedAnswerComposer.writer(of: a))
         }
         var lines: [String] = []
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -379,11 +392,22 @@ struct CaseBenchRunner {
             var asked: [AnswerResult] = []
             for q in line.questions {
                 let s = Date()
+                // Real model calls for in-case answers too (the case-scoped brain gets the same readers).
+                let before = await LLMCallCounters.shared.snapshot().completedByProvider
+                let claudeBefore = await BenchClaude.Usage.shared.calls
                 let a = try await answersService.answer(caseID: c.id, question: q.q, access: access).verified
+                let claudeCalls = await BenchClaude.Usage.shared.calls - claudeBefore
+                let after = await LLMCallCounters.shared.snapshot().completedByProvider
+                var calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
+                    let d = kv.value - (before[kv.key] ?? 0)
+                    if d > 0 { out[kv.key] = d }
+                }
+                if claudeCalls > 0 { calls["claude"] = claudeCalls }
                 asked.append(AnswerResult(id: q.id, q: q.q, body: a.body, refused: a.refused, refusal: a.refusalReason,
                                           cited: a.citations.map { caseOf[$0.objectID] ?? "?" },
                                           snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
-                                          confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s), aiCalls: [:]))
+                                          confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s), aiCalls: calls,
+                                          writer: VerifiedAnswerComposer.writer(of: a)))
             }
             let manifest = try await custody.manifest(caseID: c.id)
             let contradictions = try await cg.contradictions(caseID: c.id).count

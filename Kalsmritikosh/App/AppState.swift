@@ -800,6 +800,10 @@ public final class AppState {
     /// The person's own cloud AI (Online mode) — kept so the question interpreter's last step
     /// reaches it through the same masking, limit and consent as every other send.
     @ObservationIgnored var onlineProvider: OnlineCloudProvider?
+    /// P1 — the one place holding the readers beside the rules (question interpreter and rewriter,
+    /// verified record extractor, verified answer composer). Installed on the archive brain at boot and
+    /// on every case-scoped brain `makeBrain` builds, so a case question is read the same way.
+    @ObservationIgnored nonisolated let cloudReaderHolder = CloudReaderHolder()
     /// W1-9 — files waiting, running and finished in this session.
     public let importQueue = ImportQueue()
     /// Set by Home persona cards ("try asking"); AskView seeds its input from
@@ -2491,7 +2495,7 @@ public final class AppState {
                 // query the whole ledger, filtered for sensitivity and workspace but not for the case's
                 // source scope. Without them the email/proceeding answerers read only the scoped
                 // retrieval, so nothing outside the case can enter an answer.
-                makeBrain: { scoped in
+                makeBrain: { [cloudReaderHolder] scoped in
                     MasterBrain(
                         intentDetector: intentDetector, router: router, retriever: scoped, executor: executor,
                         capabilities: capabilities, verifier: verifier, weeklyBriefing: weeklyBriefing,
@@ -2499,7 +2503,9 @@ public final class AppState {
                         eventsRepo: events, eventLinks: eventLinksRepo, onDemandDistiller: memoryDistiller,
                         derivedObjects: derivedObjectsRepo, answerLedger: answerLedgerRepo, evidenceStore: evidenceStoreRepo,
                         objects: objects, priorityGate: priorityGate, typedFields: TypedFieldRepository(database: db),
-                        sensitiveScope: sensitiveScopesRepo)
+                        sensitiveScope: sensitiveScopesRepo,
+                        // P1 — the same readers as the archive brain; the service binds the case's cloud scope.
+                        cloudReaders: cloudReaderHolder.current)
                 },
                 artifacts: casePhaseArtifactsRepo,
                 // F08 — case-scoped recall on every lane (keyword, vector, events, entities, graph), the
@@ -2932,7 +2938,6 @@ public final class AppState {
                     // The question (and field names) only — no document text.
                     return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
                 } : nil
-            await brain.setQuestionInterpreters(onDevice: onDevice, cloud: cloud)
             // Any wording → one canonical form, the same cascade.
             let rewriteOnDevice: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
                 && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionRewriter() : nil
@@ -2944,19 +2949,40 @@ public final class AppState {
                     // The question (and field names) only — no document text.
                     return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
                 } : nil
-            await brain.setQuestionRewriters(onDevice: rewriteOnDevice, cloud: rewriteCloud)
             // Verified record extraction (Online, AI on): the person's documents go through the Online
             // provider — its preview, masking and consent — and only a verbatim-verified answer is shown.
             // Final brief §3.5: its own switch, off by default — it sends document excerpts, unlike the
             // question interpreter, which sends only the question and field names.
-            await brain.setRecordExtractor(KnowledgeModuleFlags.isEnabled(.onlineRecordReading)
-                ? VerifiedRecordExtractor { [weak self] prompt in
-                    guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
-                        throw OnlineCloudProvider.OnlineError.notAvailable
-                    }
+            // P1 — the same switch governs the verified answer composer: it sends the retrieved passages.
+            // One document reader for both. A send carries the clearance its passages were given
+            // (CloudSourceGate, bound to the asking case); without one nothing is sent. Not set up,
+            // not eligible for documents, or declined: nothing was sent and the evidence-only answer stands.
+            let readDocuments: @Sendable (String, CloudSourceClearance?, Int) async throws -> String = { [weak self] prompt, clearance, maxTokens in
+                guard let provider = await self?.onlineProvider, await provider.acceptsDocuments() else {
+                    throw VerifiedAnswerComposer.NotSent("Online document reading is not set up")
+                }
+                guard let clearance else { throw OnlineCloudProvider.OnlineError.documentsNotCleared }
+                do {
                     // Review L2: document excerpts go only to an eligible, confirmed provider.
-                    return try await provider.generateFromDocuments(prompt: prompt, options: GenerationOptions(maxTokens: 600, temperature: 0))
+                    return try await provider.generateFromDocuments(
+                        prompt: prompt, options: GenerationOptions(maxTokens: maxTokens, temperature: 0, sourceClearance: clearance))
+                } catch OnlineCloudProvider.OnlineError.declined {
+                    KalsmritikoshLog.brain.info("document reading declined by the person")
+                    throw VerifiedAnswerComposer.NotSent("declined")
+                }
+            }
+            let readsDocuments = KnowledgeModuleFlags.isEnabled(.onlineRecordReading)
+            let readers = CloudReaders(
+                interpreterOnDevice: onDevice, interpreterCloud: cloud,
+                rewriterOnDevice: rewriteOnDevice, rewriterCloud: rewriteCloud,
+                recordExtractor: readsDocuments ? VerifiedRecordExtractor { prompt, clearance in
+                    try await readDocuments(prompt, clearance, 600)
+                } : nil,
+                answerComposer: readsDocuments ? VerifiedAnswerComposer { prompt, clearance in
+                    try await readDocuments(prompt, clearance, 1_500)
                 } : nil)
+            cloudReaderHolder.set(readers)
+            await brain.setCloudReaders(readers)
             // Emails by exact subject, or sent by one person to another, straight from the ledger.
             let participants = EmailParticipantRepository(database: db)
             await brain.setEmailLookup { [weak chunks] lookup in

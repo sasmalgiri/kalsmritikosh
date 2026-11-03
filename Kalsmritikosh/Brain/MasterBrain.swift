@@ -157,7 +157,8 @@ public actor MasterBrain {
         sensitivePolicy: SensitiveRetrievalPolicy? = nil,
         aeeUpgradeBridge: AEEEvidenceUpgrading? = nil,
         typedFields: TypedFieldRepository? = nil,
-        sensitiveScope: SensitiveScopeRepository? = nil
+        sensitiveScope: SensitiveScopeRepository? = nil,
+        cloudReaders: CloudReaders? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -181,6 +182,15 @@ public actor MasterBrain {
         self.aeeUpgradeBridge = aeeUpgradeBridge
         self.typedFields = typedFields
         self.sensitiveScope = sensitiveScope
+        if let cloudReaders {
+            self.onDeviceInterpreter = cloudReaders.interpreterOnDevice
+            self.cloudInterpreter = cloudReaders.interpreterCloud
+            self.onDeviceRewriter = cloudReaders.rewriterOnDevice
+            self.cloudRewriter = cloudReaders.rewriterCloud
+            self.recordExtractor = cloudReaders.recordExtractor
+            self.answerComposer = cloudReaders.answerComposer
+            self.interpreterModelsAllowedOverride = cloudReaders.modelsAllowedOverride
+        }
     }
 
     /// AEE-M1 — attach the exact-version upgrade bridge after boot (the brain is
@@ -336,7 +346,8 @@ public actor MasterBrain {
         question: String,
         context: LLMRequestContext? = nil,
         access: SensitiveAccessContext,
-        originScopeID: UUID? = nil
+        originScopeID: UUID? = nil,
+        questionShapedByModel: Bool = false
     ) -> AsyncStream<AnswerUpdate> {
         AsyncStream { continuation in
             Task { [weak self] in
@@ -358,7 +369,7 @@ public actor MasterBrain {
                         refusalReason: "That looks like a message to the app, not a question about your archive. Investigations Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: refused, mission: nil,
-                        originScopeID: originScopeID) {
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -376,7 +387,7 @@ public actor MasterBrain {
                    let refusal = await check(question) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: refusal, mission: nil,
-                        originScopeID: originScopeID) {
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -395,7 +406,7 @@ public actor MasterBrain {
                         refusalReason: QuestionShapeRouter.outOfScopeRefusal)
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: refused, mission: nil,
-                        originScopeID: originScopeID) {
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -411,7 +422,7 @@ public actor MasterBrain {
                    let story = await compose(question, access) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: story, mission: nil,
-                        originScopeID: originScopeID) {
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -427,7 +438,7 @@ public actor MasterBrain {
                    let answered = await subjectFirst(question, access) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: answered, mission: nil,
-                        originScopeID: originScopeID) {
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -454,7 +465,7 @@ public actor MasterBrain {
                 ) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: reconstructed, mission: nil,
-                        originScopeID: originScopeID) {
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -465,7 +476,7 @@ public actor MasterBrain {
                     question: question, externalContext: context, access: access)
                 for update in await self.finalizeProgressiveAnswer(
                     question: question, verified: final, mission: mission,
-                    originScopeID: originScopeID) {
+                    originScopeID: originScopeID, modelShaped: questionShapedByModel) {
                     continuation.yield(update)
                 }
                 // P3-U4 part 2 — THE COMPOSE TWIN, inside the owner's fence:
@@ -1648,6 +1659,23 @@ public actor MasterBrain {
     private var cloudRewriter: (any QuestionRewriting)?
     private var recordExtractor: VerifiedRecordExtractor?
     public func setRecordExtractor(_ extractor: VerifiedRecordExtractor?) { recordExtractor = extractor }
+    /// P1 — the person's reader writes the answer in claims, every claim checked (VerifiedAnswerComposer).
+    private var answerComposer: VerifiedAnswerComposer?
+    public func setAnswerComposer(_ composer: VerifiedAnswerComposer?) { answerComposer = composer }
+    /// P1 — install a whole reader set at once (the archive brain and every case-scoped brain get the same).
+    public func setCloudReaders(_ readers: CloudReaders) {
+        onDeviceInterpreter = readers.interpreterOnDevice
+        cloudInterpreter = readers.interpreterCloud
+        onDeviceRewriter = readers.rewriterOnDevice
+        cloudRewriter = readers.rewriterCloud
+        recordExtractor = readers.recordExtractor
+        answerComposer = readers.answerComposer
+        interpreterModelsAllowedOverride = readers.modelsAllowedOverride
+    }
+    /// Test seam: whether a composer and a record extractor are installed.
+    var installedReaders: (composer: Bool, extractor: Bool, cloudInterpreter: Bool, cloudRewriter: Bool) {
+        (answerComposer != nil, recordExtractor != nil, cloudInterpreter != nil, cloudRewriter != nil)
+    }
     public func setQuestionRewriters(onDevice: (any QuestionRewriting)?, cloud: (any QuestionRewriting)?) {
         onDeviceRewriter = onDevice
         cloudRewriter = cloud
@@ -1695,14 +1723,16 @@ public actor MasterBrain {
         // (names and quoted subjects copied from the question), then answered from the documents.
         // The courtesy wrapper goes first ("Can you tell me …"), so the rules read what is asked.
         var question = QuestionCanonicalizer.normalize(question)
+        var rewrittenByModel = false
         if onDeviceRewriter != nil || cloudRewriter != nil,
            let canonical = await QuestionCanonicalizer.canonicalize(question, onDevice: onDeviceRewriter, cloud: cloudRewriter,
                                                                     modelsAllowed: interpreterModelsAllowed) {
             KalsmritikoshLog.brain.info("question rewritten to a canonical form")
             question = canonical
+            rewrittenByModel = true
         }
         for await update in answerStream(question: question, context: context, access: access,
-                                         originScopeID: originScopeID) {
+                                         originScopeID: originScopeID, questionShapedByModel: rewrittenByModel) {
             // AEE-M2 — the terminal states are verifiedFinal (locked, durably committed) and
             // incomplete (honest failure). Both carry the VerifiedAnswer for legacy callers.
             switch update {
@@ -1737,15 +1767,19 @@ public actor MasterBrain {
     /// When no answer ledger is wired (degraded/tests) the terminal state is still emitted.
     func finalizeProgressiveAnswer(   // internal — exercised directly by AEEM2MasterBrainIntegrationTests
         question: String, verified: VerifiedAnswer, mission: QueryMission?,
-        originScopeID: UUID? = nil
+        originScopeID: UUID? = nil, modelShaped: Bool = false
     ) async -> [AnswerUpdate] {
+        // P1 — truthful provenance: the question was rewritten by a model, so the answer must not say
+        // "no model was consulted" (it is still quoted from the documents).
+        var verified = modelShaped ? ModelUseLabel.relabel(verified, purpose: "question.rewriter") : verified
         // Q-3 — a when-question is answered with a date or an honest "no date given"; a which-office
         // question with the office the release names, or an honest "not named".
         var officeSources: [String] = []
         // An answer read from the exact record by a dedicated answerer (an email's own headers, a
         // person's proceeding steps) is final: the shape gates must not rewrite it — "Do you have the
         // send date for the email X?" came back as "No — the documents give date: …".
-        let fromRecord = verified.intentKind == VerifiedAnswer.recordAnswerKind
+        // P1 — an answer the verified reader wrote is checked claim by claim already; the gates leave it too.
+        let fromRecord = verified.intentKind == VerifiedAnswer.recordAnswerKind || VerifiedAnswerComposer.wrote(verified)
         if !fromRecord, IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil
             || YesNoFieldGate.asksYesNo(question)
             || question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil
@@ -1765,7 +1799,7 @@ public actor MasterBrain {
         // Wide case bench 2026-10-25: a yes/no question is answered yes or no; a question about
         // something the documents never mention is answered "not mentioned".
         // A conclusion ("What did the NTSB conclude caused …?") only from text labeled as one.
-        let verified = fromRecord ? verified : ConclusionGate.apply(question: question,
+        verified = fromRecord ? verified : ConclusionGate.apply(question: question,
                                             YesNoFieldGate.apply(question: question,
                                                                  AbsentAttributeGate.apply(question: question,
                                                                                            YesNoFieldGate.answerFieldQuestion(question: question, gated, sourceTexts: officeSources),
@@ -1825,17 +1859,20 @@ public actor MasterBrain {
         access: SensitiveAccessContext
     ) async -> (answer: VerifiedAnswer, mission: QueryMission?) {
         var mission: QueryMission? = nil
+        var interpretedByModel = false
         let answer = await computeVerifiedAnswer(
             question: question, externalContext: externalContext, access: access,
-            onMission: { mission = $0 })
-        return (answer, mission)
+            onMission: { mission = $0 }, onQuestionInterpreted: { interpretedByModel = true })
+        // P1 — a model chose what the question asks for: the answer must not say no model took part.
+        return (interpretedByModel ? ModelUseLabel.relabel(answer, purpose: "question.interpreter") : answer, mission)
     }
 
     private func computeVerifiedAnswer(
         question: String,
         externalContext: LLMRequestContext? = nil,
         access: SensitiveAccessContext,
-        onMission: (QueryMission) -> Void = { _ in }
+        onMission: (QueryMission) -> Void = { _ in },
+        onQuestionInterpreted: () -> Void = {}
     ) async -> VerifiedAnswer {
         guard
             let intentDetector,
@@ -2051,6 +2088,7 @@ public actor MasterBrain {
                                                                 onDevice: onDeviceInterpreter, cloud: cloudInterpreter,
                                                                 modelsAllowed: interpreterModelsAllowed), step != "rules" {
                 KalsmritikoshLog.brain.info("question understood by the \(step, privacy: .public) interpreter")
+                if step.hasPrefix("interpreted:") { onQuestionInterpreted() }
             }
         }
         // What happened to a PERSON in a proceeding ("When was X sentenced?", "Did X plead guilty?",
@@ -2194,6 +2232,7 @@ public actor MasterBrain {
             // material never, whatever the local scope permits. Each document's own protection label
             // decides (an unknown document is denied); with no label source wired, nothing is sent.
             var cloudSources: [ProceedingAnswerer.Source] = []
+            var cloudClearance: CloudSourceClearance?
             if interpreterModelsAllowed, recordExtractor != nil, VerifiedRecordExtractor.handles(parsed.ask) {
                 let cloudScope = SensitiveScope(
                     workspaceID: access.scope.workspaceID, maximumSensitivity: min(access.scope.maximumSensitivity, CloudSourceGate.cloudCeiling),
@@ -2202,8 +2241,9 @@ public actor MasterBrain {
                     // The same gate as every cloud route (K1): label, legacy privileged flag, cloud ceiling.
                     let gate = CloudSourceGate(sensitiveScope: sensitiveScope, objects: objects, localCeiling: access.scope.maximumSensitivity)
                         .bound(to: self.cloudScope)
-                    let cleared = await gate.clear(sources.map(\.objectID), purpose: "record.reading").clearance.clearedObjectIDs
-                    cloudSources = sources.filter { cleared.contains($0.objectID) }
+                    let clearance = await gate.clear(sources.map(\.objectID), purpose: "record.reading").clearance
+                    cloudClearance = clearance
+                    cloudSources = sources.filter { clearance.clearedObjectIDs.contains($0.objectID) }
                 } else if let policy = sensitivePolicy {
                     let allowed = Set(await policy.filter(result: RetrievalResult(authorityObjectIDs: sources.map(\.objectID)),
                                                           access: SensitiveAccessContext(scope: cloudScope)).result.authorityObjectIDs)
@@ -2211,7 +2251,8 @@ public actor MasterBrain {
                 }
             }
             if interpreterModelsAllowed, let recordExtractor, VerifiedRecordExtractor.handles(parsed.ask), !cloudSources.isEmpty,
-               let verified = await recordExtractor.answer(question: intent.rawQuestion, parsed: parsed, sources: cloudSources) {
+               let verified = await recordExtractor.answer(question: intent.rawQuestion, parsed: parsed, sources: cloudSources,
+                                                           clearance: cloudClearance) {
                 KalsmritikoshLog.brain.info("proceeding answer: verified extraction for \(String(describing: parsed.ask), privacy: .public)")
                 return verified
             }
@@ -2269,6 +2310,36 @@ public actor MasterBrain {
             )
         }
 
+        // P1 — the person's reader writes the answer: Online, AI on and document reading switched on
+        // (the composer is installed only then). It reads the passages this question already retrieved
+        // (case-scoped inside a case, each document cleared for the cloud first) and answers in claims;
+        // only claims that verify against their passage are shown, and the evidence-only answer above is
+        // the cross-check. Runs after every refusal gate, before the passage fallbacks below. Offline,
+        // nothing here runs and the answer is the evidence-only one, unchanged.
+        var readingFailure: String?
+        if interpreterModelsAllowed, let answerComposer {
+            switch await composeVerifiedReading(answerComposer, question: question, retrieval: retrievalForVerifier,
+                                                rules: verified, access: access) {
+            case .answered(let written), .notStated(let written):
+                KalsmritikoshLog.brain.info("verified reading: \(VerifiedAnswerComposer.writer(of: written), privacy: .public)")
+                let readingTrace = ReasoningTrace(
+                    pathTaken: "verified AI reading", intent: intent.kind.rawValue, queryCategory: category.rawValue,
+                    retrievalLayers: sharedRetrieval.layersUsed.map(\.rawValue), expertIDs: decision.expertIDs,
+                    llmPurposes: findings.map { "expert.\($0.expertID)" } + ["answer.verifiedReading"],
+                    assumptions: documentFocus.map { [$0.note] } ?? [])
+                return Self.tag(written, as: .experts, trace: readingTrace)
+            case .failed(let reason):
+                readingFailure = reason
+            case .notSent:
+                break
+            }
+        }
+        let readingFailed = readingFailure
+        // The reader failed (an unreadable reply, an error): the evidence-only answer is shown, saying so.
+        func finish(_ a: VerifiedAnswer) -> VerifiedAnswer {
+            readingFailed.map { VerifiedAnswerComposer.flagged(a, reason: $0) } ?? a
+        }
+
         // If the expert pipeline returned a refusal OR landed with
         // zero citations, try the chunk RAG fallback. Mimics the
         // generic AI-with-files experience: when structured experts
@@ -2280,13 +2351,13 @@ public actor MasterBrain {
             // the model sees only id-bearing ledger results and every
             // sentence is swept against the result it cites.
             if let grounded = await toolGroundedFallback?(question, access), !grounded.refused {
-                return grounded
+                return finish(grounded)
             }
             if let rag = await chunkBasedFallback(
                 question: question, intent: intent, retrieval: retrievalForVerifier,
                 context: llmContext
             ), !rag.refused {
-                return rag
+                return finish(rag)
             }
             // Budget spent / no provider and still ungrounded — render a
             // deterministic evidence readout instead of a bare refusal (§13),
@@ -2300,7 +2371,7 @@ public actor MasterBrain {
                 retrieval: retrievalForVerifier, eventLinks: eventLinks,
                 topics: topics
             ), !det.citations.isEmpty {
-                return det
+                return finish(det)
             }
         }
         // Tag the expert-pipeline answer with `.experts` so the UI
@@ -2393,7 +2464,7 @@ public actor MasterBrain {
                 cloudGate: cloudGate
             )
         }
-        let tagged = Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
+        let tagged = finish(Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody))
         // §16 — persist the verified answer as a derived ledger object (with
         // provenance) so derived knowledge compounds across sessions.
         // M1 safety: in UNCONSTRAINED mode the grounding/fact-lock checks were only
@@ -2407,6 +2478,39 @@ public actor MasterBrain {
         // result → review-ready → verifiedFinal) BEFORE verifiedFinal is emitted. The old
         // best-effort persistAnswerLedger(...) call is removed to avoid a duplicate answer row.
         return tagged
+    }
+
+    /// P1 — the passages this question retrieved, in the pipeline's order, cleared for the cloud (privileged
+    /// material never; above "confidential" never; outside the asking case never — the clearance is bound
+    /// to the brain's cloud scope and re-checked at the send), then read by the composer. With no label
+    /// source wired nothing is sent.
+    private func composeVerifiedReading(_ composer: VerifiedAnswerComposer, question: String, retrieval: RetrievalResult,
+                                        rules: VerifiedAnswer, access: SensitiveAccessContext) async -> VerifiedAnswerComposer.Outcome {
+        guard let sensitiveScope else { return .notSent }
+        var seen = Set<UUID>(), ranked: [Chunk] = []
+        for rc in retrieval.chunks where seen.insert(rc.chunk.id).inserted { ranked.append(rc.chunk) }
+        let candidates = Array(ranked.prefix(VerifiedAnswerComposer.maxPassages * 3))
+        guard !candidates.isEmpty else { return .notSent }
+        let gate = CloudSourceGate(sensitiveScope: sensitiveScope, objects: objects, localCeiling: access.scope.maximumSensitivity)
+            .bound(to: cloudScope)
+        let clearance = await gate.clear(Array(Set(candidates.map(\.objectID))), purpose: "answer.reading").clearance
+        let allowed = candidates.filter { clearance.clearedObjectIDs.contains($0.objectID) }
+        guard !allowed.isEmpty else { return .notSent }
+        var fileNames: [UUID: String] = [:]
+        if let objects {
+            do {
+                for row in try await objects.documentHeads(for: Set(allowed.map(\.objectID)), headCharacters: 1) {
+                    if let name = row.fileName { fileNames[row.objectID] = name }
+                }
+            } catch {
+                KalsmritikoshLog.brain.error("verified reading: file names unreadable: \(String(describing: error), privacy: .public)")
+            }
+        }
+        let passages = allowed.map {
+            VerifiedAnswerComposer.Passage(objectID: $0.objectID, chunkID: $0.id, sourceVersionID: $0.sourceVersionID,
+                                           blockID: $0.evidenceBlockID, text: $0.text, fileName: fileNames[$0.objectID])
+        }
+        return await composer.compose(question: question, passages: passages, rules: rules, clearance: clearance)
     }
 
     /// Adaptive LLM budget (ledger-first Phase 4). How much extra reasoning

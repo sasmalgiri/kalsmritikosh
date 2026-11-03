@@ -23,10 +23,12 @@
 //
 
 import Foundation
+import os
 
 public nonisolated struct VerifiedRecordExtractor: Sendable {
-    private let generate: @Sendable (String) async throws -> String
-    public init(generate: @escaping @Sendable (String) async throws -> String) { self.generate = generate }
+    /// The prompt and the clearance of the documents it was built from (K1: a document send carries one).
+    private let generate: @Sendable (String, CloudSourceClearance?) async throws -> String
+    public init(generate: @escaping @Sendable (String, CloudSourceClearance?) async throws -> String) { self.generate = generate }
 
     /// The asks the extractor answers; others stay with the rules.
     static func handles(_ ask: ProceedingAnswerer.Ask) -> Bool {
@@ -78,14 +80,18 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
     }
 
     /// The verified answer, or nil (the rules answer stands).
-    public func answer(question: String, parsed: ProceedingAnswerer.Parsed, sources: [ProceedingAnswerer.Source]) async -> VerifiedAnswer? {
+    public func answer(question: String, parsed: ProceedingAnswerer.Parsed, sources: [ProceedingAnswerer.Source],
+                       clearance: CloudSourceClearance? = nil) async -> VerifiedAnswer? {
         guard Self.handles(parsed.ask) else { return nil }
         // Only documents naming THIS person in full go to the model ("Brock Taylor" is not Jonathan Taylor).
         let about = sources.filter { ProceedingAnswerer.namesFully($0.text, person: parsed.person) }.prefix(8)
         guard !about.isEmpty else { return nil }
         let docs = about.map { String($0.text.prefix(7_000)) }
         let reply: String
-        do { reply = try await generate(Self.prompt(question: question, person: parsed.person, documents: docs)) } catch { return nil }
+        do { reply = try await generate(Self.prompt(question: question, person: parsed.person, documents: docs), clearance) } catch {
+            KalsmritikoshLog.brain.info("record reading not used: \(String(describing: error), privacy: .public)")
+            return nil
+        }
         guard let p = Self.parse(reply) else { return nil }
         return Self.verify(p, parsed: parsed, sources: Array(about), docs: docs)
     }

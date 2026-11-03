@@ -118,6 +118,15 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         return try await generateFromDocuments(prompt: prompt, options: options)
     }
 
+    /// P1 — whether a document-bearing request could be sent now (Online set up, provider eligible for
+    /// case documents, its terms confirmed). Readers check this first, so an ineligible setup is not
+    /// recorded as a failed send on every question; `generateFromDocuments` still enforces it.
+    public func acceptsDocuments() async -> Bool {
+        let s = seams.settings()
+        guard await isAvailable() else { return false }
+        return OnlineDocumentEligibility.refusal(kind: s.kind, confirmedTermsVersion: s.confirmedDocumentTerms) == nil
+    }
+
     /// A request that carries only the question (and field names) — the question interpreter and
     /// rewriter. No document text may be passed here.
     public func generateQuestionOnly(prompt: String, options: GenerationOptions) async throws -> String {
