@@ -49,6 +49,8 @@ public nonisolated struct CaseContradictionRun: Sendable {
     public var aiAgreedWithRules = 0
     public var calls = 0
     public var failedCalls = 0
+    /// Why each failed call failed (the provider's words).
+    public var failures: [String] = []
     public var passagesSent = 0
     public var deniedForCloud = 0
     /// Why the AI reading did not run or stopped (nil: it ran, or no reader is set up).
@@ -130,7 +132,9 @@ public actor InvestigationContradictionGapService {
                 run.notSentReason = "cancelled"; return
             } catch {
                 KalsmritikoshLog.knowledge.error("case contradiction reading failed: \(String(describing: error), privacy: .public)")
-                run.failedCalls += 1; continue
+                run.failedCalls += 1
+                run.failures.append("contradiction call (\(batch.subject ?? "events")): " + VerifiedRoleReader.reason(error))
+                continue
             }
             run.calls += 1
             run.passagesSent += batch.passages.count

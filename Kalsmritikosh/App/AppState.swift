@@ -2999,7 +2999,7 @@ public final class AppState {
             } : nil
             // P5 — the case drafts (chronology, open points, interview questions) read the same way.
             readersWithRoles.draftReader = readsDocuments ? CaseDraftReader { prompt, clearance in
-                try await readDocuments(prompt, clearance, 1_500)
+                try await readDocuments(prompt, clearance, CaseDraftBuilder.readerReplyTokens)
             } : nil
             cloudReaderHolder.set(readersWithRoles)
             await brain.setCloudReaders(readersWithRoles)

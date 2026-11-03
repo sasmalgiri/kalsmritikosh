@@ -64,13 +64,13 @@ extension InvestigationContradictionGapService {
                     if !text.isEmpty { passages.append(VerifiedRoleReader.Passage(objectID: d.objectID, text: text)) }
                 }
             }
-            // The batches the role reader sends (its own batching: 8 people, the passages naming them).
-            for start in stride(from: 0, to: people.count, by: VerifiedRoleReader.peoplePerBatch) {
-                let batch = people[start..<min(people.count, start + VerifiedRoleReader.peoplePerBatch)]
-                if passages.contains(where: { p in batch.contains { ProceedingAnswerer.namesFully(p.text, person: $0) } }) { out.roleBatches += 1 }
-            }
-            readings = await roleReader.read(people: people, passages: passages, clearance: clearance)
+            let report = await roleReader.readReporting(people: people, passages: passages, clearance: clearance)
+            readings = report.readings
+            out.roleBatches = report.calls
             out.roleReadings = readings.count
+            out.roleDropped = report.dropped
+            out.failures += report.failures
+            out.failedCalls += report.failures.count
         }
         out.cast = CaseDraftBuilder.cast(docs, readings: readings)
         out.timeline = CaseDraftBuilder.timeline(docs, cast: out.cast)
@@ -91,7 +91,9 @@ extension InvestigationContradictionGapService {
                     out.notSentReason = "cancelled"; break
                 } catch {
                     KalsmritikoshLog.knowledge.error("case drafts reading failed: \(String(describing: error), privacy: .public)")
-                    out.failedCalls += 1; continue
+                    out.failedCalls += 1
+                    out.failures.append("drafting call: " + VerifiedRoleReader.reason(error))
+                    continue
                 }
                 out.calls += 1
                 out.passagesSent += batch.passages.count
@@ -109,7 +111,7 @@ extension InvestigationContradictionGapService {
             }
             out.timeline = CaseDraftBuilder.sorted(out.timeline)
         }
-        KalsmritikoshLog.knowledge.info("case drafts: \(out.timeline.count, privacy: .public) chronology item(s), \(out.cast.count, privacy: .public) in the cast, \(out.leads.count, privacy: .public) lead(s); AI \(out.verified, privacy: .public) verified, \(out.dropped.count, privacy: .public) dropped, \(out.calls + out.roleBatches, privacy: .public) call(s)")
+        KalsmritikoshLog.knowledge.info("case drafts: \(out.timeline.count, privacy: .public) chronology item(s), \(out.cast.count, privacy: .public) in the cast, \(out.leads.count, privacy: .public) lead(s); AI \(out.verified, privacy: .public) verified, \(out.dropped.count, privacy: .public) dropped, \(out.calls + out.roleBatches, privacy: .public) call(s), \(out.failedCalls, privacy: .public) failed")
         return out
     }
 
@@ -150,6 +152,7 @@ extension InvestigationContradictionGapService {
         } catch {
             KalsmritikoshLog.knowledge.error("interview plan reading failed: \(String(describing: error), privacy: .public)")
             out.failedCalls = 1
+            out.failures.append("interview call: " + VerifiedRoleReader.reason(error))
         }
         return out
     }

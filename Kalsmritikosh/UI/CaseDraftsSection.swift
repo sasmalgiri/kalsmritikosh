@@ -256,6 +256,7 @@ struct CaseDraftsSection: View {
                     text += ". The AI reading did not run\(d.notSentReason.map { ": \($0)" } ?? "")"
                 }
                 if d.deniedForCloud > 0 { text += "; \(d.deniedForCloud) document(s) stayed on this Mac" }
+                if !d.failures.isEmpty { text += "; \(d.failures.count) request(s) failed — " + Array(NSOrderedSet(array: d.failures).compactMap { $0 as? String }.prefix(3)).joined(separator: "; ") }
             }
             summary = text + "."
             let ids = Set(d.timeline.map(\.objectID) + d.leads.flatMap { [$0.objectID] + [$0.otherObjectID].compactMap { $0 } }

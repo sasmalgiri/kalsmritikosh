@@ -150,7 +150,11 @@ public nonisolated struct CaseDrafts: Sendable {
     public var deniedForCloud = 0
     /// Role readings that verified (VerifiedRoleReader), and the batches sent for them.
     public var roleReadings = 0
+    /// Role-reading batches actually sent (each a call), and the role readings dropped, with why.
     public var roleBatches = 0
+    public var roleDropped: [String] = []
+    /// Why each failed reader call failed (the provider's words or the not-sent reason), drafting and role calls.
+    public var failures: [String] = []
     /// AI proposals that verified and are shown; those the rules already had; those dropped, with why.
     public var verified = 0
     public var agreedWithRules = 0
@@ -166,6 +170,8 @@ public nonisolated struct CaseInterviewDraft: Sendable {
     public var readerAvailable = false
     public var calls = 0
     public var failedCalls = 0
+    /// Why each failed call failed.
+    public var failures: [String] = []
     public var passagesSent = 0
     public var verified = 0
     public var dropped: [String] = []
@@ -479,6 +485,9 @@ public nonisolated enum CaseDraftBuilder {
     public struct Batch: Sendable { public let passages: [Passage] }
 
     static let passageCharacters = 1_500
+    /// The reply budget a drafting call needs: events and gaps for six passages run past 2,000 tokens of
+    /// JSON (smoke 2026-11-03: a 1,500-token budget left no reply text at all).
+    public static let readerReplyTokens = 4_000
     static let leadWords = #"(?i)\b(?:pending|not yet|unknown|unclear|undetermined|under investigation|referred|scheduled|attached|enclosed|exhibit|missing|unidentified|another person|others?|co-?conspirators?|records?|reported)\b"#
 
     /// The excerpts the drafting reader gets: per cleared document its opening sentence and the sentences

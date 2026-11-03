@@ -449,6 +449,10 @@ public nonisolated enum CaseContradictionFinder {
         return out
     }
 
+    /// Between a step verb and its "on <date>": another step's verb, or a schedule ("will", "scheduled",
+    /// "set for", "hearing") — the date is not this step's.
+    static let stepDateHandOff = #"(?i)\b(?:pleaded|pled|pleading|pleads|indicted|charged|convicted|found guilty|arraigned|arrested|sentenced|sentencing|hearing|trial|will|shall|scheduled|set|expected|due|is to|are to|awaiting|pending)\b"#
+
     static func stepDates(_ s: String, doc: Int, mentions: [Names.Mention], names: Names) -> [Statement] {
         guard s.range(of: #"(?i)\bsuperseding\b"#, options: .regularExpression) == nil else { return [] }
         let ns = s as NSString
@@ -458,6 +462,14 @@ public nonisolated enum CaseContradictionFinder {
             let end = v.range.location + v.range.length
             let tail = ns.substring(with: NSRange(location: end, length: min(90, ns.length - end)))
             guard let on = tail.range(of: #"(?i)^[^.;]{0,50}?\bon\s+"#, options: .regularExpression) else { continue }
+            // A date belongs to the verb that governs it: "have pleaded guilty and will be sentenced on Feb. 25,
+            // 2014" dates the (scheduled) sentencing, not the plea (smoke 2026-11-03) — another step verb or a
+            // scheduling word between this verb and "on" hands the date to that clause.
+            if String(tail[..<on.upperBound]).range(of: stepDateHandOff, options: .regularExpression) != nil { continue }
+            // A scheduled or conditional step ("will be sentenced on", "is scheduled to be sentenced on",
+            // "is set to be sentenced on") has no date of its own yet: the date is the schedule's.
+            let lead = ns.substring(with: NSRange(location: max(0, v.range.location - 40), length: v.range.location - max(0, v.range.location - 40)))
+            if (lead + ns.substring(with: v.range)).range(of: ProceedingEventExtractor.notYet, options: .regularExpression) != nil { continue }
             let days = VerifiedAnswerComposer.values(in: String(tail[on.upperBound...]).components(separatedBy: CharacterSet(charactersIn: ";")).first ?? "").dates
             guard let day = days.first, day.year != nil, day.day != nil,
                   VerifiedAnswerComposer.values(in: s).dates.filter({ $0.year != nil && $0.day != nil }).count == 1,
@@ -730,13 +742,25 @@ public nonisolated enum CaseContradictionFinder {
         for pair in parsed.pairs ?? [] {
             switch check(pair, batch: batch, names: names, docIndex: docIndex) {
             case .success(let f): if !out.verified.contains(f) { out.verified.append(f) }
-            case .failure(let why): out.dropped.append(why.reason)
+            case .failure(let why): out.dropped.append(why.reason + " — " + label(pair, batch: batch))
             }
         }
         return out
     }
 
     struct Dropped: Error { let reason: String }
+
+    static let statutoryPattern = #"(?i)\b(?:maximum (?:possible )?(?:penalty|penalties|sentence|sentences|term|fine|prison term)|statutory maximum|faces? (?:up to|a maximum|a possible)|facing (?:up to|a maximum)|carr(?:y|ies) (?:a )?(?:maximum|up to|a possible)|punishable by)\b"#
+
+    /// What a dropped pair proposed, for the record (the reader's own words, never shown as a finding).
+    static func label(_ pair: Pair, batch: Batch) -> String {
+        func short(_ s: String?) -> String {
+            let t = (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.count <= 80 ? t : String(t.prefix(77)) + "…"
+        }
+        let about = short(pair.about ?? batch.subject)
+        return "about \(about.isEmpty ? "?" : about) (\(pair.kind ?? "no kind")): \(short(pair.value_a)) [passage \(pair.a?.passage.map(String.init) ?? "?")] vs \(short(pair.value_b)) [passage \(pair.b?.passage.map(String.init) ?? "?")]; quotes \u{201C}\(short(pair.a?.quote))\u{201D} / \u{201C}\(short(pair.b?.quote))\u{201D}"
+    }
 
     static func check(_ pair: Pair, batch: Batch, names: Names, docIndex: [UUID: Int]) -> Result<Finding, Dropped> {
         func drop(_ r: String) -> Result<Finding, Dropped> { .failure(Dropped(reason: r)) }
@@ -759,6 +783,11 @@ public nonisolated enum CaseContradictionFinder {
         let ca = VerifiedAnswerComposer.context(of: fragments(qa), in: pa.text), cb = VerifiedAnswerComposer.context(of: fragments(qb), in: pb.text)
         if ([qa, qb] + ca + cb).contains(where: VerifiedAnswerComposer.addressesAModel) { return drop("instruction, not a statement") }
         if (ca + cb + [qa, qb]).contains(where: statesCorrection) { return drop("explained: a stated correction") }
+        // A penalty the law allows ("faces a maximum penalty of 20 years") is not what happened in the case;
+        // two such figures for two charges are not a disagreement (the rules skip these sentences too).
+        if ([qa, qb] + ca + cb).contains(where: { $0.range(of: statutoryPattern, options: .regularExpression) != nil }) {
+            return drop("explained: a maximum penalty the law allows, not a fact of the case")
+        }
         // 4. The differing values: present in their quotes, and different.
         let va = (pair.value_a ?? "").trimmingCharacters(in: .whitespacesAndNewlines), vb = (pair.value_b ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !va.isEmpty, !vb.isEmpty else { return drop("no differing values") }
@@ -766,8 +795,10 @@ public nonisolated enum CaseContradictionFinder {
         let xa = VerifiedAnswerComposer.values(in: va), xb = VerifiedAnswerComposer.values(in: vb)
         switch kind {
         case .amount, .count, .age:
+            // Different when neither side's figures are contained in the other's: "$400 to $2,000" vs
+            // "$400-$900" share an endpoint and still differ (smoke 2026-11-03); "$50,000" vs "$50,000" never.
             let a = xa.money.union(xa.numbers), b = xb.money.union(xb.numbers)
-            guard !a.isEmpty, !b.isEmpty, a.isDisjoint(with: b) else { return drop("the values do not differ") }
+            guard !a.isEmpty, !b.isEmpty, !a.isSubset(of: b), !b.isSubset(of: a) else { return drop("the values do not differ") }
         case .date:
             guard let da = xa.dates.first, let db = xb.dates.first, da != db else { return drop("the dates do not differ") }
         case .role, .account:

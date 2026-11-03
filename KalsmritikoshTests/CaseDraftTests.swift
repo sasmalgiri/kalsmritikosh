@@ -199,7 +199,7 @@ struct CaseDraftTests {
 
     /// Three documents; the first two are in the case, the third is not.
     private func rig(_ texts: [String], privileged: Set<Int> = [], gate: Bool = true, reader: Bool = true,
-                     reply: String = #"{"events": [], "gaps": []}"#) async throws -> Rig {
+                     reply: String = #"{"events": [], "gaps": []}"#, failure: (any Error & Sendable)? = nil) async throws -> Rig {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ws = UUID()
         try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);", [.uuid(ws), .text("Matter"), .real(1), .real(1)])
@@ -238,8 +238,10 @@ struct CaseDraftTests {
                     .bound(to: CloudScopeBinding(scopeID: caseID) { Dictionary(uniqueKeysWithValues: zip(kos.prefix(2), versions.prefix(2).map { Set([$0]) })) })
             },
             reader: { nil })
-        pass.draftReader = { reader ? CaseDraftReader { prompt, clearance in sent.add(prompt, clearance); return reply } : nil }
-        pass.roleReader = { reader ? VerifiedRoleReader { prompt, clearance in sent.add(prompt, clearance); return #"{"roles": []}"# } : nil }
+        pass.draftReader = { reader ? CaseDraftReader { prompt, clearance in
+            sent.add(prompt, clearance); if let failure { throw failure }; return reply } : nil }
+        pass.roleReader = { reader ? VerifiedRoleReader { prompt, clearance in
+            sent.add(prompt, clearance); if let failure { throw failure }; return #"{"roles": []}"# } : nil }
         let svc = InvestigationContradictionGapService(cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), evidence: evidence,
                                                        contradictions: ContradictionsRepository(database: db), gaps: GapNodeRepository(database: db),
                                                        reviews: InvestigationDeskReviewRepository(database: db), pass: pass)
@@ -276,6 +278,24 @@ struct CaseDraftTests {
         // The interview plan: the document outside the case is neither used nor sent.
         let iv = try await r.svc.draftInterview(caseID: r.caseID, person: "Guy R. Miller", useAI: false)
         #expect(!iv.questions.isEmpty && iv.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) })
+    }
+
+    @Test("A failed drafting or role call is recorded with its reason, not only counted; role calls are the batches actually sent")
+    func failureReasons() async throws {
+        let failure = OnlineRequestBuilder.ParseError.cutOff("1500 output tokens, 1500 of them thinking")
+        let r = try await rig([Self.releaseA, Self.releaseB, "x"], failure: failure)
+        let d = try await r.svc.buildDrafts(caseID: r.caseID, useAI: true)
+        #expect(d.readerAvailable && d.calls == 0)
+        #expect(d.roleBatches >= 1, "the role batches sent are counted")
+        #expect(d.failedCalls == d.failures.count && d.failedCalls >= 2)
+        #expect(d.failures.contains { $0.hasPrefix("drafting call:") && $0.contains("cut off at the output limit") && $0.contains("1500 of them thinking") }, "\(d.failures)")
+        #expect(d.failures.contains { $0.hasPrefix("role call:") }, "\(d.failures)")
+        let iv = try await r.svc.draftInterview(caseID: r.caseID, person: "Guy R. Miller", useAI: true)
+        #expect(iv.failedCalls == 1 && iv.failures.first?.contains("cut off") == true, "\(iv.failures)")
+        // A reader that answers: the drafting call is made and nothing is recorded as failed.
+        let ok = try await rig([Self.releaseA, Self.releaseB, "x"])
+        let d2 = try await ok.svc.buildDrafts(caseID: ok.caseID, useAI: true)
+        #expect(d2.calls >= 1 && d2.failures.isEmpty && d2.failedCalls == 0)
     }
 
     @Test("No send without a clearance gate or a reader; a privileged document is never sent; the rules still draft offline")

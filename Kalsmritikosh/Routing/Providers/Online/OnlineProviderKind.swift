@@ -99,6 +99,15 @@ public nonisolated enum OnlineRequestBuilder {
         }
     }
 
+    /// The thinking allowance added to a Claude request's reply budget (billed only as used).
+    public static let anthropicThinkingAllowance = 8_000
+
+    /// max_tokens for a Claude request: the reply's budget (at least 1,024, at most 16,000) plus the
+    /// thinking allowance.
+    public static func anthropicMaxTokens(_ replyTokens: Int) -> Int {
+        max(1024, min(replyTokens, 16_000)) + anthropicThinkingAllowance
+    }
+
     public static func build(kind: OnlineProviderKind, model: String, apiKey: String,
                              system: String?, prompt: String, maxTokens: Int,
                              images: [OutboundImage] = []) throws -> OutboundHTTPRequest {
@@ -133,9 +142,12 @@ public nonisolated enum OnlineRequestBuilder {
         case .anthropic:
             // Messages API. No sampling parameters (rejected on current models);
             // server-side fallbacks on refusal, per Anthropic's guidance for this model.
+            // Current models think before they answer (on by default) and the thinking counts against
+            // max_tokens: `maxTokens` is the reply's own budget, the thinking allowance comes on top
+            // (smoke 2026-11-03: a 1,500-token draft call spent all 1,500 on thinking, no reply text).
             var body: [String: Any] = [
                 "model": model,
-                "max_tokens": max(1024, min(maxTokens, 16_000)),
+                "max_tokens": anthropicMaxTokens(maxTokens),
                 "messages": [["role": "user", "content": anthropicContent]],
                 "fallbacks": "default"
             ]
@@ -173,6 +185,8 @@ public nonisolated enum OnlineRequestBuilder {
 
     public enum ParseError: Error, LocalizedError, Equatable {
         case http(Int, String), refused(String), unreadable
+        /// The reply hit the output limit before any answer text was written (the budget went to thinking).
+        case cutOff(String)
         /// A2 — the AI Included service declined (questions used up, paused for the month, not subscribed…).
         case relay(String)
         /// K8 — 401/403: the key was refused; retrying will not help.
@@ -186,6 +200,7 @@ public nonisolated enum OnlineRequestBuilder {
             case .http(let code, let msg): return "The provider returned HTTP \(code): \(msg)"
             case .refused(let why):        return "The provider declined to answer: \(why)"
             case .unreadable:              return "The provider's reply could not be read."
+            case .cutOff(let detail):      return "The provider's reply was cut off at the output limit before any answer text (\(detail))."
             case .relay(let why):          return why
             case .auth(let code):          return "The provider refused the API key (HTTP \(code)). Check the key and its access in Settings › Online."
             case .rateLimited:             return "The provider is limiting requests right now (HTTP 429). Nothing was answered; try again in a minute."
@@ -219,6 +234,12 @@ public nonisolated enum OnlineRequestBuilder {
             }
             let blocks = root["content"] as? [[String: Any]] ?? []
             let text = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
+            if text.isEmpty, root["stop_reason"] as? String == "max_tokens" {
+                let usage = root["usage"] as? [String: Any]
+                let output = usage?["output_tokens"] as? Int ?? 0
+                let thinking = (usage?["output_tokens_details"] as? [String: Any])?["thinking_tokens"] as? Int ?? 0
+                throw ParseError.cutOff("\(output) output tokens, \(thinking) of them thinking")
+            }
             guard !text.isEmpty else { throw ParseError.unreadable }
             return text
         case .openai:

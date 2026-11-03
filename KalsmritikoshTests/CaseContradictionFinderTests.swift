@@ -201,7 +201,7 @@ struct CaseContradictionFinderTests {
     }
 
     private func rig(texts: (String, String, String), privileged: Set<Int> = [], gate: Bool = true, reader: Bool = true,
-                     reply: String = #"{"pairs": []}"#) async throws -> Rig {
+                     reply: String = #"{"pairs": []}"#, failure: (any Error & Sendable)? = nil) async throws -> Rig {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ws = UUID()
         try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);", [.uuid(ws), .text("Matter"), .real(1), .real(1)])
@@ -239,7 +239,8 @@ struct CaseContradictionFinderTests {
                                        legacyPrivileged: { privilegedIDs })
                     .bound(to: CloudScopeBinding(scopeID: caseID) { Dictionary(uniqueKeysWithValues: zip(kos.prefix(2), versions.prefix(2).map { Set([$0]) })) })
             },
-            reader: { reader ? CaseContradictionReader { prompt, clearance in sent.add(prompt, clearance); return reply } : nil })
+            reader: { reader ? CaseContradictionReader { prompt, clearance in
+                sent.add(prompt, clearance); if let failure { throw failure }; return reply } : nil })
         let svc = InvestigationContradictionGapService(cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), evidence: evidence,
                                                        contradictions: ContradictionsRepository(database: db), gaps: GapNodeRepository(database: db),
                                                        reviews: InvestigationDeskReviewRepository(database: db), pass: pass)
@@ -296,7 +297,19 @@ struct CaseContradictionFinderTests {
         let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
         #expect(run.aiFindings.isEmpty)
         #expect(!run.aiDropped.isEmpty)
+        // Each drop says why and what the pair proposed (smoke 2026-11-03: "6 dropped", no reasons).
+        #expect(run.aiDropped.contains { $0.hasPrefix("quote not in its passage — about William Jamey Thompson (amount): $200,000") }, "\(run.aiDropped)")
         let stored = try await r.svc.contradictions(caseID: r.caseID)
         #expect(stored.allSatisfy { !$0.contradiction.claimA.contains("200,000") && !$0.contradiction.claimB.contains("200,000") })
+    }
+
+    @Test("A failed reader call is recorded with the provider's reason, per call")
+    func failedCallReason() async throws {
+        let r = try await rig(texts: (Self.release1, Self.release4, "x"),
+                              failure: OnlineRequestBuilder.ParseError.cutOff("1500 output tokens, 1500 of them thinking"))
+        let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
+        #expect(run.calls == 0 && run.failedCalls >= 1 && run.failures.count == run.failedCalls)
+        #expect(run.failures.allSatisfy { $0.hasPrefix("contradiction call (") && $0.contains("cut off at the output limit") }, "\(run.failures)")
+        #expect(!run.ruleFindings.isEmpty)
     }
 }

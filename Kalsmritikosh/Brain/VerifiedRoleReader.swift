@@ -37,13 +37,28 @@ public nonisolated struct VerifiedRoleReader: Sendable {
     struct Reading: Decodable { let person: String?; let role: String?; let quote: String?; let passage: Int? }
     struct Reply: Decodable { let roles: [Reading]? }
 
+    /// What one role reading did: the verified readings, the batches sent, and why each failed call or
+    /// dropped reading was not used (shown by the case drafts and the bench, never only counted).
+    public struct Report: Sendable {
+        public var readings: [VerifiedRoleReading] = []
+        public var calls = 0
+        public var failures: [String] = []
+        public var dropped: [String] = []
+        public init() {}
+    }
+
     /// Read the roles of `people` from `passages`, in small batches. Passages of documents the
     /// clearance does not hold are never sent; a failed or declined batch yields nothing.
     public func read(people: [String], passages: [Passage], clearance: CloudSourceClearance?) async -> [VerifiedRoleReading] {
-        guard let clearance else { return [] }
+        await readReporting(people: people, passages: passages, clearance: clearance).readings
+    }
+
+    /// `read`, with the calls made and the reason for every failed call and dropped reading.
+    public func readReporting(people: [String], passages: [Passage], clearance: CloudSourceClearance?) async -> Report {
+        var report = Report()
+        guard let clearance else { return report }
         let cleared = passages.filter { clearance.clearedObjectIDs.contains($0.objectID) }
-        guard !cleared.isEmpty else { return [] }
-        var out: [VerifiedRoleReading] = []
+        guard !cleared.isEmpty else { return report }
         let uniquePeople = Array(NSOrderedSet(array: people).compactMap { $0 as? String })
         for start in stride(from: 0, to: uniquePeople.count, by: Self.peoplePerBatch) {
             let batch = Array(uniquePeople[start..<min(uniquePeople.count, start + Self.peoplePerBatch)])
@@ -52,13 +67,24 @@ public nonisolated struct VerifiedRoleReader: Sendable {
             let sent = Array(naming.prefix(Self.passagesPerBatch)).map { Passage(objectID: $0.objectID, text: String($0.text.prefix(Self.passageCharacters))) }
             guard !sent.isEmpty else { continue }
             let reply: String
+            report.calls += 1
             do { reply = try await generate(Self.prompt(people: batch, passages: sent), clearance) } catch {
                 KalsmritikoshLog.brain.info("role reading not used: \(String(describing: error), privacy: .public)")
+                report.failures.append("role call: " + Self.reason(error))
                 continue
             }
-            out += Self.verify(reply: reply, people: batch, passages: sent)
+            let check = Self.verifyReporting(reply: reply, people: batch, passages: sent)
+            report.dropped += check.dropped
+            report.readings += check.readings.filter { r in !report.readings.contains { $0.person == r.person } }
         }
-        return out
+        return report
+    }
+
+    /// A failure's own words (the provider's message, or the not-sent reason), for the record.
+    public static func reason(_ error: Error) -> String {
+        if let notSent = error as? VerifiedAnswerComposer.NotSent { return "not sent: " + notSent.reason }
+        if let described = (error as? LocalizedError)?.errorDescription { return described }
+        return String(describing: error)
     }
 
     static func prompt(people: [String], passages: [Passage]) -> String {
@@ -82,25 +108,33 @@ public nonisolated struct VerifiedRoleReader: Sendable {
     /// Only readings whose quote is verbatim in the passage they cite, names the person in full and
     /// carries the stated role's wording; one per person (the first that verifies).
     static func verify(reply: String, people: [String], passages: [Passage]) -> [VerifiedRoleReading] {
+        verifyReporting(reply: reply, people: people, passages: passages).readings
+    }
+
+    static func verifyReporting(reply: String, people: [String], passages: [Passage]) -> (readings: [VerifiedRoleReading], dropped: [String]) {
         guard let start = reply.firstIndex(of: "{"), let end = reply.lastIndex(of: "}"), start < end,
               let data = String(reply[start...end]).data(using: .utf8),
-              let parsed = try? JSONDecoder().decode(Reply.self, from: data) else { return [] }
+              let parsed = try? JSONDecoder().decode(Reply.self, from: data) else { return ([], ["role reply could not be read"]) }
         var out: [VerifiedRoleReading] = []
+        var dropped: [String] = []
         for r in parsed.roles ?? [] {
-            guard let person = r.person.flatMap({ asked in people.first { $0.caseInsensitiveCompare(asked.trimmingCharacters(in: .whitespaces)) == .orderedSame } }),
-                  !out.contains(where: { $0.person == person }),
-                  let role = r.role.flatMap({ ProceedingRole(rawValue: $0.lowercased().trimmingCharacters(in: .whitespaces)) }),
-                  let quote = r.quote?.trimmingCharacters(in: .whitespacesAndNewlines), quote.count >= 8,
-                  let n = r.passage, n >= 1, n <= passages.count else { continue }
+            let label = "\(r.person ?? "?") as \(r.role ?? "?")"
+            func drop(_ why: String) { dropped.append("role \(label): \(why)") }
+            guard let person = r.person.flatMap({ asked in people.first { $0.caseInsensitiveCompare(asked.trimmingCharacters(in: .whitespaces)) == .orderedSame } })
+            else { drop("not one of the people asked about"); continue }
+            guard !out.contains(where: { $0.person == person }) else { continue }
+            guard let role = r.role.flatMap({ ProceedingRole(rawValue: $0.lowercased().trimmingCharacters(in: .whitespaces)) }) else { drop("not a known role"); continue }
+            guard let quote = r.quote?.trimmingCharacters(in: .whitespacesAndNewlines), quote.count >= 8 else { drop("no quote"); continue }
+            guard let n = r.passage, n >= 1, n <= passages.count else { drop("passage not sent"); continue }
             let passage = passages[n - 1]
             let q = VerifiedRecordExtractor.normalized(quote)
-            guard VerifiedRecordExtractor.normalized(passage.text).contains(q),
-                  ProceedingAnswerer.namesFully(quote, person: person),
-                  !ProceedingEventExtractor.addressesTheReader(quote),
-                  quote.range(of: role.supportPattern, options: .regularExpression) != nil else { continue }
+            guard VerifiedRecordExtractor.normalized(passage.text).contains(q) else { drop("quote not in its passage"); continue }
+            guard ProceedingAnswerer.namesFully(quote, person: person) else { drop("the quote does not name \(person) in full"); continue }
+            guard !ProceedingEventExtractor.addressesTheReader(quote) else { drop("instruction, not a statement"); continue }
+            guard quote.range(of: role.supportPattern, options: .regularExpression) != nil else { drop("the quote does not state the role"); continue }
             out.append(VerifiedRoleReading(person: person, role: role, quote: quote, objectID: passage.objectID, provenance: provenance))
         }
-        return out
+        return (out, dropped)
     }
 
     /// The sentences of a document that name `person` in full, joined — what a role reading needs.

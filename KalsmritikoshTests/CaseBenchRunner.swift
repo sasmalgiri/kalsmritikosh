@@ -79,6 +79,9 @@ struct CaseBenchRunner {
         let documents: Int; let readerAvailable: Bool; let verified: Int; let agreedWithRules: Int; let dropped: Int
         let droppedReasons: [String]; let calls: Int; let roleBatches: Int; let roleReadings: Int; let failedCalls: Int
         let passagesSent: Int; let deniedForCloud: Int; let notSent: String?
+        /// Why each failed reader call failed, and why each role reading was dropped.
+        var failures: [String] = []
+        var roleDropped: [String] = []
     }
     struct ContradictionLine: Encodable {
         let kind: String; let provenance: String; let description: String
@@ -88,6 +91,9 @@ struct CaseBenchRunner {
         let documents: Int; let rules: Int; let ai: Int; let aiDropped: Int; let aiAgreedWithRules: Int
         let calls: Int; let failedCalls: Int; let passagesSent: Int; let deniedForCloud: Int
         let notSent: String?; let claimLinks: Int
+        /// Why each AI pair was dropped (with what it proposed) and why each failed call failed.
+        var droppedReasons: [String] = []
+        var failures: [String] = []
     }
     struct ShardSummary: Encodable {
         let shard: String; let cases: Int; let ingestSeconds: Double; let embedSeconds: Double
@@ -99,6 +105,38 @@ struct CaseBenchRunner {
         /// Model calls by purpose over the whole shard (ingest and asking) — which features spend
         /// the on-device model.
         let modelCallsByPurpose: [String: Int]
+        /// The cloud readers the run installed (CASEBENCH_CLOUD_KEY_FILE) with their model, the calls each
+        /// made, and the failures each met, in the provider's words. Empty: no cloud reader.
+        var cloudModel: String? = nil
+        var cloudReaders: [String: CloudReaderUse] = [:]
+        /// One line for the run footer: which readers ran and what each did.
+        var cloudSummary: String { Self.cloudSummary(model: cloudModel, readers: cloudReaders) }
+
+        static func cloudSummary(model: String?, readers: [String: CloudReaderUse]) -> String {
+            guard let model else { return "cloud readers: none" }
+            let used = readers.filter { $0.value.calls > 0 }.sorted { $0.key < $1.key }
+            guard !used.isEmpty else { return "cloud readers (\(model)): installed, no calls made" }
+            return "cloud readers (\(model)): " + used.map { "\($0.key) \($0.value.calls) call(s)" + ($0.value.failed > 0 ? " (\($0.value.failed) failed: \($0.value.failures.first ?? "?"))" : "") }
+                .joined(separator: ", ")
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case shard, cases, ingestSeconds, embedSeconds, askSeconds, control, aiModel, modulesOn, modelCallsByPurpose, cloudModel, cloudReaders, cloudSummary
+        }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(shard, forKey: .shard); try c.encode(cases, forKey: .cases)
+            try c.encode(ingestSeconds, forKey: .ingestSeconds); try c.encode(embedSeconds, forKey: .embedSeconds)
+            try c.encode(askSeconds, forKey: .askSeconds); try c.encodeIfPresent(control, forKey: .control)
+            try c.encodeIfPresent(aiModel, forKey: .aiModel); try c.encode(modulesOn, forKey: .modulesOn)
+            try c.encode(modelCallsByPurpose, forKey: .modelCallsByPurpose); try c.encodeIfPresent(cloudModel, forKey: .cloudModel)
+            try c.encode(cloudReaders, forKey: .cloudReaders); try c.encode(cloudSummary, forKey: .cloudSummary)
+        }
+    }
+    struct CloudReaderUse: Encodable, Equatable {
+        var calls = 0
+        var failed = 0
+        var failures: [String] = []
     }
 
     /// The run's settings: the process environment, or — for a bundled pack run — the pack's
@@ -281,6 +319,8 @@ struct CaseBenchRunner {
 
         // 2. Ask each case's questions over the whole shard's ledger (an archive holds many cases).
         let brain = await state.brain
+        var cloudModel: String?
+        await BenchClaude.Usage.shared.resetReaders()
         // CASEBENCH_CLOUD_KEY_FILE — the cloud step of the understanding cascade, measured with the
         // owner's Claude key (read from a file outside the repo; the app itself reaches the cloud only
         // through its network helper, which a test host does not have). The question's wording goes to
@@ -290,25 +330,32 @@ struct CaseBenchRunner {
         if let keyFile = Self.env["CASEBENCH_CLOUD_KEY_FILE"],
            let key = try? String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
             let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-opus-5"
-            let send: @Sendable (String) async throws -> String = { prompt in try await BenchClaude.send(prompt, key: key, model: model) }
+            func asks(_ reader: String) -> @Sendable (String) async throws -> String {
+                { prompt in try await BenchClaude.send(prompt, key: key, model: model, reader: reader) }
+            }
             // Verified record extraction reads the person's documents — a stronger reader than the
             // question rewriter; every answer it proposes is checked verbatim against the documents.
             let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-opus-5"
+            // Each document reader is counted under its own name (the run footer lists them).
+            func reads(_ reader: String, _ maxTokens: Int) -> @Sendable (String, CloudSourceClearance?) async throws -> String {
+                { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: maxTokens, reader: reader) }
+            }
             // P1 — the verified answer composer reads the retrieved passages with the same model; every
             // claim it writes is checked against its passage. One reader set for the archive brain and,
             // through the app's holder, for every case-scoped brain.
             let baseReaders = CloudReaders(
-                interpreterCloud: CloudQuestionInterpreter(generate: send),
-                rewriterCloud: CloudQuestionRewriter(generate: send),
-                recordExtractor: VerifiedRecordExtractor { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) },
-                answerComposer: VerifiedAnswerComposer { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) },
+                interpreterCloud: CloudQuestionInterpreter(generate: asks("questionInterpreter")),
+                rewriterCloud: CloudQuestionRewriter(generate: asks("questionRewriter")),
+                recordExtractor: VerifiedRecordExtractor(generate: reads("recordExtractor", 600)),
+                answerComposer: VerifiedAnswerComposer(generate: reads("answerComposer", 1_500)),
                 // P3 — the case contradiction check reads the case's cleared passages with the same model.
-                contradictionReader: CaseContradictionReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) },
+                contradictionReader: CaseContradictionReader(generate: reads("contradictionReader", 1_500)),
                 modelsAllowedOverride: true)
             var readers = baseReaders
             // P4/P5 — the role reader and the case drafts read the case's cleared passages with the same model.
-            readers.roleReader = VerifiedRoleReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 800) }
-            readers.draftReader = CaseDraftReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) }
+            readers.roleReader = VerifiedRoleReader(generate: reads("roleReader", 800))
+            readers.draftReader = CaseDraftReader(generate: reads("draftReader", CaseDraftBuilder.readerReplyTokens))
+            cloudModel = extractModel == model ? model : "\(model) (questions), \(extractModel) (documents)"
             state.cloudReaderHolder.set(readers)
             await brain.setCloudReaders(readers)
         }
@@ -377,7 +424,8 @@ struct CaseBenchRunner {
         let summary = ShardSummary(shard: name, cases: truth.count, ingestSeconds: ingestSeconds, embedSeconds: embedSeconds,
                                    askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel,
                                    modulesOn: KnowledgeModule.allCases.filter { KnowledgeModuleFlags.isEnabled($0) }.count + ProductModule.allCases.filter { ProductModuleFlags.isEnabled($0) }.count,
-                                   modelCallsByPurpose: await LLMCallCounters.shared.snapshot().byPurpose)
+                                   modelCallsByPurpose: await LLMCallCounters.shared.snapshot().byPurpose,
+                                   cloudModel: cloudModel, cloudReaders: await BenchClaude.Usage.shared.readers)
         lines.append(String(decoding: try enc.encode(["summary": summary]), as: UTF8.self))
         try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
     }
@@ -467,7 +515,7 @@ struct CaseBenchRunner {
                 documents: d.documents, readerAvailable: d.readerAvailable, verified: d.verified, agreedWithRules: d.agreedWithRules,
                 dropped: d.dropped.count, droppedReasons: Array(d.dropped.prefix(40)), calls: d.calls, roleBatches: d.roleBatches,
                 roleReadings: d.roleReadings, failedCalls: d.failedCalls, passagesSent: d.passagesSent, deniedForCloud: d.deniedForCloud,
-                notSent: d.notSentReason)
+                notSent: d.notSentReason, failures: d.failures, roleDropped: Array(d.roleDropped.prefix(40)))
             let findings = try await findingsService.buildFindings(caseID: c.id, access: exportAccess, actor: "case-bench", at: now)
             let product = findings.assembled.workProduct
             let claims = product.sections.flatMap(\.claims)
@@ -488,7 +536,8 @@ struct CaseBenchRunner {
                     documents: check.documents, rules: check.ruleFindings.count, ai: check.aiFindings.count,
                     aiDropped: check.aiDropped.count, aiAgreedWithRules: check.aiAgreedWithRules, calls: check.calls,
                     failedCalls: check.failedCalls, passagesSent: check.passagesSent, deniedForCloud: check.deniedForCloud,
-                    notSent: check.notSentReason, claimLinks: check.claimLinks),
+                    notSent: check.notSentReason, claimLinks: check.claimLinks,
+                    droppedReasons: Array(check.aiDropped.prefix(40)), failures: check.failures),
                 drafts: drafts)
         } catch {
             return failed(error)
@@ -501,7 +550,19 @@ struct CaseBenchRunner {
 /// so the bench measures what Online mode sends; only the transport differs (the test host has no
 /// network helper).
 enum BenchClaude {
-    static func send(_ prompt: String, key: String, model: String, maxTokens: Int = 400) async throws -> String {
+    /// `reader`: which cloud reader made the call (the run footer counts calls and failures per reader).
+    static func send(_ prompt: String, key: String, model: String, maxTokens: Int = 400, reader: String = "other") async throws -> String {
+        do {
+            let text = try await transport(prompt, key: key, model: model, maxTokens: maxTokens)
+            await Usage.shared.record(reader: reader, failure: nil)
+            return text
+        } catch {
+            await Usage.shared.record(reader: reader, failure: VerifiedRoleReader.reason(error))
+            throw error
+        }
+    }
+
+    private static func transport(_ prompt: String, key: String, model: String, maxTokens: Int) async throws -> String {
         let outbound = try OnlineRequestBuilder.build(kind: .anthropic, model: model, apiKey: key,
                                                       system: nil, prompt: prompt, maxTokens: maxTokens)
         guard let url = URL(string: outbound.url) else { throw URLError(.badURL) }
@@ -521,6 +582,15 @@ enum BenchClaude {
     actor Usage {
         static let shared = Usage()
         private(set) var tokens = 0, calls = 0
+        /// Calls and failures per reader, since the last reset (one shard).
+        private(set) var readers: [String: CaseBenchRunner.CloudReaderUse] = [:]
         func add(_ n: Int) { tokens += n; calls += 1 }
+        func resetReaders() { readers = [:] }
+        func record(reader: String, failure: String?) {
+            var use = readers[reader] ?? CaseBenchRunner.CloudReaderUse()
+            use.calls += 1
+            if let failure { use.failed += 1; if use.failures.count < 20 { use.failures.append(failure) } }
+            readers[reader] = use
+        }
     }
 }

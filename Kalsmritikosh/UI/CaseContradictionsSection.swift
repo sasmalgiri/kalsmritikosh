@@ -132,6 +132,7 @@ struct CaseContradictionsSection: View {
                 text += " (AI reading off — rules only)"
             }
             if run.deniedForCloud > 0 { text += "; \(run.deniedForCloud) document(s) stayed on this Mac" }
+            if !run.failures.isEmpty { text += "; \(run.failures.count) request(s) failed — " + Array(NSOrderedSet(array: run.failures).compactMap { $0 as? String }.prefix(3)).joined(separator: "; ") }
             lastRun = text + "."
             try? await appState.caseFiles?.file.logAction(caseID: caseID, action: "contradictions checked", detail: lastRun, actor: InvestigatorProfile.name)
         } catch {
