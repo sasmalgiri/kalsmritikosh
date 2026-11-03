@@ -18,7 +18,7 @@ extension AppState {
     nonisolated static func caseContradictionPass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
                                                   claims: ClaimRepository, links: ClaimContradictionRepository,
                                                   answers: InvestigationAnswerService?, readers: CloudReaderHolder) -> CaseContradictionPass {
-        CaseContradictionPass(
+        var pass = CaseContradictionPass(
             documents: { versions in
                 let byObject = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
                 let ids = byObject.keys.sorted { $0.uuidString < $1.uuidString }
@@ -69,5 +69,17 @@ extension AppState {
                 }
                 return made
             })
+        // P5 — the case drafts read through the same gate, under the same AI conditions.
+        pass.draftReader = {
+            let current = readers.current
+            guard current.modelsAllowedOverride ?? FeatureFlags.aiRegimeValue().allowsAI else { return nil }
+            return current.draftReader
+        }
+        pass.roleReader = {
+            let current = readers.current
+            guard current.modelsAllowedOverride ?? FeatureFlags.aiRegimeValue().allowsAI else { return nil }
+            return current.roleReader
+        }
+        return pass
     }
 }

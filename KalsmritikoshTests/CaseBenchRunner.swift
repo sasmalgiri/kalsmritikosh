@@ -67,6 +67,18 @@ struct CaseBenchRunner {
         /// how it was found, and what the check cost.
         var contradictionList: [ContradictionLine] = []
         var contradictionCheck: ContradictionCheck? = nil
+        /// P5 — the case drafts (rules; the AI reading too when a key is given): chronology, cast,
+        /// gaps and leads, with what verified, what was dropped and what it cost.
+        var drafts: DraftsResult? = nil
+    }
+    struct DraftsResult: Encodable {
+        struct Item: Encodable { let date: String; let what: String; let who: String?; let quote: String; let doc: String; let provenance: String }
+        struct Member: Encodable { let name: String; let kind: String; let role: String; let group: String; let documents: Int; let quote: String?; let provenance: String? }
+        struct Lead: Encodable { let source: String; let notEstablished: String; let records: String; let quote: String; let doc: String; let otherQuote: String? }
+        let timeline: [Item]; let cast: [Member]; let leads: [Lead]
+        let documents: Int; let readerAvailable: Bool; let verified: Int; let agreedWithRules: Int; let dropped: Int
+        let droppedReasons: [String]; let calls: Int; let roleBatches: Int; let roleReadings: Int; let failedCalls: Int
+        let passagesSent: Int; let deniedForCloud: Int; let notSent: String?
     }
     struct ContradictionLine: Encodable {
         let kind: String; let provenance: String; let description: String
@@ -285,7 +297,7 @@ struct CaseBenchRunner {
             // P1 — the verified answer composer reads the retrieved passages with the same model; every
             // claim it writes is checked against its passage. One reader set for the archive brain and,
             // through the app's holder, for every case-scoped brain.
-            let readers = CloudReaders(
+            let baseReaders = CloudReaders(
                 interpreterCloud: CloudQuestionInterpreter(generate: send),
                 rewriterCloud: CloudQuestionRewriter(generate: send),
                 recordExtractor: VerifiedRecordExtractor { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) },
@@ -293,6 +305,10 @@ struct CaseBenchRunner {
                 // P3 — the case contradiction check reads the case's cleared passages with the same model.
                 contradictionReader: CaseContradictionReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) },
                 modelsAllowedOverride: true)
+            var readers = baseReaders
+            // P4/P5 — the role reader and the case drafts read the case's cleared passages with the same model.
+            readers.roleReader = VerifiedRoleReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 800) }
+            readers.draftReader = CaseDraftReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) }
             state.cloudReaderHolder.set(readers)
             await brain.setCloudReaders(readers)
         }
@@ -439,6 +455,19 @@ struct CaseBenchRunner {
                                          quoteB: x.claimB, docB: x.evidenceB.flatMap { caseOf[$0] } ?? "?")
             }
             let gaps = try await cg.gaps(caseID: c.id).count
+            // P5 — the case drafts, after the contradiction check (its rows feed the leads). With a key the
+            // bench reader drafts too (the readers above); without one the rules alone.
+            let d = try await cg.buildDrafts(caseID: c.id, useAI: true)
+            let drafts = DraftsResult(
+                timeline: d.timeline.map { .init(date: $0.dateText, what: $0.what, who: $0.who, quote: $0.quote, doc: caseOf[$0.objectID] ?? "?", provenance: $0.provenance.rawValue) },
+                cast: d.cast.map { .init(name: $0.name, kind: $0.kind.rawValue, role: $0.roleLabel, group: $0.group.rawValue, documents: $0.documentCount,
+                                         quote: $0.roleQuote, provenance: $0.roleProvenance?.rawValue) },
+                leads: d.leads.map { .init(source: $0.source.rawValue, notEstablished: $0.notEstablished, records: $0.records, quote: $0.quote,
+                                           doc: caseOf[$0.objectID] ?? "?", otherQuote: $0.otherQuote) },
+                documents: d.documents, readerAvailable: d.readerAvailable, verified: d.verified, agreedWithRules: d.agreedWithRules,
+                dropped: d.dropped.count, droppedReasons: Array(d.dropped.prefix(40)), calls: d.calls, roleBatches: d.roleBatches,
+                roleReadings: d.roleReadings, failedCalls: d.failedCalls, passagesSent: d.passagesSent, deniedForCloud: d.deniedForCloud,
+                notSent: d.notSentReason)
             let findings = try await findingsService.buildFindings(caseID: c.id, access: exportAccess, actor: "case-bench", at: now)
             let product = findings.assembled.workProduct
             let claims = product.sections.flatMap(\.claims)
@@ -459,7 +488,8 @@ struct CaseBenchRunner {
                     documents: check.documents, rules: check.ruleFindings.count, ai: check.aiFindings.count,
                     aiDropped: check.aiDropped.count, aiAgreedWithRules: check.aiAgreedWithRules, calls: check.calls,
                     failedCalls: check.failedCalls, passagesSent: check.passagesSent, deniedForCloud: check.deniedForCloud,
-                    notSent: check.notSentReason, claimLinks: check.claimLinks))
+                    notSent: check.notSentReason, claimLinks: check.claimLinks),
+                drafts: drafts)
         } catch {
             return failed(error)
         }

@@ -387,6 +387,7 @@ struct CaseOverviewTab: View {
                 }
             }
             CaseContradictionsSection(caseID: model.caseID, closed: closed)
+            CaseDraftsSection(model: model, s: s, closed: closed)
             CaseSection(title: "Stage", subtitle: "Move the case along. Closing is a recorded decision below.") {
                 HStack {
                     StageChip(stage: closed ? .closed : s.profile.stage)

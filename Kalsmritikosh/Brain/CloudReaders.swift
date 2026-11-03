@@ -29,6 +29,9 @@ public nonisolated struct CloudReaders: Sendable {
     /// P4 — reads the role each person holds in a case's documents (judge, prosecutor, defendant …);
     /// a reading is used only when its quote verifies (VerifiedRoleReader). Set after init.
     public var roleReader: VerifiedRoleReader? = nil
+    /// P5 — drafts a case's chronology, open points and interview questions from its cleared passages;
+    /// every item is verified by CaseDraftBuilder before it is shown. Set after init.
+    public var draftReader: CaseDraftReader? = nil
 
     public init(interpreterOnDevice: (any QuestionInterpreting)? = nil, interpreterCloud: (any QuestionInterpreting)? = nil,
                 rewriterOnDevice: (any QuestionRewriting)? = nil, rewriterCloud: (any QuestionRewriting)? = nil,

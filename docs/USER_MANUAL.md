@@ -85,6 +85,7 @@ Interviews are planned and recorded in the case file; statements carry the speak
 2. Speaker attribution follows the reporting verb in the document (“Lopez wrote…”). Where attribution is ambiguous the speaker is left unassigned rather than guessed.
 3. “How an account changed” (Tools ▸ Writing & checking) compares what a person said at different times; a changed account is shown as a change, not labelled a lie.
 4. Credibility notes (“Add credibility note”) are your assessment and are recorded as such, separate from the evidence.
+5. Case file ▸ Overview ▸ Drafts ▸ Interview plan: choose a person and press “Draft questions” (or “Draft questions with AI” in Online mode with document reading on). Each question rests on a quoted passage or on two documents that disagree; leading or accusatory questions are never proposed. “Add to interview” puts the question, with its quote, in the person's planned interview.
 
 Screen: **Cases**.
 
@@ -98,6 +99,7 @@ Timeline orders every dated fact; Findings shows the chronology by status; Compe
 4. In the case file's chronology, the label beside the source (“quote found in source”, or why not) is the app's check of the citation; it is not a person's verification. “Mark verified…” records that you checked the entry yourself (your name, the date and the entry as it stood); “Withdraw…” takes the mark back with a reason. If the entry changes afterwards, the mark reads “Verified on an earlier version — check again”. Every mark and withdrawal stays in the entry's verification history and in the case log.
 5. Competing Hypotheses: list the explanations, mark each piece of evidence consistent, inconsistent or not assessed. The matrix prefers the hypothesis with the fewest inconsistencies and says when there is no preference; “not assessed” is never counted as neutral support.
 6. A gap in the timeline is a gap in the record, not proof that nothing happened; it tells you what to collect next.
+7. Case file ▸ Overview ▸ Drafts: “Draft from the documents” proposes a chronology of the defendants' dated steps, a cast of characters (officials listed apart from defendants and subjects, each role with its quote), and gaps and next leads (what the documents do not establish yet and the records that would settle it), from this case's documents only. In Online mode with document reading on, “Draft with AI” also has your AI reader read the passages cleared for the case; a proposal whose quote, date, person or role does not check out against the documents is not shown. Each item shows its quote and “Open source”; “Add to chronology” makes your chronology entry citing the passage (the same passage is not added twice), “Add to people” adds the person, “Add as task” makes a case task, “Reject” sets the item aside. Nothing is added until you accept it.
 
 Screen: **Timeline**.
 

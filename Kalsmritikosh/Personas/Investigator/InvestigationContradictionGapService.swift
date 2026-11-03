@@ -25,6 +25,10 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// Links each stored contradiction to the claims citing its documents, so the findings report's
     /// conflicts section (DisclosureSelectionService) shows it. Returns the links made.
     public let linkClaims: (@Sendable ([Contradiction]) async -> Int)?
+    /// P5 — the person's AI reader for case drafts (chronology, gaps, interview questions) and the role
+    /// reader for the cast, under the same conditions as `reader` (nil: rules only).
+    public var draftReader: (@Sendable () -> CaseDraftReader?)? = nil
+    public var roleReader: (@Sendable () -> VerifiedRoleReader?)? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -63,7 +67,8 @@ public actor InvestigationContradictionGapService {
     private let contradictions: ContradictionsRepository
     private let gaps: GapNodeRepository
     private let reviews: InvestigationDeskReviewRepository
-    private let pass: CaseContradictionPass?
+    /// P5 — read by the case drafts (InvestigationContradictionGapService+Drafts).
+    let pass: CaseContradictionPass?
 
     public init(cases: InvestigationCaseRepository, resolver: CaseRetrievalScopeResolver, evidence: EvidenceStore,
                 contradictions: ContradictionsRepository, gaps: GapNodeRepository, reviews: InvestigationDeskReviewRepository,
@@ -239,7 +244,7 @@ public actor InvestigationContradictionGapService {
         return authorized.contains(v)
     }
 
-    private func authorizedSet(_ caseID: UUID) async throws -> Set<UUID> {
+    func authorizedSet(_ caseID: UUID) async throws -> Set<UUID> {
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationDeskError.caseNotFound(caseID) }
         return Set(try await resolver.scope(for: record).authorizedSourceVersionIDs)
     }
