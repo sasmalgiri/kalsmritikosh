@@ -24,10 +24,14 @@ public struct CasesView: View {
     public var body: some View {
         Group {
             if let open {
-                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID, onBack: {
+                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID,
+                             openableCases: Set(rows.map(\.caseID)),
+                             openCase: { id in if let row = rows.first(where: { $0.caseID == id }) { self.open = row } },
+                             onBack: {
                     self.open = nil
                     Task { await load() }
                 })
+                .id(open.caseID)   // N1 — opening another case from this one starts a fresh case file
             } else {
                 list
             }

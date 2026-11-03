@@ -36,13 +36,16 @@ public nonisolated struct CaseFileSnapshot: Sendable {
                 interviews: [CaseInterview], credibility: [CredibilityNote], exhibits: [CaseExhibit], holds: [CaseHoldNotice],
                 redactions: [CaseRedaction], batches: [CaseReviewBatch], conflicts: [CaseConflictCheck], actions: [CaseAction],
                 custody: [CustodyManifestEntry], addenda: [StatementAddendum] = [], reportItems: [CaseReportItem] = [],
-                supersededOrigins: Set<String> = []) {
+                supersededOrigins: Set<String> = [], attestations: [CaseFactAttestation] = []) {
         self.caseHeader = caseHeader; self.profile = profile; self.allegations = allegations; self.grid = grid; self.tasks = tasks
         self.journal = journal; self.people = people; self.contacts = contacts; self.interviews = interviews
         self.credibility = credibility; self.exhibits = exhibits; self.holds = holds; self.redactions = redactions
         self.batches = batches; self.conflicts = conflicts; self.actions = actions; self.custody = custody
         self.addenda = addenda; self.reportItems = reportItems; self.supersededOrigins = supersededOrigins
+        self.attestations = attestations
     }
+    /// N3 — every person's verified mark / withdrawal on the case's chronology entries, oldest first.
+    public let attestations: [CaseFactAttestation]
     /// I5 — the final report's explicit selection (included and excluded items with reasons).
     public let reportItems: [CaseReportItem]
     /// §3 — origins (carried rows) whose result revision is no longer the job's current one.
@@ -80,7 +83,7 @@ extension CaseFileService {
             holds: try await file.holdNotices(caseID: caseID), redactions: try await file.redactions(caseID: caseID),
             batches: try await file.reviewBatches(caseID: caseID), conflicts: try await file.conflictChecks(caseID: caseID),
             actions: try await file.actions(caseID: caseID), custody: custody, addenda: try await file.addenda(caseID: caseID),
-            reportItems: items, supersededOrigins: superseded)
+            reportItems: items, supersededOrigins: superseded, attestations: try await file.attestations(caseID: caseID))
     }
 }
 
@@ -299,9 +302,13 @@ public nonisolated enum CaseFileDocuments {
 
         let chron = s.journal.filter { $0.kind == .chronology }
         if !chron.isEmpty {
-            o += "\n## Chronology (investigator entries)\n" + chron.map { e -> String in
+            o += "\n## Chronology (investigator entries)\n"
+            o += "_The label in parentheses is the app's check that the quoted words are in the cited source; “Verified by …” is a person's own verification of the entry._\n"
+            o += chron.map { e -> String in
                 var line = "- \(d(e.eventDate)): \(e.text)" + (e.quote.map { " — “\($0)”" } ?? "")
                 if e.evidenceRef != nil || !e.citations.isEmpty { line += " (\(e.support.label))" }
+                // N3 — a person's verification, kept apart from the machine check above.
+                line += " · \(s.factMark(for: e).reportLabel)"
                 line += e.evidenceRef.map { " [\($0)]" } ?? ""
                 line += Self.furtherCitations(e.citations)
                 if let origin = e.origin {

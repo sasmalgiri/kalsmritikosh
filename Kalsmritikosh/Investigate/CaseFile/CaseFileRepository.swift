@@ -416,6 +416,100 @@ public actor CaseFileRepository {
         }
     }
 
+    // MARK: - N3: a person's verified mark on a chronology entry (v169)
+
+    /// Every attestation row in the case, oldest first (insertion order within the same instant).
+    public func attestations(caseID: UUID) async throws -> [CaseFactAttestation] {
+        (try await database.query("""
+            SELECT id, case_id, journal_entry_id, state, attested_by, attested_at, note, entry_digest
+            FROM case_fact_attestations WHERE case_id = ? ORDER BY attested_at, rowid;
+            """, [.uuid(caseID)])).compactMap(Self.decodeAttestation)
+    }
+
+    /// A person marks a chronology entry verified. HUMAN-ONLY: called from the case file screen when a
+    /// person presses "Mark verified…" (CaseFactAttestationBoundaryTests) — never from a job, import, AI
+    /// or batch path. The name is the person's own, typed or confirmed by them; a blank name is refused.
+    /// Refused when the entry is not this case's live chronology entry, or is already verified on its
+    /// current version (digest unchanged and the result revision it came from still current).
+    @discardableResult
+    public func markVerified(entryID: UUID, caseID: UUID, by person: String, note: String?, at date: Date = Date()) async throws -> UUID {
+        let who = try Self.clean(person, "Who verified the entry")
+        let note = Self.blankToNil(note)
+        let id = UUID()
+        try await write("cf_fav", caseID: caseID, actor: who, action: "factVerified", detail: note, at: date) { db in
+            let entry = try Self.liveChronologyEntry(db, entryID, caseID: caseID)
+            let digest = CaseFactAttestations.digest(text: entry.text, eventDate: entry.eventDate, evidenceRef: entry.evidenceRef, quote: entry.quote)
+            if let last = try Self.latestAttestation(db, entryID, caseID: caseID), last.state == .verified, last.entryDigest == digest,
+               try !Self.originSuperseded(db, entry.origin, caseID: caseID) {
+                throw CaseFactAttestationError.alreadyVerified(by: last.attestedBy, at: last.attestedAt)
+            }
+            try db.exec("""
+                INSERT INTO case_fact_attestations (id, case_id, journal_entry_id, state, attested_by, attested_at, note, entry_digest)
+                VALUES (?,?,?, 'verified', ?,?,?,?);
+                """, [.uuid(id), .uuid(caseID), .uuid(entryID), .text(who), .date(date), .optionalText(note), .text(digest)])
+        }
+        return id
+    }
+
+    /// A person withdraws their (or another person's) verification, with the reason. HUMAN-ONLY, like
+    /// `markVerified`. Refused when the entry's latest mark is not a verification.
+    @discardableResult
+    public func withdraw(entryID: UUID, caseID: UUID, by person: String, reason: String, at date: Date = Date()) async throws -> UUID {
+        let who = try Self.clean(person, "Who withdrew the verification")
+        let why = try Self.clean(reason, "The reason for withdrawing the verification")
+        let id = UUID()
+        try await write("cf_faw", caseID: caseID, actor: who, action: "factVerificationWithdrawn", detail: why, at: date) { db in
+            let entry = try Self.liveChronologyEntry(db, entryID, caseID: caseID)
+            guard let last = try Self.latestAttestation(db, entryID, caseID: caseID), last.state == .verified else {
+                throw CaseFactAttestationError.notVerified
+            }
+            let digest = CaseFactAttestations.digest(text: entry.text, eventDate: entry.eventDate, evidenceRef: entry.evidenceRef, quote: entry.quote)
+            try db.exec("""
+                INSERT INTO case_fact_attestations (id, case_id, journal_entry_id, state, attested_by, attested_at, note, entry_digest)
+                VALUES (?,?,?, 'withdrawn', ?,?,?,?);
+                """, [.uuid(id), .uuid(caseID), .uuid(entryID), .text(who), .date(date), .text(why), .text(digest)])
+        }
+        return id
+    }
+
+    private struct AttestedEntry: Sendable {
+        let text: String; let eventDate: Date?; let evidenceRef: String?; let quote: String?; let origin: String?
+    }
+
+    /// The live chronology entry of this case (another case's entry, a retracted entry or a note is refused).
+    private static func liveChronologyEntry(_ db: isolated Database, _ id: UUID, caseID: UUID) throws -> AttestedEntry {
+        try requireInCase(db, "journal entry", id, caseID: caseID)
+        guard let r = try db.query("""
+            SELECT entry_kind, text, event_date, evidence_ref, quote, origin FROM case_journal
+            WHERE id = ? AND case_id = ? AND removed_at IS NULL LIMIT 1;
+            """, [.uuid(id), .uuid(caseID)]).first, let text = r.string(1) else { throw CaseFileError.notInCase("journal entry", id) }
+        guard r.string(0) == CaseJournalKind.chronology.rawValue else { throw CaseFactAttestationError.notChronology }
+        return AttestedEntry(text: text, eventDate: r.date(2), evidenceRef: r.string(3), quote: r.string(4), origin: r.string(5))
+    }
+
+    private static func latestAttestation(_ db: isolated Database, _ entryID: UUID, caseID: UUID) throws -> CaseFactAttestation? {
+        try db.query("""
+            SELECT id, case_id, journal_entry_id, state, attested_by, attested_at, note, entry_digest
+            FROM case_fact_attestations WHERE case_id = ? AND journal_entry_id = ? ORDER BY attested_at DESC, rowid DESC LIMIT 1;
+            """, [.uuid(caseID), .uuid(entryID)]).first.flatMap(decodeAttestation)
+    }
+
+    /// The carried row's result revision is no longer the job's current one (same rule as the snapshot's
+    /// superseded origins: the latest non-superseded result of the job in this case).
+    private static func originSuperseded(_ db: isolated Database, _ origin: String?, caseID: UUID) throws -> Bool {
+        guard let origin, let job = JobResultHandoff.jobID(in: origin), let resultID = JobResultHandoff.resultID(in: origin) else { return false }
+        let latest = try db.query("""
+            SELECT id FROM job_results WHERE case_id = ? AND job_id = ? AND state <> 'superseded' ORDER BY created_at DESC LIMIT 1;
+            """, [.uuid(caseID), .text(job)]).first?.uuid(0)
+        return latest != resultID
+    }
+
+    private nonisolated static func decodeAttestation(_ r: SQLRow) -> CaseFactAttestation? {
+        guard let id = r.uuid(0), let c = r.uuid(1), let e = r.uuid(2), let st = r.string(3).flatMap(CaseFactAttestationState.init(rawValue:)),
+              let by = r.string(4), let at = r.date(5), let dg = r.string(7) else { return nil }
+        return CaseFactAttestation(id: id, caseID: c, journalEntryID: e, state: st, attestedBy: by, attestedAt: at, note: r.string(6), entryDigest: dg)
+    }
+
     // MARK: - People + contact log
 
     public func people(caseID: UUID) async throws -> [CasePerson] {
@@ -928,6 +1022,20 @@ public actor CaseFileRepository {
         default: throw CaseFileError.notFound(what, id)
         }
         guard try !db.query(sql + " LIMIT 1;", [.uuid(id), .uuid(caseID)]).isEmpty else { throw CaseFileError.notInCase(what, id) }
+    }
+
+    /// G1 — the source version to cite for a document in this case: a version of the document's file
+    /// that is inside the case's scope when there is one, otherwise its current version (which the case
+    /// then refuses, with the reason — the scope is never widened). Nil when the document has none.
+    public func sourceVersionToCite(objectID: UUID, caseID: UUID) async throws -> UUID? {
+        try await database.withSavepoint("cf_svc_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            let versions = try db.query("""
+                SELECT sv.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id
+                 WHERE ko.id = ? ORDER BY sv.is_current DESC, sv.created_at DESC;
+                """, [.uuid(objectID)]).compactMap { $0.uuid(0) }
+            for v in versions where try CaseEvidenceReference.problem(v.uuidString, caseID: caseID, in: db) == nil { return v }
+            return versions.first
+        }
     }
 
     /// A new reference must resolve in this case (brief §4): an in-scope source version, a live exhibit

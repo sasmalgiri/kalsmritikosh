@@ -37,6 +37,8 @@ public struct SearchView: View {
     @State private var taggingObject: UUID?
     /// Chunks the user soft-excluded this session (greyed with a Restore).
     @State private var excludedIDs: Set<Chunk.ID> = []
+    /// G1 — the hit being added to a case chronology.
+    @State private var chronologyPassage: ChronologyPassage?
 
     // Batch search (the Datashare pattern).
     @State private var batchMode = false
@@ -74,6 +76,9 @@ public struct SearchView: View {
         )) { subject in
             TagEditorSheet(subjectKind: .object, subjectID: subject.id,
                            subjectLabel: "Document \(subject.id.uuidString.prefix(8))")
+        }
+        .sheet(item: $chronologyPassage) { p in
+            AddPassageToChronologySheet(passage: p) { chronologyPassage = nil }
         }
     }
 
@@ -297,6 +302,15 @@ public struct SearchView: View {
                     .buttonStyle(.borderless).controlSize(.small)
                     .help("Tag the document this passage comes from")
                 }
+                // G1 — make a chronology entry from this passage, linked to it.
+                Button {
+                    chronologyPassage = ChronologyPassage(objectID: chunk.objectID, quote: chunk.text)
+                } label: {
+                    Label("Add to case chronology…", systemImage: "calendar.badge.plus").font(.caption2)
+                }
+                .buttonStyle(.borderless).controlSize(.small)
+                .help("Make a chronology entry in a case from this passage, with the passage as its citation")
+                .accessibilityIdentifier("search.hit.addToChronology")
                 // Human-in-loop: exclude this passage from search + answers.
                 if excluded {
                     Label("Excluded", systemImage: "eye.slash")
