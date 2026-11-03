@@ -635,6 +635,12 @@ public nonisolated enum InvestigatorProfile {
         let full = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
         return full.isEmpty ? NSUserName() : full
     }
+    /// N3 — the name the person set themselves, without the system-account fallback (nil when not set).
+    /// A person's verification is prefilled only from this; it never defaults to the Mac account name.
+    public static var storedName: String? {
+        let stored = UserDefaults.standard.string(forKey: nameKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return stored.isEmpty ? nil : stored
+    }
     public static var organisation: String? {
         let o = UserDefaults.standard.string(forKey: organisationKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return o.isEmpty ? nil : o

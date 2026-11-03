@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 168
+    public static let latestVersion = 169
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -801,7 +801,8 @@ public enum SchemaMigrations {
         (165, v165),
         (166, v166),
         (167, v167),
-        (168, v168)
+        (168, v168),
+        (169, v169)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8033,5 +8034,32 @@ public enum SchemaMigrations {
         detail TEXT, released_by TEXT NOT NULL, released_at REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_case_document_outputs_case ON case_document_outputs(case_id, released_at);
+    """
+
+    // MARK: - v169 — a "verified" mark only a person can set (N3, 2026-11-03). A chronology entry's
+    // machine check (the quote was found in the pinned source) is not a person's verification. A person
+    // marks an entry verified, or withdraws the mark with a reason; each mark names who, when, an optional
+    // note and the SHA-256 of the entry as it stood (text, date, source, quote), so a later change to the
+    // entry shows the mark as made on an earlier version. Rows are append-only: the current state is the
+    // latest row. Removed only with the case (ledger_case_erase) or by a full erase, like job_result_exports.
+    private static let v169: String = """
+    CREATE TABLE IF NOT EXISTS case_fact_attestations (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        journal_entry_id TEXT NOT NULL,
+        state            TEXT NOT NULL CHECK (state IN ('verified','withdrawn')),
+        attested_by      TEXT NOT NULL CHECK (length(trim(attested_by)) > 0),
+        attested_at      REAL NOT NULL,
+        note             TEXT,
+        entry_digest     TEXT NOT NULL CHECK (length(entry_digest) = 64),
+        CHECK (state <> 'withdrawn' OR length(trim(coalesce(note,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_fact_attestations_entry ON case_fact_attestations(case_id, journal_entry_id, attested_at);
+    CREATE TRIGGER IF NOT EXISTS case_fact_attestations_fixed BEFORE UPDATE ON case_fact_attestations
+    BEGIN SELECT RAISE(ABORT, 'case_fact_attestations is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_fact_attestations_kept BEFORE DELETE ON case_fact_attestations
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_fact_attestations is append-only'); END;
     """
 }

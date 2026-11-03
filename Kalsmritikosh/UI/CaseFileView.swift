@@ -1371,6 +1371,8 @@ struct CaseChronologyTab: View {
     @State private var ref = ""
     /// G1 — the cited passage a chronology entry opens at.
     @State private var openedPassage: OpenedSource?
+    /// N3 — the entry a person is marking verified, or withdrawing the verification of.
+    @State private var attesting: FactAttestationRequest?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1392,6 +1394,18 @@ struct CaseChronologyTab: View {
                 }
             }
             list("Chronology (investigator entries)", s.journal.filter { $0.kind == .chronology })
+                .sheet(item: $attesting) { request in
+                    FactAttestationSheet(request: request, sourceLabel: model.label(for: request.entry.evidenceRef)) { name, text in
+                        let entryID = request.entry.id, caseID = model.caseID
+                        switch request.action {
+                        case .mark:
+                            model.run(appState) { _ = try await $0.file.markVerified(entryID: entryID, caseID: caseID, by: name, note: text) }
+                        case .withdraw:
+                            model.run(appState) { _ = try await $0.file.withdraw(entryID: entryID, caseID: caseID, by: name, reason: text ?? "") }
+                        }
+                        attesting = nil
+                    } onCancel: { attesting = nil }
+                }
             list("Journal", s.journal.filter { $0.kind == .note }.reversed())
         }
         .sheet(item: $openedPassage) { opened in
@@ -1413,14 +1427,21 @@ struct CaseChronologyTab: View {
                         HStack(spacing: 6) {
                             Text(e.author)
                             if let r = e.evidenceRef { Text("· \(model.label(for: r))") }
-                            if e.evidenceRef != nil || !e.citations.isEmpty { Text("· \(e.support.label)").foregroundStyle(e.support.isDocumentary ? .green : .orange) }
+                            // The app's check (the quoted words are in the source) — not a person's verification.
+                            if e.evidenceRef != nil || !e.citations.isEmpty {
+                                Text("· \(Self.machineCheckLabel(e.support))").foregroundStyle(e.support.isDocumentary ? .green : .orange)
+                                    .help("The app's check of the citation. A person's verification is shown separately as “Verified by …”.")
+                                    .accessibilityIdentifier("chronology.entry.machineCheck")
+                            }
                             if e.citations.count > 1 { Text("· +\(e.citations.count - 1) citation(s)") }
                             if let rs = e.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { Text("· \(rs.label)") }
                             if s.isSuperseded(e.origin) { Text("· superseded — re-review").foregroundStyle(.orange) }
                         }.font(.caption).foregroundStyle(.secondary)
                         if let q = e.quote { Text("“\(q)”").font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                        if e.kind == .chronology { personMark(e) }
                     }
                     Spacer()
+                    if e.kind == .chronology { attestButtons(e) }
                     if let target = PassageChronology.openTarget(for: e, objectForVersion: model.objectByVersion) {
                         Button("Open source") {
                             openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: target.objectID, snippet: target.quote ?? ""))
@@ -1436,6 +1457,119 @@ struct CaseChronologyTab: View {
                 }
             }
         }
+    }
+
+    /// The app's citation check, worded so it cannot be read as a person's verification.
+    static func machineCheckLabel(_ support: CaseEvidenceSupport) -> String {
+        if case .documentary = support { return "quote found in source" }
+        return support.label
+    }
+
+    /// N3 — the person's mark (or nothing), and the history of marks and withdrawals.
+    @ViewBuilder private func personMark(_ e: CaseJournalEntry) -> some View {
+        let mark = s.factMark(for: e)
+        if let label = mark.screenLabel {
+            Label(label, systemImage: mark.isCurrentVerification ? "person.fill.checkmark" : "exclamationmark.triangle")
+                .font(.caption.bold())
+                .foregroundStyle(mark.isCurrentVerification ? Color.blue : Color.orange)
+                .help(mark.isCurrentVerification ? "A person's own verification of this entry, as it reads now."
+                                                 : "A person verified this entry, but it has changed since (or the result it came from was superseded). Check it again.")
+                .accessibilityIdentifier("chronology.entry.personMark")
+        }
+        let history = s.attestationHistory(for: e.id)
+        if !history.isEmpty {
+            DisclosureGroup("Verification history (\(history.count))") {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(history) { a in
+                        Text("\(CaseFileDocuments.t(a.attestedAt)) · \(a.state == .verified ? "Verified" : "Withdrawn") by \(a.attestedBy)"
+                             + (a.note.map { " — \($0)" } ?? "") + " · entry \(a.entryDigest.prefix(12))")
+                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                }
+            }
+            .font(.caption)
+            .accessibilityIdentifier("chronology.entry.verificationHistory")
+        }
+    }
+
+    @ViewBuilder private func attestButtons(_ e: CaseJournalEntry) -> some View {
+        let mark = s.factMark(for: e)
+        if !mark.isCurrentVerification {
+            Button("Mark verified…") { attesting = FactAttestationRequest(entry: e, action: .mark) }
+                .buttonStyle(.borderless).font(.caption)
+                .help("Record that you, a person, checked this entry against its source. Only a person can set this mark.")
+                .accessibilityIdentifier("chronology.entry.markVerified")
+        }
+        switch mark {
+        case .verified, .earlierVersion:
+            Button("Withdraw…") { attesting = FactAttestationRequest(entry: e, action: .withdraw) }
+                .buttonStyle(.borderless).font(.caption)
+                .help("Withdraw the verification, with the reason. The earlier mark stays in the history.")
+                .accessibilityIdentifier("chronology.entry.withdrawVerification")
+        case .none, .withdrawn:
+            EmptyView()
+        }
+    }
+}
+
+/// N3 — which entry, and whether the person is marking it verified or withdrawing the mark.
+struct FactAttestationRequest: Identifiable {
+    enum Action { case mark, withdraw }
+    let entry: CaseJournalEntry
+    let action: Action
+    var id: String { "\(entry.id.uuidString)-\(action == .mark ? "mark" : "withdraw")" }
+}
+
+/// N3 — the person states who they are (prefilled only from the name they set themselves; never the Mac
+/// account name) and sees exactly what they are attesting: the entry's text, date, source and quote.
+struct FactAttestationSheet: View {
+    let request: FactAttestationRequest
+    let sourceLabel: String
+    let onConfirm: (_ name: String, _ text: String?) -> Void
+    let onCancel: () -> Void
+    @State private var name = InvestigatorProfile.storedName ?? ""
+    @State private var text = ""
+
+    private var isMark: Bool { request.action == .mark }
+    private var ready: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (isMark || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(isMark ? "Mark this entry verified" : "Withdraw the verification").font(.headline)
+            Text(isMark ? "You are recording that you, a person, checked this entry against its source. The app's own check (whether the quoted words are in the source) is separate."
+                        : "The verification is withdrawn from now on; the earlier mark stays in the entry's history with your reason.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(CaseFileDocuments.d(request.entry.eventDate ?? request.entry.createdAt)).font(.caption.monospacedDigit())
+                Text(request.entry.text)
+                Text("Source: \(sourceLabel)").font(.caption).foregroundStyle(.secondary)
+                if let q = request.entry.quote { Text("“\(q)”").font(.caption).foregroundStyle(.secondary) }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityIdentifier("chronology.attest.entry")
+            TextField("Your name (required)", text: $name)
+                .accessibilityIdentifier("chronology.attest.name")
+            TextField(isMark ? "Note (optional)" : "Reason (required)", text: $text, axis: .vertical).lineLimit(2...5)
+                .accessibilityIdentifier(isMark ? "chronology.attest.note" : "chronology.attest.reason")
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button(isMark ? "Mark verified" : "Withdraw verification") {
+                    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    onConfirm(name.trimmingCharacters(in: .whitespacesAndNewlines), t.isEmpty ? nil : t)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!ready)
+                .accessibilityIdentifier(isMark ? "chronology.attest.confirm" : "chronology.attest.confirmWithdraw")
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
     }
 }
 

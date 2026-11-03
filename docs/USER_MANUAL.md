@@ -95,8 +95,9 @@ Timeline orders every dated fact; Findings shows the chronology by status; Compe
 1. Timeline: filter by date, entity or event kind; open an event for its participants and source. Date precision travels with the event (a month-only date is shown as such).
 2. From a job result, “Add to chronology” carries a reviewed row, with its citations and review state, into the case chronology.
 3. From a cited passage or a search hit, “Add to case chronology…” makes an entry in the case you choose, with the passage as its citation; the date is filled in only when the passage states one full date. A source the case does not include is refused, and the same passage is not added twice. In the case file's chronology, “Open source” opens the entry's passage.
-4. Competing Hypotheses: list the explanations, mark each piece of evidence consistent, inconsistent or not assessed. The matrix prefers the hypothesis with the fewest inconsistencies and says when there is no preference; “not assessed” is never counted as neutral support.
-5. A gap in the timeline is a gap in the record, not proof that nothing happened; it tells you what to collect next.
+4. In the case file's chronology, the label beside the source (“quote found in source”, or why not) is the app's check of the citation; it is not a person's verification. “Mark verified…” records that you checked the entry yourself (your name, the date and the entry as it stood); “Withdraw…” takes the mark back with a reason. If the entry changes afterwards, the mark reads “Verified on an earlier version — check again”. Every mark and withdrawal stays in the entry's verification history and in the case log.
+5. Competing Hypotheses: list the explanations, mark each piece of evidence consistent, inconsistent or not assessed. The matrix prefers the hypothesis with the fewest inconsistencies and says when there is no preference; “not assessed” is never counted as neutral support.
+6. A gap in the timeline is a gap in the record, not proof that nothing happened; it tells you what to collect next.
 
 Screen: **Timeline**.
 
