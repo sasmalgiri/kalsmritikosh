@@ -1,0 +1,8 @@
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+            AXMenu [16,266 143x142] actions=AXCancel
+              AXMenuItem title="Watch & alerts" id=bell.badge [16,271 143x22] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="People & connections" id=person.2.wave.2 [16,293 143x22] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="Email forensics" id=envelope.badge.shield.half.filled [16,315 143x22] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="Writing & checking" id=text.badge.checkmark [16,337 143x22] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="Documents" id=doc.on.doc [16,359 143x22] actions=AXCancel,AXPress,AXPick
+              AXMenuItem title="Bring documents in" id=tray.and.arrow.down [16,381 143x22] actions=AXCancel,AXPress,AXPick

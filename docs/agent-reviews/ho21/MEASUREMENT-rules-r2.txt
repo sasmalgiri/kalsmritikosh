@@ -1,0 +1,9 @@
+set: ho21-chron (FRESH: seed 20261108, 60 cases, skip-chron x1–x22 → 0 overlap) — RE-RUN r2 (first run invalid: OCR failed, disk low)
+commit: 74804bd5
+path: rules
+scorer-sha256: 060e98b92d814d24e759ac09e1e7dffcdac54c13d8a12b597c8c4e9c26df32f0
+settings: FULL=1 ASK_EVERY=1 WORKFLOW_EVERY=0 workers=1, unsigned host
+free-gb-at-start: 13
+started: 2026-11-03T06:13:24Z
+ocr-failures: 0
+finished: 2026-11-03T06:15:56Z; free-gb: 13

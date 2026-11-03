@@ -1,0 +1,9 @@
+quit: 13:28:23 kill -TERM 73745
+instances of the Debug app binary after quit: []
+background accuracy job processes (not touched):
+background job: ~/CaseBench/ho22.log last written 12:36:47; its last lines:
+ho22-opus5: 170 items (70 flagged by the scorer, 100 sampled from 858 others) → /Users/shirshendusasmal/CaseBench/adjudication
+6 shards to run on 1 workers
+done (worker failure: 0);        6 shard results in /Users/shirshendusasmal/CaseBench/ho22-chron/results-rules
+ho22-rules: 130 items (30 flagged by the scorer, 100 sampled from 898 others) → /Users/shirshendusasmal/CaseBench/adjudication
+(the ho22 processes 71656/71694 seen at 12:31 before launch had ended on their own; no signal was sent to them)

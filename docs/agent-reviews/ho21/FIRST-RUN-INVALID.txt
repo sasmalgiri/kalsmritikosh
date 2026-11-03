@@ -1,0 +1,1 @@
+INVALID: OCR failed (disk below ~9 GB) — see MEASUREMENT-*-r2.txt for the re-run

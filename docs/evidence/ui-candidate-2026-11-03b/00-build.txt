@@ -1,0 +1,35 @@
+recorded: Tue Nov  3 12:31:17 IST 2026
+HEAD: e49783fd7c8af57ca9ea0d401c513dbe82821aa8
+branch: investigations-next
+--- git diff e49783fd HEAD -- Kalsmritikosh (begin)
+--- (end; nothing between begin and end = no difference)
+--- git status --short
+ M Kalsmritikosh.xcodeproj/xcuserdata/shirshendusasmal.xcuserdatad/xcschemes/xcschememanagement.plist
+ M Kalsmritikosh/InfoPlist.xcstrings
+ M KalsmritikoshShare/InfoPlist.xcstrings
+?? docs/evidence/ui-candidate-2026-11-03b/
+last commit touching Kalsmritikosh/: e49783fd 2026-11-03 11:24:59 +0530
+binary mtime: 2026-11-03 11:24:44 +0530
+debug dylib mtime: 2026-11-03 11:24:43 +0530
+total 445808
+drwxr-xr-x   5 shirshendusasmal  staff        160 Nov  3 11:24 .
+drwxr-xr-x  10 shirshendusasmal  staff        320 Oct 24 16:13 ..
+-rwxr-xr-x   1 shirshendusasmal  staff      60624 Nov  3 11:24 Kalsmritikosh
+-rwxr-xr-x   1 shirshendusasmal  staff  228152928 Nov  3 11:24 Kalsmritikosh.debug.dylib
+-rwxr-xr-x   1 shirshendusasmal  staff      34928 Nov  3 11:24 __preview.dylib
+
+=== freshness check (binary 11:24:44 is 15 s before the commit time 11:24:59 of e49783fd)
+e49783fd author date:    2026-11-03 11:24:59 +0530
+e49783fd committer date: 2026-11-03 11:24:59 +0530
+files changed by e49783fd and their working-tree mtimes:
+  2026-11-03 11:22:53 Kalsmritikosh/App/Modules/ProductModule.swift
+  2026-11-03 11:22:56 Kalsmritikosh/KalsmritikoshApp.swift
+  2026-11-03 11:23:53 KalsmritikoshTests/InvestigatorDefaultsTests.swift
+newest 5 files under Kalsmritikosh/ (working tree mtime):
+  2026-11-03 11:22:56 Kalsmritikosh/KalsmritikoshApp.swift
+  2026-11-03 11:22:53 Kalsmritikosh/App/Modules/ProductModule.swift
+  2026-11-03 11:14:04 Kalsmritikosh/Investigate/CaseFile/CaseEvidenceVerifier.swift
+  2026-11-03 11:12:37 Kalsmritikosh/UI/WatchlistView.swift
+  2026-11-03 11:12:37 Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift
+Swift files under Kalsmritikosh/ modified after the binary (11:24:44):
+(end of list)
