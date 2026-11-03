@@ -2553,7 +2553,10 @@ public final class AppState {
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 evidence: evidenceStoreRepo, contradictions: contradictionsRepo, gaps: gapNodesRepo,
-                reviews: investigationDeskReviews)
+                reviews: investigationDeskReviews,
+                pass: Self.caseContradictionPass(objects: objects, sensitiveScopes: sensitiveScopesRepo, claims: claimsRepo,
+                                                 links: ClaimContradictionRepository(database: db),
+                                                 answers: self.investigationAnswers, readers: cloudReaderHolder))
             // INV-18 — the case Evidence vault & custody manifest, live from boot. REUSES the shared
             // append-only CustodyRepository + the EvidenceStore per-version content hashes, bounded to the
             // case's authorized source versions. Custody is never broken silently: every entry is a new
@@ -2591,7 +2594,10 @@ public final class AppState {
                     database: db, events: events, contradictions: contradictionsRepo, gaps: gapNodesRepo,
                     workspaces: workspacesRepo),
                 runs: WorkProductRunRepository(database: db),
-                approvals: InvestigationFindingsApprovalRepository(database: db))
+                approvals: InvestigationFindingsApprovalRepository(database: db),
+                prepare: Self.caseRolePass(objects: objects, sensitiveScopes: sensitiveScopesRepo, claims: claimsRepo,
+                                           reviews: ClaimReviewRepository(database: db),
+                                           answers: self.investigationAnswers, readers: cloudReaderHolder))
             // INV-01-C3 — the case DataLab authority, live from boot (also the DataLab persona job's target).
             let investigationDataLabService = InvestigationDataLabService(
                 cases: investigationCasesRepo,
@@ -2980,9 +2986,19 @@ public final class AppState {
                 } : nil,
                 answerComposer: readsDocuments ? VerifiedAnswerComposer { prompt, clearance in
                     try await readDocuments(prompt, clearance, 1_500)
+                } : nil,
+                // P3 — the case contradiction check reads the case's cleared passages the same way.
+                contradictionReader: readsDocuments ? CaseContradictionReader { prompt, clearance in
+                    try await readDocuments(prompt, clearance, 1_500)
                 } : nil)
-            cloudReaderHolder.set(readers)
-            await brain.setCloudReaders(readers)
+            // P4 — the role reader (judge, prosecutor, defendant …) reads through the same document reader,
+            // under the same switch; it runs when a case's findings are built (readCaseRoles).
+            var readersWithRoles = readers
+            readersWithRoles.roleReader = readsDocuments ? VerifiedRoleReader { prompt, clearance in
+                try await readDocuments(prompt, clearance, 800)
+            } : nil
+            cloudReaderHolder.set(readersWithRoles)
+            await brain.setCloudReaders(readersWithRoles)
             // Emails by exact subject, or sent by one person to another, straight from the ledger.
             let participants = EmailParticipantRepository(database: db)
             await brain.setEmailLookup { [weak chunks] lookup in
@@ -3692,7 +3708,8 @@ public final class AppState {
             }
         }
         if Task.isCancelled { return found.count }   // stopped by the user — prior layer stands
-        await contradictions.clear()
+        // P3 — the case contradiction check's rows are not this scan's to replace.
+        await contradictions.clearKeepingCaseChecks()
         await contradictions.insertMany(found)
         let openCount = await contradictions.count()
         self.proactiveContradictionCount = openCount

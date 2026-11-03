@@ -181,8 +181,11 @@ public nonisolated enum ProceedingAnswerer {
     }
 
     static func render(_ day: DateComponents?) -> String? {
-        guard let day, let date = Calendar(identifier: .gregorian).date(from: day) else { return nil }
+        // P4 — a stated day is a calendar day: built and printed in one calendar (UTC), so it reads the
+        // same on a Mac in any time zone.
+        guard let day, let date = ProceedingEventExtractor.ledgerDate(day) else { return nil }
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "MMMM d, yyyy"
+        f.timeZone = ProceedingEventExtractor.dayCalendar.timeZone
         return f.string(from: date)
     }
 
@@ -272,6 +275,16 @@ public nonisolated enum ProceedingAnswerer {
             out.removeAll { $0.range(of: agency, options: .regularExpression) != nil }
         }
         return out
+    }
+
+    /// Days of one step closer than this are one step reported with different dates.
+    static let oneStepSpan: TimeInterval = 60 * 86_400
+
+    /// A sentence that restates an earlier step ("previously pleaded guilty last month", "had pleaded
+    /// guilty in November") rather than reporting one on the document's own day.
+    static func restatesEarlierStep(_ sentence: String) -> Bool {
+        sentence.range(of: #"(?i)\b(?:previously|earlier|had (?:already )?(?:pleaded|pled|been)|last (?:week|month|year)|(?:pleaded|pled|convicted|sentenced|charged|indicted) (?:guilty )?in (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b)"#,
+                       options: .regularExpression) != nil
     }
 
     static func key(_ f: ProceedingEventExtractor.Finding) -> String {
@@ -577,14 +590,29 @@ public nonisolated enum ProceedingAnswerer {
             // prosecution's sentencing reported "today").
             var distinct: [Hit] = []
             for h in hits where h.1.day != nil && !distinct.contains(where: { key($0.1) == key(h.1) }) { distinct.append(h) }
-            if !distinct.isEmpty, let reported = hits.filter({ $0.1.day == nil && $0.1.reportedOn != nil }).max(by: { key($0.1) < key($1.1) }),
-               let reportedDate = Calendar(identifier: .gregorian).date(from: reported.1.reportedOn ?? DateComponents()),
+            // P4 (real-case evaluation 2026-11-03): "Mr. Glick and co-defendant Mr. Miller both previously
+            // pleaded guilty last month" in a December release restates the November plea — it is not a
+            // second plea "again on December 12".
+            if !distinct.isEmpty, let reported = hits.filter({ $0.1.day == nil && $0.1.reportedOn != nil && !Self.restatesEarlierStep($0.1.sentence) }).max(by: { key($0.1) < key($1.1) }),
+               let reportedDate = ProceedingEventExtractor.ledgerDate(reported.1.reportedOn ?? DateComponents()),
                distinct.allSatisfy({ d in
-                   guard let stated = d.1.day.flatMap({ Calendar(identifier: .gregorian).date(from: $0) }) else { return false }
+                   guard let stated = d.1.day.flatMap({ ProceedingEventExtractor.ledgerDate($0) }) else { return false }
                    return abs(stated.timeIntervalSince(reportedDate)) > 30 * 86_400
                }) {
                 distinct.append(reported)
                 distinct.sort { key($0.1) < key($1.1) }
+            }
+            // Two documents giving one step days a few weeks apart describe ONE step with a date
+            // discrepancy ("sentenced on May 28" / "on May 29"), not two steps: both days are shown
+            // with their quotes as a discrepancy. Steps further apart (two prosecutions) stay separate.
+            if distinct.count > 1, let firstDay = distinct.first.flatMap({ $0.1.day ?? $0.1.reportedOn }).flatMap(ProceedingEventExtractor.ledgerDate),
+               let lastDay = distinct.last.flatMap({ $0.1.day ?? $0.1.reportedOn }).flatMap(ProceedingEventExtractor.ledgerDate),
+               lastDay.timeIntervalSince(firstDay) <= Self.oneStepSpan {
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }
+                let days = distinct.map { render($0.1.day ?? $0.1.reportedOn) ?? "" }
+                let text = "The documents give different dates for \(name) being \(step.phrase): " + days.joined(separator: " or ")
+                    + " — a date discrepancy between the sources, not two events. They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.6))
             }
             if distinct.count > 1 {
                 let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }

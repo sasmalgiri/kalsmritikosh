@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import os
 
 public actor PersonaJobService {
     private let catalog: PersonaJobCatalog
@@ -177,6 +178,10 @@ public actor PersonaJobService {
         case .contradictionGap:
             guard let contradictionGap else { throw PersonaJobError.serviceUnavailable(.contradictionGap) }
             let caseID = try requireCase(context)
+            // P3 — the job compares the case's documents first, then lists what is in scope.
+            do { try await contradictionGap.findContradictions(caseID: caseID, at: context.at) } catch {
+                KalsmritikoshLog.knowledge.info("contradiction job: the case check did not run: \(String(describing: error), privacy: .public)")
+            }
             let contradictions = try await contradictionGap.contradictions(caseID: caseID)
             let gaps = try await contradictionGap.gaps(caseID: caseID)
             let items = contradictions.map { c in

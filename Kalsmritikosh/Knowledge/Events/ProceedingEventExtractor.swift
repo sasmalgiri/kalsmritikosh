@@ -59,7 +59,7 @@ public nonisolated enum ProceedingEventExtractor {
             case .pleaded: return #"\b(?:pleaded|pled|pleads|plead) guilty\b|\b(?:after|upon|following) pleading guilty\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b"#
             // "A federal jury in Fresno today found Adam Alan Henry, 39, of Turlock, guilty of …" (held-out chronology 10).
             // "A federal jury delivered a guilty verdict yesterday against X … for …" (ho17 adjudication A).
-            case .convicted: return #"\b(?:was|were|has been) (?:convicted|found guilty)\b|\bguilty verdicts?\b[^.]{0,30}?\bagainst\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
+            case .convicted: return #"\b(?:was|were|has been) (?:(?:each|both|also|all) )?(?:convicted|found guilty)\b|\bguilty verdicts?\b[^.]{0,30}?\bagainst\b|\bjury (?:convicted|found)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b"#
             case .acquitted: return #"\b(?:was|were) acquitted\b|\bfound not guilty\b"#
             case .sentenced: return #"\b(?:was|were|has been|been) sentenced\b|\bsentenced\b.{0,200}?\bto\s+(?:serve\s+|spend\s+)?(?:an?\s+(?:total|term|period)\s+of\s+)?(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|life|time served|probation)"#
             case .pardoned: return #"\b(?:was|were|has been) pardoned\b|\bgranted (?:a|him a|her a) pardon\b"#
@@ -93,6 +93,10 @@ public nonisolated enum ProceedingEventExtractor {
         let lower = text.lowercased()
         // The document must name the person in full (all of the asked tokens near each other).
         guard mentionsFully(lower, tokens: tokens) else { return [] }
+        // P4 (real-case evaluation 2026-11-03): the judge, the prosecutors, the agents, defence counsel,
+        // victims and witnesses take no step of the case — "John Michael Vazquez convicted", "Michael
+        // DiGiacomo pleaded guilty" were the defendants' steps read onto the officials who announced them.
+        if let role = ProceedingRoleClassifier.role(of: person, in: text), role.takesNoSteps { return [] }
         let printed = printedDate(in: text)
         // "Christi Romano, aka Christi Machala" — later sentences call the person by either name.
         var surnames: Set<String> = [surname]
@@ -120,13 +124,15 @@ public nonisolated enum ProceedingEventExtractor {
             mentionsFully(((text as NSString).substring(with: m.range)).lowercased(), tokens: tokens) } ?? false
         var descriptiveLead: Int?
         // "Baltimore, Maryland – Today, a recidivist sex offender pled guilty …" (ho16 adjudication K).
-        if introductions <= 1 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:Today|Yesterday|Earlier today),\s+(?=[at]))?(?:An?|The|an?|the)\s(?:[A-Za-z.\-]+,?\s){0,6}(?:man|woman|offender|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
+        // One introduced person who is not the asked one is that lead's subject (P4: the judge named
+        // three sentences after "A Camden County man was sentenced" is not the man).
+        if introductions == 0 || firstIntroducedIsAsked, let i = all.firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:Today|Yesterday|Earlier today),\s+(?=[at]))?(?:An?|The|an?|the)\s(?:[A-Za-z.\-]+,?\s){0,6}(?:man|woman|offender|resident|officer|official|doctor|physician|businessman|businesswoman|executive|attorney|lawyer|felon|defendant|employee|manager|teen|teenager|person|nurse|pharmacist|owner|operator|agent|leader|head|founder|president|chief|director|member|ringleader|pastor|teacher|contractor|banker|broker|accountant|preparer|trafficker|dealer|smuggler|hacker|citizen|national|immigrant|veteran|inmate|felon|deputy|pilot|sheriff|trooper|detective|sergeant|lieutenant|guard|soldier|marine|sailor|student|priest|coach|driver|worker|clerk|dentist|chiropractor|therapist|engineer|analyst|consultant|adviser|advisor|investor|developer|landlord|mayor|councilman|councilwoman|legislator|bookkeeper|administrator|cashier|teller|courier|mechanic|rancher|farmer|veterinarian|firefighter|paramedic|technician|salesman|saleswoman|realtor|fugitive|gang member|businessperson|couple)\b"#, options: .regularExpression) != nil }),
            i < 8, all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
         }
         // "U.S. District Judge Henry E. Autrey on Wednesday sentenced a man who provided the drugs …" (ho19
         // adjudication K): the judge is the subject, the defendant the descriptive object.
-        if descriptiveLead == nil, introductions <= 1 || firstIntroducedIsAsked,
+        if descriptiveLead == nil, introductions == 0 || firstIntroducedIsAsked,
            let i = all.prefix(8).firstIndex(where: { $0.range(of: #"^(?:[A-Z][A-Za-z.,' ]{2,40}\s[–—-]\s*)?(?:(?:U\.S\.|Chief|Senior|Federal)\s+)*(?:District\s+|Magistrate\s+|Circuit\s+)?Judge\s+(?:[A-Z][\w.'’-]*\s+){1,4}(?:(?:on\s+)?(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|today|yesterday)\s+)?(?:sentenced|convicted|found)\s+(?:an?|the)\s+(?:[A-Za-z.\-]+,?\s){0,5}(?:man|woman|resident|defendant|dealer|felon|offender|trafficker|doctor|officer|executive|teen|teenager|person)\b"#, options: .regularExpression) != nil }),
            all[i..<min(all.count, i + 4)].contains(where: { mentionsFully($0.lowercased(), tokens: tokens) }) {
             descriptiveLead = i
@@ -143,7 +149,8 @@ public nonisolated enum ProceedingEventExtractor {
         // subject is "He"/"She" and whose verb is a court step is about that defendant (held-out
         // chronology 9 review, 2026-10-28). "He sentenced Smith …" (the judge) does not match.
         var leads = Set([descriptiveLead].compactMap { $0 })
-        if introductions <= 1 {
+        // P4: "He"/"She"/"The defendant" is the one defendant — the person introduced, when one is.
+        if introductions == 0 || (introductions == 1 && firstIntroducedIsAsked) {
             // "The defendant pleaded guilty to wire fraud." names the one defendant too (held-out chronology 10).
             for (i, sentence) in all.enumerated()
             where sentence.range(of: #"^\W*(?:(?:In|On|During)\s+[^,.]{3,40},\s*)?(?:He|She|[Tt]he defendant)\s+(?:was|were|has|had|is|pleaded|pled|pleads|entered|later|then|also|previously)\b"#, options: .regularExpression) != nil {
@@ -193,6 +200,15 @@ public nonisolated enum ProceedingEventExtractor {
                                              options: .regularExpression) == nil
                     }
                     let rightAfter = named.contains { $0.lowerBound >= r.lowerBound && s.distance(from: r.lowerBound, to: $0.lowerBound) <= 60 }
+                        // "… unsealed today, charging James Gregory Glick, Guy R. Miller, Shawn C. Simon and William
+                        // Jamey Thompson with …": every name of the list right after the step is charged (P4: the
+                        // later names lay beyond 60 characters, and "no charging document on file" was raised for them).
+                        || named.contains { m in
+                            guard m.lowerBound >= r.upperBound, sentence.count == s.count else { return false }
+                            let from = sentence.index(sentence.startIndex, offsetBy: s.distance(from: s.startIndex, to: r.upperBound))
+                            let to = sentence.index(sentence.startIndex, offsetBy: s.distance(from: s.startIndex, to: m.lowerBound))
+                            return Self.isNameList(String(sentence[from..<to]))
+                        }
                     guard before || rightAfter else { continue }
                 }
                 // A future or conditional clause right around the step is not the step.
@@ -279,7 +295,7 @@ public nonisolated enum ProceedingEventExtractor {
         // ho15 adjudication H: in one release a charge, arrest, arraignment, plea or conviction cannot come
         // after that release's sentencing, nor after the release itself — such a day is a misreading and
         // the step keeps its sentence but loses the day.
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Self.dayCalendar
         func dateOf(_ d: DateComponents?) -> Date? { d.flatMap { cal.date(from: $0) } }
         let sentencedDay = out.filter { $0.step == .sentenced }.compactMap { dateOf($0.day) }.min()
         let printedDay = dateOf(printed).map { $0.addingTimeInterval(86_400) }
@@ -288,6 +304,14 @@ public nonisolated enum ProceedingEventExtractor {
             if let s = sentencedDay, d > s { return Finding(step: f.step, day: nil, dayFromPrintedDate: false, sentence: f.sentence, detail: f.detail, reportedOn: f.reportedOn) }
             if let p = printedDay, d > p { return Finding(step: f.step, day: nil, dayFromPrintedDate: false, sentence: f.sentence, detail: f.detail, reportedOn: f.reportedOn) }
             return f
+        }
+        // P4 (real-case evaluation 2026-11-03, D6): "Two men … were convicted …, U.S. Attorney … announced
+        // today" over "… were each convicted on Oct. 21, 2022": the announcement's day is not the step's —
+        // when the document states the step's own day, the announcement-dated reading of it goes.
+        let announced = #"(?i)\b(?:announced|said|stated|reported)\s+today\b|\btoday\s+announced\b"#
+        out = out.filter { f in
+            guard f.dayFromPrintedDate, f.sentence.range(of: announced, options: .regularExpression) != nil else { return true }
+            return !out.contains { $0.step == f.step && !$0.dayFromPrintedDate && $0.day != nil && $0.day != f.day }
         }
         return out.sorted { order($0) < order($1) }
     }
@@ -467,13 +491,14 @@ public nonisolated enum ProceedingEventExtractor {
            ns.substring(from: end).range(of: #"(?i)^\s+(?:by\s+(?:a|the)\s+(?:federal\s+)?grand\s+jury\s+|on\s+(?:federal\s+)?charges\s+)?in\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:of\s+)?(?:19|20)\d\d\b"#, options: .regularExpression) != nil {
             return (nil, false)
         }
-        guard let printed, let date = Calendar(identifier: .gregorian).date(from: printed) else { return (nil, false) }
+        let dayCalendar = Self.dayCalendar
+        guard let printed, let date = dayCalendar.date(from: printed) else { return (nil, false) }
         // "announced today that Nosack … was sentenced yesterday afternoon": the relative day attached to
         // the step is the step's; the announcement's "today" is not (ho16 adjudication B).
         if let attached {
             if sentence[attached].lowercased().hasSuffix("yesterday") {
-                if let y = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: date) {
-                    return (Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: y), true)
+                if let y = dayCalendar.date(byAdding: .day, value: -1, to: date) {
+                    return (dayCalendar.dateComponents([.year, .month, .day], from: y), true)
                 }
             } else { return (printed, true) }
         }
@@ -483,8 +508,8 @@ public nonisolated enum ProceedingEventExtractor {
         let stepWeekday = sentence.range(of: #"(?i)\b(?:sentenced|pleaded|pled|convicted|charged|indicted|arrested|arraigned|found guilty)\b[^.]{0,80}?\bon\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b(?!,?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))"#, options: .regularExpression) != nil
         if sentence.range(of: #"(?i)\btoday\b"#, options: .regularExpression) != nil, !(todayIsAnnouncement && stepWeekday) { return (printed, true) }
         if sentence.range(of: #"(?i)\byesterday\b"#, options: .regularExpression) != nil,
-           let y = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: date) {
-            return (Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: y), true)
+           let y = dayCalendar.date(byAdding: .day, value: -1, to: date) {
+            return (dayCalendar.dateComponents([.year, .month, .day], from: y), true)
         }
         // "made his initial appearance Monday", "pleaded guilty Friday": the most recent such weekday
         // on or before the printed date (held-out chronology 10, 2026-10-29). A weekday that
@@ -492,7 +517,7 @@ public nonisolated enum ProceedingEventExtractor {
         let weekdays = ["sunday": 1, "monday": 2, "tuesday": 3, "wednesday": 4, "thursday": 5, "friday": 6, "saturday": 7]
         if let r = sentence.range(of: #"(?i)\b(?:on\s+|last\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?!,?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d)"#, options: .regularExpression),
            let wanted = weekdays[String(sentence[r]).lowercased().replacingOccurrences(of: #"^(?:on|last)\s+"#, with: "", options: .regularExpression)] {
-            let cal = Calendar(identifier: .gregorian)
+            let cal = dayCalendar
             for back in 0...6 {
                 if let d = cal.date(byAdding: .day, value: -back, to: date), cal.component(.weekday, from: d) == wanted {
                     return (cal.dateComponents([.year, .month, .day], from: d), true)
@@ -594,6 +619,32 @@ public nonisolated enum ProceedingEventExtractor {
         return out.filter { $0.count >= 20 }
     }
 
+    /// P4 (real-case evaluation 2026-11-03, D6): a stated day is a calendar day, not an instant. It is
+    /// built at midnight UTC — the calendar every reader of a day-precision date renders it in
+    /// (HistoryNarrativeRenderer, ClaimSelectionService) — so "June 22, 2023" prints as June 22 on a
+    /// Mac in any time zone. The host's local calendar put it at local midnight, which read back in UTC
+    /// as the day before on every Mac east of Greenwich ("2023-06-21" on IST).
+    public static let dayCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0) ?? .current
+        return c
+    }()
+
+    /// The stated day as the instant the ledger stores for a day-precision date (midnight UTC).
+    public static func ledgerDate(_ day: DateComponents) -> Date? {
+        guard let y = day.year, let m = day.month, let d = day.day else { return nil }
+        return dayCalendar.date(from: DateComponents(year: y, month: m, day: d))
+    }
+
+    /// Only names between the step and a later name ("Glick, Guy R. Miller, Shawn C. Simon and ").
+    static func isNameList(_ between: String) -> Bool {
+        let t = String(between.drop(while: { $0 == " " }))
+        if t.isEmpty { return true }
+        let name = #"(?:(?:Mr|Mrs|Ms|Dr)\.?\s+)?[A-Z][\w'’\-]*\.?(?:\s+[A-Z][\w'’\-]*\.?){0,3}(?:,\s+(?:Jr|Sr)\.?)?(?:,\s+(?:a\s)?\d{2},(?:\s+of\s+[A-Z][\w.'’\-]*(?:,?\s+[A-Z][\w.'’\-]*){0,3},)?)?"#
+        // Other names with their separators, then the person's own given names and initials.
+        return t.range(of: "^(?:" + name + #"(?:,\s*(?:and\s+)?|\s+and\s+))*(?:(?:Mr|Mrs|Ms|Dr)\.?\s+)?(?:[A-Z][\w'’\-]*\.?\s+){0,3}$"#, options: .regularExpression) != nil
+    }
+
     /// Steps as ledger events: one per step and day, dated only when the document gives the day.
     public static func extract(text: String, sourceObjectID: UUID, people: [(name: String, entityID: UUID)]) -> [Event] {
         // Cheap gate: most documents report no proceeding at all.
@@ -603,12 +654,18 @@ public nonisolated enum ProceedingEventExtractor {
         var asked = Set<String>()
         for person in people.prefix(40) where nameTokens(person.name).count >= 2 && asked.insert(person.name.lowercased()).inserted {
             for f in findings(in: text, person: person.name) {
-                guard let day = f.day, let date = Calendar(identifier: .gregorian).date(from: day) else { continue }
+                guard let day = f.day, let date = ledgerDate(day) else { continue }
+                var attributes: [String: AnyCodable] = ["proceedingStep": AnyCodable(.string(f.step.rawValue))]
+                // P4 — the person's role as the document states it (rules), kept with the step.
+                if ProceedingRoleClassifier.role(of: person.name, in: text) == .defendant {
+                    attributes["proceedingRole"] = AnyCodable(.string(ProceedingRole.defendant.rawValue))
+                    attributes["proceedingRoleSource"] = AnyCodable(.string("rules"))
+                }
                 out.append(Event(kind: .other, date: date, title: "\(person.name) \(f.step.phrase)",
                                  summary: String(f.sentence.prefix(300)), entityIDs: [person.entityID],
                                  sourceObjectID: sourceObjectID, confidence: .medium,
                                  dateConfidence: f.dayFromPrintedDate ? 0.6 : 0.7,
-                                 attributes: ["proceedingStep": AnyCodable(.string(f.step.rawValue))],
+                                 attributes: attributes,
                                  datePrecision: .day, status: .asserted))
             }
         }

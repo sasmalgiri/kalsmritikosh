@@ -29,12 +29,17 @@ public actor InvestigationFindingsService {
     private let runs: WorkProductRunRepository
     private let approvals: InvestigationFindingsApprovalRepository
     private let receiptBuilder = WorkProductReceiptBuilder()
+    /// P4 — a pass run over the case's authorized source versions before its findings are composed
+    /// (the verified role reading). It may only set claims aside through the review log; nil: none.
+    private let prepare: (@Sendable (UUID, Set<UUID>) async -> Void)?
 
     public init(cases: InvestigationCaseRepository, resolver: CaseRetrievalScopeResolver,
                 workspaces: WorkspaceRepository, assembly: WorkProductAssemblyService,
-                runs: WorkProductRunRepository, approvals: InvestigationFindingsApprovalRepository) {
+                runs: WorkProductRunRepository, approvals: InvestigationFindingsApprovalRepository,
+                prepare: (@Sendable (UUID, Set<UUID>) async -> Void)? = nil) {
         self.cases = cases; self.resolver = resolver; self.workspaces = workspaces
         self.assembly = assembly; self.runs = runs; self.approvals = approvals
+        self.prepare = prepare
     }
 
     /// Build the case's findings work product over the shared assembly path, restricted to
@@ -51,6 +56,7 @@ public actor InvestigationFindingsService {
         let scope = try await resolver.scope(for: record)
         let authorized = scope.authorizedSourceVersionIDs
         let fingerprint = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
+        await prepare?(caseID, authorized)
 
         let assembled = try await assembly.compose(
             workspace: workspace, template: .investigationFindings,

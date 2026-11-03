@@ -21,22 +21,29 @@ public nonisolated struct CloudReaders: Sendable {
     public var rewriterCloud: (any QuestionRewriting)?
     public var recordExtractor: VerifiedRecordExtractor?
     public var answerComposer: VerifiedAnswerComposer?
+    /// P3 — reads a case's cleared passages for statements that cannot both be true; every pair it
+    /// proposes is verified by CaseContradictionFinder before it is stored.
+    public var contradictionReader: CaseContradictionReader?
     /// The case bench measures the cloud readers with the AI regime forced on; nil in the app.
     public var modelsAllowedOverride: Bool?
+    /// P4 — reads the role each person holds in a case's documents (judge, prosecutor, defendant …);
+    /// a reading is used only when its quote verifies (VerifiedRoleReader). Set after init.
+    public var roleReader: VerifiedRoleReader? = nil
 
     public init(interpreterOnDevice: (any QuestionInterpreting)? = nil, interpreterCloud: (any QuestionInterpreting)? = nil,
                 rewriterOnDevice: (any QuestionRewriting)? = nil, rewriterCloud: (any QuestionRewriting)? = nil,
                 recordExtractor: VerifiedRecordExtractor? = nil, answerComposer: VerifiedAnswerComposer? = nil,
-                modelsAllowedOverride: Bool? = nil) {
+                contradictionReader: CaseContradictionReader? = nil, modelsAllowedOverride: Bool? = nil) {
         self.interpreterOnDevice = interpreterOnDevice; self.interpreterCloud = interpreterCloud
         self.rewriterOnDevice = rewriterOnDevice; self.rewriterCloud = rewriterCloud
         self.recordExtractor = recordExtractor; self.answerComposer = answerComposer
+        self.contradictionReader = contradictionReader
         self.modelsAllowedOverride = modelsAllowedOverride
     }
 
     public var isEmpty: Bool {
         interpreterOnDevice == nil && interpreterCloud == nil && rewriterOnDevice == nil && rewriterCloud == nil
-            && recordExtractor == nil && answerComposer == nil && modelsAllowedOverride == nil
+            && recordExtractor == nil && answerComposer == nil && contradictionReader == nil && modelsAllowedOverride == nil
     }
 }
 

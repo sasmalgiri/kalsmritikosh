@@ -11,6 +11,50 @@
 //
 
 import Foundation
+import os
+
+/// P3 — what the case contradiction check needs from the app (closures, so the desk stays a thin
+/// orchestrator and the tests can supply fakes).
+public nonisolated struct CaseContradictionPass: Sendable {
+    /// The case's documents for exactly these authorized source versions (text, file name, date).
+    public let documents: @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document]
+    /// The cloud gate bound to the case's scope (nil: no protection labels — nothing may leave the Mac).
+    public let gate: @Sendable (UUID) -> CloudSourceGate?
+    /// The person's AI reader when Online document reading is on and AI is allowed (nil otherwise).
+    public let reader: @Sendable () -> CaseContradictionReader?
+    /// Links each stored contradiction to the claims citing its documents, so the findings report's
+    /// conflicts section (DisclosureSelectionService) shows it. Returns the links made.
+    public let linkClaims: (@Sendable ([Contradiction]) async -> Int)?
+
+    public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
+                gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
+                reader: @escaping @Sendable () -> CaseContradictionReader?,
+                linkClaims: (@Sendable ([Contradiction]) async -> Int)? = nil) {
+        self.documents = documents; self.gate = gate; self.reader = reader; self.linkClaims = linkClaims
+    }
+}
+
+/// What one run of the case contradiction check did.
+public nonisolated struct CaseContradictionRun: Sendable {
+    public var documents = 0
+    public var ruleFindings: [CaseContradictionFinder.Finding] = []
+    public var aiFindings: [CaseContradictionFinder.Finding] = []
+    /// Reader pairs that did not verify, with why.
+    public var aiDropped: [String] = []
+    /// Reader pairs the rules had already found.
+    public var aiAgreedWithRules = 0
+    public var calls = 0
+    public var failedCalls = 0
+    public var passagesSent = 0
+    public var deniedForCloud = 0
+    /// Why the AI reading did not run or stopped (nil: it ran, or no reader is set up).
+    public var notSentReason: String?
+    public var readerAvailable = false
+    public var claimLinks = 0
+    public var available = true
+    public var findings: [CaseContradictionFinder.Finding] { ruleFindings + aiFindings }
+    public init() {}
+}
 
 public actor InvestigationContradictionGapService {
     private let cases: InvestigationCaseRepository
@@ -19,11 +63,80 @@ public actor InvestigationContradictionGapService {
     private let contradictions: ContradictionsRepository
     private let gaps: GapNodeRepository
     private let reviews: InvestigationDeskReviewRepository
+    private let pass: CaseContradictionPass?
 
     public init(cases: InvestigationCaseRepository, resolver: CaseRetrievalScopeResolver, evidence: EvidenceStore,
-                contradictions: ContradictionsRepository, gaps: GapNodeRepository, reviews: InvestigationDeskReviewRepository) {
+                contradictions: ContradictionsRepository, gaps: GapNodeRepository, reviews: InvestigationDeskReviewRepository,
+                pass: CaseContradictionPass? = nil) {
         self.cases = cases; self.resolver = resolver; self.evidence = evidence
         self.contradictions = contradictions; self.gaps = gaps; self.reviews = reviews
+        self.pass = pass
+    }
+
+    // MARK: - P3: find contradictions in the case
+
+    /// Compare the case's own documents with each other ("Find contradictions"): the rules always; the
+    /// person's AI reader too when it is available, over the documents CloudSourceGate clears for the
+    /// case's scope (privileged and above-confidential material never), every pair it proposes verified.
+    /// Verified pairs are stored with both sides; nothing outside the case is ever compared. Read the
+    /// result through `contradictions(caseID:)`.
+    @discardableResult
+    public func findContradictions(caseID: UUID, at date: Date = Date()) async throws -> CaseContradictionRun {
+        var run = CaseContradictionRun()
+        guard let pass else { run.available = false; return run }
+        _ = try await requireOpenCaseScope(caseID)
+        let authorized = try await authorizedSet(caseID)
+        // Defence in depth: only documents whose version the case authorizes.
+        let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
+        run.documents = docs.count
+        run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
+        if let reader = pass.reader() {
+            run.readerAvailable = true
+            await readWithAI(reader, caseID: caseID, docs: docs, into: &run)
+        }
+        let stored = run.findings.map { $0.contradiction(at: date) }
+        await contradictions.insertMany(stored)
+        if let link = pass.linkClaims, !stored.isEmpty { run.claimLinks = await link(stored) }
+        KalsmritikoshLog.knowledge.info("case contradiction check: \(run.ruleFindings.count, privacy: .public) by rules, \(run.aiFindings.count, privacy: .public) by the AI reading (\(run.aiDropped.count, privacy: .public) dropped, \(run.calls, privacy: .public) call(s), \(run.passagesSent, privacy: .public) passage(s)) over \(docs.count, privacy: .public) document(s)")
+        return run
+    }
+
+    private func readWithAI(_ reader: CaseContradictionReader, caseID: UUID, docs: [CaseContradictionFinder.Document],
+                            into run: inout CaseContradictionRun) async {
+        guard let gate = pass?.gate(caseID) else {
+            run.notSentReason = "documents cannot be cleared for the cloud (no protection labels)"; return
+        }
+        let (clearance, denied) = await gate.clear(docs.map(\.objectID), purpose: "case.contradictions")
+        run.deniedForCloud = denied.count
+        let cleared = docs.filter { clearance.clearedObjectIDs.contains($0.objectID) }
+        guard cleared.count >= 2 else {
+            run.notSentReason = "fewer than two of the case's documents may leave the Mac"; return
+        }
+        for batch in CaseContradictionFinder.batches(cleared, allDocuments: docs) {
+            guard batch.passages.allSatisfy({ clearance.clearedObjectIDs.contains($0.objectID) }) else { continue }
+            let reply: String
+            do {
+                reply = try await reader.read(CaseContradictionFinder.prompt(batch), clearance: clearance)
+            } catch let notSent as VerifiedAnswerComposer.NotSent {
+                KalsmritikoshLog.knowledge.info("case contradiction reading not sent: \(notSent.reason, privacy: .public)")
+                run.notSentReason = notSent.reason; return
+            } catch is CancellationError {
+                KalsmritikoshLog.knowledge.info("case contradiction reading cancelled")
+                run.notSentReason = "cancelled"; return
+            } catch {
+                KalsmritikoshLog.knowledge.error("case contradiction reading failed: \(String(describing: error), privacy: .public)")
+                run.failedCalls += 1; continue
+            }
+            run.calls += 1
+            run.passagesSent += batch.passages.count
+            let check = CaseContradictionFinder.verify(reply: reply, batch: batch, allDocuments: docs)
+            if check.unreadable { run.aiDropped.append("the reply could not be read"); continue }
+            run.aiDropped += check.dropped
+            for f in check.verified {
+                if CaseContradictionFinder.sameAsRule(f, run.ruleFindings) { run.aiAgreedWithRules += 1; continue }
+                if !run.aiFindings.contains(where: { $0.contradiction().id == f.contradiction().id }) { run.aiFindings.append(f) }
+            }
+        }
     }
 
     // MARK: - Read (in-scope items + case disposition)

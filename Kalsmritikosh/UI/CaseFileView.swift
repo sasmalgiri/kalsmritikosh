@@ -386,6 +386,7 @@ struct CaseOverviewTab: View {
                     if steps.count > 6 { Text("and \(steps.count - 6) more").font(.caption).foregroundStyle(.secondary) }
                 }
             }
+            CaseContradictionsSection(caseID: model.caseID, closed: closed)
             CaseSection(title: "Stage", subtitle: "Move the case along. Closing is a recorded decision below.") {
                 HStack {
                     StageChip(stage: closed ? .closed : s.profile.stage)

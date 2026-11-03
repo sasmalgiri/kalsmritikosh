@@ -89,10 +89,23 @@ extension AppState {
         guard let database, let events else { return nil }
         let participants = EmailParticipantRepository(database: database)
         if let name = PersonAnswerComposer.personName(in: question) {
-            let token = name.split(separator: " ").first.map(String.init) ?? name
-            let rows = ((try? await participants.correspondence(nameToken: token)) ?? [])
-                .map { PersonAnswerComposer.Correspondence(address: $0.address, displayName: $0.displayName,
-                                                           sourceObjectID: $0.sourceObjectID, role: $0.role) }
+            // P4 (real-case evaluation 2026-11-03, D7): candidates by the first name AND the surname (an
+            // address may spell only the surname, "e..haedicke@"); the composer keeps only the rows that
+            // name the person in full — never the first name alone ("mark.frevert@" is not Mark Haedicke).
+            let parts = name.split(separator: " ").map(String.init)
+            var seenRows = Set<String>()
+            var rows: [PersonAnswerComposer.Correspondence] = []
+            for token in Array(NSOrderedSet(array: [parts.first ?? name, parts.last ?? name]).compactMap { $0 as? String }) {
+                let fetched: [(address: String, displayName: String?, sourceObjectID: UUID, role: String)]
+                do { fetched = try await participants.correspondence(nameToken: token, addressContains: parts.count > 1 && token == parts.last) } catch {
+                    KalsmritikoshLog.brain.error("subject-first: correspondence lookup failed: \(String(describing: error), privacy: .public)")
+                    continue
+                }
+                for r in fetched where seenRows.insert("\(r.address)|\(r.sourceObjectID)|\(r.role)|\(r.displayName ?? "")").inserted {
+                    rows.append(PersonAnswerComposer.Correspondence(address: r.address, displayName: r.displayName,
+                                                                    sourceObjectID: r.sourceObjectID, role: r.role))
+                }
+            }
             guard !rows.isEmpty else { return nil }
             var mail: [Event] = []
             for ko in Set(rows.map(\.sourceObjectID)).prefix(200) {

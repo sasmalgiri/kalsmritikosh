@@ -126,7 +126,9 @@ public actor EmailParticipantRepository {
 
     /// L5 — every correspondence row of a person named `nameToken` (display
     /// name or address local part contains it, whole-word-ish, case-insensitive).
-    public func correspondence(nameToken: String, limit: Int = 2_000)
+    /// `addressContains` — the token may stand anywhere in the address's local part (a surname:
+    /// "e..haedicke@"), not only at its start (a first name: "mark.…@").
+    public func correspondence(nameToken: String, addressContains: Bool = false, limit: Int = 2_000)
         async throws -> [(address: String, displayName: String?, sourceObjectID: UUID, role: String)] {
         let token = nameToken.lowercased()
         let rows = try await database.query("""
@@ -134,7 +136,7 @@ public actor EmailParticipantRepository {
         WHERE (' ' || lower(COALESCE(display_name, '')) || ' ') LIKE ?
            OR lower(raw_address) LIKE ?
         LIMIT ?;
-        """, [.text("% \(token) %"), .text("\(token)%@%"), .integer(Int64(limit))])
+        """, [.text("% \(token) %"), .text(addressContains ? "%\(token)%@%" : "\(token)%@%"), .integer(Int64(limit))])
         return rows.compactMap { r in
             guard let a = r.string(0), let ko = r.uuid(2), let role = r.string(3) else { return nil }
             return (a, r.string(1), ko, role)

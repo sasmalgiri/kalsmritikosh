@@ -508,7 +508,8 @@ public nonisolated struct GapDetector: Sendable {
                                     reason: "A document records \(person)'s sentencing, but no document on file records a guilty plea or a verdict.",
                                     nearEntity: person, evidenceObjectID: anchor))
             }
-            if guilt || steps.contains(.sentenced), !(steps.contains(.charged) || steps.contains(.arrested) || steps.contains(.arraigned)) {
+            if guilt || steps.contains(.sentenced), !(steps.contains(.charged) || steps.contains(.arrested) || steps.contains(.arraigned)),
+               !Self.namedInChargingDocument(person, texts: texts) {
                 gaps.append(GapNode(kind: .proceedingStep, description: "\(person): no charging document on file",
                                     reason: "Documents record \(person)'s plea, verdict or sentence, but none records the charge, arrest or indictment.",
                                     nearEntity: person, evidenceObjectID: anchor))
@@ -523,6 +524,30 @@ public nonisolated struct GapDetector: Sendable {
             if gaps.count >= limit { break }
         }
         return Array(gaps.prefix(limit))
+    }
+
+    /// P4 (real-case evaluation 2026-11-03, D12): "Shawn C. Simon: no charging document on file" while the
+    /// 36-count indictment on file names him. A document on file charges a person when a sentence that
+    /// names them in full speaks of their indictment or charge, or a charging document (an indictment,
+    /// information or complaint) names them in full.
+    nonisolated static func namedInChargingDocument(_ person: String, texts: [(objectID: UUID, text: String)]) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard tokens.count >= 2 else { return false }
+        for t in texts where ProceedingEventExtractor.mentionsFully(t.text.lowercased(), tokens: tokens) {
+            let head = String(t.text.prefix(1_500))
+            if head.range(of: #"(?i)\b(?:the grand jury charges|indictment|criminal complaint|criminal information)\b"#, options: .regularExpression) != nil,
+               head.range(of: #"(?im)^\s*(?:(?:superseding|sealed)\s+)?(?:indictment|information|criminal complaint)\s*$|the grand jury charges"#, options: .regularExpression) != nil {
+                return true
+            }
+            for sentence in ProceedingEventExtractor.rawSentences(of: t.text) {
+                let lower = sentence.lowercased()
+                guard ProceedingEventExtractor.mentionsFully(lower, tokens: tokens),
+                      lower.range(of: #"\b(?:indicted|indictment|charged|charging|charges against|criminal complaint|information (?:was |has been )?filed)\b"#, options: .regularExpression) != nil,
+                      lower.range(of: ProceedingEventExtractor.notYet, options: .regularExpression) == nil else { continue }
+                return true
+            }
+        }
+        return false
     }
 
     public func detectRedactedValues(

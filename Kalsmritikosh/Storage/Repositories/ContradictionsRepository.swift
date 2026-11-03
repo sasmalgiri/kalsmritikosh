@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import os
 
 public actor ContradictionsRepository {
     private let database: Database
@@ -103,6 +104,17 @@ public actor ContradictionsRepository {
     /// Clear all conflicts (a re-scan replaces the open set). Derived, safe.
     public func clear() async {
         try? await database.exec("DELETE FROM contradictions;", [])
+    }
+
+    /// The archive-wide rescan's clear: its own derived rows go, the case contradiction check's rows
+    /// (CaseContradictionFinder — found over one case's documents, each with the case's decisions) stay.
+    public func clearKeepingCaseChecks() async {
+        do {
+            try await database.exec("DELETE FROM contradictions WHERE instr(description, ?) = 0;",
+                                    [.text(CaseContradictionFinder.markerStem)])
+        } catch {
+            KalsmritikoshLog.knowledge.error("contradiction clear failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     public func count() async -> Int {

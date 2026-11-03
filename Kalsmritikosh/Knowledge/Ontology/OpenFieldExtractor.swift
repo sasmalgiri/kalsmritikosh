@@ -198,6 +198,13 @@ public enum OpenFieldExtractor {
             }
             guard line.count >= minimumLabelCharacters + 2 else { continue }
             guard let pair = split(line, dashes: !titleBlock) else { continue }
+            // P4 (real-case evaluation 2026-11-03): "… intercept that course at 1100:56, one second before
+            // the collision" is a clock time, not the label "intercept that course at 1100".
+            if pair.label.range(of: #"\d{1,4}$"#, options: .regularExpression) != nil,
+               pair.value.range(of: #"^\d{2}\b"#, options: .regularExpression) != nil { continue }
+            // A bulleted list item after a label is the start of a list, not the label's value
+            // ("Hutchins:" over "• Rapids Theatre Niagara Falls, USA, Inc." — the list of his companies).
+            if let head = pair.value.first, "•·▪◦‣●-*".contains(head) { continue }
             guard isLabelLike(pair.label),
                   isValueLike(pair.value) || (statesAReason(pair.label) && isReasonValue(pair.value)) else { continue }
 
@@ -351,6 +358,26 @@ public enum OpenFieldExtractor {
 
     // MARK: - Facts
 
+    /// The surnames of the people a text introduces as people: "Roy Johannes Gillar, 50, of …" (a name
+    /// with an age), "Mr. Glick", "defendant Hutchins". Lower-cased. Narrow on purpose: a capitalised
+    /// phrase ("Recall Classification") must not make "Classification:" look like a person.
+    nonisolated static func personSurnames(in text: String) -> Set<String> {
+        let patterns = [
+            #"\b[A-Z][a-z]+(?:\s+[A-Z]\.|\s+[A-Z][a-z]+){0,2}\s+((?:Mc|Mac|O')?[A-Z][a-zA-Z'\-]{2,}),\s+(?:Jr\.,\s+|Sr\.,\s+)?(?:a\s)?\d{2},"#,
+            #"\b(?:Mr|Mrs|Ms|Dr)\.?\s+((?:Mc|Mac|O')?[A-Z][a-zA-Z'\-]{2,})\b"#,
+            #"\b(?:co-?)?defendants?\s+((?:Mc|Mac|O')?[A-Z][a-zA-Z'\-]{2,})\b"#,
+        ]
+        let ns = text as NSString
+        var out = Set<String>()
+        for p in patterns {
+            guard let re = try? NSRegularExpression(pattern: p) else { continue }
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                out.insert(ns.substring(with: m.range(at: 1)).lowercased())
+            }
+        }
+        return out
+    }
+
     /// Open fields for a whole document, as evidence-linked facts.
     ///
     /// `blocks` must be in document order. The cap applies across the document,
@@ -365,12 +392,20 @@ public enum OpenFieldExtractor {
         var seen = Set<String>()
         var capped: Int?
 
+        // P4 (real-case evaluation 2026-11-03, D8): "Gillar: Thomas Ashley Esq., Newark" (a defence-counsel
+        // list) and "Hutchins:" over his companies minted the fields "gillar" and "hutchins", which then
+        // answered questions about the person. A label that is a person's surname in this document is
+        // a heading about that person, not a field name.
+        let surnames = personSurnames(in: blocks.map(\.text).joined(separator: "\n"))
         var carried: String?
         for block in blocks {
             var text = block.text
             if let label = carried { text = label + ":\n" + text }
             carried = danglingLabel(block.text.trimmingCharacters(in: .whitespacesAndNewlines))
-            for field in fields(in: text, kind: block.kind) {
+            for field in fields(in: text, kind: block.kind)
+            where !surnames.contains(field.label.lowercased())
+                // "Mignott: Eric Breslin Esq., Newark" — a defence-counsel line names the lawyer, not a field.
+                && field.value.range(of: #"(?i)\besq\b"#, options: .regularExpression) == nil {
                 guard facts.count < maximumFieldsPerDocument else {
                     capped = maximumFieldsPerDocument
                     return (facts, capped)

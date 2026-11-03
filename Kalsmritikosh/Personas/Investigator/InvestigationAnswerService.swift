@@ -107,7 +107,7 @@ public actor InvestigationAnswerService {
     /// B4 — the binding a case answer's cloud sends carry: re-resolved at the send boundary, it
     /// names the documents the case may use NOW and their authorised versions (an erased case throws,
     /// so nothing is sent). Without the object↔version map the scope is empty: no document may go.
-    public func cloudScope(caseID: UUID) -> CloudScopeBinding {
+    public nonisolated func cloudScope(caseID: UUID) -> CloudScopeBinding {
         let objectVersions = self.objectVersions
         return CloudScopeBinding(scopeID: caseID) { [self] in
             guard let objectVersions else { return [:] }

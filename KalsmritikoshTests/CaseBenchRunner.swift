@@ -63,6 +63,19 @@ struct CaseBenchRunner {
         let findingsSections: Int; let findingsClaims: Int; let findingsCitations: Int
         let findingsCitationsInScope: Int; let findingsText: String
         let error: String?
+        /// P3 — the case contradiction check: every contradiction in scope with both quotes, its kind and
+        /// how it was found, and what the check cost.
+        var contradictionList: [ContradictionLine] = []
+        var contradictionCheck: ContradictionCheck? = nil
+    }
+    struct ContradictionLine: Encodable {
+        let kind: String; let provenance: String; let description: String
+        let quoteA: String; let docA: String; let quoteB: String; let docB: String
+    }
+    struct ContradictionCheck: Encodable {
+        let documents: Int; let rules: Int; let ai: Int; let aiDropped: Int; let aiAgreedWithRules: Int
+        let calls: Int; let failedCalls: Int; let passagesSent: Int; let deniedForCloud: Int
+        let notSent: String?; let claimLinks: Int
     }
     struct ShardSummary: Encodable {
         let shard: String; let cases: Int; let ingestSeconds: Double; let embedSeconds: Double
@@ -277,6 +290,8 @@ struct CaseBenchRunner {
                 rewriterCloud: CloudQuestionRewriter(generate: send),
                 recordExtractor: VerifiedRecordExtractor { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 600) },
                 answerComposer: VerifiedAnswerComposer { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) },
+                // P3 — the case contradiction check reads the case's cleared passages with the same model.
+                contradictionReader: CaseContradictionReader { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: 1_500) },
                 modelsAllowedOverride: true)
             state.cloudReaderHolder.set(readers)
             await brain.setCloudReaders(readers)
@@ -410,7 +425,19 @@ struct CaseBenchRunner {
                                           writer: VerifiedAnswerComposer.writer(of: a)))
             }
             let manifest = try await custody.manifest(caseID: c.id)
-            let contradictions = try await cg.contradictions(caseID: c.id).count
+            // P3 — the case's own contradiction check (rules; the cloud reader too when a key is given),
+            // run before the findings so their conflicts section reflects it.
+            let check = try await cg.findContradictions(caseID: c.id, at: now)
+            let inScope = try await cg.contradictions(caseID: c.id)
+            let contradictions = inScope.count
+            let contradictionList = inScope.map { item -> ContradictionLine in
+                let x = item.contradiction
+                return ContradictionLine(kind: CaseContradictionFinder.kindLabel(of: x) ?? x.kind.rawValue,
+                                         provenance: CaseContradictionFinder.provenance(of: x)?.rawValue ?? "archive-scan",
+                                         description: x.description,
+                                         quoteA: x.claimA, docA: x.evidenceA.flatMap { caseOf[$0] } ?? "?",
+                                         quoteB: x.claimB, docB: x.evidenceB.flatMap { caseOf[$0] } ?? "?")
+            }
             let gaps = try await cg.gaps(caseID: c.id).count
             let findings = try await findingsService.buildFindings(caseID: c.id, access: exportAccess, actor: "case-bench", at: now)
             let product = findings.assembled.workProduct
@@ -426,7 +453,13 @@ struct CaseBenchRunner {
                 findingsSections: product.sections.count, findingsClaims: claims.count,
                 findingsCitations: citations.count,
                 findingsCitationsInScope: citations.filter { $0.sourceVersionID.map(authorized.contains) ?? false }.count,
-                findingsText: String(text.prefix(4000)), error: nil)
+                findingsText: String(text.prefix(4000)), error: nil,
+                contradictionList: contradictionList,
+                contradictionCheck: ContradictionCheck(
+                    documents: check.documents, rules: check.ruleFindings.count, ai: check.aiFindings.count,
+                    aiDropped: check.aiDropped.count, aiAgreedWithRules: check.aiAgreedWithRules, calls: check.calls,
+                    failedCalls: check.failedCalls, passagesSent: check.passagesSent, deniedForCloud: check.deniedForCloud,
+                    notSent: check.notSentReason, claimLinks: check.claimLinks))
         } catch {
             return failed(error)
         }
