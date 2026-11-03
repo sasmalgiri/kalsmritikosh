@@ -2980,7 +2980,10 @@ public final class AppState {
                 let phrase = "\"" + name.replacingOccurrences(of: "\"", with: " ") + "\""
                 do {
                     let hits = try await chunks?.searchFTS(phrase, limit: MasterBrain.nameLookupCap) ?? []
-                    let ids = NSOrderedSet(array: hits.map(\.objectID)).compactMap { $0 as? UUID }
+                    // The index search matches ANY of the name's words ("Taylor" alone finds "Brock Taylor"):
+                    // only passages holding both the given name and the surname are candidates.
+                    let naming = hits.filter { ProceedingAnswerer.hasNameWords($0.text, person: name) }
+                    let ids = NSOrderedSet(array: naming.map(\.objectID)).compactMap { $0 as? UUID }
                     return (ids, hits.count < MasterBrain.nameLookupCap)
                 } catch {
                     KalsmritikoshLog.brain.error("name lookup failed: \(String(describing: error), privacy: .public)")

@@ -1668,6 +1668,8 @@ public actor MasterBrain {
     public func setIdenticalCopyCount(_ count: @escaping @Sendable ([UUID]) async -> Int) { identicalCopyCount = count }
     static let nameLookupCap = 2_000
     static let documentCountLoadCap = 600
+    /// The most index candidates beyond the loaded documents read to establish that no document names a person.
+    static let absentPersonCheckCap = 400
     public func setEmailLookup(_ lookup: @escaping @Sendable (EmailLookup) async -> [UUID]) { emailLookup = lookup }
 
     /// The case bench measures the cloud step with answers kept evidence-only; nil in the app,
@@ -2128,18 +2130,20 @@ public actor MasterBrain {
             // sensitivity/workspace filter), not the top retrieval hits; capped searches say "at least".
             var complete = true
             var loadCap = 24
-            // Whether the archive's index finds any readable document naming the person (nil: no lookup wired).
-            var indexNamesPerson: Bool?
+            // The documents the archive's index finds for the person (nil: no lookup wired). The index
+            // matches name WORDS, so a hit is a candidate, not proof the person is named: "Brock Taylor" is
+            // a hit for Jonathan Taylor. Whether a document names the person is decided on its text below.
+            var indexFound: [UUID]?
             // Every proceeding question reads the person's documents the index finds, not only the top
             // retrieval hits: a timeline or a "when charged" needs the release retrieval ranked low
             // (held-out chronology triage 2026-10-27: 15 of 62 real misses were retrieval).
             if let nameLookup {
                 let lookup = await nameLookup(parsed.person)
-                indexNamesPerson = !lookup.ids.isEmpty
                 var found = lookup.ids
                 if let policy = sensitivePolicy {
                     found = await policy.filter(result: RetrievalResult(authorityObjectIDs: found), access: access).result.authorityObjectIDs
                 }
+                indexFound = found
                 if case .documentCount = parsed.ask {
                     ids = found + ids
                     loadCap = Self.documentCountLoadCap
@@ -2150,11 +2154,38 @@ public actor MasterBrain {
                 }
             }
             var sources: [ProceedingAnswerer.Source] = []
-            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap) {
+            let attempted = Array(NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap))
+            for id in attempted {
                 do {
                     if let text = try await objects.fetchContent(id: id) { sources.append(.init(objectID: id, text: String(text.prefix(40_000)))) }
                 } catch {
                     KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+            // No readable document names the person: answering on would describe another defendant's case
+            // from passages that share the question's wording or one part of the name (ho13 cloud-path run,
+            // 2026-10-31; public-data bench 2026-11-03 — "Jonathan Taylor" answered from a release naming
+            // "Assistant U.S. Attorney Brock Taylor", "Christopher Lee" from "Christopher Lee Saunders"'s).
+            // Refused here, before any model reads anything, and said where unreadable files are listed.
+            // Only when every document the index found was read: one beyond the load cap may name them.
+            if let indexFound, !ProceedingAnswerer.anySourceNames(parsed.person, in: sources) {
+                let read = Set(attempted)
+                let unread = indexFound.filter { !read.contains($0) }
+                // More unread candidates than one check reads: absence is not established, so no refusal.
+                var namedBeyondCap = unread.count > Self.absentPersonCheckCap
+                for id in unread.prefix(Self.absentPersonCheckCap) where !namedBeyondCap {
+                    do {
+                        if let text = try await objects.fetchContent(id: id),
+                           ProceedingAnswerer.anySourceNames(parsed.person, in: [.init(objectID: id, text: String(text.prefix(40_000)))]) {
+                            namedBeyondCap = true; break
+                        }
+                    } catch {
+                        KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
+                    }
+                }
+                if !namedBeyondCap {
+                    KalsmritikoshLog.brain.info("proceeding answer: no readable document names the person — refused")
+                    return ProceedingAnswerer.absentPerson(parsed.person, intentKind: intent.kind.rawValue)
                 }
             }
             // Online with AI on: the person's model reads the documents and proposes a quoted answer,
@@ -2191,14 +2222,6 @@ public actor MasterBrain {
             if let answered = ProceedingAnswerer.answer(parsed, sources: sources, complete: complete, identicalCopies: copies) {
                 KalsmritikoshLog.brain.info("proceeding answer: \(String(describing: parsed.ask), privacy: .public) from \(sources.count, privacy: .public) document(s)")
                 return answered
-            }
-            // No readable document anywhere names the person: answering on would describe another
-            // defendant's case from passages that share the question's wording (ho13 cloud-path run,
-            // 2026-10-31: three people whose only releases were unreadable scans were answered from
-            // other cases). Refuse instead, and say where unreadable files are listed.
-            if indexNamesPerson == false, !ProceedingAnswerer.anySourceNames(parsed.person, in: sources) {
-                KalsmritikoshLog.brain.info("proceeding answer: no readable document names the person — refused")
-                return ProceedingAnswerer.absentPerson(parsed.person, intentKind: intent.kind.rawValue)
             }
         }
         var slotFirst: VerifiedAnswer?

@@ -80,8 +80,8 @@ public nonisolated struct VerifiedRecordExtractor: Sendable {
     /// The verified answer, or nil (the rules answer stands).
     public func answer(question: String, parsed: ProceedingAnswerer.Parsed, sources: [ProceedingAnswerer.Source]) async -> VerifiedAnswer? {
         guard Self.handles(parsed.ask) else { return nil }
-        let tokens = ProceedingEventExtractor.nameTokens(parsed.person)
-        let about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: tokens) }.prefix(8)
+        // Only documents naming THIS person in full go to the model ("Brock Taylor" is not Jonathan Taylor).
+        let about = sources.filter { ProceedingAnswerer.namesFully($0.text, person: parsed.person) }.prefix(8)
         guard !about.isEmpty else { return nil }
         let docs = about.map { String($0.text.prefix(7_000)) }
         let reply: String

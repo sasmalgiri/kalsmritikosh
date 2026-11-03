@@ -308,10 +308,86 @@ public nonisolated enum ProceedingAnswerer {
         return out
     }
 
-    /// True when any source names the person in full (given name and surname within a short stretch).
-    static func anySourceNames(_ person: String, in sources: [Source]) -> Bool {
+    /// Words that may follow a full name without making it a longer name ("Jonathan Taylor Sentenced …",
+    /// "Jonathan Taylor Jr.", "… Taylor Of Albuquerque").
+    static let nameFollowers: Set<String> = [
+        "jr", "sr", "esq", "was", "is", "has", "had", "will", "who", "and", "or", "of", "in", "on", "at", "to", "for", "from", "with",
+        "by", "the", "a", "an", "as", "after", "before", "said", "says", "today", "yesterday", "also", "pleads", "pleaded", "pled",
+        "sentenced", "charged", "indicted", "convicted", "arrested", "found", "guilty", "admits", "agrees", "gets", "receives",
+        "faces", "ordered", "jailed", "acquitted", "pardoned", "released", "arraigned", "accused", "named", "sues", "sued",
+    ]
+
+    /// Words that may stand before "SURNAME, Given" without making the surname someone else's.
+    static let reversedNameLeaders: Set<String> = [
+        "defendant", "defendants", "name", "names", "re", "v", "vs", "versus", "states", "america", "mr", "ms", "mrs", "dr", "case",
+        "the", "and", "of", "in", "on", "for",
+    ]
+
+    /// True when `text` names the person in full: given name and surname together, with at most two
+    /// middle names, initials or a quoted nickname between them ("Jonathan A. Taylor", "Jonathan “Jon”
+    /// Taylor"), or surname first ("TAYLOR, Jonathan"). Sharing only the surname or the given name is not
+    /// naming the person: "Assistant U.S. Attorney Brock Taylor" does not name Jonathan Taylor, and
+    /// "Christopher Lee Saunders" does not name Christopher Lee (a further surname follows) — unless the
+    /// same text also names "Christopher Lee" on its own (public-data bench, 2026-11-03: people whose own
+    /// releases were unreadable were answered from releases naming another person of one shared name part).
+    static func namesFully(_ text: String, person: String) -> Bool {
         let tokens = ProceedingEventExtractor.nameTokens(person)
-        return sources.contains { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: tokens) }
+        guard tokens.count >= 2, let first = tokens.first, let last = tokens.last else {
+            return ProceedingEventExtractor.mentionsFully(text.lowercased(), tokens: tokens)
+        }
+        func loose(_ t: String) -> String {
+            NSRegularExpression.escapedPattern(for: t).replacingOccurrences(of: #"\-"#, with: "-").replacingOccurrences(of: "-", with: #"[\s-]?"#)
+        }
+        let middle = #"(?:[A-Z]\.?|[A-Z][A-Za-z'’\-]+|["“'‘][^"”'’\n]{1,20}["”'’]|\([^)\n]{1,20}\))"#
+        let forward = #"(?<![\p{L}])(?i:"# + loose(first) + #")(?:\s+"# + middle + #"){0,2}?\s+(?i:"# + loose(last) + #")(?![\p{L}])"#
+        let reversed = #"(?<![\p{L}])(?i:"# + loose(last) + #"),\s+(?i:"# + loose(first) + #")(?![\p{L}])"#
+        let ns = text as NSString
+        // A capitalised word right after the name that the text never uses as an ordinary word is a further
+        // surname ("Christopher Lee Saunders"); a headline verb or a word the text also writes in lower case
+        // ("Sentenced" / "sentenced") is not.
+        func extendsName(after end: Int) -> Bool {
+            let rest = ns.substring(from: end)
+            guard let r = rest.range(of: #"^[ \t]+(?:[A-Z]\.\s+)?([A-Z][a-z][A-Za-z'’\-]*)"#, options: .regularExpression) else { return false }
+            let word = String(rest[r]).trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).last ?? ""
+            let lower = word.lowercased()
+            if nameFollowers.contains(lower) { return false }
+            return text.range(of: #"(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: lower) + #"(?![\p{L}])"#, options: .regularExpression) == nil
+        }
+        // "Brock Taylor, Jonathan Smith and …" is a list, not "Taylor, Jonathan": a given name before the
+        // surname makes it someone else's.
+        func givenNameBefore(_ start: Int) -> Bool {
+            let before = ns.substring(to: start)
+            guard let r = before.range(of: #"([A-Z][a-z'’\-]+)[ \t]+$"#, options: .regularExpression) else { return false }
+            let word = String(before[r]).trimmingCharacters(in: .whitespaces).lowercased()
+            return !reversedNameLeaders.contains(word)
+        }
+        for (pattern, isReversed) in [(forward, false), (reversed, true)] {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let end = m.range.location + m.range.length
+                if extendsName(after: end) { continue }
+                if isReversed, givenNameBefore(m.range.location) { continue }
+                return true
+            }
+        }
+        return false
+    }
+
+    /// True when `text` holds the person's given name and surname as words (each part of a hyphenated
+    /// one), in any order or distance — the cheap pre-filter for an index search that matches ANY word.
+    static func hasNameWords(_ text: String, person: String) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard let first = tokens.first, let last = tokens.last else { return false }
+        let lower = text.lowercased()
+        let parts = Set([first, last].flatMap { $0.split(separator: "-").map(String.init) }).filter { !$0.isEmpty }
+        return parts.allSatisfy { lower.range(of: #"(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: $0) + #"(?![\p{L}])"#, options: .regularExpression) != nil }
+    }
+
+    /// True when any source names the person in full (see `namesFully`), or by a full name a source
+    /// declares as theirs ("Jon Taylor, also known as Jonathan Taylor").
+    static func anySourceNames(_ person: String, in sources: [Source]) -> Bool {
+        if sources.contains(where: { namesFully($0.text, person: person) }) { return true }
+        return aliasNames(of: person, in: sources.map(\.text)).contains { alias in sources.contains { namesFully($0.text, person: alias) } }
     }
 
     /// The refusal for a person no readable document names: no citations, nothing from other cases.
@@ -330,19 +406,19 @@ public nonisolated enum ProceedingAnswerer {
 
     /// The sources that name the person in full — the documents a count or a refusal is about.
     static func namingSources(_ person: String, in sources: [Source]) -> [UUID] {
-        let tokens = ProceedingEventExtractor.nameTokens(person)
-        return sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: tokens) }.map(\.objectID)
+        sources.filter { namesFully($0.text, person: person) }.map(\.objectID)
     }
 
     /// `identicalCopies`: further files byte-identical to the documents that name the person (stored once).
     public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true, identicalCopies: Int = 0) -> VerifiedAnswer? {
-        var about = sources.filter { ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(parsed.person)) }
+        // Only documents that name THIS person in full: a release naming "Brock Taylor" or "Christopher Lee
+        // Saunders" is never read for Jonathan Taylor's or Christopher Lee's steps.
+        var about = sources.filter { namesFully($0.text, person: parsed.person) }
         // A document that names the person only by a declared alias ("McKenzie McClure", when another
         // release says "McKenzie McClure a/k/a Kalvin McClure") is about them too (held-out chronology 13).
         let aliases = aliasNames(of: parsed.person, in: about.map(\.text))
         for alias in aliases {
-            let tokens = ProceedingEventExtractor.nameTokens(alias)
-            for s in sources where !about.contains(where: { $0.objectID == s.objectID }) && ProceedingEventExtractor.mentionsFully(s.text.lowercased(), tokens: tokens) {
+            for s in sources where !about.contains(where: { $0.objectID == s.objectID }) && namesFully(s.text, person: alias) {
                 about.append(s)
             }
         }
