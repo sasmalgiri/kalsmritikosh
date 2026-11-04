@@ -7,16 +7,16 @@ build, whose identifiers the *owner* records in `release/approvals/distribution-
 
 ## Current candidate (2026-11-04, plans and credits + whole-case reader) — simulation-tested only
 
-Candidate: 7bb6323b3304101f6b51137dfbe77e0b85c646e4
+Candidate: c30d21916fbc030ea5b16dc33045273d0587c96e
 
 | Field | Value |
 |---|---|
 | Branch / PR | `investigations-next`, PR #169 (open) |
-| Code commits since the 2026-10-31 packet | … `67ba9bfb` (plans, AI credits, relay metering) · `7bb6323b` (whole-case reader, consent once per case, offline search results) |
-| Working tree at packet time | **not clean**: the case-reader agent has uncommitted product changes (Brain/, Personas/Investigator/, Routing/Providers/Online/, OutboundLog, CaseReadPermission); this packet's release-text edits (`docs/privacy.html`, `docs/terms.html`, `docs/index.html`, `docs/support.html`, `Kalsmritikosh/Core/LegalNotice.swift` text constants, CLAIMS registries, `release/*`) and the new test file `KalsmritikoshTests/PlanJourneySimulationTests.swift` are also uncommitted. Committing any product change makes a **new candidate**; this line and `Candidate:` must then be updated |
+| Code commits since the 2026-10-31 packet | … `67ba9bfb` (plans, AI credits, relay metering) · `7bb6323b` (whole-case reader, consent once per case, offline search results) · `b66cf7a9` (case analysis on the whole case, outbound log keeps the case text once, no second preview) · `70897448` (release package) · `c30d2191` (AI Pro limit from the plan, one size estimator, own-key limit on case reads, local credit pre-check, no public accuracy figures) |
+| Working tree at packet time | clean apart from Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries — no product code uncommitted |
 | Schema | **v169** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh` PASS) |
 | Testing mode | **Simulation only** (owner decision 2026-11-04: no paid live testing). StoreKit in-process (SKTestSession), fake relay mirroring `relay/src`, fake Anthropic API, no-network replay reader. The owner funds US$20 on the relay's Anthropic key for App Review only |
-| Hosted CI | **not run** on `67ba9bfb`/`7bb6323b` (Actions budget; last green head `4147e106`) |
+| Hosted CI | **not run** on `67ba9bfb` … `c30d2191` (Actions budget; last green head `4147e106`) |
 | Unsigned Release digests | not built for this tree |
 | Signed Distribution build | none — *owner* (`release/OWNER_LAUNCH_CHECKLIST.md` §8) |
 | Relay | not deployed; `AIIncludedRelay.host` empty → gate `relay-host-configured` FAIL until the owner deploys (§5–§6 of the checklist) |
@@ -26,11 +26,11 @@ Candidate: 7bb6323b3304101f6b51137dfbe77e0b85c646e4
 
 | Suite | Result | What it covers |
 |---|---|---|
-| `PlanJourneySimulationTests` (new) | 4 pass + 1 expected failure | one end-to-end journey per plan: Workbench trial → own-key case read; AI Included purchase → consent once per case → metered whole-case read → allowance out → pack → refusal codes; AI Pro large case; offline search results. Details `release/approvals/simulation-journeys.md` |
+| `PlanJourneySimulationTests` (new) | pass (the AI Pro size-limit known issue fixed in `c30d2191`) | one end-to-end journey per plan: Workbench trial → own-key case read; AI Included purchase → consent once per case → metered whole-case read → allowance out → pack → refusal codes; AI Pro large case; offline search results. Details `release/approvals/simulation-journeys.md` |
 | `CaseWholeReadingTests` | 14/14 | one call per question, cached prefix, verifier, too-large fallback, consent once per document set, privileged excluded, offline search, masking, replay simulation |
 | `AICreditsTests` / `AIIncludedTests` / `PurchaseTests` | 8/8 · 7/7 · 11/11 | credit meter, relay request shapes, region switch, entitlement states |
-| `PurchaseStoreKitTests` (own tests) | 10/11 | **fails** `billingRetryWithGraceKeepsAccessUntilGraceEnds` — known StoreKit-environment failure on this Mac (also with the old .storekit) |
-| Relay `npm test` | 17/17 | reservation, refunds, ceilings, daily limit, packs, global cap and the 90 % stop, retention, nothing stored |
+| `PurchaseStoreKitTests` (own tests) + `CaseReadBudgetTests` | 25/25 on `c30d2191` | `billingRetryWithGraceKeepsAccessUntilGraceEnds` passed this run; it has failed intermittently on this Mac (StoreKit environment, also with the old .storekit) |
+| Relay `npm test` | 19/19 | reservation, refunds, ceilings, daily limit, packs, global cap and the 90 % stop, retention, nothing stored |
 | Guards / claims / schema pin / debug args | PASS | `bash scripts/release-check.sh` |
 
 The commit messages of `67ba9bfb` and `7bb6323b` record wider agent runs (104/104; 250/252 with 2 explained; 188/189 — one
