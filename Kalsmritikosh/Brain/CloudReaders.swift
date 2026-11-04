@@ -32,6 +32,9 @@ public nonisolated struct CloudReaders: Sendable {
     /// P5 — drafts a case's chronology, open points and interview questions from its cleared passages;
     /// every item is verified by CaseDraftBuilder before it is shown. Set after init.
     public var draftReader: CaseDraftReader? = nil
+    /// Plan A — reads a WHOLE case (its cleared documents as a cached prefix) for a question asked
+    /// inside the case; installed under the same switch as the other document readers. Set after init.
+    public var caseReader: CaseReader? = nil
 
     public init(interpreterOnDevice: (any QuestionInterpreting)? = nil, interpreterCloud: (any QuestionInterpreting)? = nil,
                 rewriterOnDevice: (any QuestionRewriting)? = nil, rewriterCloud: (any QuestionRewriting)? = nil,

@@ -2514,7 +2514,9 @@ public final class AppState {
                 scopedRecall: SourceScopedRetriever.ScopedRecall(
                     chunks: chunks, sensitivePolicy: nil, vectors: vectors, embedder: embedder,
                     events: events, entities: entities, relationships: relationships),
-                objectVersions: { try await objects.sourceVersionsByObject(inSourceVersionIDs: $0) })
+                objectVersions: { try await objects.sourceVersionsByObject(inSourceVersionIDs: $0) },
+                // Plan A — the whole-case AI reader, asked once per case (App/AppState+CaseReading.swift).
+                caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo))
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.
@@ -3000,6 +3002,16 @@ public final class AppState {
             // P5 — the case drafts (chronology, open points, interview questions) read the same way.
             readersWithRoles.draftReader = readsDocuments ? CaseDraftReader { prompt, clearance in
                 try await readDocuments(prompt, clearance, CaseDraftBuilder.readerReplyTokens)
+            } : nil
+            // Plan A — the whole-case reader: one call per question with the case's cleared documents as a
+            // cached prefix, through the provider's case read (stored per-case permission, masking, limits,
+            // re-clearance, outbound record, usage to the billing layer).
+            readersWithRoles.caseReader = readsDocuments ? CaseReader { [weak self] send in
+                guard let provider = await self?.onlineProvider, await provider.acceptsDocuments() else {
+                    throw VerifiedAnswerComposer.NotSent("Online document reading is not set up")
+                }
+                let r = try await provider.readCase(send)
+                return CaseReader.Reply(text: r.text, usage: r.usage)
             } : nil
             cloudReaderHolder.set(readersWithRoles)
             await brain.setCloudReaders(readersWithRoles)

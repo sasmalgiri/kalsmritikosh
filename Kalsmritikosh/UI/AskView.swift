@@ -1086,8 +1086,11 @@ public struct AskView: View {
             //    brain answer, so nothing ungrounded ever reaches the user.
             // OPS-003D — production screen scope (not DEBUG-only testUnrestricted).
             // Global Q&A: no workspace restriction, full sensitivity ceiling, privilege hidden.
-            let answer = await appState.brain.answer(question: q,
-                                                      access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            let pipelineAnswer = await appState.brain.answer(question: q,
+                                                              access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            // Plan A — without an AI reader, Ask returns search results (the best matching passages),
+            // never rules-written prose; a verified exact field value shows as "Found in the record".
+            let answer = await appState.aiReadsDocuments() ? pipelineAnswer : OfflineSearchResults.present(pipelineAnswer, question: q)
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)

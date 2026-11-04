@@ -64,6 +64,11 @@ struct KalsmritikoshApp: App {
                                      set: { if $0 == nil, OutboundConsent.shared.pending != nil { OutboundConsent.shared.resolve(allow: false) } })) { preview in
                     OutboundConsentSheet(preview: preview)
                 }
+                // Plan A — the once-per-case AI permission (no case document goes to the AI without it).
+                .sheet(item: Binding(get: { CaseReadConsent.shared.pending },
+                                     set: { if $0 == nil, CaseReadConsent.shared.pending != nil { CaseReadConsent.shared.resolve(allow: false) } })) { request in
+                    CaseReadConsentSheet(request: request)
+                }
                 .preferredColorScheme(.light)   // light UI across all phases
                 .purchaseGate()                 // subscription with a 14-day introductory trial; legacy unlock honoured (Purchase.swift)
                 .appLockOverlay()               // W2-7 — Touch ID / password lock

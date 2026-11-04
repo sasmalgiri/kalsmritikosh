@@ -359,9 +359,25 @@ struct CaseBenchRunner {
             // P4/P5 — the role reader and the case drafts read the case's cleared passages with the same model.
             readers.roleReader = VerifiedRoleReader(generate: reads("roleReader", 800))
             readers.draftReader = CaseDraftReader(generate: reads("draftReader", CaseDraftBuilder.readerReplyTokens))
+            // Plan A — questions inside a case: the whole case read with the same model, through the app's
+            // own case-reading request (cache breakpoint, effort, usage). The bench allows the permission.
+            readers.caseReader = CaseReader { send in try await BenchClaude.readCase(send, key: key, model: extractModel) }
+            await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }
             cloudModel = extractModel == model ? model : "\(model) (questions), \(extractModel) (documents)"
             state.cloudReaderHolder.set(readers)
             await brain.setCloudReaders(readers)
+        }
+        // Plan A — CASEBENCH_CASE_READER_REPLAY: a JSON file {question: recorded reply} replayed as the
+        // whole-case reader (no network, no API spend); questions inside a case then take the whole-case
+        // path. The permission sheet is answered "Allow" for the bench.
+        if let replayFile = Self.env["CASEBENCH_CASE_READER_REPLAY"],
+           let data = FileManager.default.contents(atPath: replayFile),
+           let recorded = try? JSONDecoder().decode([String: String].self, from: data) {
+            var readers = state.cloudReaderHolder.current
+            readers.caseReader = Self.replayReader(recorded)
+            readers.modelsAllowedOverride = true
+            state.cloudReaderHolder.set(readers)
+            await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }
         }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         func ask(_ id: String, _ q: String) async -> AnswerResult {
@@ -551,6 +567,21 @@ struct CaseBenchRunner {
     }
 }
 
+extension CaseBenchRunner {
+    /// Plan A — a whole-case reader that replays recorded replies by question (the question is read
+    /// from the request's task text); an unknown question gets "not stated". No network.
+    static func replayReader(_ recorded: [String: String]) -> CaseReader {
+        CaseReader { send in
+            let question = send.suffix.components(separatedBy: "\n").first { $0.hasPrefix("Question: ") }
+                .map { String($0.dropFirst("Question: ".count)) } ?? ""
+            await BenchClaude.Usage.shared.record(reader: "caseReader", failure: nil)
+            return CaseReader.Reply(text: recorded[question] ?? #"{"status":"not_stated","claims":[],"answer":""}"#,
+                                    usage: CloudCallUsage(inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: CaseReader.estimatedTokens(send.prefix),
+                                                          outputTokens: 0, purpose: send.purpose, provider: "replay"))
+        }
+    }
+}
+
 /// The bench's direct Claude call (test target only). The request and the reading of the reply are the
 /// app's own (`OnlineRequestBuilder`) — model floor on output tokens, refusal fallbacks, error mapping —
 /// so the bench measures what Online mode sends; only the transport differs (the test host has no
@@ -564,6 +595,30 @@ enum BenchClaude {
             return text
         } catch {
             await Usage.shared.record(reader: reader, failure: VerifiedRoleReader.reason(error))
+            throw error
+        }
+    }
+
+    /// Plan A — the app's whole-case request, sent directly (the test host has no network helper).
+    static func readCase(_ send: CaseReadSend, key: String, model: String) async throws -> CaseReader.Reply {
+        do {
+            let outbound = try OnlineRequestBuilder.buildCaseReading(kind: .anthropic, model: model, apiKey: key, system: nil, prefix: send.prefix,
+                                                                     suffix: send.suffix, replyTokens: send.replyTokens, ttl: send.ttl, effort: send.effort)
+            guard let url = URL(string: outbound.url) else { throw URLError(.badURL) }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 600
+            for (k, v) in outbound.headers { request.setValue(v, forHTTPHeaderField: k) }
+            request.httpBody = outbound.body
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let http = OutboundHTTPResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+            let text = try OnlineRequestBuilder.parse(kind: .anthropic, response: http)
+            let usage = OnlineRequestBuilder.usage(kind: .anthropic, response: http, purpose: send.purpose)
+            await Usage.shared.add((usage?.totalInputTokens ?? 0) + (usage?.outputTokens ?? 0))
+            await Usage.shared.record(reader: "caseReader", failure: nil)
+            return CaseReader.Reply(text: text, usage: usage)
+        } catch {
+            await Usage.shared.record(reader: "caseReader", failure: VerifiedRoleReader.reason(error))
             throw error
         }
     }

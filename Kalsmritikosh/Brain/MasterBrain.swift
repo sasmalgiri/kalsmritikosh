@@ -1683,6 +1683,37 @@ public actor MasterBrain {
         answerComposer = readers.answerComposer
         interpreterModelsAllowedOverride = readers.modelsAllowedOverride
     }
+    // MARK: Plan A — the whole-case reader's two brain steps (owner, 2026-11-04)
+
+    /// How many documents the last verified reading of this brain sent to the reader (nil: none was
+    /// sent). A case too large to read whole says how many of its documents the reader saw.
+    public private(set) var lastReadingDocumentCount: Int?
+
+    /// The evidence-only reading of a question: the same pipeline as `answer`, NOT committed to the
+    /// answer ledger. On the whole-case path it is only the cross-check; the caller installs no cloud
+    /// readers on this brain, so it makes no model call.
+    public func evidenceOnlyReading(question: String, access: SensitiveAccessContext) async -> VerifiedAnswer {
+        let q = QuestionCanonicalizer.normalize(question)
+        return await QuestionUnderstanding.$session.withValue(QuestionUnderstanding.Session()) {
+            await computeVerified(question: q, access: access).answer
+        }
+    }
+
+    /// Commit an answer written outside the expert pipeline (the whole-case reading) through the same
+    /// durable lifecycle as every answer; returns the terminal answer (with its commit proof when the
+    /// ledger accepted it).
+    public func commitReading(question: String, verified: VerifiedAnswer, originScopeID: UUID?) async -> VerifiedAnswer {
+        let updates = await finalizeProgressiveAnswer(question: QuestionCanonicalizer.normalize(question), verified: verified,
+                                                      mission: nil, originScopeID: originScopeID)
+        for update in updates.reversed() {
+            switch update {
+            case .verifiedFinal(let a), .incomplete(let a): return a
+            default: continue
+            }
+        }
+        return verified
+    }
+
     /// Test seam: whether a composer and a record extractor are installed.
     var installedReaders: (composer: Bool, extractor: Bool, cloudInterpreter: Bool, cloudRewriter: Bool) {
         (answerComposer != nil, recordExtractor != nil, cloudInterpreter != nil, cloudRewriter != nil)
@@ -2285,6 +2316,7 @@ public actor MasterBrain {
                     let stepWords = Self.stepWords(parsed.ask)
                     let passages = VerifiedAnswerComposer.passages(from: cloudSources, person: parsed.person, stepWords: stepWords,
                                                                    fileNames: await fileNames(for: cloudSources.map(\.objectID)))
+                    lastReadingDocumentCount = Set(cloudSources.map(\.objectID)).count
                     let outcome = await answerComposer.compose(question: intent.rawQuestion, passages: passages, rules: answered,
                                                                clearance: cloudClearance)
                     if let checked = VerifiedAnswerComposer.crossChecked(outcome, rules: answered) {
@@ -2590,6 +2622,7 @@ public actor MasterBrain {
                 KalsmritikoshLog.brain.error("verified reading: file names unreadable: \(String(describing: error), privacy: .public)")
             }
         }
+        lastReadingDocumentCount = Set(allowed.map(\.objectID)).count
         let passages = allowed.map {
             VerifiedAnswerComposer.Passage(objectID: $0.objectID, chunkID: $0.id, sourceVersionID: $0.sourceVersionID,
                                            blockID: $0.evidenceBlockID, text: $0.text, fileName: fileNames[$0.objectID])

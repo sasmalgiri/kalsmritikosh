@@ -50,6 +50,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                     transport: @escaping @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse) {
             self.settings = settings; self.consent = consent; self.transport = transport
         }
+        /// Plan A — whether the person allowed this case's document set (fingerprint) to be read by
+        /// their AI (asked once per case, CaseReadPermissionStore). Tests script it.
+        public var casePermission: @Sendable (_ caseID: UUID, _ fingerprint: String) -> Bool = { caseID, fingerprint in
+            CaseReadPermissionStore.live.isGranted(caseID: caseID, fingerprint: fingerprint)
+        }
         public static let live = Seams(settings: { OnlineSnapshot.current() },
                                        consent: { await OutboundConsent.shared.request($0) },
                                        transport: { try await NetworkHelperClient.send($0) })
@@ -88,8 +93,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         /// T1 — Online mode, the provider, its key or model, or the document terms changed while the
         /// consent dialog was open; the consent was given for a different send.
         case changedDuringConsent(String)
+        /// Plan A — a whole-case read without the person's stored permission for exactly these documents.
+        case caseNotPermitted
         public var errorDescription: String? {
             switch self {
+            case .caseNotPermitted:   return "Not sent: you have not allowed the AI to read this case's current documents."
             case .notEligibleForDocuments(let why): return why
             case .timedOut:           return "The provider did not reply in time. Nothing was answered; try again."
             case .logUnavailable:     return "Not sent: the record of what leaves this Mac could not be written."
@@ -234,6 +242,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                 throw await fail(OnlineError.limitReached(cap))
             }
         }
+        // Plans and credits (2026-11-04) — the person's own monthly limit for their own Anthropic key.
+        if kind == .anthropic, let why = OwnKeyBudget.refusal() {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "own-key monthly limit")
+            throw await fail(OwnKeyBudget.LimitReached(reason: why))
+        }
 
         // 3. Consent (O-5) — not switchable.
         // B2 (agent legal review): AI Included sends a recording to Google Gemini, not to Claude — the
@@ -241,12 +254,15 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         let isRecording = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
         let shownProvider = kind == .included && isRecording ? "AI Included → Google Gemini (transcription)" : kind.displayName
         let shownModel = kind == .included && isRecording ? "Gemini (chosen by the AI Included service)" : model
-        let preview = OutboundPreview(provider: shownProvider, model: shownModel, host: kind.host,
+        var preview = OutboundPreview(provider: shownProvider, model: shownModel, host: kind.host,
                                       text: shownText, bytes: bytes, maskedCount: mapping.count,
                                       carriesDocuments: carriesDocuments,
                                       providerTerms: carriesDocuments ? (images.isEmpty ? kind.documentTerms
                                           : kind.documentTerms + " The \(images.count) attachment(s) (page images or a recording) are sent as they are: names or details shown or spoken in them cannot be masked.") : nil,
                                       aiIncluded: kind == .included)
+        // Plans and credits — what this send may cost: credits on an AI plan, dollars on an own Anthropic key.
+        preview.costEstimate = await Self.costEstimate(kind: kind, model: model, system: sendSystem, prompt: sendPrompt,
+                                                       images: images, maxTokens: options.maxTokens)
         let beforeConsent = SendSettings(settings)
         guard await seams.consent(preview) else {
             await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)
@@ -303,6 +319,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                 throw OnlineRequestBuilder.ParseError.relay(why)
             }
             let text = try OnlineRequestBuilder.parse(kind: kind == .included && isAudio ? .gemini : kind, response: response)
+            if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
+            else if kind == .anthropic { OwnKeyBudget.record(responseBody: response.body, model: model) }
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {
@@ -317,8 +335,151 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         }
     }
 
+    /// Plans and credits (2026-11-04) — the estimate the consent dialog shows (nil when none applies).
+    static func costEstimate(kind: OnlineProviderKind, model: String, system: String?, prompt: String,
+                             images: [OutboundImage], maxTokens: Int) async -> String? {
+        let pictures = images.filter { $0.mediaType.hasPrefix("image/") }.count
+        let chars = (system?.count ?? 0) + prompt.count
+        let tokens = AIPricing.approximateTokens(characters: chars) + pictures * 1_600
+        let maxOut = OnlineRequestBuilder.anthropicMaxTokens(maxTokens)
+        switch kind {
+        case .anthropic:
+            return OwnKeyBudget.estimateLine(model: model, inputTokens: tokens, maxOutputTokens: maxOut)
+        case .included:
+            if images.contains(where: { !$0.mediaType.hasPrefix("image/") }) { return "Transcription is charged in credits at its actual cost (usually a few)." }
+            let expected = AIPricing.estimateCredits(inputTokens: tokens, maxOutputTokens: maxOut)
+            let held = AIPricing.relayReservation(inputCharacters: chars, images: pictures, maxOutputTokens: maxOut)
+            let balance = await MainActor.run { AICreditMeter.shared.balance }
+            return "Up to \(expected.formatted()) credits (\(held.formatted()) held while it runs; only the actual cost is charged)" + (balance.map { "; you have \($0.formatted())." } ?? ".")
+        case .openai, .gemini:
+            return nil
+        }
+    }
+
     /// K8 — the longest the person waits for a reply.
     static let replyDeadline: Duration = .seconds(120)
+
+    // MARK: - Plan A: the whole-case read (owner, 2026-11-04)
+    //
+    // The case's cleared documents as a cached prefix, the question after it. The person's consent is
+    // the permission they gave for THIS case's document set (asked once per case, not per send); every
+    // other step of `send` runs: eligibility, masking (the prefix masked first so it does not change with
+    // the question), protected identities, the daily limit, the re-clearance of every document, the
+    // record before the send, the deadline, the log, unmasking. The usage goes to the billing layer.
+
+    /// The longest a whole-case read may take (a large case is read before the answer is written).
+    static let caseReadDeadline: Duration = .seconds(300)
+    /// Separates the case's blocks while they are masked as one text (no masking pattern matches it).
+    static let blockSeparator = "\u{1E}\u{1E}case-block\u{1E}\u{1E}"
+
+    public func readCase(_ request: CaseReadSend) async throws -> (text: String, usage: CloudCallUsage?) {
+        let settings = seams.settings()
+        let kind = settings.kind
+        let model = settings.model
+        if let why = OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: settings.confirmedDocumentTerms) {
+            await log(kind, model, "", 0, 0, nil, "blocked", "provider not eligible for documents")
+            throw await fail(OnlineError.notEligibleForDocuments(why))
+        }
+        guard await isAvailable(), let key = settings.apiKey else { throw await fail(OnlineError.notAvailable) }
+        // The clearance must be the case's own (bound to its scope) and the person must have allowed
+        // exactly the documents it clears — recomputed here, never taken from the caller.
+        guard let binding = request.clearance.binding, binding.scopeID == request.caseID,
+              !request.clearance.clearedObjectIDs.isEmpty else {
+            await log(kind, model, "", 0, 0, nil, "blocked", "case read without the case's clearance")
+            throw await fail(OnlineError.documentsNotCleared)
+        }
+        let fingerprint = CaseReadPermission.fingerprint(caseID: request.caseID, versions: request.clearance.versions)
+        guard seams.casePermission(request.caseID, fingerprint) else {
+            await log(kind, model, "", 0, 0, nil, "blocked", "no case permission for these documents")
+            throw await fail(OnlineError.caseNotPermitted)
+        }
+
+        // K9 + masking: instructions written inside documents are defanged; the case text is masked
+        // first and the question continues its placeholders.
+        let guardInjection = PromptInjectionGuard()
+        var prefix = request.prefix.map { guardInjection.defang($0) }
+        var suffix = request.suffix
+        var mapping: [String: String] = [:]
+        let protected: [String]
+        do { protected = try await protectedNames() } catch {
+            await log(kind, model, "", 0, 0, nil, "blocked", "protected-identity register unreadable")
+            throw await fail(OnlineError.protectionUnreadable)
+        }
+        var maskNames = protected
+        if ProductModuleFlags.isEnabled(.onlinePIIMasking) { maskNames += await knownNames() }
+        if !maskNames.isEmpty {
+            let masker = OnlinePIIMasker(names: maskNames)
+            let p = masker.mask(prefix.joined(separator: Self.blockSeparator))
+            let parts = p.text.components(separatedBy: Self.blockSeparator)
+            if parts.count == prefix.count { prefix = parts } else {
+                await log(kind, model, "", 0, 0, nil, "blocked", "case blocks could not be masked")
+                throw await fail(OnlineError.documentsNotCleared)
+            }
+            let q = masker.mask(suffix, continuing: p.mapping)
+            suffix = q.text
+            mapping = q.mapping
+        }
+        let shownText = (prefix + [suffix]).joined(separator: "\n\n")
+        let bytes = shownText.utf8.count
+        let survivors = RedactionVerifier().leaks(in: shownText, protectedTerms: protected, artifact: "request")
+        if !survivors.isEmpty {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "protected source identity")
+            throw await fail(OnlineError.protectedIdentity(survivors.count))
+        }
+        if ProductModuleFlags.isEnabled(.leastDataOnline), let cap = settings.dailyByteCap {
+            let used = (try? await outboundLog?.bytesSentToday()) ?? 0
+            if used + bytes > cap {
+                await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "daily limit")
+                throw await fail(OnlineError.limitReached(cap))
+            }
+        }
+        // A6/B4 — every document is re-cleared at the send: still in the case, same version, not
+        // privileged or restricted since the clearance.
+        if let why = await request.clearance.stillCleared() {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "sources changed before the case read")
+            throw await fail(OnlineError.changedDuringConsent(why))
+        }
+        if Task.isCancelled {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled", "before sending")
+            throw CancellationError()
+        }
+        do { try await recordPending(kind, model, shownText, mapping.count) }
+        catch { throw await fail(OnlineError.logUnavailable) }
+
+        var dispatched = false
+        do {
+            // The person allowed this case's documents with the read's estimate shown (CaseReadPermission,
+            // checked above), so on AI Included the read is a confirmed large read: the relay applies the
+            // plan's case-read ceiling instead of the ordinary per-request one.
+            let largeRead = kind == .included
+            let outbound = try AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
+                try OnlineRequestBuilder.buildCaseReading(
+                    kind: kind, model: model, apiKey: key, system: nil, prefix: prefix, suffix: suffix,
+                    replyTokens: request.replyTokens, ttl: request.ttl, effort: request.effort)
+            }
+            try Task.checkCancellation()
+            dispatched = true
+            let response = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
+                try await Self.withDeadline(Self.caseReadDeadline) { [seams] in try await seams.transport(outbound) }
+            }
+            if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
+                throw OnlineRequestBuilder.ParseError.relay(why)
+            }
+            let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
+            if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
+            let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
+            await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", "case read \(request.purpose)")
+            if let usage { CloudUsageMeter.report(usage) }
+            return (OnlinePIIMasker.unmask(text, mapping: mapping), usage)
+        } catch is CancellationError {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled",
+                      dispatched ? "stopped waiting; delivery unknown" : "before sending")
+            throw CancellationError()
+        } catch {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "failed", error.localizedDescription)
+            throw await fail(error)
+        }
+    }
 
     /// Run `op`, failing with `.timedOut` after `deadline` and with `CancellationError` when the caller
     /// is cancelled — even if `op` itself never returns (an XPC reply that never comes).
