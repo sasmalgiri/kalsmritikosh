@@ -5,24 +5,72 @@ Unsigned digests identify compiled code and are supporting evidence only; the su
 build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
 `bash scripts/release-check.sh` — currently **BLOCKED**.
 
-> **2026-10-31:** the owner adopted subscriptions (updated completion instructions §11). A billing change creates a
-> new candidate: `0d1ef99a` is superseded; the current candidate is the head after the §11 commit, and the Sandbox /
-> TestFlight purchase matrix (DISTRIBUTION_PACK §6) must run on it.
+## Current candidate (2026-11-04, plans and credits + whole-case reader) — simulation-tested only
 
-## Current candidate (2026-10-31, after the App Store completion instructions §2–§5 and §11)
+Candidate: 7bb6323b3304101f6b51137dfbe77e0b85c646e4
 
 | Field | Value |
 |---|---|
 | Branch / PR | `investigations-next`, PR #169 (open) |
-| Code commits since the last green head `4147e106` | `60c7421e` (§2 + §3, schema v168) · `a738c56b` (§4 one output service) · `7647249e` (§1 baseline, Release excludes the fixture) · `12aa3c71` (test-host isolation, Home first) · `933cedb3` (run-d fixes) · `0d1ef99a` (run-e fix) · the §11 subscription commit |
-| Schema | **v168** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
-| Hosted CI | **not yet run on these commits** — the last green head is `4147e106` (run 41051769092, seven jobs). Pushed in one batch with the next code change (Actions budget). |
-| Unsigned Release digests | **not yet built for this tree** — produced at freeze with the command in §6 and recorded here |
-| Signed Distribution build | none — *owner*: archive from the frozen commit in Xcode, record the archive's identifiers and the upload |
-| Contracts | 168 jobs: 20 studio, 97 executor, 51 service (`docs/JOB_CONTRACTS.md`) |
-| Gates | `ci/release-gates.json`; evidence and approval records under `release/approvals/` |
+| Code commits since the 2026-10-31 packet | … `67ba9bfb` (plans, AI credits, relay metering) · `7bb6323b` (whole-case reader, consent once per case, offline search results) |
+| Working tree at packet time | **not clean**: the case-reader agent has uncommitted product changes (Brain/, Personas/Investigator/, Routing/Providers/Online/, OutboundLog, CaseReadPermission); this packet's release-text edits (`docs/privacy.html`, `docs/terms.html`, `docs/index.html`, `docs/support.html`, `Kalsmritikosh/Core/LegalNotice.swift` text constants, CLAIMS registries, `release/*`) and the new test file `KalsmritikoshTests/PlanJourneySimulationTests.swift` are also uncommitted. Committing any product change makes a **new candidate**; this line and `Candidate:` must then be updated |
+| Schema | **v169** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh` PASS) |
+| Testing mode | **Simulation only** (owner decision 2026-11-04: no paid live testing). StoreKit in-process (SKTestSession), fake relay mirroring `relay/src`, fake Anthropic API, no-network replay reader. The owner funds US$20 on the relay's Anthropic key for App Review only |
+| Hosted CI | **not run** on `67ba9bfb`/`7bb6323b` (Actions budget; last green head `4147e106`) |
+| Unsigned Release digests | not built for this tree |
+| Signed Distribution build | none — *owner* (`release/OWNER_LAUNCH_CHECKLIST.md` §8) |
+| Relay | not deployed; `AIIncludedRelay.host` empty → gate `relay-host-configured` FAIL until the owner deploys (§5–§6 of the checklist) |
+| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (4 November 2026; notices version 1.9) |
+
+### Simulation evidence on this tree (agent run, 2026-11-04, this Mac — not hosted CI)
+
+| Suite | Result | What it covers |
+|---|---|---|
+| `PlanJourneySimulationTests` (new) | 4 pass + 1 expected failure | one end-to-end journey per plan: Workbench trial → own-key case read; AI Included purchase → consent once per case → metered whole-case read → allowance out → pack → refusal codes; AI Pro large case; offline search results. Details `release/approvals/simulation-journeys.md` |
+| `CaseWholeReadingTests` | 14/14 | one call per question, cached prefix, verifier, too-large fallback, consent once per document set, privileged excluded, offline search, masking, replay simulation |
+| `AICreditsTests` / `AIIncludedTests` / `PurchaseTests` | 8/8 · 7/7 · 11/11 | credit meter, relay request shapes, region switch, entitlement states |
+| `PurchaseStoreKitTests` (own tests) | 10/11 | **fails** `billingRetryWithGraceKeepsAccessUntilGraceEnds` — known StoreKit-environment failure on this Mac (also with the old .storekit) |
+| Relay `npm test` | 17/17 | reservation, refunds, ceilings, daily limit, packs, global cap and the 90 % stop, retention, nothing stored |
+| Guards / claims / schema pin / debug args | PASS | `bash scripts/release-check.sh` |
+
+The commit messages of `67ba9bfb` and `7bb6323b` record wider agent runs (104/104; 250/252 with 2 explained; 188/189 — one
+sandbox CSV-write test); those were not re-run for this packet.
+
+### Accuracy — the bar was NOT measured live on this candidate (owner decision)
+
+- Held-out bench ho22 (public DOJ releases, agent adjudication) on `e49783fd` — **before** the whole-case reader: rules 0.00 %,
+  Opus 5 0.22 % wrong; ≤3 % met there. Not repeated on `7bb6323b`, whose answer path changed.
+- Real solved cases (agent judge, `docs/agent-reviews/real-case-*.md`): AI off 14 % correct per question; Opus 5 everywhere
+  (`14e0708b`, round 1 of five tuned cases) 44 % correct, 2.5 wrong-at-confidence per 100 questions; the six new cases are
+  incomplete (bench key out of credit) — **not a result**, and **not** a pass of the ≤3 % wrong / ≥90 % bar. The whole-case
+  reader (`7bb6323b`) has not been evaluated on real cases at all.
+
+### Known limits carried by this candidate
+
+1. AI Pro's larger whole-case read is not delivered: nothing writes `kalsmritikosh.caseRead.planLimit`, so `CaseReadLimits.current()`
+   returns the 300k default for AI Pro (the listing and paywall promise "larger whole-case reads"). Product fix needed before
+   attaching AI Pro, or drop the claim.
+2. Own-key monthly dollar limit not enforced on whole-case reads (`OnlineCloudProvider.readCase`).
+3. Size mismatch at the AI Pro limit between the app (case text only) and the relay (case text + question) — a case just under the
+   app's limit is refused `too-large`.
+4. The app's own credit refusal checks are unused before a send; the relay refuses correctly.
+5. StoreKit `billingRetryWithGrace` test fails in this Mac's StoreKit environment; real grace behaviour unverified until Sandbox.
+6. GUI not re-walked for the once-per-case permission sheet, the plan picker, the credit meter or offline search results (gate
+   `ui-consent-and-plans`).
+7. Hosted CI not run; relay not deployed; no Sandbox/TestFlight purchase matrix; no signed build.
+8. Carried from earlier packets: first screen restores the last visited screen; UI export not exercised in a journey; archive Q&A
+   copy-answer does not scrub protected identities (route 20).
+
+### Status
+
+`bash scripts/release-check.sh` → **BLOCKED** (see the output recorded with this packet).
 
 ## Historical candidates (superseded — digests and defects kept for the record)
+
+### 1b. The 2026-10-31 candidate (after §2–§5 and §11 subscriptions)
+
+Commits `60c7421e` · `a738c56b` · `7647249e` · `12aa3c71` · `933cedb3` · `0d1ef99a` · the §11 subscription commit; schema v168;
+hosted CI not run; no digests. Superseded by the 2026-11-04 plans/credits and whole-case-reader commits.
 
 ### 1a. The superseding candidate (after the workflow review)
 

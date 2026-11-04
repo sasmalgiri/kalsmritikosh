@@ -11,7 +11,7 @@
   "gates": [
     {
       "id": "guards",
-      "title": "Architecture guards (16) clean",
+      "title": "Architecture guards clean (ci/guards/run-all.sh, incl. the relay's own tests)",
       "kind": "command",
       "run": "bash ci/guards/run-all.sh",
       "required": true
@@ -59,6 +59,28 @@
       "required": true
     },
     {
+      "id": "simulation-journeys",
+      "title": "Simulated end-to-end journey per plan (Workbench trial + own key, AI Included purchase/consent/metered read/pack/refusal, AI Pro large case, offline search) green on the candidate commit",
+      "kind": "evidence",
+      "evidence": "release/approvals/simulation-journeys.md",
+      "required": true,
+      "note": "Owner decision 2026-11-04: simulation is the only test of the paid paths before App Review. The record must name the committed candidate the suites ran on."
+    },
+    {
+      "id": "relay-host-configured",
+      "title": "AI relay deployed and its host compiled into the app and the network helper (else the AI plans and packs must not be attached to the submission)",
+      "kind": "command",
+      "run": "grep -qE 'public static let host = \"[^\"]+\"' Kalsmritikosh/Routing/Providers/Online/AIIncludedRelay.swift && bash ci/guards/relay-host-match.sh >/dev/null",
+      "required": true
+    },
+    {
+      "id": "ui-consent-and-plans",
+      "title": "Once-per-case permission sheet, plan picker, credit meter and offline search results walked in the GUI on the candidate's code",
+      "kind": "evidence",
+      "evidence": "release/approvals/ui-consent-and-plans.md",
+      "required": true
+    },
+    {
       "id": "output-routes",
       "title": "Every output route in docs/OUTPUT_ROUTES_INVENTORY.md retested on the candidate (file, clipboard, print)",
       "kind": "evidence",
@@ -76,7 +98,8 @@
       "id": "accuracy-adjudication",
       "title": "Independent adjudication of a fresh held-out set on frozen code; ≤3 % wrong per mode and family (owner decision 2026-11-02, raised from ≤1 % and declared in docs/ACCURACY.md)",
       "kind": "human",
-      "required": true
+      "required": true,
+      "owner_decision_2026_11_04": "Not measured live on this candidate (simulation-only testing). Last measurements: ho22 (agent adjudication, commit e49783fd — before the whole-case reader) rules 0.00 % / Opus 5 0.22 % wrong, bar met there; real solved cases (agent judge, docs/agent-reviews/real-case-*.md) are NOT a pass: 44 % correct per question with Opus 5 everywhere on 5 tuned cases, round 1 only, the six new cases incomplete (bench key ran out of credit). Closes only by the owner's own record; the agent never writes it."
     },
     {
       "id": "distribution-archive",
@@ -97,7 +120,8 @@
       "title": "Real StoreKit: trial, purchase, restore and refund paths on the Distribution build",
       "kind": "artifact",
       "required": true,
-      "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged"
+      "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged",
+      "note_simulation": "In-process StoreKit tests (PurchaseStoreKitTests, PlanJourneySimulationTests) are simulation and do not satisfy this gate. Sandbox/TestFlight purchases cost nothing; AI requests during them spend the relay's capped budget."
     },
     {
       "id": "legal-privacy",
@@ -132,6 +156,9 @@
     "ci",
     "candidate-packet",
     "acceptance-case-ui",
+    "simulation-journeys",
+    "relay-host-configured",
+    "ui-consent-and-plans",
     "output-routes",
     "persona-journeys-distribution",
     "accuracy-adjudication",
@@ -142,5 +169,6 @@
     "practitioner-review",
     "user-evaluation",
     "publisher-decision"
-  ]
+  ],
+  "candidate_note": "2026-11-04: candidate investigations-next @ 7bb6323b (schema v169). Testing is SIMULATION-ONLY by owner decision 2026-11-04 (no paid live testing; the owner funds US$20 on the relay's Anthropic key for App Review only): StoreKit in-process (SKTestSession), a fake relay mirroring relay/src, a fake Anthropic API and the no-network replay reader. No gate below is passed by simulation; the simulation is its own gate (simulation-journeys). The <=3 % accuracy bar was NOT measured live on this candidate. See docs/RELEASE_CANDIDATE.md, current section."
 }

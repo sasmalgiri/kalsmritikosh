@@ -73,6 +73,12 @@ public nonisolated enum LegalNotice {
     it on: then an AI plan (AI Included or AI Pro) or the cloud AI you choose with your own API key may help understand \
     a question and, if you allow it, read passages, page images or a recording to word an answer \
     or a transcript — you see exactly what would be sent, and nothing is sent until you agree. \
+    Inside a case you are asked once: the first time you use AI there, the app lists which of the case's \
+    documents would go to Anthropic (Claude) and which would not, and if you allow it for that case, those \
+    documents and your questions in that case are sent to Anthropic until its documents change, when you are \
+    asked again. Recordings you choose to transcribe go to Google (Gemini). Privileged material, protected \
+    source identities and other cases' documents are not sent. The app itself has no network permission; \
+    only its separate network helper connects, and only in Online mode. \
     Document text goes only to a provider whose terms permit it, after you confirm, and that \
     provider keeps what it receives under its own terms. With AI Included or AI Pro, requests pass \
     through the publisher's relay to Anthropic (Claude) or Google (Gemini, for recordings) under the \
@@ -176,16 +182,18 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.8 (2026-10-18)"
+    public static let termsVersion = "1.9 (2026-11-04)"
 
-    /// Payment terms (SHIP_DECISIONS 2026-10-30): one edition, sold as an auto-renewable
-    /// subscription; verified legacy one-time unlocks stay valid.
+    /// Payment terms (owner decisions 2026-11-04): one subscription group, three levels; credit packs.
     public static let subscriptionStatement = """
-    One edition with all nine personas, sold through the Mac App Store as an auto-renewable \
-    subscription — monthly or annual at the price shown for your storefront, the same access \
-    either way. Eligible new subscribers get a 14-day free trial; the chosen plan then renews \
-    automatically unless cancelled at least a day before the period ends, in your Apple Account. \
-    A permanent unlock bought under the earlier one-time offer remains valid. All payments, \
+    All nine personas, sold through the Mac App Store as one auto-renewable subscription at three \
+    levels, each monthly or yearly at the price shown for your storefront: Workbench (no AI of ours; \
+    Online AI with your own key, billed by that provider), AI Included (2,000 AI credits a month) and AI Pro \
+    (6,000 AI credits a month and larger whole-case reads). One credit is US$0.01 of the AI provider's \
+    cost; each request is charged what it actually cost. Credit packs (500 or 2,000 credits) never \
+    expire and are spent after the month's credits while an AI plan is active. Eligible new Workbench \
+    subscribers get a 14-day free trial; the AI plans have none. A plan renews automatically unless \
+    cancelled at least a day before the period ends, in your Apple Account. All payments, \
     renewals, refunds and restores are handled by Apple under Apple’s terms; the developer never \
     sees or stores your payment details. Prices may change prospectively with notice — never \
     retroactively. Whatever the plan or its state: your documents, ledger and reports remain \

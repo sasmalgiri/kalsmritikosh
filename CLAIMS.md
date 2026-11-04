@@ -63,6 +63,7 @@ Proof kinds:
 | `answers.refuses-to-guess` | `refuses to guess` | test:missingEvidenceIncomplete |
 | `answers.evidence-gate` | `enforced evidence gate` | test:missingEvidenceIncomplete |
 | `answers.refuses-unsupported` | `refuses when the record` | test:missingEvidenceIncomplete |
+| `answers.ai-checked` | `checks each AI statement against the source passage it cites` | test:unverifiedDroppedAndNotStated |
 | `journalism.reply-gate` | `right of reply enforced` | test:stages |
 | `privacy.no-egress` | `no network connections` | ci:sensitive-export |
 | `privacy.on-device` | `on-device by default` | ci:sensitive-export |
@@ -86,6 +87,7 @@ Proof kinds:
 | `privacy.ai-by-country` | `switches Online AI off for App Store accounts` | grep:AI_BLOCKED_STOREFRONTS:relay/src/policy.ts |
 | `privacy.online-tools` | `the name you check is not sent` | test:client |
 | `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState.swift |
+| `privacy.case-permission` | `You are asked once for each case` | test:consentOncePerDocumentSet |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
 | `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |
 | `privacy.purchase-by-apple` | `handled by Apple through the App Store` | grep:Transaction.currentEntitlements:Kalsmritikosh/App/Store/Purchase.swift |

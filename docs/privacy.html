@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Privacy Policy — Investigations Made Easy</title>
-<meta name="description" data-claim="privacy.never-leaves" content="Investigations Made Easy privacy policy: on-device by default, no analytics, no accounts; Online mode and the AI plans (AI Included, AI Pro) are optional and disclosed here." />
+<meta name="description" data-claim="privacy.never-leaves" content="Investigations Made Easy privacy policy: on-device by default, no analytics, no accounts; Online mode, the AI plans (AI Included, AI Pro) and what goes to Anthropic and Google with your permission once per case are disclosed here." />
 <style>
   :root{--bg:#0b0d12;--ink:#eef1f7;--muted:#9aa4b8;--line:rgba(255,255,255,.09);
     --grad:linear-gradient(120deg,#6d7cff,#22c1a6)}
@@ -42,8 +42,11 @@
   <div class="box" data-claim="privacy.never-leaves privacy.nothing-collected"><strong>The short version.</strong> Investigations Made Easy is a private, on-device application.
   <strong>In Private mode — the default — your documents, the knowledge built from them, your questions, and the answers never leave your Mac.</strong>
   We run no servers that keep your content, in any mode. We do not have accounts, tracking, ads, analytics, or telemetry.
-  If you turn on Online mode, what you approve goes from your Mac to the AI provider you chose — or, with AI Included, through our
-  relay, which passes it on and keeps only counts — and that provider keeps it under its own terms (below).</div>
+  If you turn on Online mode and use AI — with an AI plan (AI Included or AI Pro) or your own key — what you approve goes from your Mac
+  to a third-party AI: for a case you allow, that case's documents and your questions about it go to Anthropic (Claude); a recording
+  you choose to transcribe goes to Google (Gemini). On an AI plan it passes through our relay, which passes it on and keeps only
+  counts; with your own key it goes directly. The AI provider keeps it under its own terms (below). You give that permission once
+  per case, and nothing is sent without it.</div>
 
   <h2 data-claims-exempt="heading">What the app processes, and where</h2>
   <ul>
@@ -66,25 +69,39 @@
   <h2 data-claims-exempt="heading">Network use</h2>
   <p data-claim="privacy.never-leaves">The app is designed to work fully offline. In Private mode <strong>no document text, questions, answers, filenames, or usage data
   are transmitted for any purpose</strong>, so they never leave your Mac, and there is no analytics or crash-telemetry SDK. The only network activity
-  is ordinary system behaviour when you open a cited source file or a link in another app.</p>
+  is ordinary system behaviour when you open a cited source file or a link in another app. The app itself has no network permission at all;
+  only a separate, sandboxed helper inside it can connect, and only when you turn on Online mode.
+  Diagnostics (MetricKit reports from macOS) stay on your Mac and are never sent automatically; you can look at them and choose to email them to us.</p>
 
   <h2 data-claims-exempt="heading">Online mode (optional)</h2>
   <p data-claim="privacy.online-opt-in">Online mode is off unless you turn it on (Settings ▸ Modules ▸ Connection). You then choose how AI is reached:
-  <strong>AI Included</strong> (part of the AI Included plans, below), or your own API key for a cloud AI provider you choose — Anthropic, OpenAI or Google —
+  an <strong>AI plan</strong> (AI Included or AI Pro, below), or your own API key for a cloud AI provider you choose — Anthropic, OpenAI or Google —
   stored in your Mac's Keychain.</p>
-  <p data-claim="privacy.online-record-reading">Online mode has separate parts, each with its own switch. <strong>Understanding a question's wording</strong> sends only your
-  question and the names of the fields your documents hold — never document text. <strong>Letting your cloud AI read the documents
-  about a person</strong> (off until you turn it on) sends up to eight of the documents that name that person, up to 7,000 characters
-  of each; material marked privileged is never sent. Every send is shown to you first and recorded.</p>
+  <p data-claim="privacy.case-permission"><strong>Third-party AI reading a case — your permission, once per case.</strong> The first time you use AI
+  inside a case, the app shows a permission sheet listing exactly which of that case's documents would be sent to Anthropic (Claude),
+  which would not and why, their size and the estimated cost (in credits on an AI plan, in dollars on your own key). Only if you
+  choose <strong>Allow for this case</strong> are those documents, and the questions you then ask in that case, sent to Anthropic so that
+  Claude can read them and answer — on an AI plan through our relay, with your own key directly. You are asked once for each case,
+  and asked again whenever its documents change (a document added, removed or replaced). If a case is too large to read whole, the same
+  permission covers sending, for each question, the passages of those documents most related to it. <strong>Not now</strong> sends nothing;
+  the app then answers from your documents on your Mac. A recording you choose to transcribe is sent to Google (Gemini) — on an AI plan
+  through our relay, or with your own paid Gemini key — after you confirm that send.</p>
+  <p data-claim="privacy.online-record-reading"><strong>What is never sent:</strong> material marked privileged is never sent, nor the identities of
+  protected sources, nor the documents of any other case, nor anything in Private mode. Online mode's other parts each have their own
+  switch. <strong>Understanding a question's wording</strong> sends only your question and the names of the fields your documents hold —
+  never document text. <strong>Letting your cloud AI read the documents about a person</strong> across your whole archive (off until you
+  turn it on) sends up to eight of the documents that name that person, up to 7,000 characters of each, and is asked for each time.
+  Every send is recorded on your Mac (Settings ▸ Online ▸ What was sent).</p>
   <p data-claim="privacy.provider-terms">Document text goes only to a provider whose terms permit case material — Claude on Anthropic's
   commercial API, or a <strong>paid</strong> Gemini project — after you confirm your account is on those terms; no document text
   goes to OpenAI in this release. The provider keeps what it receives under its own terms: Anthropic's commercial API deletes
   inputs and outputs within 30 days by default, with stated exceptions; Google's unpaid Gemini tier may use content and have it
-  reviewed by people, which is why case documents are not sent to an unpaid key. The app shows these terms with every send of
-  document text, and asks every time.</p>
-  <p data-claim="privacy.consent-before-send">When an answer would be worded by that provider, the app first shows you exactly what would be sent —
-  passages from your documents and your question, the destination and its size — and nothing is sent until you agree.
-  You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first. With your own key,
+  reviewed by people, which is why case documents are not sent to an unpaid key. The app shows these terms when it asks for your
+  permission.</p>
+  <p data-claim="privacy.consent-before-send">Before any AI send, the app first shows you exactly what would be sent — inside a case, the case's
+  documents, once, as above; elsewhere, the passages and your question each time — with the destination and its size, and nothing is
+  sent until you agree. You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first
+  (masking), in the documents and in your questions alike. With your own key,
   the text goes directly from your Mac to that provider, under your own account and that provider's terms and privacy policy,
   and never passes through any server of ours. Every send is recorded on your Mac. Only a separate, sandboxed helper inside the
   app can connect, over HTTPS, and only to the destinations listed on this page. One click returns you to Private mode.</p>
@@ -116,7 +133,10 @@
   Investigations Made Easy itself opens no connection for them and never sees your payment details; the App Store only tells the app
   which verified plan or purchase this Apple account holds and until when. Subscribing turns nothing else on: it does not enable Online mode or send anything anywhere. When you choose an AI
   plan, the app asks the relay only whether the AI plans are open to new subscribers this month; checking your credits or
-  adding a credit pack sends only the transaction numbers. With your own key, the app keeps a tally of the cost Anthropic reports on your Mac only, for the monthly limit you may set.</p>
+  adding a credit pack sends only the transaction numbers. With your own key, the app keeps a tally of the cost Anthropic reports on your Mac only, for the monthly limit you may set.
+  Apple's role: Apple sells and bills the plans and credit packs, handles cancellation and refunds, and — for the AI plans — answers our relay's
+  check of which plan a transaction number holds. Apple's own privacy policy covers what Apple keeps; Apple does not receive your documents or
+  questions from this app.</p>
 
   <h2 data-claims-exempt="heading">Sync through a folder (optional)</h2>
   <p data-claim="privacy.sync-encrypted">If you turn on sync, the app writes your notes, tags, groups, highlights, PDF marks and the
@@ -146,7 +166,7 @@
 
   <h2 data-claims-exempt="heading">Children</h2>
   <p data-claims-exempt="narrative">The app is for adults: it is rated 18+, and its Online AI and Online tools may only be used
-  by people 18 or older (the AI providers' terms require it).</p>
+  by people 18 or older (the AI providers' terms require it). It is not directed to children and we do not knowingly receive anything from them.</p>
 
   <h2 data-claims-exempt="heading">Who is responsible, and your rights</h2>
   <p data-claims-exempt="narrative">The publisher, Shrabani Sasmal (contact below), is responsible for the AI relay and the
@@ -158,7 +178,13 @@
   these providers are in the United States, so data may be processed outside your country. You may ask what the relay holds
   about your subscription number, and to have it corrected or deleted (deleting it ends the AI plan's service for that subscription and removes any remaining pack credits), by
   writing to the contact below with your App Store order number. Everything else stays on your Mac, where you control and can
-  delete it (Settings ▸ Your data).</p>
+  delete it (Settings ▸ Your data); the record of what was sent is kept in the app's database on your Mac, and each case's AI permission
+  in the app's settings on your Mac (a fingerprint of the case's document versions and a count — never their content). What Anthropic or Google already received is kept and deleted under their terms (Anthropic's commercial API deletes
+  inputs and outputs within 30 days by default, with stated exceptions); we cannot recall it from them.</p>
+
+  <h2 data-claims-exempt="heading">AI answers</h2>
+  <p data-claims-exempt="narrative">The app is an aid for investigators. What an AI returns can be incomplete or wrong, and conclusions are yours;
+  see section 3 of the <a href="terms.html">Terms</a>.</p>
 
   <h2 data-claims-exempt="heading">Changes</h2>
   <p data-claims-exempt="narrative">Material changes will be posted at this URL with an updated date.</p>

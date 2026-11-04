@@ -41,6 +41,8 @@ change — copy and registry move together or not at all.
 | asc.no-account | `There's no account, no sign-in, and no analytics.` | release/APP_STORE_LISTING.md |
 | asc.private-by-default | `By default your files and questions` | release/APP_STORE_LISTING.md |
 | asc.consent-before-send | `exactly what would be sent before anything leaves your Mac` | release/APP_STORE_LISTING.md |
+| asc.ai-checked | `Every AI statement is checked against the exact source line it cites` | release/APP_STORE_LISTING.md |
+| asc.case-permission | `with your permission, once per case` | release/APP_STORE_LISTING.md |
 
 What each App Store row rests on (R-2, App Review 2.3.1, 2026-10-24). The ids are backticked so
 `ci/guards/app-claims-coverage.sh` does not read these as fragment rows.
@@ -52,6 +54,8 @@ What each App Store row rests on (R-2, App Review 2.3.1, 2026-10-24). The ids ar
 | `asc.english-only` | SHIP_DECISIONS 2026-10-23 (2). |
 | `asc.trial-then-buy` | Subscription group (owner decisions 2026-11-04: Workbench, AI Included, AI Pro) with Workbench `…edition.monthly` ($4.99, P1M) and `…edition.annual` ($39.99, P1Y), the only plans with a two-week free introductory offer (StoreKit/Kalsmritikosh.storekit); Kalsmritikosh/App/Store/Purchase.swift; test:trialThenPaidThenCancelled (KalsmritikoshTests/PurchaseTests.swift) |
 | `asc.encrypted-at-rest` | test:aKeyedLedgerIsEncryptedOnDisk (KalsmritikoshTests/LedgerEncryptionTests.swift); SHIP_DECISIONS 2026-10-15 (W2-7). |
-| `asc.no-account` | Privacy label Data Not Collected (owner:OWNER_ACCEPTANCE_CHECKLIST.md); site row `privacy.no-servers` in CLAIMS.md. |
+| `asc.no-account` | No sign-in or account exists in the app; the AI relay keys counts by the App Store transaction number only (relay/src/store.ts). The privacy label declares that identifier and the AI sends (release/APP_PRIVACY_LABEL.md, 2026-11-04) — the claim is about accounts and analytics, not about collecting nothing; site row `privacy.no-servers` in CLAIMS.md. |
 | `asc.private-by-default` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift (site row `privacy.online-opt-in`); main app has no network entitlement (ci/guards/release-configuration.sh). |
 | `asc.consent-before-send` | grep:OutboundConsentSheet:Kalsmritikosh (site row `privacy.consent-before-send`). |
+| `asc.ai-checked` | test:unverifiedDroppedAndNotStated and test:wholeCaseOneCall (KalsmritikoshTests/CaseWholeReadingTests.swift) — a claim that does not verify is never shown; site row `answers.ai-checked`. Says *checked*, never *correct*. |
+| `asc.case-permission` | test:consentOncePerDocumentSet (KalsmritikoshTests/CaseWholeReadingTests.swift); Kalsmritikosh/UI/CaseReadConsentSheet.swift; site row `privacy.case-permission`. |
