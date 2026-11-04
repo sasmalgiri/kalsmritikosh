@@ -20,14 +20,19 @@ public nonisolated enum OfflineSearchResults {
     public static let recordValueKind = "offlineRecordValue"
     static let maxResults = 8
 
-    /// What Ask shows offline for `answer`.
-    public static func present(_ answer: VerifiedAnswer, question: String) -> VerifiedAnswer {
+    /// The reason written when the caller does not know which step is missing.
+    public static let defaultReason = "No AI is set up"
+
+    /// What Ask shows offline for `answer`. `reason` names why no AI answered (the app passes the
+    /// missing setup step — AISetupCause.note — so the person knows which one to fix).
+    public static func present(_ answer: VerifiedAnswer, question: String, reason: String? = nil) -> VerifiedAnswer {
+        let why = reason ?? defaultReason
         if answer.intentKind == searchKind || answer.intentKind == recordValueKind { return answer }
         // An answer an AI reading wrote and verified is not an offline answer.
         if VerifiedAnswerComposer.wrote(answer) { return answer }
         if let line = recordValueLine(answer) {
             let value = valuePart(of: answer)
-            let body = "Found in the record: \(value)\n• \(ProceedingAnswerer.quote(line))\n\n(The value of a labelled line in the cited record. No AI is set up, so no answer was written; open the source to check it.)"
+            let body = "Found in the record: \(value)\n• \(ProceedingAnswerer.quote(line))\n\n(The value of a labelled line in the cited record. \(why), so no answer was written; open the source to check it.)"
             return rebuilt(answer, body: body, answerText: value, kind: recordValueKind,
                            citations: Array(answer.citations.filter { $0.snippet.contains(line) }.prefix(1)), refused: false)
         }
@@ -41,7 +46,7 @@ public nonisolated enum OfflineSearchResults {
             return rebuilt(answer, body: body, answerText: nil, kind: searchKind, citations: [], refused: true)
         }
         let terms = highlightTerms(question)
-        var body = "Search results for \u{201C}\(question)\u{201D} — the \(results.count == 1 ? "best matching passage" : "\(results.count) best matching passages"). No AI is set up, so no answer is written; open a source to read it in full.\n"
+        var body = "Search results for \u{201C}\(question)\u{201D} — the \(results.count == 1 ? "best matching passage" : "\(results.count) best matching passages"). \(why), so no answer is written; open a source to read it in full.\n"
         for (i, c) in results.enumerated() {
             body += "\n\(i + 1). \u{201C}\(highlight(String(c.snippet.prefix(300)), terms: terms))\u{201D}"
         }

@@ -163,12 +163,16 @@ public nonisolated struct CaseReader: Sendable {
         case .answered(let a):
             return .answered(relabeled(a, documents: documents.count))
         case .notStated:
-            // The whole case was read and nothing verified: honest "not stated" — the rules value is not
-            // shown in its place (it would be the rules answering).
-            let dropped = VerifiedAnswerComposer.parse(reply).map {
-                VerifiedAnswerComposer.verify($0, passages: passages, question: question, person: person).dropped.count
-            } ?? 0
-            return .notStated(notStated(documents: documents.count, dropped: dropped))
+            // Candidate review PB1: "the documents don't say" only when the reader itself says not_stated
+            // after reading the whole case. When it proposed statements and none checked out, that is the
+            // verifier's result, not a finding: say so, and show the passages it pointed to as search results.
+            // The rules value is never shown in its place (it would be the rules answering).
+            guard let parsed = VerifiedAnswerComposer.parse(reply),
+                  (parsed.status ?? "answered").lowercased() != "not_stated", !(parsed.claims ?? []).isEmpty else {
+                return .notStated(notStated(documents: documents.count, dropped: 0))
+            }
+            let dropped = VerifiedAnswerComposer.verify(parsed, passages: passages, question: question, person: person).dropped.count
+            return .notStated(unconfirmed(documents: documents, claims: parsed.claims ?? [], dropped: max(dropped, 1), question: question))
         case .failed, .notSent:
             return outcome
         }
@@ -183,6 +187,43 @@ public nonisolated struct CaseReader: Sendable {
                                  answerState: a.answerState, ledgerAnswerID: a.ledgerAnswerID)
         out.resolvedQuestion = a.resolvedQuestion
         return out
+    }
+
+    /// The AI proposed statements and none matched its cited source: nothing is shown as found, and the
+    /// documents it pointed to are listed as search results (each at the place nearest its quote).
+    static func unconfirmed(documents: [Document], claims: [VerifiedAnswerComposer.Claim], dropped: Int, question: String) -> VerifiedAnswer {
+        var seen = Set<UUID>(), cited: [VerifiedAnswer.Citation] = []
+        for c in claims {
+            guard let n = c.passage, n >= 1, n <= documents.count else { continue }
+            let d = documents[n - 1]
+            guard seen.insert(d.objectID).inserted else { continue }
+            cited.append(VerifiedAnswer.Citation(objectID: d.objectID, chunkID: nil, snippet: excerpt(d.text, near: c.quote)))
+            if cited.count == OfflineSearchResults.maxResults { break }
+        }
+        var body = unconfirmedLead + " The AI read all \(documents.count) document\(documents.count == 1 ? "" : "s") of this case and proposed \(dropped) statement\(dropped == 1 ? "" : "s") that did not match \(dropped == 1 ? "its" : "their") cited source. The documents may still answer this — search or read them."
+        if !cited.isEmpty {
+            let terms = OfflineSearchResults.highlightTerms(question)
+            body += "\n\nThe passages the AI pointed to (search results, not confirmed):"
+            for (i, c) in cited.enumerated() {
+                body += "\n\(i + 1). \u{201C}\(OfflineSearchResults.highlight(c.snippet, terms: terms))\u{201D}"
+            }
+        }
+        body += "\n\n" + receipt(documents: documents.count)
+        return VerifiedAnswer(body: body, answerText: nil, intentKind: VerifiedAnswerComposer.unconfirmedKind,
+                              citations: cited, confidence: .zero, refused: false, source: .experts, answerState: .unverified)
+    }
+
+    /// The lead of an unconfirmed reading (never "the documents don't say").
+    public static let unconfirmedLead = "The AI's reading could not be confirmed against the documents — nothing is shown as found."
+
+    /// Up to 300 characters of `text` around the first words of `quote` (the start when they are not found).
+    static func excerpt(_ text: String, near quote: String?) -> String {
+        let words = (quote ?? "").split(whereSeparator: { $0.isWhitespace }).prefix(4).joined(separator: " ")
+        if words.count >= 6, let r = text.range(of: words, options: [.caseInsensitive, .diacriticInsensitive]) {
+            let start = text.index(r.lowerBound, offsetBy: -min(80, text.distance(from: text.startIndex, to: r.lowerBound)))
+            return String(text[start...].prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return String(text.prefix(300)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func notStated(documents: Int, dropped: Int) -> VerifiedAnswer {

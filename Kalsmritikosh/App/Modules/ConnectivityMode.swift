@@ -32,7 +32,7 @@ nonisolated public enum ConnectivityMode: String, CaseIterable, Identifiable, Se
         case .privateMode:
             return "Everything happens on this Mac. Nothing is sent anywhere."
         case .online:
-            return "Answers may use the cloud AI you choose, with your own key. You see exactly what will be sent first, personal details can be masked, and every send is logged. Switch back to Private at any time."
+            return "Answers may use an AI plan or your own Anthropic key. Inside a case you allow the AI once, with the list of documents; elsewhere you see what would be sent first. Personal details can be masked, and every send is logged. Switch back to Private at any time."
         }
     }
 

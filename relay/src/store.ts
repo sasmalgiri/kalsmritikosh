@@ -6,7 +6,7 @@ import { type Micro, type Tier, type TopUpTake } from "./policy.ts";
 export type Provider = "anthropic" | "gemini";
 
 /** Apple's last answer about a subscriber: the AI tier and the current period (re-asked after a TTL). */
-export interface PlanStatus { tier: Tier | null; anchor: number; expires: number; checkedAt: number }
+export interface PlanStatus { tier: Tier | null; anchor: number; expires: number; checkedAt: number; yearly?: boolean }
 
 export type CreditReservation =
   | { ok: true; fromAllowance: number; fromTopUps: TopUpTake[] }
@@ -224,13 +224,14 @@ export class D1Store implements Store {
     return r.meta.changes === 1;
   }
   async cachedStatus(sub: string): Promise<PlanStatus | null> {
-    const r = await this.q("SELECT tier, anchor, expires, checked_at FROM status_cache WHERE sub = ?1", sub)
-      .first<{ tier: string | null; anchor: number; expires: number; checked_at: number }>();
-    return r ? { tier: (r.tier === "ai" || r.tier === "pro") ? r.tier : null, anchor: r.anchor, expires: r.expires, checkedAt: r.checked_at } : null;
+    const r = await this.q("SELECT tier, anchor, expires, checked_at, yearly FROM status_cache WHERE sub = ?1", sub)
+      .first<{ tier: string | null; anchor: number; expires: number; checked_at: number; yearly: number | null }>();
+    return r ? { tier: (r.tier === "ai" || r.tier === "pro") ? r.tier : null, anchor: r.anchor, expires: r.expires, checkedAt: r.checked_at,
+                 yearly: r.yearly === 1 } : null;
   }
   async cacheStatus(sub: string, s: PlanStatus): Promise<void> {
-    await this.q("INSERT INTO status_cache (sub, tier, anchor, expires, checked_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(sub) DO UPDATE SET tier = ?2, anchor = ?3, expires = ?4, checked_at = ?5",
-      sub, s.tier, s.anchor, s.expires, s.checkedAt).run();
+    await this.q("INSERT INTO status_cache (sub, tier, anchor, expires, checked_at, yearly) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(sub) DO UPDATE SET tier = ?2, anchor = ?3, expires = ?4, checked_at = ?5, yearly = ?6",
+      sub, s.tier, s.anchor, s.expires, s.checkedAt, s.yearly ? 1 : 0).run();
   }
   async forgetStatus(sub: string): Promise<void> {
     await this.q("DELETE FROM status_cache WHERE sub = ?1", sub).run();

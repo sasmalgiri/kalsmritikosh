@@ -1485,7 +1485,7 @@ public struct SettingsView: View {
                     set: { EvidenceOnlyRelease.aiEnabled = $0; moduleFlagsVersion &+= 1 }
                 ))
                 Text(EvidenceOnlyRelease.aiEnabled
-                     ? "AI may write answers from your evidence. Choose Apple's on-device model below, or your own cloud AI key under Online mode (you approve every send)."
+                     ? "AI may write answers from your evidence: with an AI plan (AI Included or AI Pro) or your own Anthropic key under Online mode, a case's documents are read by the AI once you allow that case (asked once per case); questions in an allowed case are then sent without a further prompt. Apple's on-device model can be chosen below."
                      : "Off — evidence only. Every answer is a value or passage your documents state, with its source, or an honest \u{201C}the documents don't say\u{201D}. No AI model is used.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -2279,7 +2279,7 @@ public struct SettingsView: View {
                 InfoPopoverButton(topic: "subscription-plans")   // §6.8 — purchases
             }
             Text(store.statusText).font(.callout).accessibilityIdentifier("settings.subscription.status")
-            Text("Three plans with all nine personas, each monthly or yearly: Workbench (Online AI with your own Anthropic key; 14-day free trial for eligible new subscribers), AI Included (2,000 AI credits a month) and AI Pro (6,000). They are one subscription — change plan in your Apple Account. Plans renew automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
+            Text("Three plans with all nine personas, each monthly or yearly: Workbench (Online AI with your own Anthropic key; 14-day free trial for eligible new subscribers), AI Included (2,000 AI credits a month) and AI Pro (6,000 a month; 5,400 a month on the yearly plan). They are one subscription — change plan in your Apple Account. Plans renew automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 if !store.entitlement.allowsPaidUse || store.entitlement.hadAccessBefore {

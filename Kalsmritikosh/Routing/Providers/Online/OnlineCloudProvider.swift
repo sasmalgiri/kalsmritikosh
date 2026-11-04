@@ -203,8 +203,24 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         return try await send(prompt: prompt, options: GenerationOptions(maxTokens: 8_192), carriesDocuments: true, images: [audio])
     }
 
+    /// LB1 — every record of a send whose passages were cleared for a case carries that case's marker
+    /// ("case <uuid>"), so erasing the case can remove the text it sent from the outbound record.
+    @TaskLocal static var logScope: String?
+
+    /// The marker the outbound record carries for a case (`CaseEraser` removes the text of the entries
+    /// that carry it).
+    public static func caseMarker(_ caseID: UUID) -> String { "case \(caseID.uuidString)" }
+
     private func send(prompt: String, options: GenerationOptions, carriesDocuments: Bool,
                       images: [OutboundImage] = []) async throws -> String {
+        let scope = options.sourceClearance?.binding.map { Self.caseMarker($0.scopeID) }
+        return try await Self.$logScope.withValue(scope) {
+            try await sendInScope(prompt: prompt, options: options, carriesDocuments: carriesDocuments, images: images)
+        }
+    }
+
+    private func sendInScope(prompt: String, options: GenerationOptions, carriesDocuments: Bool,
+                             images: [OutboundImage]) async throws -> String {
         let settings = seams.settings()
         let kind = settings.kind
         let model = settings.model
@@ -587,6 +603,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     static func caseTextFullTag(_ digest: String) -> String { "case text \(digest) (full copy)" }
+    /// The full copy's marker for one case: a case's copy is found (and erased) by its own case marker.
+    static func caseTextFullTag(_ digest: String, caseID: UUID) -> String { caseTextFullTag(digest) + " · " + caseMarker(caseID) }
 
     /// Plan A — the case text is recorded ONCE per exact text sent (its SHA-256: the case's masked,
     /// defanged documents — so a new document set, a new version or a different masking stores a new
@@ -596,12 +614,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         guard let outboundLog else { throw OnlineError.logUnavailable }
         let digest = Self.sha256(prefixText)
         let sha = Self.sha256(shownText)
-        let full = Self.caseTextFullTag(digest)
+        let full = Self.caseTextFullTag(digest, caseID: caseID)
         guard try await outboundLog.hasEntry(detailContaining: full) else {
             return CaseLogRecord(payload: shownText, sha: sha, tag: full)
         }
         let reference = "[Case text not repeated: identical to the full copy recorded earlier in this log — case \(caseID.uuidString), document set \(fingerprint.prefix(16)), case text SHA-256 \(digest), \(prefixText.utf8.count) bytes. The task sent after it follows.]"
-        return CaseLogRecord(payload: reference + "\n\n" + suffix, sha: sha, tag: "case text \(digest) (see the full copy)")
+        return CaseLogRecord(payload: reference + "\n\n" + suffix, sha: sha, tag: "case text \(digest) (see the full copy) · " + Self.caseMarker(caseID))
     }
 
     /// Run `op`, failing with `.timedOut` after `deadline` and with `CancellationError` when the caller
@@ -640,7 +658,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         try await outboundLog.record(OutboundLogEntry(
             id: UUID(), sentAt: Date(), provider: kind.rawValue, model: model, host: kind.host,
             bytesSent: 0, maskedCount: masked, payloadSHA256: sha ?? Self.sha256(text), payloadText: text, responseBytes: nil,
-            outcome: "sending", detail: detail))
+            outcome: "sending", detail: Self.scoped(detail)))
     }
 
     /// Embeddings never leave the Mac: this provider has no `.embedding` capability.
@@ -657,6 +675,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         return error
     }
 
+    /// The detail with the case marker of the send in progress (LB1), once.
+    static func scoped(_ detail: String?) -> String? {
+        guard let scope = logScope, !(detail ?? "").contains(scope) else { return detail }
+        return [detail, scope].compactMap { $0 }.joined(separator: "; ")
+    }
+
     private func log(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ bytes: Int, _ masked: Int,
                      _ responseBytes: Int?, _ outcome: String, _ detail: String?, sha: String? = nil) async {
         guard let outboundLog else { return }
@@ -665,7 +689,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             try await outboundLog.record(OutboundLogEntry(
                 id: UUID(), sentAt: Date(), provider: kind.rawValue, model: model, host: kind.host,
                 bytesSent: outcome == "declined" || outcome == "blocked" ? 0 : bytes, maskedCount: masked,
-                payloadSHA256: sha, payloadText: text, responseBytes: responseBytes, outcome: outcome, detail: detail))
+                payloadSHA256: sha, payloadText: text, responseBytes: responseBytes, outcome: outcome, detail: Self.scoped(detail)))
         } catch {
             KalsmritikoshLog.routing.error("Outbound log write failed: \(error.localizedDescription, privacy: .public)")
         }

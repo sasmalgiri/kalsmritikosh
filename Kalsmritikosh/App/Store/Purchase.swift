@@ -9,7 +9,7 @@
 //      person's own Anthropic key, billed by Anthropic. The ONLY plan with a 14-day introductory trial.
 //    • AI Included ($39 / $389.99): everything in Workbench + 2,000 AI credits a month through the
 //      publisher's relay (1 credit = US$0.01 of Claude cost). No trial.
-//    • AI Pro ($99 / $989.99): everything + 6,000 credits a month and a larger whole-case read. No trial.
+//    • AI Pro ($99 / $989.99): everything + 6,000 credits a month (yearly: 5,400 a month) and a larger whole-case read. No trial.
 //  Yearly plans get the same monthly allowance each month (from the purchase anniversary — see
 //  relay/src/policy.ts, the one authority for plan parameters). Credit packs (500 and 2,000, consumable)
 //  never expire and are usable only with an AI plan. In the storefronts where Online AI is blocked
@@ -109,11 +109,14 @@ nonisolated enum PlanTier: String, Equatable, Sendable, CaseIterable, Comparable
                    : "Online AI uses your own Anthropic key, billed to you by Anthropic. ")
                 + "14-day free trial for new subscribers."
         case .aiIncluded:
-            return "Everything in Workbench, plus \(AIPricing.aiIncluded.monthlyCredits.formatted()) AI credits a month for Claude through the publisher's service — no AI account or key needed. 1 credit = US$0.01 of AI cost; a typical question uses a few credits, reading a whole case more. No free trial."
+            return "Everything in Workbench, plus \(AIPricing.aiIncluded.monthlyCredits.formatted()) AI credits a month for Claude through the publisher's service — no AI account or key needed. 1 credit = US$0.01 of AI cost. " + Self.creditUseNote + " No free trial."
         case .aiPro:
-            return "Everything in Workbench, plus \(AIPricing.aiPro.monthlyCredits.formatted()) AI credits a month and larger whole-case reads (up to \(AIPricing.aiPro.caseReadCredits.formatted()) credits at once). No free trial."
+            return "Everything in Workbench, plus \(AIPricing.aiPro.monthlyCredits.formatted()) AI credits a month on the monthly plan, \(AIPricing.aiPro.yearlyMonthlyCredits.formatted()) a month on the yearly plan, and larger whole-case reads (up to \(AIPricing.aiPro.caseReadCredits.formatted()) credits at once). No free trial."
         }
     }
+    /// What credits buy, honestly (user evaluation US3): the first read of a case costs most; questions
+    /// within an hour reuse the case the AI already read.
+    static let creditUseNote = "Reading a case the first time costs about 1–2 credits per 1,000 words of its text; a question within an hour of the last one in that case usually costs 5–30 credits, because the AI re-uses the case it already read (after an idle hour the first question pays the first-read cost again). The app shows the estimate before a case is read."
     static func < (a: PlanTier, b: PlanTier) -> Bool { a.rank < b.rank }
     private var rank: Int { self == .workbench ? 0 : self == .aiIncluded ? 1 : 2 }
 }
@@ -145,6 +148,8 @@ nonisolated enum SubscriptionPlan: String, Equatable, Sendable, CaseIterable {
     var isAnnual: Bool { self == .annual || self == .aiAnnual || self == .proAnnual }
     /// AI Included or AI Pro: the publisher's AI credits come with the plan.
     var includesAI: Bool { tier != .workbench }
+    /// The credits of one allowance month on this plan (0 for Workbench). AI Pro yearly: 5,400.
+    var monthlyCredits: Int { tier.limits?.monthly(yearly: isAnnual) ?? 0 }
     var periodNoun: String { isAnnual ? "year" : "month" }
     var label: String { "\(tier.name) \(isAnnual ? "yearly" : "monthly")" }
     /// The same plan with the other duration (for the yearly saving).
@@ -439,7 +444,7 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
     /// The disclosure Apple's guidance and the instruction ask for, with real values.
     var disclosure: String {
         var renew = "Renews automatically at \(displayPrice) per \(plan.periodNoun) unless cancelled at least a day before the period ends. Manage or cancel through your Apple Account."
-        if plan.includesAI { renew += " " + Self.aiTerms(plan.tier) }
+        if plan.includesAI { renew += " " + Self.aiTerms(plan) }
         if eligibleForTrial, let d = trialDays {
             return "\(d) days free, then \(displayPrice) per \(plan.periodNoun). \(renew)"
         }
@@ -447,16 +452,16 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
     }
 
     /// What an AI plan is and is not, shown with every AI plan price.
-    static func aiTerms(_ tier: PlanTier) -> String {
-        let l = tier.limits ?? AIPricing.aiIncluded
-        return "Includes \(l.monthlyCredits.formatted()) AI credits a month (1 credit = US$0.01 of AI cost at Anthropic's published prices; yearly plans get the same allowance every month, renewing on the day of purchase). Credits pay for questions answered by Claude Opus 5 (Anthropic; if Anthropic declines a request, another Claude model may answer it) and for transcription of recordings by Google Gemini, through the publisher's service; each request is charged what it actually cost, and the app shows the estimate before a large read. One request may use up to \(l.perRequestCredits) credits, a confirmed whole-case read up to \(l.caseReadCredits.formatted()), and up to \(l.dailyCredits.formatted()) a day. Unused monthly credits do not carry over; credit packs (500 or 2,000) never expire and are spent after the month's credits, while an AI plan is active. The service has a monthly capacity: if it is reached it pauses until the 1st (UTC), nothing is charged, and everything else keeps working. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts and credits."
+    static func aiTerms(_ plan: SubscriptionPlan) -> String {
+        let l = plan.tier.limits ?? AIPricing.aiIncluded
+        return "Includes \(plan.monthlyCredits.formatted()) AI credits a month (1 credit = US$0.01 of AI cost at Anthropic's published prices; " + (plan.isAnnual ? "the yearly plan gets the same allowance every month, renewing on the day of purchase" : "renewing on the day of purchase") + "). Credits pay for questions answered by Claude Opus 5 (Anthropic; if Anthropic declines a request, another Claude model may answer it) and for transcription of recordings by Google Gemini, through the publisher's service; each request is charged what it actually cost, and the app shows the estimate before a large read. One request may use up to \(l.perRequestCredits) credits, a confirmed whole-case read up to \(l.caseReadCredits.formatted()), and up to \(l.dailyCredits.formatted()) a day. Unused monthly credits do not carry over; credit packs (500 or 2,000) never expire and are spent after the month's credits, while an AI plan is active. The service has a monthly capacity: if it is reached it pauses until the 1st (UTC), nothing is charged, and everything else keeps working. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts and credits."
     }
 
     /// Release decisions 2026-11-04 (item 3): the plans offered for sale here — the AI plans only when this
     /// build has the relay and the App Store country is confirmed as one where Online AI is allowed; in a
     /// blocked (or not yet confirmed) storefront only Workbench.
     static func forSale(_ offers: [PlanOffer], relayConfigured: Bool = AIIncludedRelay.isConfigured,
-                        sellsAI: Bool = AIRegion.sellsAIProducts) -> [PlanOffer] {
+                        sellsAI: Bool = AIRegion.sellsAIProducts && AISetup.onlineAIRunsOnThisMac) -> [PlanOffer] {
         offers.filter { !$0.plan.includesAI || (relayConfigured && sellsAI) }
     }
 
@@ -876,6 +881,7 @@ final class PurchaseCenter {
     }
 
     private func buy(_ product: Product?, what: String) async {
+        verifiedAIPurchase = false
         guard let product else {
             message = "The App Store is not reachable right now, so the price and the plan cannot be confirmed. Try again in a moment."
             return
@@ -891,6 +897,7 @@ final class PurchaseCenter {
                 }
                 await t.finish()
                 message = Self.message(for: .verified, what: what)
+                verifiedAIPurchase = SubscriptionPlan(productID: t.productID)?.includesAI == true
             case .userCancelled: message = Self.message(for: .cancelled, what: what)
             case .pending: message = Self.message(for: .pending, what: what)
             @unknown default: break
@@ -900,6 +907,18 @@ final class PurchaseCenter {
             message = error.localizedDescription
         }
         await refresh()
+        if verifiedAIPurchase { offerAISetup() }
+    }
+
+    /// The last purchase was a verified AI Included / AI Pro subscription (tests read it).
+    private(set) var verifiedAIPurchase = false
+
+    /// Candidate review UB1 (App Review 2.1): after a verified AI plan purchase or restore, the one-step
+    /// setup sheet — the AI's terms and "Allow AI to read case documents you permit" — is offered unless AI
+    /// already works for the plan. Only the app's own centre does this (a test's centre stays private).
+    private func offerAISetup() {
+        guard publishes, entitlement.includesAI else { return }
+        AISetupCenter.shared.offerIfNeeded(.included)
     }
 
     /// What a purchase attempt ended in, as the person is told.
@@ -929,6 +948,7 @@ final class PurchaseCenter {
             default: message = "Restored: " + statusText
             }
         }
+        offerAISetup()
     }
 
     /// A paid action (create, edit, analyse) asks here first. When nothing paid stands, the paywall

@@ -69,6 +69,12 @@ struct KalsmritikoshApp: App {
                                      set: { if $0 == nil, CaseReadConsent.shared.pending != nil { CaseReadConsent.shared.resolve(allow: false) } })) { request in
                     CaseReadConsentSheet(request: request)
                 }
+                // UB1 — after a verified AI plan purchase or restore, or "Turn on AI…": the one-step setup
+                // (terms + "Allow AI to read case documents you permit"); never over the plans sheet.
+                .sheet(item: Binding(get: { PurchaseCenter.shared.paywallRequested == nil ? AISetupCenter.shared.offer : nil },
+                                     set: { AISetupCenter.shared.offer = $0 })) { kind in
+                    AISetupSheet(kind: kind).environment(appState)
+                }
                 .preferredColorScheme(.light)   // light UI across all phases
                 .purchaseGate()                 // subscription with a 14-day introductory trial; legacy unlock honoured (Purchase.swift)
                 .appLockOverlay()               // W2-7 — Touch ID / password lock

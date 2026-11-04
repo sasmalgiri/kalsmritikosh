@@ -63,7 +63,7 @@ In Terminal, in the repository's `relay/` folder (Node ≥ 23.6 for the tests):
 
 ```
 cd relay
-npm test                                   # expect: pass 19, fail 0
+npm test                                   # expect: pass 20, fail 0
 npx wrangler login                         # free Cloudflare account
 npx wrangler d1 create kals-relay          # copy the printed database_id into wrangler.toml
 npm run db:init
@@ -72,14 +72,15 @@ npx wrangler secret put GEMINI_API_KEY     # aistudio.google.com ▸ API key in 
 npx wrangler secret put APPLE_ISSUER_ID
 npx wrangler secret put APPLE_KEY_ID
 npx wrangler secret put APPLE_PRIVATE_KEY  # paste the whole .p8
-npx wrangler secret put GLOBAL_CAP_USD     # type: 20  (keep 20 until Apple approves the app — see step 12)
 npm run deploy                             # note the address: https://kals-ai-relay.<you>.workers.dev
 curl https://kals-ai-relay.<you>.workers.dev/v1/sellable   # expect {"sellable":true}
 ```
 
 - **Anthropic money:** console.anthropic.com ▸ **Billing** ▸ buy **US$20** of credit; turn **auto-reload off**; ▸ **Limits** ▸
   monthly spend limit **US$20**. The relay stops new AI work at 90 % of `GLOBAL_CAP_USD` (US$18), so the console limit is the
-  last backstop.
+  last backstop. `GLOBAL_CAP_USD` is set in **one place only**: `[vars]` in `relay/wrangler.toml` (`"20"` for App Review). Do
+  **not** also create a secret with that name (Cloudflare refuses a var and a secret with the same name); change it by editing
+  `wrangler.toml` and running `npm run deploy`.
 - **Gemini (transcription):** a billing-enabled Google Cloud project with a **US$5 budget alert** (`GEMINI_BUDGET_USD = 5` in
   `wrangler.toml`). If you do not want to fund Gemini, leave `GEMINI_API_KEY` unset: transcription on an AI plan then fails with
   a clear message (decision: say so in the review notes).
@@ -125,9 +126,9 @@ bash scripts/release-check.sh
 ```
 
 The human gates need records **you** write in `release/approvals/<gate>.md` (format in `release/approvals/README.md`):
-`legal-privacy`, `publisher-decision`, `accuracy-adjudication` (by your 2026-11-04 decision the ≤3 % bar was **not measured
-live** on this candidate — record ACCEPTED only if you knowingly accept that, with the reason in Notes), `practitioner-review`,
-`user-evaluation`. Never sign a record for a commit other than the one you upload.
+`legal-privacy` and `publisher-decision`. By your decision of 2026-11-04 (ship with Opus 5 and without live accuracy
+measurement) `accuracy-adjudication`, `practitioner-review` and `user-evaluation` are no longer gates; the agent reviews stay as
+evidence in `docs/agent-reviews/`. Never sign a record for a commit other than the one you upload.
 
 ## 10. TestFlight (optional, free)
 
@@ -144,20 +145,26 @@ App Store Connect ▸ the app ▸ macOS App ▸ version **1.0**:
 3. **Build:** select the uploaded build; answer export compliance (already declared in the build: no non-exempt encryption).
 4. **In-App Purchases and Subscriptions:** attach all eight products — **only if** step 6 put the relay host into this build.
 5. **App Review Information:** no sign-in required; contact Shrabani Sasmal, phone, sasmalgiri@gmail.com; paste the review
-   notes (with the real relay host).
+   notes (with the real relay host). Check that steps 3 and 6 of the notes include the one-step AI setup the reviewer sees after
+   buying AI Included or saving a key ("Allow AI to read case documents you permit" — it turns on Online mode, "Use AI to write
+   answers" and the document terms), and that step 4 (the case permission sheet) follows it; without that step the reviewer gets
+   search results and no AI (Guideline 2.1).
+   Also confirm, before you submit, that the Sandbox account you name for App Review is in a storefront where Online AI is
+   offered (not one of the 13 blocked ones), or the AI plans will not be shown to the reviewer.
 6. **Version release:** "Manually release this version".
 7. **Add for Review** ▸ **Submit**.
 
-## 12. After approval
+## 12. After approval — raise the cap FIRST, then release
 
-- **Release** the version (manual release).
-- **Global spend cap (release decision 2026-11-04, item 6).** Keep **`GLOBAL_CAP_USD=20` until Apple approves the app** (review
-  traffic only). **After approval, set it to about US$25 × the number of AI subscribers you expect** this month (e.g. 40 expected
-  subscribers → 1000), and raise it as subscribers grow. At US$20 a single AI Included subscriber (2,000 credits = US$20 of
+- **Global spend cap — before you press Release (release decision 2026-11-04, item 6; legal review LS8).** `GLOBAL_CAP_USD=20`
+  is only for App Review traffic. **Before releasing the version to the public, set it to about US$25 × the number of AI
+  subscribers you expect** this month (e.g. 40 expected subscribers → 1000), and raise it as subscribers grow — otherwise one
+  subscriber can pause every AI plan until the 1st while fees are still charged. At US$20 a single AI Included subscriber (2,000 credits = US$20 of
   Claude cost) could use the whole service's month; US$25 per subscriber covers an AI Included allowance plus some packs and
-  transcription — if many subscribers are on AI Pro (6,000 credits = US$60), size the cap up for them. Then raise the Anthropic
-  console spend limit to at least the cap and add credit. Command: `cd relay && npx wrangler secret put GLOBAL_CAP_USD` (type the
-  new number) — takes effect immediately.
+  transcription — if many subscribers are on AI Pro (6,000 credits = US$60 monthly, 5,400 = US$54 yearly), size the cap up for
+  them. Raise the Anthropic console spend limit to at least the cap and add credit. How: edit `GLOBAL_CAP_USD` in
+  `relay/wrangler.toml` `[vars]`, then `cd relay && npm run deploy` — takes effect immediately.
+- **Then release** the version (manual release).
 - **Watch `/v1/sellable`** — `curl https://<relay host>/v1/sellable` (or the app's plan screen) — at least weekly and after
   each cap change: `false` means 90 % of the cap is spent, AI plans
   are no longer offered to new buyers and new AI requests are refused until the 1st (UTC) or until you raise the cap.

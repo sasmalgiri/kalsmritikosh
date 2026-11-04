@@ -368,6 +368,8 @@ struct CaseOverviewTab: View {
     @State private var eraseDocuments = false
     @State private var confirmErase = false
     @State private var eraseStatus: String?
+    /// LS4 — the case's stored AI permission (nil = none); re-read after "Stop AI for this case".
+    @State private var aiPermission: CaseReadPermission?
 
     var body: some View {
         let closed = s.caseHeader.status == .closed
@@ -503,8 +505,29 @@ struct CaseOverviewTab: View {
                     }
                 }
             }
+            // LS4 — a case permission is withdrawn per case, here.
+            CaseSection(title: "AI for this case",
+                        subtitle: "Whether the AI may read this case's documents. You are asked once per case (and again when its documents or the AI destination change); stopping it here sends nothing more from this case until you allow it again.") {
+                HStack {
+                    if let p = aiPermission {
+                        Text("Allowed \(p.grantedAt.formatted(date: .abbreviated, time: .shortened)) for \(p.documentCount) document\(p.documentCount == 1 ? "" : "s")"
+                             + (p.destination.flatMap { OnlineProviderKind(rawValue: $0)?.displayName }.map { " · \($0)" } ?? ""))
+                            .font(.caption)
+                    } else {
+                        Text("Not allowed — the AI has not been allowed to read this case's documents.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Stop AI for this case") {
+                        CaseReadPermissionStore.live.withdraw(caseID: model.caseID)
+                        aiPermission = nil
+                    }
+                    .disabled(reason: aiPermission == nil ? "The AI is not allowed to read this case." : nil, remedy: "Nothing to stop.")
+                    .accessibilityIdentifier("case.stopAI")
+                }
+            }
+            .onAppear { aiPermission = CaseReadPermissionStore.live.permission(caseID: model.caseID) }
             CaseSection(title: "Erase this case",
-                        subtitle: "Removes everything recorded for this case — its work, notes, results and history — and keeps only a record that it was erased (who, when, why; never the content). A legal hold refuses it. Documents another case or workspace uses are always kept.") {
+                        subtitle: "Removes everything recorded for this case — its work, notes, results and history, the AI permission and the case text kept in “What was sent” (that record keeps only when, where, the size and a fingerprint) — and keeps only a record that it was erased (who, when, why; never the content). A legal hold refuses it. Documents another case or workspace uses are always kept.") {
                 TextField("Why erase (required)", text: $eraseReason)
                 TextField("Legal basis (optional)", text: $eraseBasis)
                 Toggle("Also erase the documents only this case uses", isOn: $eraseDocuments)

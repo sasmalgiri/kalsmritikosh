@@ -25,7 +25,7 @@ struct CaseContradictionsSection: View {
 
     var body: some View {
         CaseSection(title: "Contradictions",
-                    subtitle: "Statements in this case's documents that cannot both be true. Both sides are shown with their sources; nothing is averaged or decided for you.") {
+                    subtitle: "Statements in this case's documents that may not both be true — check each pair. Both sides are shown with their sources; nothing is averaged or decided for you.") {
             HStack {
                 Button {
                     Task { await find() }

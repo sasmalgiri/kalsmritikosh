@@ -10,7 +10,7 @@ answer.
 | Plan | Credits / month | One request | One confirmed whole-case read | Per day |
 |---|---|---|---|---|
 | AI Included (monthly $39 / yearly $389.99) | 2,000 | 400 | 600 | 1,500 |
-| AI Pro (monthly $99 / yearly $989.99) | 6,000 | 400 | 3,000 | 4,000 |
+| AI Pro (monthly $99 / yearly $989.99) | 6,000 (yearly: 5,400) | 400 | 3,000 | 4,000 |
 
 * **Allowance month = anniversary month.** It starts at the purchase of the current subscription
   period (the renewal for monthly plans; the start of the year for yearly plans; the moment of an
@@ -58,8 +58,9 @@ own cap. Settlement runs under `waitUntil`, so it finishes even if the app disco
      budget alert at `GEMINI_BUDGET_USD`).
    - `npx wrangler secret put APPLE_ISSUER_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` — App Store
      Connect ▸ Users and Access ▸ Integrations ▸ **In-App Purchase** key (paste the whole .p8 file).
-5. The global cap: `GLOBAL_CAP_USD` in `wrangler.toml` (default `20` until launch). To raise it, edit
-   it and deploy, or `npx wrangler secret put GLOBAL_CAP_USD` (a secret overrides the var).
+5. The global cap: `GLOBAL_CAP_USD` in `wrangler.toml` `[vars]` only (default `20` for App Review). To raise it,
+   edit it and `npm run deploy` — before releasing the app to the public. Do not also create a secret with the
+   same name (Cloudflare does not allow a var and a secret with one name).
 6. `npm run deploy` — note the printed address (`https://kals-ai-relay.<you>.workers.dev`) and give
    it to the agent; the app is built with it.
 7. App Store Connect ▸ the app ▸ App Information ▸ **App Store Server Notifications** (Version 2),

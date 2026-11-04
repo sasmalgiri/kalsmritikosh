@@ -81,9 +81,9 @@ public nonisolated enum CaseReadCostEstimate {
             // (twice the input rate), later questions read it at a tenth.
             let first = CloudUsageMeter.estimateCredits(inputTokens: caseTokens * 2 + questionTokens, maxOutputTokens: maxOutputTokens, cachedTokens: 0)
             let next = CloudUsageMeter.estimateCredits(inputTokens: caseTokens + questionTokens, maxOutputTokens: maxOutputTokens, cachedTokens: caseTokens)
-            return "At most about \(first) credits for the first read of this case, then about \(next) per question while it stays open."
+            return "At most about \(first) credits for the first read of this case, then about \(next) per question asked within an hour of the last one (the AI keeps the case for about an hour; after an idle hour the first question costs about the first-read amount again)."
         }
         let d = ownKeyDollars(caseTokens: caseTokens, questionTokens: questionTokens, maxOutputTokens: maxOutputTokens, oneHourCache: oneHourCache)
-        return String(format: "At most about $%.2f on your own key for the first read of this case, then about $%.2f per question while it stays open (list prices; billed by your provider).", d.first, d.next)
+        return String(format: "At most about $%.2f on your own key for the first read of this case, then about $%.2f per question asked within an hour of the last one (the AI keeps the case for about an hour; after an idle hour the first question costs about the first-read amount again; list prices; billed by your provider).", d.first, d.next)
     }
 }

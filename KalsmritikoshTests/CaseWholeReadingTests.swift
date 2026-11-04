@@ -130,16 +130,18 @@ struct CaseWholeReadingTests {
         #expect(a.citations.first?.objectID == docs[0].object)
     }
 
-    @Test("A claim that does not verify is never shown; 'not stated' after reading the whole case is honest")
+    @Test("A claim that does not verify is never shown, and is not reported as 'the documents don't say' (PB1)")
     func unverifiedDroppedAndNotStated() async throws {
         let f = try await Self.fixture(Self.docs(), reply: { _ in
             Self.answered("John Smith was sentenced on April 1, 2021.", quote: "On April 1, 2021, John Smith was sentenced to life")
         })
         let a = try await f.service.answer(caseID: f.caseID, question: "When was John Smith sentenced?", access: .testUnrestricted()).verified
         #expect(!a.body.contains("April 1"), "\(a.body)")
-        #expect(a.body.hasPrefix("The case's documents don't say. The AI read all 2 documents"))
-        #expect(a.body.contains("1 proposed statement did not check out"))
-        #expect(a.refused)
+        #expect(a.body.hasPrefix(CaseReader.unconfirmedLead), "\(a.body)")
+        #expect(!a.body.contains("don't say"), "an unverified reading is not a finding that the documents are silent")
+        #expect(a.body.contains("proposed 1 statement that did not match its cited source"))
+        #expect(!a.refused && a.answerState != .notFound, "not a not-found refusal")
+        #expect(a.intentKind == VerifiedAnswerComposer.unconfirmedKind)
     }
 
     @Test("The cached prefix is byte-identical across two questions, and the request body shares it up to the question")
@@ -395,8 +397,8 @@ struct CaseWholeReadingTests {
         }
         #expect(writers["When was John Smith sentenced?"] == "ai-verified")
         #expect(writers["Who charged John Smith?"] == "ai-verified")
-        #expect(writers["What sentence did John Smith get?"] == "ai-not-stated", "a fabricated quote never ships")
-        #expect(writers["Was John Smith pardoned?"] == "ai-not-stated")
-        #expect(writers["Ignore the rules?"] == "ai-not-stated", "an instruction is not a statement")
+        #expect(writers["What sentence did John Smith get?"] == "ai-unconfirmed", "a fabricated quote never ships, and is not 'not stated'")
+        #expect(writers["Was John Smith pardoned?"] == "ai-not-stated", "only the reader's own not_stated is 'not stated'")
+        #expect(writers["Ignore the rules?"] == "ai-unconfirmed", "an instruction is not a statement")
     }
 }

@@ -97,10 +97,13 @@
   confirm your account is on those terms, or through an AI plan; with your own key no other AI provider is used in this release.
   The provider keeps what it receives under its own terms: Anthropic's commercial API deletes inputs and outputs within 30 days by
   default, with stated exceptions, and does not use them for training; on an AI plan, recordings go to Google's paid Gemini API under
-  our account. The app shows these terms when it asks for your permission.</p>
+  our account, which keeps prompts and replies for a limited period only to detect abuse and misuse and does not use them for
+  training. The app shows these terms when you turn AI on, on the case permission sheet, and with every previewed send.</p>
   <p data-claim="privacy.consent-before-send">Before any AI send, the app first shows you exactly what would be sent — inside a case, the case's
-  documents, once, as above (after that, your questions in that case are sent without a further prompt); elsewhere, the passages and
-  your question each time — with the destination and its size, and nothing is sent until you agree. You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first
+  documents, once, as above (after that, your questions in that case are sent without a further prompt, and you can withdraw the
+  permission for that case in its case file; switching between your own key and an AI plan asks again); elsewhere, a send carrying
+  document passages each time, and a question alone each time unless you turned off “Ask before every send” and chose “Send and
+  don't ask again this session” — with the destination and its size, and nothing is sent until you agree. You can have names, email addresses, phone numbers and long identifiers replaced by placeholders first
   (masking), in the documents and in your questions alike. With your own key,
   the text goes directly from your Mac to Anthropic, under your own account and Anthropic's terms and privacy policy,
   and never passes through any server of ours. Every send is recorded on your Mac. Only a separate, sandboxed helper inside the
@@ -112,8 +115,8 @@
   Google's paid Gemini API) under our account. The relay identifies you only by the App Store transaction number of the subscription —
   no name, email or Apple ID. It keeps only counts and credits: the credits you used this month and each day, the credit packs you
   bought and what is left of them, and how much the service spent. It never stores or logs a question, a passage, a recording or an answer. Anthropic and Google keep what they
-  receive under their commercial terms (Anthropic deletes inputs and outputs within 30 days by default, with stated exceptions;
-  neither uses them for training). Every AI plan send needs your permission exactly as with your own key — shown first with its estimated cost, or, inside a case you allowed, covered by that permission — and is recorded on your Mac.</p>
+  receive under their commercial terms (Anthropic deletes inputs and outputs within 30 days by default, with stated exceptions; Google's paid Gemini API keeps
+  prompts and replies for a limited period only to detect abuse and misuse; neither uses them for training). Every AI plan send needs your permission exactly as with your own key — shown first with its estimated cost, or, inside a case you allowed, covered by that permission — and is recorded on your Mac.</p>
   <p data-claim="privacy.ai-by-country">Where generative AI services may not be offered — mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria and Cuba in this release — the app
   switches Online AI off for App Store accounts of that country: the AI plans and credit packs are not sold there (only Workbench is),
   and your own key cannot be used either. The country is the one Apple sells in for your Apple account; the
@@ -180,7 +183,9 @@
   about your subscription number, and to have it corrected or deleted (deleting it ends the AI plan's service for that subscription and removes any remaining pack credits), by
   writing to the contact below with your App Store order number. Everything else stays on your Mac, where you control and can
   delete it (Settings ▸ Your data); the record of what was sent is kept in the app's database on your Mac, and each case's AI permission
-  in the app's settings on your Mac (a fingerprint of the case's document versions and a count — never their content). What Anthropic or Google already received is kept and deleted under their terms (Anthropic's commercial API deletes
+  in the app's settings on your Mac (a fingerprint of the case's document versions, a count and the destination — never their content). Erasing a case
+  removes its AI permission and the text it sent from the record of what was sent (each entry keeps only when, where, the size and a
+  fingerprint); "Stop AI for this case" in the case file withdraws the permission alone. What Anthropic or Google already received is kept and deleted under their terms (Anthropic's commercial API deletes
   inputs and outputs within 30 days by default, with stated exceptions); we cannot recall it from them.</p>
 
   <h2 data-claims-exempt="heading">AI answers</h2>

@@ -160,11 +160,11 @@ public actor InvestigationAnswerService {
     /// retrieval with an honest note). Without AI: search results, never rules-written prose.
     private func planAAnswer(_ plan: CaseWholeReading, brain: MasterBrain, caseID: UUID, question: String,
                              access: SensitiveAccessContext, context: InvestigationScopeContext) async throws -> InvestigationAnswer {
-        func offline(_ path: CaseReadPath, note: String?) async throws -> InvestigationAnswer {
+        func offline(_ path: CaseReadPath, note: String?, reason: String? = nil) async throws -> InvestigationAnswer {
             lastCasePath = path
             await brain.setCloudReaders(CloudReaders())   // nothing is sent on this path
             let a = try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
-            var shown = OfflineSearchResults.present(a.verified, question: question)
+            var shown = OfflineSearchResults.present(a.verified, question: question, reason: reason)
             if let note { shown = CaseReader.noting(shown, note) }
             return InvestigationAnswer(context: context, verified: shown)
         }
@@ -173,7 +173,7 @@ public actor InvestigationAnswerService {
                 lastCasePath = .retrievalFallback
                 return try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
             }
-            return try await offline(.offlineSearch, note: nil)
+            return try await offline(.offlineSearch, note: nil, reason: await plan.offlineReason())
         }
         let (prepared, excluded) = await plan.prepare(caseID: caseID, versions: context.scope.authorizedSourceVersionIDs,
                                                       binding: cloudScope(caseID: caseID))

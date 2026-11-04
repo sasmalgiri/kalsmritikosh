@@ -17,18 +17,24 @@ public nonisolated enum AIPricing {
     // MARK: Plans (mirror of PLANS in relay/src/policy.ts)
 
     public struct PlanLimits: Equatable, Sendable {
+        /// Credits each allowance month on the monthly plan.
         public let monthlyCredits: Int
+        /// Credits each allowance month on the yearly plan (AI Pro yearly: 5,400 — owner decision
+        /// 2026-11-04, so a fully used yearly plan stays within its net revenue at 27 % VAT and 15 %).
+        public let yearlyMonthlyCredits: Int
         public let perRequestCredits: Int
         public let caseReadCredits: Int
         public let dailyCredits: Int
         /// The plan's whole-case limit (estimated tokens of case text, `maxTokensForText`) before the
         /// credit/size cap (`caseReadTokenCeiling`). CaseReadLimits derives the app's limit from this.
         public let caseReadTokens: Int
+        /// The credits of one allowance month on a monthly or a yearly plan (mirror of `monthlyAllowance`).
+        public func monthly(yearly: Bool) -> Int { yearly ? yearlyMonthlyCredits : monthlyCredits }
     }
     /// AI Included.
-    public static let aiIncluded = PlanLimits(monthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits: 600, dailyCredits: 1_500, caseReadTokens: 300_000)
+    public static let aiIncluded = PlanLimits(monthlyCredits: 2_000, yearlyMonthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits: 600, dailyCredits: 1_500, caseReadTokens: 300_000)
     /// AI Pro.
-    public static let aiPro = PlanLimits(monthlyCredits: 6_000, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000)
+    public static let aiPro = PlanLimits(monthlyCredits: 6_000, yearlyMonthlyCredits: 5_400, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000)
 
     /// Credits in each pack (mirror of TOPUP_CREDITS).
     public static let credits500 = 500

@@ -71,6 +71,9 @@ public nonisolated struct CaseWholeReading: Sendable {
     /// Whether another AI reader (the passage composer) may answer when no whole-case reader is
     /// installed: then the case is answered the way it was before plan A, not as search results.
     public var otherReadersAvailable: @Sendable () async -> Bool = { false }
+    /// Why no AI reader is installed now, in the person's words (the missing setup step: no plan or key,
+    /// Online off, AI switched off, terms not accepted, blocked country, relay or credits); nil = unknown.
+    public var offlineReason: @Sendable () async -> String? = { nil }
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseReader.Document],
                 gate: @escaping @Sendable () -> CloudSourceGate?,

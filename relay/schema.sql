@@ -34,5 +34,6 @@ CREATE TABLE IF NOT EXISTS status_cache (
   tier       TEXT,                     -- "ai" | "pro" | NULL (no AI plan) as Apple last reported
   anchor     INTEGER NOT NULL,         -- ms: purchase of the current period (allowance anniversary)
   expires    INTEGER NOT NULL,         -- ms: end of the current period
-  checked_at INTEGER NOT NULL          -- ms since epoch; re-checked with Apple after 10 minutes
+  checked_at INTEGER NOT NULL,         -- ms since epoch; re-checked with Apple after 10 minutes
+  yearly     INTEGER NOT NULL DEFAULT 0 -- 1 = a yearly plan (AI Pro yearly: 5,400 credits a month, not 6,000)
 );

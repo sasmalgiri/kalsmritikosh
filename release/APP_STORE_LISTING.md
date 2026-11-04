@@ -46,32 +46,32 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 >
 > Investigations Made Easy is a private, on-device case file for investigators in HR, compliance, fraud, insurance, law, journalism and research. It organises, finds and documents; every finding is yours to make.
 >
-> Run the whole case: intake, triage, plan and tasks, evidence and exhibits, preservation notices, interviews and confirmed statements, evidence for and against each allegation, your finding and why, and closure — all in the case log.
+> Run the whole case: intake, triage, plan, evidence and exhibits, preservation notices, interviews, evidence for and against each allegation, your finding and closure — all in the case log.
 >
-> Point it at your folders of documents and email. It builds a structured record — people, dates, events, facts — and answers your questions citing the exact source passages. When the evidence isn't there, it tells you honestly instead of guessing.
+> Point it at your folders of documents and email. It builds a structured record — people, dates, events, facts — and answers your questions citing the exact source passages. When no passage supports an answer, it says so and shows the closest passage. Answers can still be incomplete or wrong — check the cited source.
 >
-> Ask AI about a case — with your permission, once per case. With an AI plan or your own Anthropic key, Claude can read a whole case and answer questions about it. The first time, the app lists which of the case's documents would go to Anthropic and which would not (privileged material never does), with the estimated cost; you allow it for that case or not, and are asked again when its documents change. Every AI statement is checked against the exact source line it cites before you see it; what cannot be matched is left out. The investigator decides.
+> Ask AI about a case — with your permission, once per case. With an AI plan or your own Anthropic key, Claude can read a whole case. The first time, the app lists which documents would go to Anthropic and which would not (privileged material never does), with the estimated cost; you are asked again when they change. Every AI statement is checked against the exact source line it cites before you see it; what cannot be matched is left out. The investigator decides.
 >
-> Private by design. Everything runs on your Mac, and the knowledge base is encrypted on disk. There's no account, no sign-in, and no analytics. By default your files and questions never leave your device; without AI, Ask returns the matching passages with your words highlighted and a link to the source. If you choose, turn on AI — Apple's on-device model, an AI plan, or your own Anthropic key — and you see exactly what would be sent before anything leaves your Mac.
+> Private by design. The app itself has no network access, and the knowledge base is encrypted on disk. No account, no sign-in, no analytics. Without AI, nothing leaves your Mac and Ask returns the matching passages with a link to the source. With an AI plan or your own Anthropic key, the documents of a case you allow go to Anthropic (recordings you transcribe to Google).
 >
 > • Cases, interviews, exhibits, holds, redaction log, chronology and an append-only case log
-> • Documents, email (including PST), chat exports, Cellebrite reports, scans and recordings
+> • Documents, email (including Outlook MSG and PST), chat exports, Cellebrite reports, scans and recordings
 > • Search and ask across everything — answers come with clickable citations
 > • Timelines, contradictions and gaps between documents; follow the money with sources
 > • Cited case reports, exhibit lists, custody reports and statements to export
-> • Optional Online tools: exchange rates, sanctions lists, registries, court records, web capture, transcription
+> • Optional Online lookups: exchange rates, sanctions, registries, court records, transcription
 >
 > Plans (auto-renewing; your storefront's price is shown in the app):
-> • Workbench $4.99/month or $39.99/year — every feature on your Mac, no AI of ours; optional Online AI with your own Anthropic key, billed by Anthropic. New subscribers can try every paid feature free for 14 days, then $4.99 a month or $39.99 a year.
+> • Workbench $4.99/month or $39.99/year — every feature on your Mac, no AI of ours; optional Online AI with your own Anthropic key, billed by Anthropic. Eligible new subscribers can try every Workbench feature free for 14 days (no AI credits), then the Workbench price.
 > • AI Included $39/month or $389.99/year — Workbench plus 2,000 AI credits a month.
-> • AI Pro $99/month or $989.99/year — Workbench plus 6,000 AI credits a month and larger whole-case reads.
-> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No trial on the AI plans and no free AI. Online AI is not available in every country; where it is not, only Workbench is offered.
+> • AI Pro $99/month (6,000 AI credits a month) or $989.99/year (5,400 a month) — Workbench plus larger whole-case reads.
+> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. A case's first read costs about 1–2 credits per 1,000 words; a question within an hour of the last usually 5–30. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No trial on the AI plans. Where Online AI is not offered, only Workbench is sold.
 >
 > Payment is charged to your Apple Account. Subscriptions renew automatically unless cancelled at least 24 hours before the period ends; manage or cancel in your Apple Account settings. When a plan ends, your cases stay readable and exportable.
 >
-> No AI writes your answers unless you turn it on. Turn on "Use AI to write answers" for Apple's on-device intelligence where your Mac supports it, or Online mode for an AI plan or your own Anthropic key.
+> No AI writes your answers unless you turn it on. After buying an AI plan or saving your Anthropic key, one step turns it on: "Allow AI to read case documents you permit". AI answers need macOS 26 or later.
 >
-> English only in this version. Documents in other languages are kept and keyword-searchable, but names and dates in them may be missed.
+> English only in this version; other languages are kept and keyword-searchable, but names and dates in them may be missed.
 >
 > An investigation aid for adults (18+). It organises and cites your evidence; it does not decide findings, guilt or outcomes — you do. AI output can be incomplete or wrong; verify against the cited originals. Not legal, financial or professional advice.
 >
@@ -92,8 +92,8 @@ The paywall (`Kalsmritikosh/UI/PurchaseGate.swift`) shows StoreKit's own localiz
   ₹249 / ₹1,999; AI Included ₹3,499 / ₹34,999; AI Pro ₹8,999 / ₹89,999; packs ₹899 (500) / ₹2,999 (2,000). The monthly AI
   prices assume Apple's rounded US points $39.00 / $99.00 exist (owner check, `release/IAP_SETUP.md` §6).
 - **What each includes:** Workbench — all personas and jobs, no AI of ours, Online AI with your own Anthropic key (billed by
-  Anthropic). AI Included — Workbench + 2,000 AI credits a month. AI Pro — Workbench + 6,000 AI credits a month + larger
-  whole-case reads (up to 3,000 credits per confirmed read vs 600). Yearly plans get the same credits every month.
+  Anthropic). AI Included — Workbench + 2,000 AI credits a month. AI Pro — Workbench + 6,000 AI credits a month (AI Pro yearly: 5,400 a month) + larger
+  whole-case reads (up to 3,000 credits per confirmed read vs 600). AI Included yearly gets the same 2,000 credits every month.
 - **Free trial:** Workbench only, 14 days, for eligible new subscribers; then the chosen Workbench price. The AI plans have none.
 - **Credits:** 1 credit = US$0.01 of Claude cost at Anthropic's published rates; each request is charged its actual cost rounded
   up (at least 1), a failed request costs nothing; the estimate is shown before a whole-case read; one request ≤ 400 credits; a
@@ -134,8 +134,12 @@ Optional: Settings ▸ Online with the credit meter; "What was sent" log.
 > 2. SUBSCRIBE (Sandbox account): the paywall shows Workbench (14-day free trial), AI Included and AI Pro, monthly and
 >    yearly, at storefront prices, with Restore purchases, Manage subscription, Terms and Privacy links.
 >
-> 3. AI INCLUDED (the publisher pays): buy AI Included monthly with the Sandbox account. Then Settings ▸ Modules ▸
->    Connection ▸ Online, and Settings ▸ Online ▸ choose "AI Included or AI Pro". "Check credits" shows 2,000 credits.
+> 3. AI INCLUDED (the publisher pays): buy AI Included monthly with the Sandbox account. Right after the purchase the app
+>    shows "Turn on AI for your AI plan" with the AI's terms and where documents go (Anthropic, through the publisher's
+>    relay). Choose "Allow AI to read case documents you permit". This one step turns on Online mode, "Use AI to write
+>    answers" and AI reading of case documents, and records the terms acceptance — no other setting is needed. (If you
+>    chose "Not now": Ask shows search results that name the missing step, with a "Turn on AI…" button; or Settings ▸
+>    Online ▸ "Turn on AI…".) Settings ▸ Online ▸ "Check credits" shows 2,000 credits.
 >    Requests go to the publisher's relay (Cloudflare Worker, <RELAY HOST>), which verifies the subscription with the App
 >    Store Server API (Sandbox transactions are accepted), reserves the request's worst-case cost in credits, forwards to
 >    Anthropic (Claude Opus 5) — or, for recordings, Google Gemini — under the publisher's own key, and charges the actual
@@ -150,8 +154,9 @@ Optional: Settings ▸ Online with the credit meter; "What was sent" log.
 >
 > 5. CREDIT PACKS: Settings ▸ Online ▸ "Buy 500 credits" (consumable, never expires), usable while an AI plan is active.
 >
-> 6. OWN KEY (Workbench): with Workbench, Settings ▸ Online ▸ "Claude (Anthropic)" — the only own-key provider — and paste an
->    Anthropic API key (Keychain).
+> 6. OWN KEY (Workbench): with Workbench, Settings ▸ Online ▸ "Claude (Anthropic)" — the only own-key provider — paste an
+>    Anthropic API key (Keychain) and choose "Save key"; the same one-step sheet appears ("Allow AI to read case documents
+>    you permit").
 >    The same permission sheet appears, with the estimate in dollars; requests go directly from the Mac to api.anthropic.com.
 >    We do not provide a key for this path.
 >

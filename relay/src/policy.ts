@@ -5,7 +5,9 @@
 // (Kalsmritikosh/Routing/Providers/Online/AIPricing.swift, checked by ci/guards/relay-host-match.sh).
 //
 // • 1 credit = US$0.01 of real provider cost (Anthropic's published rates below).
-// • AI Included: 2,000 credits a month; AI Pro: 6,000. Yearly plans get the same allowance every month.
+// • AI Included: 2,000 credits a month (monthly and yearly). AI Pro: 6,000 a month on the monthly plan,
+//   5,400 a month on the yearly plan (owner decision 2026-11-04: at Apple's 15 % commission and 27 % VAT
+//   included, a fully used 6,000 would cost more than AI Pro yearly earns; AI Included yearly stays covered).
 // • Allowance month = ANNIVERSARY month: it starts on the day of the current subscription period's
 //   purchase (Apple's `purchaseDate` of the latest transaction — the renewal for monthly plans, the
 //   start of the year for yearly plans, the moment of an upgrade) and resets on that day each month
@@ -34,8 +36,10 @@ export type Tier = "ai" | "pro";
 
 export interface PlanPolicy {
   label: string;
-  /** Credits each allowance month (monthly and yearly plans alike). */
+  /** Credits each allowance month on the monthly plan. */
   monthlyCredits: number;
+  /** Credits each allowance month on the yearly plan. */
+  yearlyMonthlyCredits: number;
   /** The most one ordinary request may reserve. */
   perRequestCredits: number;
   /** The most one confirmed "large read" (reading the whole case) may reserve. */
@@ -49,8 +53,8 @@ export interface PlanPolicy {
 }
 
 export const PLANS: Record<Tier, PlanPolicy> = {
-  ai:  { label: "AI Included", monthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits:   600, dailyCredits: 1_500, caseReadTokens: 300_000 },
-  pro: { label: "AI Pro",      monthlyCredits: 6_000, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000 },
+  ai:  { label: "AI Included", monthlyCredits: 2_000, yearlyMonthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits:   600, dailyCredits: 1_500, caseReadTokens: 300_000 },
+  pro: { label: "AI Pro",      monthlyCredits: 6_000, yearlyMonthlyCredits: 5_400, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000 },
 };
 const TIER_RANK: Record<Tier, number> = { ai: 1, pro: 2 };
 export const higherTier = (a: Tier | null, b: Tier | null): Tier | null =>
@@ -67,6 +71,13 @@ export const PRODUCTS = {
   credits500: "ecosanskritiinnovation.Kalsmritikosh.ai.credits500",
   credits2000: "ecosanskritiinnovation.Kalsmritikosh.ai.credits2000",
 } as const;
+
+/** The yearly subscription products (their allowance month is `yearlyMonthlyCredits`). */
+export const YEARLY_PRODUCTS: readonly string[] = [PRODUCTS.workbenchAnnual, PRODUCTS.aiAnnual, PRODUCTS.proAnnual];
+
+/** The credits of one allowance month for `tier` on a monthly or a yearly plan. */
+export const monthlyAllowance = (tier: Tier, yearly: boolean): number =>
+  yearly ? PLANS[tier].yearlyMonthlyCredits : PLANS[tier].monthlyCredits;
 
 /** Which AI tier a subscription product grants (Workbench grants none). */
 export const TIER_OF_PRODUCT: Record<string, Tier> = {

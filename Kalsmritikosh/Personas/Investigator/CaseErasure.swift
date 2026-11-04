@@ -12,6 +12,10 @@
 //     workspace uses; a shared document is never removed, only reported.
 //   • A content-free record is kept (`case_erasures`): who, when, why, how many rows — never the
 //     content. A person is recorded by a SHA-256 of the name, not the name.
+//   • Candidate review LB1/PB2 — the text the case sent to the AI ("What was sent", `outbound_log`:
+//     whole-case copies and the passages and questions of sends cleared for the case) is replaced by an
+//     erasure line; each entry keeps its time, destination, size and SHA-256 (the audit value), never
+//     the content.
 //
 
 import Foundation
@@ -204,6 +208,11 @@ public actor CaseEraser {
         }
         try db.exec("DELETE FROM investigation_cases WHERE id = ?;", [.uuid(caseID)])
         counts["investigation_cases"] = 1
+        // LB1 — what the case sent to the AI, kept in the outbound record: the text goes, the audit line stays.
+        if tables.contains("outbound_log") {
+            let n = try eraseOutboundText(db, caseID: caseID, erasureID: erasureID, at: date)
+            if n > 0 { counts["outbound_log (text removed)"] = n }
+        }
 
         // 4. The documents only this case used, when asked: every row derived from them.
         var vault: [String] = []
@@ -220,6 +229,10 @@ public actor CaseEraser {
             if try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE case_id = ?;", [.uuid(caseID)]) > 0 { left.append(t) }
         }
         if try count(db, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]) > 0 { left.append("investigation_cases") }
+        if tables.contains("outbound_log"), try count(db, "SELECT COUNT(*) FROM outbound_log WHERE (instr(detail, ?) > 0 OR instr(payload_text, ?) > 0) AND payload_text NOT LIKE ?;",
+                                                      [.text(caseMarker(caseID)), .text(caseMarker(caseID)), .text(erasedOutboundPrefix + "%")]) > 0 {
+            left.append("outbound_log")
+        }
         if eraseExclusive, !exclusive.isEmpty {
             let marks = exclusive.map { _ in "?" }.joined(separator: ",")
             if try count(db, "SELECT COUNT(*) FROM files WHERE id IN (\(marks));", exclusive.map { .text($0) }) > 0 { left.append("files") }
@@ -235,6 +248,50 @@ public actor CaseEraser {
                                        sourcesKeptInLibrary: eraseExclusive ? 0 : exclusive.count, documentsStillNaming: 0, vaultAddresses: vault)
         report.answersRemoved = answersRemoved
         return report
+    }
+
+    // MARK: - The outbound record (LB1)
+
+    /// The start of the line that replaces an erased case's text in the outbound record.
+    nonisolated static let erasedOutboundPrefix = "[Erased with case "
+
+    nonisolated static func caseMarker(_ caseID: UUID) -> String { OnlineCloudProvider.caseMarker(caseID) }
+
+    /// The line kept in place of the text (no content): which case, which erasure, when.
+    nonisolated static func erasedOutboundText(caseID: UUID, erasureID: UUID, at date: Date) -> String {
+        "\(erasedOutboundPrefix)\(caseID.uuidString) (erasure \(erasureID.uuidString), \(ISO8601DateFormatter().string(from: date))): the text sent was removed. The time, destination, size and SHA-256 of what was sent are kept.]"
+    }
+
+    /// Replace the text of every outbound entry of this case: entries carrying its marker (whole-case
+    /// reads, their references, and sends whose passages were cleared for the case) and the full copies
+    /// of the case texts its references point to. Returns how many entries lost their text.
+    static func eraseOutboundText(_ db: isolated Database, caseID: UUID, erasureID: UUID, at date: Date) throws -> Int {
+        let marker = caseMarker(caseID)
+        var digests = Set<String>()
+        let digest = try NSRegularExpression(pattern: #"case text (?:SHA-256 )?([0-9a-f]{64})"#)
+        for row in try db.query("SELECT detail, payload_text FROM outbound_log WHERE instr(detail, ?) > 0 OR instr(payload_text, ?) > 0;",
+                                [.text(marker), .text(marker)]) {
+            for text in [row.string(0), row.string(1)].compactMap({ $0 }) {
+                let ns = text as NSString
+                for m in digest.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                    digests.insert(ns.substring(with: m.range(at: 1)))
+                }
+            }
+        }
+        var conditions = ["instr(detail, ?) > 0", "instr(payload_text, ?) > 0"]
+        var binds: [SQLValue] = [.text(marker), .text(marker)]
+        for d in digests.sorted() {
+            conditions.append("instr(detail, ?) > 0")
+            binds.append(.text(OnlineCloudProvider.caseTextFullTag(d)))
+        }
+        let filter = "(\(conditions.joined(separator: " OR "))) AND payload_text NOT LIKE ?"
+        binds.append(.text(erasedOutboundPrefix + "%"))
+        let n = try count(db, "SELECT COUNT(*) FROM outbound_log WHERE \(filter);", binds)
+        if n > 0 {
+            try db.exec("UPDATE outbound_log SET payload_text = ? WHERE \(filter);",
+                        [.text(erasedOutboundText(caseID: caseID, erasureID: erasureID, at: date))] + binds)
+        }
+        return n
     }
 
     // MARK: - Person

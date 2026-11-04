@@ -122,6 +122,42 @@ struct CaseErasureTests {
         await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM case_actions WHERE case_id = ?;", [.uuid(f.caseB)]) }
     }
 
+    @Test("LB1/PB2: erasing a case removes the text it sent to the AI from the outbound record; the audit line (time, destination, size, SHA-256) stays; another case's entries stay")
+    func caseEraseRemovesOutboundText() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let log = OutboundLogRepository(database: f.db)
+        let dA = String(repeating: "a", count: 64), dLegacy = String(repeating: "b", count: 64), dB = String(repeating: "c", count: 64)
+        let markA = OnlineCloudProvider.caseMarker(f.caseA), markB = OnlineCloudProvider.caseMarker(f.caseB)
+        func entry(_ text: String, _ detail: String?) -> OutboundLogEntry {
+            OutboundLogEntry(id: UUID(), sentAt: Date(), provider: "included", model: "m", host: "relay.example", bytesSent: text.utf8.count,
+                             maskedCount: 0, payloadSHA256: "sha-" + String(text.count), payloadText: text, responseBytes: 10, outcome: "sent", detail: detail)
+        }
+        let rows = [
+            entry("SECRET whole case A text", OnlineCloudProvider.caseTextFullTag(dA, caseID: f.caseA)),
+            // A full copy written before entries carried the case marker, pointed to by a case-A reference.
+            entry("SECRET legacy case A text", OnlineCloudProvider.caseTextFullTag(dLegacy)),
+            entry("[Case text not repeated: … — \(markA), document set x, case text SHA-256 \(dLegacy), 9 bytes.]\n\nSECRET question", "case text \(dLegacy) (see the full copy)"),
+            entry("SECRET passages of case A", "case read; \(markA)"),
+            entry("SECRET whole case B text", OnlineCloudProvider.caseTextFullTag(dB, caseID: f.caseB)),
+            entry("question about something else", nil),
+        ]
+        for r in rows { try await log.record(r) }
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Retention ended", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        #expect(out.report.rowsErased["outbound_log (text removed)"] == 4)
+        let after = Dictionary(uniqueKeysWithValues: try await log.recent().map { ($0.id, $0) })
+        for r in rows.prefix(4) {
+            let e = try #require(after[r.id], "the entry itself is kept")
+            #expect(e.payloadText.hasPrefix(CaseEraser.erasedOutboundPrefix + f.caseA.uuidString), "\(e.payloadText)")
+            #expect(!e.payloadText.contains("SECRET"))
+            #expect(e.payloadSHA256 == r.payloadSHA256 && e.bytesSent == r.bytesSent && e.host == r.host && e.sentAt.timeIntervalSince1970.rounded() == r.sentAt.timeIntervalSince1970.rounded())
+        }
+        #expect(after[rows[4].id]?.payloadText == "SECRET whole case B text", "case B's record is untouched")
+        #expect(after[rows[5].id]?.payloadText == "question about something else")
+        #expect(rows[4].detail?.contains(markB) == true)
+    }
+
     @Test("A case erase without its documents keeps them in the library and says so")
     func caseEraseKeepsDocuments() async throws {
         let f = try await Self.boot()

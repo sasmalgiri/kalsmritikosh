@@ -23,8 +23,13 @@ public nonisolated struct CaseReadPermission: Codable, Sendable, Equatable {
     public let fingerprint: String
     public let grantedAt: Date
     public let documentCount: Int
-    public init(caseID: UUID, fingerprint: String, grantedAt: Date, documentCount: Int) {
+    /// Where the person allowed the documents to go (the Online provider: own key directly to Anthropic,
+    /// or an AI plan through the publisher's relay). A permission for one destination never covers the
+    /// other: switching asks again (candidate review LS3). nil = a permission stored before this field.
+    public let destination: String?
+    public init(caseID: UUID, fingerprint: String, grantedAt: Date, documentCount: Int, destination: String? = nil) {
         self.caseID = caseID; self.fingerprint = fingerprint; self.grantedAt = grantedAt; self.documentCount = documentCount
+        self.destination = destination
     }
 
     /// The fingerprint of a document set: SHA-256 over the sorted, length-prefixed (document, versions)
@@ -72,33 +77,43 @@ public nonisolated struct CaseReadPermittedSet: Sendable, Equatable {
 }
 
 /// Where case permissions are kept. Live: the app's defaults (a preference of the person, not ledger
-/// data — erasing a case also revokes it). Tests: in memory.
+/// data — erasing a case also revokes it, and "Stop AI for this case" in the case file). Tests: in memory.
 public final nonisolated class CaseReadPermissionStore: Sendable {
     private let load: @Sendable (UUID) -> CaseReadPermission?
     private let save: @Sendable (CaseReadPermission?, UUID) -> Void
     /// How long a permission lasts; nil = until the case's documents change (the default).
     private let maxAge: @Sendable () -> TimeInterval?
+    /// The destination the documents would go to now (nil = not tracked, tests).
+    private let destination: @Sendable () -> String?
 
     public init(load: @escaping @Sendable (UUID) -> CaseReadPermission?,
                 save: @escaping @Sendable (CaseReadPermission?, UUID) -> Void,
-                maxAge: @escaping @Sendable () -> TimeInterval? = { nil }) {
-        self.load = load; self.save = save; self.maxAge = maxAge
+                maxAge: @escaping @Sendable () -> TimeInterval? = { nil },
+                destination: @escaping @Sendable () -> String? = { nil }) {
+        self.load = load; self.save = save; self.maxAge = maxAge; self.destination = destination
     }
 
-    /// The permission for exactly this document set, still in force at `now`.
+    /// The permission for exactly this document set and this destination, still in force at `now`.
     public func isGranted(caseID: UUID, fingerprint: String, now: Date = Date()) -> Bool {
         guard let p = load(caseID), p.fingerprint == fingerprint else { return false }
         if let age = maxAge(), now.timeIntervalSince(p.grantedAt) > age { return false }
+        // LS3 — allowed for the own key (directly to Anthropic) is not allowed for an AI plan (through the
+        // publisher's relay), nor the other way round: the person is asked again.
+        if let current = destination(), p.destination != current { return false }
         return true
     }
 
     public func permission(caseID: UUID) -> CaseReadPermission? { load(caseID) }
 
     public func grant(caseID: UUID, fingerprint: String, documentCount: Int, at: Date = Date()) {
-        save(CaseReadPermission(caseID: caseID, fingerprint: fingerprint, grantedAt: at, documentCount: documentCount), caseID)
+        save(CaseReadPermission(caseID: caseID, fingerprint: fingerprint, grantedAt: at, documentCount: documentCount,
+                                destination: destination()), caseID)
     }
 
     public func revoke(caseID: UUID) { save(nil, caseID) }
+    /// LS4 — the person withdrew the AI permission of one case ("Stop AI for this case", or erasing the case).
+    /// (A separate name from `revoke`, which ci/guards/sensitive-scope-mutation-bypass.sh reserves.)
+    public func withdraw(caseID: UUID) { save(nil, caseID) }
 
     // MARK: - Live and test stores
 
@@ -123,13 +138,15 @@ public final nonisolated class CaseReadPermissionStore: Sendable {
         maxAge: {
             let days = UserDefaults.standard.integer(forKey: reaskAfterDaysKey)
             return days > 0 ? TimeInterval(days) * 86_400 : nil
-        })
+        },
+        destination: { OnlineSettings.kind.rawValue })
 
     /// An in-memory store (tests, simulations).
-    public static func inMemory(maxAge: TimeInterval? = nil) -> CaseReadPermissionStore {
+    public static func inMemory(maxAge: TimeInterval? = nil,
+                                destination: @escaping @Sendable () -> String? = { nil }) -> CaseReadPermissionStore {
         let box = OSAllocatedUnfairLock(initialState: [UUID: CaseReadPermission]())
         return CaseReadPermissionStore(load: { id in box.withLock { $0[id] } },
                                        save: { p, id in box.withLock { $0[id] = p } },
-                                       maxAge: { maxAge })
+                                       maxAge: { maxAge }, destination: destination)
     }
 }

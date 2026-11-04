@@ -1090,7 +1090,11 @@ public struct AskView: View {
                                                               access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
             // Plan A — without an AI reader, Ask returns search results (the best matching passages),
             // never rules-written prose; a verified exact field value shows as "Found in the record".
-            let answer = await appState.aiReadsDocuments() ? pipelineAnswer : OfflineSearchResults.present(pipelineAnswer, question: q)
+            // Candidate review UB1: the search results name the missing setup step, and the prompt above
+            // the window offers the one action that fixes it.
+            let answer = await appState.aiReadsDocuments()
+                ? pipelineAnswer
+                : OfflineSearchResults.present(pipelineAnswer, question: q, reason: AISetupCenter.shared.noteOffline()?.note)
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)

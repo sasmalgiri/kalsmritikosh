@@ -29,18 +29,18 @@ change — copy and registry move together or not at all.
 | Claim ID | Verbatim fragment in the listing | Source |
 |---|---|---|
 | asc.private-on-device | `private, on-device case file` | release/APP_STORE_LISTING.md |
-| asc.honest-refusal | `it tells you honestly` | release/APP_STORE_LISTING.md |
+| asc.honest-refusal | `When no passage supports an answer, it says so` | release/APP_STORE_LISTING.md |
 | asc.cited-answers | `answers come with clickable citations` | release/APP_STORE_LISTING.md |
-| asc.on-device-ai | `Apple's on-device intelligence` | release/APP_STORE_LISTING.md |
+| asc.on-device-ai | `AI answers need macOS 26 or later` | release/APP_STORE_LISTING.md |
 | asc.evidence-only-default | `No AI writes your answers unless you turn it on.` | release/APP_STORE_LISTING.md |
 | asc.judgement-human | `It organises, finds and documents` | release/APP_STORE_LISTING.md |
 | asc.no-decision | `It organises and cites your evidence` | release/APP_STORE_LISTING.md |
-| asc.english-only | `English only in this version.` | release/APP_STORE_LISTING.md |
-| asc.trial-then-buy | `try every paid feature free for 14 days, then $4.99 a month or $39.99 a year` | release/APP_STORE_LISTING.md |
+| asc.english-only | `English only in this version;` | release/APP_STORE_LISTING.md |
+| asc.trial-then-buy | `try every Workbench feature free for 14 days (no AI credits), then the Workbench price` | release/APP_STORE_LISTING.md |
 | asc.encrypted-at-rest | `the knowledge base is encrypted on` | release/APP_STORE_LISTING.md |
-| asc.no-account | `There's no account, no sign-in, and no analytics.` | release/APP_STORE_LISTING.md |
-| asc.private-by-default | `By default your files and questions` | release/APP_STORE_LISTING.md |
-| asc.consent-before-send | `exactly what would be sent before anything leaves your Mac` | release/APP_STORE_LISTING.md |
+| asc.no-account | `No account, no sign-in, no analytics.` | release/APP_STORE_LISTING.md |
+| asc.private-by-default | `Without AI, nothing leaves your Mac` | release/APP_STORE_LISTING.md |
+| asc.consent-before-send | `the documents of a case you allow go to Anthropic` | release/APP_STORE_LISTING.md |
 | asc.ai-checked | `Every AI statement is checked against the exact source line it cites` | release/APP_STORE_LISTING.md |
 | asc.case-permission | `with your permission, once per case` | release/APP_STORE_LISTING.md |
 

@@ -95,13 +95,6 @@
       "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged"
     },
     {
-      "id": "accuracy-adjudication",
-      "title": "Independent adjudication of a fresh held-out set on frozen code; ≤3 % wrong per mode and family (owner decision 2026-11-02, raised from ≤1 % and declared in docs/ACCURACY.md)",
-      "kind": "human",
-      "required": true,
-      "owner_decision_2026_11_04": "Not measured live on this candidate (simulation-only testing). Last measurements: ho22 (agent adjudication, commit e49783fd — before the whole-case reader) rules 0.00 % / Opus 5 0.22 % wrong, bar met there; real solved cases (agent judge, docs/agent-reviews/real-case-*.md) are NOT a pass: 44 % correct per question with Opus 5 everywhere on 5 tuned cases, round 1 only, the six new cases incomplete (bench key ran out of credit). Closes only by the owner's own record; the agent never writes it."
-    },
-    {
       "id": "distribution-archive",
       "title": "Mac App Store archive from the candidate commit, validated and uploaded (archive and upload identifiers recorded)",
       "kind": "artifact",
@@ -130,18 +123,6 @@
       "required": true
     },
     {
-      "id": "practitioner-review",
-      "title": "One practitioner per persona reviewed the deliverables (not the agent)",
-      "kind": "human",
-      "required": true
-    },
-    {
-      "id": "user-evaluation",
-      "title": "Five-user evaluation completed with recorded findings",
-      "kind": "human",
-      "required": true
-    },
-    {
       "id": "publisher-decision",
       "title": "Owner's binding decision to submit this exact candidate",
       "kind": "human",
@@ -161,14 +142,12 @@
     "ui-consent-and-plans",
     "output-routes",
     "persona-journeys-distribution",
-    "accuracy-adjudication",
     "distribution-archive",
     "testflight",
     "storekit",
     "legal-privacy",
-    "practitioner-review",
-    "user-evaluation",
     "publisher-decision"
   ],
-  "candidate_note": "2026-11-04: candidate investigations-next @ 7bb6323b (schema v169). Testing is SIMULATION-ONLY by owner decision 2026-11-04 (no paid live testing; the owner funds US$20 on the relay's Anthropic key for App Review only): StoreKit in-process (SKTestSession), a fake relay mirroring relay/src, a fake Anthropic API and the no-network replay reader. No gate below is passed by simulation; the simulation is its own gate (simulation-journeys). The <=3 % accuracy bar was NOT measured live on this candidate. See docs/RELEASE_CANDIDATE.md, current section."
+  "candidate_note": "2026-11-04: candidate investigations-next @ 7bb6323b (schema v169). Testing is SIMULATION-ONLY by owner decision 2026-11-04 (no paid live testing; the owner funds US$20 on the relay's Anthropic key for App Review only): StoreKit in-process (SKTestSession), a fake relay mirroring relay/src, a fake Anthropic API and the no-network replay reader. No gate below is passed by simulation; the simulation is its own gate (simulation-journeys). The <=3 % accuracy bar was NOT measured live on this candidate. See docs/RELEASE_CANDIDATE.md, current section.",
+  "owner_decision_2026_11_04_gates": "Owner decided to ship with Opus 5 and without live accuracy measurement; agent reviews kept as evidence, not as gates. Removed gates: accuracy-adjudication, practitioner-review, user-evaluation (their AGENT reviews stay in docs/agent-reviews/candidate-review-7d720fe1-*.md). legal-privacy stays a gate."
 }

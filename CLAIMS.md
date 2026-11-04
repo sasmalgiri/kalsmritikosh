@@ -60,7 +60,7 @@ Proof kinds:
 | `studios.unsealed-disclosure` | `UNSEALED` | grep:_UNSEALED:Kalsmritikosh/Core/Security/ConformanceSeal.swift |
 | `receipts.sealed` | `sealed receipt` | ci:report-receipt-integrity |
 | `answers.traceable` | `every line traceable to a source` | test:ungroundedFlagged |
-| `answers.refuses-to-guess` | `refuses to guess` | test:missingEvidenceIncomplete |
+| `answers.refuses-to-guess` | `says so when no passage supports an answer` | test:missingEvidenceIncomplete |
 | `answers.evidence-gate` | `enforced evidence gate` | test:missingEvidenceIncomplete |
 | `answers.refuses-unsupported` | `refuses when the record` | test:missingEvidenceIncomplete |
 | `answers.ai-checked` | `checks each AI statement against the source passage it cites` | test:unverifiedDroppedAndNotStated |
@@ -86,7 +86,7 @@ Proof kinds:
 | `privacy.ai-included-relay` | `It keeps only counts` | grep:counts only:relay/src/index.ts |
 | `privacy.ai-by-country` | `switches Online AI off for App Store accounts` | grep:AI_BLOCKED_STOREFRONTS:relay/src/policy.ts |
 | `privacy.online-tools` | `the name you check is not sent` | test:client |
-| `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState.swift |
+| `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState+CaseReading.swift |
 | `privacy.case-permission` | `You are asked once for each case` | test:consentOncePerDocumentSet |
 | `privacy.question-no-prompt` | `your questions are sent without a further prompt` | test:questionOnlyInsidePermittedCase |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |

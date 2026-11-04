@@ -178,7 +178,7 @@
     <a class="btn primary" href="#get">Coming soon for Mac</a>
     <a class="btn ghost" href="#why-exists">Start with “why”</a>
   </div>
-  <div class="req muted">Requires macOS 15.6+ for ingest, search, timeline and exports. AI-written answers require macOS 26+ with Apple Intelligence enabled.</div>
+  <div class="req muted">Requires macOS 15.6+ for ingest, search, timeline and exports. AI-written answers (an AI plan or your own Anthropic key) need macOS 26+; Apple's on-device model also needs Apple Intelligence.</div>
 
   <nav class="qnav" aria-label="The three questions">
     <a href="#why-exists"><span class="n">1</span>Why does it exist?</a>
@@ -196,7 +196,7 @@
         <span class="cite">2 sources</span>
       </div>
     </div>
-    <div class="muted" style="font-size:13px">Every claim carries the exact evidence that supports it. If your documents don't say it, the answer says so — it won't guess.</div>
+    <div class="muted" style="font-size:13px">Every claim carries the exact evidence that supports it. Every AI statement is checked against the source line it cites, and statements that cannot be matched are left out. Answers can still be incomplete or wrong — check the cited source.</div>
   </div>
 </div></header>
 
@@ -230,9 +230,9 @@
   </div>
 
   <p class="gap-line">
-    <b>The gap it fills:</b> a place to ask your own documents that <b>stays entirely on your Mac</b> and
-    <b data-claim="answers.refuses-to-guess">refuses to guess</b> — every answer tied to the exact evidence, so you can hand it the work you
-    <i>can't</i> get wrong: the case, the claim, the report, the family history.
+    <b>The gap it fills:</b> a place to ask your own documents that <b>keeps them on your Mac unless you allow a case to be read by Online AI</b> and
+    <b data-claim="answers.refuses-to-guess">says so when no passage supports an answer</b> — every answer tied to the exact evidence, so you can check it
+    yourself: the case, the claim, the report, the family history.
   </p>
 </div></section>
 
@@ -262,11 +262,11 @@
   <p class="subhead">Why that design changes everything</p>
   <div class="grid g3">
     <div class="card"><div class="ic">📎</div><h3>Answers carry their sources</h3><p>Every claim is tied to its exact source — the file plus the most precise locator the format allows: page, line, sheet &amp; row, slide, or email message. Click any citation to see the original — no hunting through a 40-page PDF.</p></div>
-    <div class="card"><div class="ic">🚫</div><h3>It won't guess</h3><p>It won't guess about your documents. An evidence gate decides: answer, water down, refuse, or show a conflict. Anything from outside your documents is answered separately and clearly marked.</p></div>
+    <div class="card"><div class="ic">🚫</div><h3>It shows its sources</h3><p>Every AI statement is checked against the source line it cites; statements that cannot be matched are left out. Answers can still be incomplete or wrong, so check the cited source. An evidence gate decides: answer, water down, refuse, or show a conflict. Anything from outside your documents is answered separately and clearly marked.</p></div>
     <div class="card"><div class="ic">⚖️</div><h3>Conflicts are surfaced, not averaged</h3><p>When two documents disagree, you see both sides with their sources — the exact thing other tools quietly paper over.</p></div>
     <div class="card"><div class="ic">🕘</div><h3>A real timeline</h3><p>Dated facts across your whole archive are reconstructed into one chronology — with honest markers for what's proven vs. inferred.</p></div>
     <div class="card"><div class="ic">📤</div><h3>Export with citations intact</h3><p>Turn findings into a work product — a chronology, a brief, a report — with the citations baked in. No walled garden.</p></div>
-    <div class="card" data-claim="privacy.private-by-design"><div class="ic">🔐</div><h3>Private by design</h3><p>Runs 100% on your Mac using Apple's on-device model. No account, no uploads, no analytics. Erase everything in one click.</p></div>
+    <div class="card" data-claim="privacy.private-by-design"><div class="ic">🔐</div><h3>Private by design</h3><p>The app itself has no network access: in Private mode everything runs on your Mac. With an AI plan or your own Anthropic key, the documents of a case you allow are sent to Anthropic (and recordings you transcribe to Google) — nothing else. No account, no analytics. Erase everything in one click.</p></div>
   </div>
 </div></section>
 
@@ -312,7 +312,7 @@
         <li>Ask in plain language; answers cite their evidence</li>
         <li>Confidence, timeliness and conflicts on every answer</li>
         <li>Reads, extracts, cross-checks &amp; embeds every source — that's the time</li>
-        <li data-claim="privacy.on-device">Runs 100% on your Mac — no accounts, no uploads</li>
+        <li data-claim="privacy.on-device">Apple's on-device model runs on your Mac; with Online AI (an AI plan or your own key) a case you allow is read by Anthropic</li>
         <li>Runs in the background; use Lightning meanwhile, switch AI off anytime</li>
       </ul>
       <a class="btn primary" href="#get">🧠 Deeper answers — minutes to hours</a>
@@ -411,10 +411,10 @@
   </div>
 
   <!-- personas -->
-  <p class="subhead">Built for people who can't afford to be wrong</p>
+  <p class="subhead">Built for people who check every source</p>
   <p class="lead">Pick your focus on first launch — the app speaks your profession's own language and tailors the workspace to the jobs you actually do.</p>
   <div class="grid g3">
-    <a class="card plink" href="for/lawyers.html"><div class="ic">⚖️</div><h3>Solo &amp; small-firm lawyers</h3><p>Case chronology, privilege log, exhibit list, Bates-style document production — the document-review workflow big-firm platforms charge per-gigabyte for — for one plain monthly or yearly plan. No processing fees, ever.</p></a>
+    <a class="card plink" href="for/lawyers.html"><div class="ic">⚖️</div><h3>Solo &amp; small-firm lawyers</h3><p>Case chronology, privilege log, exhibit list, Bates-style document production — the document-review workflow big-firm platforms charge per-gigabyte for — for a monthly or yearly plan (AI credits are included with the AI plans). No per-gigabyte processing fees.</p></a>
     <a class="card plink" href="for/investigators.html"><div class="ic">🔍</div><h3>Investigators</h3><p>Subject workups, chain of custody, timeline &amp; link analysis — who knew what, and when, with the gaps in the record made visible.</p></a>
     <a class="card plink" href="for/siu.html"><div class="ic">🛡️</div><h3>Insurance fraud (SIU)</h3><p>Work a referred claim file: red-flag worksheets (indicators, never proof), statement comparison, loss chronology, and a defensible SIU report.</p></a>
     <a class="card plink" href="for/forensic-accountants.html"><div class="ic">🧾</div><h3>Forensic accountants</h3><p>Follow the money — funds tracing, tracing schedules where every amount drills to its source document, exhibit-ready expert reports.</p></a>
@@ -464,7 +464,7 @@
       <th>What matters</th><th class="col-us">Investigations Made Easy</th><th>Cloud chatbots</th><th>Cloud “notebook” AIs</th>
     </tr></thead>
     <tbody>
-      <tr><td class="k">Runs fully on your device</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+      <tr><td class="k">Works on your device without uploading your documents (Private mode; Online AI sends only a case you allow)</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
       <tr><td class="k">Your files used for training</td><td class="col-us yes">Never</td><td class="k">Varies by provider, plan &amp; settings</td><td class="k">Varies by provider &amp; settings</td></tr>
       <tr><td class="k">Citation precision</td><td class="col-us yes">File + exact locator — page, line, timestamp or record</td><td class="k">Available in some modes; precision varies</td><td class="k">Inline citations; precision varies</td></tr>
       <tr><td class="k">Refuses when evidence is missing</td><td class="col-us yes" data-claim="answers.evidence-gate">Yes — enforced evidence gate</td><td class="k">Depends on product &amp; mode</td><td class="k">Source-grounded modes may decline</td></tr>
@@ -485,7 +485,7 @@
   <details><summary>How accurate are the answers?</summary><p data-claim="accuracy.declared">Accuracy has not been measured on this version of the app. Earlier versions were measured on public U.S. Department of Justice releases; those results describe earlier code, not this version, so no accuracy figure is claimed here. Every AI statement is checked against the exact source line it cites before you see it, and what cannot be matched is left out — but check the cited source before you rely on an answer. The investigator decides. The method and the earlier measurement records are in ACCURACY.md in the project repository.</p></details>
   <details><summary>What can I feed it?</summary><p>Documents (PDF, Word DOC/DOCX, RTF, OpenDocument, EPUB, HTML, Markdown, text), spreadsheets (Excel XLS/XLSX, CSV, ODS), PowerPoint (PPTX), and email (EML, MBOX, Apple Mail, Outlook MSG/PST, Lotus Notes NSF). ZIP archives are opened and read file by file, within safety limits; RAR and 7z archives are kept but not opened. Scans and images are read with on-device OCR, so their accuracy depends on the scan. With “Transcribe audio &amp; video” on (the default), the words spoken in recordings and videos are turned into text on your Mac by Apple’s on-device speech recognition (English), with a time on every line so you can play the moment back; with it off they are kept and searchable by name and date. The transcript is as accurate as the recording allows — clear speech is transcribed closely, noise, accents and crosstalk lower it, and numbers may be written differently — so check any quote you rely on against the recording. The app reads what is <em>said</em>; it does not watch a video, recognise who is speaking or what is shown, or work out what happened from the footage. PowerPoint 97–2003 (PPT) and Keynote files are kept but not read yet. Reading is tuned for English: documents in other languages are kept and keyword-searchable, but names, dates and facts in them may be missed.</p></details>
   <details><summary>Will it mix up two people with the same name?</summary><p>It combines two names only when they clearly refer to the same person or organization, and every combination is listed under Knowledge → Merged. You can undo any of them with Unmerge; nothing is deleted.</p></details>
-  <details><summary>What do I need to run it?</summary><p>A Mac on macOS 15.6 or later for ingest, search, and evidence review. AI-written answers use Apple's on-device model, which requires macOS 26 or later with Apple Intelligence enabled on a supported Mac — everything else works without it.</p></details>
+  <details><summary>What do I need to run it?</summary><p>A Mac on macOS 15.6 or later for ingest, search, and evidence review. AI-written answers need macOS 26 or later: with an AI plan or your own Anthropic key (no Apple Intelligence needed), or with Apple's on-device model (Apple Intelligence enabled on a supported Mac). Everything else works without AI.</p></details>
   <details data-claim="privacy.erase-everything"><summary>How do I delete my data?</summary><p>Settings → Your data → “Delete all my data.” It erases the whole ledger instantly; your original files on disk are untouched.</p></details>
 </div></section>
 
@@ -494,7 +494,7 @@
   <h2>Answers you can actually trust.</h2>
   <p class="lead center">Private. Cited. On your Mac.</p>
   <div class="cta"><a class="btn primary" href="#get">Coming soon for Mac</a></div>
-  <div class="req muted">Requires macOS 15.6+ · AI answers need macOS 26+ with Apple Intelligence</div>
+  <div class="req muted">Requires macOS 15.6+ · AI answers need macOS 26+</div>
 </div></section>
 
 <footer><div class="wrap">

@@ -6,7 +6,7 @@ import { MemoryStore } from "../src/store.ts";
 import {
   ANTHROPIC_RATES, APPLE_STATUS, CHARS_PER_TOKEN, IMAGE_TOKENS, LARGE_READ_MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, PRODUCTS,
   TOKEN_OVERHEAD, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, maxInputTokens, maxTokensForText,
-  monthKey, refundSplit, sellable, usd, worstCaseCost,
+  monthKey, monthlyAllowance, refundSplit, sellable, usd, worstCaseCost,
 } from "../src/policy.ts";
 
 const NOW = new Date("2026-11-15T10:00:00Z");
@@ -283,6 +283,23 @@ test("upgrade to AI Pro: 6,000 credits from the upgrade; Apple's grace keeps AI;
   const calls = g.appleCalls;
   assert.equal((await handle(ask(question), gs.env, gs.deps)).status, 200);
   assert.equal(g.appleCalls, calls, "cached");
+});
+
+test("AI Pro yearly: 5,400 credits a month (owner decision 2026-11-04); AI Pro monthly 6,000; AI Included yearly 2,000", async () => {
+  assert.equal(monthlyAllowance("pro", true), 5_400);
+  assert.equal(monthlyAllowance("pro", false), 6_000);
+  assert.equal(monthlyAllowance("ai", true), 2_000);
+  assert.equal(monthlyAllowance("ai", false), 2_000);
+  const y = world(); y.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.proAnnual, purchaseDate: NOW.getTime() - DAY, expires: NOW.getTime() + 364 * DAY }];
+  const ys = await setup(y);
+  const k = await kals(await status(ys));
+  assert.deepEqual([k.plan, k.monthlyCredits, k.allowanceLeft], ["pro", 5400, 5400] as unknown[]);
+  // The yearly allowance is what is reserved against: 5,400 used up refuses the next request.
+  const used = await setup(y);
+  used.store.allowance.set(`${SUB}|${period(y)}`, 5_400);
+  assert.equal((await handle(ask(question), used.env, used.deps)).status, 402);
+  const ai = world(); ai.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.aiAnnual, purchaseDate: NOW.getTime() - DAY, expires: NOW.getTime() + 364 * DAY }];
+  assert.equal((await kals(await status(await setup(ai)))).monthlyCredits, 2000);
 });
 
 test("transcription: Gemini's own cap, metered in credits", async () => {

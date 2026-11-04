@@ -69,11 +69,14 @@ struct OnlineStatusBar: View {
     @Environment(AppState.self) private var appState
     @State private var status = OnlineStatus.shared
     @State private var meter = AICreditMeter.shared
+    @State private var setup = AISetupCenter.shared
     @State private var version = 0
 
     var body: some View {
         let _ = version
         VStack(spacing: 0) {
+            // UB1 — the last answer was search results: name the missing step, with its one action.
+            if let cause = setup.lastOfflineCause { AISetupPrompt(cause: cause) }
             if ConnectivityMode.current == .online {
                 HStack(spacing: 8) {
                     Label("Online — answers may use \(OnlineSettings.kind.displayName)", systemImage: "icloud")
@@ -150,6 +153,9 @@ struct OnlineSettingsSection: View {
     @State private var log: [OutboundLogEntry] = []
     @State private var showLog = false
     @State private var retiredNotice = OnlineSettings.retiredProviderNotice
+    /// UB1 — the one-step setup offered after a key is saved, or from "Turn on AI…" here.
+    @State private var setupKind: OnlineProviderKind?
+    @State private var setup = AISetupCenter.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -189,6 +195,10 @@ struct OnlineSettingsSection: View {
             }
         }
         .onAppear { retiredNotice = OnlineSettings.retiredProviderNotice }
+        .sheet(item: $setupKind) { k in
+            AISetupSheet(kind: k) { refreshFromSettings() }.environment(appState)
+        }
+        .onChange(of: setup.version) { _, _ in refreshFromSettings() }
         .sheet(isPresented: $showLog) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("What was sent").font(.title3.bold())
@@ -221,6 +231,17 @@ struct OnlineSettingsSection: View {
             // Review L2 — whether this provider may receive case documents, on whose terms.
             Text(kind.documentTerms).font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // UB1 — the one step instead of hidden switches: shown while AI cannot yet read for this provider.
+            if let cause = setupCause, cause != .blockedStorefront, cause != .noPlanOrKey {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(cause.note + ".").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if cause.actionTitle == "Turn on AI…" {
+                        Button("Turn on AI…") { setupKind = kind }.font(.caption)
+                            .accessibilityIdentifier("online.turnOnAI")
+                    }
+                }
+            }
             if kind.mayReceiveDocuments {
                 Toggle(kind.documentAttestation, isOn: Binding(
                     get: { documentTermsConfirmed },
@@ -232,6 +253,23 @@ struct OnlineSettingsSection: View {
             } else {
                 AIIncludedStatusView(store: PurchaseCenter.shared)
             }
+    }
+
+    /// What still stops AI for the provider shown here (nil = ready).
+    private var setupCause: AISetupCause? { let _ = setup.version; return setupCauseFor(kind) }
+
+    private func setupCauseFor(_ k: OnlineProviderKind) -> AISetupCause? {
+        var s = AISetup.snapshot()
+        s.kind = k
+        if k == .anthropic { s.hasOwnKey = hasKey }
+        return AISetup.cause(s)
+    }
+
+    private func refreshFromSettings() {
+        kind = OnlineSettings.kind
+        model = OnlineSettings.model
+        hasKey = OnlineSettings.apiKey(for: kind) != nil
+        documentTermsConfirmed = OnlineSettings.confirmedDocumentTerms(for: kind) == kind.documentTermsVersion
     }
 
     /// The person's own provider: model and key.
@@ -247,6 +285,8 @@ struct OnlineSettingsSection: View {
                     OnlineSettings.model = model
                     hasKey = OnlineSettings.setAPIKey(key, for: kind) && !key.isEmpty
                     key = ""
+                    // UB1 — a saved Anthropic key: offer the same one-step setup as an AI plan.
+                    if hasKey, kind == .anthropic, setupCauseFor(.anthropic) != nil { setupKind = .anthropic }
                 }
                 .disabled(key.isEmpty)
                 if hasKey {
@@ -285,7 +325,7 @@ struct AIIncludedStatusView: View {
                 Text("Checking sends only your App Store subscription number to the AI service — nothing from your cases.")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own Anthropic key.")
+                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000 a month; 5,400 on the yearly plan) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own Anthropic key.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if AIRegion.sellsAIProducts {
                     Button("See plans") { store.paywallRequested = "use the AI plans" }

@@ -76,7 +76,7 @@ struct AICreditsTests {
         #expect(m.refusal(credits: 700, largeRead: true)?.contains("AI Pro reads more at once") == true)
         m.apply(AIIncludedRelay.Receipt(plan: "ai", monthlyCredits: 2000, allowanceLeft: 30, topUps: 0, dailyUsed: 0, dailyLimit: 1500,
                                         perRequestCredits: 400, caseReadCredits: 600, periodEndsAt: nil, charged: nil, reserved: nil))
-        #expect(m.refusal(credits: 50, largeRead: false)?.contains("30 are left") == true)
+        #expect(m.refusal(credits: 50, largeRead: false)?.contains("Up to 50 credits are held while this runs (it usually costs far less), and you have 30") == true)
         m.planChanged(.aiPro)
         #expect(m.limits?.caseReadCredits == 3_000)
         m.planChanged(nil)
@@ -125,7 +125,7 @@ struct AICreditsTests {
         let ts = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "_", with: "")
         func plan(_ name: String, _ l: AIPricing.PlanLimits) {
             let line = ts.split(separator: "\n").first { $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(name):") && $0.contains("monthlyCredits") }.map(String.init) ?? ""
-            for (k, v) in [("monthlyCredits", l.monthlyCredits), ("perRequestCredits", l.perRequestCredits), ("caseReadCredits", l.caseReadCredits), ("dailyCredits", l.dailyCredits)] {
+            for (k, v) in [("monthlyCredits", l.monthlyCredits), ("yearlyMonthlyCredits", l.yearlyMonthlyCredits), ("perRequestCredits", l.perRequestCredits), ("caseReadCredits", l.caseReadCredits), ("dailyCredits", l.dailyCredits)] {
                 #expect(line.range(of: "\(k):\\s*\(v)\\b", options: .regularExpression) != nil, "\(name).\(k) = \(v) not in: \(line)")
             }
         }

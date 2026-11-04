@@ -67,6 +67,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     public static let verifiedKind = "aiVerifiedAnswer"
     public static let needsReviewKind = "aiVerifiedNeedsReview"
     public static let notStatedKind = "aiNotStated"
+    /// PB1 — the AI proposed statements and none checked out: not a "not stated" finding.
+    public static let unconfirmedKind = "aiUnconfirmed"
     static let failedMarker = "(The AI reading could not be used"
 
     public static let maxPassages = 16
@@ -656,13 +658,14 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         case verifiedKind?: return "ai-verified"
         case needsReviewKind?: return "needs-review"
         case notStatedKind?: return "ai-not-stated"
+        case unconfirmedKind?: return "ai-unconfirmed"
         default: return a.body.contains(failedMarker) ? "rules-ai-failed" : "rules"
         }
     }
 
     /// True for the answers this composer wrote: the shape gates leave them as they are.
     public static func wrote(_ a: VerifiedAnswer) -> Bool {
-        [verifiedKind, needsReviewKind, notStatedKind].contains(a.intentKind ?? "")
+        [verifiedKind, needsReviewKind, notStatedKind, unconfirmedKind].contains(a.intentKind ?? "")
     }
 }
 

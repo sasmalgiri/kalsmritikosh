@@ -57,7 +57,7 @@ an introductory offer on AI Included or AI Pro.
 | Product | Display name | Description |
 |---|---|---|
 | aipro.monthly | `AI Pro monthly` | `Workbench plus 6,000 AI credits and big reads` |
-| aipro.annual | `AI Pro yearly` | `Workbench plus 6,000 AI credits and big reads` |
+| aipro.annual | `AI Pro yearly` | `Workbench plus 5,400 AI credits and big reads` |
 | ai.monthly | `AI Included monthly` | `Workbench plus 2,000 AI credits each month` |
 | ai.annual | `AI Included yearly` | `Workbench plus 2,000 AI credits each month` |
 | edition.monthly | `Workbench monthly` | `Every feature on your Mac; own Anthropic key` |
@@ -133,6 +133,15 @@ and draw on the publisher's capped Anthropic key).
    packs ₹899 (500 credits) / ₹2,999 (2,000 credits). Set them as India overrides (§2, §3); confirm each is an India price point
    (if not, stop and decide). They include GST. The credits are US-dollar-cost based: ₹3,499 at the current rate is close to
    US$39 before tax, so the margin after GST and Apple's commission is lower in India than in the US.
-3. **AI-blocked storefronts (decided):** the AI subscriptions and both packs are **not** available in the 13 storefronts listed
+3. **AI Pro yearly allowance (decided 2026-11-04): 5,400 credits a month, not 6,000.** At Apple's 15 % commission (Small
+   Business Program) and the highest EU VAT (27 %, prices include VAT), AI Pro yearly nets about $989.99 ÷ 1.27 × 0.85 ÷ 12 ≈
+   **$55.2 a month**; a fully used 6,000 credits would cost $60 of Claude, a loss. 5,400 credits = $54 stays covered. AI Pro
+   monthly keeps 6,000 ($99 ÷ 1.27 × 0.85 ≈ $66.3 ≥ $60). AI Included keeps 2,000 monthly and yearly: yearly nets $389.99 ÷ 1.27 ×
+   0.85 ÷ 12 ≈ **$21.75 ≥ $20**; monthly $39 ÷ 1.27 × 0.85 ≈ $26.1. At Apple's 30 % first-year rate (before the Small Business
+   Program applies) the yearly plans do not cover full use in high-VAT storefronts — confirm the Small Business Program is
+   active before AI sales. The relay grants the allowance by product (`relay/src/policy.ts` `monthlyAllowance`,
+   `yearlyMonthlyCredits`); the app, the paywall, the `.storekit` file, the listing and the terms state "AI Pro yearly: 5,400
+   credits a month".
+4. **AI-blocked storefronts (decided):** the AI subscriptions and both packs are **not** available in the 13 storefronts listed
    in §2 — remove them from each AI product's availability. Only Workbench is sold there. Other storefronts: Apple's automatic
    equivalents apply unless you override them.

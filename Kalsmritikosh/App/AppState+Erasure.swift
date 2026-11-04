@@ -83,6 +83,8 @@ extension AppState {
             _ = await hnsw.build(from: vectors)
         }
         pendingErasureWork[caseID.uuidString] = residue.isEmpty ? nil : residue
+        // LS4 — the case's AI permission ends with the case (also covered by the sweep below in the app).
+        if !TestHost.isActive { CaseReadPermissionStore.live.withdraw(caseID: caseID) }
         let defaults = Self.erasePreferences
         for key in defaults.dictionaryRepresentation().keys where key.contains(caseID.uuidString) || key.contains(caseID.uuidString.lowercased()) {
             defaults.removeObject(forKey: key)

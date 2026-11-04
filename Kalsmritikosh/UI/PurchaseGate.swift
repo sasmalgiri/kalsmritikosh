@@ -235,8 +235,8 @@ struct PurchaseScreen: View {
                         } else {
                             Text("Charged every month").font(.caption).foregroundStyle(.secondary)
                         }
-                        if let l = o.plan.tier.limits {
-                            Text("\(l.monthlyCredits.formatted()) AI credits every month · no free trial").font(.caption2).foregroundStyle(.secondary)
+                        if o.plan.includesAI {
+                            Text("\(o.plan.monthlyCredits.formatted()) AI credits every month · no free trial").font(.caption2).foregroundStyle(.secondary)
                         } else {
                             Text(o.eligibleForTrial ? "14-day free trial, then this price" : "No free trial on this account").font(.caption2).foregroundStyle(.secondary)
                         }

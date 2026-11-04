@@ -11,7 +11,7 @@
 import {
   AI_BLOCKED_REQUEST_COUNTRIES, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
   TOPUP_CREDITS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, higherTier, maxInputTokens,
-  monthKey, ratesFor, refundSplit, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost,
+  monthKey, monthlyAllowance, ratesFor, refundSplit, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost, YEARLY_PRODUCTS,
   type AnthropicUsage, type CacheUse, type Micro, type Refusal, type Tier,
 } from "./policy.ts";
 import { D1Store, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
@@ -77,22 +77,23 @@ async function planStatus(sub: string, env: Env, d: Deps): Promise<PlanStatus> {
   for (const s of statuses) {
     const tier = grantedTier(s.status, s.transaction, now);
     if (tier && higherTier(best.tier, tier) === tier && tier !== best.tier) {
-      best = { tier, anchor: s.transaction.purchaseDate, expires: s.transaction.expiresDate ?? s.transaction.purchaseDate, checkedAt: now.getTime() };
+      best = { tier, anchor: s.transaction.purchaseDate, expires: s.transaction.expiresDate ?? s.transaction.purchaseDate, checkedAt: now.getTime(),
+               yearly: YEARLY_PRODUCTS.includes(s.transaction.productId) };
     }
   }
   await d.store.cacheStatus(sub, best);
   return best;
 }
 
-interface Account { sub: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string }
+interface Account { sub: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number }
 
 async function receipt(a: Account, env: Env, d: Deps, extra: Record<string, unknown> = {}) {
   const b = await d.store.balance(a.sub, a.period.key, a.day);
   const plan = PLANS[a.tier];
   return {
-    plan: a.tier, monthlyCredits: plan.monthlyCredits,
-    allowanceUsed: Math.min(plan.monthlyCredits, b.allowanceUsed),
-    allowanceLeft: Math.max(0, plan.monthlyCredits - b.allowanceUsed),
+    plan: a.tier, monthlyCredits: a.monthlyCredits,
+    allowanceUsed: Math.min(a.monthlyCredits, b.allowanceUsed),
+    allowanceLeft: Math.max(0, a.monthlyCredits - b.allowanceUsed),
     topUps: b.topUps,
     dailyUsed: b.dailyUsed, dailyLimit: dailyLimit(env, a.tier),
     perRequestCredits: plan.perRequestCredits, caseReadCredits: plan.caseReadCredits,
@@ -130,8 +131,7 @@ async function metered(a: Account, provider: Provider, worstMicro: Micro, ceilin
   if (!(await d.store.reserveSpend(month, provider, worstMicro, caps(env)[provider], stopAt(env, provider)))) {
     return refuse(REFUSALS.capacityPaused());
   }
-  const plan = PLANS[a.tier];
-  const held = await d.store.reserveCredits(a.sub, a.period.key, plan.monthlyCredits, a.day, dailyLimit(env, a.tier), reserved);
+  const held = await d.store.reserveCredits(a.sub, a.period.key, a.monthlyCredits, a.day, dailyLimit(env, a.tier), reserved);
   if (!held.ok) {
     await d.store.adjustSpend(month, provider, -worstMicro);
     return refuse(held.reason === "daily" ? REFUSALS.dailyLimit(dailyLimit(env, a.tier)) : REFUSALS.creditsUsed(reserved, held.balance));
@@ -255,7 +255,8 @@ export async function handle(req: Request, env: Env, d: Deps): Promise<Response>
   try { status = await planStatus(sub, env, d); } catch { return refuse(REFUSALS.storeUnavailable()); }
   if (!status.tier) return refuse(REFUSALS.notSubscribed());
   const now = d.now();
-  const a: Account = { sub, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day: dayKey(now) };
+  const a: Account = { sub, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day: dayKey(now),
+                       monthlyCredits: monthlyAllowance(status.tier, status.yearly === true) };
   // GET or POST: the app's network helper sends POST only.
   if (url.pathname === "/v1/status") {
     const spentA = await d.store.spent(monthKey(now), "anthropic");

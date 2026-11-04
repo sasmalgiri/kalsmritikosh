@@ -56,7 +56,7 @@ final class AICreditMeter {
                 : "This request needs about \(credits.formatted()) credits, more than the \(ceiling) one request may use. Select fewer passages."
         }
         if let b = balance, credits > b {
-            return "This needs about \(credits.formatted()) credits and \(b.formatted()) are left. Buy a credit pack in Settings ▸ Online, wait for the monthly reset, or use your own key."
+            return "Up to \(credits.formatted()) credits are held while this runs (it usually costs far less), and you have \(b.formatted()). Buy a credit pack in Settings ▸ Online, wait for the monthly reset, or use your own key."
         }
         if paused { return "The AI service has reached this month's capacity and is paused until the 1st. Nothing is charged meanwhile." }
         return nil

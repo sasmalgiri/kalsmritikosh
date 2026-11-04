@@ -5,6 +5,20 @@ Unsigned digests identify compiled code and are supporting evidence only; the su
 build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
 `bash scripts/release-check.sh` — currently **BLOCKED**.
 
+## Owner gate decision (2026-11-04) and the fixes of the AGENT candidate reviews of 7d720fe1
+
+**Owner decided to ship with Opus 5 and without live accuracy measurement; agent reviews kept as evidence, not as gates.**
+The gates `accuracy-adjudication`, `practitioner-review` and `user-evaluation` are removed from `ci/release-gates.json`;
+`legal-privacy` stays a gate. The four reviews (`docs/agent-reviews/candidate-review-7d720fe1-*.md`) stay as evidence.
+
+Fixed on the working tree after `d0d6638a` (uncommitted at the time of writing; the Candidate line below is updated by the
+owner's session once committed): UB1/PB3 (one-step AI setup after a verified AI purchase, restore or a saved key; the six
+causes of "no AI" named with their action), LB1/PB2 (case erasure removes the case's text from the outbound record and its
+AI permission), LB2 (public site qualified: the app has no network; a case you allow goes to Anthropic, recordings to Google),
+PB1 (an unverified reading is "could not be confirmed", never "the documents don't say"), AI Pro yearly 5,400 credits a month,
+LS1–LS9 (permission sheet names Anthropic and the relay and shows the terms; permission tied to its destination and withdrawable
+per case; privacy policy wording; `GLOBAL_CAP_USD` in one place, raised before release; review notes' setup steps).
+
 ## Current candidate (2026-11-04, plans and credits + whole-case reader) — simulation-tested only
 
 Candidate: c30d21916fbc030ea5b16dc33045273d0587c96e
@@ -20,7 +34,7 @@ Candidate: c30d21916fbc030ea5b16dc33045273d0587c96e
 | Unsigned Release digests | not built for this tree |
 | Signed Distribution build | none — *owner* (`release/OWNER_LAUNCH_CHECKLIST.md` §8) |
 | Relay | not deployed; `AIIncludedRelay.host` empty → gate `relay-host-configured` FAIL until the owner deploys (§5–§6 of the checklist) |
-| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (4 November 2026; notices version 1.9) |
+| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (4 November 2026; notices version 1.11) |
 
 ### Simulation evidence on this tree (agent run, 2026-11-04, this Mac — not hosted CI)
 

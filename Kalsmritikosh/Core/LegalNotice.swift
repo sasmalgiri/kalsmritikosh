@@ -133,7 +133,7 @@ public nonisolated enum LegalNotice {
     is not liable for indirect, incidental, special, consequential, exemplary, or \
     punitive damages, or for lost profits, lost data, or business interruption, under \
     any legal theory, even if advised of the possibility. Total aggregate liability for \
-    all claims is capped at the amount you paid for the app in the twelve months before \
+    all claims is capped at the amount you paid for the app, its subscriptions and credit packs in the twelve months before \
     the claim arose. Some jurisdictions do not allow some of these exclusions, so parts \
     may not apply to you. These provisions allocate risk and are a basis of the bargain.
     """
@@ -182,14 +182,14 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.10 (2026-11-04)"
+    public static let termsVersion = "1.11 (2026-11-04)"
 
     /// Payment terms (owner decisions 2026-11-04): one subscription group, three levels; credit packs.
     public static let subscriptionStatement = """
     All nine personas, sold through the Mac App Store as one auto-renewable subscription at three \
     levels, each monthly or yearly at the price shown for your storefront: Workbench (no AI of ours; \
     Online AI with your own Anthropic key, billed by Anthropic), AI Included (2,000 AI credits a month) and AI Pro \
-    (6,000 AI credits a month and larger whole-case reads); where Online AI is not offered only Workbench is sold. One credit is US$0.01 of the AI provider's \
+    (6,000 AI credits a month, 5,400 a month on the yearly plan, and larger whole-case reads); where Online AI is not offered only Workbench is sold. One credit is US$0.01 of the AI provider's \
     cost; each request is charged what it actually cost. Credit packs (500 or 2,000 credits) never \
     expire and are spent after the month's credits while an AI plan is active. Eligible new Workbench \
     subscribers get a 14-day free trial; the AI plans have none. A plan renews automatically unless \

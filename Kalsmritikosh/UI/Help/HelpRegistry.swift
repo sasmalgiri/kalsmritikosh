@@ -147,7 +147,7 @@ public nonisolated enum HelpRegistry {
             summary: "Every file ends in one recorded state: read, kept but not read, or failed with a reason. Nothing is silently skipped and nothing is invented for an unreadable file.",
             steps: [
                 "Open Sources. The indicator reads “Ready” when the folder is fully processed; a line “could not be read — see Needs attention” counts the failures.",
-                "Open Needs attention for the file’s reason: corrupt or password-protected file, an unsupported format (DOC, XLS, PPT, MSG, PST, RAR, 7z are kept but not read), a scan with too little text for OCR, or a recording that could not be transcribed.",
+                "Open Needs attention for the file’s reason: corrupt or password-protected file, an unsupported format (PPT, RAR and 7z are kept but not read; DOC, XLS, MSG and PST are read), a scan with too little text for OCR, or a recording that could not be transcribed.",
                 "Scans: OCR quality follows scan quality. Tools ▸ Documents ▸ Improved text recognition lists weak scans and can save a searchable copy.",
                 "Recordings: with “Transcribe audio & video” on (Settings ▸ Modules, the default) recordings are transcribed on your Mac while importing (Apple Speech, English). With it off, recordings are catalogued and kept, and can be transcribed on demand in Transcripts. Transcripts are evidence of what the speech model heard, not a certified transcript.",
                 "Fix the file (open it in its own app and re-save, remove the password, re-scan) and press “Ingest All”, or leave it: a failed file stays listed as failed so the gap is visible in the case."
@@ -156,7 +156,7 @@ public nonisolated enum HelpRegistry {
             keywords: ["ocr", "transcription", "unreadable", "password", "corrupt", "needs attention", "failed"]),
         HelpTopic(
             id: "task-search-and-refusals", kind: .task, title: "Search, ask, and understand an honest refusal",
-            summary: "Search finds passages; Ask builds a cited answer from the documents in scope. When the documents do not support an answer the app says so instead of guessing.",
+            summary: "Search finds passages; Ask builds a cited answer from the documents in scope. When no passage supports an answer the app says so and shows the closest passage. Answers can still be incomplete or wrong — check the cited source.",
             steps: [
                 "Search: plain words or the syntax `type:email`, `file:report`, `before:2024-06-01`, `after:2023-01-01`, `person:\"Ann Lee\"`, `org:acme`, `tag:urgent`, quoted phrases, `-word` to exclude. The coverage badge says how much of the archive the search covered.",
                 "Ask: type the question and press “Send question”. The badge under the answer gives its status; “Evidence for this answer” lists each cited passage.",
@@ -238,25 +238,27 @@ public nonisolated enum HelpRegistry {
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
             summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own AI-provider account.",
             steps: [
-                "Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included or AI Pro (with that plan) or your own Anthropic (Claude) key — the only own-key provider (Workbench uses your own key). Not available where Online AI is blocked for the App Store country. A badge shows while it is on; one click returns to Private.",
-                "Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked.",
-                "Each send is recorded before it leaves and shows its estimated cost first. Providers may retain what they receive under their own terms. With your own key they bill your account (set a monthly limit for your own Claude key in Settings ▸ Online); on an AI plan each request is charged in credits at its actual cost.",
+                "The easy way: after buying AI Included or AI Pro, or after saving your Anthropic key in Settings ▸ Online, the app shows “Turn on AI”: read the AI's terms and choose “Allow AI to read case documents you permit”. That one step turns on Online mode, “Use AI to write answers” and AI reading of case documents. If you chose Not now, Ask names what is missing and offers “Turn on AI…”. Not available where Online AI is blocked for the App Store country. A badge shows while Online is on; one click returns to Private.",
+                "Inside a case you allow the AI once for that case: the sheet lists the documents that would go (and those that never go — privileged or restricted material) and names where they go; your questions in that case are then sent without a further prompt, and you can stop it in the case file (“Stop AI for this case”). Outside a case, a send carrying document text is always previewed and approved; a question alone is previewed too, unless “Ask before every send” is off and you chose “Send and don’t ask again this session”. Document text goes only to providers whose terms you accepted; protected identities are masked.",
+                "Each send is recorded before it leaves; the estimate is shown before a case is first read. Providers may retain what they receive under their own terms. With your own key they bill your account (set a monthly limit for your own Claude key in Settings ▸ Online); on an AI plan each request is charged in credits at its actual cost.",
                 "Subscribing never turns Online on. The test host and the sample case never send anything."
             ],
             destination: .settings, keywords: ["cloud", "api key", "claude", "anthropic", "own key", "network", "consent"]),
         HelpTopic(
             id: "task-ai-included", kind: .task, title: "AI credits: AI Included and AI Pro without an AI account of your own",
-            summary: "AI Included gives 2,000 AI credits a month and AI Pro 6,000 (1 credit = US$0.01 of Claude cost); each request is charged what it actually cost. Credit packs of 500 or 2,000 never expire.",
+            summary: "AI Included gives 2,000 AI credits a month; AI Pro 6,000 a month on the monthly plan and 5,400 a month on the yearly plan (1 credit = US$0.01 of Claude cost); each request is charged what it actually cost. Credit packs of 500 or 2,000 never expire.",
             steps: [
-                "Choose AI Included or AI Pro on the subscription screen (neither has a free trial; the 14-day trial is Workbench's). Then Settings ▸ Online ▸ Provider ▸ AI Included or AI Pro (Claude Opus 5).",
-                "Every send is still shown to you first, with its estimated credits, and recorded. The relay checks the plan with Apple, holds the request's worst-case cost, passes it to Anthropic and charges only the actual cost (whole credits, at least 1); a failed request costs nothing. It keeps only counts and credits.",
+                "Choose AI Included or AI Pro on the subscription screen (neither has a free trial; the 14-day trial is Workbench's).",
+                "Right after the purchase (or Restore purchases) the app shows “Turn on AI for your AI plan”: the AI's terms and where case documents go (Anthropic, through the publisher's relay, which keeps only counts and credits). Choose “Allow AI to read case documents you permit” — this turns on Online mode, “Use AI to write answers” and AI reading of case documents; nothing is sent yet. If you chose Not now, Ask shows search results that name what is missing, with “Turn on AI…”.",
+                "Open a case and ask a question. The first time, the case's permission sheet lists the documents that would be read and what it costs; choose “Allow for this case”. Questions in that case are then answered by the AI without a further prompt, each statement checked against its quote, and every send is recorded. The relay checks the plan with Apple, holds the request's worst-case cost, passes it to Anthropic and charges only the actual cost (whole credits, at least 1); a failed request costs nothing. It keeps only counts and credits.",
                 "Settings ▸ Online ▸ “Check credits” shows this month's credits used and left, your credit packs, the reset date and the last request's cost. Before reading a whole case the app shows the estimate (for example “about 120 credits; you have 840”) and reads it only after you confirm.",
-                "The month's credits renew on the day of your purchase each month — yearly plans too — and do not carry over. Credit packs (500 or 2,000, bought in Settings ▸ Online) never expire, are spent after the month's credits, work while an AI plan is active and stay with your Apple account on every Mac.",
+                "Reading a case the first time costs about 1–2 credits per 1,000 words of its text; a question within an hour of the last one usually costs 5–30 credits, because the AI re-uses the case it already read. After an idle hour the first question costs about the first-read amount again.",
+                "The month's credits renew on the day of your purchase each month — yearly plans too (AI Pro yearly: 5,400 credits a month) — and do not carry over. Credit packs (500 or 2,000, bought in Settings ▸ Online) never expire, are spent after the month's credits, work while an AI plan is active and stay with your Apple account on every Mac.",
                 "One request may use up to 400 credits; a confirmed whole-case read up to 600 (AI Included) or 3,000 (AI Pro); there is a daily limit. If the service's monthly capacity is reached it pauses until the 1st and says so; nothing is charged and your own key can be used meanwhile.",
                 "Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country: there only Workbench is sold — no AI plan, no credit pack — and an own key cannot be used either. You must be 18 or older to use it."
             ],
-            controls: ["Check credits"],
-            destination: .settings, keywords: ["opus", "relay", "credits", "credit pack", "top-up", "ai pro", "balance", "paused", "subscription", "country"]),
+            controls: ["Check credits", "Turn on AI…", "Allow for this case", "Stop AI for this case"],
+            destination: .settings, keywords: ["opus", "relay", "turn on ai", "use ai to write answers", "no ai is set up", "credits", "credit pack", "top-up", "ai pro", "balance", "paused", "subscription", "country"]),
         HelpTopic(
             id: "task-online-ai-helps", kind: .task, title: "Read a scan, translate, challenge or draft with AI",
             summary: "Online helps that work only from your documents and always say what they are: AI output is marked and is never the original or a finding.",
@@ -478,11 +480,11 @@ public nonisolated enum HelpRegistry {
 
     public static let subscription: [HelpTopic] = [
         HelpTopic(id: "subscription-plans", kind: .subscription, title: "Plans, the free trial, renewal and cancelling",
-                  summary: "Three plans, each monthly or yearly, all with the nine personas (the professions listed under “By profession”): Workbench (Online AI with your own Anthropic key), AI Included (2,000 AI credits a month) and AI Pro (6,000). Prices are shown by the App Store for your country; the app never shows a made-up price.",
+                  summary: "Three plans, each monthly or yearly, all with the nine personas (the professions listed under “By profession”): Workbench (Online AI with your own Anthropic key), AI Included (2,000 AI credits a month) and AI Pro (6,000 a month; 5,400 a month on the yearly plan). Prices are shown by the App Store for your country; the app never shows a made-up price.",
                   steps: [
                     "Workbench has a 14-day free introductory trial when Apple finds your account eligible (one per account); the AI plans have none. The subscription screen shows the price that follows the trial and when it will be charged.",
                     "The subscription renews automatically unless cancelled at least a day before the period ends. Cancel in your Apple Account (Help ▸ Manage subscription, or the “Manage subscription” link on the subscription screen); Apple’s instructions are linked there.",
-                    "The three plans are one subscription, never two: moving up (Workbench → AI Included → AI Pro) starts at once and Apple refunds the unused part; moving down or between monthly and yearly takes effect at the next renewal. Monthly and yearly give the same access and the same monthly credits.",
+                    "The three plans are one subscription, never two: moving up (Workbench → AI Included → AI Pro) starts at once and Apple refunds the unused part; moving down or between monthly and yearly takes effect at the next renewal. Monthly and yearly give the same access and the same monthly credits, except AI Pro yearly: 5,400 credits a month instead of 6,000.",
                     "Payment, renewal, refunds and restore are handled by Apple. The app opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode."
                   ],
                   controls: ["Manage subscription", "Restore purchases"], destination: .settings,
