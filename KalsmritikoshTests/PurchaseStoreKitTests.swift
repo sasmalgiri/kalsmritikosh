@@ -76,14 +76,16 @@ struct PurchaseStoreKitTests {
         defer { s.clearTransactions() }
         let c = await Self.centre()
         #expect(!c.productsUnavailable)
-        #expect(c.offers.map(\.plan) == [.monthly, .annual, .aiMonthly, .aiAnnual])
-        // A2 — AI Included: no introductory offer, its own prices and the AI terms with every price.
+        #expect(c.offers.map(\.plan) == [.monthly, .annual, .aiMonthly, .aiAnnual, .proMonthly, .proAnnual])
+        // The AI plans: no introductory offer, their own prices and the credit terms with every price.
         let aiMonthly = try #require(c.offers.first { $0.plan == .aiMonthly })
-        #expect(aiMonthly.displayPrice == "$24.99" && !aiMonthly.eligibleForTrial && aiMonthly.trialDays == nil)
-        #expect(aiMonthly.actionTitle == "Subscribe $24.99 per month")
-        #expect(aiMonthly.disclosure.contains("up to 300 questions a month") && aiMonthly.disclosure.contains("share one monthly service capacity") && aiMonthly.disclosure.contains("pauses until the 1st"))
-        #expect(c.aiAnnualSavingPercent == 17)
-        #expect(c.topUpPrice == "$14.99")
+        #expect(aiMonthly.displayPrice == "$39.00" && !aiMonthly.eligibleForTrial && aiMonthly.trialDays == nil)
+        #expect(aiMonthly.actionTitle == "Subscribe $39.00 per month")
+        #expect(aiMonthly.disclosure.contains("2,000 AI credits a month") && aiMonthly.disclosure.contains("never expire") && aiMonthly.disclosure.contains("pauses until the 1st"))
+        let proAnnual = try #require(c.offers.first { $0.plan == .proAnnual })
+        #expect(proAnnual.displayPrice == "$989.00" && !proAnnual.eligibleForTrial && proAnnual.disclosure.contains("6,000 AI credits a month"))
+        #expect(c.aiAnnualSavingPercent == 17 && c.annualSavings[.aiPro] == 17)
+        #expect(c.packPrices == [PurchaseProducts.credits500: "$9.99", PurchaseProducts.credits2000: "$34.99"])
         let monthly = try #require(c.offers.first { $0.plan == .monthly })
         let annual = try #require(c.offers.first { $0.plan == .annual })
         #expect(monthly.displayPrice == "$4.99" && monthly.periodText == "1 month")
@@ -236,36 +238,42 @@ struct PurchaseStoreKitTests {
         #expect(c.entitlement.allowsPaidUse)
     }
 
-    @Test func legacyPermanentUnlockBeatsEverythingAndIsNeverAskedToSubscribe() async throws {
+    /// Workbench (trial) → AI Included → AI Pro: each an immediate upgrade within the one group, never a
+    /// second subscription; the AI tier follows; then a downgrade to Workbench waits for the renewal.
+    @Test func upgradeThroughTheThreeLevelsIsOneSubscription() async throws {
         let s = try Self.session()
         defer { s.clearTransactions() }
-        _ = try await s.buyProduct(identifier: PurchaseProducts.legacyUnlock)
         let c = await Self.centre()
-        #expect(c.entitlement == .legacyUnlocked)
-        #expect(c.statusText == "Purchased outright (lifetime unlock).")
-        #expect(c.allowPaidAction("anything") && c.paywallRequested == nil)
+        c.aiSellable = { true }   // the relay's answer, scripted (no network in tests)
         await c.subscribe(.monthly)
-        #expect(c.entitlement == .legacyUnlocked)
-        // A refunded unlock with nothing else: lapsed (revoked), read-only, not "never started".
-        let tx = try #require(Self.latest(s, PurchaseProducts.legacyUnlock))
-        try s.refundTransaction(identifier: tx.identifier)
-        try s.expireSubscription(productIdentifier: PurchaseProducts.monthly)
-        await Self.settle(c, within: 20) { !$0.allowsPaidUse }
-        #expect(!c.entitlement.allowsPaidUse && c.entitlement.hadAccessBefore, "\(c.entitlement)")
+        guard case .introductoryTrial(_, .monthly, _) = c.entitlement else { Issue.record("expected the Workbench trial, got \(c.entitlement)"); return }
+        #expect(c.entitlement.aiTier == nil && !c.entitlement.includesAI, "the trial never includes AI credits")
+        await c.subscribe(.aiMonthly)
+        let toAI = await Self.settle(c) { $0.aiTier == .aiIncluded }
+        #expect(toAI, "after upgrading: \(c.entitlement)")
+        await c.subscribe(.proAnnual)
+        let toPro = await Self.settle(c) { $0.aiTier == .aiPro }
+        #expect(toPro, "after upgrading: \(c.entitlement)")
+        #expect(AICreditMeter.shared.tier == nil || c.entitlement.aiTier == .aiPro)
+        // One subscription: StoreKit reports one renewing product for the group.
+        let product = try #require(try await Product.products(for: [PurchaseProducts.monthly]).first)
+        let statuses = try #require(try await product.subscription?.status)
+        let renewing = statuses.filter { $0.state == .subscribed }
+        #expect(renewing.count == 1, "\(statuses.map(\.state))")
+        // Downgrade to Workbench: AI Pro stands until its period ends.
+        await c.subscribe(.monthly)
+        await Self.settle(c, within: 3) { _ in false }
+        #expect(c.entitlement.aiTier == .aiPro, "a downgrade takes effect at renewal: \(c.entitlement)")
     }
 
-    @Test func legacyFreeTrialProductIsATrialNotBillingConsent() async throws {
+    @Test func creditPacksNeedAnAIPlan() async throws {
         let s = try Self.session()
         defer { s.clearTransactions() }
-        _ = try await s.buyProduct(identifier: PurchaseProducts.legacyTrial)
         let c = await Self.centre()
-        guard case .legacyTrial(let ends) = c.entitlement else { Issue.record("expected the legacy trial, got \(c.entitlement)"); return }
-        #expect(ends > Date().addingTimeInterval(13 * 86_400))
-        #expect(c.entitlement.allowsPaidUse && !c.entitlement.leadsWithSubscriptionScreen)
-        #expect(c.statusText.contains("no charge follows it"))
-        // Still eligible for the subscription's introductory offer: the two products are unrelated.
-        let allEligible = c.offers.filter { !$0.plan.includesAI }.allSatisfy { $0.eligibleForTrial }
-        #expect(allEligible)
+        await c.subscribe(.annual)
+        await c.buyCredits(PurchaseProducts.credits500)
+        #expect(c.message == "Credit packs are for AI Included and AI Pro subscribers. Choose an AI plan first.")
+        #expect(!s.allTransactions().contains { $0.productIdentifier == PurchaseProducts.credits500 }, "nothing was bought")
     }
 
     @Test func restoreWithNothingBoughtSaysSo() async throws {

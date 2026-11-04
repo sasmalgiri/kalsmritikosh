@@ -4,7 +4,7 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
 # No request logging: the relay keeps counts only, never content.
-# Daily retention purge (privacy policy: counts kept 13 months).
+# Daily retention purge (privacy policy: counts kept 13 months; credit packs with credits left are never purged).
 [triggers]
 crons = ["0 3 * * *"]
 
@@ -18,8 +18,12 @@ database_id = "REPLACE_AFTER_wrangler_d1_create"
 
 [vars]
 BUNDLE_ID = "ecosanskritiinnovation.Kalsmritikosh"
-ANTHROPIC_BUDGET_USD = "20"   # owner decision 2026-11-01: hard monthly cap
-GEMINI_BUDGET_USD = "5"       # owner decision 2026-11-01: hard monthly cap
+# Global monthly safety cap over ALL subscribers (owner decision 2026-11-04: $20 until launch, then
+# raised by the owner). At 90 % of it AI plans stop being sold and new reservations are refused.
+# Per-subscriber spending is limited by each plan's credits (src/policy.ts PLANS).
+GLOBAL_CAP_USD = "20"
+GEMINI_BUDGET_USD = "5"       # transcription's own monthly cap
+# DAILY_CREDIT_LIMIT = "1500" # optional: one daily credit limit for every plan (default: per plan)
 ANTHROPIC_MODEL = "claude-opus-5"
 GEMINI_MODEL = "gemini-2.5-flash"
 # Conservative Gemini prices (micro-dollars per token); keep at or above Google's published price.

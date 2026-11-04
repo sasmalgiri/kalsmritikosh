@@ -2,17 +2,19 @@
 //  AIIncludedRelay.swift
 //  Kalsmritikosh
 //
-//  A2 (completion mandate 2026-11-01) — the publisher's AI Included service (relay/ in this repo).
-//  A subscriber's questions go to it instead of to a provider with their own key; it confirms the
-//  subscription with Apple, counts the month's 300 questions and forwards to Claude Opus 5 with the
-//  publisher's key. It stores counts only. The subscriber is identified by the App Store
-//  original transaction id of the AI Included subscription — no account, name or e-mail.
+//  A2 (completion mandate 2026-11-01; plans and credits 2026-11-04) — the publisher's AI relay (relay/
+//  in this repo) behind the AI Included and AI Pro plans. A subscriber's requests go to it instead of
+//  to a provider with their own key; it confirms the plan with Apple, reserves the request's worst-case
+//  cost in credits (1 credit = US$0.01 of Claude cost), forwards to Claude with the publisher's key and
+//  charges the actual cost. It stores counts and credits only. The subscriber is identified by the App
+//  Store original transaction id of the subscription group — no account, name or e-mail.
 //
 //  Nothing in this file touches the network: like OnlineRequestBuilder it builds requests the
 //  network helper sends, and reads what comes back.
 //
 
 import Foundation
+import CryptoKit
 
 public nonisolated enum AIIncludedRelay {
     /// The relay's host, set once the publisher has deployed it (relay/README.md). Empty = AI Included
@@ -34,16 +36,64 @@ public nonisolated enum AIIncludedRelay {
             guard isValidSubscription(subscription) else { throw RelayError.notSubscribed }
             headers[subscriptionHeader] = subscription
         }
+        if path == "/v1/messages", confirmedLargeRead { headers[largeReadHeader] = "confirmed" }
         return OutboundHTTPRequest(url: "https://\(host)\(path)", headers: headers,
                                    body: try JSONSerialization.data(withJSONObject: body))
     }
 
-    /// Questions left and whether the service is paused this month.
+    /// The header that marks a request as a confirmed whole-case read (the relay then allows up to the
+    /// plan's case-read limit instead of the per-request limit). Set ONLY inside
+    /// `$confirmedLargeRead.withValue(true)`, after the person accepted the estimate.
+    static let largeReadHeader = "x-kals-large-read"
+    @TaskLocal public static var confirmedLargeRead = false
+
+    /// The appAccountToken a credit pack is bought with for subscription `sub`, so the relay credits it
+    /// to that subscription only: SHA-256("kals-credits:" + sub), first 16 bytes in RFC 4122 version-5
+    /// layout. Mirror of accountToken in relay/src/policy.ts.
+    public static func accountToken(subscription sub: String) -> UUID {
+        var b = Array(SHA256.hash(data: Data("kals-credits:\(sub)".utf8)).prefix(16))
+        b[6] = (b[6] & 0x0f) | 0x50
+        b[8] = (b[8] & 0x3f) | 0x80
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+    }
+
+    /// The relay's receipt (`kals` in every reply): the plan, the balance and what the request cost.
+    public struct Receipt: Equatable, Sendable {
+        public var plan: String              // "ai" | "pro"
+        public var monthlyCredits: Int
+        public var allowanceLeft: Int
+        public var topUps: Int
+        public var dailyUsed: Int
+        public var dailyLimit: Int
+        public var perRequestCredits: Int
+        public var caseReadCredits: Int
+        public var periodEndsAt: Date?
+        /// Credits this request was charged (nil for a status check).
+        public var charged: Int?
+        public var reserved: Int?
+        public var balance: Int { allowanceLeft + topUps }
+    }
+
+    /// The plan's state and whether the service is paused this month.
     public struct Status: Equatable, Sendable {
-        public let monthly: Int
-        public let topUps: Int
+        public let receipt: Receipt
         public let paused: Bool
-        public var total: Int { monthly + topUps }
+    }
+
+    /// The `kals` receipt in a relay reply body, or nil.
+    public static func receipt(in body: Data) -> Receipt? {
+        guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
+        return receipt(from: root["kals"] as? [String: Any])
+    }
+
+    static func receipt(from k: [String: Any]?) -> Receipt? {
+        guard let k, let left = k["allowanceLeft"] as? Int, let top = k["topUps"] as? Int else { return nil }
+        let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return Receipt(plan: k["plan"] as? String ?? "ai", monthlyCredits: k["monthlyCredits"] as? Int ?? 0,
+                       allowanceLeft: left, topUps: top, dailyUsed: k["dailyUsed"] as? Int ?? 0, dailyLimit: k["dailyLimit"] as? Int ?? 0,
+                       perRequestCredits: k["perRequestCredits"] as? Int ?? 0, caseReadCredits: k["caseReadCredits"] as? Int ?? 0,
+                       periodEndsAt: (k["periodEndsAt"] as? String).flatMap { iso.date(from: $0) },
+                       charged: k["charged"] as? Int, reserved: k["reserved"] as? Int)
     }
 
     public enum RelayError: Error, LocalizedError, Equatable {
@@ -63,7 +113,7 @@ public nonisolated enum AIIncludedRelay {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               let error = root["error"] as? [String: Any],
               let code = error["code"] as? String,
-              ["not-subscribed", "quota-used", "capacity-paused", "too-large", "bad-request", "store-unavailable", "region-unavailable"].contains(code),
+              ["not-subscribed", "credits-used", "daily-limit", "too-costly", "capacity-paused", "too-large", "bad-request", "store-unavailable", "region-unavailable"].contains(code),
               let message = error["message"] as? String else { return nil }
         return message
     }
@@ -77,9 +127,8 @@ public nonisolated enum AIIncludedRelay {
 
     static func parseStatus(_ response: OutboundHTTPResponse) throws -> Status {
         let root = try object(response)
-        guard let remaining = root["remaining"] as? [String: Any],
-              let monthly = remaining["monthly"] as? Int, let topUps = remaining["topUps"] as? Int else { throw RelayError.unreadable }
-        return Status(monthly: monthly, topUps: topUps, paused: root["paused"] as? Bool ?? false)
+        guard let r = receipt(from: root["kals"] as? [String: Any]) else { throw RelayError.unreadable }
+        return Status(receipt: r, paused: root["paused"] as? Bool ?? false)
     }
 
     static func parseSellable(_ response: OutboundHTTPResponse) throws -> Bool {
@@ -87,15 +136,19 @@ public nonisolated enum AIIncludedRelay {
         return sellable
     }
 
-    /// true when this top-up is now on the subscriber's account (credited now, or already credited before).
-    static func parseTopUp(_ response: OutboundHTTPResponse) throws -> Bool {
+    /// What the relay did with a credit pack: on the account (credited now or before), or removed
+    /// because Apple reports it refunded. Either way the transaction may be finished.
+    public enum TopUpOutcome: Equatable, Sendable { case onAccount, revoked }
+    static func parseTopUp(_ response: OutboundHTTPResponse) throws -> TopUpOutcome {
         let root = try object(response)
-        return root["credited"] is Bool
+        if root["revoked"] as? Bool == true { return .revoked }
+        guard root["credited"] is Bool else { throw RelayError.unreadable }
+        return .onAccount
     }
 
     typealias Transport = @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse
 
-    /// The subscriber's questions left this month (one small request carrying only the subscription number).
+    /// The subscriber's credits and plan (one small request carrying only the subscription number).
     public static func status(subscription: String) async throws -> Status {
         try await status(subscription: subscription, transport: { try await NetworkHelperClient.send($0) })
     }
@@ -104,7 +157,7 @@ public nonisolated enum AIIncludedRelay {
         return try parseStatus(try await transport(try request("/v1/status", subscription: subscription)))
     }
 
-    /// Whether AI Included is offered to new buyers this month (asked only when someone chooses to buy it;
+    /// Whether the AI plans are offered to new buyers this month (asked only when someone chooses to buy it;
     /// nothing about the person is sent).
     public static func sellable() async throws -> Bool {
         try await sellable(transport: { try await NetworkHelperClient.send($0) })
@@ -114,11 +167,12 @@ public nonisolated enum AIIncludedRelay {
         return try parseSellable(try await transport(try request("/v1/sellable", subscription: nil)))
     }
 
-    /// Ask the relay to credit a verified 200-question top-up (it re-checks the transaction with Apple).
-    public static func creditTopUp(subscription: String, transactionID: String) async throws -> Bool {
+    /// Ask the relay to credit a verified credit pack, or to remove a refunded one (it re-checks the
+    /// transaction with Apple either way).
+    public static func creditTopUp(subscription: String, transactionID: String) async throws -> TopUpOutcome {
         try await creditTopUp(subscription: subscription, transactionID: transactionID, transport: { try await NetworkHelperClient.send($0) })
     }
-    static func creditTopUp(subscription: String, transactionID: String, transport: Transport) async throws -> Bool {
+    static func creditTopUp(subscription: String, transactionID: String, transport: Transport) async throws -> TopUpOutcome {
         guard isConfigured else { throw RelayError.notConfigured }
         guard isValidSubscription(transactionID) else { throw RelayError.unreadable }
         return try parseTopUp(try await transport(try request("/v1/topup", subscription: subscription, body: ["transactionId": transactionID])))

@@ -1,46 +1,63 @@
-// AI Included relay — counts only. Every reservation is ONE conditional update, so two requests
+// AI relay — counts and credits only. Every reservation is a conditional update, so two requests
 // arriving together can never both pass a limit that only one of them fits under.
 
-import { type Micro, type Provider, MONTHLY_QUESTIONS, TOPUP_QUESTIONS, TOPUP_VALID_DAYS } from "./policy.ts";
+import { type Micro, type Tier, type TopUpTake } from "./policy.ts";
 
-export type QuestionSource = { kind: "monthly" } | { kind: "topup"; transactionId: string };
+export type Provider = "anthropic" | "gemini";
+
+/** Apple's last answer about a subscriber: the AI tier and the current period (re-asked after a TTL). */
+export interface PlanStatus { tier: Tier | null; anchor: number; expires: number; checkedAt: number }
+
+export type CreditReservation =
+  | { ok: true; fromAllowance: number; fromTopUps: TopUpTake[] }
+  | { ok: false; reason: "credits" | "daily"; balance: number };
+
+export interface Balance { allowanceUsed: number; topUps: number; dailyUsed: number }
 
 export interface Store {
-  /** Add `amount` to the month's spend for `provider` only if the total stays within `budget`. */
-  reserveSpend(month: string, provider: Provider, amount: Micro, budget: Micro): Promise<boolean>;
-  /** Correct a reservation to the actual cost (delta is usually negative). Never below zero. */
+  /** Add `amount` to the month's spend for `provider` only if the total stays within `cap` and the
+   *  spend so far is below `stopAt`. */
+  reserveSpend(month: string, provider: Provider, amount: Micro, cap: Micro, stopAt: Micro): Promise<boolean>;
+  /** Correct a reservation to the actual cost. Never below zero. */
   adjustSpend(month: string, provider: Provider, delta: Micro): Promise<void>;
   spent(month: string, provider: Provider): Promise<Micro>;
-  /** Use one question: the month's allowance first, then the oldest valid top-up; null when none is left. */
-  consumeQuestion(month: string, sub: string, now: Date): Promise<QuestionSource | null>;
-  /** Give a question back (the provider call failed, nothing was answered). */
-  refundQuestion(month: string, sub: string, source: QuestionSource): Promise<void>;
-  /** Credit a verified top-up once; false when this transaction was already credited. */
-  creditTopUp(transactionId: string, sub: string, purchasedAt: number): Promise<boolean>;
-  remaining(month: string, sub: string, now: Date): Promise<{ monthly: number; topUps: number }>;
-  /** Apple's last answer about this subscriber (re-asked after STATUS_TTL_MS). */
-  cachedStatus(sub: string): Promise<{ active: boolean; checkedAt: number } | null>;
-  cacheStatus(sub: string, active: boolean, at: number): Promise<void>;
-  /** Retention (privacy policy): drop months before `oldestMonth`, top-ups bought before `topUpsBefore`
-   *  (ms), and status answers older than `statusBefore` (ms). */
-  purge(oldestMonth: string, topUpsBefore: number, statusBefore: number): Promise<void>;
+
+  /** Reserve `credits`: the day's limit first, then the period's allowance, then unrevoked top-ups
+   *  oldest first. All or nothing. */
+  reserveCredits(sub: string, period: string, allowance: number, day: string, dailyLimit: number, credits: number): Promise<CreditReservation>;
+  /** Give credits back (the unused part of a reservation, or all of it after a failure). */
+  releaseCredits(sub: string, period: string, day: string, fromAllowance: number, fromTopUps: TopUpTake[]): Promise<void>;
+  balance(sub: string, period: string, day: string): Promise<Balance>;
+
+  /** Credit a verified pack once; false when this transaction was already credited. */
+  creditTopUp(transactionId: string, sub: string, productId: string, purchasedAt: number, credits: number): Promise<boolean>;
+  /** A refunded or revoked pack: its remaining credits are removed. true when it was on record. */
+  revokeTopUp(transactionId: string): Promise<boolean>;
+
+  cachedStatus(sub: string): Promise<PlanStatus | null>;
+  cacheStatus(sub: string, s: PlanStatus): Promise<void>;
+  forgetStatus(sub: string): Promise<void>;
+
+  /** Retention: spend months before `oldestMonth`, allowance periods starting before `oldestPeriod` (ISO),
+   *  day counts before `oldestDay`, EMPTY top-ups bought before `topUpsBefore` (ms) — a pack with credits
+   *  left is never deleted — and status answers older than `statusBefore` (ms). */
+  purge(oldestMonth: string, oldestPeriod: string, oldestDay: string, topUpsBefore: number, statusBefore: number): Promise<void>;
 }
 
-const topUpCutoff = (now: Date) => now.getTime() - TOPUP_VALID_DAYS * 86_400_000;
+interface TopUpRow { sub: string; productId: string; purchasedAt: number; credits: number; remaining: number; revoked: boolean }
 
-/** In-memory store for tests (same semantics as D1). */
+/** In-memory store for tests (same semantics as D1; no await inside a critical section). */
 export class MemoryStore implements Store {
-  status = new Map<string, { active: boolean; checkedAt: number }>();
-  async cachedStatus(sub: string) { return this.status.get(sub) ?? null; }
-  async cacheStatus(sub: string, active: boolean, at: number) { this.status.set(sub, { active, checkedAt: at }); }
   spend = new Map<string, Micro>();
-  usage = new Map<string, number>();
-  topups = new Map<string, { sub: string; purchasedAt: number; remaining: number }>();
+  allowance = new Map<string, number>();   // `${sub}|${period}` → used
+  daily = new Map<string, number>();       // `${sub}|${day}` → used
+  topups = new Map<string, TopUpRow>();
+  status = new Map<string, PlanStatus>();
 
-  async reserveSpend(month: string, provider: Provider, amount: Micro, budget: Micro): Promise<boolean> {
+  async reserveSpend(month: string, provider: Provider, amount: Micro, cap: Micro, stopAt: Micro): Promise<boolean> {
     const k = `${month}|${provider}`;
     const cur = this.spend.get(k) ?? 0;
-    if (cur + amount > budget) return false;
+    if (cur >= stopAt || cur + amount > cap) return false;
     this.spend.set(k, cur + amount);
     return true;
   }
@@ -48,112 +65,181 @@ export class MemoryStore implements Store {
     const k = `${month}|${provider}`;
     this.spend.set(k, Math.max(0, (this.spend.get(k) ?? 0) + delta));
   }
-  async spent(month: string, provider: Provider): Promise<Micro> {
-    return this.spend.get(`${month}|${provider}`) ?? 0;
-  }
-  async consumeQuestion(month: string, sub: string, now: Date): Promise<QuestionSource | null> {
-    const k = `${month}|${sub}`;
-    const used = this.usage.get(k) ?? 0;
-    if (used < MONTHLY_QUESTIONS) { this.usage.set(k, used + 1); return { kind: "monthly" }; }
-    const cutoff = topUpCutoff(now);
-    const valid = [...this.topups.entries()]
-      .filter(([, t]) => t.sub === sub && t.remaining > 0 && t.purchasedAt > cutoff)
+  async spent(month: string, provider: Provider): Promise<Micro> { return this.spend.get(`${month}|${provider}`) ?? 0; }
+
+  private usable(sub: string) {
+    return [...this.topups.entries()].filter(([, t]) => t.sub === sub && !t.revoked && t.remaining > 0)
       .sort((a, b) => a[1].purchasedAt - b[1].purchasedAt);
-    if (valid.length === 0) return null;
-    const [id, t] = valid[0];
-    t.remaining -= 1;
-    return { kind: "topup", transactionId: id };
   }
-  async refundQuestion(month: string, sub: string, source: QuestionSource): Promise<void> {
-    if (source.kind === "monthly") {
-      const k = `${month}|${sub}`;
-      this.usage.set(k, Math.max(0, (this.usage.get(k) ?? 0) - 1));
-    } else {
-      const t = this.topups.get(source.transactionId);
-      if (t) t.remaining = Math.min(TOPUP_QUESTIONS, t.remaining + 1);
+
+  async reserveCredits(sub: string, period: string, allowance: number, day: string, dailyLimit: number, credits: number): Promise<CreditReservation> {
+    const ak = `${sub}|${period}`, dk = `${sub}|${day}`;
+    const used = this.allowance.get(ak) ?? 0;
+    const topUps = this.usable(sub).reduce((s, [, t]) => s + t.remaining, 0);
+    const balance = Math.max(0, allowance - used) + topUps;
+    if ((this.daily.get(dk) ?? 0) + credits > dailyLimit) return { ok: false, reason: "daily", balance };
+    if (balance < credits) return { ok: false, reason: "credits", balance };
+    const fromAllowance = Math.min(credits, Math.max(0, allowance - used));
+    let rest = credits - fromAllowance;
+    const fromTopUps: TopUpTake[] = [];
+    for (const [id, t] of this.usable(sub)) {
+      if (rest === 0) break;
+      const n = Math.min(rest, t.remaining);
+      t.remaining -= n; rest -= n;
+      fromTopUps.push({ id, n });
     }
+    this.allowance.set(ak, used + fromAllowance);
+    this.daily.set(dk, (this.daily.get(dk) ?? 0) + credits);
+    return { ok: true, fromAllowance, fromTopUps };
   }
-  async creditTopUp(transactionId: string, sub: string, purchasedAt: number): Promise<boolean> {
+  async releaseCredits(sub: string, period: string, day: string, fromAllowance: number, fromTopUps: TopUpTake[]): Promise<void> {
+    const ak = `${sub}|${period}`, dk = `${sub}|${day}`;
+    this.allowance.set(ak, Math.max(0, (this.allowance.get(ak) ?? 0) - fromAllowance));
+    let back = fromAllowance;
+    for (const t of fromTopUps) {
+      back += t.n;
+      const row = this.topups.get(t.id);
+      if (row && !row.revoked) row.remaining = Math.min(row.credits, row.remaining + t.n);
+    }
+    this.daily.set(dk, Math.max(0, (this.daily.get(dk) ?? 0) - back));
+  }
+  async balance(sub: string, period: string, day: string): Promise<Balance> {
+    return { allowanceUsed: this.allowance.get(`${sub}|${period}`) ?? 0,
+             topUps: this.usable(sub).reduce((s, [, t]) => s + t.remaining, 0),
+             dailyUsed: this.daily.get(`${sub}|${day}`) ?? 0 };
+  }
+  async creditTopUp(transactionId: string, sub: string, productId: string, purchasedAt: number, credits: number): Promise<boolean> {
     if (this.topups.has(transactionId)) return false;
-    this.topups.set(transactionId, { sub, purchasedAt, remaining: TOPUP_QUESTIONS });
+    this.topups.set(transactionId, { sub, productId, purchasedAt, credits, remaining: credits, revoked: false });
     return true;
   }
-  async purge(oldestMonth: string, topUpsBefore: number, statusBefore: number): Promise<void> {
-    for (const k of [...this.spend.keys()]) if (k.split("|")[0] < oldestMonth) this.spend.delete(k);
-    for (const k of [...this.usage.keys()]) if (k.split("|")[0] < oldestMonth) this.usage.delete(k);
-    for (const [k, t] of [...this.topups.entries()]) if (t.purchasedAt < topUpsBefore) this.topups.delete(k);
-    for (const [k, s] of [...this.status.entries()]) if (s.checkedAt < statusBefore) this.status.delete(k);
+  async revokeTopUp(transactionId: string): Promise<boolean> {
+    const t = this.topups.get(transactionId);
+    if (!t) return false;
+    t.revoked = true; t.remaining = 0;
+    return true;
   }
-  async remaining(month: string, sub: string, now: Date): Promise<{ monthly: number; topUps: number }> {
-    const cutoff = topUpCutoff(now);
-    const topUps = [...this.topups.values()].filter((t) => t.sub === sub && t.purchasedAt > cutoff).reduce((s, t) => s + t.remaining, 0);
-    return { monthly: Math.max(0, MONTHLY_QUESTIONS - (this.usage.get(`${month}|${sub}`) ?? 0)), topUps };
+  async cachedStatus(sub: string) { return this.status.get(sub) ?? null; }
+  async cacheStatus(sub: string, s: PlanStatus) { this.status.set(sub, s); }
+  async forgetStatus(sub: string) { this.status.delete(sub); }
+  async purge(oldestMonth: string, oldestPeriod: string, oldestDay: string, topUpsBefore: number, statusBefore: number): Promise<void> {
+    for (const k of [...this.spend.keys()]) if (k.split("|")[0] < oldestMonth) this.spend.delete(k);
+    for (const k of [...this.allowance.keys()]) if (k.split("|")[1] < oldestPeriod) this.allowance.delete(k);
+    for (const k of [...this.daily.keys()]) if (k.split("|")[1] < oldestDay) this.daily.delete(k);
+    for (const [k, t] of [...this.topups.entries()]) if (t.remaining === 0 && t.purchasedAt < topUpsBefore) this.topups.delete(k);
+    for (const [k, s] of [...this.status.entries()]) if (s.checkedAt < statusBefore) this.status.delete(k);
   }
 }
 
 /** Minimal shape of Cloudflare D1 the relay uses. */
 export interface D1Like {
-  prepare(sql: string): { bind(...values: unknown[]): { run(): Promise<{ meta: { changes: number } }>; first<T = Record<string, unknown>>(): Promise<T | null> } };
+  prepare(sql: string): { bind(...values: unknown[]): {
+    run(): Promise<{ meta: { changes: number } }>;
+    first<T = Record<string, unknown>>(): Promise<T | null>;
+    all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
+  } };
 }
 
 /** Production store on Cloudflare D1 (SQLite). Schema: relay/schema.sql. */
 export class D1Store implements Store {
   private readonly db: D1Like;
   constructor(db: D1Like) { this.db = db; }
+  private q(sql: string, ...v: unknown[]) { return this.db.prepare(sql).bind(...v); }
 
-  async cachedStatus(sub: string): Promise<{ active: boolean; checkedAt: number } | null> {
-    const r = await this.db.prepare("SELECT active, checked_at FROM status_cache WHERE sub = ?1").bind(sub).first<{ active: number; checked_at: number }>();
-    return r ? { active: r.active === 1, checkedAt: r.checked_at } : null;
-  }
-  async cacheStatus(sub: string, active: boolean, at: number): Promise<void> {
-    await this.db.prepare("INSERT INTO status_cache (sub, active, checked_at) VALUES (?1, ?2, ?3) ON CONFLICT(sub) DO UPDATE SET active = ?2, checked_at = ?3")
-      .bind(sub, active ? 1 : 0, at).run();
-  }
-
-  async reserveSpend(month: string, provider: Provider, amount: Micro, budget: Micro): Promise<boolean> {
-    await this.db.prepare("INSERT OR IGNORE INTO spend (month, provider, micro) VALUES (?1, ?2, 0)").bind(month, provider).run();
-    const r = await this.db.prepare("UPDATE spend SET micro = micro + ?1 WHERE month = ?2 AND provider = ?3 AND micro + ?1 <= ?4")
-      .bind(amount, month, provider, budget).run();
+  async reserveSpend(month: string, provider: Provider, amount: Micro, cap: Micro, stopAt: Micro): Promise<boolean> {
+    await this.q("INSERT OR IGNORE INTO spend (month, provider, micro) VALUES (?1, ?2, 0)", month, provider).run();
+    const r = await this.q("UPDATE spend SET micro = micro + ?1 WHERE month = ?2 AND provider = ?3 AND micro + ?1 <= ?4 AND micro < ?5",
+      amount, month, provider, cap, stopAt).run();
     return r.meta.changes === 1;
   }
   async adjustSpend(month: string, provider: Provider, delta: Micro): Promise<void> {
-    await this.db.prepare("UPDATE spend SET micro = MAX(0, micro + ?1) WHERE month = ?2 AND provider = ?3").bind(delta, month, provider).run();
+    await this.q("UPDATE spend SET micro = MAX(0, micro + ?1) WHERE month = ?2 AND provider = ?3", delta, month, provider).run();
   }
   async spent(month: string, provider: Provider): Promise<Micro> {
-    const row = await this.db.prepare("SELECT micro FROM spend WHERE month = ?1 AND provider = ?2").bind(month, provider).first<{ micro: number }>();
-    return row?.micro ?? 0;
+    return (await this.q("SELECT micro FROM spend WHERE month = ?1 AND provider = ?2", month, provider).first<{ micro: number }>())?.micro ?? 0;
   }
-  async consumeQuestion(month: string, sub: string, now: Date): Promise<QuestionSource | null> {
-    await this.db.prepare("INSERT OR IGNORE INTO usage (month, sub, used) VALUES (?1, ?2, 0)").bind(month, sub).run();
-    const m = await this.db.prepare("UPDATE usage SET used = used + 1 WHERE month = ?1 AND sub = ?2 AND used < ?3").bind(month, sub, MONTHLY_QUESTIONS).run();
-    if (m.meta.changes === 1) return { kind: "monthly" };
-    const t = await this.db.prepare("SELECT transaction_id FROM topups WHERE sub = ?1 AND remaining > 0 AND purchased_at > ?2 ORDER BY purchased_at LIMIT 1")
-      .bind(sub, topUpCutoff(now)).first<{ transaction_id: string }>();
-    if (!t) return null;
-    const u = await this.db.prepare("UPDATE topups SET remaining = remaining - 1 WHERE transaction_id = ?1 AND remaining > 0").bind(t.transaction_id).run();
-    return u.meta.changes === 1 ? { kind: "topup", transactionId: t.transaction_id } : null;
-  }
-  async refundQuestion(month: string, sub: string, source: QuestionSource): Promise<void> {
-    if (source.kind === "monthly") {
-      await this.db.prepare("UPDATE usage SET used = MAX(0, used - 1) WHERE month = ?1 AND sub = ?2").bind(month, sub).run();
-    } else {
-      await this.db.prepare("UPDATE topups SET remaining = MIN(?2, remaining + 1) WHERE transaction_id = ?1").bind(source.transactionId, TOPUP_QUESTIONS).run();
+
+  async reserveCredits(sub: string, period: string, allowance: number, day: string, dailyLimit: number, credits: number): Promise<CreditReservation> {
+    const bal = async () => {
+      const b = await this.balance(sub, period, day);
+      return Math.max(0, allowance - b.allowanceUsed) + b.topUps;
+    };
+    // 1. The day's limit (one conditional update).
+    await this.q("INSERT OR IGNORE INTO daily (sub, day, used) VALUES (?1, ?2, 0)", sub, day).run();
+    const d = await this.q("UPDATE daily SET used = used + ?3 WHERE sub = ?1 AND day = ?2 AND used + ?3 <= ?4", sub, day, credits, dailyLimit).run();
+    if (d.meta.changes !== 1) return { ok: false, reason: "daily", balance: await bal() };
+    // 2. The allowance: take what is left of it (optimistic: retried when another request moved it).
+    await this.q("INSERT OR IGNORE INTO allowance (sub, period, used) VALUES (?1, ?2, 0)", sub, period).run();
+    let fromAllowance = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const used = (await this.q("SELECT used FROM allowance WHERE sub = ?1 AND period = ?2", sub, period).first<{ used: number }>())?.used ?? 0;
+      const take = Math.min(credits, Math.max(0, allowance - used));
+      if (take === 0) break;
+      const u = await this.q("UPDATE allowance SET used = used + ?3 WHERE sub = ?1 AND period = ?2 AND used = ?4", sub, period, take, used).run();
+      if (u.meta.changes === 1) { fromAllowance = take; break; }
     }
+    // 3. Top-ups, oldest first, each by a conditional update.
+    let rest = credits - fromAllowance;
+    const fromTopUps: TopUpTake[] = [];
+    if (rest > 0) {
+      const rows = (await this.q("SELECT transaction_id, remaining FROM topups WHERE sub = ?1 AND revoked = 0 AND remaining > 0 ORDER BY purchased_at", sub)
+        .all<{ transaction_id: string; remaining: number }>()).results;
+      for (const r of rows) {
+        if (rest === 0) break;
+        const n = Math.min(rest, r.remaining);
+        const u = await this.q("UPDATE topups SET remaining = remaining - ?2 WHERE transaction_id = ?1 AND revoked = 0 AND remaining >= ?2", r.transaction_id, n).run();
+        if (u.meta.changes === 1) { fromTopUps.push({ id: r.transaction_id, n }); rest -= n; }
+      }
+    }
+    if (rest > 0) {
+      // Not enough: everything taken goes back (the day's count too), nothing is sent.
+      await this.releaseCredits(sub, period, day, fromAllowance, fromTopUps);
+      await this.q("UPDATE daily SET used = MAX(0, used - ?3) WHERE sub = ?1 AND day = ?2", sub, day, rest).run();
+      return { ok: false, reason: "credits", balance: await bal() };
+    }
+    return { ok: true, fromAllowance, fromTopUps };
   }
-  async creditTopUp(transactionId: string, sub: string, purchasedAt: number): Promise<boolean> {
-    const r = await this.db.prepare("INSERT OR IGNORE INTO topups (transaction_id, sub, purchased_at, remaining) VALUES (?1, ?2, ?3, ?4)")
-      .bind(transactionId, sub, purchasedAt, TOPUP_QUESTIONS).run();
+  async releaseCredits(sub: string, period: string, day: string, fromAllowance: number, fromTopUps: TopUpTake[]): Promise<void> {
+    let back = fromAllowance;
+    if (fromAllowance > 0) await this.q("UPDATE allowance SET used = MAX(0, used - ?3) WHERE sub = ?1 AND period = ?2", sub, period, fromAllowance).run();
+    for (const t of fromTopUps) {
+      back += t.n;
+      await this.q("UPDATE topups SET remaining = MIN(credits, remaining + ?2) WHERE transaction_id = ?1 AND revoked = 0", t.id, t.n).run();
+    }
+    if (back > 0) await this.q("UPDATE daily SET used = MAX(0, used - ?3) WHERE sub = ?1 AND day = ?2", sub, day, back).run();
+  }
+  async balance(sub: string, period: string, day: string): Promise<Balance> {
+    const a = await this.q("SELECT used FROM allowance WHERE sub = ?1 AND period = ?2", sub, period).first<{ used: number }>();
+    const t = await this.q("SELECT COALESCE(SUM(remaining), 0) AS left FROM topups WHERE sub = ?1 AND revoked = 0", sub).first<{ left: number }>();
+    const d = await this.q("SELECT used FROM daily WHERE sub = ?1 AND day = ?2", sub, day).first<{ used: number }>();
+    return { allowanceUsed: a?.used ?? 0, topUps: t?.left ?? 0, dailyUsed: d?.used ?? 0 };
+  }
+  async creditTopUp(transactionId: string, sub: string, productId: string, purchasedAt: number, credits: number): Promise<boolean> {
+    const r = await this.q("INSERT OR IGNORE INTO topups (transaction_id, sub, product_id, purchased_at, credits, remaining, revoked) VALUES (?1, ?2, ?3, ?4, ?5, ?5, 0)",
+      transactionId, sub, productId, purchasedAt, credits).run();
     return r.meta.changes === 1;
   }
-  async purge(oldestMonth: string, topUpsBefore: number, statusBefore: number): Promise<void> {
-    await this.db.prepare("DELETE FROM spend WHERE month < ?1").bind(oldestMonth).run();
-    await this.db.prepare("DELETE FROM usage WHERE month < ?1").bind(oldestMonth).run();
-    await this.db.prepare("DELETE FROM topups WHERE purchased_at < ?1").bind(topUpsBefore).run();
-    await this.db.prepare("DELETE FROM status_cache WHERE checked_at < ?1").bind(statusBefore).run();
+  async revokeTopUp(transactionId: string): Promise<boolean> {
+    const r = await this.q("UPDATE topups SET revoked = 1, remaining = 0 WHERE transaction_id = ?1", transactionId).run();
+    return r.meta.changes === 1;
   }
-  async remaining(month: string, sub: string, now: Date): Promise<{ monthly: number; topUps: number }> {
-    const u = await this.db.prepare("SELECT used FROM usage WHERE month = ?1 AND sub = ?2").bind(month, sub).first<{ used: number }>();
-    const t = await this.db.prepare("SELECT COALESCE(SUM(remaining), 0) AS left FROM topups WHERE sub = ?1 AND purchased_at > ?2").bind(sub, topUpCutoff(now)).first<{ left: number }>();
-    return { monthly: Math.max(0, MONTHLY_QUESTIONS - (u?.used ?? 0)), topUps: t?.left ?? 0 };
+  async cachedStatus(sub: string): Promise<PlanStatus | null> {
+    const r = await this.q("SELECT tier, anchor, expires, checked_at FROM status_cache WHERE sub = ?1", sub)
+      .first<{ tier: string | null; anchor: number; expires: number; checked_at: number }>();
+    return r ? { tier: (r.tier === "ai" || r.tier === "pro") ? r.tier : null, anchor: r.anchor, expires: r.expires, checkedAt: r.checked_at } : null;
+  }
+  async cacheStatus(sub: string, s: PlanStatus): Promise<void> {
+    await this.q("INSERT INTO status_cache (sub, tier, anchor, expires, checked_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(sub) DO UPDATE SET tier = ?2, anchor = ?3, expires = ?4, checked_at = ?5",
+      sub, s.tier, s.anchor, s.expires, s.checkedAt).run();
+  }
+  async forgetStatus(sub: string): Promise<void> {
+    await this.q("DELETE FROM status_cache WHERE sub = ?1", sub).run();
+  }
+  async purge(oldestMonth: string, oldestPeriod: string, oldestDay: string, topUpsBefore: number, statusBefore: number): Promise<void> {
+    await this.q("DELETE FROM spend WHERE month < ?1", oldestMonth).run();
+    await this.q("DELETE FROM allowance WHERE period < ?1", oldestPeriod).run();
+    await this.q("DELETE FROM daily WHERE day < ?1", oldestDay).run();
+    await this.q("DELETE FROM topups WHERE remaining = 0 AND purchased_at < ?1", topUpsBefore).run();
+    await this.q("DELETE FROM status_cache WHERE checked_at < ?1", statusBefore).run();
   }
 }

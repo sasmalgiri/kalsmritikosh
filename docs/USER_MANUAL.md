@@ -128,24 +128,25 @@ Screen: **Cases**.
 
 ### Private and Online modes, and what a provider may charge
 
-Private (the default) opens no connection for your documents. Online is optional and uses AI Included or your own AI-provider account.
+Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own AI-provider account.
 
-1. Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included (with an AI Included plan) or your own Claude, OpenAI or Gemini key. A badge shows while it is on; one click returns to Private.
+1. Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included or AI Pro (with that plan) or your own Claude, OpenAI or Gemini key (Workbench uses your own key). A badge shows while it is on; one click returns to Private.
 2. Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked.
-3. Each send is recorded before it leaves. Providers may retain what they receive under their own terms. With your own key they bill your account; AI Included questions are part of the AI Included plan.
+3. Each send is recorded before it leaves and shows its estimated cost first. Providers may retain what they receive under their own terms. With your own key they bill your account (set a monthly limit for your own Claude key in Settings ▸ Online); on an AI plan each request is charged in credits at its actual cost.
 4. Subscribing never turns Online on. The test host and the sample case never send anything.
 
 Screen: **Settings**.
 
-### AI Included: questions without an AI account of your own
+### AI credits: AI Included and AI Pro without an AI account of your own
 
-The AI Included plans add up to 300 Claude Opus 5 questions a month through the publisher's relay, within a monthly capacity shared by all subscribers; top-ups of 200 last 12 months.
+AI Included gives 2,000 AI credits a month and AI Pro 6,000 (1 credit = US$0.01 of Claude cost); each request is charged what it actually cost. Credit packs of 500 or 2,000 never expire.
 
-1. Choose an AI Included plan on the subscription screen (there is no free trial with AI Included). Then Settings ▸ Online ▸ Provider ▸ AI Included (Claude Opus 5).
-2. Every send is still shown to you first and recorded. The relay checks the subscription with Apple, counts the question and passes the request to Anthropic; it keeps only counts.
-3. Settings ▸ Online ▸ “Check questions left” shows this month's count; the button beside it buys 200 more through the App Store.
-4. All subscribers share one monthly service capacity: if it is reached, AI Included pauses until the 1st and says so, even if you have questions left; everything else keeps working and your own key can be used meanwhile.
-5. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country. You must be 18 or older to use it.
+1. Choose AI Included or AI Pro on the subscription screen (neither has a free trial; the 14-day trial is Workbench's). Then Settings ▸ Online ▸ Provider ▸ AI Included or AI Pro (Claude Opus 5).
+2. Every send is still shown to you first, with its estimated credits, and recorded. The relay checks the plan with Apple, holds the request's worst-case cost, passes it to Anthropic and charges only the actual cost (whole credits, at least 1); a failed request costs nothing. It keeps only counts and credits.
+3. Settings ▸ Online ▸ “Check credits” shows this month's credits used and left, your credit packs, the reset date and the last request's cost. Before reading a whole case the app shows the estimate (for example “about 120 credits; you have 840”) and reads it only after you confirm.
+4. The month's credits renew on the day of your purchase each month — yearly plans too — and do not carry over. Credit packs (500 or 2,000, bought in Settings ▸ Online) never expire, are spent after the month's credits, work while an AI plan is active and stay with your Apple account on every Mac.
+5. One request may use up to 400 credits; a confirmed whole-case read up to 600 (AI Included) or 3,000 (AI Pro); there is a daily limit. If the service's monthly capacity is reached it pauses until the 1st and says so; nothing is charged and your own key can be used meanwhile.
+6. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country. You must be 18 or older to use it.
 
 Screen: **Settings**.
 
@@ -180,7 +181,7 @@ Public-record lookups and captures in Online mode, each shown to you before it i
 3. Sanctions lists: the complete OFAC and UN lists are downloaded and searched on this Mac — the name you check is not sent. A match on a name is a possible match until identifiers agree.
 4. Company registry (GLEIF) and court records (CourtListener): the name you search is sent to that service.
 5. Capture a web page: the page as the site returned it, with a record of address, time, status and SHA-256, added to your archive.
-6. Transcribe a recording: speaker labels and timecodes through AI Included or your Gemini key; the transcript is marked as AI output.
+6. Transcribe a recording: speaker labels and timecodes through an AI plan's credits (AI Included or AI Pro) or your Gemini key; the transcript is marked as AI output.
 
 Screen: **Sources**.
 
@@ -961,11 +962,11 @@ In Private mode the AI runs on this Mac and is used to read, extract and phrase.
 
 ### Plans, the free trial, renewal and cancelling
 
-One edition with all nine personas (the professions listed under “By profession”), as a monthly or annual subscription. Prices and periods are shown by the App Store for your country; the app never shows a made-up price.
+Three plans, each monthly or yearly, all with the nine personas (the professions listed under “By profession”): Workbench (Online AI with your own Anthropic key), AI Included (2,000 AI credits a month) and AI Pro (6,000). Prices are shown by the App Store for your country; the app never shows a made-up price.
 
-1. A 14-day free introductory trial is offered when Apple finds your account eligible (one per account). The subscription screen shows the price that follows the trial and when it will be charged.
+1. Workbench has a 14-day free introductory trial when Apple finds your account eligible (one per account); the AI plans have none. The subscription screen shows the price that follows the trial and when it will be charged.
 2. The subscription renews automatically unless cancelled at least a day before the period ends. Cancel in your Apple Account (Help ▸ Manage subscription, or the “Manage subscription” link on the subscription screen); Apple’s instructions are linked there.
-3. Monthly and annual give the same access. Switching plan takes effect at the next renewal; Apple shows the details.
+3. The three plans are one subscription, never two: moving up (Workbench → AI Included → AI Pro) starts at once and Apple refunds the unused part; moving down or between monthly and yearly takes effect at the next renewal. Monthly and yearly give the same access and the same monthly credits.
 4. Payment, renewal, refunds and restore are handled by Apple. The app opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode.
 
 Screen: **Settings**.
@@ -976,7 +977,7 @@ Your subscription follows your Apple account; your archive does not.
 
 1. On a new Mac, or after reinstalling, press “Restore purchases” (subscription screen or Settings ▸ Subscription). The App Store confirms what your account holds.
 2. Offline, the last verified state is kept until its own verified end (for example the end of the paid period). The app never extends access beyond what was verified and never removes still-valid access because the store could not be reached.
-3. The permanent unlock bought under the earlier plan is honoured for good and is never asked to subscribe. The earlier free 14-day product is a trial, not consent to billing.
+3. AI credit packs are kept by the AI service for your Apple account's subscription, not on the Mac: they are there after reinstalling or on another Mac once the plan is restored.
 4. Your documents and the ledger stay on this Mac. Move them with a complete backup and the recovery key (Settings ▸ Your data).
 
 Screen: **Settings**.

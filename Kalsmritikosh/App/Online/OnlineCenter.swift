@@ -114,8 +114,10 @@ public struct OutboundPreview: Sendable, Identifiable {
     public var carriesDocuments: Bool = false
     /// The provider's retention / training terms, shown with a document send.
     public var providerTerms: String? = nil
-    /// A2 — sent through AI Included (one of the subscriber's monthly questions), not the person's own key.
+    /// A2 — sent through an AI plan (charged in credits), not the person's own key.
     public var aiIncluded: Bool = false
+    /// Plans and credits (2026-11-04) — the estimated cost: credits on an AI plan, dollars on an own key.
+    public var costEstimate: String? = nil
 }
 
 @MainActor

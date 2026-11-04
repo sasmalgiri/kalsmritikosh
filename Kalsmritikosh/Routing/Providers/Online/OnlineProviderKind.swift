@@ -14,7 +14,7 @@ import Foundation
 
 public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case anthropic, openai, gemini
-    /// A2 — AI Included: Claude Opus 5 through the publisher's relay, for AI Included subscribers.
+    /// A2 — AI Included / AI Pro: Claude Opus 5 through the publisher's relay, metered in credits.
     /// Its "key" is the App Store subscription number; the publisher's provider key never reaches the Mac.
     case included
 
@@ -31,7 +31,7 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
         case .anthropic: return "Claude (Anthropic)"
         case .openai:    return "OpenAI"
         case .gemini:    return "Gemini (Google)"
-        case .included:  return "AI Included (Claude Opus 5)"
+        case .included:  return "AI Included or AI Pro (Claude Opus 5)"
         }
     }
 
@@ -131,10 +131,11 @@ public nonisolated enum OnlineRequestBuilder {
         }
         switch kind {
         case .included:
-            // The relay fixes the model and the output ceiling itself; it reads only these fields.
+            // The relay fixes the model and the output ceiling itself (24,000); it reads only these fields.
+            // The reply budget gets the same thinking allowance as a Claude request with an own key.
             var body: [String: Any] = [
                 "model": model,
-                "max_tokens": max(1024, min(maxTokens, 4096)),
+                "max_tokens": anthropicMaxTokens(maxTokens),
                 "messages": [["role": "user", "content": anthropicContent]]
             ]
             if let system, !system.isEmpty { body["system"] = system }

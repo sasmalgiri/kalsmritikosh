@@ -79,9 +79,6 @@ struct PurchaseGate: ViewModifier {
         case .introductoryTrial(_, _, let willRenew):
             strip(icon: "clock", text: "Free trial: \(store.entitlement.daysLeft() ?? 1) day(s) left. \(willRenew ? "It renews automatically unless cancelled a day before it ends." : "Renewal is off; nothing will be charged.")",
                   action: "Manage subscription") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }
-        case .legacyTrial:
-            strip(icon: "clock", text: "Free trial (earlier plan): \(store.entitlement.daysLeft() ?? 1) day(s) left. No charge follows it; subscribe when it ends to keep editing.",
-                  action: "See plans") { store.paywallRequested = "keep editing after the trial" }
         case .grace:
             strip(icon: "exclamationmark.triangle", text: store.statusText, action: "Update payment") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }
         case .billingRetry, .lapsed:
@@ -194,22 +191,33 @@ struct PurchaseScreen: View {
         if presentedAsSheet { dismiss() } else { store.gateDismissedThisLaunch = true }
     }
 
-    /// A2 — AI Included is shown only when this build can reach the publisher's relay.
+    /// The AI plans are shown only when this build can reach the publisher's relay.
     private var visibleOffers: [PlanOffer] {
         store.offers.filter { !$0.plan.includesAI || (AIIncludedRelay.isConfigured && AIRegion.allowsAI) }
     }
 
+    /// The three levels, each with what it includes (App Review 3.1.2(c)), then the credit packs.
     private var plans: some View {
         VStack(alignment: .leading, spacing: 10) {
-            planRow(visibleOffers.filter { !$0.plan.includesAI })
-            let ai = visibleOffers.filter(\.plan.includesAI)
-            if !ai.isEmpty {
-                Text("AI Included — everything above, plus up to \(PurchaseProducts.aiQuestionsPerMonth) Claude Opus 5 questions a month with no AI key or account of your own, within a monthly service capacity shared by all subscribers")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                planRow(ai)
+            ForEach(PlanTier.allCases, id: \.self) { tier in
+                let row = visibleOffers.filter { $0.plan.tier == tier }
+                if !row.isEmpty {
+                    Text("\(tier.name) — \(tier.includes)")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
+                    planRow(row)
+                }
+            }
+            if visibleOffers.contains(where: \.plan.includesAI) {
+                Text("Credit packs for the AI plans: " + PurchaseProducts.creditPacks.map { id in
+                        "\((PurchaseProducts.credits(inPack: id) ?? 0).formatted()) credits" + (store.packPrices[id].map { " \($0)" } ?? "")
+                     }.joined(separator: " · ") + ". One-time purchases in Settings ▸ Online; they never expire and are spent after the month's credits while an AI plan is active.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
             }
         }
     }
+
+    private func saving(_ o: PlanOffer) -> Int? { store.annualSavings[o.plan.tier] }
 
     private func planRow(_ offers: [PlanOffer]) -> some View {
         HStack(spacing: 12) {
@@ -223,18 +231,18 @@ struct PurchaseScreen: View {
                         }
                         Text("\(o.displayPrice) per \(o.plan.periodNoun)").font(.title3.weight(.semibold))
                         if o.plan.isAnnual {
-                            Text("Charged once a year" + ((o.plan.includesAI ? store.aiAnnualSavingPercent : store.annualSavingPercent).map { " · about \($0)% less than twelve monthly charges" } ?? ""))
+                            Text("Charged once a year" + (saving(o).map { " · about \($0)% less than twelve monthly charges" } ?? ""))
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("Charged every month").font(.caption).foregroundStyle(.secondary)
                         }
-                        if o.plan.includesAI {
-                            Text("Up to \(PurchaseProducts.aiQuestionsPerMonth) AI questions a month · shared capacity · no free trial").font(.caption2).foregroundStyle(.secondary)
+                        if let l = o.plan.tier.limits {
+                            Text("\(l.monthlyCredits.formatted()) AI credits every month · no free trial").font(.caption2).foregroundStyle(.secondary)
                         } else {
                             Text(o.eligibleForTrial ? "14-day free trial, then this price" : "No free trial on this account").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
-                    .padding(12).frame(width: 220, alignment: .leading)
+                    .padding(12).frame(width: 210, alignment: .leading)
                     .background(selected == o.plan ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected == o.plan ? Color.accentColor : .clear, lineWidth: 1.5))
                 }
@@ -249,8 +257,7 @@ struct PurchaseScreen: View {
         if let what = store.paywallRequested, store.entitlement.hadAccessBefore { return "Subscribe to \(what)" }
         switch store.entitlement {
         case .lapsed, .billingRetry: return "Your work is safe and readable — subscribe to keep editing"
-        case .legacyTrial: return "Keep going after the free trial"
-        default: return "Investigations Made Easy — one edition, all nine personas"
+        default: return "Investigations Made Easy — all nine personas, three plans"
         }
     }
 
@@ -260,13 +267,13 @@ struct PurchaseScreen: View {
             return "Every case stays readable; export, complete backup, recovery, Help and privacy controls keep working. A subscription is needed only to create, edit and analyse again."
         default:
             return AIIncludedRelay.isConfigured
-                ? "Every persona and every job is included, on-device, with no AI key needed. AI Included adds Claude Opus 5 questions each month; or use Online AI with your own provider account (billed by that provider). Monthly and annual plans give the same access."
-                : "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and annual plans give the same access."
+                ? "Every plan includes every persona and every job, on-device. Workbench uses Online AI only with your own Anthropic key (billed by Anthropic); AI Included and AI Pro add monthly AI credits with no AI account of your own. Monthly and yearly give the same access; change plan any time in your Apple Account — it is one subscription, never two."
+                : "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and yearly plans give the same access."
         }
     }
 
     private var footer: String {
-        "Payment, renewal, refunds and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode or send anything anywhere (choosing AI Included asks the publisher's service only whether it is open to new subscribers). The subscription works on the Macs signed in with your Apple account; your archive is not copied between them."
+        "Payment, renewal, refunds and restore are handled by Apple through the App Store; Investigations Made Easy itself opens no connection for them and never sees your payment details. Subscribing does not turn on Online mode or send anything anywhere (choosing an AI plan asks the publisher's service only whether it is open to new subscribers). The subscription works on the Macs signed in with your Apple account; your archive is not copied between them."
     }
 }
 

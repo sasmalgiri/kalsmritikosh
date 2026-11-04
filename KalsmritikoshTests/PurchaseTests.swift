@@ -2,18 +2,18 @@
 //  PurchaseTests.swift
 //  KalsmritikoshTests
 //
-//  App Store completion instructions 2026-10-30 §11 — the subscription rules (Purchase.swift)
-//  without the App Store: monthly/annual at one level, the introductory trial, cancelled-but-active,
-//  verified grace, billing retry, expiry, refund/revocation, the legacy permanent unlock and the
-//  legacy free trial, the offline cache rule, the paywall copy from real values, and the local
-//  StoreKit configuration.
+//  Plans and credits (owner decisions 2026-11-04) — the subscription rules (Purchase.swift) without the
+//  App Store: three levels (Workbench, AI Included, AI Pro), monthly/yearly, the introductory trial on
+//  Workbench only, upgrade and downgrade within the one group, cancelled-but-active, verified grace,
+//  billing retry, expiry, refund/revocation, no legacy products, the offline cache rule, the paywall
+//  copy from real values, and the local StoreKit configuration.
 //
 
 import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("Subscriptions, the introductory trial and the legacy purchases")
+@Suite("Subscriptions, the introductory trial and the three plans")
 struct PurchaseTests {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     private func day(_ n: Double) -> Date { t0.addingTimeInterval(n * 86_400) }
@@ -21,9 +21,6 @@ struct PurchaseTests {
     private func sub(_ plan: SubscriptionPlan, from: Date, days: Double, intro: Bool = false, revoked: Bool = false) -> Entitlement.Record {
         .init(productID: plan.productID, purchaseDate: from, originalPurchaseDate: from, expirationDate: from.addingTimeInterval(days * 86_400),
               revoked: revoked, isIntroductoryOffer: intro)
-    }
-    private func legacy(_ id: String, at: Date, revoked: Bool = false) -> Entitlement.Record {
-        .init(productID: id, purchaseDate: at, originalPurchaseDate: at, revoked: revoked)
     }
 
     @Test("First launch: unknown until the store answers, then not started; the test host is unlocked")
@@ -36,7 +33,7 @@ struct PurchaseTests {
         #expect(!Entitlement.lapsed(reason: .expired).leadsWithSubscriptionScreen, "a lapsed profile keeps its window, read-only")
         #expect(PurchaseCenter.isTestHost)
         PurchaseCenter.shared.start()
-        #expect(PurchaseCenter.shared.entitlement == .legacyUnlocked)
+        #expect(PurchaseCenter.shared.entitlement == .testHostUnlocked)
     }
 
     @Test("Introductory trial, then the paid period, then cancelled-but-active, then expired — both plans give the same access")
@@ -50,12 +47,12 @@ struct PurchaseTests {
             let off = Entitlement.evaluate(records: [trial], renewal: .init(willAutoRenew: false), storeAnswered: true, now: day(13))
             #expect(off == .introductoryTrial(endsAt: day(14), plan: plan, willRenew: false) && off.allowsPaidUse)
             // The paid period after the trial.
-            let paid = sub(plan, from: day(14), days: plan == .monthly ? 30 : 365)
+            let paid = sub(plan, from: day(14), days: plan.isAnnual ? 365 : 30)
             let e2 = Entitlement.evaluate(records: [trial, paid], renewal: renewing, storeAnswered: true, now: day(20))
-            #expect(e2 == .subscribed(expiresAt: plan == .monthly ? day(44) : day(379), plan: plan, willRenew: true))
+            #expect(e2 == .subscribed(expiresAt: plan.isAnnual ? day(379) : day(44), plan: plan, willRenew: true))
             // Cancelled but active: access to the verified expiry, then lapsed.
             let cancelled = Entitlement.evaluate(records: [trial, paid], renewal: .init(willAutoRenew: false), storeAnswered: true, now: day(20))
-            #expect(cancelled == .subscribed(expiresAt: plan == .monthly ? day(44) : day(379), plan: plan, willRenew: false) && cancelled.allowsPaidUse)
+            #expect(cancelled == .subscribed(expiresAt: plan.isAnnual ? day(379) : day(44), plan: plan, willRenew: false) && cancelled.allowsPaidUse)
             let after = Entitlement.evaluate(records: [trial, paid], renewal: .init(willAutoRenew: false, expired: true), storeAnswered: true, now: day(400))
             #expect(after == .lapsed(reason: .expired) && !after.allowsPaidUse && after.hadAccessBefore && after.allowsReadAccess)
         }
@@ -87,28 +84,42 @@ struct PurchaseTests {
         #expect(Entitlement.evaluate(records: [monthly, annual], renewal: .init(willAutoRenew: true), storeAnswered: true, now: day(40)) == .subscribed(expiresAt: day(395), plan: .annual, willRenew: true))
     }
 
-    @Test("The legacy permanent unlock wins over everything and is never asked to subscribe; a refunded one does not")
-    func legacyUnlock() {
-        let unlock = legacy(PurchaseProducts.legacyUnlock, at: t0)
-        let expiredSub = sub(.monthly, from: t0, days: 30)
-        #expect(Entitlement.evaluate(records: [unlock, expiredSub], renewal: .init(willAutoRenew: false, expired: true), storeAnswered: true, now: day(400)) == .legacyUnlocked)
-        #expect(Entitlement.legacyUnlocked.allowsPaidUse)
-        let refunded = legacy(PurchaseProducts.legacyUnlock, at: t0, revoked: true)
-        #expect(Entitlement.evaluate(records: [refunded], renewal: nil, storeAnswered: true, now: t0) == .lapsed(reason: .revoked))
-        let again = legacy(PurchaseProducts.legacyUnlock, at: day(5))
-        #expect(Entitlement.evaluate(records: [refunded, again], renewal: nil, storeAnswered: true, now: day(6)) == .legacyUnlocked)
+    @Test("Three levels in one group: Workbench below AI Included below AI Pro; credits per plan; no legacy products")
+    func plansAndTiers() {
+        #expect(SubscriptionPlan.allCases.map(\.tier) == [.workbench, .workbench, .aiIncluded, .aiIncluded, .aiPro, .aiPro])
+        #expect(PlanTier.workbench < .aiIncluded && PlanTier.aiIncluded < .aiPro)
+        #expect(PlanTier.workbench.limits == nil && PlanTier.aiIncluded.limits?.monthlyCredits == 2_000 && PlanTier.aiPro.limits?.monthlyCredits == 6_000)
+        #expect((PlanTier.aiPro.limits?.caseReadCredits ?? 0) > (PlanTier.aiIncluded.limits?.caseReadCredits ?? 0), "AI Pro reads more of a case at once")
+        #expect(SubscriptionPlan.proAnnual.label == "AI Pro yearly" && SubscriptionPlan.monthly.label == "Workbench monthly")
+        #expect(SubscriptionPlan.proMonthly.counterpart == .proAnnual && SubscriptionPlan.proAnnual.isAnnual)
+        #expect(PurchaseProducts.all == PurchaseProducts.subscriptions && PurchaseProducts.subscriptions.count == 6)
+        #expect(PurchaseProducts.storeProducts.count == 8)
+        #expect(!PurchaseProducts.storeProducts.contains("ecosanskritiinnovation.Kalsmritikosh.unlock")
+                && !PurchaseProducts.storeProducts.contains("ecosanskritiinnovation.Kalsmritikosh.trial14"), "no earlier buyers: the legacy products are gone")
+        #expect(PurchaseProducts.credits(inPack: PurchaseProducts.credits500) == 500 && PurchaseProducts.credits(inPack: PurchaseProducts.credits2000) == 2_000)
+        #expect(PurchaseProducts.credits(inPack: PurchaseProducts.aiMonthly) == nil && SubscriptionPlan(productID: PurchaseProducts.credits500) == nil)
+        // An old lifetime-unlock or trial transaction, if StoreKit ever returned one, grants nothing.
+        let old = Entitlement.Record(productID: "ecosanskritiinnovation.Kalsmritikosh.unlock", purchaseDate: t0, originalPurchaseDate: t0, revoked: false)
+        #expect(Entitlement.evaluate(records: [old], renewal: nil, storeAnswered: true, now: day(1)) == .notStarted)
     }
 
-    @Test("The old free trial product is a trial, not billing consent: it runs its 14 days and ends; no charge follows")
-    func legacyTrial() {
-        let trial = legacy(PurchaseProducts.legacyTrial, at: t0)
-        let running = Entitlement.evaluate(records: [trial], renewal: nil, storeAnswered: true, now: day(13))
-        #expect(running == .legacyTrial(endsAt: day(14)) && running.allowsPaidUse && running.plan == nil)
-        let ended = Entitlement.evaluate(records: [trial], renewal: nil, storeAnswered: true, now: day(14))
-        #expect(ended == .lapsed(reason: .legacyTrialEnded) && !ended.allowsPaidUse && ended.hadAccessBefore)
-        // Subscribing after it: the subscription decides.
-        let sub1 = sub(.annual, from: day(20), days: 365, intro: true)
-        #expect(Entitlement.evaluate(records: [trial, sub1], renewal: .init(willAutoRenew: true), storeAnswered: true, now: day(21)) == .introductoryTrial(endsAt: day(385), plan: .annual, willRenew: true))
+    @Test("Upgrade is immediate (the replaced period no longer counts, even with a later expiry); a downgrade waits for the renewal")
+    func upgradeAndDowngrade() {
+        // Workbench yearly, upgraded on day 40 to AI Included monthly: the year's old expiry stays on record, marked upgraded.
+        var year = sub(.annual, from: t0, days: 365); year.upgraded = true
+        let ai = sub(.aiMonthly, from: day(40), days: 30)
+        let up = Entitlement.evaluate(records: [year, ai], renewal: .init(willAutoRenew: true), storeAnswered: true, now: day(41))
+        #expect(up == .subscribed(expiresAt: day(70), plan: .aiMonthly, willRenew: true) && up.aiTier == .aiIncluded)
+        // AI Included → AI Pro the same way.
+        var aiUp = ai; aiUp.upgraded = true
+        let pro = sub(.proMonthly, from: day(50), days: 30)
+        #expect(Entitlement.evaluate(records: [year, aiUp, pro], renewal: .init(willAutoRenew: true), storeAnswered: true, now: day(51)).aiTier == .aiPro)
+        // AI Pro → Workbench: the Pro period stands until it ends, then the Workbench renewal decides.
+        let proNow = Entitlement.evaluate(records: [pro], renewal: .init(willAutoRenew: true), storeAnswered: true, now: day(60))
+        #expect(proNow.aiTier == .aiPro)
+        let wb = sub(.monthly, from: day(80), days: 30)
+        let after = Entitlement.evaluate(records: [pro, wb], renewal: .init(willAutoRenew: true), storeAnswered: true, now: day(81))
+        #expect(after == .subscribed(expiresAt: day(110), plan: .monthly, willRenew: true) && after.aiTier == nil && after.allowsPaidUse)
     }
 
     @Test("Offline rule: the cached verified state keeps access only to its own verified end, then reads lapsed — never unknown, never unlimited")
@@ -118,9 +129,9 @@ struct PurchaseTests {
         #expect(cached.entitlement(now: day(10)) == active)
         #expect(cached.entitlement(now: day(31)) == .lapsed(reason: .expired))
         #expect(CachedEntitlement(.grace(until: day(3), plan: .annual), at: t0).entitlement(now: day(4)) == .lapsed(reason: .billingFailed))
-        #expect(CachedEntitlement(.legacyTrial(endsAt: day(2)), at: t0).entitlement(now: day(3)) == .lapsed(reason: .legacyTrialEnded))
-        // N3: a permanent purchase is proved by StoreKit's signed transaction, never by the cache.
-        #expect(CachedEntitlement(.legacyUnlocked, at: t0).entitlement(now: day(9_999)) == .unknown)
+        #expect(CachedEntitlement(.subscribed(expiresAt: day(30), plan: .proAnnual, willRenew: true), at: t0).entitlement(now: day(5)).aiTier == .aiPro)
+        // The test host's own state is never cached as access.
+        #expect(CachedEntitlement(.testHostUnlocked, at: t0).entitlement(now: t0) == .notStarted)
         #expect(CachedEntitlement(.unknown, at: t0).entitlement(now: t0) == .notStarted, "an unknown state is never cached as access")
         // Round trip through the isolated preference store.
         let defaults = AppDefaults.store
@@ -162,31 +173,32 @@ struct PurchaseTests {
         #expect(Entitlement.lapsed(reason: .expired).allowsReadAccess && Entitlement.notStarted.allowsReadAccess)
     }
 
-    @Test("The local StoreKit configuration: one group — the edition (monthly, annual, two-week free introductory offer) one level below AI Included (monthly, annual, no free trial) — 3-day grace, the two legacy non-consumables kept as they were, and the 200-question consumable top-up")
+    @Test("The local StoreKit configuration: one group — Workbench (two-week free trial) below AI Included below AI Pro (no trial) — 3-day grace, and the two never-expiring credit packs; no legacy products")
     func storeKitConfiguration() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("StoreKit/Kalsmritikosh.storekit")
         let json = try #require(try JSONSerialization.jsonObject(with: try Data(contentsOf: url)) as? [String: Any])
         let products = try #require(json["products"] as? [[String: Any]])
-        #expect(Set(products.compactMap { $0["productID"] as? String }) == [PurchaseProducts.legacyUnlock, PurchaseProducts.legacyTrial, PurchaseProducts.aiTopUp200])
+        #expect(Set(products.compactMap { $0["productID"] as? String }) == Set(PurchaseProducts.creditPacks))
+        let packPrices = [PurchaseProducts.credits500: "9.99", PurchaseProducts.credits2000: "34.99"]
         for p in products {
-            let topUp = p["productID"] as? String == PurchaseProducts.aiTopUp200
-            #expect(p["type"] as? String == (topUp ? "Consumable" : "NonConsumable"), "legacy ids are never repurposed")
-            if topUp { #expect(p["displayPrice"] as? String == "14.99") }
+            #expect(p["type"] as? String == "Consumable")
+            #expect(p["displayPrice"] as? String == packPrices[p["productID"] as? String ?? ""])
         }
         let groups = try #require(json["subscriptionGroups"] as? [[String: Any]])
         #expect(groups.count == 1)
         let subs = try #require(groups[0]["subscriptions"] as? [[String: Any]])
         #expect(Set(subs.compactMap { $0["productID"] as? String }) == Set(PurchaseProducts.subscriptions))
         let prices = [PurchaseProducts.monthly: "4.99", PurchaseProducts.annual: "39.99",
-                      PurchaseProducts.aiMonthly: "24.99", PurchaseProducts.aiAnnual: "249.99"]
+                      PurchaseProducts.aiMonthly: "39.0", PurchaseProducts.aiAnnual: "389.0",
+                      PurchaseProducts.proMonthly: "99.0", PurchaseProducts.proAnnual: "989.0"]
         for s in subs {
             let id = try #require(s["productID"] as? String)
             let plan = try #require(SubscriptionPlan(productID: id))
-            #expect(s["groupNumber"] as? Int == (plan.includesAI ? 1 : 2), "AI Included is the higher level")
+            #expect(s["groupNumber"] as? Int == [PlanTier.aiPro: 1, .aiIncluded: 2, .workbench: 3][plan.tier], "AI Pro above AI Included above Workbench")
             #expect(s["familyShareable"] as? Bool == false, "not advertised for the new subscriptions")
             if plan.includesAI {
-                #expect(s["introductoryOffer"] == nil, "no free trial includes the publisher's AI")
+                #expect(s["introductoryOffer"] == nil, "only Workbench has a free trial")
             } else {
                 let intro = try #require(s["introductoryOffer"] as? [String: Any])
                 #expect(intro["paymentMode"] as? String == "free" && intro["subscriptionPeriod"] as? String == "P2W")
@@ -253,10 +265,10 @@ struct EntitlementBoundaryTests {
         #expect(PaidUse.refusal("edit", sample: false, entitlement: active, now: at(60)) != nil, "expired at use, without a refresh")
         #expect(PaidUse.refusal("edit", sample: false, entitlement: .lapsed(reason: .revoked), now: t0) != nil)
         #expect(PaidUse.refusal("edit", sample: false, entitlement: .unknown, now: t0) != nil, "an unanswered store is not an unlock")
-        #expect(PaidUse.refusal("edit", sample: false, entitlement: .legacyUnlocked, now: at(1e9)) == nil)
+        #expect(PaidUse.refusal("edit", sample: false, entitlement: .testHostUnlocked, now: at(1e9)) == nil)
         // The sample: working on the bundled documents is free; importing the person's files never is.
         #expect(PaidUse.refusal("run jobs", sample: true, entitlement: .notStarted, now: t0) == nil)
-        #expect(PaidUse.refusal("add documents", importing: true, sample: true, entitlement: .legacyUnlocked, now: t0)?.reason.contains("Back to my archive") == true)
+        #expect(PaidUse.refusal("add documents", importing: true, sample: true, entitlement: .testHostUnlocked, now: t0)?.reason.contains("Back to my archive") == true)
         // The refusal says what stays free.
         #expect(PaidUse.refusal("edit", sample: false, entitlement: .notStarted, now: t0)?.reason.contains("readable and exportable") == true)
     }
@@ -308,11 +320,11 @@ struct EntitlementBoundaryTests {
         raw[raw.count / 2] ^= 0x01
         defaults.set(raw, forKey: CachedEntitlement.key)
         #expect(CachedEntitlement.load(from: defaults, secret: secret) == nil)
-        // A forged permanent state, even correctly sealed, grants nothing: only StoreKit proves it.
-        CachedEntitlement(.legacyUnlocked, at: t0).save(to: defaults, secret: secret)
-        #expect(CachedEntitlement.load(from: defaults, secret: secret)?.entitlement(now: at(10)) == .unknown)
+        // A forged unlimited state cannot even be written: the test host's state is cached as nothing.
+        CachedEntitlement(.testHostUnlocked, at: t0).save(to: defaults, secret: secret)
+        #expect(CachedEntitlement.load(from: defaults, secret: secret)?.entitlement(now: at(10)) == .notStarted)
         // A plain JSON preference in the old v1 format is not read.
-        defaults.set(try JSONEncoder().encode(CachedEntitlement(.legacyUnlocked, at: t0)), forKey: "kalsmritikosh.purchase.verifiedEntitlement")
+        defaults.set(try JSONEncoder().encode(CachedEntitlement(active, at: t0)), forKey: "kalsmritikosh.purchase.verifiedEntitlement")
         CachedEntitlement(.notStarted, at: t0).save(to: defaults, secret: secret)
         #expect(CachedEntitlement.load(from: defaults, secret: secret)?.entitlement(now: t0) == .notStarted)
         // Clock rollback: the state is read as of the verification, never earlier — a cache verified after

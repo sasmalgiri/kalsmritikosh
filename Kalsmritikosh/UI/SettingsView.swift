@@ -2279,7 +2279,7 @@ public struct SettingsView: View {
                 InfoPopoverButton(topic: "subscription-plans")   // §6.8 — purchases
             }
             Text(store.statusText).font(.callout).accessibilityIdentifier("settings.subscription.status")
-            Text("One edition with all nine personas, monthly or annual, same access either way. Eligible new subscribers get a 14-day free trial, after which the chosen plan renews automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
+            Text("Three plans with all nine personas, each monthly or yearly: Workbench (Online AI with your own Anthropic key; 14-day free trial for eligible new subscribers), AI Included (2,000 AI credits a month) and AI Pro (6,000). They are one subscription — change plan in your Apple Account. Plans renew automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 if !store.entitlement.allowsPaidUse || store.entitlement.hadAccessBefore {

@@ -20,6 +20,25 @@ if [ -z "$appBlocked" ] || [ "$appBlocked" != "$relayBlocked" ]; then
   exit 1
 fi
 echo "ok: AI-blocked storefronts identical in app and relay ($appBlocked)"
+# Plans and credits (2026-11-04) — the plan limits, pack sizes and Claude rates: relay/src/policy.ts is the
+# authority, Kalsmritikosh/Routing/Providers/Online/AIPricing.swift mirrors them for display.
+num() { tr -d '_ ' | grep -oE '[0-9.]+' | tr '\n' ' '; }
+for tier in "ai:aiIncluded" "pro:aiPro"; do
+  r=${tier%%:*}; a=${tier##*:}
+  relayPlan=$(grep -E "^\s*$r:\s*\{ label" "$ROOT/relay/src/policy.ts" | sed -E 's/.*monthlyCredits/monthlyCredits/' | num)
+  appPlan=$(grep -E "static let $a = PlanLimits" "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*monthlyCredits/monthlyCredits/' | num)
+  if [ -z "$relayPlan" ] || [ "$relayPlan" != "$appPlan" ]; then
+    echo "FAIL: plan '$r' limits differ: relay ($relayPlan) != app ($appPlan)"
+    exit 1
+  fi
+done
+relayRates=$(grep -E '"claude-opus-5": \{ inputPerMTok' "$ROOT/relay/src/policy.ts" | sed -E 's/.*inputPerMTok/inputPerMTok/' | num)
+appRates=$(grep -E '"claude-opus-5": Rates\(inputPerMTok' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*inputPerMTok/inputPerMTok/' | num)
+if [ -z "$relayRates" ] || [ "$relayRates" != "$appRates" ]; then
+  echo "FAIL: claude-opus-5 rates differ: relay ($relayRates) != app ($appRates)"
+  exit 1
+fi
+echo "ok: plan limits and Claude rates identical in app and relay"
 # A8–A10 — the public-record hosts, in the app (PublicSource.host) and the helper (lookupHosts).
 appLookup=$(sed -n '/public var host: String {/,/^    }/p' "$ROOT/Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift" | grep -oE '"[a-z0-9.-]+"' | tr -d '"' | sort -u | tr '\n' ' ')
 helperLookup=$(sed -n '/static let lookupHosts/,/\]/p' "$ROOT/KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift" | grep -oE '"[a-z0-9.-]+"' | tr -d '"' | sort -u | tr '\n' ' ')

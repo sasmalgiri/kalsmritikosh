@@ -1,50 +1,35 @@
 {
   "identifier" : "6D2E5C1A",
-  "nonRenewingSubscriptions" : [ ],
+  "nonRenewingSubscriptions" : [],
   "products" : [
     {
-      "displayPrice" : "0.0",
-      "familyShareable" : true,
-      "internalID" : "7A1F3B20",
-      "localizations" : [
-        {
-          "description" : "Earlier plan (2026-10-18), kept for compatibility only: a free 14-day trial. Not sold to new customers.",
-          "displayName" : "14-day free trial (earlier plan)",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "ecosanskritiinnovation.Kalsmritikosh.trial14",
-      "referenceName" : "Legacy 14-day free trial",
-      "type" : "NonConsumable"
-    },
-    {
-      "displayPrice" : "79.0",
-      "familyShareable" : true,
-      "internalID" : "7A1F3B21",
-      "localizations" : [
-        {
-          "description" : "Earlier plan (2026-10-18), kept for restore and reinstall only: the permanent unlock. Not sold to new customers.",
-          "displayName" : "Investigations Made Easy — lifetime unlock (earlier plan)",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "ecosanskritiinnovation.Kalsmritikosh.unlock",
-      "referenceName" : "Legacy permanent unlock",
-      "type" : "NonConsumable"
-    },
-    {
-      "displayPrice" : "14.99",
+      "displayPrice" : "9.99",
       "familyShareable" : false,
-      "internalID" : "7A1F3B42",
+      "internalID" : "7A1F3B43",
       "localizations" : [
         {
-          "description" : "200 more AI Included questions, valid for 12 months.",
-          "displayName" : "200 AI questions",
+          "description" : "500 AI credits for AI Included or AI Pro. Never expire; spent after the month's credits while an AI plan is active.",
+          "displayName" : "500 AI credits",
           "locale" : "en_US"
         }
       ],
-      "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.topup200",
-      "referenceName" : "AI Included — 200-question top-up",
+      "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.credits500",
+      "referenceName" : "AI credits \u2014 500",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "34.99",
+      "familyShareable" : false,
+      "internalID" : "7A1F3B44",
+      "localizations" : [
+        {
+          "description" : "2,000 AI credits for AI Included or AI Pro. Never expire; spent after the month's credits while an AI plan is active.",
+          "displayName" : "2,000 AI credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.credits2000",
+      "referenceName" : "AI credits \u2014 2000",
       "type" : "Consumable"
     }
   ],
@@ -53,113 +38,155 @@
     "_billingGracePeriodEnabled" : true,
     "_billingGracePeriodInDays" : 3,
     "_developerTeamID" : "6TPTCJD42Q",
-    "_storeKitErrors" : [ ]
+    "_storeKitErrors" : []
   },
   "subscriptionGroups" : [
     {
       "id" : "21777001",
       "localizations" : [
         {
-          "description" : "All nine personas and every v1 job, on your Mac.",
+          "description" : "Workbench, AI Included or AI Pro \u2014 every persona and job on your Mac.",
           "displayName" : "Investigations Made Easy",
           "locale" : "en_US"
         }
       ],
-      "name" : "Investigations Made Easy edition",
+      "name" : "Investigations Made Easy plans",
       "subscriptions" : [
         {
-          "adHocOffers" : [ ],
-          "codeOffers" : [ ],
+          "adHocOffers" : [],
+          "codeOffers" : [],
           "displayPrice" : "4.99",
           "familyShareable" : false,
-          "groupNumber" : 2,
+          "groupNumber" : 3,
           "internalID" : "7A1F3B30",
-          "introductoryOffer" : {
-            "internalID" : "7A1F3B32",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P2W"
-          },
           "localizations" : [
             {
-              "description" : "Every persona and job. Renews monthly unless cancelled.",
-              "displayName" : "Monthly",
+              "description" : "Every persona and job on your Mac; Online AI with your own Anthropic key. Renews monthly unless cancelled.",
+              "displayName" : "Workbench monthly",
               "locale" : "en_US"
             }
           ],
           "productID" : "ecosanskritiinnovation.Kalsmritikosh.edition.monthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Edition — monthly",
+          "referenceName" : "Workbench \u2014 monthly",
           "subscriptionGroupID" : "21777001",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [ ]
-        },
-        {
-          "adHocOffers" : [ ],
-          "codeOffers" : [ ],
-          "displayPrice" : "39.99",
-          "familyShareable" : false,
-          "groupNumber" : 2,
-          "internalID" : "7A1F3B31",
+          "winbackOffers" : [],
           "introductoryOffer" : {
-            "internalID" : "7A1F3B33",
+            "internalID" : "7A1F3B32",
             "paymentMode" : "free",
             "subscriptionPeriod" : "P2W"
-          },
+          }
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "7A1F3B31",
           "localizations" : [
             {
-              "description" : "Every persona and job. Charged once a year; renews yearly unless cancelled.",
-              "displayName" : "Annual",
+              "description" : "Every persona and job on your Mac; Online AI with your own Anthropic key. Renews yearly unless cancelled.",
+              "displayName" : "Workbench yearly",
               "locale" : "en_US"
             }
           ],
           "productID" : "ecosanskritiinnovation.Kalsmritikosh.edition.annual",
           "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Edition — annual",
+          "referenceName" : "Workbench \u2014 yearly",
           "subscriptionGroupID" : "21777001",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [ ]
+          "winbackOffers" : [],
+          "introductoryOffer" : {
+            "internalID" : "7A1F3B33",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          }
         },
         {
-          "adHocOffers" : [ ],
-          "codeOffers" : [ ],
-          "displayPrice" : "24.99",
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "39.0",
           "familyShareable" : false,
-          "groupNumber" : 1,
+          "groupNumber" : 2,
           "internalID" : "7A1F3B40",
           "localizations" : [
             {
-              "description" : "Everything in the edition plus 300 Claude Opus 5 questions a month. Renews unless cancelled.",
+              "description" : "Everything in Workbench plus 2,000 AI credits a month (Claude through the publisher's service). Renews unless cancelled.",
               "displayName" : "AI Included monthly",
               "locale" : "en_US"
             }
           ],
           "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.monthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "AI Included — monthly",
+          "referenceName" : "AI Included \u2014 monthly",
           "subscriptionGroupID" : "21777001",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [ ]
+          "winbackOffers" : []
         },
         {
-          "adHocOffers" : [ ],
-          "codeOffers" : [ ],
-          "displayPrice" : "249.99",
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "389.0",
           "familyShareable" : false,
-          "groupNumber" : 1,
+          "groupNumber" : 2,
           "internalID" : "7A1F3B41",
           "localizations" : [
             {
-              "description" : "Everything in the edition plus 300 Claude Opus 5 questions a month. Renews unless cancelled.",
-              "displayName" : "AI Included annual",
+              "description" : "Everything in Workbench plus 2,000 AI credits a month (Claude through the publisher's service). Same allowance every month. Renews unless cancelled.",
+              "displayName" : "AI Included yearly",
               "locale" : "en_US"
             }
           ],
           "productID" : "ecosanskritiinnovation.Kalsmritikosh.ai.annual",
           "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "AI Included — annual",
+          "referenceName" : "AI Included \u2014 yearly",
           "subscriptionGroupID" : "21777001",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [ ]
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "99.0",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7A1F3B50",
+          "localizations" : [
+            {
+              "description" : "Everything in Workbench plus 6,000 AI credits a month and larger whole-case reads. Renews unless cancelled.",
+              "displayName" : "AI Pro monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ecosanskritiinnovation.Kalsmritikosh.aipro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "AI Pro \u2014 monthly",
+          "subscriptionGroupID" : "21777001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "989.0",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "7A1F3B51",
+          "localizations" : [
+            {
+              "description" : "Everything in Workbench plus 6,000 AI credits a month and larger whole-case reads. Same allowance every month. Renews unless cancelled.",
+              "displayName" : "AI Pro yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "ecosanskritiinnovation.Kalsmritikosh.aipro.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "AI Pro \u2014 yearly",
+          "subscriptionGroupID" : "21777001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         }
       ]
     }

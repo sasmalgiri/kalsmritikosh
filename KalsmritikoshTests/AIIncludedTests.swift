@@ -19,7 +19,7 @@ struct AIIncludedTests {
               revoked: revoked, isIntroductoryOffer: intro, originalID: id)
     }
 
-    @Test("Only a paid AI Included period or its grace includes AI — never the trial, the edition, or a lapsed state")
+    @Test("Only a paid AI Included / AI Pro period or its grace includes AI — never a trial, Workbench, or a lapsed state")
     func includesAI() {
         let renew = Entitlement.Renewal(willAutoRenew: true)
         let ai = Entitlement.evaluate(records: [record(.aiMonthly, days: 30, id: 77)], renewal: renew, storeAnswered: true, now: day(3))
@@ -32,21 +32,29 @@ struct AIIncludedTests {
         #expect(!trial.includesAI, "the owner's rule: no included AI in the free trial")
         #expect(Entitlement.grace(until: day(40), plan: .aiAnnual).includesAI)
         #expect(!Entitlement.billingRetry(plan: .aiMonthly).includesAI)
-        #expect(!Entitlement.lapsed(reason: .expired).includesAI && !Entitlement.legacyUnlocked.includesAI)
+        #expect(!Entitlement.lapsed(reason: .expired).includesAI && !Entitlement.testHostUnlocked.includesAI)
+        #expect(Entitlement.grace(until: day(40), plan: .proMonthly).aiTier == .aiPro)
         // Upgraded from the edition to AI Included: the AI subscription's own id is what the relay gets.
         let both = [record(.monthly, days: 10, id: 1), record(.aiMonthly, days: 40, id: 2)]
         let up = Entitlement.evaluate(records: both, renewal: renew, storeAnswered: true, now: day(12))
         #expect(up.includesAI && Entitlement.aiSubscriptionID(records: both, entitlement: up) == "2")
     }
 
-    @Test("Plans: two durations at each level, AI Included above the edition")
+    @Test("Plans: two durations at each level; credit packs are never subscriptions; every AI price carries the credit terms")
     func plans() {
         #expect(SubscriptionPlan(productID: PurchaseProducts.aiMonthly) == .aiMonthly)
-        #expect(SubscriptionPlan(productID: PurchaseProducts.aiTopUp200) == nil, "a top-up is never a subscription")
+        #expect(SubscriptionPlan(productID: PurchaseProducts.proAnnual) == .proAnnual)
+        #expect(SubscriptionPlan(productID: PurchaseProducts.credits2000) == nil, "a credit pack is never a subscription")
         #expect(SubscriptionPlan.aiAnnual.isAnnual && SubscriptionPlan.aiAnnual.periodNoun == "year" && SubscriptionPlan.aiAnnual.counterpart == .aiMonthly)
-        #expect(PurchaseProducts.storeProducts.contains(PurchaseProducts.aiTopUp200) && !PurchaseProducts.all.contains(PurchaseProducts.aiTopUp200))
-        let offer = PlanOffer(plan: .aiAnnual, displayPrice: "₹19,999", periodText: "1 year", eligibleForTrial: false, trialDays: nil)
-        #expect(offer.disclosure.hasPrefix("₹19,999 per year, charged now.") && offer.disclosure.contains("keeps only counts"))
+        #expect(PurchaseProducts.storeProducts.contains(PurchaseProducts.credits500) && !PurchaseProducts.all.contains(PurchaseProducts.credits500))
+        let offer = PlanOffer(plan: .aiAnnual, displayPrice: "$389.00", periodText: "1 year", eligibleForTrial: false, trialDays: nil)
+        #expect(offer.disclosure.hasPrefix("$389.00 per year, charged now.") && offer.disclosure.contains("keeps only counts and credits"))
+        #expect(offer.disclosure.contains("2,000 AI credits a month") && offer.disclosure.contains("same allowance every month") && offer.disclosure.contains("never expire"))
+        let pro = PlanOffer(plan: .proMonthly, displayPrice: "$99.00", periodText: "1 month", eligibleForTrial: false, trialDays: nil)
+        #expect(pro.disclosure.contains("6,000 AI credits a month") && pro.disclosure.contains("3,000"))
+        let wb = PlanOffer(plan: .monthly, displayPrice: "$4.99", periodText: "1 month", eligibleForTrial: true, trialDays: 14)
+        #expect(!wb.disclosure.contains("credits"), "Workbench has no relay credits")
+        #expect(PlanTier.workbench.includes.contains("your own Anthropic key") && PlanTier.aiIncluded.includes.contains("No free trial"))
     }
 
     @Test("The relay request carries only the subscription number — never a key — and a non-number is never sent")
@@ -57,7 +65,13 @@ struct AIIncludedTests {
         #expect(r.headers["x-kals-subscription"] == "2000000123456789")
         #expect(r.headers["x-api-key"] == nil && r.headers["authorization"] == nil)
         let body = try #require(try JSONSerialization.jsonObject(with: r.body) as? [String: Any])
-        #expect(body["max_tokens"] as? Int == 4096 && body["system"] as? String == "S")
+        #expect(body["max_tokens"] as? Int == OnlineRequestBuilder.anthropicMaxTokens(100_000) && body["system"] as? String == "S")
+        #expect(OnlineRequestBuilder.anthropicMaxTokens(100_000) <= 24_000, "within the relay's output ceiling")
+        #expect(r.headers["x-kals-large-read"] == nil, "a large read is only ever marked after confirmation")
+        let large = try AIIncludedRelay.$confirmedLargeRead.withValue(true) {
+            try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: "2000000123456789", system: nil, prompt: "p", maxTokens: 2_000)
+        }
+        #expect(large.headers["x-kals-large-read"] == "confirmed")
         #expect(throws: AIIncludedRelay.RelayError.notSubscribed) {
             try OnlineRequestBuilder.build(kind: .included, model: "m", apiKey: "sk-ant-secret", system: nil, prompt: "p", maxTokens: 10)
         }
@@ -68,9 +82,12 @@ struct AIIncludedTests {
 
     @Test("The relay's refusals reach the person in its own words; other errors keep their usual meaning")
     func refusals() throws {
-        let used = #"{"error":{"code":"quota-used","message":"This month's AI Included questions are used up."}}"#
-        #expect(throws: OnlineRequestBuilder.ParseError.relay("This month's AI Included questions are used up.")) {
-            try OnlineRequestBuilder.parse(kind: .included, response: OutboundHTTPResponse(status: 429, body: Data(used.utf8)))
+        let used = #"{"error":{"code":"credits-used","message":"This request needs up to 60 credits and 12 are left.","estimate":60,"balance":12}}"#
+        #expect(throws: OnlineRequestBuilder.ParseError.relay("This request needs up to 60 credits and 12 are left.")) {
+            try OnlineRequestBuilder.parse(kind: .included, response: OutboundHTTPResponse(status: 402, body: Data(used.utf8)))
+        }
+        for code in ["daily-limit", "too-costly"] {
+            #expect(AIIncludedRelay.refusal(in: Data(#"{"error":{"code":"\#(code)","message":"m"}}"#.utf8)) == "m")
         }
         let paused = #"{"error":{"code":"capacity-paused","message":"paused until the 1st"}}"#
         #expect(throws: OnlineRequestBuilder.ParseError.relay("paused until the 1st")) {
@@ -86,11 +103,13 @@ struct AIIncludedTests {
 
     @Test("Status, availability and top-up replies are read strictly")
     func relayReplies() throws {
-        let status = try AIIncludedRelay.parseStatus(OutboundHTTPResponse(status: 200, body: Data(#"{"active":true,"remaining":{"monthly":212,"topUps":200},"paused":false}"#.utf8)))
-        #expect(status == .init(monthly: 212, topUps: 200, paused: false) && status.total == 412)
+        let status = try AIIncludedRelay.parseStatus(OutboundHTTPResponse(status: 200, body: Data(#"{"active":true,"paused":false,"kals":{"plan":"pro","monthlyCredits":6000,"allowanceUsed":100,"allowanceLeft":5900,"topUps":500,"dailyUsed":100,"dailyLimit":4000,"perRequestCredits":400,"caseReadCredits":3000,"periodStartsAt":"2026-11-15T10:00:00.000Z","periodEndsAt":"2026-12-15T10:00:00.000Z"}}"#.utf8)))
+        #expect(status.receipt.balance == 6_400 && status.receipt.plan == "pro" && !status.paused && status.receipt.charged == nil)
+        #expect(status.receipt.periodEndsAt == ISO8601DateFormatter().date(from: "2026-12-15T10:00:00Z"))
         #expect(try AIIncludedRelay.parseSellable(OutboundHTTPResponse(status: 200, body: Data(#"{"sellable":false}"#.utf8))) == false)
-        #expect(try AIIncludedRelay.parseTopUp(OutboundHTTPResponse(status: 200, body: Data(#"{"credited":false,"remaining":{}}"#.utf8))),
+        #expect(try AIIncludedRelay.parseTopUp(OutboundHTTPResponse(status: 200, body: Data(#"{"credited":false,"revoked":false,"kals":{}}"#.utf8))) == .onAccount,
                 "already credited is still on the account: the transaction may be finished")
+        #expect(try AIIncludedRelay.parseTopUp(OutboundHTTPResponse(status: 200, body: Data(#"{"credited":false,"revoked":true}"#.utf8))) == .revoked)
         #expect(throws: AIIncludedRelay.RelayError.refused("The request was not in the expected form: not a valid top-up")) {
             try AIIncludedRelay.parseTopUp(OutboundHTTPResponse(status: 400, body: Data(#"{"error":{"code":"bad-request","message":"The request was not in the expected form: not a valid top-up"}}"#.utf8)))
         }

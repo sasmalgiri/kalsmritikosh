@@ -21,10 +21,15 @@ struct OutboundConsentSheet: View {
                 InfoPopoverButton(topic: "task-private-online")   // §6.8 — Online sends
             }
             Text(preview.aiIncluded
-                 ? "This text will be sent through AI Included (\(preview.host)) to \(preview.model). It uses one of this month's AI Included questions; nothing is billed to you beyond the plan. Nothing else leaves your Mac for this request."
+                 ? "This text will be sent through your AI plan (\(preview.host)) to \(preview.model). It is charged in credits at its actual cost; nothing is billed to you beyond the plan and the credit packs you bought. Nothing else leaves your Mac for this request."
                  : "This text will be sent to \(preview.host) (model \(preview.model)) with your own key, and billed to your provider account. Nothing else leaves your Mac for this request.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let cost = preview.costEstimate {
+                Label(cost, systemImage: "creditcard").font(.caption.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("consent.costEstimate")
+            }
             if preview.carriesDocuments {
                 Label("This send includes text from your documents.", systemImage: "doc.text")
                     .font(.caption.weight(.semibold))
@@ -63,6 +68,7 @@ struct OutboundConsentSheet: View {
 struct OnlineStatusBar: View {
     @Environment(AppState.self) private var appState
     @State private var status = OnlineStatus.shared
+    @State private var meter = AICreditMeter.shared
     @State private var version = 0
 
     var body: some View {
@@ -72,6 +78,14 @@ struct OnlineStatusBar: View {
                 HStack(spacing: 8) {
                     Label("Online — answers may use \(OnlineSettings.kind.displayName)", systemImage: "icloud")
                         .font(.caption.weight(.semibold))
+                    // Plans and credits — the meter on every screen (Ask, the case file …) while Online is on.
+                    if OnlineSettings.kind == .included, let line = meter.summaryLine {
+                        Text("· " + line + (meter.resetText.map { " · \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("online.creditMeter")
+                    } else if OnlineSettings.kind == .anthropic {
+                        Text("· own key: about \(AIPricing.formatUSD(OwnKeyBudget.spentUSD())) this month" + (OwnKeyBudget.monthlyLimitUSD.map { " of your \(AIPricing.formatUSD($0)) limit" } ?? ""))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Button("Switch to Private") {
                         ConnectivityMode.set(.privateMode)
@@ -199,43 +213,92 @@ struct OnlineSettingsSection: View {
             }
             Text("The key is kept in your Mac's Keychain and sent only to \(kind.host).")
                 .font(.caption2).foregroundStyle(.secondary)
+            if kind == .anthropic { OwnKeyBudgetView() }
         }
     }
 }
 
-/// A2 — AI Included in Settings ▸ Online: whether it is active, questions left, and the 200-question top-up.
+/// Plans and credits (2026-11-04) — the AI plan in Settings ▸ Online: this month's allowance used and
+/// left, the credit-pack balance, the reset date, the last request's cost, and the two packs.
 struct AIIncludedStatusView: View {
     let store: PurchaseCenter
+    @State private var meter = AICreditMeter.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if store.entitlement.includesAI {
-                if let s = store.aiStatus {
-                    Text("\(s.monthly) of \(PurchaseProducts.aiQuestionsPerMonth) questions left this month" + (s.topUps > 0 ? " · \(s.topUps) bought questions left" : ""))
-                        .font(.callout)
-                    if s.paused {
-                        Text("AI Included has reached this month's service capacity and is paused until the 1st. Everything else keeps working; your own key can be used meanwhile.")
-                            .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    }
-                } else {
-                    Text("AI Included is active. Choose “Check questions left” to see this month's count.").font(.callout)
-                }
+            if let tier = store.entitlement.aiTier {
+                AICreditMeterView(meter: meter, tier: tier)
                 HStack {
-                    Button("Check questions left") { Task { await store.refreshAIStatus() } }.disabled(store.busy)
-                    Button("Buy \(PurchaseProducts.aiTopUpQuestions) more questions" + (store.topUpPrice.map { " (\($0))" } ?? "")) {
-                        Task { await store.buyTopUp() }
+                    Button("Check credits") { Task { await store.refreshAIStatus() } }.disabled(store.busy)
+                    ForEach(PurchaseProducts.creditPacks, id: \.self) { id in
+                        let credits = PurchaseProducts.credits(inPack: id) ?? 0
+                        Button("Buy \(credits.formatted()) credits" + (store.packPrices[id].map { " (\($0))" } ?? "")) {
+                            Task { await store.buyCredits(id) }
+                        }
+                        .disabled(store.busy || store.packPrices[id] == nil)
+                        .help("A one-time App Store purchase. Credit packs never expire; they are spent after the month's credits while an AI plan is active, and stay with your Apple account on every Mac.")
                     }
-                    .disabled(store.busy || store.topUpPrice == nil)
-                    .help("A one-time App Store purchase; the questions stay valid for 12 months.")
                 }
-                Text("Checking sends only your App Store subscription number to the AI Included service — nothing from your cases.")
+                Text("Checking sends only your App Store subscription number to the AI service — nothing from your cases.")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                Text("AI Included is not active for this Apple account. Choose an AI Included plan to use it, or pick another provider above and use your own key.")
+                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own key.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Button("See plans") { store.paywallRequested = "use AI Included" }
+                Button("See plans") { store.paywallRequested = "use the AI plans" }
             }
             if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }
+    }
+}
+
+/// The credit meter itself (Settings ▸ Online, and compact on the Ask and case screens).
+struct AICreditMeterView: View {
+    let meter: AICreditMeter
+    let tier: PlanTier
+    var compact = false
+
+    var body: some View {
+        let monthly = meter.receipt?.monthlyCredits ?? tier.limits?.monthlyCredits ?? 0
+        VStack(alignment: .leading, spacing: 4) {
+            if let r = meter.receipt {
+                Text("\(tier.name): \(r.allowanceLeft.formatted()) of \(monthly.formatted()) credits left this month" + (meter.resetText.map { " (\($0))" } ?? ""))
+                    .font(compact ? .caption : .callout)
+                if !compact {
+                    ProgressView(value: Double(max(0, monthly - r.allowanceLeft)), total: Double(max(1, monthly)))
+                        .accessibilityLabel("\(monthly - r.allowanceLeft) of \(monthly) credits used this month")
+                }
+                Text("Credit packs: \(r.topUps.formatted()) credits (never expire)" + (meter.lastCharged.map { " · last request: \($0) credit\($0 == 1 ? "" : "s")" } ?? ""))
+                    .font(.caption).foregroundStyle(.secondary)
+                if meter.paused {
+                    Text("The AI service has reached this month's capacity and is paused until the 1st. Nothing is charged meanwhile; everything else keeps working.")
+                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("\(tier.name): \(monthly.formatted()) credits a month. Choose “Check credits” to see what is left.")
+                    .font(compact ? .caption : .callout)
+            }
+        }
+        .accessibilityIdentifier("ai.creditMeter")
+    }
+}
+
+/// Own key (Claude): the estimated spend this month and the person's own monthly limit.
+struct OwnKeyBudgetView: View {
+    @State private var limitText = OwnKeyBudget.monthlyLimitUSD.map { String(format: "%.2f", $0) } ?? ""
+    @State private var spent = OwnKeyBudget.spentUSD()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Monthly limit for your own key (US$, blank = none)").font(.caption)
+                TextField("", text: $limitText).textFieldStyle(.roundedBorder).frame(width: 90)
+                    .onSubmit { OwnKeyBudget.monthlyLimitUSD = Double(limitText.trimmingCharacters(in: .whitespaces)) }
+                Button("Set limit") { OwnKeyBudget.monthlyLimitUSD = Double(limitText.trimmingCharacters(in: .whitespaces)) }
+                    .controlSize(.small)
+            }
+            Text("This month: about \(AIPricing.formatUSD(spent)) (estimated on this Mac from Anthropic's replies at its published prices; Anthropic's own bill is the record). When the limit is reached, nothing more is sent until the next month or until you raise it. Each send shows its estimated cost first.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear { spent = OwnKeyBudget.spentUSD() }
     }
 }

@@ -15,8 +15,11 @@ This file is the ONLY paste source for App Store Connect; `APP_STORE_METADATA.md
 - **Category:** Productivity (secondary: Reference)
 - **Age rating:** **18+** (owner decision 2026-11-02): Google's Gemini API requires users 18+, Anthropic restricts minors, and the web-capture tool gives unrestricted web access. In the questionnaire answer "Unrestricted Web Access: Yes" and set the age to 18+.
 - **Seller / copyright:** Shrabani Sasmal (the individual Apple Developer account; owner decision 2026-11-02) — the same name on the website, terms, privacy policy and in the app.
-- **Price:** **Free download; one edition, all nine personas, sold as an auto-renewable subscription** (SHIP_DECISIONS 2026-10-30): US $4.99/month or $39.99/year; India target ₹249/month or ₹1,999/year (verify the available price points in App Store Connect; never substitute silently); 14-day free introductory offer for eligible subscribers, then automatic renewal unless cancelled. One subscription group, two durations at one level: `ecosanskritiinnovation.Kalsmritikosh.edition.monthly`, `ecosanskritiinnovation.Kalsmritikosh.edition.annual`; 3-day paid-to-paid billing grace. Legacy non-consumables kept for compatibility only, not sold to new customers: `…trial14`, `…unlock` (permanent unlocks remain valid). Family Sharing is not advertised for the subscriptions. The iPhone/iPad app is free.
-  **AI Included** (same group, one level higher, NO introductory offer): `ecosanskritiinnovation.Kalsmritikosh.ai.monthly` US $24.99 / ₹1,999 and `…ai.annual` US $249.99 / ₹19,999; consumable top-up `…ai.topup200` US $14.99 / ₹1,199 (200 questions, valid 12 months). Sold as **"up to 300 questions a month, subject to a monthly service capacity shared by all subscribers"** (owner decision 2026-11-02). Attach the AI Included products to the submission ONLY once the relay is deployed and its address is in the build (`AIIncludedRelay.host`); otherwise leave them unattached.
+- **Price:** **Free download; all nine personas; one auto-renewable subscription group with three levels** (owner decisions 2026-11-04; supersedes 2026-10-30/11-02). Create in App Store Connect, all in ONE group (levels from the top):
+  1. **AI Pro** — `ecosanskritiinnovation.Kalsmritikosh.aipro.monthly` US $99 · `…aipro.annual` US $989. 6,000 AI credits a month (yearly: the same every month), larger whole-case read. NO introductory offer.
+  2. **AI Included** — `ecosanskritiinnovation.Kalsmritikosh.ai.monthly` US $39 · `…ai.annual` US $389. 2,000 AI credits a month. NO introductory offer.
+  3. **Workbench** — `ecosanskritiinnovation.Kalsmritikosh.edition.monthly` US $4.99 / ₹249 · `…edition.annual` US $39.99 / ₹1,999 (verify the price points; never substitute silently). **14-day free introductory offer** (the only plan with one). Online AI with the user's own Anthropic key.
+  Consumables: `ecosanskritiinnovation.Kalsmritikosh.ai.credits500` US $9.99 (500 credits) and `…ai.credits2000` US $34.99 (2,000 credits) — **never expire**, usable with an AI plan. 3-day billing grace. Family Sharing not advertised. No legacy products (no earlier buyers: `…unlock` and `…trial14` are not created; `…ai.topup200` is not created). Set AI-plan prices in other storefronts (incl. India) yourself; the app shows whatever the storefront returns. Attach the AI plans and packs to the submission ONLY once the relay is deployed and its address is in the build (`AIIncludedRelay.host`); otherwise leave them unattached. App Store Server Notifications V2 URL: `<relay>/v1/apple-notifications`.
 - **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
 - **Keywords (≤100 chars):**
   `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private`
@@ -78,9 +81,9 @@ This file is the ONLY paste source for App Store Connect; `APP_STORE_METADATA.md
 > • Online tools (optional): exchange rates at a date from the European Central Bank, sanctions-list checks searched on your Mac, company-registry and court-record lookups, web-page capture with a timestamped record, and recording transcription with speaker labels.
 > • AI helps (optional, Online): read a scan your Mac could not, translate a document into English, challenge an answer, or draft a cited report paragraph — always marked as AI output.
 >
-> **Try every paid feature free for 14 days, then $4.99 a month or $39.99 a year (your storefront's price is shown in the app), renewing automatically unless cancelled. Cancel any time; your cases stay readable and exportable.**
+> **Workbench: try every paid feature free for 14 days, then $4.99 a month or $39.99 a year (your storefront's price is shown in the app), renewing automatically unless cancelled.** Online AI uses your own Anthropic key, billed by Anthropic, with the cost estimated before each send and a monthly limit you set. Cancel any time; your cases stay readable and exportable.
 >
-> **AI Included** ($24.99 a month or $249.99 a year, no free trial) adds up to 300 Claude Opus 5 questions a month without an AI account of your own, within a monthly service capacity shared by all subscribers — when it is reached, AI Included pauses until the 1st and everything else keeps working. Not available in every country.
+> **AI Included** ($39 a month or $389 a year) and **AI Pro** ($99 a month or $989 a year) add 2,000 or 6,000 AI credits a month for Claude Opus 5 — no AI account of your own. 1 credit = US$0.01 of AI cost; each request is charged what it actually cost, and a whole-case read shows its estimate first. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No free trial on the AI plans. If the service's monthly capacity is reached it pauses until the 1st, nothing is charged, and everything else keeps working. Not available in every country.
 >
 > **No AI writes your answers unless you turn it on.** Out of the box, answers, search, timelines,
 > matrices, contradictions, gaps and cited reports all come from your evidence alone. Turn on
@@ -109,8 +112,8 @@ Answer in App Store Connect ▸ App Privacy: **"Yes, we collect data"**, with ex
 | User Content ▸ Emails or Text Messages (passages from mail and chats) | No | App Functionality | same path, when the passages come from email or messages |
 | User Content ▸ Photos or Videos (page images, video recordings) | No | App Functionality | Read with AI and transcription of video |
 | User Content ▸ Audio Data (recordings) | No | App Functionality | transcription through AI Included (Gemini) |
-| Identifiers ▸ User ID (the AI Included subscription's App Store transaction number) | Yes | App Functionality | the relay keeps it with the month's counts |
-| Purchases ▸ Purchase History (AI Included subscription and top-ups) | Yes | App Functionality | the relay verifies them with Apple and keeps top-up records |
+| Identifiers ▸ User ID (the AI plan subscription's App Store transaction number) | Yes | App Functionality | the relay keeps it with the month's and day's credit counts |
+| Purchases ▸ Purchase History (AI plan subscription and credit packs) | Yes | App Functionality | the relay verifies them with Apple and keeps credit-pack records (balance) |
 | Usage Data ▸ Product Interaction (questions used this month) | Yes | App Functionality | the relay's counts |
 
 `Kalsmritikosh/PrivacyInfo.xcprivacy` declares the same seven types; `docs/DISTRIBUTION_PACK.md` §1 and
@@ -145,7 +148,7 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > connections at all; its knowledge base is encrypted at rest with a key kept in the Keychain.
 >
 > **Online mode (optional, off by default).** Settings ▸ Modules ▸ Connection ▸ Online, then Settings ▸
-> Online: **AI Included** (AI Included plans) or the user's own API key for Anthropic, OpenAI or Google Gemini.
+> Online: **AI Included / AI Pro** (the AI plans' monthly credits) or the user's own API key for Anthropic, OpenAI or Google Gemini.
 > Before anything is sent, a consent screen shows the exact text (and any page image or recording), the
 > destination and its size; nothing is sent unless the user presses Send, and every send is recorded in
 > Settings ▸ Online ▸ What was sent. Network access is confined to the bundled, sandboxed extension
@@ -153,8 +156,9 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > to five public-record sources (data-api.ecb.europa.eu, sanctionslistservice.ofac.treas.gov, scsanctions.un.org,
 > api.gleif.org, www.courtlistener.com) or a page the user asks to capture; the main app has no network
 > entitlement. **AI Included** sends approved requests through the publisher's relay (Cloudflare Worker), which
-> checks the subscription with the App Store Server API and forwards to Anthropic (Claude Opus 5) or, for
-> recordings, Google Gemini under the publisher's account; it keeps only counts. Online AI is switched off for
+> checks the subscription with the App Store Server API, reserves the request's worst-case cost in credits, forwards to
+> Anthropic (Claude Opus 5) or, for recordings, Google Gemini under the publisher's account, and charges the actual
+> cost; it keeps only counts and credits. Credit packs (consumables) never expire and are kept by the relay per subscription. Online AI is switched off for
 > App Store accounts in CN, HK, MO, RU, BY, VE, AF, MM, YE, IR, KP, SY, CU (the providers' supported-country lists).
 > To test: switch to Online, choose a provider, ask a question, and observe the consent screen.
 > **Online tools** (Sources ▸ Online tools…): exchange rate, sanctions lists (downloaded and searched on the Mac),
@@ -164,15 +168,16 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 > "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
 > citations. Work products export from the Studio/report screens.
 >
-> **Subscription.** On first launch the app shows the subscription screen with the monthly and annual
-> plans at the storefront's own prices, the 14-day free trial for eligible accounts (StoreKit decides
+> **Subscription.** On first launch the app shows the subscription screen with the three plans (Workbench,
+> AI Included, AI Pro), each monthly and yearly, what each includes, the credit packs, at the storefront's own
+> prices, Workbench's 14-day free trial for eligible accounts (StoreKit decides
 > eligibility), the price and period that follow, automatic renewal, how to cancel (at least a day
 > before the period ends, in the Apple Account), Restore purchases and Manage subscription. Help, the
 > isolated sample case and backup/recovery are reachable from that screen without subscribing. After a
 > plan ends, cases stay readable and exports, backups, recovery, Help and privacy controls keep working;
 > only creating, editing and analysing ask for a plan. To test in the sandbox: subscribe to either plan
-> (the trial applies once per account), cancel, let it lapse, restore. Permanent unlocks sold under the
-> earlier one-time offer are honoured. **No model download** in this version. Minimum OS
+> (the trial applies once per account), upgrade to an AI plan (one subscription, immediate), cancel, let it
+> lapse, restore. **No model download** in this version. Minimum OS
 > macOS 15.6. **By default no AI model is used**: answers are built from the person's documents by
 > keyword, structured-field and document matching. AI is optional (Settings → Modules → "Use AI to
 > write answers"): Apple's on-device model on macOS 26+ with Apple Intelligence, or the person's own
@@ -193,4 +198,4 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the publ
 - [x] Quotes no accuracy figures (measured figures live in docs/CASE_BENCH_AI_ROUNDS.md only).
 - [x] Does not claim "no network" falsely (accurate: Private mode — the default — makes no connections; Online mode is opt-in and consented per send).
 - [x] Makes no zero-data-collection claim (AI Included sends approved content to providers; the label declares it). No telemetry, analytics or account exist.
-- [x] Says "up to 300" and "shared monthly capacity" wherever AI Included's allowance appears; never promises 300.
+- [x] States the AI plans' credits (2,000 / 6,000 a month, 1 credit = US$0.01 of AI cost), that packs never expire (App Review 3.1.1), that only Workbench has a free trial, and that the service can pause at its monthly capacity (App Review 3.1.2(c): what each plan includes).

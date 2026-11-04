@@ -2,16 +2,21 @@
 //  Purchase.swift
 //  Kalsmritikosh
 //
-//  How the app is sold (owner decision 2026-10-30, App Store completion instructions §11): a free
-//  download; one edition with all nine personas; an auto-renewable subscription — monthly or
-//  annual, the same access either way — with a 14-day introductory free trial for subscribers
-//  Apple finds eligible, renewing automatically unless cancelled. Apple sells, bills, renews,
-//  refunds and restores; the app itself opens no connection for any of it and never sees payment
-//  details. Subscribing enables nothing else: not Online mode, not any upload.
+//  How the app is sold (owner decisions 2026-11-04, replacing 2026-10-30 §11 and 2026-11-01 A2): a free
+//  download and ONE auto-renewable subscription group with three levels, each monthly or yearly —
+//  StoreKit upgrades, downgrades and crossgrades within the group, so nobody holds two subscriptions:
+//    • Workbench ($4.99 / $39.99; ₹249 / ₹1,999): every non-AI feature; Online AI only with the
+//      person's own Anthropic key, billed by Anthropic. The ONLY plan with a 14-day introductory trial.
+//    • AI Included ($39 / $389): everything in Workbench + 2,000 AI credits a month through the
+//      publisher's relay (1 credit = US$0.01 of Claude cost). No trial.
+//    • AI Pro ($99 / $989): everything + 6,000 credits a month and a larger whole-case read. No trial.
+//  Yearly plans get the same monthly allowance each month (from the purchase anniversary — see
+//  relay/src/policy.ts, the one authority for plan parameters). Credit packs (500 and 2,000, consumable)
+//  never expire and are usable only with an AI plan. There are no earlier buyers: the 2026-10-18 lifetime
+//  unlock and its free trial product no longer exist in the app.
 //
-//  Two earlier products are honoured, never repurposed: the permanent unlock sold under the
-//  2026-10-18 plan (`…unlock`, one purchase for good) takes precedence over everything, and the old
-//  free 14-day product (`…trial14`) is a trial still running or ended — it is not consent to billing.
+//  Apple sells, bills, renews, refunds and restores; the app itself opens no connection for any of it
+//  and never sees payment details. Subscribing enables nothing else: not Online mode, not any upload.
 //
 //  Entitlement comes only from VERIFIED StoreKit 2 transactions and renewal information. The last
 //  verified state is cached so an offline launch keeps what was verified, through the latest
@@ -29,29 +34,35 @@ import Security
 import os
 
 nonisolated enum PurchaseProducts {
-    /// Adopted 2026-10-30: one subscription group, two durations, one access level.
+    /// Workbench (product ids kept from the 2026-10-30 edition; never sold before).
     static let monthly = "ecosanskritiinnovation.Kalsmritikosh.edition.monthly"
     static let annual = "ecosanskritiinnovation.Kalsmritikosh.edition.annual"
     static let introductoryTrialDays = 14
-    /// A2 (owner decision 2026-11-01) — AI Included: the same subscription group, one level higher
-    /// (everything in the edition plus 300 Claude Opus 5 questions a month through the publisher's
-    /// relay). No introductory offer: the free trial never includes the publisher's AI.
+    /// AI Included — the same group, one level above Workbench. No introductory offer.
     static let aiMonthly = "ecosanskritiinnovation.Kalsmritikosh.ai.monthly"
     static let aiAnnual = "ecosanskritiinnovation.Kalsmritikosh.ai.annual"
-    /// Consumable: 200 more AI Included questions, valid 12 months (credited by the relay).
-    static let aiTopUp200 = "ecosanskritiinnovation.Kalsmritikosh.ai.topup200"
-    static let aiQuestionsPerMonth = 300
-    static let aiTopUpQuestions = 200
-    static var subscriptions: [String] { [monthly, annual, aiMonthly, aiAnnual] }
+    /// AI Pro — the same group, the top level. No introductory offer.
+    static let proMonthly = "ecosanskritiinnovation.Kalsmritikosh.aipro.monthly"
+    static let proAnnual = "ecosanskritiinnovation.Kalsmritikosh.aipro.annual"
+    /// Consumable credit packs (credited by the relay; never expire).
+    static let credits500 = "ecosanskritiinnovation.Kalsmritikosh.ai.credits500"
+    static let credits2000 = "ecosanskritiinnovation.Kalsmritikosh.ai.credits2000"
 
-    /// Sold under the 2026-10-18 plan; kept for restore, reinstall and update — never a subscription.
-    static let legacyUnlock = "ecosanskritiinnovation.Kalsmritikosh.unlock"
-    static let legacyTrial = "ecosanskritiinnovation.Kalsmritikosh.trial14"
-    static let legacyTrialDays = 14
+    static var subscriptions: [String] { [monthly, annual, aiMonthly, aiAnnual, proMonthly, proAnnual] }
+    static var creditPacks: [String] { [credits500, credits2000] }
+    /// Credits in a pack (mirror of relay TOPUP_CREDITS), nil for anything else.
+    static func credits(inPack id: String) -> Int? {
+        switch id {
+        case credits500: return AIPricing.credits500
+        case credits2000: return AIPricing.credits2000
+        default: return nil
+        }
+    }
 
-    static var all: [String] { subscriptions + [legacyUnlock, legacyTrial] }
-    /// Everything the App Store is asked for (the consumable top-up is never an entitlement record).
-    static var storeProducts: [String] { all + [aiTopUp200] }
+    /// Every entitlement record the app reads (a consumable pack is never an entitlement).
+    static var all: [String] { subscriptions }
+    /// Everything the App Store is asked for.
+    static var storeProducts: [String] { subscriptions + creditPacks }
 
     /// Apple's page for upgrading, downgrading or cancelling (the in-app sheet does not exist on macOS).
     static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
@@ -59,17 +70,53 @@ nonisolated enum PurchaseProducts {
     static let cancelInstructionsURL = URL(string: "https://support.apple.com/en-us/118428")!
 }
 
-/// Which plan and duration a transaction is for.
-nonisolated enum SubscriptionPlan: String, Equatable, Sendable, CaseIterable {
-    case monthly, annual, aiMonthly, aiAnnual
-    init?(productID: String) {
-        switch productID {
-        case PurchaseProducts.monthly: self = .monthly
-        case PurchaseProducts.annual: self = .annual
-        case PurchaseProducts.aiMonthly: self = .aiMonthly
-        case PurchaseProducts.aiAnnual: self = .aiAnnual
+/// The three levels of the subscription group.
+nonisolated enum PlanTier: String, Equatable, Sendable, CaseIterable, Comparable {
+    case workbench, aiIncluded, aiPro
+    var name: String {
+        switch self {
+        case .workbench: return "Workbench"
+        case .aiIncluded: return "AI Included"
+        case .aiPro: return "AI Pro"
+        }
+    }
+    /// The relay's limits (nil for Workbench, which has no relay credits).
+    var limits: AIPricing.PlanLimits? {
+        switch self {
+        case .workbench: return nil
+        case .aiIncluded: return AIPricing.aiIncluded
+        case .aiPro: return AIPricing.aiPro
+        }
+    }
+    /// The relay's code for this tier in its receipts ("ai" / "pro").
+    init?(relayCode: String) {
+        switch relayCode {
+        case "ai": self = .aiIncluded
+        case "pro": self = .aiPro
         default: return nil
         }
+    }
+    /// What the plan includes, in plain words (App Review 3.1.2(c)): shown with every price.
+    var includes: String {
+        switch self {
+        case .workbench:
+            return "Every persona and job on your Mac — adding documents, the case file, timelines, jobs and exports. Online AI uses your own Anthropic key, billed to you by Anthropic. 14-day free trial for new subscribers."
+        case .aiIncluded:
+            return "Everything in Workbench, plus \(AIPricing.aiIncluded.monthlyCredits.formatted()) AI credits a month for Claude through the publisher's service — no AI account or key needed. 1 credit = US$0.01 of AI cost; a typical question uses a few credits, reading a whole case more. No free trial."
+        case .aiPro:
+            return "Everything in Workbench, plus \(AIPricing.aiPro.monthlyCredits.formatted()) AI credits a month and larger whole-case reads (up to \(AIPricing.aiPro.caseReadCredits.formatted()) credits at once). No free trial."
+        }
+    }
+    static func < (a: PlanTier, b: PlanTier) -> Bool { a.rank < b.rank }
+    private var rank: Int { self == .workbench ? 0 : self == .aiIncluded ? 1 : 2 }
+}
+
+/// Which plan and duration a transaction is for.
+nonisolated enum SubscriptionPlan: String, Equatable, Sendable, CaseIterable {
+    case monthly, annual, aiMonthly, aiAnnual, proMonthly, proAnnual
+    init?(productID: String) {
+        guard let p = Self.allCases.first(where: { $0.productID == productID }) else { return nil }
+        self = p
     }
     var productID: String {
         switch self {
@@ -77,37 +124,40 @@ nonisolated enum SubscriptionPlan: String, Equatable, Sendable, CaseIterable {
         case .annual: return PurchaseProducts.annual
         case .aiMonthly: return PurchaseProducts.aiMonthly
         case .aiAnnual: return PurchaseProducts.aiAnnual
+        case .proMonthly: return PurchaseProducts.proMonthly
+        case .proAnnual: return PurchaseProducts.proAnnual
         }
     }
-    var isAnnual: Bool { self == .annual || self == .aiAnnual }
-    /// AI Included: the publisher's Claude Opus 5 questions come with the plan.
-    var includesAI: Bool { self == .aiMonthly || self == .aiAnnual }
-    var periodNoun: String { isAnnual ? "year" : "month" }
-    var label: String {
+    var tier: PlanTier {
         switch self {
-        case .monthly: return "Monthly"
-        case .annual: return "Annual"
-        case .aiMonthly: return "AI Included monthly"
-        case .aiAnnual: return "AI Included annual"
+        case .monthly, .annual: return .workbench
+        case .aiMonthly, .aiAnnual: return .aiIncluded
+        case .proMonthly, .proAnnual: return .aiPro
         }
     }
-    /// The same plan with the other duration (for the annual saving).
+    var isAnnual: Bool { self == .annual || self == .aiAnnual || self == .proAnnual }
+    /// AI Included or AI Pro: the publisher's AI credits come with the plan.
+    var includesAI: Bool { tier != .workbench }
+    var periodNoun: String { isAnnual ? "year" : "month" }
+    var label: String { "\(tier.name) \(isAnnual ? "yearly" : "monthly")" }
+    /// The same plan with the other duration (for the yearly saving).
     var counterpart: SubscriptionPlan {
         switch self {
         case .monthly: return .annual
         case .annual: return .monthly
         case .aiMonthly: return .aiAnnual
         case .aiAnnual: return .aiMonthly
+        case .proMonthly: return .proAnnual
+        case .proAnnual: return .proMonthly
         }
     }
 }
 
 /// Where this Apple account stands. Pure, so the rules are tested without StoreKit.
 nonisolated enum Entitlement: Equatable, Sendable {
-    /// The 2026-10-18 permanent unlock, verified and not revoked: everything, for good.
-    case legacyUnlocked
-    /// The old free 14-day product, still running (no billing is attached to it).
-    case legacyTrial(endsAt: Date)
+    /// The unit-test host's own state (TestHost only): paid functions open, no AI plan. Never produced
+    /// from a store answer or the cache; a shipped build never reaches it.
+    case testHostUnlocked
     /// A subscription's introductory free period; the selected plan renews at `endsAt` unless cancelled.
     case introductoryTrial(endsAt: Date, plan: SubscriptionPlan, willRenew: Bool)
     /// A paid period; `willRenew` false = cancelled but active until `expiresAt`.
@@ -116,7 +166,7 @@ nonisolated enum Entitlement: Equatable, Sendable {
     case grace(until: Date, plan: SubscriptionPlan)
     /// Billing retry with no grace: not entitled to paid functions until payment recovers.
     case billingRetry(plan: SubscriptionPlan)
-    /// Nothing paid stands any more (expired, refunded/revoked, or the legacy trial ended).
+    /// Nothing paid stands any more (expired, refunded/revoked, or billing failed).
     case lapsed(reason: LapseReason)
     /// The store answered and this account never had anything.
     case notStarted
@@ -126,13 +176,13 @@ nonisolated enum Entitlement: Equatable, Sendable {
     /// whenever one exists — see `PurchaseCenter.refresh`).
     case unknown
 
-    nonisolated enum LapseReason: String, Equatable, Sendable { case expired, revoked, legacyTrialEnded, billingFailed }
+    nonisolated enum LapseReason: String, Equatable, Sendable { case expired, revoked, billingFailed }
 
     /// Paid functions (creating, editing, analysing) may be used. Only a VERIFIED state grants them:
     /// an unanswered store is never an unlimited unlock (UI run f, F-1).
     var allowsPaidUse: Bool {
         switch self {
-        case .legacyUnlocked, .legacyTrial, .introductoryTrial, .subscribed, .grace: return true
+        case .testHostUnlocked, .introductoryTrial, .subscribed, .grace: return true
         case .billingRetry, .lapsed, .notStarted, .unknown: return false
         }
     }
@@ -161,7 +211,7 @@ nonisolated enum Entitlement: Equatable, Sendable {
     /// When the verified state stops being valid on its own (offline, the cache may not extend it).
     var verifiedUntil: Date? {
         switch self {
-        case .legacyTrial(let d), .introductoryTrial(let d, _, _), .subscribed(let d, _, _), .grace(let d, _): return d
+        case .introductoryTrial(let d, _, _), .subscribed(let d, _, _), .grace(let d, _): return d
         default: return nil
         }
     }
@@ -173,16 +223,19 @@ nonisolated enum Entitlement: Equatable, Sendable {
         }
     }
 
-    /// A2 — the publisher's AI questions come with the current state: a paid AI Included period or its
-    /// grace. Never a trial (the owner's rule: no included AI in the free trial), never a lapsed state.
-    var includesAI: Bool {
+    /// The publisher's AI credits come with the current state: a paid AI Included / AI Pro period or its
+    /// grace. Never a trial (no AI plan has one), never a lapsed state.
+    var includesAI: Bool { aiTier != nil }
+
+    /// The AI plan level that stands now (nil = no AI credits).
+    var aiTier: PlanTier? {
         switch self {
-        case .subscribed(_, let p, _), .grace(_, let p): return p.includesAI
-        default: return false
+        case .subscribed(_, let p, _), .grace(_, let p): return p.includesAI ? p.tier : nil
+        default: return nil
         }
     }
 
-    /// One verified StoreKit transaction (or legacy transaction), as the rules need it.
+    /// One verified StoreKit transaction, as the rules need it.
     struct Record: Equatable, Sendable {
         let productID: String
         let purchaseDate: Date
@@ -192,15 +245,18 @@ nonisolated enum Entitlement: Equatable, Sendable {
         let revoked: Bool
         /// Subscriptions: this transaction is the introductory free period.
         var isIntroductoryOffer: Bool = false
-        /// The App Store original transaction id (identifies an AI Included subscriber to the relay).
+        /// The App Store original transaction id (identifies an AI subscriber to the relay; the same for
+        /// every transaction of the subscription group).
         var originalID: UInt64? = nil
+        /// Apple replaced this period by an immediate upgrade within the group: it no longer counts.
+        var upgraded: Bool = false
     }
 
-    /// The AI Included subscription's original transaction id when `entitlement` includes AI — what the
-    /// relay is told, and nothing else about the person.
+    /// The AI plan's original transaction id when `entitlement` includes AI — what the relay is told,
+    /// and nothing else about the person.
     static func aiSubscriptionID(records: [Record], entitlement: Entitlement) -> String? {
         guard entitlement.includesAI else { return nil }
-        let ai = records.filter { !$0.revoked && SubscriptionPlan(productID: $0.productID)?.includesAI == true }
+        let ai = records.filter { !$0.revoked && !$0.upgraded && SubscriptionPlan(productID: $0.productID)?.includesAI == true }
         return ai.max(by: { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) })?.originalID.map(String.init)
     }
 
@@ -216,13 +272,11 @@ nonisolated enum Entitlement: Equatable, Sendable {
     /// The rules. `storeAnswered` is false when neither a transaction nor a product came back
     /// (offline first launch, or a build with no store): then nothing is known.
     static func evaluate(records: [Record], renewal: Renewal?, storeAnswered: Bool, now: Date) -> Entitlement {
-        // 1. A standing permanent unlock beats everything (a refunded one does not hide another that stands).
-        let unlocks = records.filter { $0.productID == PurchaseProducts.legacyUnlock }
-        if unlocks.contains(where: { !$0.revoked }) { return .legacyUnlocked }
-
-        // 2. The subscription group: the latest non-revoked period decides.
+        // The subscription group: the latest period that was neither refunded nor replaced by an upgrade
+        // decides (a Workbench year upgraded to AI Included keeps its old expiry on record, but no longer
+        // counts; a downgrade takes effect at renewal, so the higher plan stands until then).
         let subs = records.filter { SubscriptionPlan(productID: $0.productID) != nil }
-        if let latest = subs.filter({ !$0.revoked }).max(by: { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) }),
+        if let latest = subs.filter({ !$0.revoked && !$0.upgraded }).max(by: { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) }),
            let plan = SubscriptionPlan(productID: latest.productID) {
             let expires = latest.expirationDate ?? latest.purchaseDate
             let willRenew = renewal?.willAutoRenew ?? true
@@ -236,13 +290,6 @@ nonisolated enum Entitlement: Equatable, Sendable {
             return .lapsed(reason: renewal?.isInBillingRetry == false && renewal?.willAutoRenew == true ? .billingFailed : .expired)
         }
         if !subs.isEmpty { return .lapsed(reason: .revoked) }   // every subscription period was refunded or revoked
-
-        // 3. The old free trial product.
-        if let start = records.filter({ $0.productID == PurchaseProducts.legacyTrial }).map(\.originalPurchaseDate).min() {
-            let ends = start.addingTimeInterval(TimeInterval(PurchaseProducts.legacyTrialDays) * 86_400)
-            return now < ends ? .legacyTrial(endsAt: ends) : .lapsed(reason: .legacyTrialEnded)
-        }
-        if !unlocks.isEmpty { return .lapsed(reason: .revoked) }   // only a refunded unlock
         return storeAnswered ? .notStarted : .unknown
     }
 
@@ -257,7 +304,6 @@ nonisolated enum Entitlement: Equatable, Sendable {
     func asCached(now: Date) -> Entitlement {
         if let until = verifiedUntil, now >= until {
             switch self {
-            case .legacyTrial: return .lapsed(reason: .legacyTrialEnded)
             case .grace: return .lapsed(reason: .billingFailed)
             default: return .lapsed(reason: .expired)
             }
@@ -270,13 +316,11 @@ nonisolated enum Entitlement: Equatable, Sendable {
 ///
 /// N3 (mandate 2026-11-01): the cache is a convenience for an offline launch, not an authority.
 /// • It is sealed with an HMAC whose key lives in the Keychain, so an edited preference is ignored.
-/// • It never restores a permanent unlock: a real lifetime purchase is a signed transaction StoreKit
-///   keeps on this Mac and re-reads offline (`Transaction.currentEntitlements`), so the cache is not
-///   needed for it — and a forged one grants nothing.
+/// • It holds only time-limited states, each with its own verified end.
 /// • A clock set back before the moment of verification is read as that moment, so it cannot extend a
 ///   time-limited state.
 nonisolated struct CachedEntitlement: Codable, Equatable, Sendable {
-    enum Kind: String, Codable { case legacyUnlocked, legacyTrial, introductoryTrial, subscribed, grace, billingRetry, lapsed, notStarted }
+    enum Kind: String, Codable { case introductoryTrial, subscribed, grace, billingRetry, lapsed, notStarted }
     var kind: Kind
     var until: Date?
     var plan: String?
@@ -287,14 +331,12 @@ nonisolated struct CachedEntitlement: Codable, Equatable, Sendable {
     init(_ e: Entitlement, at: Date) {
         verifiedAt = at
         switch e {
-        case .legacyUnlocked: kind = .legacyUnlocked
-        case .legacyTrial(let d): kind = .legacyTrial; until = d
         case .introductoryTrial(let d, let p, let r): kind = .introductoryTrial; until = d; plan = p.rawValue; willRenew = r
         case .subscribed(let d, let p, let r): kind = .subscribed; until = d; plan = p.rawValue; willRenew = r
         case .grace(let d, let p): kind = .grace; until = d; plan = p.rawValue
         case .billingRetry(let p): kind = .billingRetry; plan = p.rawValue
         case .lapsed(let why): kind = .lapsed; reason = why.rawValue
-        case .notStarted, .unknown: kind = .notStarted
+        case .notStarted, .unknown, .testHostUnlocked: kind = .notStarted
         }
     }
 
@@ -304,10 +346,6 @@ nonisolated struct CachedEntitlement: Codable, Equatable, Sendable {
         let p = plan.flatMap(SubscriptionPlan.init(rawValue:))
         let e: Entitlement
         switch kind {
-        case .legacyUnlocked: return .unknown   // only StoreKit's signed transaction proves a permanent purchase
-        case .legacyTrial:
-            guard let until else { return .unknown }
-            e = .legacyTrial(endsAt: until)
         case .introductoryTrial:
             guard let until, let p else { return .unknown }
             e = .introductoryTrial(endsAt: until, plan: p, willRenew: willRenew ?? true)
@@ -394,15 +432,18 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
     /// The disclosure Apple's guidance and the instruction ask for, with real values.
     var disclosure: String {
         var renew = "Renews automatically at \(displayPrice) per \(plan.periodNoun) unless cancelled at least a day before the period ends. Manage or cancel through your Apple Account."
-        if plan.includesAI { renew += " " + Self.aiTerms }
+        if plan.includesAI { renew += " " + Self.aiTerms(plan.tier) }
         if eligibleForTrial, let d = trialDays {
             return "\(d) days free, then \(displayPrice) per \(plan.periodNoun). \(renew)"
         }
         return "\(displayPrice) per \(plan.periodNoun), charged now. \(renew)"
     }
 
-    /// What AI Included is and is not, shown with every AI Included price.
-    static let aiTerms = "Includes up to \(PurchaseProducts.aiQuestionsPerMonth) questions a month answered by Claude Opus 5 (Anthropic; if Anthropic declines a request, another Claude model may answer it), and transcription of recordings by Google Gemini, through the publisher's service. All AI Included subscribers share one monthly service capacity: when it is used up, AI Included pauses until the 1st of the next month (UTC), even if you have questions left, and everything else keeps working. Unused questions do not carry over; 200 more can be bought, valid 12 months. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts."
+    /// What an AI plan is and is not, shown with every AI plan price.
+    static func aiTerms(_ tier: PlanTier) -> String {
+        let l = tier.limits ?? AIPricing.aiIncluded
+        return "Includes \(l.monthlyCredits.formatted()) AI credits a month (1 credit = US$0.01 of AI cost at Anthropic's published prices; yearly plans get the same allowance every month, renewing on the day of purchase). Credits pay for questions answered by Claude Opus 5 (Anthropic; if Anthropic declines a request, another Claude model may answer it) and for transcription of recordings by Google Gemini, through the publisher's service; each request is charged what it actually cost, and the app shows the estimate before a large read. One request may use up to \(l.perRequestCredits) credits, a confirmed whole-case read up to \(l.caseReadCredits.formatted()), and up to \(l.dailyCredits.formatted()) a day. Unused monthly credits do not carry over; credit packs (500 or 2,000) never expire and are spent after the month's credits, while an AI plan is active. The service has a monthly capacity: if it is reached it pauses until the 1st (UTC), nothing is charged, and everything else keeps working. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts and credits."
+    }
 
     /// The annual plan's saving against twelve monthly charges, from the two matching storefront
     /// prices; nil when the prices are not comparable numbers. Secondary information only.
@@ -437,7 +478,7 @@ nonisolated enum PaidUse {
     }
 
     private struct Snapshot: Sendable { var entitlement: Entitlement }
-    private static let snapshot = OSAllocatedUnfairLock(initialState: Snapshot(entitlement: TestHost.isActive ? .legacyUnlocked : .unknown))
+    private static let snapshot = OSAllocatedUnfairLock(initialState: Snapshot(entitlement: TestHost.isActive ? .testHostUnlocked : .unknown))
     /// The clock the boundary reads; tests inject one (never the Mac's clock settings).
     nonisolated(unsafe) static var clock: @Sendable () -> Date = { Date() }
 
@@ -511,18 +552,18 @@ final class PurchaseCenter {
     /// The clock every decision reads; tests inject one (N2 — never the Mac's clock settings).
     var clock: () -> Date = { PaidUse.clock() }
     private(set) var offers: [PlanOffer] = []
-    /// The annual saving (per cent) when both storefront prices are known; shown second.
-    private(set) var annualSavingPercent: Int?
-    /// The same for AI Included.
-    private(set) var aiAnnualSavingPercent: Int?
-    /// A2 — the 200-question top-up as the storefront sells it (nil until loaded).
-    private(set) var topUpPrice: String?
-    /// A2 — AI Included questions left this month, when last asked (Settings ▸ Online).
-    private(set) var aiStatus: AIIncludedRelay.Status?
-    /// The AI Included subscription number from verified transactions (nil when the state has no AI).
+    /// The yearly saving (per cent) per level when both storefront prices are known; shown second.
+    private(set) var annualSavings: [PlanTier: Int] = [:]
+    var annualSavingPercent: Int? { annualSavings[.workbench] }
+    var aiAnnualSavingPercent: Int? { annualSavings[.aiIncluded] }
+    /// The credit packs as the storefront sells them (product id → display price; empty until loaded).
+    private(set) var packPrices: [String: String] = [:]
+    /// The AI subscription number from verified transactions (nil when the state has no AI).
     private(set) var aiSubscriptionID: String? {
         didSet { if publishes { AIIncludedAccess.publish(aiSubscriptionID) } }
     }
+    /// Whether the relay is selling AI plans this month (tests inject an answer; never the network there).
+    var aiSellable: @Sendable () async throws -> Bool = { try await AIIncludedRelay.sellable() }
     /// True while the products could not be loaded: the paywall shows retry, never a made-up price.
     private(set) var productsUnavailable = false
     private(set) var busy = false
@@ -581,17 +622,18 @@ final class PurchaseCenter {
     }
 
     func start() {
-        if !talksToStore { apply(.legacyUnlocked); return }
+        if !talksToStore { apply(.testHostUnlocked); return }
         guard updates == nil else { return }
+        AICreditMeter.installHooks()
         AIRegion.start()
         // The last verified state carries the person through an offline launch, under its own rule.
         if let cached = CachedEntitlement.load() { apply(cached.entitlement(now: clock())) }
         updates = Task { [weak self] in
             for await result in Transaction.updates {
-                // A top-up is finished only once the relay has credited it (after the refresh that
-                // confirms the AI Included subscription it belongs to).
+                // A credit pack is finished only once the relay has credited it (after the refresh that
+                // confirms the AI subscription it belongs to) — or, refunded, once the relay removed it.
                 if case .verified(let t) = result {
-                    if t.productID == PurchaseProducts.aiTopUp200 { await self?.refresh(); await self?.creditTopUp(t); continue }
+                    if PurchaseProducts.credits(inPack: t.productID) != nil { await self?.refresh(); await self?.creditTopUp(t); continue }
                     await t.finish()
                 }
                 await self?.refresh()
@@ -629,15 +671,15 @@ final class PurchaseCenter {
                                      eligibleForTrial: eligible && intro != nil && intro?.paymentMode == .freeTrial, trialDays: days))
             }
             offers = out
-            // The edition's two plans must be there; AI Included is offered only when its products are.
+            // Workbench's two plans must be there; the AI plans are offered only when their products are.
             productsUnavailable = out.filter { !$0.plan.includesAI }.count < 2
-            if let m = products[PurchaseProducts.monthly], let a = products[PurchaseProducts.annual] {
-                annualSavingPercent = PlanOffer.annualSaving(monthly: m.price, annual: a.price)
+            var savings: [PlanTier: Int] = [:]
+            for plan in SubscriptionPlan.allCases where !plan.isAnnual {
+                if let m = products[plan.productID], let a = products[plan.counterpart.productID],
+                   let pct = PlanOffer.annualSaving(monthly: m.price, annual: a.price) { savings[plan.tier] = pct }
             }
-            if let m = products[PurchaseProducts.aiMonthly], let a = products[PurchaseProducts.aiAnnual] {
-                aiAnnualSavingPercent = PlanOffer.annualSaving(monthly: m.price, annual: a.price)
-            }
-            topUpPrice = products[PurchaseProducts.aiTopUp200]?.displayPrice
+            annualSavings = savings
+            packPrices = Dictionary(uniqueKeysWithValues: PurchaseProducts.creditPacks.compactMap { id in products[id].map { (id, $0.displayPrice) } })
         } catch {
             KalsmritikoshLog.app.error("App Store products unavailable: \(error.localizedDescription, privacy: .public)")
             productsUnavailable = true
@@ -658,13 +700,14 @@ final class PurchaseCenter {
 
     /// Read the signed transactions and renewal information StoreKit holds for this Apple account.
     func refresh() async {
-        if !talksToStore { apply(.legacyUnlocked); return }
+        if !talksToStore { apply(.testHostUnlocked); return }
         var records: [Entitlement.Record] = []
         var seen: [UInt64: Int] = [:]
         func record(_ t: Transaction) {
             let r = Entitlement.Record(productID: t.productID, purchaseDate: t.purchaseDate, originalPurchaseDate: t.originalPurchaseDate,
                                        expirationDate: t.expirationDate, revoked: t.revocationDate != nil,
-                                       isIntroductoryOffer: t.offer?.type == .introductory, originalID: t.originalID)
+                                       isIntroductoryOffer: t.offer?.type == .introductory, originalID: t.originalID,
+                                       upgraded: t.isUpgraded)
             if let i = seen[t.id] {
                 // The same transaction read twice: a revocation seen on either read stands.
                 if r.revoked { records[i] = r }
@@ -704,101 +747,109 @@ final class PurchaseCenter {
             // The store did not answer: keep the cached verified state under its own rule.
             apply(CachedEntitlement.load()?.entitlement(now: now) ?? .unknown)
             aiSubscriptionID = nil   // the relay re-checks with Apple anyway; offline nothing could reach it
+            AICreditMeter.shared.planChanged(nil)
             return
         }
         apply(fresh)
         aiSubscriptionID = Entitlement.aiSubscriptionID(records: records, entitlement: fresh)
+        AICreditMeter.shared.planChanged(fresh.aiTier)
         CachedEntitlement(fresh, at: now).save()
     }
 
     /// Subscribe to a plan (StoreKit applies the introductory offer only to the eligible).
     func subscribe(_ plan: SubscriptionPlan) async {
-        // A2 — AI Included is not sold to someone new once the month's service capacity is nearly used
-        // (the relay says so; nothing about the person is sent). A current AI subscriber changing
-        // duration is not new.
+        // An AI plan is not sold to someone new once the month's service capacity is nearly used (the
+        // relay says so; nothing about the person is sent). A current AI subscriber changing plan is not new.
         if plan.includesAI, let why = AIRegion.current.explanation {
             message = why
             return
         }
         if plan.includesAI, !entitlement.includesAI, talksToStore {
             let open: Bool
-            do { open = try await AIIncludedRelay.sellable() } catch {
+            do { open = try await aiSellable() } catch {
                 KalsmritikoshLog.app.error("AI Included availability check failed: \(error.localizedDescription, privacy: .public)")
-                message = "The AI Included service could not be reached to confirm it is open to new subscribers. Nothing was charged; try again in a minute, or choose a plan without AI Included."
+                message = "The AI service could not be reached to confirm it is open to new subscribers. Nothing was charged; try again in a minute, or choose Workbench."
                 return
             }
             guard open else {
-                message = "AI Included has reached this month's capacity and is not taking new subscribers until the 1st. Nothing was charged. The plans without AI Included are available, and Online mode can use your own AI key."
+                message = "The AI plans have reached this month's capacity and are not taking new subscribers until the 1st. Nothing was charged. Workbench is available, and its Online AI can use your own Anthropic key."
                 return
             }
         }
         await buy(products[plan.productID], what: "the \(plan.label.lowercased()) plan")
     }
 
-    /// A2 — buy 200 more AI Included questions. The transaction is finished only once the relay has
+    /// Buy a credit pack (500 or 2,000 credits; never expire). It is bought FOR the current AI
+    /// subscription (`appAccountToken`, which the relay checks), and finished only once the relay has
     /// credited it; one that could not be credited stays unfinished and is credited at the next launch.
-    func buyTopUp() async {
-        guard entitlement.includesAI, aiSubscriptionID != nil else {
-            message = "Extra questions are for AI Included subscribers. Subscribe to an AI Included plan first."
+    func buyCredits(_ productID: String) async {
+        guard PurchaseProducts.credits(inPack: productID) != nil else { return }
+        guard entitlement.includesAI, let sub = aiSubscriptionID else {
+            message = "Credit packs are for AI Included and AI Pro subscribers. Choose an AI plan first."
             return
         }
-        guard let product = products[PurchaseProducts.aiTopUp200] else {
-            message = "The App Store is not reachable right now, so the top-up cannot be confirmed. Try again in a moment."
+        guard let product = products[productID] else {
+            message = "The App Store is not reachable right now, so the credit pack cannot be confirmed. Try again in a moment."
             return
         }
         busy = true
         defer { busy = false }
         do {
-            switch try await product.purchase() {
+            switch try await product.purchase(options: [.appAccountToken(AIIncludedRelay.accountToken(subscription: sub))]) {
             case .success(let verification):
                 guard case .verified(let t) = verification else {
-                    message = Self.message(for: .unverified, what: "the top-up")
+                    message = Self.message(for: .unverified, what: "the credit pack")
                     return
                 }
                 await creditTopUp(t)
             case .userCancelled: break
-            case .pending: message = Self.message(for: .pending, what: "the top-up")
+            case .pending: message = Self.message(for: .pending, what: "the credit pack")
             @unknown default: break
             }
         } catch {
-            KalsmritikoshLog.app.error("Top-up purchase failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Credit pack purchase failed: \(error.localizedDescription, privacy: .public)")
             message = error.localizedDescription
         }
     }
 
-    /// Credit a verified top-up with the relay, then finish it. Never finished uncredited.
+    /// Credit a verified pack with the relay, then finish it. Never finished uncredited. A refunded pack is
+    /// reported to the relay (which re-checks with Apple and removes its remaining credits), then finished.
     func creditTopUp(_ t: Transaction) async {
-        guard t.productID == PurchaseProducts.aiTopUp200 else { return }
-        if t.revocationDate != nil { await t.finish(); return }   // refunded: nothing to credit
+        guard let credits = PurchaseProducts.credits(inPack: t.productID) else { return }
         guard let sub = aiSubscriptionID else {
-            message = "The top-up was bought; it will be added once AI Included is confirmed for this account."
+            if t.revocationDate != nil { await t.finish(); return }
+            message = "The credit pack was bought; it will be added once an AI plan is confirmed for this account."
             return
         }
         do {
-            if try await AIIncludedRelay.creditTopUp(subscription: sub, transactionID: String(t.id)) {
+            switch try await AIIncludedRelay.creditTopUp(subscription: sub, transactionID: String(t.id)) {
+            case .onAccount:
                 await t.finish()
-                message = "\(PurchaseProducts.aiTopUpQuestions) questions added, valid for 12 months."
-                await refreshAIStatus()
+                message = "\(credits.formatted()) credits added. Credit packs never expire."
+            case .revoked:
+                await t.finish()
+                message = "A refunded credit pack was removed from your balance."
             }
+            await refreshAIStatus()
         } catch {
-            KalsmritikoshLog.app.error("Top-up credit failed: \(error.localizedDescription, privacy: .public)")
-            message = "The top-up was bought but the AI Included service could not add it yet (\(error.localizedDescription)). It is kept and added automatically next time the app opens."
+            KalsmritikoshLog.app.error("Credit pack credit failed: \(error.localizedDescription, privacy: .public)")
+            message = "The credit pack was bought but the AI service could not add it yet (\(error.localizedDescription)). It is kept and added automatically next time the app opens."
         }
     }
 
-    /// Credit any bought-but-uncredited top-ups (an earlier credit failed, or the app quit).
+    /// Credit any bought-but-uncredited packs (an earlier credit failed, or the app quit).
     func creditPendingTopUps() async {
         guard talksToStore, aiSubscriptionID != nil else { return }
         for await result in Transaction.unfinished {
-            if case .verified(let t) = result, t.productID == PurchaseProducts.aiTopUp200 { await creditTopUp(t) }
+            if case .verified(let t) = result, PurchaseProducts.credits(inPack: t.productID) != nil { await creditTopUp(t) }
         }
     }
 
-    /// Ask the relay how many AI Included questions are left (one request carrying only the subscription number).
+    /// Ask the relay for the plan's credits (one request carrying only the subscription number).
     func refreshAIStatus() async {
-        guard let sub = aiSubscriptionID else { aiStatus = nil; return }
-        do { aiStatus = try await AIIncludedRelay.status(subscription: sub) } catch {
-            KalsmritikoshLog.app.error("AI Included status failed: \(error.localizedDescription, privacy: .public)")
+        guard let sub = aiSubscriptionID else { AICreditMeter.shared.planChanged(entitlement.aiTier); return }
+        do { AICreditMeter.shared.apply(try await AIIncludedRelay.status(subscription: sub)) } catch {
+            KalsmritikoshLog.app.error("AI credit status failed: \(error.localizedDescription, privacy: .public)")
             message = error.localizedDescription
         }
     }
@@ -878,8 +929,7 @@ final class PurchaseCenter {
     var statusText: String {
         let df = DateFormatter(); df.dateStyle = .medium; df.timeStyle = .none
         switch entitlement {
-        case .legacyUnlocked: return "Purchased outright (lifetime unlock)."
-        case .legacyTrial(let d): return "Free trial (earlier plan) until \(df.string(from: d)); no charge follows it."
+        case .testHostUnlocked: return "Test host (no store)."
         case .introductoryTrial(let d, let plan, let r):
             return r ? "Free trial until \(df.string(from: d)); the \(plan.label.lowercased()) plan then renews unless cancelled a day before."
                      : "Free trial until \(df.string(from: d)); renewal is off, so nothing will be charged."
@@ -891,7 +941,6 @@ final class PurchaseCenter {
             switch why {
             case .expired: return "Subscription ended. Your work stays readable and exportable; subscribe again to edit and analyse."
             case .revoked: return "The purchase was refunded or revoked. Your work stays readable and exportable."
-            case .legacyTrialEnded: return "The free trial ended. Your work stays readable and exportable."
             case .billingFailed: return "Renewal failed. Your work stays readable and exportable; update the payment method to continue."
             }
         case .notStarted: return "Not subscribed."

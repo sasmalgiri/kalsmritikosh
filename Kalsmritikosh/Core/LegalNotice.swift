@@ -70,14 +70,14 @@ public nonisolated enum LegalNotice {
     answers use Apple’s on-device model (part of macOS), and the semantic-search models ship \
     inside the app package — nothing to install and nothing to download. The ledger is \
     encrypted on your Mac, with its key in your Keychain. Online mode is off unless you turn \
-    it on: then AI Included or the cloud AI you choose with your own API key may help understand \
+    it on: then an AI plan (AI Included or AI Pro) or the cloud AI you choose with your own API key may help understand \
     a question and, if you allow it, read passages, page images or a recording to word an answer \
     or a transcript — you see exactly what would be sent, and nothing is sent until you agree. \
     Document text goes only to a provider whose terms permit it, after you confirm, and that \
-    provider keeps what it receives under its own terms. With AI Included, requests pass through \
-    the publisher's relay to Anthropic (Claude) or Google (Gemini, for recordings) under the \
-    publisher's account; the relay keeps only counts and the subscription's transaction number, \
-    never content. Online tools look up public records (exchange rates, registries, court \
+    provider keeps what it receives under its own terms. With AI Included or AI Pro, requests pass \
+    through the publisher's relay to Anthropic (Claude) or Google (Gemini, for recordings) under the \
+    publisher's account and are charged in credits at their actual cost; the relay keeps only counts, \
+    credits and the subscription's transaction number, never content. Online tools look up public records (exchange rates, registries, court \
     records), search downloaded sanctions lists on this Mac, and capture web pages you choose, \
     each shown to you first. Online AI is not offered in some countries. Sync through a folder, if \
     you turn it on, writes your own work into a folder you choose, encrypted with your \
