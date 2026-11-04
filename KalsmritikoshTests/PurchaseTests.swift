@@ -152,6 +152,11 @@ struct PurchaseTests {
         #expect(ineligible.actionTitle == "Subscribe ₹249 per month" && !ineligible.disclosure.contains("free"))
         #expect(PlanOffer.annualSaving(monthly: 4.99, annual: 39.99) == 33)
         #expect(PlanOffer.annualSaving(monthly: 249, annual: 1999) == 33)
+        // Release decisions 2026-11-04: the AI plans' yearly prices ($389.99, $989.99) and India prices.
+        #expect(PlanOffer.annualSaving(monthly: 39, annual: 389.99) == 17)
+        #expect(PlanOffer.annualSaving(monthly: 99, annual: 989.99) == 17)
+        #expect(PlanOffer.annualSaving(monthly: 3499, annual: 34999) == 17)
+        #expect(PlanOffer.annualSaving(monthly: 8999, annual: 89999) == 17)
         #expect(PlanOffer.annualSaving(monthly: 3, annual: 40) == nil, "no saving is not a saving")
         #expect(PlanOffer.annualSaving(monthly: 0, annual: 40) == nil)
     }
@@ -190,8 +195,8 @@ struct PurchaseTests {
         let subs = try #require(groups[0]["subscriptions"] as? [[String: Any]])
         #expect(Set(subs.compactMap { $0["productID"] as? String }) == Set(PurchaseProducts.subscriptions))
         let prices = [PurchaseProducts.monthly: "4.99", PurchaseProducts.annual: "39.99",
-                      PurchaseProducts.aiMonthly: "39.0", PurchaseProducts.aiAnnual: "389.0",
-                      PurchaseProducts.proMonthly: "99.0", PurchaseProducts.proAnnual: "989.0"]
+                      PurchaseProducts.aiMonthly: "39.0", PurchaseProducts.aiAnnual: "389.99",
+                      PurchaseProducts.proMonthly: "99.0", PurchaseProducts.proAnnual: "989.99"]   // yearly AI prices: release decisions 2026-11-04
         for s in subs {
             let id = try #require(s["productID"] as? String)
             let plan = try #require(SubscriptionPlan(productID: id))

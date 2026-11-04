@@ -81,13 +81,14 @@ Proof kinds:
 | `privacy.no-cloud` | `no cloud` | ci:sensitive-export |
 | `privacy.exports-local` | `never uploaded` | ci:sensitive-export |
 | `privacy.online-opt-in` | `Online mode is off unless you turn it on` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift |
-| `privacy.provider-terms` | `goes to OpenAI in this release` | grep:mayReceiveDocuments:Kalsmritikosh/Routing/Providers/Online/OnlineProviderKind.swift |
+| `privacy.provider-terms` | `with your own key no other AI provider is used in this release` | grep:isRetiredForAnswering:Kalsmritikosh/Routing/Providers/Online/OnlineProviderKind.swift |
 | `privacy.consent-before-send` | `nothing is sent until you agree` | grep:OutboundConsentSheet:Kalsmritikosh |
 | `privacy.ai-included-relay` | `It keeps only counts` | grep:counts only:relay/src/index.ts |
 | `privacy.ai-by-country` | `switches Online AI off for App Store accounts` | grep:AI_BLOCKED_STOREFRONTS:relay/src/policy.ts |
 | `privacy.online-tools` | `the name you check is not sent` | test:client |
 | `privacy.online-record-reading` | `material marked privileged is never sent` | grep:onlineRecordReading:Kalsmritikosh/App/AppState.swift |
 | `privacy.case-permission` | `You are asked once for each case` | test:consentOncePerDocumentSet |
+| `privacy.question-no-prompt` | `your questions are sent without a further prompt` | test:questionOnlyInsidePermittedCase |
 | `privacy.encrypted-at-rest` | `encrypted on your Mac` | test:aKeyedLedgerIsEncryptedOnDisk |
 | `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |
 | `privacy.purchase-by-apple` | `handled by Apple through the App Store` | grep:Transaction.currentEntitlements:Kalsmritikosh/App/Store/Purchase.swift |

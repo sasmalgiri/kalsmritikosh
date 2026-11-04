@@ -14,9 +14,11 @@ bundle ID `ecosanskritiinnovation.Kalsmritikosh` · repository `github.com/sasma
 1. https://developer.apple.com/programs/enroll/ ▸ sign in with the Apple Account of **Shrabani Sasmal** ▸ enrol as
    **Individual** ▸ pay the annual fee. The App Store "Seller" will be the legal name on this account — it must read
    exactly "Shrabani Sasmal".
-2. Note the **Team ID** (developer.apple.com ▸ Account ▸ Membership details). The project and `StoreKit/Kalsmritikosh.storekit`
-   currently carry `6TPTCJD42Q`. **If Shrabani's Team ID is different, tell the agent** — the App Group
-   (`6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh`) and signing team must change with it.
+2. **Verify the Team ID** (release decision 2026-11-04, item 7): developer.apple.com ▸ Account ▸ **Membership** (Membership
+   details) for **Shrabani Sasmal**'s account, and note the Team ID shown there. The project and `StoreKit/Kalsmritikosh.storekit`
+   currently carry **`6TPTCJD42Q`**. **If Shrabani's Team ID differs from `6TPTCJD42Q`, tell the agent before archiving** — the
+   signing team of every target and the App Group (`6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh`, used by the app and its Share
+   extension) must change with it. Do not change the project yourself; the agent was told not to change it until you confirm.
 
 ## 2. Agreements, tax and banking
 
@@ -40,9 +42,17 @@ accepted) ▸ declare no associated developer accounts ▸ submit. Takes effect 
 2. **App Information:** category Productivity / Business; **Content Rights:** "contains third-party content" → Yes, you have
    the rights (MIT-licensed BGE models; public-domain sample cases); **Age Rating:** fill the questionnaire honestly
    ("Unrestricted Web Access: Yes"), then choose **18+**.
-3. **Pricing and Availability:** Free; all territories (Online AI switches itself off in the 13 blocked storefronts).
+3. **Pricing and Availability:** Free; all territories (Online AI switches itself off in the 13 blocked storefronts, and only
+   Workbench is sold there — see step 4).
 4. **Subscriptions and credit packs:** follow `release/IAP_SETUP.md` §1–§3 exactly (six subscriptions in one group with
-   levels, Workbench's 14-day free intro offer only, two consumables, 3-day billing grace, Family Sharing off).
+   levels, Workbench's 14-day free intro offer only, two consumables, 3-day billing grace, Family Sharing off). Prices (release
+   decisions 2026-11-04): US Workbench $4.99 / $39.99, AI Included $39 / **$389.99**, AI Pro $99 / **$989.99**, packs $9.99 /
+   $34.99; **India overrides** Workbench ₹249 / ₹1,999, AI Included ₹3,499 / ₹34,999, AI Pro ₹8,999 / ₹89,999, packs ₹899 /
+   ₹2,999 (Apple's storefront prices include GST). **Confirm in the price picker that $39.00 and $99.00 exist** as US points
+   (IAP_SETUP §6.1); if not, tell the agent which points you chose.
+   **Remove the 13 AI-blocked storefronts** — CHN, HKG, MAC, RUS, BLR, VEN, AFG, MMR, YEM, IRN, PRK, SYR, CUB — from the
+   **availability of the four AI subscriptions and both credit packs** (each product ▸ Availability). Leave Workbench available.
+   The app already hides the AI plans, the packs and the own-key option for App Store accounts of those countries.
 5. **In-App Purchase key** for the relay: `release/IAP_SETUP.md` §5 (download the `.p8` once; note Key ID and Issuer ID).
 6. **App Privacy:** enter the answers in `release/APP_PRIVACY_LABEL.md`; Privacy Policy URL
    `https://sasmalgiri.github.io/kalsmritikosh/privacy.html`.
@@ -53,7 +63,7 @@ In Terminal, in the repository's `relay/` folder (Node ≥ 23.6 for the tests):
 
 ```
 cd relay
-npm test                                   # expect: pass 17, fail 0
+npm test                                   # expect: pass 19, fail 0
 npx wrangler login                         # free Cloudflare account
 npx wrangler d1 create kals-relay          # copy the printed database_id into wrangler.toml
 npm run db:init
@@ -62,7 +72,7 @@ npx wrangler secret put GEMINI_API_KEY     # aistudio.google.com ▸ API key in 
 npx wrangler secret put APPLE_ISSUER_ID
 npx wrangler secret put APPLE_KEY_ID
 npx wrangler secret put APPLE_PRIVATE_KEY  # paste the whole .p8
-npx wrangler secret put GLOBAL_CAP_USD     # type: 20
+npx wrangler secret put GLOBAL_CAP_USD     # type: 20  (keep 20 until Apple approves the app — see step 12)
 npm run deploy                             # note the address: https://kals-ai-relay.<you>.workers.dev
 curl https://kals-ai-relay.<you>.workers.dev/v1/sellable   # expect {"sellable":true}
 ```
@@ -141,13 +151,21 @@ App Store Connect ▸ the app ▸ macOS App ▸ version **1.0**:
 ## 12. After approval
 
 - **Release** the version (manual release).
-- **Raise `GLOBAL_CAP_USD` before you sell to the public.** At US$20 a single AI Included subscriber (2,000 credits = US$20 of
-  Claude cost) could use the whole service's month. Rule of thumb: cap ≥ (AI Included subscribers × 20) + (AI Pro subscribers ×
-  60) + transcription, in US$; then raise the Anthropic console spend limit to at least the cap and add credit. Command:
-  `cd relay && npx wrangler secret put GLOBAL_CAP_USD` (type the new number) — takes effect immediately.
-- **Watch** `curl https://<relay host>/v1/sellable` (or the app's plan screen): `false` means 90 % of the cap is spent, AI plans
+- **Global spend cap (release decision 2026-11-04, item 6).** Keep **`GLOBAL_CAP_USD=20` until Apple approves the app** (review
+  traffic only). **After approval, set it to about US$25 × the number of AI subscribers you expect** this month (e.g. 40 expected
+  subscribers → 1000), and raise it as subscribers grow. At US$20 a single AI Included subscriber (2,000 credits = US$20 of
+  Claude cost) could use the whole service's month; US$25 per subscriber covers an AI Included allowance plus some packs and
+  transcription — if many subscribers are on AI Pro (6,000 credits = US$60), size the cap up for them. Then raise the Anthropic
+  console spend limit to at least the cap and add credit. Command: `cd relay && npx wrangler secret put GLOBAL_CAP_USD` (type the
+  new number) — takes effect immediately.
+- **Watch `/v1/sellable`** — `curl https://<relay host>/v1/sellable` (or the app's plan screen) — at least weekly and after
+  each cap change: `false` means 90 % of the cap is spent, AI plans
   are no longer offered to new buyers and new AI requests are refused until the 1st (UTC) or until you raise the cap.
 - Check console.anthropic.com ▸ Usage weekly against Apple's proceeds.
 - Consider turning off the relay's Sandbox acceptance after review (today it accepts Sandbox and TestFlight transactions, which
   spend the real budget) — ask the agent for a flag.
 - Subscriber deletion requests: `relay/README.md` ▸ "Retention and requests".
+- **Lawyer review (optional, recommended before taking money).** The terms, privacy policy, privacy label and listing were
+  prepared and reviewed by agents, not counsel (`docs/agent-reviews/legal-privacy.md`). A lawyer's review is not required to
+  submit, but is recommended before the first paid subscription is sold — especially the India tax/GST position, the AI-provider
+  disclosures (App Review 5.1.2(i)) and the "not linked" privacy-label reading (`release/APP_PRIVACY_LABEL.md`, owner decision 1).

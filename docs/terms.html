@@ -54,15 +54,15 @@
   <p><strong>Third-party AI, with your permission once per case.</strong> When you use AI inside a case — on an AI plan or with your
   own Anthropic key — the App first lists which of that case's documents would be sent to Anthropic (Claude), which would not and
   why, and the estimated cost. If you allow it for that case, those documents and the questions you ask in that case are sent to
-  Anthropic until the case's documents change, when you are asked again. Recordings you choose to transcribe are sent to Google
-  (Gemini) after you confirm. Material marked privileged, protected source identities and other cases' documents are not sent.
+  Anthropic until the case's documents change, when you are asked again; inside a case you allowed, your questions are sent without a further prompt.
+  Recordings you choose to transcribe on an AI plan are sent to Google (Gemini) after you confirm. Material marked privileged, protected source identities and other cases' documents are not sent.
   Masking, if you turn it on, replaces names and contact details with placeholders before sending. The <a href="privacy.html">Privacy
   Policy</a> describes what is sent, kept and deleted.</p>
-  <p>Online mode is optional and off by default. If you turn it on, the text you approve in each preview is sent from your
-  Mac to the AI provider you chose, under your own account with that provider and that provider's terms, which govern
-  how it retains and uses what it receives. You are responsible for having the right to disclose that text — including
-  information about other people in your files — to that provider. The App sends document text only to providers whose
-  terms the App has reviewed for that use and only after you confirm your account is on those terms.</p>
+  <p>Online mode is optional and off by default. If you turn it on with your own key, the text you approve is sent from your
+  Mac to Anthropic, the only AI provider available with your own key, under your own Anthropic account and Anthropic's terms,
+  which govern how it retains and uses what it receives. You are responsible for having the right to disclose that text — including
+  information about other people in your files — to that provider. With your own key the App sends document text only
+  after you confirm your Anthropic account is on Anthropic's commercial terms.</p>
   <p><strong>AI Included and AI Pro.</strong> The AI plans (monthly or yearly, sold by Apple, with no free trial) include AI
   credits each month — 2,000 with AI Included and 6,000 with AI Pro — used for questions and readings answered by Claude Opus 5
   through our relay (if Anthropic declines a request, another Claude model may answer it) and for transcribing recordings with
@@ -76,7 +76,7 @@
   nothing is charged meanwhile, everything else in the App keeps working and your own key can be used; new AI subscriptions may not
   be offered while the capacity is nearly used. What you send is passed to Anthropic (or Google) under our commercial account and
   their terms; our relay keeps only counts and credits and never stores or logs your content. The AI plans and Online AI are not
-  available for App Store accounts in countries where generative AI services may not be offered by us (mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria and Cuba in this release), judged by your App Store account's country and by where a request comes from. We may change the models used, or the monthly
+  available for App Store accounts in countries where generative AI services may not be offered by us (mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria and Cuba in this release), judged by your App Store account's country and by where a request comes from: there the AI plans and credit packs are not sold (only Workbench is) and Online AI with your own key cannot be used either. We may change the models used, or the monthly
   credit allowance for future billing periods, with notice in the App; a change never applies to a period already paid, and
   credits you bought in packs are never reduced.</p>
   <p><strong>Workbench and your own key.</strong> With Workbench (or any plan) you may use Online AI with your own Anthropic key,
@@ -88,7 +88,7 @@
   name is not an identification, and a search that finds nothing does not show that no record exists. You are responsible
   for having the right to capture, keep and use a web page, and for how you use what any lookup returns.</p>
   <p><strong>Acceptable use.</strong> You must be 18 or older to use the App's Online AI and Online tools. When you use
-  an AI plan or your own AI provider you must also follow that provider's usage policy (Anthropic's Usage Policy; Google's
+  an AI plan or your own Anthropic key you must also follow the AI provider's usage policy (Anthropic's Usage Policy; Google's
   Generative AI Prohibited Use Policy). In particular, do not use them to track or profile people without a lawful basis,
   and where AI output informs a legal, employment, insurance or similar decision about a person, a qualified human must
   review it before it is relied on.</p>
@@ -96,7 +96,7 @@
   <h2>3. Accuracy disclaimer — read this</h2>
   <div class="box">
     <p>The App reconstructs history and answers questions from <strong>your</strong> documents using bounded on-device
-    AI (and, only if you turn on Online mode, the cloud AI you chose). <strong>Outputs may be incomplete, out of date, or wrong.</strong> The App distinguishes direct evidence from
+    AI (and, only if you turn on Online mode, the cloud AI you allowed). <strong>Outputs may be incomplete, out of date, or wrong.</strong> The App distinguishes direct evidence from
     assertion and inference and shows citations, but:</p>
     <ul>
       <li>it is <strong>not legal, financial, medical, or professional advice</strong>;</li>

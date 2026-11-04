@@ -1,6 +1,7 @@
 # App Privacy ("nutrition label") answers — Investigations Made Easy v1
 
-_Prepared 2026-11-04 by an agent (not counsel) for candidate `investigations-next` @ `7bb6323b`. The owner enters these in
+_Prepared 2026-11-04 by an agent (not counsel) for candidate `investigations-next` @ `7bb6323b`; updated the same day with the
+owner's accepted release decisions (item 5: content not linked, App Functionality; no Diagnostics; own key = Anthropic only). The owner enters these in
 App Store Connect ▸ the app ▸ **App Privacy**. Source of truth for what the build does: `Kalsmritikosh/PrivacyInfo.xcprivacy`
 (the same seven types), `docs/privacy.html`, `relay/src/store.ts` + `relay/schema.sql` (what the relay keeps), and the agent
 legal review `docs/agent-reviews/legal-privacy.md` (S1). This file supersedes the label table in `APP_STORE_LISTING.md`._
@@ -14,7 +15,8 @@ legal review `docs/agent-reviews/legal-privacy.md` (S1). This file supersedes th
   publisher's accounts. Anthropic and Google are the developer's third-party partners and keep inputs for a period under their
   commercial terms (Anthropic: up to 30 days by default) → **collected**. The relay forwards no user identifier and stores no
   content, and the providers see only the publisher's account → **not linked** to the user.
-- **Own key (Workbench or any plan):** content goes from the Mac directly to the person's own Anthropic / Gemini account. That is
+- **Own key (Workbench or any plan):** content goes from the Mac directly to the person's own Anthropic account (Anthropic is the
+  only own-key provider; OpenAI and Gemini are not offered for answering, and recordings go to Gemini only through the relay). That is
   not collection by the developer or its partners and need not be declared; it is covered anyway because the same types are
   declared for the AI plans (conservative and harmless).
 - **Third-party AI is not a separate category** in the questionnaire: it is declared through the data types sent (User Content),
@@ -24,8 +26,10 @@ legal review `docs/agent-reviews/legal-privacy.md` (S1). This file supersedes th
   History and Product Interaction, **linked** (the transaction number is an account-level identifier).
 - **Apple's own purchase processing** (StoreKit, payment, receipts) is Apple's and is not declared by the developer; the
   developer declares only what its relay keeps.
-- **Diagnostics:** MetricKit payloads stay on the Mac (`App/Diagnostics/DiagnosticsReporter.swift`); the person may choose to email
-  them from their own Mail app. No crash, analytics or telemetry SDK. → **not collected** (see owner decision 2).
+- **Diagnostics — not declared (owner decision 2026-11-04):** MetricKit payloads stay on the Mac
+  (`App/Diagnostics/DiagnosticsReporter.swift`) and are never sent automatically. Diagnostics are shared only if the person
+  chooses to email them from their own Mail app — an optional, user-initiated act, used only to answer that person. No crash,
+  analytics or telemetry SDK. → **not collected**; no Diagnostics type in the label or in `PrivacyInfo.xcprivacy`.
 - **Tracking:** none. No advertising, no data broker, no cross-app linking, no IDFA/AdServices. Answer **No** for every type.
 
 ## Answers to enter
@@ -57,18 +61,25 @@ as in the table; "Do you or your third-party partners use this data for tracking
 
 - `Kalsmritikosh/PrivacyInfo.xcprivacy` `NSPrivacyCollectedDataTypes`: OtherUserContent, AudioData, PurchaseHistory (linked),
   EmailsOrTextMessages, PhotosorVideos, UserID (linked), ProductInteraction (linked), all tracking false, purpose App
-  Functionality — **matches** the table.
+  Functionality, **no Diagnostics type** — **matches** the table (re-checked after the release decisions; the manifest's comment
+  records owner decision item 5).
 - `docs/privacy.html` names the same recipients (Anthropic, Google, the relay on Cloudflare, Apple), the once-per-case permission,
   what is never sent, the relay's counts-only storage and retention (13 months / 40 days / packs while credits remain + 25 months).
+- `docs/privacy.html` says Anthropic is the only own-key provider, that inside a case the person allowed their questions are sent
+  without a further prompt, and that diagnostics stay on the Mac unless the person emails them.
 
-## Owner decisions still needed
+## Owner decisions (accepted 2026-11-04)
 
-1. **Confirm "not linked" for content.** Defensible because the relay strips the transaction number before forwarding and stores
-   no content, and Anthropic/Google see only the publisher's account. If counsel prefers the cautious reading (the relay sees
-   content and the transaction number together in transit), switch the four User Content rows to *Linked* — no other change.
-2. **Diagnostics by email.** Apple's optional-disclosure rule covers infrequent, user-initiated support data. If you plan to use
-   emailed MetricKit reports beyond answering that person, declare Diagnostics ▸ Crash Data / Performance Data, not linked.
-3. **Own-key OpenAI.** The build still offers OpenAI as an own-key provider for question wording only (no document text). Nothing
-   to declare (the person's own account), but decide whether to keep it given the "own Anthropic key" positioning.
+1. **Content sent to AI: collected, not linked to identity, not used for tracking, purpose App Functionality** (the four User
+   Content rows above). Basis: the relay strips the transaction number before forwarding and stores no content; Anthropic and
+   Google see only the publisher's account. If counsel later prefers the cautious reading (the relay sees content and the
+   transaction number together in transit), switch the four User Content rows to *Linked* in both places — this file and
+   `Kalsmritikosh/PrivacyInfo.xcprivacy` — no other change.
+2. **No Diagnostics declaration.** MetricKit stays on the Mac; diagnostics are shared only if the person chooses to email them.
+   If emailed reports are ever used beyond answering that person, declare Diagnostics ▸ Crash Data / Performance Data, not
+   linked, in both places.
+3. **Own key = Anthropic only.** OpenAI and Gemini are no longer offered as answering providers (Settings shows Claude
+   (Anthropic) and, with a plan, the AI plans); a stored OpenAI/Gemini choice migrates to "not set up" with a notice. The network
+   helper's AI hosts are `api.anthropic.com` and the relay only. Nothing to declare for the own key (the person's own account).
 4. **Age rating 18+** (owner decision 2026-11-02) is set in the age-rating questionnaire, not here; answer "Unrestricted Web
    Access: Yes" (web capture) and choose 18+.

@@ -11,8 +11,8 @@
 
       Private mode (the default) runs entirely on-device. The main
       app has no network entitlement; the embedded network helper
-      (KalsmritikoshNetworkHelper) can reach only the Online AI
-      providers, the AI Included relay, five public-record sources and
+      (KalsmritikoshNetworkHelper) can reach only Anthropic (the
+      person's own key), the AI plans' relay, five public-record sources and
       pages the person asks to capture — only in Online mode, each send
       approved first. See docs/DATA_FLOW_INVENTORY.md — the one
       source for every privacy statement. All on-disk data
@@ -43,7 +43,13 @@
       Text Messages; page images/videos → Photos or Videos (not linked).
       Widened 2026-11-02 after the agent legal review (S1).
       All for App Functionality only; never tracking. Nothing is sent in
-      Private mode or without the person's approval of each send.
+      Private mode or without the person's permission (per send, or once
+      per case for that case's documents and questions).
+      OWNER DECISION 2026-11-04 (release decisions, item 5): content sent
+      to AI is collected, NOT linked to identity, not used for tracking,
+      purpose App Functionality. NO Diagnostics type is declared: MetricKit
+      payloads stay on the Mac and are shared only if the person chooses
+      to email them (release/APP_PRIVACY_LABEL.md).
     -->
     <key>NSPrivacyCollectedDataTypes</key>
     <array>

@@ -2,7 +2,7 @@
 //  OnlineCloudProvider.swift
 //  Kalsmritikosh
 //
-//  O-4 — the user's own cloud AI (Claude, OpenAI or Gemini) as a ModelProvider.
+//  O-4 — Online AI (the person's own Claude key, or an AI plan through the relay) as a ModelProvider.
 //  It resolves only when Online mode is genuinely in force (CapabilityRegistry
 //  checks OnlineSettings.cloudAllowed) and only for text generation — never
 //  embeddings. Every call, in order:
@@ -186,15 +186,17 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         return try await send(prompt: prompt, options: GenerationOptions(maxTokens: 8_000), carriesDocuments: true, images: images)
     }
 
-    /// A11 — transcribe a recording with speaker labels and timecodes (AI Included, or Gemini with the
-    /// person's own key). A document send: eligible, confirmed provider only; always previewed.
+    /// A11 — transcribe a recording with speaker labels and timecodes (AI Included or AI Pro). A document
+    /// send: eligible, confirmed provider only; always previewed.
     public func transcribeRecording(_ audio: OutboundImage, fileName: String) async throws -> String {
         let s = seams.settings()
         if let why = OnlineDocumentEligibility.refusal(kind: s.kind, confirmedTermsVersion: s.confirmedDocumentTerms) {
             await log(s.kind, s.model, "", 0, 0, nil, "blocked", "provider not eligible for documents")
             throw await fail(OnlineError.notEligibleForDocuments(why))
         }
-        guard s.kind == .included || s.kind == .gemini else {
+        // Release decisions 2026-11-04: recordings are transcribed only through an AI plan (Gemini on the
+        // publisher's key, via the relay); the own key is Claude, which does not take audio.
+        guard s.kind == .included else {
             throw await fail(OnlineRequestBuilder.BuildError.audioNotSupported(s.kind.displayName))
         }
         let prompt = "Transcribe the recording “\(fileName)” verbatim. Label each turn with a speaker label (Speaker 1, Speaker 2, …) and a start time [mm:ss]. Do not summarise, translate, correct or add anything; mark inaudible parts as [inaudible]."

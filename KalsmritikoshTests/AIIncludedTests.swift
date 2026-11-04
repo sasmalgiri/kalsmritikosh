@@ -47,8 +47,8 @@ struct AIIncludedTests {
         #expect(SubscriptionPlan(productID: PurchaseProducts.credits2000) == nil, "a credit pack is never a subscription")
         #expect(SubscriptionPlan.aiAnnual.isAnnual && SubscriptionPlan.aiAnnual.periodNoun == "year" && SubscriptionPlan.aiAnnual.counterpart == .aiMonthly)
         #expect(PurchaseProducts.storeProducts.contains(PurchaseProducts.credits500) && !PurchaseProducts.all.contains(PurchaseProducts.credits500))
-        let offer = PlanOffer(plan: .aiAnnual, displayPrice: "$389.00", periodText: "1 year", eligibleForTrial: false, trialDays: nil)
-        #expect(offer.disclosure.hasPrefix("$389.00 per year, charged now.") && offer.disclosure.contains("keeps only counts and credits"))
+        let offer = PlanOffer(plan: .aiAnnual, displayPrice: "$389.99", periodText: "1 year", eligibleForTrial: false, trialDays: nil)
+        #expect(offer.disclosure.hasPrefix("$389.99 per year, charged now.") && offer.disclosure.contains("keeps only counts and credits"))
         #expect(offer.disclosure.contains("2,000 AI credits a month") && offer.disclosure.contains("same allowance every month") && offer.disclosure.contains("never expire"))
         let pro = PlanOffer(plan: .proMonthly, displayPrice: "$99.00", periodText: "1 month", eligibleForTrial: false, trialDays: nil)
         #expect(pro.disclosure.contains("6,000 AI credits a month") && pro.disclosure.contains("3,000"))
@@ -137,6 +137,13 @@ struct AIIncludedTests {
         try await AIRegion.TestOverride.$country.withValue("CHN") {
             #expect(!AIRegion.allowsAI && !OnlineSettings.cloudAllowed)
             #expect(!OnlineProviderKind.included.isSelectable)
+            // Release decisions 2026-11-04 (item 3): there only Workbench is sold — no AI plan, no credit
+            // pack — and the own-key option is not offered either.
+            #expect(AIRegion.isBlocked && !AIRegion.sellsAIProducts)
+            #expect(!OnlineProviderKind.anthropic.isSelectable && OnlineProviderKind.allCases.filter(\.isSelectable).isEmpty)
+            let all = SubscriptionPlan.allCases.map { PlanOffer(plan: $0, displayPrice: "$1", periodText: "1 month", eligibleForTrial: false, trialDays: nil) }
+            #expect(PlanOffer.forSale(all, relayConfigured: true).map(\.plan.tier) == [.workbench, .workbench], "only Workbench is offered")
+            #expect(PlanTier.workbench.includes.contains("not available for App Store accounts in this country") && !PlanTier.workbench.includes.contains("Anthropic key"))
             let req = try OnlineRequestBuilder.build(kind: .anthropic, model: "claude-opus-5", apiKey: "k", system: nil, prompt: "p", maxTokens: 10)
             do {
                 _ = try await NetworkHelperClient.send(req)
@@ -146,5 +153,66 @@ struct AIIncludedTests {
                 if case .failed(let why) = e { #expect(why.contains("not available for App Store accounts in this country")) }
             }
         }
+        // An allowed storefront: the AI plans are for sale when the relay is configured; an unknown one
+        // (the store has not answered) offers only Workbench but keeps the own-key setup visible.
+        #expect(!AIRegion.isBlocked && AIRegion.sellsAIProducts && OnlineProviderKind.anthropic.isSelectable)
+        let all = SubscriptionPlan.allCases.map { PlanOffer(plan: $0, displayPrice: "$1", periodText: "1 month", eligibleForTrial: false, trialDays: nil) }
+        #expect(PlanOffer.forSale(all, relayConfigured: true).count == SubscriptionPlan.allCases.count)
+        #expect(PlanOffer.forSale(all, relayConfigured: false).allSatisfy { !$0.plan.includesAI })
+        #expect(PlanOffer.forSale(all, relayConfigured: true, sellsAI: false).allSatisfy { !$0.plan.includesAI })
+        let unknownOK = AIRegion.TestOverride.$country.withValue("") { !AIRegion.isBlocked && !AIRegion.sellsAIProducts && OnlineProviderKind.anthropic.isSelectable }
+        #expect(unknownOK)
+    }
+
+    @Test("Own key is Anthropic only (release decisions 2026-11-04): OpenAI and Gemini are never offered, their hosts are closed, a stored choice migrates to not set up")
+    func ownKeyAnthropicOnly() throws {
+        #expect(!OnlineProviderKind.openai.isSelectable && !OnlineProviderKind.gemini.isSelectable)
+        #expect(OnlineProviderKind.allCases.filter { $0.isSelectable && $0.usesOwnKey } == [.anthropic])
+        #expect(OnlineProviderKind.allowedHosts == Set(["api.anthropic.com", AIIncludedRelay.host].filter { !$0.isEmpty }))
+        #expect(!NetworkHelperClient.allows(host: "api.openai.com", method: nil, purpose: nil))
+        #expect(!NetworkHelperClient.allows(host: "generativelanguage.googleapis.com", method: nil, purpose: nil))
+
+        // The migration, on a scratch defaults suite and a key-removal spy (never the person's settings).
+        for (old, name) in [(OnlineProviderKind.openai, "OpenAI"), (.gemini, "Gemini (Google)")] {
+            let suite = "kals.test.retired.\(UUID().uuidString)"
+            let d = try #require(UserDefaults(suiteName: suite))
+            defer { d.removePersistentDomain(forName: suite) }
+            d.set(old.rawValue, forKey: "kalsmritikosh.online.provider")
+            d.set("gpt-x", forKey: "kalsmritikosh.online.model")
+            d.set(old.documentTermsVersion, forKey: "kalsmritikosh.online.documentTermsConfirmed." + old.rawValue)
+            var removed: [OnlineProviderKind] = []
+            let notice = try #require(OnlineSettings.migrateRetiredProvider(in: d, hasAnthropicKey: false, removeKey: { removed.append($0) }))
+            #expect(d.string(forKey: "kalsmritikosh.online.provider") == "anthropic")
+            #expect(d.string(forKey: "kalsmritikosh.online.model") == nil, "the old model name is never sent to Anthropic")
+            #expect(d.string(forKey: "kalsmritikosh.online.documentTermsConfirmed." + old.rawValue) == nil)
+            #expect(removed == [old])
+            #expect(notice.contains(name) && notice.contains("Claude (Anthropic) only") && notice.contains("not set up"))
+            #expect(OnlineSettings.retiredProviderNotice(in: d) == notice)
+            // Once migrated, nothing changes again.
+            #expect(OnlineSettings.migrateRetiredProvider(in: d, hasAnthropicKey: false, removeKey: { removed.append($0) }) == nil && removed == [old])
+        }
+        let suite = "kals.test.retired.\(UUID().uuidString)"
+        let d = try #require(UserDefaults(suiteName: suite))
+        defer { d.removePersistentDomain(forName: suite) }
+        d.set("openai", forKey: "kalsmritikosh.online.provider")
+        let withKey = try #require(OnlineSettings.migrateRetiredProvider(in: d, hasAnthropicKey: true, removeKey: { _ in }))
+        #expect(withKey.contains("Anthropic key is used from now on") && !withKey.contains("not set up"))
+        d.set("anthropic", forKey: "kalsmritikosh.online.provider")
+        #expect(OnlineSettings.migrateRetiredProvider(in: d, hasAnthropicKey: false, removeKey: { _ in Issue.record("nothing to remove") }) == nil)
+    }
+
+    @Test("Inside a case the person allowed, a question-only send needs no further prompt; documents must be in the allowed set (release decisions 2026-11-04, item 9)")
+    func questionOnlyInsidePermittedCase() {
+        let caseID = UUID(), doc = UUID(), version = UUID()
+        let permitted = CaseReadPermittedSet(caseID: caseID, versions: [doc: [version]])
+        let granted: @Sendable (UUID, String) -> Bool = { id, fp in id == caseID && fp == permitted.fingerprint }
+        #expect(OnlineCloudProvider.coveredByCasePermission(permitted, clearance: nil, carriesDocuments: false, granted: granted),
+                "a question alone inside the allowed case is sent without a further preview")
+        #expect(!OnlineCloudProvider.coveredByCasePermission(permitted, clearance: nil, carriesDocuments: false, granted: { _, _ in false }),
+                "no stored permission: previewed as always")
+        #expect(!OnlineCloudProvider.coveredByCasePermission(nil, clearance: nil, carriesDocuments: false, granted: granted),
+                "outside a case: previewed as always")
+        #expect(!OnlineCloudProvider.coveredByCasePermission(permitted, clearance: nil, carriesDocuments: true, granted: granted),
+                "document text without a clearance is never covered")
     }
 }

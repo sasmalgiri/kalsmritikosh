@@ -108,7 +108,7 @@ struct OnlineStatusBar: View {
                     }
                     Spacer()
                     // Plans and credits — a credit refusal (the app's own check or the relay's) offers the way out.
-                    if status.lastFailureOffers.contains(.buyCredits) {
+                    if status.lastFailureOffers.contains(.buyCredits), AIRegion.sellsAIProducts {
                         Menu("Buy credits") {
                             ForEach(PurchaseProducts.creditPacks, id: \.self) { id in
                                 Button("\((PurchaseProducts.credits(inPack: id) ?? 0).formatted()) credits" + (PurchaseCenter.shared.packPrices[id].map { " (\($0))" } ?? "")) {
@@ -119,7 +119,7 @@ struct OnlineStatusBar: View {
                         .font(.caption).fixedSize()
                         .accessibilityIdentifier("online.failure.buyCredits")
                     }
-                    if status.lastFailureOffers.contains(.upgrade) {
+                    if status.lastFailureOffers.contains(.upgrade), AIRegion.sellsAIProducts {
                         Button("Upgrade") { PurchaseCenter.shared.paywallRequested = "upgrade to AI Pro" }
                             .font(.caption)
                             .accessibilityIdentifier("online.failure.upgrade")
@@ -149,6 +149,7 @@ struct OnlineSettingsSection: View {
     @State private var capText = OnlineSettings.dailyByteCap.map(String.init) ?? ""
     @State private var log: [OutboundLogEntry] = []
     @State private var showLog = false
+    @State private var retiredNotice = OnlineSettings.retiredProviderNotice
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -157,6 +158,57 @@ struct OnlineSettingsSection: View {
                 Label(why, systemImage: "globe").font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Release decisions 2026-11-04 (item 4) — an earlier OpenAI / Gemini choice was migrated.
+            if let notice = retiredNotice {
+                HStack(alignment: .top, spacing: 8) {
+                    Label(notice, systemImage: "info.circle").font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Dismiss") { OnlineSettings.dismissRetiredProviderNotice(); retiredNotice = nil }
+                        .font(.caption)
+                }
+                .accessibilityIdentifier("online.retiredProviderNotice")
+            }
+            if AIRegion.isBlocked {
+                // Item 3 — where Online AI is blocked neither an AI plan nor an own key can be set up.
+                Text("Neither an AI plan nor your own AI key can be used with an App Store account in this country, so there is nothing to set up here.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("online.blockedRegion")
+            } else {
+                providerControls
+            }
+            Toggle("Ask before every send", isOn: $askEveryTime)
+                .onChange(of: askEveryTime) { _, v in OnlineSettings.askEveryTime = v }
+            HStack {
+                Text("Daily limit (bytes, blank = none, 0 = send nothing)").font(.caption)
+                TextField("", text: $capText).textFieldStyle(.roundedBorder).frame(width: 120)
+                    .onSubmit { OnlineSettings.dailyByteCap = Int(capText.trimmingCharacters(in: .whitespaces)) }
+            }
+            Button("What was sent…") {
+                Task { log = (try? await appState.outboundLog?.recent()) ?? []; showLog = true }
+            }
+        }
+        .onAppear { retiredNotice = OnlineSettings.retiredProviderNotice }
+        .sheet(isPresented: $showLog) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("What was sent").font(.title3.bold())
+                List(log) { e in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(e.sentAt.formatted()) · \(e.provider) · \(e.outcome) · \(e.bytesSent) bytes").font(.caption.weight(.semibold))
+                        Text("SHA-256 \(e.payloadSHA256.prefix(16))…  masked \(e.maskedCount)").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        Text(e.payloadText.prefix(400)).font(.caption2).foregroundStyle(.secondary)
+                        if let d = e.detail { Text(d).font(.caption2).foregroundStyle(.orange) }
+                    }
+                }
+                .frame(minHeight: 320)
+                HStack { Spacer(); Button("Done") { showLog = false }.keyboardShortcut(.defaultAction) }
+            }
+            .padding(16).frame(width: 620)
+        }
+    }
+
+    /// The provider (Claude with your own key, or an AI plan), its terms, and its key or plan status.
+    @ViewBuilder private var providerControls: some View {
             Picker("Provider", selection: $kind) {
                 ForEach(OnlineProviderKind.allCases.filter(\.isSelectable)) { Text($0.displayName).tag($0) }
             }
@@ -180,33 +232,6 @@ struct OnlineSettingsSection: View {
             } else {
                 AIIncludedStatusView(store: PurchaseCenter.shared)
             }
-            Toggle("Ask before every send", isOn: $askEveryTime)
-                .onChange(of: askEveryTime) { _, v in OnlineSettings.askEveryTime = v }
-            HStack {
-                Text("Daily limit (bytes, blank = none, 0 = send nothing)").font(.caption)
-                TextField("", text: $capText).textFieldStyle(.roundedBorder).frame(width: 120)
-                    .onSubmit { OnlineSettings.dailyByteCap = Int(capText.trimmingCharacters(in: .whitespaces)) }
-            }
-            Button("What was sent…") {
-                Task { log = (try? await appState.outboundLog?.recent()) ?? []; showLog = true }
-            }
-        }
-        .sheet(isPresented: $showLog) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("What was sent").font(.title3.bold())
-                List(log) { e in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(e.sentAt.formatted()) · \(e.provider) · \(e.outcome) · \(e.bytesSent) bytes").font(.caption.weight(.semibold))
-                        Text("SHA-256 \(e.payloadSHA256.prefix(16))…  masked \(e.maskedCount)").font(.caption2.monospaced()).foregroundStyle(.secondary)
-                        Text(e.payloadText.prefix(400)).font(.caption2).foregroundStyle(.secondary)
-                        if let d = e.detail { Text(d).font(.caption2).foregroundStyle(.orange) }
-                    }
-                }
-                .frame(minHeight: 320)
-                HStack { Spacer(); Button("Done") { showLog = false }.keyboardShortcut(.defaultAction) }
-            }
-            .padding(16).frame(width: 620)
-        }
     }
 
     /// The person's own provider: model and key.
@@ -247,7 +272,8 @@ struct AIIncludedStatusView: View {
                 AICreditMeterView(meter: meter, tier: tier)
                 HStack {
                     Button("Check credits") { Task { await store.refreshAIStatus() } }.disabled(store.busy)
-                    ForEach(PurchaseProducts.creditPacks, id: \.self) { id in
+                    // Release decisions 2026-11-04 (item 3): packs are sold only where Online AI is allowed.
+                    ForEach(AIRegion.sellsAIProducts ? PurchaseProducts.creditPacks : [], id: \.self) { id in
                         let credits = PurchaseProducts.credits(inPack: id) ?? 0
                         Button("Buy \(credits.formatted()) credits" + (store.packPrices[id].map { " (\($0))" } ?? "")) {
                             Task { await store.buyCredits(id) }
@@ -259,9 +285,11 @@ struct AIIncludedStatusView: View {
                 Text("Checking sends only your App Store subscription number to the AI service — nothing from your cases.")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own key.")
+                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own Anthropic key.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Button("See plans") { store.paywallRequested = "use the AI plans" }
+                if AIRegion.sellsAIProducts {
+                    Button("See plans") { store.paywallRequested = "use the AI plans" }
+                }
             }
             if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }

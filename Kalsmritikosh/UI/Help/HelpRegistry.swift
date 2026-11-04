@@ -238,12 +238,12 @@ public nonisolated enum HelpRegistry {
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
             summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own AI-provider account.",
             steps: [
-                "Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included or AI Pro (with that plan) or your own Claude, OpenAI or Gemini key (Workbench uses your own key). A badge shows while it is on; one click returns to Private.",
+                "Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included or AI Pro (with that plan) or your own Anthropic (Claude) key — the only own-key provider (Workbench uses your own key). Not available where Online AI is blocked for the App Store country. A badge shows while it is on; one click returns to Private.",
                 "Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked.",
                 "Each send is recorded before it leaves and shows its estimated cost first. Providers may retain what they receive under their own terms. With your own key they bill your account (set a monthly limit for your own Claude key in Settings ▸ Online); on an AI plan each request is charged in credits at its actual cost.",
                 "Subscribing never turns Online on. The test host and the sample case never send anything."
             ],
-            destination: .settings, keywords: ["cloud", "api key", "claude", "openai", "gemini", "network", "consent"]),
+            destination: .settings, keywords: ["cloud", "api key", "claude", "anthropic", "own key", "network", "consent"]),
         HelpTopic(
             id: "task-ai-included", kind: .task, title: "AI credits: AI Included and AI Pro without an AI account of your own",
             summary: "AI Included gives 2,000 AI credits a month and AI Pro 6,000 (1 credit = US$0.01 of Claude cost); each request is charged what it actually cost. Credit packs of 500 or 2,000 never expire.",
@@ -253,7 +253,7 @@ public nonisolated enum HelpRegistry {
                 "Settings ▸ Online ▸ “Check credits” shows this month's credits used and left, your credit packs, the reset date and the last request's cost. Before reading a whole case the app shows the estimate (for example “about 120 credits; you have 840”) and reads it only after you confirm.",
                 "The month's credits renew on the day of your purchase each month — yearly plans too — and do not carry over. Credit packs (500 or 2,000, bought in Settings ▸ Online) never expire, are spent after the month's credits, work while an AI plan is active and stay with your Apple account on every Mac.",
                 "One request may use up to 400 credits; a confirmed whole-case read up to 600 (AI Included) or 3,000 (AI Pro); there is a daily limit. If the service's monthly capacity is reached it pauses until the 1st and says so; nothing is charged and your own key can be used meanwhile.",
-                "Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country. You must be 18 or older to use it."
+                "Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country: there only Workbench is sold — no AI plan, no credit pack — and an own key cannot be used either. You must be 18 or older to use it."
             ],
             controls: ["Check credits"],
             destination: .settings, keywords: ["opus", "relay", "credits", "credit pack", "top-up", "ai pro", "balance", "paused", "subscription", "country"]),
@@ -287,7 +287,7 @@ public nonisolated enum HelpRegistry {
                 "Sanctions lists: the complete OFAC and UN lists are downloaded and searched on this Mac — the name you check is not sent. A match on a name is a possible match until identifiers agree.",
                 "Company registry (GLEIF) and court records (CourtListener): the name you search is sent to that service.",
                 "Capture a web page: the page as the site returned it, with a record of address, time, status and SHA-256, added to your archive.",
-                "Transcribe a recording: speaker labels and timecodes through an AI plan's credits (AI Included or AI Pro) or your Gemini key; the transcript is marked as AI output."
+                "Transcribe a recording: speaker labels and timecodes through an AI plan's credits (AI Included or AI Pro; Google Gemini through the publisher's service); the transcript is marked as AI output."
             ],
             controls: ["Online tools…"],
             destination: .sources, keywords: ["fx", "currency", "ofac", "un", "sanctions", "lei", "company", "court", "capture", "web", "transcribe", "audio", "speakers"]),

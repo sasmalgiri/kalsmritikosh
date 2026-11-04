@@ -2,9 +2,15 @@
 //  OnlineProviderKind.swift
 //  Kalsmritikosh
 //
-//  O-4 — the three bring-your-own-key cloud providers Online mode supports, and
-//  how to build each one's HTTPS request and read its reply. Model names live
-//  here (Routing/Providers) by the capability-discipline rule.
+//  O-4 — the cloud providers Online mode can talk to, and how to build each one's
+//  HTTPS request and read its reply. Model names live here (Routing/Providers) by
+//  the capability-discipline rule.
+//
+//  Release decisions 2026-11-04 (item 4): the person's OWN key answers with Anthropic (Claude) only.
+//  OpenAI and Gemini are no longer offered as answering providers (`isSelectable` false, their hosts
+//  are not allowed, a stored choice of either migrates to "not set up" — OnlineSettings.kind). Their
+//  cases stay because `.gemini` is the reply format of the relay's transcription route (AI plans) and
+//  the request/parse code is pinned by builder tests; nothing in the release reaches them.
 //
 //  Nothing in this file touches the network: it produces a request envelope the
 //  separate network helper sends (O-2), and parses the bytes it returns.
@@ -20,8 +26,20 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
 
     public var id: String { rawValue }
 
-    /// Offered in Settings: AI Included only when this build has the relay's address.
-    public var isSelectable: Bool { self != .included || (AIIncludedRelay.isConfigured && AIRegion.allowsAI) }
+    /// Offered in Settings: the own key is Claude (Anthropic) only, and not where the App Store country
+    /// blocks Online AI; AI Included only when this build has the relay's address and the country is
+    /// confirmed as allowed. OpenAI and Gemini are never offered (release decisions 2026-11-04).
+    public var isSelectable: Bool {
+        switch self {
+        case .anthropic:        return !AIRegion.isBlocked
+        case .included:         return AIIncludedRelay.isConfigured && AIRegion.allowsAI
+        case .openai, .gemini:  return false
+        }
+    }
+
+    /// Retired as answering providers (release decisions 2026-11-04): a stored choice of one of these is
+    /// migrated to "not set up" (OnlineSettings.kind).
+    public var isRetiredForAnswering: Bool { self == .openai || self == .gemini }
 
     /// The person brings their own key and chooses the model (false for AI Included).
     public var usesOwnKey: Bool { self != .included }
@@ -55,7 +73,9 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
         }
     }
 
-    public static let allowedHosts: Set<String> = Set(allCases.map(\.host).filter { !$0.isEmpty })
+    /// The AI hosts a request may go to: Anthropic (own key) and the publisher's relay (AI plans). The
+    /// retired providers' hosts are not allowed (the network helper applies the same list).
+    public static let allowedHosts: Set<String> = Set(allCases.filter { !$0.isRetiredForAnswering }.map(\.host).filter { !$0.isEmpty })
 }
 
 /// A fully built request, handed to the network helper as JSON.
@@ -94,7 +114,7 @@ public nonisolated enum OnlineRequestBuilder {
         public var errorDescription: String? {
             switch self {
             case .imagesNotSupported(let p): return "\(p) is not set up to read page images in this release — nothing was sent."
-            case .audioNotSupported(let p): return "\(p) does not transcribe recordings. Choose AI Included, or Gemini with your own key, in Settings ▸ Online — nothing was sent."
+            case .audioNotSupported(let p): return "\(p) does not transcribe recordings. Transcription is part of the AI plans: choose AI Included or AI Pro in Settings ▸ Online — nothing was sent."
             }
         }
     }

@@ -191,10 +191,9 @@ struct PurchaseScreen: View {
         if presentedAsSheet { dismiss() } else { store.gateDismissedThisLaunch = true }
     }
 
-    /// The AI plans are shown only when this build can reach the publisher's relay.
-    private var visibleOffers: [PlanOffer] {
-        store.offers.filter { !$0.plan.includesAI || (AIIncludedRelay.isConfigured && AIRegion.allowsAI) }
-    }
+    /// The AI plans (and the credit-pack line) are shown only when this build can reach the publisher's
+    /// relay and the App Store country allows Online AI; in a blocked storefront only Workbench.
+    private var visibleOffers: [PlanOffer] { PlanOffer.forSale(store.offers) }
 
     /// The three levels, each with what it includes (App Review 3.1.2(c)), then the credit packs.
     private var plans: some View {
@@ -257,7 +256,9 @@ struct PurchaseScreen: View {
         if let what = store.paywallRequested, store.entitlement.hadAccessBefore { return "Subscribe to \(what)" }
         switch store.entitlement {
         case .lapsed, .billingRetry: return "Your work is safe and readable — subscribe to keep editing"
-        default: return "Investigations Made Easy — all nine personas, three plans"
+        default: return AIRegion.sellsAIProducts && AIIncludedRelay.isConfigured
+            ? "Investigations Made Easy — all nine personas, three plans"
+            : "Investigations Made Easy — all nine personas"
         }
     }
 
@@ -266,9 +267,12 @@ struct PurchaseScreen: View {
         case .lapsed, .billingRetry:
             return "Every case stays readable; export, complete backup, recovery, Help and privacy controls keep working. A subscription is needed only to create, edit and analyse again."
         default:
-            return AIIncludedRelay.isConfigured
+            if AIRegion.isBlocked {
+                return "Every persona and every job is included, on your Mac. Online AI — the AI plans and your own AI key — is not available for App Store accounts in this country, so Workbench is the plan offered here. Monthly and yearly give the same access."
+            }
+            return AIIncludedRelay.isConfigured && AIRegion.sellsAIProducts
                 ? "Every plan includes every persona and every job, on-device. Workbench uses Online AI only with your own Anthropic key (billed by Anthropic); AI Included and AI Pro add monthly AI credits with no AI account of your own. Monthly and yearly give the same access; change plan any time in your Apple Account — it is one subscription, never two."
-                : "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own provider account and may cost extra. Monthly and yearly plans give the same access."
+                : "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own Anthropic key and may cost extra (billed by Anthropic). Monthly and yearly plans give the same access."
         }
     }
 

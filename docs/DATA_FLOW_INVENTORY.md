@@ -13,14 +13,15 @@ owner/counsel decision** (§4). Optional use does not by itself make disclosure 
 ## 1. Leaving the Mac (network)
 
 Only one process can open a network connection: the **KalsmritikoshNetworkHelper** extension. It is embedded in
-Debug and Release, has outgoing connections enabled, and accepts only HTTPS POST to three hosts:
-`api.anthropic.com`, `api.openai.com` and `generativelanguage.googleapis.com`. It logs nothing and keeps no
+Debug and Release, has outgoing connections enabled, and accepts only HTTPS POST to the AI hosts:
+`api.anthropic.com` (the person's own key — Anthropic is the only own-key provider, release decisions 2026-11-04) and the
+publisher's relay (AI plans; recordings reach Google Gemini only through it). OpenAI and Gemini hosts are no longer allowed. It logs nothing and keeps no
 cache or cookies. The main app has no network client entitlement.
 
 | # | What | To | When | Default | Consent / limits | Recorded |
 |---|---|---|---|---|---|---|
 | N1 | The **question** and, for the interpreter, the app's field names and descriptions | The provider the person chose, with their own API key | Online mode, when the rules and the on-device model did not understand the question | Off. Needs Online mode and a key. The interpreter module is on, but sends only in Online mode. | Preview of the exact text, destination and size. "Ask every time" is the default. If the person turns it off, they may allow the rest of the session for question-only sends. Optional name masking is **off by default**. Daily byte limit. | `outbound_log` in the encrypted ledger: the full text sent (after masking), its SHA-256, size, provider, model, host and outcome. The response body is not stored. |
-| N2 | **Document passages**, from two routes only. *Answer wording*: the answer synthesiser and the chunk fallback. *Record reading*: up to 8 documents naming a person, up to 7,000 characters each. Before any prompt is built, each source document passes the cloud source gate: privileged, above confidential, or protection unreadable/untraceable means it is not sent. Background, ingest, summary and expert calls cannot reach the cloud (they do not declare it). | Only a provider reviewed for case material (Claude on the commercial API, or a paid Gemini project; **not OpenAI** in this release), after the person confirms their account is on those terms. The confirmation lapses when the reviewed terms change. | Online mode with AI answers on; record reading has its own switch | Off | **Always previewed** with the provider's retention and training terms; never covered by "this session". Masking and the daily limit as in N1. | As N1. A refused send is logged as `blocked`, with the unsent text, inside the encrypted ledger. |
+| N2 | **Document passages**, from two routes only. *Answer wording*: the answer synthesiser and the chunk fallback. *Record reading*: up to 8 documents naming a person, up to 7,000 characters each. Before any prompt is built, each source document passes the cloud source gate: privileged, above confidential, or protection unreadable/untraceable means it is not sent. Background, ingest, summary and expert calls cannot reach the cloud (they do not declare it). | Only a provider reviewed for case material (Claude on the commercial API with the person's own Anthropic key, or an AI plan through the relay), after the person confirms their account is on those terms. The confirmation lapses when the reviewed terms change. | Online mode with AI answers on; record reading has its own switch | Off | **Always previewed** with the provider's retention and training terms; never covered by "this session". Masking and the daily limit as in N1. | As N1. A refused send is logged as `blocked`, with the unsent text, inside the encrypted ledger. |
 | N3 | Subscription products and prices, verified transactions and renewal information, introductory-offer eligibility, purchase, restore (2026-10-30: auto-renewable monthly/annual; legacy unlock/trial honoured) | Apple, through StoreKit (Apple's own connection, not the app's helper) | At launch and on foreground (entitlements, renewal status); on the person's action (subscribe, restore); Apple's transaction updates | On | Apple's own purchase sheets; the app shows Apple's prices and dates and caches only the last verified state | Nothing beyond StoreKit; no case content; subscribing enables nothing else (not Online). "Manage subscription" opens Apple's account page in the browser. |
 | N4 | "Report a problem": the app and macOS version | The person's Mail app, as a draft to the developer | Person's click | — | Editable draft; nothing is sent by the app | — |
 | N5 | "Send diagnostics": MetricKit JSON (crash and hang stacks, counters, device model, OS) | The person's Mail app | Person's click, after a list of the files | — | The person sends it, or not | — |
@@ -32,7 +33,7 @@ check. The older local-model and cloud providers (Ollama, MLX, custom endpoints)
 **Provider retention is the provider's.** The publisher receives nothing that is sent, but that does not mean the
 provider keeps nothing:
 - Anthropic's commercial API deletes inputs and outputs within 30 days by default, with stated exceptions.
-- Google's unpaid Gemini tier may use content and have it reviewed by people.
+- Recordings on an AI plan go to Google's paid Gemini API under the publisher's account (no own-key Gemini in this release).
 
 The terms the app shows live in `OnlineProviderKind.documentTerms`, reviewed 2026-10-27.
 

@@ -74,6 +74,18 @@ nonisolated enum AIRegion {
     static var current: Decision { decision(countryCode: countryCode) }
     static var allowsAI: Bool { current.allowsAI }
 
+    /// Release decisions 2026-11-04 (item 3): the storefront is one of the blocked countries. There the
+    /// AI plans and credit packs are not offered (only Workbench is sold) and the own-key option is not
+    /// shown either — the UI matches what the send path already refuses. An unknown storefront is not
+    /// "blocked": the own-key setup stays visible and sends simply wait (`allowsAI` is false).
+    static var isBlocked: Bool {
+        if case .blocked = current { return true }
+        return false
+    }
+
+    /// The AI plans and credit packs may be offered for sale: only on a storefront confirmed as allowed.
+    static var sellsAIProducts: Bool { allowsAI }
+
     static func record(_ code: String) {
         state.withLock { $0 = code }
         UserDefaults.standard.set(code, forKey: lastKey)

@@ -184,7 +184,7 @@ enum GuideContent {
             ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.")
         ]
         // O-3 — Private is the default; Online is opt-in with the user's own key.
-        items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with your own Claude, OpenAI or Gemini key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))
+        items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with an AI plan (AI Included or AI Pro) or your own Anthropic (Claude) key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))
         items.append(("Modules", "Every feature is a switch in Settings → Modules. Switched-off features disappear; stand-alone tools appear in the sidebar Tools menu while switched on."))
         #if DEBUG
         items.append(("Allow cloud providers (dev builds)", "Dev-only toggle for developer cloud testing; separate from Online mode."))

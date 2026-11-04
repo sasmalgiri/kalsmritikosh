@@ -9,8 +9,8 @@ answer.
 ## Plans and credits (owner decisions 2026-11-04; the one place: `src/policy.ts`)
 | Plan | Credits / month | One request | One confirmed whole-case read | Per day |
 |---|---|---|---|---|
-| AI Included (monthly $39 / yearly $389) | 2,000 | 400 | 600 | 1,500 |
-| AI Pro (monthly $99 / yearly $989) | 6,000 | 400 | 3,000 | 4,000 |
+| AI Included (monthly $39 / yearly $389.99) | 2,000 | 400 | 600 | 1,500 |
+| AI Pro (monthly $99 / yearly $989.99) | 6,000 | 400 | 3,000 | 4,000 |
 
 * **Allowance month = anniversary month.** It starts at the purchase of the current subscription
   period (the renewal for monthly plans; the start of the year for yearly plans; the moment of an

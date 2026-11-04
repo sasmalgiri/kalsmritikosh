@@ -26,9 +26,49 @@ public nonisolated enum OnlineSettings {
     private static let keychainService = "ecosanskritiinnovation.Kalsmritikosh.onlineKeys"
 
     public static var kind: OnlineProviderKind {
-        get { OnlineProviderKind(rawValue: UserDefaults.standard.string(forKey: kindKey) ?? "") ?? .anthropic }
+        get {
+            let stored = OnlineProviderKind(rawValue: UserDefaults.standard.string(forKey: kindKey) ?? "") ?? .anthropic
+            guard stored.isRetiredForAnswering else { return stored }
+            migrateRetiredProvider(in: .standard,
+                                   hasAnthropicKey: apiKey(for: .anthropic) != nil,
+                                   removeKey: { setAPIKey(nil, for: $0) })
+            return .anthropic
+        }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: kindKey) }
     }
+
+    // MARK: Retired answering providers (release decisions 2026-11-04, item 4)
+
+    private static let retiredNoticeKey = "kalsmritikosh.online.retiredProviderNotice"
+
+    /// A stored own-key choice of OpenAI or Gemini becomes "not set up": the provider is set back to
+    /// Claude (Anthropic), the old model name is dropped (it would otherwise be sent to Anthropic), the
+    /// old provider's terms confirmation and its key in the Keychain are removed, and a notice explains
+    /// it in Settings ▸ Online until dismissed. Without an Anthropic key nothing is sent until the person
+    /// adds one or chooses an AI plan. Returns the notice, or nil when nothing had to change.
+    @discardableResult
+    static func migrateRetiredProvider(in defaults: UserDefaults, hasAnthropicKey: Bool,
+                                       removeKey: (OnlineProviderKind) -> Void) -> String? {
+        guard let raw = defaults.string(forKey: kindKey), let old = OnlineProviderKind(rawValue: raw),
+              old.isRetiredForAnswering else { return nil }
+        defaults.set(OnlineProviderKind.anthropic.rawValue, forKey: kindKey)
+        defaults.removeObject(forKey: modelKey)
+        defaults.removeObject(forKey: documentTermsKey + old.rawValue)
+        removeKey(old)
+        let name = old == .openai ? "OpenAI" : "Gemini (Google)"
+        let notice = "Online AI with your own key now answers with Claude (Anthropic) only. Your earlier choice, \(name), is no longer offered, and its key was removed from this Mac's Keychain. "
+            + (hasAnthropicKey
+               ? "Your saved Anthropic key is used from now on."
+               : "Online AI is not set up: add an Anthropic key here, or choose AI Included or AI Pro. Until then answers come from your documents on this Mac.")
+        defaults.set(notice, forKey: retiredNoticeKey)
+        KalsmritikoshLog.app.notice("Online provider \(old.rawValue, privacy: .public) retired; setting migrated to anthropic (key present: \(hasAnthropicKey, privacy: .public))")
+        return notice
+    }
+
+    /// The explanation left by `migrateRetiredProvider`, shown in Settings ▸ Online until dismissed.
+    public static var retiredProviderNotice: String? { UserDefaults.standard.string(forKey: retiredNoticeKey) }
+    public static func dismissRetiredProviderNotice() { UserDefaults.standard.removeObject(forKey: retiredNoticeKey) }
+    static func retiredProviderNotice(in defaults: UserDefaults) -> String? { defaults.string(forKey: retiredNoticeKey) }
 
     public static var model: String {
         get {

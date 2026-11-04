@@ -96,7 +96,7 @@ extension AppState {
         guard PurchaseCenter.shared.allowPaidAction("add documents", importing: true) else { return PaidUse.refusal("add documents", importing: true)?.reason ?? "A subscription is needed." }
         guard let ingest else { return "The ledger is not open yet." }
         guard OnlineSettings.cloudAllowed else {
-            return AIRegion.current.explanation ?? "Transcription needs Online mode with AI Included or your own Gemini key (Settings ▸ Online)."
+            return AIRegion.current.explanation ?? "Transcription needs Online mode with an AI plan — AI Included or AI Pro (Settings ▸ Online)."
         }
         guard let provider = onlineProvider, await provider.isAvailable() else { return OnlineCloudProvider.OnlineError.notAvailable.localizedDescription }
         guard let type = OnlineToolDocuments.audioTypes[url.pathExtension.lowercased()] else {

@@ -49,7 +49,7 @@ Apple's definition of "collect" is met for that path. The App Store privacy labe
 | Data type (App Store Connect) | Collected when | Linked to the user? | Tracking? | Purpose |
 |---|---|---|---|---|
 | Other User Content (questions, document passages, page images) | AI Included or own-key Online AI, each send approved | **No** — the relay forwards no identifier to the provider | No | App Functionality |
-| Audio Data (recordings sent for transcription) | Transcription through AI Included or own Gemini key | **No** | No | App Functionality |
+| Audio Data (recordings sent for transcription) | Transcription through an AI plan (Gemini via the relay; no own-key Gemini since 2026-11-04) | **No** | No | App Functionality |
 | Purchase History (the AI Included subscription's App Store transaction number, with question counts) | AI Included use, status check, top-up | **Yes** (the relay keeps it with the counts) | No | App Functionality |
 | Emails or Text Messages (passages from mail and chats) | as Other User Content | No | No | App Functionality |
 | Photos or Videos (page images, video recordings) | Read with AI; transcription of video | No | No | App Functionality |

@@ -399,7 +399,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         // ── Wave O ───────────────────────────────────────────────────────
         case .onlineAnswers:
             return Spec(planID: "O-4", group: "Online (your own key)", title: "Answers with your own cloud AI key",
-                        detail: "Use Claude, OpenAI or Gemini with your own key. You see exactly what will be sent before it goes, every send is logged, and answers pass the same evidence check as private ones.",
+                        detail: "Use an AI plan, or Claude with your own Anthropic key. You see exactly what will be sent before it goes, every send is logged, and answers pass the same evidence check as private ones.",
                         whenOff: "All answers are made on your Mac.",
                         implemented: true, requiresOnline: true)
         }

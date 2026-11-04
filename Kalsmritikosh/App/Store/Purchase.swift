@@ -7,12 +7,15 @@
 //  StoreKit upgrades, downgrades and crossgrades within the group, so nobody holds two subscriptions:
 //    • Workbench ($4.99 / $39.99; ₹249 / ₹1,999): every non-AI feature; Online AI only with the
 //      person's own Anthropic key, billed by Anthropic. The ONLY plan with a 14-day introductory trial.
-//    • AI Included ($39 / $389): everything in Workbench + 2,000 AI credits a month through the
+//    • AI Included ($39 / $389.99): everything in Workbench + 2,000 AI credits a month through the
 //      publisher's relay (1 credit = US$0.01 of Claude cost). No trial.
-//    • AI Pro ($99 / $989): everything + 6,000 credits a month and a larger whole-case read. No trial.
+//    • AI Pro ($99 / $989.99): everything + 6,000 credits a month and a larger whole-case read. No trial.
 //  Yearly plans get the same monthly allowance each month (from the purchase anniversary — see
 //  relay/src/policy.ts, the one authority for plan parameters). Credit packs (500 and 2,000, consumable)
-//  never expire and are usable only with an AI plan. There are no earlier buyers: the 2026-10-18 lifetime
+//  never expire and are usable only with an AI plan. In the storefronts where Online AI is blocked
+//  (AIRegion) only Workbench is offered — no AI plan, no credit pack, no own-key setup (release decisions
+//  2026-11-04; App Store Connect availability is set to match). India prices are set in App Store Connect
+//  (release/IAP_SETUP.md). There are no earlier buyers: the 2026-10-18 lifetime
 //  unlock and its free trial product no longer exist in the app.
 //
 //  Apple sells, bills, renews, refunds and restores; the app itself opens no connection for any of it
@@ -100,7 +103,11 @@ nonisolated enum PlanTier: String, Equatable, Sendable, CaseIterable, Comparable
     var includes: String {
         switch self {
         case .workbench:
-            return "Every persona and job on your Mac — adding documents, the case file, timelines, jobs and exports. Online AI uses your own Anthropic key, billed to you by Anthropic. 14-day free trial for new subscribers."
+            return "Every persona and job on your Mac — adding documents, the case file, timelines, jobs and exports. "
+                + (AIRegion.isBlocked
+                   ? "Online AI is not available for App Store accounts in this country. "
+                   : "Online AI uses your own Anthropic key, billed to you by Anthropic. ")
+                + "14-day free trial for new subscribers."
         case .aiIncluded:
             return "Everything in Workbench, plus \(AIPricing.aiIncluded.monthlyCredits.formatted()) AI credits a month for Claude through the publisher's service — no AI account or key needed. 1 credit = US$0.01 of AI cost; a typical question uses a few credits, reading a whole case more. No free trial."
         case .aiPro:
@@ -445,6 +452,14 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
         return "Includes \(l.monthlyCredits.formatted()) AI credits a month (1 credit = US$0.01 of AI cost at Anthropic's published prices; yearly plans get the same allowance every month, renewing on the day of purchase). Credits pay for questions answered by Claude Opus 5 (Anthropic; if Anthropic declines a request, another Claude model may answer it) and for transcription of recordings by Google Gemini, through the publisher's service; each request is charged what it actually cost, and the app shows the estimate before a large read. One request may use up to \(l.perRequestCredits) credits, a confirmed whole-case read up to \(l.caseReadCredits.formatted()), and up to \(l.dailyCredits.formatted()) a day. Unused monthly credits do not carry over; credit packs (500 or 2,000) never expire and are spent after the month's credits, while an AI plan is active. The service has a monthly capacity: if it is reached it pauses until the 1st (UTC), nothing is charged, and everything else keeps working. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts and credits."
     }
 
+    /// Release decisions 2026-11-04 (item 3): the plans offered for sale here — the AI plans only when this
+    /// build has the relay and the App Store country is confirmed as one where Online AI is allowed; in a
+    /// blocked (or not yet confirmed) storefront only Workbench.
+    static func forSale(_ offers: [PlanOffer], relayConfigured: Bool = AIIncludedRelay.isConfigured,
+                        sellsAI: Bool = AIRegion.sellsAIProducts) -> [PlanOffer] {
+        offers.filter { !$0.plan.includesAI || (relayConfigured && sellsAI) }
+    }
+
     /// The annual plan's saving against twelve monthly charges, from the two matching storefront
     /// prices; nil when the prices are not comparable numbers. Secondary information only.
     static func annualSaving(monthly: Decimal, annual: Decimal) -> Int? {
@@ -784,6 +799,12 @@ final class PurchaseCenter {
     /// credited it; one that could not be credited stays unfinished and is credited at the next launch.
     func buyCredits(_ productID: String) async {
         guard PurchaseProducts.credits(inPack: productID) != nil else { return }
+        // Release decisions 2026-11-04 (item 3): no credit pack is sold where Online AI is not available.
+        if !AIRegion.sellsAIProducts {
+            message = AIRegion.current.explanation.map { "Credit packs are not sold here. " + $0 }
+                ?? "Credit packs are not sold here."
+            return
+        }
         guard entitlement.includesAI, let sub = aiSubscriptionID else {
             message = "Credit packs are for AI Included and AI Pro subscribers. Choose an AI plan first."
             return

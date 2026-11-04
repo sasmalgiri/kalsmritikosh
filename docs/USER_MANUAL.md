@@ -130,7 +130,7 @@ Screen: **Cases**.
 
 Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own AI-provider account.
 
-1. Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included or AI Pro (with that plan) or your own Claude, OpenAI or Gemini key (Workbench uses your own key). A badge shows while it is on; one click returns to Private.
+1. Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included or AI Pro (with that plan) or your own Anthropic (Claude) key — the only own-key provider (Workbench uses your own key). Not available where Online AI is blocked for the App Store country. A badge shows while it is on; one click returns to Private.
 2. Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked.
 3. Each send is recorded before it leaves and shows its estimated cost first. Providers may retain what they receive under their own terms. With your own key they bill your account (set a monthly limit for your own Claude key in Settings ▸ Online); on an AI plan each request is charged in credits at its actual cost.
 4. Subscribing never turns Online on. The test host and the sample case never send anything.
@@ -146,7 +146,7 @@ AI Included gives 2,000 AI credits a month and AI Pro 6,000 (1 credit = US$0.01 
 3. Settings ▸ Online ▸ “Check credits” shows this month's credits used and left, your credit packs, the reset date and the last request's cost. Before reading a whole case the app shows the estimate (for example “about 120 credits; you have 840”) and reads it only after you confirm.
 4. The month's credits renew on the day of your purchase each month — yearly plans too — and do not carry over. Credit packs (500 or 2,000, bought in Settings ▸ Online) never expire, are spent after the month's credits, work while an AI plan is active and stay with your Apple account on every Mac.
 5. One request may use up to 400 credits; a confirmed whole-case read up to 600 (AI Included) or 3,000 (AI Pro); there is a daily limit. If the service's monthly capacity is reached it pauses until the 1st and says so; nothing is charged and your own key can be used meanwhile.
-6. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country. You must be 18 or older to use it.
+6. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country: there only Workbench is sold — no AI plan, no credit pack — and an own key cannot be used either. You must be 18 or older to use it.
 
 Screen: **Settings**.
 
@@ -181,7 +181,7 @@ Public-record lookups and captures in Online mode, each shown to you before it i
 3. Sanctions lists: the complete OFAC and UN lists are downloaded and searched on this Mac — the name you check is not sent. A match on a name is a possible match until identifiers agree.
 4. Company registry (GLEIF) and court records (CourtListener): the name you search is sent to that service.
 5. Capture a web page: the page as the site returned it, with a record of address, time, status and SHA-256, added to your archive.
-6. Transcribe a recording: speaker labels and timecodes through an AI plan's credits (AI Included or AI Pro) or your Gemini key; the transcript is marked as AI output.
+6. Transcribe a recording: speaker labels and timecodes through an AI plan's credits (AI Included or AI Pro; Google Gemini through the publisher's service); the transcript is marked as AI output.
 
 Screen: **Sources**.
 
@@ -894,7 +894,7 @@ Screen: **Compliance Board**.
 - **Ingest** — Reading and filing your documents into searchable, dated, cited facts. Runs automatically when you add files — you don't press anything.
 - **Distill memory** — Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it.
 - **Background maintenance** — Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.
-- **Private / Online** — Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with your own Claude, OpenAI or Gemini key. You see what will be sent first, a badge shows while it is on, and one click returns to Private.
+- **Private / Online** — Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with an AI plan (AI Included or AI Pro) or your own Anthropic (Claude) key. You see what will be sent first, a badge shows while it is on, and one click returns to Private.
 - **Modules** — Every feature is a switch in Settings → Modules. Switched-off features disappear; stand-alone tools appear in the sidebar Tools menu while switched on.
 - **Keep each email thread as one document** — Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect.
 - **Show low-quality names in results** — Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses.

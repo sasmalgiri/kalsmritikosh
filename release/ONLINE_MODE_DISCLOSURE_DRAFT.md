@@ -11,7 +11,7 @@ any build until the network helper target exists (O-2), so nothing here is in ef
 
 > **Online mode (optional, off by default).** Investigations Made Easy starts in Private mode, in which
 > nothing you add or ask ever leaves your Mac. You may switch on Online mode in Settings and enter
-> your own API key for a cloud AI provider you choose (Anthropic, OpenAI or Google). In Online
+> an AI plan or your own Anthropic API key (the only own-key provider). In Online
 > mode, when Investigations Made Easy needs AI to word an answer, it shows you exactly the text it intends to
 > send — passages from your documents and your question — before sending it, and sends it only if
 > you agree. You can have names, email addresses, phone numbers and long identifiers replaced by
@@ -32,7 +32,7 @@ any build until the network helper target exists (O-2), so nothing here is in ef
 ## 3. App Review notes (add)
 
 > Investigations Made Easy is fully offline by default (Private mode). Online mode is an explicit opt-in:
-> the user supplies their own API key for Anthropic, OpenAI or Google Gemini. Before any text is
+> the user chooses an AI plan or supplies their own Anthropic API key (the only own-key provider; release decisions 2026-11-04). Before any text is
 > sent, a consent screen shows the exact text, the destination host and its size; nothing is sent
 > without the user pressing Send. Network access is confined to a bundled XPC service
 > (KalsmritikoshNetworkHelper) that may only make HTTPS requests to those three hosts; the main app has

@@ -4,7 +4,7 @@
 //
 //  O-2 — the ONLY Kalsmritikosh process allowed to open a network connection
 //  (its sandbox alone has `network.client`). It does one thing: send an HTTPS
-//  POST to one of three allowlisted hosts and return the status and body. It
+//  POST to an allowlisted AI host (Anthropic, or the publisher's relay) and return the status and body. It
 //  keeps no state, stores nothing, logs no content, and refuses any other host,
 //  scheme or method. The main app builds the request, shows the user exactly
 //  what will be sent, records every send, and only then asks this helper to carry it.
@@ -17,7 +17,9 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
     /// A2 — the publisher's AI Included relay, once deployed. Keep identical to `AIIncludedRelay.host`
     /// (ci/guards/relay-host-match.sh checks the two).
     static let relayHost = ""
-    static let allowedHosts: Set<String> = Set(["api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com", relayHost].filter { !$0.isEmpty })
+    /// Release decisions 2026-11-04: the own key answers with Anthropic only; recordings go to Gemini
+    /// through the relay, never from the Mac. Keep identical to `OnlineProviderKind.allowedHosts`.
+    static let allowedHosts: Set<String> = Set(["api.anthropic.com", relayHost].filter { !$0.isEmpty })
     /// A8/A10 — public-record sources, read with GET only. Keep identical to `PublicSource.allHosts`.
     static let lookupHosts: Set<String> = ["data-api.ecb.europa.eu", "sanctionslistservice.ofac.treas.gov", "scsanctions.un.org",
                                            "api.gleif.org", "www.courtlistener.com"]

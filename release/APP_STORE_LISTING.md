@@ -21,7 +21,7 @@ Related: privacy answers → `release/APP_PRIVACY_LABEL.md`; products → `relea
 | Support email | sasmalgiri@gmail.com |
 | Price | Free download; one auto-renewable subscription group (Workbench, AI Included, AI Pro) + two credit packs — `release/IAP_SETUP.md` |
 | Export compliance | `ITSAppUsesNonExemptEncryption = NO` in the build (Apple OS crypto only; SHIP_DECISIONS 2026-10-17) |
-| Availability | All storefronts. Online AI is switched off inside the app (and refused by the relay) for App Store accounts in CHN, HKG, MAC, RUS, BLR, VEN, AFG, MMR, YEM, IRN, PRK, SYR, CUB; the app itself still works there without AI. |
+| Availability | The app: all storefronts. Online AI is switched off inside the app (and refused by the relay) for App Store accounts in CHN, HKG, MAC, RUS, BLR, VEN, AFG, MMR, YEM, IRN, PRK, SYR, CUB; the app itself still works there without AI. **In those 13 storefronts only Workbench is sold**: the four AI subscriptions and both credit packs are removed from their availability in App Store Connect (`release/IAP_SETUP.md` §2–§3), and the app hides the AI plans, the packs and the own-key option there (release decisions 2026-11-04). |
 
 **Keywords (≤100 chars):** `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private` (99)
 
@@ -52,7 +52,7 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 >
 > Ask AI about a case — with your permission, once per case. With an AI plan or your own Anthropic key, Claude can read a whole case and answer questions about it. The first time, the app lists which of the case's documents would go to Anthropic and which would not (privileged material never does), with the estimated cost; you allow it for that case or not, and are asked again when its documents change. Every AI statement is checked against the exact source line it cites before you see it; what cannot be matched is left out. The investigator decides.
 >
-> Private by design. Everything runs on your Mac, and the knowledge base is encrypted on disk. There's no account, no sign-in, and no analytics. By default your files and questions never leave your device; without AI, Ask returns the matching passages with your words highlighted and a link to the source. If you choose, turn on AI — Apple's on-device model, an AI plan, or your own cloud AI key — and you see exactly what would be sent before anything leaves your Mac.
+> Private by design. Everything runs on your Mac, and the knowledge base is encrypted on disk. There's no account, no sign-in, and no analytics. By default your files and questions never leave your device; without AI, Ask returns the matching passages with your words highlighted and a link to the source. If you choose, turn on AI — Apple's on-device model, an AI plan, or your own Anthropic key — and you see exactly what would be sent before anything leaves your Mac.
 >
 > • Cases, interviews, exhibits, holds, redaction log, chronology and an append-only case log
 > • Documents, email (including PST), chat exports, Cellebrite reports, scans and recordings
@@ -63,13 +63,13 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 >
 > Plans (auto-renewing; your storefront's price is shown in the app):
 > • Workbench $4.99/month or $39.99/year — every feature on your Mac, no AI of ours; optional Online AI with your own Anthropic key, billed by Anthropic. New subscribers can try every paid feature free for 14 days, then $4.99 a month or $39.99 a year.
-> • AI Included $39/month or $389/year — Workbench plus 2,000 AI credits a month.
-> • AI Pro $99/month or $989/year — Workbench plus 6,000 AI credits a month and larger whole-case reads.
-> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No trial on the AI plans and no free AI. Online AI is not available in every country.
+> • AI Included $39/month or $389.99/year — Workbench plus 2,000 AI credits a month.
+> • AI Pro $99/month or $989.99/year — Workbench plus 6,000 AI credits a month and larger whole-case reads.
+> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No trial on the AI plans and no free AI. Online AI is not available in every country; where it is not, only Workbench is offered.
 >
 > Payment is charged to your Apple Account. Subscriptions renew automatically unless cancelled at least 24 hours before the period ends; manage or cancel in your Apple Account settings. When a plan ends, your cases stay readable and exportable.
 >
-> No AI writes your answers unless you turn it on. Turn on "Use AI to write answers" for Apple's on-device intelligence where your Mac supports it, or Online mode for an AI plan or your own key.
+> No AI writes your answers unless you turn it on. Turn on "Use AI to write answers" for Apple's on-device intelligence where your Mac supports it, or Online mode for an AI plan or your own Anthropic key.
 >
 > English only in this version. Documents in other languages are kept and keyword-searchable, but names and dates in them may be missed.
 >
@@ -87,7 +87,10 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 The paywall (`Kalsmritikosh/UI/PurchaseGate.swift`) shows StoreKit's own localized prices; the copy below is the reference text.
 
 - **Title and period of each plan:** Workbench monthly / yearly; AI Included monthly / yearly; AI Pro monthly / yearly.
-- **Price per period:** $4.99 / month, $39.99 / year (India ₹249 / ₹1,999); $39 / month, $389 / year; $99 / month, $989 / year.
+- **Price per period (US):** Workbench $4.99 / month, $39.99 / year; AI Included $39 / month, $389.99 / year; AI Pro $99 / month,
+  $989.99 / year; packs $9.99 / $34.99. **India** (set in App Store Connect; Apple's storefront prices include GST): Workbench
+  ₹249 / ₹1,999; AI Included ₹3,499 / ₹34,999; AI Pro ₹8,999 / ₹89,999; packs ₹899 (500) / ₹2,999 (2,000). The monthly AI
+  prices assume Apple's rounded US points $39.00 / $99.00 exist (owner check, `release/IAP_SETUP.md` §6).
 - **What each includes:** Workbench — all personas and jobs, no AI of ours, Online AI with your own Anthropic key (billed by
   Anthropic). AI Included — Workbench + 2,000 AI credits a month. AI Pro — Workbench + 6,000 AI credits a month + larger
   whole-case reads (up to 3,000 credits per confirmed read vs 600). Yearly plans get the same credits every month.
@@ -147,14 +150,16 @@ Optional: Settings ▸ Online with the credit meter; "What was sent" log.
 >
 > 5. CREDIT PACKS: Settings ▸ Online ▸ "Buy 500 credits" (consumable, never expires), usable while an AI plan is active.
 >
-> 6. OWN KEY (Workbench): with Workbench, Settings ▸ Online ▸ "Claude (Anthropic)" and paste an Anthropic API key (Keychain).
+> 6. OWN KEY (Workbench): with Workbench, Settings ▸ Online ▸ "Claude (Anthropic)" — the only own-key provider — and paste an
+>    Anthropic API key (Keychain).
 >    The same permission sheet appears, with the estimate in dollars; requests go directly from the Mac to api.anthropic.com.
 >    We do not provide a key for this path.
 >
-> Network access is confined to the bundled, sandboxed extension KalsmritikoshNetworkHelper: HTTPS POST only to the AI
-> providers and the relay, and HTTPS GET only to five public-record sources (data-api.ecb.europa.eu,
+> Network access is confined to the bundled, sandboxed extension KalsmritikoshNetworkHelper: HTTPS POST only to
+> api.anthropic.com (own key) and the relay (AI plans), and HTTPS GET only to five public-record sources (data-api.ecb.europa.eu,
 > sanctionslistservice.ofac.treas.gov, scsanctions.un.org, api.gleif.org, www.courtlistener.com) or a page the user asks to
-> capture. Online AI is switched off for App Store accounts in CN, HK, MO, RU, BY, VE, AF, MM, YE, IR, KP, SY, CU.
+> capture. Online AI is switched off for App Store accounts in CN, HK, MO, RU, BY, VE, AF, MM, YE, IR, KP, SY, CU, and only
+> Workbench is sold there (no AI plan, no credit pack, no own-key setup).
 > Minimum macOS 15.6. Contact: Shrabani Sasmal, sasmalgiri@gmail.com.
 
 _Before pasting: replace `<RELAY HOST>` with the deployed host (OWNER_LAUNCH_CHECKLIST step 6). If the relay is not deployed,

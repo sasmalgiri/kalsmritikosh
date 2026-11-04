@@ -18,7 +18,7 @@ The single inventory is **`docs/DATA_FLOW_INVENTORY.md`**. Summary:
 - Private mode, the default: no network.
 - Online mode, opt-in, uses the person's own API key:
   - It sends the question and the app's field names.
-  - If allowed, it also sends document passages to Claude (Anthropic commercial API) or a paid Gemini project. It never sends document text to OpenAI in this release.
+  - If allowed, it also sends document passages to Claude (Anthropic commercial API). Since 2026-11-04 Anthropic is the only own-key provider; recordings go to Gemini only through the AI plans' relay.
   - Every send is previewed and recorded in the encrypted ledger.
 - StoreKit runs through Apple.
 - Mail hand-offs happen only when the person clicks.

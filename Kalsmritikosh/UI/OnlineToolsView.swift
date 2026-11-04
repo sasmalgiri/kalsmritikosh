@@ -188,7 +188,7 @@ struct OnlineToolsView: View {
     private var transcribeTool: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button("Choose a recording…") { pickRecording = true }
-            Text("Up to 18 MB (m4a, mp3, wav, aac, aiff, flac, ogg, mp4, mov). Sent — shown to you first — to AI Included or Gemini with your own key; the transcript, with speaker labels and timecodes, is added as a marked document. Speaker labels are guesses, not identifications.")
+            Text("Up to 18 MB (m4a, mp3, wav, aac, aiff, flac, ogg, mp4, mov). Sent — shown to you first — through your AI plan (AI Included or AI Pro) to Google Gemini; the transcript, with speaker labels and timecodes, is added as a marked document. Speaker labels are guesses, not identifications.")
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }

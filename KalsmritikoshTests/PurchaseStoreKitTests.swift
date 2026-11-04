@@ -83,7 +83,7 @@ struct PurchaseStoreKitTests {
         #expect(aiMonthly.actionTitle == "Subscribe $39.00 per month")
         #expect(aiMonthly.disclosure.contains("2,000 AI credits a month") && aiMonthly.disclosure.contains("never expire") && aiMonthly.disclosure.contains("pauses until the 1st"))
         let proAnnual = try #require(c.offers.first { $0.plan == .proAnnual })
-        #expect(proAnnual.displayPrice == "$989.00" && !proAnnual.eligibleForTrial && proAnnual.disclosure.contains("6,000 AI credits a month"))
+        #expect(proAnnual.displayPrice == "$989.99" && !proAnnual.eligibleForTrial && proAnnual.disclosure.contains("6,000 AI credits a month"))
         #expect(c.aiAnnualSavingPercent == 17 && c.annualSavings[.aiPro] == 17)
         #expect(c.packPrices == [PurchaseProducts.credits500: "$9.99", PurchaseProducts.credits2000: "$34.99"])
         let monthly = try #require(c.offers.first { $0.plan == .monthly })

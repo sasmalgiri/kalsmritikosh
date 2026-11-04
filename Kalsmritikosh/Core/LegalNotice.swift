@@ -70,22 +70,22 @@ public nonisolated enum LegalNotice {
     answers use Apple’s on-device model (part of macOS), and the semantic-search models ship \
     inside the app package — nothing to install and nothing to download. The ledger is \
     encrypted on your Mac, with its key in your Keychain. Online mode is off unless you turn \
-    it on: then an AI plan (AI Included or AI Pro) or the cloud AI you choose with your own API key may help understand \
+    it on: then an AI plan (AI Included or AI Pro) or Claude with your own Anthropic API key may help understand \
     a question and, if you allow it, read passages, page images or a recording to word an answer \
     or a transcript — you see exactly what would be sent, and nothing is sent until you agree. \
     Inside a case you are asked once: the first time you use AI there, the app lists which of the case's \
     documents would go to Anthropic (Claude) and which would not, and if you allow it for that case, those \
-    documents and your questions in that case are sent to Anthropic until its documents change, when you are \
-    asked again. Recordings you choose to transcribe go to Google (Gemini). Privileged material, protected \
+    documents and your questions in that case are sent to Anthropic, without a further prompt, until its documents \
+    change, when you are asked again. Recordings you choose to transcribe go to Google (Gemini) through an AI plan. Privileged material, protected \
     source identities and other cases' documents are not sent. The app itself has no network permission; \
     only its separate network helper connects, and only in Online mode. \
-    Document text goes only to a provider whose terms permit it, after you confirm, and that \
-    provider keeps what it receives under its own terms. With AI Included or AI Pro, requests pass \
+    With your own key, document text goes only to Anthropic after you confirm its commercial terms apply \
+    to your account, and Anthropic keeps what it receives under those terms. With AI Included or AI Pro, requests pass \
     through the publisher's relay to Anthropic (Claude) or Google (Gemini, for recordings) under the \
     publisher's account and are charged in credits at their actual cost; the relay keeps only counts, \
     credits and the subscription's transaction number, never content. Online tools look up public records (exchange rates, registries, court \
     records), search downloaded sanctions lists on this Mac, and capture web pages you choose, \
-    each shown to you first. Online AI is not offered in some countries. Sync through a folder, if \
+    each shown to you first. Online AI is not offered in some countries; there only Workbench is sold and an own key cannot be used. Sync through a folder, if \
     you turn it on, writes your own work into a folder you choose, encrypted with your \
     passphrase; that folder's service moves it. The subscription, its free trial, renewals, refunds \
     and restore are handled by Apple through the App Store; the app never sees payment details and \
@@ -182,14 +182,14 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.9 (2026-11-04)"
+    public static let termsVersion = "1.10 (2026-11-04)"
 
     /// Payment terms (owner decisions 2026-11-04): one subscription group, three levels; credit packs.
     public static let subscriptionStatement = """
     All nine personas, sold through the Mac App Store as one auto-renewable subscription at three \
     levels, each monthly or yearly at the price shown for your storefront: Workbench (no AI of ours; \
-    Online AI with your own key, billed by that provider), AI Included (2,000 AI credits a month) and AI Pro \
-    (6,000 AI credits a month and larger whole-case reads). One credit is US$0.01 of the AI provider's \
+    Online AI with your own Anthropic key, billed by Anthropic), AI Included (2,000 AI credits a month) and AI Pro \
+    (6,000 AI credits a month and larger whole-case reads); where Online AI is not offered only Workbench is sold. One credit is US$0.01 of the AI provider's \
     cost; each request is charged what it actually cost. Credit packs (500 or 2,000 credits) never \
     expire and are spent after the month's credits while an AI plan is active. Eligible new Workbench \
     subscribers get a 14-day free trial; the AI plans have none. A plan renews automatically unless \
