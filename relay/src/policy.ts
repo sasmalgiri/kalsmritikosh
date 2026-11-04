@@ -42,11 +42,15 @@ export interface PlanPolicy {
   caseReadCredits: number;
   /** Abuse limit: credits charged per UTC day. */
   dailyCredits: number;
+  /** The most case text (estimated tokens, `maxTokensForText`) the app offers to read whole on this plan.
+   *  The app derives its whole-case limit from this and caps it so the worst-case reservation of such a
+   *  read always fits `caseReadCredits` and LARGE_READ_MAX_INPUT_CHARS (AIPricing.caseReadTokenCeiling). */
+  caseReadTokens: number;
 }
 
 export const PLANS: Record<Tier, PlanPolicy> = {
-  ai:  { label: "AI Included", monthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits:   600, dailyCredits: 1_500 },
-  pro: { label: "AI Pro",      monthlyCredits: 6_000, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000 },
+  ai:  { label: "AI Included", monthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits:   600, dailyCredits: 1_500, caseReadTokens: 300_000 },
+  pro: { label: "AI Pro",      monthlyCredits: 6_000, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000 },
 };
 const TIER_RANK: Record<Tier, number> = { ai: 1, pro: 2 };
 export const higherTier = (a: Tier | null, b: Tier | null): Tier | null =>
@@ -113,9 +117,29 @@ export function anthropicCost(u: AnthropicUsage, r: ModelRates, batch = false): 
   return Math.ceil(usdMicro * (batch ? r.batch : 1));
 }
 
-/** Tokens a text is at most worth, conservatively (≈ 3 characters per token; English is ~4). */
+// MARK: - Size estimate (THE estimator; the app uses the same constants: AIPricing.maxTokensForText)
+//
+// The relay never sees a token count before the provider answers, so it sizes a request from its text:
+// at most one token per CHARS_PER_TOKEN characters (English is ~4; 3 leaves room for code, numbers and
+// other scripts), plus TOKEN_OVERHEAD for the message framing, plus IMAGE_TOKENS per image or document
+// block (Claude's own ceiling after resizing). Characters are JavaScript string length (UTF-16 code
+// units); the app counts UTF-8 bytes, which are never fewer, so its estimate is never below this one.
+
+/** Characters per token in the conservative estimate. */
+export const CHARS_PER_TOKEN = 3;
+/** Tokens added once per request for the message framing. */
+export const TOKEN_OVERHEAD = 64;
+/** Claude bills an image at most ~1,600 tokens after its own resizing; counted at that ceiling. */
+export const IMAGE_TOKENS = 1_600;
+
+/** Tokens a text is at most worth, conservatively. */
 export function maxTokensForText(chars: number): number {
-  return Math.ceil(chars / 3) + 64;
+  return Math.ceil(chars / CHARS_PER_TOKEN) + TOKEN_OVERHEAD;
+}
+
+/** Tokens a Messages request's input is at most worth: its text characters and its images. */
+export function maxInputTokens(chars: number, images: number): number {
+  return maxTokensForText(chars) + images * IMAGE_TOKENS;
 }
 
 /** How a request's input could be billed at worst: plain, or written to a 5-minute / 1-hour cache. */
@@ -142,7 +166,9 @@ export function creditsFor(micro: Micro): number {
 export const MAX_OUTPUT_TOKENS = 24_000;
 /** The largest ordinary request the relay forwards (text characters). */
 export const MAX_INPUT_CHARS = 120_000;
-/** A confirmed large read (the whole case) may carry this much; its credits are capped by the plan. */
+/** A confirmed large read (the whole case) may carry this much (text characters, the question and the
+ *  system prompt included); its credits are capped by the plan. AI Pro's 800k-token whole-case limit is
+ *  at most 2,400,000 characters of case text by the estimate above, which leaves room for the task. */
 export const LARGE_READ_MAX_INPUT_CHARS = 2_800_000;
 
 // MARK: - Allowance months

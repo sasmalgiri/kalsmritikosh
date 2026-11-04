@@ -65,7 +65,9 @@ final class AICreditMeter {
     func planChanged(_ t: PlanTier?) {
         guard t != tier else { return }
         tier = t
-        if t == nil { receipt = nil; lastCharged = nil; lastChargedAt = nil }
+        // A receipt belongs to the plan it was issued for: a new plan starts without one.
+        receipt = nil; lastCharged = nil; lastChargedAt = nil; updatedAt = nil
+        publishTier()
     }
 
     func apply(_ s: AIIncludedRelay.Status) {
@@ -78,6 +80,66 @@ final class AICreditMeter {
         if let t = PlanTier(relayCode: r.plan) { tier = t }
         if let c = r.charged { lastCharged = c; lastChargedAt = at }
         updatedAt = at
+        publishTier()
+    }
+
+    // MARK: The plan, readable from any actor (CaseReadLimits)
+
+    private static let tierSnapshot = OSAllocatedUnfairLock<PlanTier?>(initialState: nil)
+    /// The current verified AI plan as the shared meter knows it (StoreKit's verified entitlement, or the
+    /// relay's receipt, which the relay confirmed with Apple). nil = none known.
+    nonisolated static var verifiedTier: PlanTier? { tierSnapshot.withLock { $0 } }
+    private func publishTier() {
+        guard self === AICreditMeter.shared else { return }
+        let t = tier
+        Self.tierSnapshot.withLock { $0 = t }
+    }
+
+    // MARK: The local pre-check (before an AI Included / AI Pro send)
+
+    /// A receipt older than this is not trusted for the balance or the day's use (credits can come back
+    /// — a pack bought on another Mac, the allowance reset — without this Mac hearing of it).
+    static let receiptFreshness: TimeInterval = 10 * 60
+
+    /// The relay's refusal for a request that will reserve `reserved` credits, when the meter already
+    /// shows it (same order and words as relay/src/index.ts `metered`: the ceiling, the day's limit, the
+    /// balance); nil = send and let the relay decide (also whenever the plan or a fresh receipt is unknown).
+    func localRefusal(reserved: Int, largeRead: Bool, now: Date = Date()) -> AIPlanRefusal? {
+        guard let tier, let plan = tier.limits else { return nil }
+        let fresh: AIIncludedRelay.Receipt? = {
+            guard let r = receipt, let at = updatedAt, PlanTier(relayCode: r.plan) == tier,
+                  now.timeIntervalSince(at) >= 0, now.timeIntervalSince(at) < Self.receiptFreshness else { return nil }
+            if let ends = r.periodEndsAt, now >= ends { return nil }        // a new allowance month has begun
+            if OwnKeyBudget.monthKey(at) != OwnKeyBudget.monthKey(now) { return nil }
+            return r
+        }()
+        let upgrade: [AIPlanRefusal.Offer] = tier == .aiPro ? [] : [.upgrade]
+        let ceiling = largeRead ? (fresh.map { $0.caseReadCredits > 0 ? $0.caseReadCredits : plan.caseReadCredits } ?? plan.caseReadCredits)
+                                : (fresh.map { $0.perRequestCredits > 0 ? $0.perRequestCredits : plan.perRequestCredits } ?? plan.perRequestCredits)
+        if reserved > ceiling {
+            return AIPlanRefusal(code: .tooCostly, message: AIPricing.tooCostlyMessage(estimate: reserved, ceiling: ceiling, large: largeRead),
+                                 estimate: reserved, offers: largeRead ? upgrade : [])
+        }
+        guard let r = fresh else { return nil }
+        if r.dailyLimit > 0, Self.sameUTCDay(updatedAt, now), r.dailyUsed + reserved > r.dailyLimit {
+            return AIPlanRefusal(code: .dailyLimit, message: AIPricing.dailyLimitMessage(limit: r.dailyLimit), estimate: reserved, offers: upgrade)
+        }
+        if reserved > r.balance {
+            return AIPlanRefusal(code: .creditsUsed, message: AIPricing.creditsUsedMessage(estimate: reserved, balance: r.balance),
+                                 estimate: reserved, offers: [.buyCredits] + upgrade)
+        }
+        return nil
+    }
+
+    private static func sameUTCDay(_ a: Date?, _ b: Date) -> Bool {
+        guard let a else { return false }
+        var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC") ?? .current
+        return c.isDate(a, inSameDayAs: b)
+    }
+
+    /// The live pre-check the Online provider runs (Seams.live): the shared meter.
+    nonisolated static func liveCheck(reserved: Int, largeRead: Bool) async -> AIPlanRefusal? {
+        await MainActor.run { AICreditMeter.shared.localRefusal(reserved: reserved, largeRead: largeRead) }
     }
 
     /// A relay reply body (any layer, any actor): its `kals` receipt, when it carries one, is shown.
@@ -102,17 +164,12 @@ final class AICreditMeter {
         return "resets \(d.formatted(date: .abbreviated, time: .omitted))"
     }
 
-    /// Install the case reader's hooks (CloudUsage.swift): the credit estimator, and the usage sink that
-    /// keeps the own-key tally for whole-case reads.
+    /// Install the case reader's hooks (CloudUsage.swift): the credit estimator. The own-key tally of a
+    /// whole-case read is kept by OnlineCloudProvider.readCase itself (from the reply's `usage`, with the
+    /// model actually used), exactly as `send` does — not through a hook that may not be installed.
     nonisolated static func installHooks() {
         CloudUsageMeter.install(creditEstimator: { input, maxOut, cached in
             AIPricing.estimateCredits(inputTokens: input, maxOutputTokens: maxOut, cachedTokens: cached)
-        })
-        CloudUsageMeter.install(sink: { usage in
-            guard usage.provider == OnlineProviderKind.anthropic.rawValue else { return }
-            OwnKeyBudget.record(usage: ["input_tokens": usage.inputTokens, "cache_creation_input_tokens": usage.cacheWriteTokens,
-                                        "cache_read_input_tokens": usage.cacheReadTokens, "output_tokens": usage.outputTokens],
-                                model: OnlineSettings.model)
         })
     }
 }
@@ -169,12 +226,20 @@ nonisolated enum OwnKeyBudget {
         record(usage: usage, model: model, at: at)
     }
 
-    /// nil when a send may go; otherwise the clear reason it may not (the monthly limit is reached).
-    static func refusal(now: Date = Date()) -> String? {
-        guard let limit = monthlyLimitUSD else { return nil }
-        let spent = spentUSD(now: now)
-        guard spent >= limit else { return nil }
-        return "Not sent: your monthly limit for your own AI key (\(AIPricing.formatUSD(limit))) is reached — about \(AIPricing.formatUSD(spent)) used this month (estimated from Anthropic's replies). Raise the limit in Settings ▸ Online, or wait for the new month."
+    /// nil when a send may go; otherwise the clear reason it may not: the monthly limit is reached, or
+    /// this request's worst-case cost (`estimateUSD`, AIPricing.worstCaseUSD) would take the month past it.
+    static func refusal(estimateUSD: Double = 0, now: Date = Date()) -> String? {
+        refusal(estimateUSD: estimateUSD, limit: monthlyLimitUSD, spent: spentUSD(now: now))
+    }
+
+    /// The rule itself, for a given limit and month's tally.
+    static func refusal(estimateUSD: Double, limit: Double?, spent: Double) -> String? {
+        guard let limit else { return nil }
+        if spent >= limit {
+            return "Not sent: your monthly limit for your own AI key (\(AIPricing.formatUSD(limit))) is reached — about \(AIPricing.formatUSD(spent)) used this month (estimated from Anthropic's replies). Raise the limit in Settings ▸ Online, or wait for the new month."
+        }
+        guard estimateUSD > 0, spent + estimateUSD > limit else { return nil }
+        return "Not sent: this request could cost up to \(AIPricing.formatUSD(estimateUSD)), which would go past your monthly limit for your own AI key (\(AIPricing.formatUSD(limit))) — about \(AIPricing.formatUSD(spent)) used this month (estimated from Anthropic's replies). Raise the limit in Settings ▸ Online, or wait for the new month."
     }
 
     /// The line shown before an own-key send ("Estimated cost: up to $0.42 on your Anthropic account").

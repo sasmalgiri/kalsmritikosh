@@ -21,11 +21,14 @@ public nonisolated enum AIPricing {
         public let perRequestCredits: Int
         public let caseReadCredits: Int
         public let dailyCredits: Int
+        /// The plan's whole-case limit (estimated tokens of case text, `maxTokensForText`) before the
+        /// credit/size cap (`caseReadTokenCeiling`). CaseReadLimits derives the app's limit from this.
+        public let caseReadTokens: Int
     }
     /// AI Included.
-    public static let aiIncluded = PlanLimits(monthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits: 600, dailyCredits: 1_500)
+    public static let aiIncluded = PlanLimits(monthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits: 600, dailyCredits: 1_500, caseReadTokens: 300_000)
     /// AI Pro.
-    public static let aiPro = PlanLimits(monthlyCredits: 6_000, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000)
+    public static let aiPro = PlanLimits(monthlyCredits: 6_000, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000)
 
     /// Credits in each pack (mirror of TOPUP_CREDITS).
     public static let credits500 = 500
@@ -69,15 +72,86 @@ public nonisolated enum AIPricing {
         return max(1, Int((m / 10_000).rounded(.up)))
     }
 
-    /// What the relay will RESERVE for a request of `inputCharacters` (characters ÷ 3 + 64 tokens, every
-    /// token at the dearest rate it may be billed at): a request fits only if this fits the balance and
-    /// the per-request or case-read limit. Mirror of worstCaseCost in relay/src/policy.ts.
+    // MARK: The size estimator (mirror of CHARS_PER_TOKEN / TOKEN_OVERHEAD / IMAGE_TOKENS / maxTokensForText)
+    //
+    // ONE estimator for the app and the relay: at most one token per 3 characters, plus 64 per request,
+    // plus 1,600 per image. The relay counts JavaScript string length (UTF-16 units); the app counts
+    // UTF-8 bytes where it sizes case text, which are never fewer — so the app's estimate is never below
+    // the relay's, and a read the app offers is never refused by the relay for its size.
+
+    /// Characters per token in the conservative estimate (mirror of CHARS_PER_TOKEN).
+    public static let charsPerToken = 3
+    /// Tokens added once per request for the framing (mirror of TOKEN_OVERHEAD).
+    public static let tokenOverhead = 64
+    /// The token ceiling of one image (mirror of IMAGE_TOKENS).
+    public static let imageTokens = 1_600
+    /// The relay's output ceiling (mirror of MAX_OUTPUT_TOKENS).
+    public static let maxOutputTokens = 24_000
+    /// The largest ordinary request the relay forwards, in characters (mirror of MAX_INPUT_CHARS).
+    public static let maxInputChars = 120_000
+    /// The largest confirmed large read, in characters, task included (mirror of LARGE_READ_MAX_INPUT_CHARS).
+    public static let largeReadMaxInputChars = 2_800_000
+
+    /// Tokens a text of `characters` is at most worth (mirror of maxTokensForText).
+    public static func maxTokensForText(characters: Int) -> Int {
+        (max(0, characters) + charsPerToken - 1) / charsPerToken + tokenOverhead
+    }
+
+    /// Characters as the relay counts them (estimateMessagesInput): the system prompt — or the two
+    /// characters `""` when there is none — and every text block, in UTF-16 units.
+    public static func relayCharacters(system: String?, texts: [String]) -> Int {
+        (system?.utf16.count ?? 2) + texts.reduce(0) { $0 + $1.utf16.count }
+    }
+
+    /// What the relay will RESERVE for a request of `inputCharacters` (the estimator above, every token
+    /// at the dearest rate it may be billed at, the output at its clamped allowance): a request fits only
+    /// if this fits the balance and the per-request or case-read limit. Mirror of worstCaseCost + creditsFor.
     public static func relayReservation(inputCharacters: Int, images: Int = 0, maxOutputTokens: Int, cacheWrite1h: Bool = false, cacheWrite5m: Bool = false) -> Int {
         let r = relayRates
-        let tokens = Double((inputCharacters + 2) / 3 + 64 + images * 1_600)
+        let tokens = Double(maxTokensForText(characters: inputCharacters) + images * imageTokens)
         let mult = cacheWrite1h ? r.cacheWrite1h : cacheWrite5m ? r.cacheWrite5m : 1
-        let m = tokens * r.inputPerMTok * max(1, mult) + Double(min(max(1_024, maxOutputTokens), 24_000)) * r.outputPerMTok
+        let m = (tokens * r.inputPerMTok * max(1, mult) + Double(min(max(1_024, maxOutputTokens), Self.maxOutputTokens)) * r.outputPerMTok).rounded(.up)
         return max(1, Int((m / 10_000).rounded(.up)))
+    }
+
+    // MARK: The whole-case safety margin (app side)
+
+    /// Masking may replace a name with a longer placeholder: the case text sent is allowed to grow by 5 %.
+    public static let caseReadMaskGrowth = 1.05
+    /// Room for the task after the case (a question with its rules, or an analysis task).
+    public static let caseReadTaskAllowanceCharacters = 20_000
+
+    /// Whether a whole-case read of `caseCharacters` of case text (UTF-8 bytes) is accepted by the relay
+    /// in the worst case: grown by masking, plus the largest task, at the relay's output ceiling and the
+    /// 1-hour cache write — within the large-read size limit AND the plan's case-read credit ceiling.
+    public static func caseReadFits(caseCharacters: Int, creditCeiling: Int) -> Bool {
+        let sent = Int((Double(max(0, caseCharacters)) * caseReadMaskGrowth).rounded(.up)) + caseReadTaskAllowanceCharacters
+        guard sent <= largeReadMaxInputChars else { return false }
+        return relayReservation(inputCharacters: sent, maxOutputTokens: maxOutputTokens, cacheWrite1h: true) <= creditCeiling
+    }
+
+    /// The largest whole-case size (estimated tokens of case text) whose read always fits `creditCeiling`
+    /// and the relay's size limit (`caseReadFits` for the most text that estimates to that many tokens).
+    public static func caseReadTokenCeiling(creditCeiling: Int) -> Int {
+        func fits(_ tokens: Int) -> Bool { caseReadFits(caseCharacters: max(0, tokens - tokenOverhead) * charsPerToken, creditCeiling: creditCeiling) }
+        var lo = 0, hi = largeReadMaxInputChars / charsPerToken + tokenOverhead
+        guard fits(lo) else { return 0 }
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            if fits(mid) { lo = mid } else { hi = mid - 1 }
+        }
+        return lo
+    }
+
+    /// Own key: the worst-case US-dollar cost of a request to `model` (the same estimator, every input
+    /// token at the dearest rate it may be billed at — a 1-hour cache write is 2× — plus the full output
+    /// allowance), or nil when the model's price is not in the table.
+    public static func worstCaseUSD(model: String, inputCharacters: Int, images: Int = 0, maxOutputTokens: Int,
+                                    cacheWrite1h: Bool = false, cacheWrite5m: Bool = false) -> Double? {
+        guard let r = rates[model] else { return nil }
+        let tokens = Double(maxTokensForText(characters: inputCharacters) + images * imageTokens)
+        let mult = cacheWrite1h ? r.cacheWrite1h : cacheWrite5m ? r.cacheWrite5m : 1
+        return (tokens * r.inputPerMTok * max(1, mult) + Double(max(0, maxOutputTokens)) * r.outputPerMTok) / 1_000_000
     }
 
     /// Own key: the estimated US-dollar cost of a request to `model` at Anthropic's published rates, or
@@ -87,8 +161,8 @@ public nonisolated enum AIPricing {
         return micro(inputTokens: inputTokens, maxOutputTokens: maxOutputTokens, cachedTokens: cachedTokens, rates: r) / 1_000_000
     }
 
-    /// A rough token count for text the app is about to send (≈ 4 characters per token; the relay's own
-    /// reservation uses a more conservative 3).
+    /// A typical (not worst-case) token count for text, ≈ 4 characters per token — only for the
+    /// "usually" estimate shown; every limit and refusal uses `maxTokensForText`.
     public static func approximateTokens(characters: Int) -> Int { max(1, (characters + 3) / 4) }
 
     /// The actual cost of an Anthropic reply from its `usage` object, in US dollars (own key: the local
@@ -104,9 +178,42 @@ public nonisolated enum AIPricing {
         return m / 1_000_000
     }
 
+    // MARK: Refusals (mirror of REFUSALS.creditsUsed / dailyLimit / tooCostly in relay/src/policy.ts)
+
+    /// The relay's words for the three refusals the app can also tell before sending (word for word).
+    public static func creditsUsedMessage(estimate: Int, balance: Int) -> String {
+        "This request needs up to \(estimate) credits and \(balance) are left (this month's allowance and your credit packs). Nothing was sent. Buy a credit pack, wait for the allowance to reset, or use your own AI key in Settings."
+    }
+    public static func dailyLimitMessage(limit: Int) -> String {
+        "Today's AI limit of \(limit) credits for this plan is reached. Nothing was sent; it resets at midnight UTC."
+    }
+    public static func tooCostlyMessage(estimate: Int, ceiling: Int, large: Bool) -> String {
+        large
+            ? "Reading this much at once needs up to \(estimate) credits, more than this plan's \(ceiling)-credit limit for one read. Nothing was sent; select fewer documents (AI Pro reads more at once)."
+            : "This request needs up to \(estimate) credits, more than the \(ceiling) one request may use. Nothing was sent; select fewer passages, or confirm it as a large read."
+    }
+
     /// "$0.42" / "under $0.01".
     public static func formatUSD(_ v: Double) -> String {
         if v < 0.01 { return "under $0.01" }
         return String(format: "$%.2f", v)
     }
 }
+
+/// A request on AI Included / AI Pro the app refuses BEFORE sending, because the credit meter (the relay's
+/// last receipt) already shows the relay would refuse it — with the relay's own code and words. The relay
+/// stays the authority: when the meter is unknown or stale, nothing is refused here.
+public nonisolated struct AIPlanRefusal: Error, LocalizedError, Equatable, Sendable {
+    public enum Code: String, Sendable { case creditsUsed = "credits-used", dailyLimit = "daily-limit", tooCostly = "too-costly" }
+    /// What the person can do about it (buttons next to the message).
+    public enum Offer: String, Sendable, Equatable { case buyCredits, upgrade }
+    public let code: Code
+    public let message: String
+    public let estimate: Int
+    public let offers: [Offer]
+    public init(code: Code, message: String, estimate: Int, offers: [Offer]) {
+        self.code = code; self.message = message; self.estimate = estimate; self.offers = offers
+    }
+    public var errorDescription: String? { message }
+}
+

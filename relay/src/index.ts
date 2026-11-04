@@ -10,7 +10,7 @@
 
 import {
   AI_BLOCKED_REQUEST_COUNTRIES, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
-  TOPUP_CREDITS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, higherTier, maxTokensForText,
+  TOPUP_CREDITS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, higherTier, maxInputTokens,
   monthKey, ratesFor, refundSplit, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost,
   type AnthropicUsage, type CacheUse, type Micro, type Refusal, type Tier,
 } from "./policy.ts";
@@ -40,8 +40,6 @@ export interface Env {
 export interface Deps { store: Store; fetcher: Fetch; now: () => Date }
 
 const STATUS_TTL_MS = 10 * 60_000;
-/** Claude bills an image at most ~1,600 tokens after its own resizing; counted at that ceiling. */
-const IMAGE_TOKENS = 1_600;
 /** Audio bytes per token, conservatively (Gemini bills ~32 tokens a second; 128 kbps ≈ 500 bytes/token). */
 const AUDIO_BYTES_PER_TOKEN = 200;
 const MAX_AUDIO_BYTES = 18 * 1024 * 1024;
@@ -172,7 +170,7 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
   const maxOut = Math.min(MAX_OUTPUT_TOKENS, Math.max(1024, Number(body.max_tokens ?? MAX_OUTPUT_TOKENS) || MAX_OUTPUT_TOKENS));
   const model = env.ANTHROPIC_MODEL ?? "claude-opus-5";
   const rates = ratesFor(model);
-  const inputTokens = maxTokensForText(size.chars) + size.images * IMAGE_TOKENS;
+  const inputTokens = maxInputTokens(size.chars, size.images);
   const worst = worstCaseCost(inputTokens, maxOut, rates, size.cache);
   const plan = PLANS[a.tier];
   // Only these fields are forwarded; the model and the ceiling are the relay's.

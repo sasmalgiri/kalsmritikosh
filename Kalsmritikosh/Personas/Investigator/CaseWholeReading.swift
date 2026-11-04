@@ -84,9 +84,11 @@ public nonisolated struct CaseWholeReading: Sendable {
         self.askConsent = askConsent; self.wholeCaseLimit = wholeCaseLimit; self.providerName = providerName; self.estimate = estimate
     }
 
-    /// AI Included and the own-key default: about 300k tokens read whole; AI Pro: about 800k.
+    /// The own-key default (and AI Included's plan limit): about 300k tokens read whole. The plan limits
+    /// come from AIPricing (the mirror of relay/src/policy.ts) through CaseReadLimits — never stored.
     public static let defaultLimit = 300_000
-    public static let proLimit = 800_000
+    /// AI Pro's whole-case limit (AIPricing.aiPro.caseReadTokens).
+    public static var proLimit: Int { AIPricing.aiPro.caseReadTokens }
 
     // MARK: - The prepared case
 

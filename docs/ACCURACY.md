@@ -1,5 +1,11 @@
 # Accuracy — what was measured, and the bar it is held to
 
+**Not measured on this version (2026-11-04).** The release candidate (`investigations-next`, plan A: the whole-case
+reader, plans and credits) changed the answer path after every measurement below, and testing of this candidate is
+simulation-only by owner decision. The figures below describe EARLIER code; no public page quotes them as the
+product's accuracy. The website's FAQ says accuracy has not been measured on this version (CLAIMS.md
+`accuracy.declared`).
+
 **Bar (owner decision, 2026-11-02): at most 3 % of answers wrong, per answering path.** The original target was
 ≤1 %. It was raised because seven fresh measurement rounds (ho14–ho20, 2026-11-01/02) showed the wrong-answer rate
 of the rules path moving between 0.22 % and 2.23 % from one fresh set to the next (pooled about 1.2 %), and the cause

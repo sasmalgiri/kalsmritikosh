@@ -55,9 +55,22 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         public var casePermission: @Sendable (_ caseID: UUID, _ fingerprint: String) -> Bool = { caseID, fingerprint in
             CaseReadPermissionStore.live.isGranted(caseID: caseID, fingerprint: fingerprint)
         }
-        public static let live = Seams(settings: { OnlineSnapshot.current() },
-                                       consent: { await OutboundConsent.shared.request($0) },
-                                       transport: { try await NetworkHelperClient.send($0) })
+        /// Plans and credits — the app's own pre-check of an AI Included / AI Pro request against the credit
+        /// meter (reserved credits, confirmed large read) → the relay's refusal, or nil to send and let the
+        /// relay decide. Live: the shared AICreditMeter; tests script it (default: never refuses).
+        public var creditCheck: @Sendable (_ reserved: Int, _ largeRead: Bool) async -> AIPlanRefusal? = { _, _ in nil }
+        /// Own key — the monthly-limit check for a request whose worst case is `estimateUSD` (nil = may go),
+        /// and the tally of a reply (its raw body, the model). Live: OwnKeyBudget; tests script both so the
+        /// person's real limit and tally are never involved.
+        public var ownKeyRefusal: @Sendable (_ estimateUSD: Double) -> String? = { OwnKeyBudget.refusal(estimateUSD: $0) }
+        public var ownKeyTally: @Sendable (_ responseBody: Data, _ model: String) -> Void = { OwnKeyBudget.record(responseBody: $0, model: $1) }
+        public static let live: Seams = {
+            var s = Seams(settings: { OnlineSnapshot.current() },
+                          consent: { await OutboundConsent.shared.request($0) },
+                          transport: { try await NetworkHelperClient.send($0) })
+            s.creditCheck = { reserved, large in await AICreditMeter.liveCheck(reserved: reserved, largeRead: large) }
+            return s
+        }()
     }
 
     public init(outboundLog: OutboundLogRepository?, knownNames: @escaping @Sendable () async -> [String],
@@ -242,10 +255,28 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                 throw await fail(OnlineError.limitReached(cap))
             }
         }
-        // Plans and credits (2026-11-04) — the person's own monthly limit for their own Anthropic key.
-        if kind == .anthropic, let why = OwnKeyBudget.refusal() {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "own-key monthly limit")
-            throw await fail(OwnKeyBudget.LimitReached(reason: why))
+        // Plans and credits (2026-11-04) — the person's own monthly limit for their own Anthropic key:
+        // reached, or this request's worst case (AIPricing.worstCaseUSD) would take the month past it.
+        let pictures = images.filter { $0.mediaType.hasPrefix("image/") }.count
+        let isAudio = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
+        let relayChars = AIPricing.relayCharacters(system: sendSystem?.isEmpty == false ? sendSystem : nil, texts: [sendPrompt])
+        let maxOut = OnlineRequestBuilder.anthropicMaxTokens(options.maxTokens)
+        if kind == .anthropic {
+            let worst = AIPricing.worstCaseUSD(model: model, inputCharacters: relayChars, images: pictures, maxOutputTokens: maxOut) ?? 0
+            if let why = seams.ownKeyRefusal(worst) {
+                await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "own-key monthly limit")
+                throw await fail(OwnKeyBudget.LimitReached(reason: why))
+            }
+        }
+        // AI Included / AI Pro — the meter already shows the relay would refuse (too costly, the day's
+        // limit, the balance): said before anything is sent, in the relay's words. Unknown/stale: send.
+        // Transcription is metered on its own route and is left to the relay.
+        if kind == .included, !isAudio {
+            let reserved = AIPricing.relayReservation(inputCharacters: relayChars, images: pictures, maxOutputTokens: maxOut)
+            if let refusal = await seams.creditCheck(reserved, AIIncludedRelay.confirmedLargeRead) {
+                await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "credits (\(refusal.code.rawValue)), checked before sending")
+                throw await fail(refusal)
+            }
         }
 
         // 3. Consent (O-5) — not switchable. Plan A: a send inside a case whose every passage comes from
@@ -324,13 +355,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             dispatched = true
             let response = try await Self.withDeadline(Self.replyDeadline) { [seams] in try await seams.transport(request) }
             // A11 — AI Included's transcription route answers in Gemini's form (its refusals in the relay's).
-            let isAudio = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
             if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
                 throw OnlineRequestBuilder.ParseError.relay(why)
             }
             let text = try OnlineRequestBuilder.parse(kind: kind == .included && isAudio ? .gemini : kind, response: response)
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
-            else if kind == .anthropic { OwnKeyBudget.record(responseBody: response.body, model: model) }
+            else if kind == .anthropic { seams.ownKeyTally(response.body, model) }
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent",
                       coveredByCase ? "covered by the case's stored permission" : nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
@@ -364,7 +394,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                              images: [OutboundImage], maxTokens: Int) async -> String? {
         let pictures = images.filter { $0.mediaType.hasPrefix("image/") }.count
         let chars = (system?.count ?? 0) + prompt.count
-        let tokens = AIPricing.approximateTokens(characters: chars) + pictures * 1_600
+        let tokens = AIPricing.approximateTokens(characters: chars) + pictures * AIPricing.imageTokens
         let maxOut = OnlineRequestBuilder.anthropicMaxTokens(maxTokens)
         switch kind {
         case .anthropic:
@@ -467,6 +497,26 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                 throw await fail(OnlineError.limitReached(cap))
             }
         }
+        // Plans and credits — the same pre-send checks as `send`, sized exactly as the relay sizes this
+        // request (every text block, the cache write it asks for, the output allowance).
+        let relayChars = AIPricing.relayCharacters(system: nil, texts: prefix + [suffix])
+        let maxOut = OnlineRequestBuilder.anthropicMaxTokens(request.replyTokens)
+        if kind == .anthropic {
+            let worst = AIPricing.worstCaseUSD(model: model, inputCharacters: relayChars, maxOutputTokens: maxOut,
+                                               cacheWrite1h: request.ttl == .oneHour, cacheWrite5m: request.ttl == .fiveMinutes) ?? 0
+            if let why = seams.ownKeyRefusal(worst) {
+                await record("blocked", nil, "own-key monthly limit")
+                throw await fail(OwnKeyBudget.LimitReached(reason: why))
+            }
+        }
+        if kind == .included {
+            let reserved = AIPricing.relayReservation(inputCharacters: relayChars, maxOutputTokens: maxOut,
+                                                      cacheWrite1h: request.ttl == .oneHour, cacheWrite5m: request.ttl == .fiveMinutes)
+            if let refusal = await seams.creditCheck(reserved, true) {
+                await record("blocked", nil, "credits (\(refusal.code.rawValue)), checked before sending")
+                throw await fail(refusal)
+            }
+        }
         // A6/B4 — every document is re-cleared at the send: still in the case, same version, not
         // privileged or restricted since the clearance.
         if let why = await request.clearance.stillCleared() {
@@ -505,6 +555,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             }
             let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
+            else if kind == .anthropic { seams.ownKeyTally(response.body, model) }
             let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
             await record("sent", response.body.count, "case read \(request.purpose)")
             if let usage { CloudUsageMeter.report(usage) }
@@ -599,7 +650,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         let reason = OnlineFailure.scrubbed(error.localizedDescription)
         let kind = OnlineFailure.classify(error)
         KalsmritikoshLog.routing.error("Online answer failed (\(kind.rawValue, privacy: .public)): \(reason, privacy: .public)")
-        await MainActor.run { OnlineStatus.shared.recordFailure(reason, kind: kind) }
+        let offers = (error as? AIPlanRefusal)?.offers ?? []
+        await MainActor.run { OnlineStatus.shared.recordFailure(reason, kind: kind, offers: offers) }
         return error
     }
 

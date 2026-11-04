@@ -39,6 +39,19 @@ if [ -z "$relayRates" ] || [ "$relayRates" != "$appRates" ]; then
   exit 1
 fi
 echo "ok: plan limits and Claude rates identical in app and relay"
+# The ONE size estimator (2026-11-04 simulation fix): the app sizes whole-case reads and its credit pre-check
+# with the relay's constants, so a read the app offers is never refused too-large/too-costly by the relay.
+for pair in "CHARS_PER_TOKEN:charsPerToken" "TOKEN_OVERHEAD:tokenOverhead" "IMAGE_TOKENS:imageTokens" \
+            "MAX_OUTPUT_TOKENS:maxOutputTokens" "MAX_INPUT_CHARS:maxInputChars" "LARGE_READ_MAX_INPUT_CHARS:largeReadMaxInputChars"; do
+  r=${pair%%:*}; a=${pair##*:}
+  relayVal=$(grep -E "^export const $r(: [A-Za-z]+)? = " "$ROOT/relay/src/policy.ts" | sed -E 's/.*= *([0-9_]+).*/\1/' | tr -d '_')
+  appVal=$(grep -E "public static let $a = " "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*= *([0-9_]+).*/\1/' | tr -d '_')
+  if [ -z "$relayVal" ] || [ "$relayVal" != "$appVal" ]; then
+    echo "FAIL: estimator constant $r ($relayVal) != AIPricing.$a ($appVal)"
+    exit 1
+  fi
+done
+echo "ok: size estimator constants identical in app and relay"
 # A8–A10 — the public-record hosts, in the app (PublicSource.host) and the helper (lookupHosts).
 appLookup=$(sed -n '/public var host: String {/,/^    }/p' "$ROOT/Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift" | grep -oE '"[a-z0-9.-]+"' | tr -d '"' | sort -u | tr '\n' ' ')
 helperLookup=$(sed -n '/static let lookupHosts/,/\]/p' "$ROOT/KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift" | grep -oE '"[a-z0-9.-]+"' | tr -d '"' | sort -u | tr '\n' ' ')

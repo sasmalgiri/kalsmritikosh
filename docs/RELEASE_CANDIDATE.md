@@ -47,13 +47,15 @@ sandbox CSV-write test); those were not re-run for this packet.
 
 ### Known limits carried by this candidate
 
-1. AI Pro's larger whole-case read is not delivered: nothing writes `kalsmritikosh.caseRead.planLimit`, so `CaseReadLimits.current()`
-   returns the 300k default for AI Pro (the listing and paywall promise "larger whole-case reads"). Product fix needed before
-   attaching AI Pro, or drop the claim.
-2. Own-key monthly dollar limit not enforced on whole-case reads (`OnlineCloudProvider.readCase`).
-3. Size mismatch at the AI Pro limit between the app (case text only) and the relay (case text + question) — a case just under the
-   app's limit is refused `too-large`.
-4. The app's own credit refusal checks are unused before a send; the relay refuses correctly.
+1–4. **Fixed in the working tree (2026-11-04, uncommitted; not yet on a bound candidate commit)** — the four limits the plan
+   journeys found: (1) the whole-case limit is derived from the verified plan (`CaseReadLimits.limit`, AIPricing
+   `caseReadTokens`, mirrored from `PLANS` in relay/src/policy.ts: own key 300k setting, AI Included 300k, AI Pro 800k), capped
+   so the worst-case reservation always fits the plan's case-read credits and the relay's size limit; (2) one size estimator
+   (3 characters a token + 64, images 1,600) in policy.ts and AIPricing, checked by `ci/guards/relay-host-match.sh`, golden
+   numbers in relay/test and `CaseReadBudgetTests`; (3) the own-key monthly dollar limit is checked against the worst case and
+   tallied on whole-case reads too; (4) the credit meter refuses locally (credits-used / daily-limit / too-costly, the relay's
+   words, Buy credits / Upgrade) when a fresh receipt shows the relay would; unknown or stale → sent, the relay decides.
+   `PlanJourneySimulationTests` 5/5 with no known-issue marker; `CaseReadBudgetTests` 9/9; relay 19/19.
 5. StoreKit `billingRetryWithGrace` test fails in this Mac's StoreKit environment; real grace behaviour unverified until Sandbox.
 6. GUI not re-walked for the once-per-case permission sheet, the plan picker, the credit meter or offline search results (gate
    `ui-consent-and-plans`).

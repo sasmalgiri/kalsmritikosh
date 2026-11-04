@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { appleNotification, handle, publicSellable, purgeOld, type Env, type Deps } from "../src/index.ts";
 import { MemoryStore } from "../src/store.ts";
 import {
-  ANTHROPIC_RATES, APPLE_STATUS, PLANS, PRODUCTS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey,
-  grantedTier, monthKey, refundSplit, sellable, usd,
+  ANTHROPIC_RATES, APPLE_STATUS, CHARS_PER_TOKEN, IMAGE_TOKENS, LARGE_READ_MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, PRODUCTS,
+  TOKEN_OVERHEAD, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, maxInputTokens, maxTokensForText,
+  monthKey, refundSplit, sellable, usd, worstCaseCost,
 } from "../src/policy.ts";
 
 const NOW = new Date("2026-11-15T10:00:00Z");
@@ -348,4 +349,47 @@ test("the pack token is a stable RFC 4122 UUID derived from the subscription num
   assert.equal(t, await accountToken(SUB));
   assert.notEqual(t, await accountToken("2000000123456780"));
   console.log(`accountToken(${SUB}) = ${t}`);
+});
+
+// The app sizes a request with the SAME estimator (Kalsmritikosh/Routing/Providers/Online/AIPricing.swift,
+// checked by ci/guards/relay-host-match.sh); the golden numbers below are asserted on both sides
+// (KalsmritikoshTests/AICreditsTests.swift, "estimator agrees with the relay").
+test("the size estimator: 3 characters a token + 64, images at 1,600; golden reservations the app's mirror reproduces", () => {
+  assert.equal(CHARS_PER_TOKEN, 3); assert.equal(TOKEN_OVERHEAD, 64); assert.equal(IMAGE_TOKENS, 1_600);
+  assert.equal(maxTokensForText(0), 64);
+  assert.equal(maxTokensForText(900_000), 300_064);
+  assert.equal(maxInputTokens(10_000, 2), 3_334 + 64 + 3_200);
+  assert.equal(creditsFor(worstCaseCost(maxInputTokens(900_000, 0), 24_000, OPUS, "1h")), 361);
+  assert.equal(creditsFor(worstCaseCost(maxInputTokens(10_000, 2), 4_000, OPUS, "none")), 14);
+  assert.equal(creditsFor(worstCaseCost(maxInputTokens(1, 0), 1_024, OPUS, "5m")), 3);
+});
+
+test("near the limit: the largest whole-case read the app offers on each plan is accepted, never too-large or too-costly", async () => {
+  // The app's margin (AIPricing.caseReadMaskGrowth, caseReadTaskAllowanceCharacters): masking may grow the
+  // case text by 5 %, the task after it is at most 20,000 characters, the output at the relay's ceiling.
+  const maskGrowth = 1.05, taskAllowance = 20_000;
+  for (const [tier, product] of [["ai", PRODUCTS.aiMonthly], ["pro", PRODUCTS.proMonthly]] as const) {
+    const plan = PLANS[tier];
+    // The most case text whose estimate is within the plan's whole-case limit: (limit − 64) × 3 characters.
+    const caseChars = (plan.caseReadTokens - TOKEN_OVERHEAD) * CHARS_PER_TOKEN;
+    assert.equal(maxTokensForText(caseChars), plan.caseReadTokens);
+    const sentChars = Math.ceil(caseChars * maskGrowth) + taskAllowance;
+    assert.ok(sentChars <= LARGE_READ_MAX_INPUT_CHARS, `${tier}: ${sentChars} characters fit the large-read size limit`);
+    const worst = creditsFor(worstCaseCost(maxTokensForText(sentChars), MAX_OUTPUT_TOKENS, OPUS, "1h"));
+    assert.ok(worst <= plan.caseReadCredits, `${tier}: worst case ${worst} credits fits ${plan.caseReadCredits}`);
+    const w = world(); w.subs = [{ ...w.subs[0], productId: product }];
+    const s = await setup(w);
+    const body = { max_tokens: MAX_OUTPUT_TOKENS, messages: [{ role: "user", content: [
+      { type: "text", text: "x".repeat(Math.ceil(caseChars * maskGrowth)), cache_control: { type: "ephemeral", ttl: "1h" } },
+      { type: "text", text: "q".repeat(taskAllowance) }] }] };
+    const r = await handle(ask(body, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
+    assert.equal(r.status, 200, `${tier}: the read the app offers is accepted`);
+    const k = await kals(r);
+    assert.equal(k.reserved, worst, `${tier}: the relay reserves what the app's mirror computes`);
+  }
+  // Past the size limit the relay still refuses (the app never offers such a read).
+  const s = await setup(world());
+  const over = { max_tokens: 4_000, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(LARGE_READ_MAX_INPUT_CHARS + 1) }] }] };
+  const r = await handle(ask(over, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
+  assert.equal(r.status, 413);
 });

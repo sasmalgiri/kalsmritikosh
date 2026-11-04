@@ -107,6 +107,23 @@ struct OnlineStatusBar: View {
                             .font(.caption).lineLimit(2)
                     }
                     Spacer()
+                    // Plans and credits — a credit refusal (the app's own check or the relay's) offers the way out.
+                    if status.lastFailureOffers.contains(.buyCredits) {
+                        Menu("Buy credits") {
+                            ForEach(PurchaseProducts.creditPacks, id: \.self) { id in
+                                Button("\((PurchaseProducts.credits(inPack: id) ?? 0).formatted()) credits" + (PurchaseCenter.shared.packPrices[id].map { " (\($0))" } ?? "")) {
+                                    Task { await PurchaseCenter.shared.buyCredits(id) }
+                                }
+                            }
+                        }
+                        .font(.caption).fixedSize()
+                        .accessibilityIdentifier("online.failure.buyCredits")
+                    }
+                    if status.lastFailureOffers.contains(.upgrade) {
+                        Button("Upgrade") { PurchaseCenter.shared.paywallRequested = "upgrade to AI Pro" }
+                            .font(.caption)
+                            .accessibilityIdentifier("online.failure.upgrade")
+                    }
                     if ConnectivityMode.current == .online {
                         Button("Switch to Private") { ConnectivityMode.set(.privateMode); status.clear(); version &+= 1 }
                             .font(.caption)

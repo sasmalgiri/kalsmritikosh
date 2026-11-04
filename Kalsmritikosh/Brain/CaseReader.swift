@@ -104,10 +104,11 @@ public nonisolated struct CaseReader: Sendable {
         return blocks
     }
 
-    /// About how many tokens a text is (≈ 3.5 characters a token in English prose; conservative).
+    /// At most how many tokens a text is: THE estimator the relay sizes requests with (AIPricing
+    /// .maxTokensForText — 3 characters a token + 64, mirror of relay/src/policy.ts), applied to UTF-8
+    /// bytes, which are never fewer than the relay's UTF-16 count — so the app never under-estimates.
     public static func estimatedTokens(_ texts: [String]) -> Int {
-        let bytes = texts.reduce(0) { $0 + $1.utf8.count }
-        return Int((Double(bytes) / 3.5).rounded(.up))
+        AIPricing.maxTokensForText(characters: texts.reduce(0) { $0 + $1.utf8.count })
     }
 
     /// The task after the prefix: one question, the claim rules, the reply form.

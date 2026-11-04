@@ -158,15 +158,18 @@ public final class OnlineStatus {
     public private(set) var lastFailureAt: Date?
     /// What kind of failure it was (no credit, key refused …); an account problem shows a lasting banner.
     public private(set) var lastFailureKind: OnlineFailure?
+    /// What the person can do about the last failure (a credit refusal: buy credits, upgrade).
+    public private(set) var lastFailureOffers: [AIPlanRefusal.Offer] = []
 
-    public func recordFailure(_ reason: String, kind: OnlineFailure? = nil) {
+    public func recordFailure(_ reason: String, kind: OnlineFailure? = nil, offers: [AIPlanRefusal.Offer] = []) {
         lastFailure = reason
         lastFailureAt = Date()
         lastFailureKind = kind
+        lastFailureOffers = offers
     }
 
     /// The account-level banner for the last failure, if it was one ("Your AI account has no credit …").
     public var accountBanner: String? { lastFailureKind?.banner }
 
-    public func clear() { lastFailure = nil; lastFailureAt = nil; lastFailureKind = nil }
+    public func clear() { lastFailure = nil; lastFailureAt = nil; lastFailureKind = nil; lastFailureOffers = [] }
 }

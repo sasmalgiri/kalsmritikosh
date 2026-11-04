@@ -17,9 +17,8 @@
 //      index.ts `metered` (worst-case reservation, ceilings, daily limit, allowance → packs, charge the
 //      actual usage rounded up, refunds, the `kals` receipt, the refusal codes);
 //    • the relay's crediting of a credit pack (the app's relay host is empty in this build);
-//    • the plan → whole-case limit selection (no product code maps the tier to CaseReadLimits yet);
-//    • the own-key monthly tally hook (AICreditMeter.installHooks's sink) — the same OwnKeyBudget call,
-//      at a fixed past month so the real tally is never touched;
+//    • the own-key monthly tally — the same OwnKeyBudget call readCase makes, at a fixed past month so the
+//      real tally is never touched;
 //    • the consent sheet's Allow / Not now (a recorder answers it).
 //
 //  Nested in PurchaseStoreKitTests (serialized) so these journeys never run alongside its SKTestSession
@@ -381,9 +380,10 @@ struct PlanJourneySimulationTests {
                        confirmedDocumentTerms: key == nil ? nil : kind.documentTermsVersion, dailyByteCap: nil)
     }
 
-    /// SIMULATED seam: the plan → whole-case limit (CaseReadLimits reads a stored value nothing writes yet).
+    /// The plan → whole-case limit, as the app derives it (CaseReadLimits: AI plans from AIPricing, the
+    /// mirror of relay/src/policy.ts; no plan / own key: the own-key default).
     nonisolated static func wholeCaseLimit(for tier: PlanTier?) -> Int {
-        tier == .aiPro ? CaseWholeReading.proLimit : CaseWholeReading.defaultLimit
+        CaseReadLimits.limit(kind: tier?.limits == nil ? .anthropic : .included, tier: tier, ownKeySetting: 0)
     }
 
     // MARK: - 1. Workbench
@@ -594,7 +594,7 @@ struct PlanJourneySimulationTests {
         #expect(relay.log.last?.code == "daily-limit" && relay.log.last?.status == 429 && relay.upstream.calls == before)
 
         // Consistency of the plan's numbers: a case at AI Included's whole-case limit fits its case-read ceiling.
-        let atLimit = AIPricing.relayReservation(inputCharacters: Int(Double(CaseWholeReading.defaultLimit) * 3.5), maxOutputTokens: OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens), cacheWrite1h: true)
+        let atLimit = AIPricing.relayReservation(inputCharacters: (CaseWholeReading.defaultLimit - AIPricing.tokenOverhead) * AIPricing.charsPerToken, maxOutputTokens: OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens), cacheWrite1h: true)
         #expect(atLimit <= AIPricing.aiIncluded.caseReadCredits, "a whole case at the limit reserves \(atLimit) of \(AIPricing.aiIncluded.caseReadCredits)")
     }
 
@@ -667,14 +667,14 @@ struct PlanJourneySimulationTests {
 
         // Consistency: at AI Pro's whole-case limit the reservation fits Pro's case-read ceiling.
         let maxOut = OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens)
-        let atLimit = AIPricing.relayReservation(inputCharacters: Int(Double(CaseWholeReading.proLimit) * 3.5), maxOutputTokens: maxOut, cacheWrite1h: true)
+        let atLimit = AIPricing.relayReservation(inputCharacters: (CaseWholeReading.proLimit - AIPricing.tokenOverhead) * AIPricing.charsPerToken, maxOutputTokens: maxOut, cacheWrite1h: true)
         #expect(atLimit <= AIPricing.aiPro.caseReadCredits)
     }
 
-    /// Boundary between the app's Pro limit (≈ 3.5 bytes per token → 2,800,000 bytes of case text) and the
-    /// relay's large-read size limit (LARGE_READ_MAX_INPUT_CHARS = 2,800,000 characters INCLUDING the
-    /// question): a case just under the app's limit is read whole by the app, and the relay refuses it as
-    /// too-large because the question block is counted too. Recorded as a known issue (product change).
+    /// Boundary between the app's Pro limit and the relay's large-read size limit (LARGE_READ_MAX_INPUT_CHARS
+    /// = 2,800,000 characters INCLUDING the question): both now size text with the ONE estimator (3
+    /// characters a token + 64), so the largest case the app reads whole on AI Pro — question, masking
+    /// growth and all — is accepted by the relay, and one byte more falls back to retrieval.
     @Test("AI Pro boundary: a case the app reads whole at the 800k limit also fits the relay's large-read size limit")
     func proLimitMatchesRelaySizeLimit() throws {
         let question = CaseReader.questionSuffix(Self.question)
@@ -684,16 +684,22 @@ struct PlanJourneySimulationTests {
                                             text: String(repeating: "x", count: fillerBytes))]
             return CaseReader.prefix(CaseReader.prepare(docs).documents)
         }
-        // A prefix of 2,799,990 bytes: within the app's 800,000-token limit.
+        let limit = CaseReadLimits.limit(kind: .included, tier: .aiPro, ownKeySetting: 0)
+        #expect(limit == CaseWholeReading.proLimit && limit == AIPricing.aiPro.caseReadTokens)
+        // The largest prefix whose estimate is within the limit: (limit − 64) × 3 bytes.
+        let maxBytes = (limit - AIPricing.tokenOverhead) * AIPricing.charsPerToken
         let probe = prefix(1_000).reduce(0) { $0 + $1.utf8.count } - 1_000
-        let p = prefix(2_799_990 - probe)
+        let p = prefix(maxBytes - probe)
         let bytes = p.reduce(0) { $0 + $1.utf8.count }
-        #expect(abs(bytes - 2_799_990) < 50, "\(bytes)")
-        #expect(CaseReader.estimatedTokens(p) <= CaseWholeReading.proLimit, "the app reads this case whole on AI Pro")
-        let relayChars = p.reduce(0) { $0 + $1.utf16.count } + question.utf16.count
-        withKnownIssue("relay LARGE_READ_MAX_INPUT_CHARS (2.8M chars, question included) vs the app's proLimit × 3.5 bytes (prefix only)", isIntermittent: true) {
-            #expect(relayChars <= 2_800_000, "relay would count \(relayChars) characters and refuse too-large")
-        }
+        #expect(bytes == maxBytes, "\(bytes)")
+        #expect(CaseReader.estimatedTokens(p) == limit, "the app reads this case whole on AI Pro")
+        #expect(CaseReader.estimatedTokens(prefix(maxBytes - probe + 1)) > limit, "one byte more: retrieval")
+        let relayChars = AIPricing.relayCharacters(system: nil, texts: p + [question])
+        #expect(relayChars <= AIPricing.largeReadMaxInputChars, "relay counts \(relayChars) characters: within its large-read size limit")
+        // Even with masking growth and the largest task, the worst case fits the size limit and Pro's credits.
+        #expect(AIPricing.caseReadFits(caseCharacters: bytes, creditCeiling: AIPricing.aiPro.caseReadCredits))
+        let reserved = AIPricing.relayReservation(inputCharacters: relayChars, maxOutputTokens: OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens), cacheWrite1h: true)
+        #expect(reserved <= AIPricing.aiPro.caseReadCredits, "reserved \(reserved)")
     }
 
     // MARK: - 4. Offline
