@@ -2558,7 +2558,8 @@ public final class AppState {
                 reviews: investigationDeskReviews,
                 pass: Self.caseContradictionPass(objects: objects, sensitiveScopes: sensitiveScopesRepo, claims: claimsRepo,
                                                  links: ClaimContradictionRepository(database: db),
-                                                 answers: self.investigationAnswers, readers: cloudReaderHolder))
+                                                 answers: self.investigationAnswers, readers: cloudReaderHolder,
+                                                 caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo)))
             // INV-18 — the case Evidence vault & custody manifest, live from boot. REUSES the shared
             // append-only CustodyRepository + the EvidenceStore per-version content hashes, bounded to the
             // case's authorized source versions. Custody is never broken silently: every entry is a new
@@ -2599,7 +2600,8 @@ public final class AppState {
                 approvals: InvestigationFindingsApprovalRepository(database: db),
                 prepare: Self.caseRolePass(objects: objects, sensitiveScopes: sensitiveScopesRepo, claims: claimsRepo,
                                            reviews: ClaimReviewRepository(database: db),
-                                           answers: self.investigationAnswers, readers: cloudReaderHolder))
+                                           answers: self.investigationAnswers, readers: cloudReaderHolder,
+                                           caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo)))
             // INV-01-C3 — the case DataLab authority, live from boot (also the DataLab persona job's target).
             let investigationDataLabService = InvestigationDataLabService(
                 cases: investigationCasesRepo,

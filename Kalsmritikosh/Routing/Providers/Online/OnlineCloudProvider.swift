@@ -248,25 +248,35 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             throw await fail(OwnKeyBudget.LimitReached(reason: why))
         }
 
-        // 3. Consent (O-5) — not switchable.
-        // B2 (agent legal review): AI Included sends a recording to Google Gemini, not to Claude — the
-        // preview names the provider and model that will actually receive it.
-        let isRecording = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
-        let shownProvider = kind == .included && isRecording ? "AI Included → Google Gemini (transcription)" : kind.displayName
-        let shownModel = kind == .included && isRecording ? "Gemini (chosen by the AI Included service)" : model
-        var preview = OutboundPreview(provider: shownProvider, model: shownModel, host: kind.host,
-                                      text: shownText, bytes: bytes, maskedCount: mapping.count,
-                                      carriesDocuments: carriesDocuments,
-                                      providerTerms: carriesDocuments ? (images.isEmpty ? kind.documentTerms
-                                          : kind.documentTerms + " The \(images.count) attachment(s) (page images or a recording) are sent as they are: names or details shown or spoken in them cannot be masked.") : nil,
-                                      aiIncluded: kind == .included)
-        // Plans and credits — what this send may cost: credits on an AI plan, dollars on an own Anthropic key.
-        preview.costEstimate = await Self.costEstimate(kind: kind, model: model, system: sendSystem, prompt: sendPrompt,
-                                                       images: images, maxTokens: options.maxTokens)
+        // 3. Consent (O-5) — not switchable. Plan A: a send inside a case whose every passage comes from
+        //    the documents the person allowed for that case (CaseReadPermittedSet, checked against the
+        //    stored permission here) is covered by that permission — no second preview. Anything else —
+        //    a document outside the permitted set, images, no case — is previewed as always.
+        let coveredByCase = images.isEmpty && Self.coveredByCasePermission(
+            CaseReadPermittedSet.current, clearance: options.sourceClearance, carriesDocuments: carriesDocuments,
+            granted: seams.casePermission)
         let beforeConsent = SendSettings(settings)
-        guard await seams.consent(preview) else {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)
-            throw OnlineError.declined
+        if coveredByCase {
+            KalsmritikoshLog.routing.info("online send covered by the case's stored permission — no per-send preview")
+        } else {
+            // B2 (agent legal review): AI Included sends a recording to Google Gemini, not to Claude — the
+            // preview names the provider and model that will actually receive it.
+            let isRecording = images.contains { $0.mediaType.hasPrefix("audio/") || $0.mediaType.hasPrefix("video/") }
+            let shownProvider = kind == .included && isRecording ? "AI Included → Google Gemini (transcription)" : kind.displayName
+            let shownModel = kind == .included && isRecording ? "Gemini (chosen by the AI Included service)" : model
+            var preview = OutboundPreview(provider: shownProvider, model: shownModel, host: kind.host,
+                                          text: shownText, bytes: bytes, maskedCount: mapping.count,
+                                          carriesDocuments: carriesDocuments,
+                                          providerTerms: carriesDocuments ? (images.isEmpty ? kind.documentTerms
+                                              : kind.documentTerms + " The \(images.count) attachment(s) (page images or a recording) are sent as they are: names or details shown or spoken in them cannot be masked.") : nil,
+                                          aiIncluded: kind == .included)
+            // Plans and credits — what this send may cost: credits on an AI plan, dollars on an own Anthropic key.
+            preview.costEstimate = await Self.costEstimate(kind: kind, model: model, system: sendSystem, prompt: sendPrompt,
+                                                           images: images, maxTokens: options.maxTokens)
+            guard await seams.consent(preview) else {
+                await log(kind, model, shownText, bytes, mapping.count, nil, "declined", nil)
+                throw OnlineError.declined
+            }
         }
         // T1 — the consent covers the send as previewed; if anything it depended on changed while the
         // dialog was open, nothing is sent.
@@ -321,7 +331,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             let text = try OnlineRequestBuilder.parse(kind: kind == .included && isAudio ? .gemini : kind, response: response)
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
             else if kind == .anthropic { OwnKeyBudget.record(responseBody: response.body, model: model) }
-            await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", nil)
+            await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent",
+                      coveredByCase ? "covered by the case's stored permission" : nil)
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {
             // The person stopped it: recorded, not reported as a provider failure. Once dispatched, the
@@ -333,6 +344,19 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             await log(kind, model, shownText, bytes, mapping.count, nil, "failed", error.localizedDescription)
             throw await fail(error)
         }
+    }
+
+    /// Plan A — whether a send is covered by the case's stored permission: a permitted set is carried,
+    /// the person's stored permission matches its fingerprint (recomputed, never the caller's), and a
+    /// document send's clearance holds only permitted documents at permitted versions, bound to that
+    /// case. A question-only send inside the case (the question interpreter) carries no document text
+    /// and is covered by the same permission the question itself is sent under on the whole-case path.
+    static func coveredByCasePermission(_ permitted: CaseReadPermittedSet?, clearance: CloudSourceClearance?, carriesDocuments: Bool,
+                                        granted: @Sendable (UUID, String) -> Bool) -> Bool {
+        guard let permitted, !permitted.versions.isEmpty, granted(permitted.caseID, permitted.fingerprint) else { return false }
+        guard carriesDocuments else { return true }
+        guard let clearance else { return false }
+        return permitted.covers(clearance)
     }
 
     /// Plans and credits (2026-11-04) — the estimate the consent dialog shows (nil when none applies).
@@ -419,32 +443,46 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             suffix = q.text
             mapping = q.mapping
         }
-        let shownText = (prefix + [suffix]).joined(separator: "\n\n")
+        let prefixText = prefix.joined(separator: "\n\n")
+        let shownText = prefixText + "\n\n" + suffix
         let bytes = shownText.utf8.count
+        // The outbound record keeps the case text ONCE per exact text sent (CaseLogRecord): later reads
+        // of the same case text record the question and a reference to that full copy.
+        func record(_ outcome: String, _ responseBytes: Int?, _ detail: String?) async {
+            let r = (try? await caseLogRecord(prefixText: prefixText, suffix: suffix, shownText: shownText,
+                                              caseID: request.caseID, fingerprint: fingerprint))
+                ?? CaseLogRecord(payload: shownText, sha: Self.sha256(shownText), tag: nil)
+            await log(kind, model, r.payload, bytes, mapping.count, responseBytes, outcome,
+                      [detail, r.tag].compactMap { $0 }.joined(separator: "; "), sha: r.sha)
+        }
         let survivors = RedactionVerifier().leaks(in: shownText, protectedTerms: protected, artifact: "request")
         if !survivors.isEmpty {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "protected source identity")
+            await record("blocked", nil, "protected source identity")
             throw await fail(OnlineError.protectedIdentity(survivors.count))
         }
         if ProductModuleFlags.isEnabled(.leastDataOnline), let cap = settings.dailyByteCap {
             let used = (try? await outboundLog?.bytesSentToday()) ?? 0
             if used + bytes > cap {
-                await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "daily limit")
+                await record("blocked", nil, "daily limit")
                 throw await fail(OnlineError.limitReached(cap))
             }
         }
         // A6/B4 — every document is re-cleared at the send: still in the case, same version, not
         // privileged or restricted since the clearance.
         if let why = await request.clearance.stillCleared() {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "sources changed before the case read")
+            await record("blocked", nil, "sources changed before the case read")
             throw await fail(OnlineError.changedDuringConsent(why))
         }
         if Task.isCancelled {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled", "before sending")
+            await record("cancelled", nil, "before sending")
             throw CancellationError()
         }
-        do { try await recordPending(kind, model, shownText, mapping.count) }
-        catch { throw await fail(OnlineError.logUnavailable) }
+        // K8 — no record, no send: the lookup of the earlier full copy is part of writing the record.
+        do {
+            let r = try await caseLogRecord(prefixText: prefixText, suffix: suffix, shownText: shownText,
+                                            caseID: request.caseID, fingerprint: fingerprint)
+            try await recordPending(kind, model, r.payload, mapping.count, sha: r.sha, detail: r.tag)
+        } catch { throw await fail(OnlineError.logUnavailable) }
 
         var dispatched = false
         do {
@@ -468,17 +506,49 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
             let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
-            await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent", "case read \(request.purpose)")
+            await record("sent", response.body.count, "case read \(request.purpose)")
             if let usage { CloudUsageMeter.report(usage) }
             return (OnlinePIIMasker.unmask(text, mapping: mapping), usage)
         } catch is CancellationError {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled",
-                      dispatched ? "stopped waiting; delivery unknown" : "before sending")
+            await record("cancelled", nil, dispatched ? "stopped waiting; delivery unknown" : "before sending")
             throw CancellationError()
         } catch {
-            await log(kind, model, shownText, bytes, mapping.count, nil, "failed", error.localizedDescription)
+            await record("failed", nil, error.localizedDescription)
             throw await fail(error)
         }
+    }
+
+    /// What one case-read entry of the outbound record holds.
+    struct CaseLogRecord: Sendable {
+        /// The full text sent, or — when that exact case text is already recorded in full — a reference
+        /// to the full copy (case, document set, SHA-256 and size of the case text) and the task after it.
+        let payload: String
+        /// SHA-256 of exactly what left the Mac (always the full text, also on a reference entry).
+        let sha: String
+        /// The marker the full copy is found by ("case text <sha> (full copy)") or a reference's.
+        let tag: String?
+    }
+
+    static func sha256(_ text: String) -> String {
+        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func caseTextFullTag(_ digest: String) -> String { "case text \(digest) (full copy)" }
+
+    /// Plan A — the case text is recorded ONCE per exact text sent (its SHA-256: the case's masked,
+    /// defanged documents — so a new document set, a new version or a different masking stores a new
+    /// full copy); later reads of the same text record the task and a reference to the first copy.
+    /// Throws when the record cannot be read (the caller refuses to send: no record, no send).
+    func caseLogRecord(prefixText: String, suffix: String, shownText: String, caseID: UUID, fingerprint: String) async throws -> CaseLogRecord {
+        guard let outboundLog else { throw OnlineError.logUnavailable }
+        let digest = Self.sha256(prefixText)
+        let sha = Self.sha256(shownText)
+        let full = Self.caseTextFullTag(digest)
+        guard try await outboundLog.hasEntry(detailContaining: full) else {
+            return CaseLogRecord(payload: shownText, sha: sha, tag: full)
+        }
+        let reference = "[Case text not repeated: identical to the full copy recorded earlier in this log — case \(caseID.uuidString), document set \(fingerprint.prefix(16)), case text SHA-256 \(digest), \(prefixText.utf8.count) bytes. The task sent after it follows.]"
+        return CaseLogRecord(payload: reference + "\n\n" + suffix, sha: sha, tag: "case text \(digest) (see the full copy)")
     }
 
     /// Run `op`, failing with `.timedOut` after `deadline` and with `CancellationError` when the caller
@@ -510,13 +580,14 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         }
     }
 
-    func recordPending(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ masked: Int) async throws {
+    /// `sha`: the SHA-256 of what is sent when `text` is not all of it (a case read's reference entry).
+    func recordPending(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ masked: Int,
+                       sha: String? = nil, detail: String? = nil) async throws {
         guard let outboundLog else { throw OnlineError.logUnavailable }
-        let sha = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
         try await outboundLog.record(OutboundLogEntry(
             id: UUID(), sentAt: Date(), provider: kind.rawValue, model: model, host: kind.host,
-            bytesSent: 0, maskedCount: masked, payloadSHA256: sha, payloadText: text, responseBytes: nil,
-            outcome: "sending", detail: nil))
+            bytesSent: 0, maskedCount: masked, payloadSHA256: sha ?? Self.sha256(text), payloadText: text, responseBytes: nil,
+            outcome: "sending", detail: detail))
     }
 
     /// Embeddings never leave the Mac: this provider has no `.embedding` capability.
@@ -533,9 +604,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     }
 
     private func log(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ bytes: Int, _ masked: Int,
-                     _ responseBytes: Int?, _ outcome: String, _ detail: String?) async {
+                     _ responseBytes: Int?, _ outcome: String, _ detail: String?, sha: String? = nil) async {
         guard let outboundLog else { return }
-        let sha = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        let sha = sha ?? Self.sha256(text)
         do {
             try await outboundLog.record(OutboundLogEntry(
                 id: UUID(), sentAt: Date(), provider: kind.rawValue, model: model, host: kind.host,

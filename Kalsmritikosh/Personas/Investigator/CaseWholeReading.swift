@@ -61,9 +61,13 @@ public nonisolated struct CaseWholeReading: Sendable {
     public var estimate: @Sendable (_ caseTokens: Int, _ questionTokens: Int) -> String
     /// Questions asked from an open case are interactive: the case text is cached for an hour.
     public var questionTTL: CaseReadCacheTTL = .oneHour
-    // TODO(plan A): background case analysis (contradictions, roles, drafts) should reuse this cached
-    // prefix with its task as the suffix, at the 5-minute TTL, through the Message Batches API (50%) —
-    // the batch route is not wired yet; those readers still read cleared passages with per-send consent.
+    // Case analysis (contradictions, roles, drafts) reuses this cached prefix with its task as the
+    // suffix (`analysisRoute` / `readForAnalysis`), at the SAME TTL as questions so the request is
+    // byte-identical through the cache breakpoint and the cache is shared.
+    // TODO(plan A, batches): route these background reads through the Message Batches API (50% off).
+    // Not wired: it needs submit/poll/result handling in the provider and network helper, and a
+    // relay route that reserves credits across an asynchronous batch — more than a small change. Until
+    // then they are ordinary case reads (one call per analysis kind).
     /// Whether another AI reader (the passage composer) may answer when no whole-case reader is
     /// installed: then the case is answered the way it was before plan A, not as search results.
     public var otherReadersAvailable: @Sendable () async -> Bool = { false }
@@ -140,5 +144,39 @@ public nonisolated struct CaseWholeReading: Sendable {
         }
         permissions.grant(caseID: caseID, fingerprint: prepared.fingerprint, documentCount: prepared.documents.count)
         return true
+    }
+
+    // MARK: - Case analysis on the whole-case path
+
+    /// How a case analysis reads with AI. Analysis never asks for the permission: it uses the one the
+    /// person already gave for the case's current documents, or reads passages as before.
+    public enum AnalysisRoute: Sendable {
+        /// The case fits and its permission is stored: one whole-case read per analysis kind.
+        case wholeCase(CaseReader, Prepared)
+        /// Read passages (today's path). `permitted`: the case's stored permission covers the passages
+        /// of its cleared documents (too large to read whole) — no second per-send preview for them.
+        case passages(permitted: CaseReadPermittedSet?, why: String)
+    }
+
+    public func analysisRoute(caseID: UUID, versions: Set<UUID>, binding: CloudScopeBinding) async -> AnalysisRoute {
+        guard let reader = await reader() else { return .passages(permitted: nil, why: "no whole-case reader") }
+        let (prepared, _) = await prepare(caseID: caseID, versions: versions, binding: binding)
+        guard let prepared else { return .passages(permitted: nil, why: "nothing of the case may be sent whole") }
+        guard permissions.isGranted(caseID: caseID, fingerprint: prepared.fingerprint) else {
+            return .passages(permitted: nil, why: "the case's current documents are not allowed yet")
+        }
+        guard prepared.fits else {
+            return .passages(permitted: CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions),
+                             why: "the case is too large to read whole (about \(prepared.tokens.formatted()) tokens, the limit is \(prepared.limit.formatted()))")
+        }
+        return .wholeCase(reader, prepared)
+    }
+
+    /// One whole-case analysis read: the case's cached prefix (byte-identical to a question's) and the
+    /// analysis task after it.
+    public func readForAnalysis(_ reader: CaseReader, _ prepared: Prepared, caseID: UUID, task: String, replyTokens: Int,
+                                purpose: String) async throws -> CaseReader.Reply {
+        try await reader.send(CaseReadSend(caseID: caseID, prefix: prepared.prefix, suffix: task, replyTokens: replyTokens,
+                                           ttl: questionTTL, effort: .high, purpose: purpose, clearance: prepared.clearance))
     }
 }

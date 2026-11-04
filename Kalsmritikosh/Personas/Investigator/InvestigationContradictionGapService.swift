@@ -29,6 +29,10 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// reader for the cast, under the same conditions as `reader` (nil: rules only).
     public var draftReader: (@Sendable () -> CaseDraftReader?)? = nil
     public var roleReader: (@Sendable () -> VerifiedRoleReader?)? = nil
+    /// Plan A — the whole-case reading (the same cached case prefix as questions) and the case's cloud
+    /// scope. With both, an analysis whose case fits and whose permission is stored reads the whole case.
+    public var caseReading: CaseWholeReading? = nil
+    public var caseBinding: (@Sendable (UUID) -> CloudScopeBinding?)? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -56,6 +60,9 @@ public nonisolated struct CaseContradictionRun: Sendable {
     /// Why the AI reading did not run or stopped (nil: it ran, or no reader is set up).
     public var notSentReason: String?
     public var readerAvailable = false
+    /// Plan A — the AI read the whole case in one call (false: passages, `passagePathReason` says why).
+    public var readWholeCase = false
+    public var passagePathReason: String?
     public var claimLinks = 0
     public var available = true
     public var findings: [CaseContradictionFinder.Finding] { ruleFindings + aiFindings }
@@ -99,7 +106,18 @@ public actor InvestigationContradictionGapService {
         run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
         if let reader = pass.reader() {
             run.readerAvailable = true
-            await readWithAI(reader, caseID: caseID, docs: docs, into: &run)
+            switch await analysisRoute(caseID) {
+            case .wholeCase(let caseReader, let prepared):
+                run.readWholeCase = true
+                await readWholeCase(caseReader, prepared, caseID: caseID, docs: docs, into: &run)
+            case .passages(let permitted, let why):
+                run.passagePathReason = why
+                var r = run
+                await CaseReadPermittedSet.$current.withValue(permitted) {
+                    await readWithAI(reader, caseID: caseID, docs: docs, into: &r)
+                }
+                run = r
+            }
         }
         let stored = run.findings.map { $0.contradiction(at: date) }
         await contradictions.insertMany(stored)
@@ -138,14 +156,65 @@ public actor InvestigationContradictionGapService {
             }
             run.calls += 1
             run.passagesSent += batch.passages.count
-            let check = CaseContradictionFinder.verify(reply: reply, batch: batch, allDocuments: docs)
-            if check.unreadable { run.aiDropped.append("the reply could not be read"); continue }
-            run.aiDropped += check.dropped
-            for f in check.verified {
-                if CaseContradictionFinder.sameAsRule(f, run.ruleFindings) { run.aiAgreedWithRules += 1; continue }
-                if !run.aiFindings.contains(where: { $0.contradiction().id == f.contradiction().id }) { run.aiFindings.append(f) }
-            }
+            absorb(CaseContradictionFinder.verify(reply: reply, batch: batch, allDocuments: docs), into: &run)
         }
+    }
+
+    /// The verified pairs of one reading into the run (the rules' own pairs counted, never twice).
+    private func absorb(_ check: CaseContradictionFinder.Verification, into run: inout CaseContradictionRun) {
+        if check.unreadable { run.aiDropped.append("the reply could not be read"); return }
+        run.aiDropped += check.dropped
+        for f in check.verified {
+            if CaseContradictionFinder.sameAsRule(f, run.ruleFindings) { run.aiAgreedWithRules += 1; continue }
+            if !run.aiFindings.contains(where: { $0.contradiction().id == f.contradiction().id }) { run.aiFindings.append(f) }
+        }
+    }
+
+    // MARK: - Plan A: analysis on the whole-case path
+
+    /// How this case's analysis reads with AI: the whole case (it fits and its permission is stored),
+    /// or passages — under the stored permission when the case is too large, else as before.
+    func analysisRoute(_ caseID: UUID) async -> CaseWholeReading.AnalysisRoute {
+        guard let plan = pass?.caseReading, let binding = pass?.caseBinding?(caseID) else {
+            return .passages(permitted: nil, why: "no whole-case reading set up")
+        }
+        do {
+            return await plan.analysisRoute(caseID: caseID, versions: try await authorizedSet(caseID), binding: binding)
+        } catch {
+            KalsmritikoshLog.knowledge.error("case analysis: scope unreadable for the whole-case read: \(String(describing: error), privacy: .public)")
+            return .passages(permitted: nil, why: "the case's scope could not be read")
+        }
+    }
+
+    /// One whole-case read: the case's cached prefix, the contradiction task after it; every pair verified
+    /// exactly as on the passage path (passage N = document N as sent).
+    private func readWholeCase(_ reader: CaseReader, _ prepared: CaseWholeReading.Prepared, caseID: UUID,
+                               docs: [CaseContradictionFinder.Document], into run: inout CaseContradictionRun) async {
+        guard let plan = pass?.caseReading else { return }
+        guard prepared.documents.count >= 2 else {
+            run.notSentReason = "fewer than two of the case's documents may leave the Mac"; return
+        }
+        let reply: String
+        do {
+            reply = try await plan.readForAnalysis(reader, prepared, caseID: caseID, task: CaseContradictionFinder.wholeCaseTask(),
+                                                   replyTokens: CaseContradictionFinder.wholeCaseReplyTokens,
+                                                   purpose: "case.analysis.contradictions").text
+        } catch let notSent as VerifiedAnswerComposer.NotSent {
+            KalsmritikoshLog.knowledge.info("case contradiction whole-case reading not sent: \(notSent.reason, privacy: .public)")
+            run.notSentReason = notSent.reason; return
+        } catch is CancellationError {
+            KalsmritikoshLog.knowledge.info("case contradiction whole-case reading cancelled")
+            run.notSentReason = "cancelled"; return
+        } catch {
+            KalsmritikoshLog.knowledge.error("case contradiction whole-case reading failed: \(String(describing: error), privacy: .public)")
+            run.failedCalls += 1
+            run.failures.append("contradiction call (whole case): " + VerifiedRoleReader.reason(error))
+            return
+        }
+        run.calls += 1
+        run.passagesSent += prepared.documents.count
+        absorb(CaseContradictionFinder.verify(reply: reply, batch: CaseContradictionFinder.wholeCaseBatch(prepared.documents), allDocuments: docs),
+               into: &run)
     }
 
     // MARK: - Read (in-scope items + case disposition)

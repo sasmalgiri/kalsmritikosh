@@ -17,7 +17,8 @@ extension AppState {
 
     nonisolated static func caseContradictionPass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
                                                   claims: ClaimRepository, links: ClaimContradictionRepository,
-                                                  answers: InvestigationAnswerService?, readers: CloudReaderHolder) -> CaseContradictionPass {
+                                                  answers: InvestigationAnswerService?, readers: CloudReaderHolder,
+                                                  caseReading: CaseWholeReading? = nil) -> CaseContradictionPass {
         var pass = CaseContradictionPass(
             documents: { versions in
                 let byObject = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
@@ -80,6 +81,10 @@ extension AppState {
             guard current.modelsAllowedOverride ?? FeatureFlags.aiRegimeValue().allowsAI else { return nil }
             return current.roleReader
         }
+        // Plan A — a case that fits and whose documents the person allowed is analysed whole, over the
+        // same cached case prefix as its questions.
+        pass.caseReading = caseReading
+        pass.caseBinding = { caseID in answers?.cloudScope(caseID: caseID) }
         return pass
     }
 }

@@ -185,9 +185,14 @@ public actor InvestigationAnswerService {
             return try await offline(.notPermitted, note: "(You have not allowed the AI to read this case's documents, so these are search results. Ask again to review the permission.)")
         }
         guard prepared.fits else {
-            // Too large to read whole: today's retrieval path (its own per-send preview), said so.
+            // Too large to read whole: today's retrieval path, said so. The person already allowed this
+            // case's documents, so passages FROM them carry that permission (no second per-send preview;
+            // masking, re-clearance and the record still run); any other document is previewed as before.
             lastCasePath = .retrievalFallback
-            let a = try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
+            let permitted = CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions)
+            let a = try await CaseReadPermittedSet.$current.withValue(permitted) {
+                try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
+            }
             let note = CaseReader.retrievalNote(documentsRead: await brain.lastReadingDocumentCount, caseDocuments: prepared.documents.count,
                                                 caseTokens: prepared.tokens, limit: prepared.limit)
             return InvestigationAnswer(context: context, verified: CaseReader.noting(a.verified, note))

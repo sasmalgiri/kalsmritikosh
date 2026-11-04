@@ -23,7 +23,8 @@ extension AppState {
     /// The pre-findings role pass (InvestigationFindingsService `prepare`).
     nonisolated static func caseRolePass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
                                          claims: ClaimRepository, reviews: ClaimReviewRepository,
-                                         answers: InvestigationAnswerService?, readers: CloudReaderHolder)
+                                         answers: InvestigationAnswerService?, readers: CloudReaderHolder,
+                                         caseReading: CaseWholeReading? = nil)
         -> @Sendable (UUID, Set<UUID>) async -> Void {
         { caseID, versions in
             let current = readers.current
@@ -45,21 +46,51 @@ extension AppState {
                     if stepClaims[id] != nil, let ko = try await objects.load(id: id) { texts[id] = ko.content }
                 }
                 guard !stepClaims.isEmpty else { return }
-                let gate = CloudSourceGate(sensitiveScope: sensitiveScopes, objects: objects).bound(to: answers?.cloudScope(caseID: caseID))
-                let (clearance, denied) = await gate.clear(Array(texts.keys), purpose: "Read the role of each person in the case's documents")
-                if !denied.isEmpty { KalsmritikoshLog.brain.info("role reading: \(denied.count, privacy: .public) document(s) not cleared") }
-                var passages: [VerifiedRoleReader.Passage] = []
-                var people: [String] = []
-                for (id, byPerson) in stepClaims.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
-                    guard let text = texts[id], clearance.clearedObjectIDs.contains(id) else { continue }
-                    for person in byPerson.keys.sorted() {
-                        let naming = VerifiedRoleReader.sentences(naming: person, in: text)
-                        guard !naming.isEmpty else { continue }
-                        passages.append(VerifiedRoleReader.Passage(objectID: id, text: naming))
-                        people.append(person)
+                // Plan A — a case that fits and whose documents the person allowed: one role call over the
+                // same cached case prefix as its questions; otherwise passages, under the stored permission
+                // when the case is too large to read whole.
+                var permitted: CaseReadPermittedSet?
+                var wholeReadings: [VerifiedRoleReading]?
+                if let caseReading, let binding = answers?.cloudScope(caseID: caseID) {
+                    switch await caseReading.analysisRoute(caseID: caseID, versions: versions, binding: binding) {
+                    case .wholeCase(let caseReader, let prepared):
+                        let people = Array(Set(stepClaims.values.flatMap(\.keys))).sorted()
+                        do {
+                            let reply = try await caseReading.readForAnalysis(
+                                caseReader, prepared, caseID: caseID, task: VerifiedRoleReader.wholeCaseTask(people: people),
+                                replyTokens: VerifiedRoleReader.wholeCaseReplyTokens, purpose: "case.analysis.roles")
+                            // As on the passage path: a reading counts only from a document carrying that
+                            // person's step claims (those are the claims it can set aside).
+                            wholeReadings = VerifiedRoleReader.verifyWholeCase(reply: reply.text, people: people, documents: prepared.documents)
+                                .readings.filter { stepClaims[$0.objectID]?[$0.person] != nil }
+                        } catch {
+                            KalsmritikoshLog.brain.error("whole-case role reading failed: \(String(describing: error), privacy: .public)")
+                            wholeReadings = []
+                        }
+                    case .passages(let p, _):
+                        permitted = p
                     }
                 }
-                let readings = await reader.read(people: people, passages: passages, clearance: clearance)
+                let readings: [VerifiedRoleReading]
+                if let wholeReadings { readings = wholeReadings } else {
+                    let gate = CloudSourceGate(sensitiveScope: sensitiveScopes, objects: objects).bound(to: answers?.cloudScope(caseID: caseID))
+                    let (clearance, denied) = await gate.clear(Array(texts.keys), purpose: "Read the role of each person in the case's documents")
+                    if !denied.isEmpty { KalsmritikoshLog.brain.info("role reading: \(denied.count, privacy: .public) document(s) not cleared") }
+                    var passages: [VerifiedRoleReader.Passage] = []
+                    var people: [String] = []
+                    for (id, byPerson) in stepClaims.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                        guard let text = texts[id], clearance.clearedObjectIDs.contains(id) else { continue }
+                        for person in byPerson.keys.sorted() {
+                            let naming = VerifiedRoleReader.sentences(naming: person, in: text)
+                            guard !naming.isEmpty else { continue }
+                            passages.append(VerifiedRoleReader.Passage(objectID: id, text: naming))
+                            people.append(person)
+                        }
+                    }
+                    readings = await CaseReadPermittedSet.$current.withValue(permitted) {
+                        await reader.read(people: people, passages: passages, clearance: clearance)
+                    }
+                }
                 var rejected = 0
                 for r in readings where r.role.takesNoSteps {
                     for claimID in stepClaims[r.objectID]?[r.person] ?? [] {

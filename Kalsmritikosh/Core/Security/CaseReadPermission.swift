@@ -41,6 +41,36 @@ public nonisolated struct CaseReadPermission: Codable, Sendable, Equatable {
     }
 }
 
+/// The document set a case permission was given for, carried (task-local) into the sends a case makes
+/// from PASSAGES of those documents — a case too large to read whole, or an analysis that falls back to
+/// passages. The person allowed these documents once for the case; a send whose every passage comes from
+/// them, at a permitted version, under a clearance bound to the same case, is covered by that permission
+/// and shows no second per-send preview. Everything else of the send still runs (masking, protected
+/// identities, the daily limit, re-clearance at the send, the record before the send).
+///
+/// The provider trusts nothing here on its own: it recomputes the fingerprint from `versions` and checks
+/// it against the stored permission, so a caller cannot widen the set the person allowed.
+public nonisolated struct CaseReadPermittedSet: Sendable, Equatable {
+    public let caseID: UUID
+    /// Each permitted document → its permitted source versions (the case read's own clearance).
+    public let versions: [UUID: Set<UUID>]
+    public init(caseID: UUID, versions: [UUID: Set<UUID>]) { self.caseID = caseID; self.versions = versions }
+
+    @TaskLocal public static var current: CaseReadPermittedSet?
+
+    public var fingerprint: String { CaseReadPermission.fingerprint(caseID: caseID, versions: versions) }
+
+    /// Whether every document `clearance` clears is one of these, at a permitted version, and the
+    /// clearance is bound to this case. A clearance without versions or binding is never covered.
+    public func covers(_ clearance: CloudSourceClearance) -> Bool {
+        guard let binding = clearance.binding, binding.scopeID == caseID, !clearance.clearedObjectIDs.isEmpty else { return false }
+        return clearance.clearedObjectIDs.allSatisfy { id in
+            guard let permitted = versions[id], let sent = clearance.versions[id], !sent.isEmpty else { return false }
+            return sent.isSubset(of: permitted)
+        }
+    }
+}
+
 /// Where case permissions are kept. Live: the app's defaults (a preference of the person, not ledger
 /// data — erasing a case also revokes it). Tests: in memory.
 public final nonisolated class CaseReadPermissionStore: Sendable {

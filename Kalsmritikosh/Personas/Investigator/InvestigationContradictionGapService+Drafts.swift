@@ -48,14 +48,47 @@ extension InvestigationContradictionGapService {
         out.readerAvailable = reader != nil
         var clearance: CloudSourceClearance?
         var cleared: [CaseDraftBuilder.Document] = []
+        // Plan A — the whole case (it fits, its permission is stored): one role call and one drafting call
+        // over the questions' cached prefix. Otherwise passages; under the stored permission when the
+        // case is too large to read whole (no second per-send preview for its documents).
+        var whole: (reader: CaseReader, prepared: CaseWholeReading.Prepared, plan: CaseWholeReading)?
+        var permitted: CaseReadPermittedSet?
         if useAI, reader != nil {
+            switch await analysisRoute(caseID) {
+            case .wholeCase(let r, let prepared):
+                if let plan = pass.caseReading { whole = (r, prepared, plan); out.readWholeCase = true }
+            case .passages(let p, _):
+                permitted = p
+            }
             let c = await clearDrafts(caseID, docs: docs, purpose: "case.drafts")
             clearance = c.clearance; cleared = c.cleared; out.deniedForCloud = c.denied; out.notSentReason = c.why
         }
         // The cast: rules, then the verified role reading over the cleared sentences naming each person.
         var readings: [VerifiedRoleReading] = []
         let ruleCast = CaseDraftBuilder.cast(docs)
-        if let clearance, !cleared.isEmpty, let roleReader = pass.roleReader?() {
+        if let whole, pass.roleReader?() != nil {
+            let people = Array(ruleCast.filter { $0.kind == .person }.prefix(16).map(\.name))
+            var report = VerifiedRoleReader.Report()
+            if !people.isEmpty {
+                do {
+                    let reply = try await whole.plan.readForAnalysis(whole.reader, whole.prepared, caseID: caseID,
+                                                                     task: VerifiedRoleReader.wholeCaseTask(people: people),
+                                                                     replyTokens: VerifiedRoleReader.wholeCaseReplyTokens,
+                                                                     purpose: "case.analysis.roles")
+                    report = VerifiedRoleReader.verifyWholeCase(reply: reply.text, people: people, documents: whole.prepared.documents)
+                } catch {
+                    KalsmritikoshLog.knowledge.info("whole-case role reading not used: \(String(describing: error), privacy: .public)")
+                    report.calls = 1
+                    report.failures.append("role call (whole case): " + VerifiedRoleReader.reason(error))
+                }
+            }
+            readings = report.readings
+            out.roleBatches = report.calls
+            out.roleReadings = readings.count
+            out.roleDropped = report.dropped
+            out.failures += report.failures
+            out.failedCalls += report.failures.count
+        } else if let clearance, !cleared.isEmpty, let roleReader = pass.roleReader?() {
             let people = Array(ruleCast.filter { $0.kind == .person }.prefix(16).map(\.name))
             var passages: [VerifiedRoleReader.Passage] = []
             for person in people {
@@ -64,7 +97,9 @@ extension InvestigationContradictionGapService {
                     if !text.isEmpty { passages.append(VerifiedRoleReader.Passage(objectID: d.objectID, text: text)) }
                 }
             }
-            let report = await roleReader.readReporting(people: people, passages: passages, clearance: clearance)
+            let report = await CaseReadPermittedSet.$current.withValue(permitted) {
+                await roleReader.readReporting(people: people, passages: passages, clearance: clearance)
+            }
             readings = report.readings
             out.roleBatches = report.calls
             out.roleReadings = readings.count
@@ -76,13 +111,49 @@ extension InvestigationContradictionGapService {
         out.timeline = CaseDraftBuilder.timeline(docs, cast: out.cast)
         out.leads = CaseDraftBuilder.leads(docs, cast: out.cast, contradictions: contradictions)
         // The chronology and gaps reading.
-        if let reader, let clearance, !cleared.isEmpty {
+        func absorb(_ check: CaseDraftBuilder.TimelineVerification) {
+            if check.unreadable { out.dropped.append("the reply could not be read"); return }
+            out.dropped += check.dropped
+            for item in check.items {
+                if CaseDraftBuilder.sameAsRule(item, out.timeline.filter { $0.provenance == .rules }) { out.agreedWithRules += 1; continue }
+                guard !out.timeline.contains(where: { $0.id == item.id }) else { continue }
+                out.timeline.append(item); out.verified += 1
+            }
+            for lead in check.leads where !out.leads.contains(where: { $0.id == lead.id }) {
+                out.leads.append(lead); out.verified += 1
+            }
+        }
+        if let whole {
+            do {
+                let reply = try await whole.plan.readForAnalysis(whole.reader, whole.prepared, caseID: caseID,
+                                                                 task: CaseDraftBuilder.wholeCaseTimelineTask(),
+                                                                 replyTokens: CaseDraftBuilder.wholeCaseReplyTokens,
+                                                                 purpose: "case.analysis.drafts")
+                out.calls += 1
+                out.passagesSent += whole.prepared.documents.count
+                absorb(CaseDraftBuilder.verifyTimeline(reply: reply.text, batch: CaseDraftBuilder.wholeCaseBatch(whole.prepared.documents),
+                                                       documents: docs, cast: out.cast))
+            } catch let notSent as VerifiedAnswerComposer.NotSent {
+                KalsmritikoshLog.knowledge.info("case drafts whole-case reading not sent: \(notSent.reason, privacy: .public)")
+                out.notSentReason = notSent.reason
+            } catch is CancellationError {
+                KalsmritikoshLog.knowledge.info("case drafts whole-case reading cancelled")
+                out.notSentReason = "cancelled"
+            } catch {
+                KalsmritikoshLog.knowledge.error("case drafts whole-case reading failed: \(String(describing: error), privacy: .public)")
+                out.failedCalls += 1
+                out.failures.append("drafting call (whole case): " + VerifiedRoleReader.reason(error))
+            }
+            out.timeline = CaseDraftBuilder.sorted(out.timeline)
+        } else if let reader, let clearance, !cleared.isEmpty {
             let clearedIDs = clearance.clearedObjectIDs
             for batch in CaseDraftBuilder.timelineBatches(cleared) {
                 guard batch.passages.allSatisfy({ clearedIDs.contains($0.objectID) }) else { continue }
                 let reply: String
                 do {
-                    reply = try await reader.read(CaseDraftBuilder.timelinePrompt(batch), clearance: clearance)
+                    reply = try await CaseReadPermittedSet.$current.withValue(permitted) {
+                        try await reader.read(CaseDraftBuilder.timelinePrompt(batch), clearance: clearance)
+                    }
                 } catch let notSent as VerifiedAnswerComposer.NotSent {
                     KalsmritikoshLog.knowledge.info("case drafts reading not sent: \(notSent.reason, privacy: .public)")
                     out.notSentReason = notSent.reason; break
@@ -97,17 +168,7 @@ extension InvestigationContradictionGapService {
                 }
                 out.calls += 1
                 out.passagesSent += batch.passages.count
-                let check = CaseDraftBuilder.verifyTimeline(reply: reply, batch: batch, documents: docs, cast: out.cast)
-                if check.unreadable { out.dropped.append("the reply could not be read"); continue }
-                out.dropped += check.dropped
-                for item in check.items {
-                    if CaseDraftBuilder.sameAsRule(item, out.timeline.filter { $0.provenance == .rules }) { out.agreedWithRules += 1; continue }
-                    guard !out.timeline.contains(where: { $0.id == item.id }) else { continue }
-                    out.timeline.append(item); out.verified += 1
-                }
-                for lead in check.leads where !out.leads.contains(where: { $0.id == lead.id }) {
-                    out.leads.append(lead); out.verified += 1
-                }
+                absorb(CaseDraftBuilder.verifyTimeline(reply: reply, batch: batch, documents: docs, cast: out.cast))
             }
             out.timeline = CaseDraftBuilder.sorted(out.timeline)
         }
@@ -145,8 +206,17 @@ extension InvestigationContradictionGapService {
         guard !passages.isEmpty, passages.allSatisfy({ clearance.clearedObjectIDs.contains($0.objectID) }) else {
             out.notSentReason = out.notSentReason ?? "no cleared passage names \(person) in full"; return out
         }
+        // Plan A — the interview plan stays a small passage read (one person's sentences and the case's
+        // disagreements about them); the case's stored permission covers them (no second preview).
+        let permitted: CaseReadPermittedSet?
+        switch await analysisRoute(caseID) {
+        case .wholeCase(_, let prepared): permitted = CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions)
+        case .passages(let p, _): permitted = p
+        }
         do {
-            let reply = try await reader.read(CaseDraftBuilder.interviewPrompt(person: person, passages: passages), clearance: clearance)
+            let reply = try await CaseReadPermittedSet.$current.withValue(permitted) {
+                try await reader.read(CaseDraftBuilder.interviewPrompt(person: person, passages: passages), clearance: clearance)
+            }
             out.calls = 1
             out.passagesSent = passages.count
             let check = CaseDraftBuilder.verifyInterview(reply: reply, person: person, passages: passages)
