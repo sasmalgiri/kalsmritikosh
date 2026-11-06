@@ -63,7 +63,7 @@ One row per active screen (every sidebar destination), linking its Get started s
 | Guide | — | screen-guide | — | help.guide, help.search, help.topic.<id>, help.replayTutorial, help.replayIntro, help.open.<screen> | gap |
 | Constitution | — | screen-sutra | — | — | gap |
 | Compliance Board | — | screen-sopboard | — | — | gap |
-| Settings | step 1 | screen-settings, task-private-online, task-ai-included, task-keys-backup-erase, task-support, subscription-plans, subscription-restore-offline, subscription-expiry | task-keys-backup-erase (Your data), subscription-plans (Subscription) | settings.subscription.status, info.subscription-plans | ui-journeys-2026-10-30f (Subscription section, Restore outcome) |
+| Settings | step 1 | screen-settings, task-core-and-optional-tools, task-private-online, task-ai-included, task-keys-backup-erase, task-support, subscription-plans, subscription-restore-offline, subscription-expiry | task-keys-backup-erase (Your data), subscription-plans (Subscription) | settings.subscription.status, info.subscription-plans | ui-journeys-2026-10-30f (Subscription section, Restore outcome) |
 
 ## Critical actions and their explanations (§6.8)
 

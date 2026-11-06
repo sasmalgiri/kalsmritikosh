@@ -223,15 +223,15 @@ public struct OnboardingView: View {
                 TextField("Name your first case (optional) — e.g. \u{201C}Acme expense complaint\u{201D}", text: $firstCaseTitle)
                     .textFieldStyle(.roundedBorder)
             }
-            Toggle("I\u{2019}m coming from DEVONthink (switch on the import and smart-collection tools)", isOn: Binding(
+            Toggle("I\u{2019}m coming from DEVONthink (switch on the DEVONthink import and Send to DEVONthink)", isOn: Binding(
                 get: { fromDevonthink },
                 set: { on in fromDevonthink = on; if on { ModulePreset.apply(persona: "devonthink") } }))
                 .font(.callout)
-            Toggle("I\u{2019}ll use it on its own, without DEVONthink (switch on tags, highlights, smart collections, capture and the other organising tools)", isOn: Binding(
+            Toggle("I\u{2019}ll use it on its own, without DEVONthink (switch on tags, highlights, rules and the other organising tools; Spotlight and sync stay off)", isOn: Binding(
                 get: { standalone },
                 set: { on in standalone = on; if on { ModulePreset.applyStandalone() } }))
                 .font(.callout)
-            Text("Choosing a focus switches on the tools it needs. You can change any of them in Settings \u{2192} Modules.")
+            Text("Every focus starts with the same core: bring documents in, search them exactly, review the evidence, track what is open and export a cited report. A focus adds only the tools its work needs; specialist tools are listed by task in Settings \u{2192} Modules.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: 560)

@@ -37,23 +37,24 @@ import Testing
         let saved = keys.map { store.object(forKey: $0) }
         defer { for (k, v) in zip(keys, saved) { if let v { store.set(v, forKey: k) } else { store.removeObject(forKey: k) } } }
 
-        // Another role: nothing changes.
+        // Another role: nothing changes. (Since the 2026-11-06 scope decision the role's tools are the core
+        // views — timeline/relationships and dossiers — not specialist tools such as watchlists.)
         store.set("legal", forKey: ModulePreset.personaKey)
         store.removeObject(forKey: ModulePreset.investigationPresetRevisionKey)
-        ProductModuleFlags.setEnabled(.watchlists, false)
+        ProductModuleFlags.setEnabled(.timelineGraph, false)
         #expect(!ModulePreset.refreshInvestigationRole(store))
-        #expect(!ProductModuleFlags.isEnabled(.watchlists))
+        #expect(!ProductModuleFlags.isEnabled(.timelineGraph))
 
         // An Investigator from before: the role's tools come on once, including one stored as off.
         store.set("investigation", forKey: ModulePreset.personaKey)
         #expect(ModulePreset.refreshInvestigationRole(store))
-        #expect(ProductModuleFlags.isEnabled(.watchlists))
-        #expect(ProductModuleFlags.isEnabled(.communicationAnalysis))
+        #expect(ProductModuleFlags.isEnabled(.timelineGraph))
+        #expect(ProductModuleFlags.isEnabled(.livingDossiers))
 
         // Afterwards the person's choice stands: turned off, it stays off at the next launch.
-        ProductModuleFlags.setEnabled(.watchlists, false)
+        ProductModuleFlags.setEnabled(.timelineGraph, false)
         #expect(!ModulePreset.refreshInvestigationRole(store))
-        #expect(!ProductModuleFlags.isEnabled(.watchlists))
+        #expect(!ProductModuleFlags.isEnabled(.timelineGraph))
     }
 
     @Test func plainWordsAreNotSyntax() {

@@ -50,6 +50,7 @@ struct KalsmritikoshApp: App {
         }
         #endif
         DiagnosticsReporter.shared.start()   // U-4 — MetricKit crash/hang reports, saved on this Mac only
+        ModuleScopeMigration.run()                // 2026-11-06 scope: an earlier install keeps its old defaults
         ModulePreset.refreshInvestigationRole()   // an earlier Investigator gets the role's current tools, once
     }
 
@@ -80,7 +81,7 @@ struct KalsmritikoshApp: App {
                 .appLockOverlay()               // W2-7 — Touch ID / password lock
                 // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
                 .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
-                // P-3 — File ▸ Import from iPhone or iPad (Continuity Camera), with "Share and capture" on.
+                // P-3 — File ▸ Import from iPhone or iPad (Continuity Camera), with "Import from iPhone or iPad" on.
                 .importsItemProviders(ProductModuleFlags.isEnabled(.captureExtensions) ? DeviceImport.acceptedTypes : []) { providers in
                     Task { await appState.importFromDevice(providers) }
                     return true

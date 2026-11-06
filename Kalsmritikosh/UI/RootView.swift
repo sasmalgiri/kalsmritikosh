@@ -1642,7 +1642,7 @@ private struct CommandPaletteView: View {
     @FocusState private var fieldFocused: Bool
 
     /// The catalog is static; build once per palette open.
-    private let allEntries = PaletteCatalog.entries()
+    private let allEntries = PaletteCatalog.visibleEntries()
 
     private var filtered: [PaletteEntry] {
         PaletteCatalog.matches(query: query, in: allEntries)

@@ -165,6 +165,16 @@ public enum PaletteCatalog {
         return out
     }
 
+    /// What the palette LISTS: the complete catalog minus retired surfaces whose module is off (scope
+    /// decision 2026-11-06), so the beginner path never meets them. `entries()` stays complete, so a menu
+    /// item or saved route to a retired screen still resolves and lands on that screen, never a blank one.
+    public static func visibleEntries() -> [PaletteEntry] {
+        entries().filter { entry in
+            if case .screen(.ccStudio) = entry.target { return ProductModuleFlags.isEnabled(.contentCreatorPersona) }
+            return true
+        }
+    }
+
     // MARK: - Matching & ranking
 
     /// Fuzzy subsequence primitive (the palette's original matcher).

@@ -152,6 +152,18 @@ The case overview, the AI permission sheet and the case report say which documen
 
 Screen: **Cases**.
 
+### What every case has, and the optional tools
+
+Every case has the same core: bring records in, search them exactly, open the original, review and connect the evidence, track what is still open, and export a cited report — with no AI, no add-on and no connector needed. Optional tools are for specific kinds of work; they are off until a case needs them.
+
+1. Core, always there: intake with visible failures; exact search with dates, people and types; the case file with chronology, people, contradictions, evidence requests and findings; Tools ▸ Export (PDF, Word and CSV); Tools ▸ Legal holds (“Place hold”, “Release”); Tools ▸ Documents ▸ Saved searches (“Save search”); backup, restore and erasure in Settings ▸ Your data.
+2. Optional tools: Settings ▸ Modules lists them by the task they support — professional workflows (Bates productions, review coding, case slices), advanced analysis (account changes, watchlists, who wrote to whom, “Order by review priority” for documents), media and places, connections and automation (DEVONthink, notes apps, Shortcuts, Spotlight, rules, sync), AI assistance, and presentation. Each says what stays when it is off.
+3. Turning a tool off hides it and keeps everything it made. A hold, an export check, erasure, a case's AI permission and the record of what could not be read are not switches: no tool, profession or plan turns them off.
+4. Retired features (generic briefings, FAQs and mind maps; the Content creator persona) are under Settings ▸ Modules ▸ Retired, so work made with them earlier stays reachable.
+5. Settings ▸ Modules ▸ “Show engine components” holds the engine's internal switches, for troubleshooting with support. A case does not need any of them changed.
+
+Screen: **Settings**.
+
 ### Private and Online modes, and what a provider may charge
 
 Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own Anthropic key (the only own key the app accepts).
@@ -700,7 +712,7 @@ Screen: **What Changed**.
 
 ### Settings — modes, privacy, data and subscription
 
-System mode, Private/Online, modules, ingest options, Your data (backup, recovery key, erasure), Help & feedback, legal notices and the subscription.
+System mode, Private/Online, the optional tools (Modules, listed by the task each supports), ingest options, Your data (backup, recovery key, erasure), Help & feedback, legal notices and the subscription.
 
 Screen: **Settings**.
 
@@ -946,12 +958,12 @@ Screen: **Compliance Board**.
 - **OCR** — Reads text out of scanned pages and photos. Slower; used automatically for scans and images.
 - **Transcription** — Turns audio and video into text on this Mac (Apple Speech, English). Runs while importing when “Transcribe audio & video” is on in Settings → Modules (the default); with it off, recordings are kept and can be transcribed later in Transcripts. A transcript is what the speech model heard, not a certified record.
 - **Your database** — Tools → Import a DEVONthink database reads the documents stored in a .dtBase2 where they are, and turns Finder tags into tags. Groups are not read; add indexed folders in Sources.
-- **Groups** — Use tags, smart collections or case slices — a document can carry many tags.
-- **Smart groups / rules** — Tools → Smart collections and rules. Collections stay up to date; a rule is saved only after a dry run.
-- **See Also** — The corroboration meter and near-duplicates: how many independent sources support a fact.
+- **Groups** — Use tags, saved searches or case slices — a document can carry many tags.
+- **Saved searches / rules** — Tools → Documents → Saved searches. Saved searches stay up to date; with “Automatic rules” on (Settings → Modules), a rule is saved only after a dry run.
+- **See Also** — Source counts and near-duplicates: how many documents an answer cites and which are copies of one another. A count is not an assessment — review each source.
 - **Annotations** — Highlights and notes, stored beside the source and never written into it.
 - **Item links** — kalsmritikosh:// links open the exact passage.
-- **Stamps / Bates** — Tools → Production sets: Bates PDFs, load files, privilege log and legal holds.
+- **Stamps / Bates** — Tools → Legal review → Production sets: Bates PDFs, load files and the privilege log. Legal holds are always in Tools → Legal holds.
 - **Sync** — None, by design. Your archive stays on this Mac; move it with a complete backup and its recovery key.
 - **AI chat** — Ask answers only from your documents, each claim cited; conflicts are shown, never averaged.
 - **Multilingual archives** — One semantic index that understands your documents' own languages — no translate-to-English shortcut.

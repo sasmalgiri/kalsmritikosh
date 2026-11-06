@@ -224,12 +224,12 @@ enum GuideContent {
         // W4-8 — switcher map; full page in docs/COMING_FROM_DEVONTHINK.md.
         ("Coming from DEVONthink", "arrow.left.arrow.right", [
             ("Your database", "Tools → Import a DEVONthink database reads the documents stored in a .dtBase2 where they are, and turns Finder tags into tags. Groups are not read; add indexed folders in Sources."),
-            ("Groups", "Use tags, smart collections or case slices — a document can carry many tags."),
-            ("Smart groups / rules", "Tools → Smart collections and rules. Collections stay up to date; a rule is saved only after a dry run."),
-            ("See Also", "The corroboration meter and near-duplicates: how many independent sources support a fact."),
+            ("Groups", "Use tags, saved searches or case slices — a document can carry many tags."),
+            ("Saved searches / rules", "Tools → Documents → Saved searches. Saved searches stay up to date; with “Automatic rules” on (Settings → Modules), a rule is saved only after a dry run."),
+            ("See Also", "Source counts and near-duplicates: how many documents an answer cites and which are copies of one another. A count is not an assessment — review each source."),
             ("Annotations", "Highlights and notes, stored beside the source and never written into it."),
             ("Item links", "kalsmritikosh:// links open the exact passage."),
-            ("Stamps / Bates", "Tools → Production sets: Bates PDFs, load files, privilege log and legal holds."),
+            ("Stamps / Bates", "Tools → Legal review → Production sets: Bates PDFs, load files and the privilege log. Legal holds are always in Tools → Legal holds."),
             ("Sync", "None, by design. Your archive stays on this Mac; move it with a complete backup and its recovery key."),
             ("AI chat", "Ask answers only from your documents, each claim cited; conflicts are shown, never averaged.")
         ]),

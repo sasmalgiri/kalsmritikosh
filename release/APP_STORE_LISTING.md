@@ -5,6 +5,8 @@ _The ONLY paste source for App Store Connect (`APP_STORE_METADATA.md` is superse
 case, offline search results, simulation-only testing (owner decision 2026-11-04). Every sentence stays inside the "Do NOT claim"
 checklist at the end and the locked contract in `SHIP_DECISIONS.md`. Claim fragments registered in `CLAIMS_APP.md` are checked by
 `ci/guards/app-claims-coverage.sh` — reword them only together with that file. Agent-prepared, not counsel-reviewed._
+_2026-11-06 (owner scope decision, `docs/IME_Core_and_Add_On_Scope_2026-11-06.md`): the copy describes the core workflow by its
+outcomes and names specialist tools as optional; it no longer counts jobs. No price, plan or entitlement changed._
 
 Related: privacy answers → `release/APP_PRIVACY_LABEL.md`; products → `release/IAP_SETUP.md`; owner steps →
 `release/OWNER_LAUNCH_CHECKLIST.md`.
@@ -54,11 +56,11 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 >
 > Private by design. The app itself has no network access, and the knowledge base is encrypted on disk. No account, no sign-in, no analytics. Without AI, nothing leaves your Mac and Ask returns the matching passages with a link to the source. With an AI plan or your own Anthropic key, the documents of a case you allow go to Anthropic (recordings you transcribe to Google).
 >
-> • Cases, interviews, exhibits, holds, redaction log, chronology and an append-only case log
+> • No AI or add-on needed: intake showing what failed, exact search, review, cited PDF/Word/CSV reports
 > • Documents, email (including Outlook MSG and PST), chat exports, Cellebrite reports, scans and recordings
 > • Search and ask across everything — answers come with clickable citations
 > • Timelines, contradictions and gaps between documents; follow the money with sources
-> • Cited case reports, exhibit lists, custody reports and statements to export
+> • Specialist tools (Bates, email forensics, watchlists) stay off until needed
 > • Optional Online lookups: exchange rates, sanctions, registries, court records, transcription
 >
 > Plans (auto-renewing; your storefront's price is shown in the app):
@@ -91,7 +93,7 @@ The paywall (`Kalsmritikosh/UI/PurchaseGate.swift`) shows StoreKit's own localiz
   $989.99 / year; packs $9.99 / $34.99. **India** (set in App Store Connect; Apple's storefront prices include GST): Workbench
   ₹249 / ₹1,999; AI Included ₹3,499 / ₹34,999; AI Pro ₹8,999 / ₹89,999; packs ₹899 (500) / ₹2,999 (2,000). The monthly AI
   prices assume Apple's rounded US points $39.00 / $99.00 exist (owner check, `release/IAP_SETUP.md` §6).
-- **What each includes:** Workbench — all personas and jobs, no AI of ours, Online AI with your own Anthropic key (billed by
+- **What each includes:** Workbench — the whole investigation workflow, every optional tool and all personas, no AI of ours, Online AI with your own Anthropic key (billed by
   Anthropic). AI Included — Workbench + 2,000 AI credits a month. AI Pro — Workbench + 6,000 AI credits a month (AI Pro yearly: 5,400 a month) + larger
   whole-case reads (up to 3,000 credits per confirmed read vs 600). AI Included yearly gets the same 2,000 credits every month.
 - **Free trial:** Workbench only, 14 days, for eligible new subscribers; then the chosen Workbench price. The AI plans have none.

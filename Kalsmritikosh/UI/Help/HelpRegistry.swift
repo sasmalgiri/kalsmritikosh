@@ -265,6 +265,19 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["coverage", "not read", "password", "unsupported", "ocr", "credits", "cost", "cancel", "retry", "failed", "balance"]),
         HelpTopic(
+            id: "task-core-and-optional-tools", kind: .task, title: "What every case has, and the optional tools",
+            summary: "Every case has the same core: bring records in, search them exactly, open the original, review and connect the evidence, track what is still open, and export a cited report — with no AI, no add-on and no connector needed. Optional tools are for specific kinds of work; they are off until a case needs them.",
+            steps: [
+                "Core, always there: intake with visible failures; exact search with dates, people and types; the case file with chronology, people, contradictions, evidence requests and findings; Tools ▸ Export (PDF, Word and CSV); Tools ▸ Legal holds (“Place hold”, “Release”); Tools ▸ Documents ▸ Saved searches (“Save search”); backup, restore and erasure in Settings ▸ Your data.",
+                "Optional tools: Settings ▸ Modules lists them by the task they support — professional workflows (Bates productions, review coding, case slices), advanced analysis (account changes, watchlists, who wrote to whom, “Order by review priority” for documents), media and places, connections and automation (DEVONthink, notes apps, Shortcuts, Spotlight, rules, sync), AI assistance, and presentation. Each says what stays when it is off.",
+                "Turning a tool off hides it and keeps everything it made. A hold, an export check, erasure, a case's AI permission and the record of what could not be read are not switches: no tool, profession or plan turns them off.",
+                "Retired features (generic briefings, FAQs and mind maps; the Content creator persona) are under Settings ▸ Modules ▸ Retired, so work made with them earlier stays reachable.",
+                "Settings ▸ Modules ▸ “Show engine components” holds the engine's internal switches, for troubleshooting with support. A case does not need any of them changed."
+            ],
+            controls: ["Place hold", "Release", "Save search", "Order by review priority", "Show engine components"],
+            destination: .settings,
+            keywords: ["modules", "optional", "add-on", "pack", "core", "features", "tools", "turn on", "retired", "catalog", "capability"]),
+        HelpTopic(
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
             summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own Anthropic key (the only own key the app accepts).",
             steps: [
@@ -448,7 +461,7 @@ public nonisolated enum HelpRegistry {
             (.review, "Review — what waits for your decision", "Results, links and documents that need a human decision before they count."),
             (.transcripts, "Transcripts — recordings as text", "Transcripts made on this Mac (Apple Speech, English): quotable, searchable, and marked as a speech model’s reading, not a certified transcript."),
             (.changes, "What Changed — differences between versions", "What a later version of a document, result or account added, removed or changed."),
-            (.settings, "Settings — modes, privacy, data and subscription", "System mode, Private/Online, modules, ingest options, Your data (backup, recovery key, erasure), Help & feedback, legal notices and the subscription."),
+            (.settings, "Settings — modes, privacy, data and subscription", "System mode, Private/Online, the optional tools (Modules, listed by the task each supports), ingest options, Your data (backup, recovery key, erasure), Help & feedback, legal notices and the subscription."),
             (.guide, "Guide — this help", "Searchable offline help: Get started, tasks, recipes by profession, the screens, the words the app uses, reading results carefully, subscription and troubleshooting.")
         ]
         for (dest, title, body) in written where !seen.contains(dest) {

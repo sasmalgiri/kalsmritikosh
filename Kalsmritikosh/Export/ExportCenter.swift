@@ -60,6 +60,15 @@ public nonisolated enum LedgerExportFormat: String, Sendable, CaseIterable, Iden
     }
     /// Formats built from original email files (shown only for source sets).
     public var needsOriginals: Bool { self == .mbox || self == .emlZip }
+
+    /// Scope decision 2026-11-06 (SPLIT exportFormats): practical PDF, Word and CSV are core and never
+    /// depend on the "More export formats" switch; the switch adds the specialist interchange formats.
+    public static let core: [LedgerExportFormat] = [.csv, .docx, .pdf]
+
+    /// The formats offered, given whether "More export formats" is on.
+    public static func offered(specialistOn: Bool) -> [LedgerExportFormat] {
+        specialistOn ? allCases : allCases.filter { core.contains($0) }
+    }
 }
 
 public nonisolated struct LedgerExportPreflight: Sendable {

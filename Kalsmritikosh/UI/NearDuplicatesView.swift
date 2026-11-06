@@ -42,9 +42,10 @@ extension AppState {
         return groups
     }
 
-    /// Group keys for the corroboration meter: "nd:<group>" for objects in a near-duplicate group.
+    /// Group keys for source counts: "nd:<group>" for objects in a near-duplicate group. Read whatever the
+    /// switch says (2026-11-06, SPLIT): stored groups only ever make the count more conservative.
     func nearDuplicateKeys(for ids: Set<UUID>) async -> [UUID: String] {
-        guard ProductModuleFlags.isEnabled(.nearDuplicates), let database, !ids.isEmpty else { return [:] }
+        guard let database, !ids.isEmpty else { return [:] }
         let marks = ids.map { _ in "?" }.joined(separator: ",")
         let rows = (try? await database.query(
             "SELECT object_id, group_id FROM near_duplicate_members WHERE object_id IN (\(marks));",
@@ -66,7 +67,7 @@ struct NearDuplicatesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Near-duplicates").font(.title3.bold())
-            Text("Drafts, forwards and re-saved copies, linked as versions of one another. Nothing is merged or deleted; the corroboration meter counts each group as one source.")
+            Text("Drafts, forwards and re-saved copies, linked as versions of one another. Nothing is merged or deleted; source counts count each group as one document.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Text("Similarity at least \(Int(threshold * 100))%").font(.caption)

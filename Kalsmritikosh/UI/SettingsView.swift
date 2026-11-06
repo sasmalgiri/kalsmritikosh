@@ -111,6 +111,9 @@ public struct SettingsView: View {
     // Collapsed every time Settings opens (user evaluation 2026-11-02, M4: a remembered expansion put
     // "RELEASE READY: NO" and "Wipe & re-ingest everything" in front of a first-time user).
     @State private var showAdvanced = false
+    /// 2026-11-06 scope: the engine (KnowledgeModule) switchboard is for troubleshooting, collapsed by default.
+    @State private var showEngineComponents = false
+    @State private var showRetiredStudio = false
     /// Collapses the many individual diagnostic tools so only the single
     /// "release readiness" check is prominent. Off by default.
     @AppStorage("kalsmritikosh.settings.showMoreDiagnostics") private var showMoreDiagnostics = false
@@ -538,16 +541,18 @@ public struct SettingsView: View {
                     .textSelection(.enabled)
             }
 
-            // I-7 — accuracy on your own archive (module "Accuracy on your archive").
+            // I-7 — the archive self-test, a diagnostic (owner decision 2026-11-06: INTERNAL, not an accuracy claim).
+            Divider().padding(.vertical, 4)
+            moduleToggle(.archiveSelfScore)
             if ProductModuleFlags.isEnabled(.archiveSelfScore) {
                 Divider().padding(.vertical, 4)
-                Text("Measure accuracy — asks up to 20 questions whose answers your ledger already proves, plus 3 that have no answer, and scores the results. Answers then show how often answers at their confidence were right on your archive. Uses the on-device model, so it takes a few minutes.")
+                Text("Archive self-test (troubleshooting) — asks up to 20 questions whose answers your ledger already states, plus 3 that have no answer, and counts the results. The questions come from the same archive, so this is a consistency check, not a measure of real-world accuracy; nothing is shown with answers. Uses the on-device model, so it takes a few minutes.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
                     Task { await runSelfScore() }
                 } label: {
-                    Label(selfScoreRunning ? "Measuring…" : "Measure accuracy on my archive",
+                    Label(selfScoreRunning ? "Running…" : "Run the archive self-test",
                           systemImage: selfScoreRunning ? "hourglass" : "target")
                 }
                 .disabled(selfScoreRunning)
@@ -1529,36 +1534,48 @@ public struct SettingsView: View {
             }
             }
             Divider()
-            Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(groups.keys.sorted(), id: \.self) { groupName in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
-                        let reason = KnowledgeModuleFlags.disabledReason(module)
-                        Toggle(isOn: Binding(
-                            get: { KnowledgeModuleFlags.isEnabled(module) },
-                            set: {
-                                KnowledgeModuleFlags.setEnabled(module, $0)
-                                moduleFlagsVersion &+= 1
-                            }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(module.title)
-                                Text(module.detail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let reason {
-                                    Label(reason, systemImage: "lock.fill")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.orange)
+            DisclosureGroup(isExpanded: $showEngineComponents) {
+                VStack(alignment: .leading, spacing: 16) {
+                Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(groups.keys.sorted(), id: \.self) { groupName in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                            let reason = KnowledgeModuleFlags.disabledReason(module)
+                            Toggle(isOn: Binding(
+                                get: { KnowledgeModuleFlags.isEnabled(module) },
+                                set: {
+                                    KnowledgeModuleFlags.setEnabled(module, $0)
+                                    moduleFlagsVersion &+= 1
+                                }
+                            )) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(module.title)
+                                    Text(module.detail)
+                                        .font(.caption).foregroundStyle(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
+                                    if let reason {
+                                        Label(reason, systemImage: "lock.fill")
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(.orange)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
                                 }
                             }
+                            .disabled(reason != nil)
                         }
-                        .disabled(reason != nil)
                     }
+                }
+                }
+                .padding(.top, 6)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show engine components").font(.subheadline.weight(.semibold))
+                    Text("For troubleshooting with support. The app does not need you to change these to run a case; coverage, citation checks and other safeguards stay enforced whatever is set here.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Divider()
@@ -1603,98 +1620,67 @@ public struct SettingsView: View {
         }
     }
 
-    /// W0-M — product modules from the beat-DEVONthink plan. Built modules get
-    /// a switch; the rest are counted so the list stays short.
+    /// W0-M — product modules as a small capability catalog (owner decision 2026-11-06, scope §9.6):
+    /// the core workflow first, then each optional family with the investigative task it supports,
+    /// then retired features (kept so earlier work stays reachable). Diagnostics live under Advanced;
+    /// deferred modules (team review) are not listed.
     @ViewBuilder
     private var productModulesSection: some View {
         let _ = moduleFlagsVersion
         let built = ProductModule.allCases.filter(\.implemented)
-        // Companion positioning: what fills DEVONthink's gaps first; what DEVONthink already does
-        // is listed separately and stays off until switched on.
-        let groups = Dictionary(grouping: built.filter { !$0.alsoInDevonthink }, by: \.group)
-        let overlap = built.filter(\.alsoInDevonthink).sorted { $0.title < $1.title }
+        let families: [CapabilityFamily] = [.core, .professional, .analysis, .media, .connections, .ai, .presentation]
         VStack(alignment: .leading, spacing: 10) {
             Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Text("The core workflow — bring records in, search them exactly, review, track what is open and export a cited report — works with every optional tool off. Turn on a tool only when your case needs it; turning one off hides it and keeps everything it made.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Toggle(isOn: Binding(get: { ProductModuleFlags.showPreviewFeatures },
                                  set: { ProductModuleFlags.showPreviewFeatures = $0; moduleFlagsVersion &+= 1 })) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show preview features")
-                    Text("Features that are built but not yet verified on real data or hardware (team review, places, iPhone/iPad snapshot). Use them knowing they may change.")
+                    Text("Features that are built but not yet verified on real data or hardware (places, iPhone/iPad snapshot). Use them knowing they may change.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            ForEach(groups.keys.sorted(), id: \.self) { groupName in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(groupName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
-                        let reason = ProductModuleFlags.disabledReason(module)
-                        Toggle(isOn: Binding(
-                            get: { ProductModuleFlags.isEnabled(module) },
-                            set: {
-                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
-                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
-                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+            ForEach(families, id: \.self) { family in
+                let members = built.filter { $0.family == family }.sorted { $0.title < $1.title }
+                if !members.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(family.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(family.task).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if family == .connections {
+                            Button("Use on its own: turn on the organising tools") {
+                                ModulePreset.applyStandalone(); moduleFlagsVersion &+= 1
                             }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
-                                Text(module.detail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text("Off: \(module.spec.whenOff)")
-                                    .font(.caption2).foregroundStyle(.tertiary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let reason {
-                                    Label(reason, systemImage: "lock.fill")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.orange)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
+                            .controlSize(.small)
+                            .help("For using Investigations Made Easy without DEVONthink: switches on tags, highlights, rules, capture and the other organising tools. Spotlight and folder sync stay as they are; you can turn any of them off again.")
                         }
-                        .disabled(reason != nil)
+                        ForEach(members) { module in moduleToggle(module) }
                     }
                 }
             }
-            if !overlap.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Also in DEVONthink — off until you turn them on").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text("Investigations Made Easy works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
-                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Button("Use on its own: turn all of these on") {
-                        ModulePreset.applyStandalone(); moduleFlagsVersion &+= 1
-                        if ProductModuleFlags.isEnabled(.spotlightIndex) { Task { await appState.syncSpotlight() } }
-                    }
-                    .controlSize(.small)
-                    .help("For using Investigations Made Easy without DEVONthink. Switches on every feature in this list; nothing else changes, and you can turn any of them off again.")
-                    ForEach(overlap) { module in
-                        let reason = ProductModuleFlags.disabledReason(module)
-                        Toggle(isOn: Binding(
-                            get: { ProductModuleFlags.isEnabled(module) },
-                            set: {
-                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
-                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
-                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+            let retired = built.filter { $0.family == .retired }.sorted { $0.title < $1.title }
+            if !retired.isEmpty {
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(CapabilityFamily.retired.task).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(retired) { module in moduleToggle(module) }
+                        if ProductModuleFlags.isEnabled(.contentCreatorPersona) {
+                            Button("Open saved publish packages") {
+                                NotificationCenter.default.post(name: .kalsmritikoshPaletteEntry, object: "go.\(Destination.ccStudio.rawValue)")
                             }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
-                                Text(module.detail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text("Off: \(module.spec.whenOff)")
-                                    .font(.caption2).foregroundStyle(.tertiary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let reason {
-                                    Label(reason, systemImage: "lock.fill")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.orange)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
+                            .controlSize(.small)
                         }
-                        .disabled(reason != nil)
+                        if ProductModuleFlags.isEnabled(.studioOutputs) {
+                            Button("Open briefings, FAQs and mind maps") { showRetiredStudio = true }
+                                .controlSize(.small)
+                                .sheet(isPresented: $showRetiredStudio) { StudioOutputsView().environment(appState) }
+                        }
                     }
+                    .padding(.top, 4)
+                } label: {
+                    Text(CapabilityFamily.retired.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
             }
             let coming = ProductModule.allCases.count - built.count
@@ -1703,6 +1689,37 @@ public struct SettingsView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// One product-module switch, with what it does, what stays when it is off, and why it is greyed.
+    @ViewBuilder
+    private func moduleToggle(_ module: ProductModule) -> some View {
+        let reason = ProductModuleFlags.disabledReason(module)
+        Toggle(isOn: Binding(
+            get: { ProductModuleFlags.isEnabled(module) },
+            set: {
+                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
+                // W3-7 — adding or removing Spotlight entries follows the switch at once.
+                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+            }
+        )) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
+                Text(module.detail)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Off: \(module.spec.whenOff)")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let reason {
+                    Label(reason, systemImage: "lock.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .disabled(reason != nil)
     }
 
     @ViewBuilder

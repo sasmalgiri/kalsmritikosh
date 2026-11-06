@@ -1,0 +1,1347 @@
+{
+  "concerns" : {
+    "core" : "disposition + coreRetained",
+    "diagnosticOrPreview" : "preview flag and the INTERNAL disposition",
+    "optionalVisibility" : "ProductModuleFlags (module switch)",
+    "purchaseEntitlement" : "entitlement (PurchaseGate decides access; no switch is a purchase)"
+  },
+  "generatedFrom" : "ProductModule (Kalsmritikosh/App/Modules/ProductModule.swift). Do not hand-edit.",
+  "invariants" : [
+    "Nothing goes online without the user seeing what will be sent (O-5).",
+    "Every online send is recorded with a receipt (O-5).",
+    "Online answers pass the same claim–evidence check as private ones; cloud text is never primary evidence (O-6).",
+    "If Online fails the app says so and offers a private answer; it never switches mode on its own (O-7).",
+    "A new user starts in Private mode (owner decision 2026-10-15).",
+    "The main app keeps no network permission; only the network helper has it (O-2, W0-C).",
+    "Legal holds can be created and released with every module off, and a hold always blocks forgetting and erasing.",
+    "Every case export re-checks its citations, privilege and access, whatever is switched on.",
+    "Backup, restore and erasure (Settings ▸ Your data) are never behind a module or a purchase.",
+    "What each search and case could and could not read is always recorded; a switch only changes how much is shown.",
+    "No case document goes to an AI without that case's permission, whatever module is on.",
+    "A persona preset or pack only switches modules on — never a safeguard off — and never switches on Online, Spotlight, sync or watched questions."
+  ],
+  "modules" : [
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : true,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "advancedSearchSyntax",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Advanced search syntax",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "AdvancedSearchCompiler"
+      ],
+      "whenOff" : "Plain keyword search, as before."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : true,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "searchCoverageBadge",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Search coverage badge",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Results only; coverage is still recorded."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "signedReceipts",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Signed import and export receipts",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Unsigned receipts as before."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : true,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "userTags",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-4",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Tags",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "TagsRepository"
+      ],
+      "whenOff" : "Tags are hidden but kept; turning this back on restores them."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "deepLinks",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Links to passages (kalsmritikosh://)",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Links are not offered; existing links show a 'links are off' message."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "shortcutsActions",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-6",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Shortcuts actions",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "P-4 AppleScript dictionary"
+      ],
+      "whenOff" : "Actions refuse with a message to turn them on."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : true,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "commandPalette",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-7",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Command palette",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "PaletteCatalog"
+      ],
+      "whenOff" : "Menus and toolbar only; ⌘K does nothing."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "ledgerRelocation",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-8",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Move the ledger to another disk",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Boot uses the copy on this Mac; a copy on another disk is left in place."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "importQueue",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W1-9",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Import queue",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Imports run in the order added, with progress in the toolbar."
+    },
+    {
+      "coreRetained" : "Export receipts and the re-check of every citation on export.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "professional",
+      "implemented" : true,
+      "key" : "proofBundles",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Proof bundles",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Answers export as before, without a bundle."
+    },
+    {
+      "coreRetained" : "Unanswered questions and the gap list in the case.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "gapMap",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "What is missing",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "GapDetector"
+      ],
+      "whenOff" : "The existing Insights gap list stays; the grouped map and per-answer gaps are hidden."
+    },
+    {
+      "coreRetained" : "Citations, and copies counted once, are always kept.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "corroborationMeter",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Source counts",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "CorroborationMeter",
+        "SourceIndependenceGrouper"
+      ],
+      "whenOff" : "Citations only."
+    },
+    {
+      "coreRetained" : "Contradictions found during the normal search are always shown.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "devilsAdvocate",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-4",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Look for contradicting evidence",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Contradictions are shown only when they are found during the normal search."
+    },
+    {
+      "coreRetained" : "Dates and date filters in search (before:, after:).",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "presentation",
+      "implemented" : true,
+      "key" : "timeTravel",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Filter by document date",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Answers always use all evidence."
+    },
+    {
+      "coreRetained" : "Citations are re-checked on every report export.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "liveFactCheck",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-6",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Fact-check my writing",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "The fact-check tool is hidden."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "INTERNAL",
+      "entitlement" : "none",
+      "family" : "diagnostics",
+      "implemented" : true,
+      "key" : "archiveSelfScore",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-7",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Archive self-test (diagnostic)",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "No self-test runs."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+        "onlineAnswers"
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "ai",
+      "implemented" : true,
+      "key" : "leastDataOnline",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-8",
+      "preview" : false,
+      "requiresOnline" : true,
+      "title" : "Send the least data",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Online answers send the passages the question needs, still previewed and logged; no daily limit."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "statementDrift",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-9",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "How an account changed",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Contradictions between documents only."
+    },
+    {
+      "coreRetained" : "Redacted case reports through the one export route.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+        "userTags"
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "professional",
+      "implemented" : true,
+      "key" : "caseSlices",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-10",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Signed case slices",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Work products export as documents only."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "answerPath",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-11",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "How this answer was found",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "The answer and its citations only."
+    },
+    {
+      "coreRetained" : "People and organisations in the case.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "livingDossiers",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "I-12",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Living dossiers",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Dossiers are built when opened, without the since-last-time strip."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : true,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "annotations",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Highlights and notes",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "W2-1 highlights"
+      ],
+      "whenOff" : "Highlights are hidden but kept."
+    },
+    {
+      "coreRetained" : "Email headers and provenance are kept with every message.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "emailAuthenticity",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Email authenticity checks",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Emails are read as before; no authenticity result."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "specPSTReader",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Outlook PST reader (MS-PST)",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "The current PST reader is used."
+    },
+    {
+      "coreRetained" : "Exact duplicates are recognised; stored version groups still count once in source counts.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "nearDuplicates",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-4",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Near-duplicates",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "NearDuplicateFinder"
+      ],
+      "whenOff" : "Exact duplicates only."
+    },
+    {
+      "coreRetained" : "Legal holds: create, release, and block forgetting and erasing (Tools ▸ Legal holds).",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "professional",
+      "implemented" : true,
+      "key" : "legalProduction",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Production sets",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "ProductionBuilder"
+      ],
+      "whenOff" : "No Bates numbering or load files. Legal holds are part of the core (Tools ▸ Legal holds): they can be created and released, and they block forgetting and erasing, with this switched off."
+    },
+    {
+      "coreRetained" : "Case reports in PDF, Word and CSV, and timeline/entity/source tables as CSV, Word or PDF.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "professional",
+      "implemented" : true,
+      "key" : "exportFormats",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-6",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "More export formats",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "LedgerExportRenderer"
+      ],
+      "whenOff" : "Core exports stay: case reports in PDF, Word and CSV from the case file, and the timeline, entities and sources as CSV, Word or PDF from Tools ▸ Export."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "appLock",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-7",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Lock with Touch ID",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "AppLock"
+      ],
+      "whenOff" : "No app lock; the Mac's own login protects the data."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "byteRangeItems",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W2-8",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Very large items",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "W2-8 very large items"
+      ],
+      "whenOff" : "Very large items are recorded as too large."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "devonthinkImport",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W3-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Import a DEVONthink database",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "DevonthinkPackage"
+      ],
+      "whenOff" : "DEVONthink databases are not recognised."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "sendToDevonthink",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W3-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Send to DEVONthink",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Not offered."
+    },
+    {
+      "coreRetained" : "Chronology and people lists in the case file.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "timelineGraph",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W3-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Timeline and relationship views",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Lists only."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "proactiveAlerts",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W3-4",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Alerts",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "No alerts; contradictions still appear in answers."
+    },
+    {
+      "coreRetained" : "Saved searches (Tools ▸ Documents ▸ Saved searches).",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "smartCollections",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W3-5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Automatic rules",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Saved searches stay part of the core (Tools ▸ Documents ▸ Saved searches); rules are kept but do not run."
+    },
+    {
+      "coreRetained" : "“Save to Investigations Made Easy” in the Share and Services menus, unless switched off by you.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "captureExtensions",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W3-6",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Import from iPhone or iPad",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "ShareInbox"
+      ],
+      "whenOff" : "“Save to Investigations Made Easy” in the Share and Services menus stays part of the core unless you switched this off yourself; importing from an iPhone or iPad is off."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "spotlightIndex",
+      "neverSwitchedOnAutomatically" : true,
+      "planID" : "W3-7",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Show in Spotlight",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Nothing is given to Spotlight, and any earlier entries are removed."
+    },
+    {
+      "coreRetained" : "The ordinary chronology.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "issueChronology",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Issues and chronology",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Chronology without issues."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "communicationAnalysis",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Who talks to whom",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Threads only."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "watchlists",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Watchlists",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Lists are kept but not matched."
+    },
+    {
+      "coreRetained" : "Privileged documents are withheld from every export; manual review states in the case.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "professional",
+      "implemented" : true,
+      "key" : "reviewCoding",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-4",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Review coding",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "ReviewCodesRepository"
+      ],
+      "whenOff" : "No coding."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "RETIRE",
+      "entitlement" : "none",
+      "family" : "retired",
+      "implemented" : true,
+      "key" : "studioOutputs",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Briefings, FAQs and mind maps (retired)",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Not offered. Files made earlier are yours and are not touched."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "menuBarAsk",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-6",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Ask from anywhere",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Ask from the main window only."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "media",
+      "implemented" : true,
+      "key" : "imageIntelligence",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-7",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Similar images",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "N-7 image grouping"
+      ],
+      "whenOff" : "Images are searchable by their text only."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "media",
+      "implemented" : true,
+      "key" : "locationMap",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-8",
+      "preview" : true,
+      "requiresOnline" : false,
+      "title" : "Places",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Not shown."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "notesImport",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-9",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Import notes apps",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "N-9 notes formats"
+      ],
+      "whenOff" : "These folders import as plain files."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+        "onlineAnswers"
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "ai",
+      "implemented" : true,
+      "key" : "onlinePIIMasking",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-10",
+      "preview" : false,
+      "requiresOnline" : true,
+      "title" : "Mask personal details before sending",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "PIIMasker"
+      ],
+      "whenOff" : "Passages are sent unmasked, still previewed first."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "questionMonitors",
+      "neverSwitchedOnAutomatically" : true,
+      "planID" : "N-11",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Watch a question",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Pinned questions are kept but not re-asked."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "customEntityTypes",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-12",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Your own record types",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Types are kept but not filled."
+    },
+    {
+      "coreRetained" : "Contradictions, gaps and watchlist matches stay visible where they are found.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+        "reviewCoding"
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "riskScore",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "N-13",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Review priority (documents)",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "ReviewPriority"
+      ],
+      "whenOff" : "Documents are listed in the order they were added."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "ocrUpgrade",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W4-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Improved text recognition",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "The current text recognition."
+    },
+    {
+      "coreRetained" : "Common Office, PDF, email, image (OCR) and archive formats.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "media",
+      "implemented" : true,
+      "key" : "extraParsers",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W4-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "More file types",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "W4-2 Keynote"
+      ],
+      "whenOff" : "These files are kept but not read."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "analysis",
+      "implemented" : true,
+      "key" : "mailRecovery",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W4-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Deleted email recovery",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "Only live mail is read."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "DEFER",
+      "entitlement" : "none",
+      "family" : "notInThisVersion",
+      "implemented" : true,
+      "key" : "teamReview",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "W4-4",
+      "preview" : true,
+      "requiresOnline" : false,
+      "title" : "Team review over a shared folder",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "W4-4 team review"
+      ],
+      "whenOff" : "Single-user cases."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "ai-plan-or-own-key",
+      "family" : "ai",
+      "implemented" : true,
+      "key" : "onlineAnswers",
+      "neverSwitchedOnAutomatically" : true,
+      "planID" : "O-4",
+      "preview" : false,
+      "requiresOnline" : true,
+      "title" : "Answers with your own cloud AI key",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "All answers are made on your Mac."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : true,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "CORE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "writtenNotes",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "P-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Your own notes",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "P-2 Your own notes"
+      ],
+      "whenOff" : "Notes are hidden but kept, with their versions; what the archive learned from them stays."
+    },
+    {
+      "coreRetained" : "Case scope and tags organise case evidence.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "MERGE",
+      "entitlement" : "none",
+      "family" : "core",
+      "implemented" : true,
+      "key" : "userGroups",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "X-2",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Your own folders",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "X-2 Your own folders"
+      ],
+      "whenOff" : "Groups are hidden but kept, with their members."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+        "userGroups"
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "filingSuggestions",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "X-1",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "See Also and filing suggestions",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "X-1 See Also"
+      ],
+      "whenOff" : "No suggestions; groups and tags work as before."
+    },
+    {
+      "coreRetained" : "Markdown notes with versions, and highlights on any passage.",
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "SPLIT",
+      "entitlement" : "none",
+      "family" : "presentation",
+      "implemented" : true,
+      "key" : "richDocuments",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "X-3",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Rich text notes and PDF marks",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "X-3 Rich text notes"
+      ],
+      "whenOff" : "Rich notes and PDF marks are hidden but kept."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "OPTIONAL",
+      "entitlement" : "none",
+      "family" : "connections",
+      "implemented" : true,
+      "key" : "folderSync",
+      "neverSwitchedOnAutomatically" : true,
+      "planID" : "X-5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Sync through a folder",
+      "verification" : "unit-tested",
+      "verificationEvidence" : [
+        "X-5 Sync"
+      ],
+      "whenOff" : "Nothing is written to or read from the sync folder; everything stays on this Mac."
+    },
+    {
+      "coreRetained" : null,
+      "defaultEnabled" : false,
+      "dependsOn" : [
+
+      ],
+      "disposition" : "RETIRE",
+      "entitlement" : "none",
+      "family" : "retired",
+      "implemented" : true,
+      "key" : "contentCreatorPersona",
+      "neverSwitchedOnAutomatically" : false,
+      "planID" : "IF-A5",
+      "preview" : false,
+      "requiresOnline" : false,
+      "title" : "Content creator persona (retired)",
+      "verification" : "built",
+      "verificationEvidence" : [
+
+      ],
+      "whenOff" : "The persona and its studio are hidden; saved publish packages are kept and return when this is turned on."
+    }
+  ],
+  "scopeDecision" : "docs/IME_Core_and_Add_On_Scope_2026-11-06.md"
+}

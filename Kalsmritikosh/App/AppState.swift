@@ -4368,7 +4368,7 @@ public final class AppState {
             return 0
         }
         if held > 0 {
-            legalHoldBlock = "Not erased: \(held) document\(held == 1 ? " is" : "s are") under a legal hold. Release the hold first (Tools → Legal production)."
+            legalHoldBlock = "Not erased: \(held) document\(held == 1 ? " is" : "s are") under a legal hold. Release the hold first (Tools → Legal holds)."
             KalsmritikoshLog.app.notice("Erase refused: \(held, privacy: .public) documents under legal hold")
             return 0
         }
@@ -4648,7 +4648,7 @@ public final class AppState {
                 // W2-5 — a legal hold blocks forgetting held documents: nothing is removed.
                 if let db = database,
                    let held = try? await LegalProductionRepository(database: db).heldCount(underRoot: url), held > 0 {
-                    legalHoldBlock = "Not forgotten: \(held) document\(held == 1 ? "" : "s") from this folder \(held == 1 ? "is" : "are") under a legal hold. Release the hold first (Tools → Legal production)."
+                    legalHoldBlock = "Not forgotten: \(held) document\(held == 1 ? "" : "s") from this folder \(held == 1 ? "is" : "are") under a legal hold. Release the hold first (Tools → Legal holds)."
                     KalsmritikoshLog.app.notice("Forget refused: \(held, privacy: .public) held documents under root")
                     return
                 }
