@@ -167,8 +167,27 @@ public nonisolated struct HypothesisDecision: Sendable, Equatable {
 public nonisolated enum EvidenceRequestStatus: String, Codable, Sendable, Equatable, CaseIterable {
     case open
     case confirmed
+    /// v170 — recorded decisions about the custodian's response (P1-B): part of what was asked arrived,
+    /// the custodian refused, or the material cannot be obtained. Each is a person's decision.
+    case partial
+    case refused
+    case unobtainable
     case fulfilled
     case cancelled
+
+    public var label: String {
+        switch self {
+        case .open: return "Open"
+        case .confirmed: return "To pursue"
+        case .partial: return "Partly provided"
+        case .refused: return "Refused"
+        case .unobtainable: return "Cannot be obtained"
+        case .fulfilled: return "Fulfilled"
+        case .cancelled: return "Cancelled"
+        }
+    }
+    /// Still being pursued (counts as an open request in the case overview).
+    public var isOutstanding: Bool { [.open, .confirmed, .partial].contains(self) }
 }
 
 public nonisolated struct EvidenceRequest: Identifiable, Sendable, Equatable {
@@ -181,12 +200,25 @@ public nonisolated struct EvidenceRequest: Identifiable, Sendable, Equatable {
     public let actor: String
     public let createdAt: Date
     public let updatedAt: Date
+    /// v170 (P1-B) — what the request is for and from whom; nil on a request made before v170.
+    public let allegationID: UUID?
+    public let question: String?
+    public let custodian: String?
+    public let periodStart: Date?
+    public let periodEnd: Date?
+    public let dueAt: Date?
 
     public nonisolated init(id: UUID, caseID: UUID, hypothesisID: UUID?, description: String, status: EvidenceRequestStatus,
-                            revision: Int, actor: String, createdAt: Date, updatedAt: Date) {
+                            revision: Int, actor: String, createdAt: Date, updatedAt: Date,
+                            allegationID: UUID? = nil, question: String? = nil, custodian: String? = nil,
+                            periodStart: Date? = nil, periodEnd: Date? = nil, dueAt: Date? = nil) {
         self.id = id; self.caseID = caseID; self.hypothesisID = hypothesisID; self.description = description
         self.status = status; self.revision = revision; self.actor = actor; self.createdAt = createdAt; self.updatedAt = updatedAt
+        self.allegationID = allegationID; self.question = question; self.custodian = custodian
+        self.periodStart = periodStart; self.periodEnd = periodEnd; self.dueAt = dueAt
     }
+
+    public nonisolated func isOverdue(at now: Date) -> Bool { status.isOutstanding && (dueAt.map { $0 < now } ?? false) }
 }
 
 // MARK: - INV-05 5W1H worksheet
@@ -240,6 +272,14 @@ public nonisolated enum InvestigationHypothesisError: Error, Sendable, Equatable
     case evidenceOutOfScope(sourceVersionID: UUID)   // a citation outside the case's authorized scope
     case evidenceObjectMismatch(knowledgeObjectID: UUID, sourceVersionID: UUID)  // KO not in that version
     case requestNotFound(UUID)
+    /// v170 (P1-B) — follow-through rules.
+    case requestItemNotFound(UUID)
+    case receiptNotFound(UUID)
+    case alreadyReceived(sourceVersionID: UUID)        // that version is already linked to this request
+    case requestItemsOutstanding([String])             // fulfilled while items are missing needs a note saying why
+    case decisionNoteRequired(EvidenceRequestStatus)   // refused / unobtainable / partial-without-receipts need the reason
+    case requestClosed(UUID)                           // a cancelled request takes no new receipts
+    case allegationNotFound(UUID)                      // a linked allegation must be one of this case's
     case cellAnswerRequiresEvidence(WorksheetDimension)   // answering a 5W1H cell needs a citation
     case blankStatement
     case blankActor

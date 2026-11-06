@@ -354,6 +354,14 @@ public final class PersonaJobsModel {
     static let lastPersonaKey = "kalsmritikosh.jobs.lastPersona"
     static let lastMatterKey = "kalsmritikosh.jobs.lastMatter"
 
+    /// P1-A — "Find a job": every word of the query appears in the job's title, description or kind.
+    public nonisolated static func jobMatches(_ job: PersonaJob, query: String) -> Bool {
+        let words = query.lowercased().split { $0 == " " }.map(String.init)
+        guard !words.isEmpty else { return true }
+        let hay = [job.title, job.detail, job.kind.rawValue].joined(separator: " ").lowercased()
+        return words.allSatisfy { hay.contains($0) }
+    }
+
     public func select(persona id: ApplicationDefinitionID) async {
         selectedPersona = id
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastPersonaKey)
@@ -487,6 +495,12 @@ public struct PersonaJobsView: View {
     /// SURFACE STYLE switch (Settings): classic fixed Analyze launchers vs the
     /// newer catalog-driven ones. Reactive via the shared FeatureFlags key.
     @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
+    /// P1-A — progressive disclosure: the jobs of the next step are shown; every other phase is one
+    /// click away, and "Find a job" searches the whole catalogue (every persona job stays reachable).
+    @State private var jobQuery = ""
+    @State private var expandedPhases: Set<Int> = []
+    @AppStorage("kalsmritikosh.jobs.showAll") private var showAllJobs = false
+    @FocusState private var jobSearchFocused: Bool
 
     public init() {}
 
@@ -907,14 +921,34 @@ public struct PersonaJobsView: View {
     }
 
     private func jobGrid(_ model: PersonaJobsModel) -> some View {
-        let phased: [(JobPhase, [PersonaJob])] = JobPhase.allCases.compactMap { phase in
+        let allPhased: [(JobPhase, [PersonaJob])] = JobPhase.allCases.compactMap { phase in
             let inPhase = model.runnableJobs.filter { JobPhase.phase(of: $0.kind) == phase }
             return inPhase.isEmpty ? nil : (phase, inPhase)
         }
         // The journey pointer: the first phase with unresolved work (completed or not-applicable
         // resolve a job; a launch, a blocked or an unreviewed result does not).
-        let nextPhase = phased.first { !$0.1.allSatisfy { model.progress(of: $0).state.isResolved } }?.0
+        let nextPhase = allPhased.first { !$0.1.allSatisfy { model.progress(of: $0).state.isResolved } }?.0
+        let query = jobQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phased = query.isEmpty ? allPhased : allPhased.compactMap { entry -> (JobPhase, [PersonaJob])? in
+            let hits = entry.1.filter { PersonaJobsModel.jobMatches($0, query: query) }
+            return hits.isEmpty ? nil : (entry.0, hits)
+        }
         return VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                TextField("Find a job", text: $jobQuery)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+                    .focused($jobSearchFocused)
+                    .accessibilityIdentifier("jobs.find")
+                Toggle("Show all jobs", isOn: $showAllJobs).toggleStyle(.checkbox)
+                Button("Find a job") { jobSearchFocused = true }
+                    .keyboardShortcut("f", modifiers: [.command, .option])
+                    .frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
+                Spacer()
+            }
+            Text(query.isEmpty
+                 ? (showAllJobs ? "Showing all \(model.runnableJobs.count) jobs." : "Showing the jobs for the next step; every other phase is one click away. ⌥⌘F finds any job by name.")
+                 : "\(phased.reduce(0) { $0 + $1.1.count }) of \(model.runnableJobs.count) jobs match “\(query)”.")
+                .font(.caption).foregroundStyle(.secondary)
             ForEach(Array(phased.enumerated()), id: \.element.0.id) { index, entry in
                 let (phase, phaseJobs) = entry
                 let done = phaseJobs.filter { model.progress(of: $0).state.isResolved }.count
@@ -967,7 +1001,19 @@ public struct PersonaJobsView: View {
                         Text("\(done)/\(phaseJobs.count) resolved")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    jobCards(model, jobs: phaseJobs)
+                    if !query.isEmpty || showAllJobs || phase == nextPhase || (nextPhase == nil && index == 0)
+                        || expandedPhases.contains(phase.rawValue) {
+                        jobCards(model, jobs: phaseJobs)
+                    } else {
+                        Button {
+                            expandedPhases.insert(phase.rawValue)
+                        } label: {
+                            Label("Show the \(phaseJobs.count) job\(phaseJobs.count == 1 ? "" : "s") in \(phase.label)", systemImage: "chevron.down.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("jobs.phase.show")
+                    }
                 }
                 .padding(12)
                 .background(isNext ? Theme.brand.opacity(0.05) : Color.clear,

@@ -108,12 +108,79 @@ public actor InvestigationAnalysisService {
         try await analysis.setRequestStatus(requestID: requestID, expectedRevision: expectedRevision, to: .confirmed, actor: actor, at: date)
     }
     public func fulfillRequest(requestID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> EvidenceRequest {
-        try await analysis.setRequestStatus(requestID: requestID, expectedRevision: expectedRevision, to: .fulfilled, actor: actor, at: date)
+        try await decideRequest(requestID: requestID, expectedRevision: expectedRevision, status: .fulfilled, note: nil, actor: actor, at: date)
     }
     public func cancelRequest(requestID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> EvidenceRequest {
         try await analysis.setRequestStatus(requestID: requestID, expectedRevision: expectedRevision, to: .cancelled, actor: actor, at: date)
     }
     public func requests(caseID: UUID) async throws -> [EvidenceRequest] { try await analysis.requests(caseID: caseID) }
+
+    // MARK: - P1-B: requests that can be followed through (v170)
+
+    /// A request with its linked allegation or question, custodian, period, due date and expected items.
+    /// A linked allegation must belong to this case (checked in the write's savepoint).
+    public func createEvidenceRequest(caseID: UUID, details: EvidenceRequestDetails, actor: String, at date: Date) async throws -> EvidenceRequest {
+        if let hypothesisID = details.hypothesisID {
+            guard let h = try await analysis.fetchHypothesis(hypothesisID), h.caseID == caseID else {
+                throw InvestigationHypothesisError.hypothesisNotFound(hypothesisID)
+            }
+        }
+        return try await analysis.createRequest(caseID: caseID, details: details, actor: actor, at: date)
+    }
+
+    /// The person's decision about a request. Fulfilled while expected items are still missing needs a
+    /// note saying why it is accepted as complete; refused and "cannot be obtained" need the reason; partial
+    /// needs either something received or a note. Arrivals never set any of these.
+    public func decideRequest(requestID: UUID, expectedRevision: Int, status: EvidenceRequestStatus, note: String?,
+                              actor: String, at date: Date) async throws -> EvidenceRequest {
+        let why = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let request = try await analysis.request(id: requestID) else { throw InvestigationHypothesisError.requestNotFound(requestID) }
+        _ = try await requireOpenCaseScope(request.caseID)
+        let progress = EvidenceRequestProgress.compute(items: try await analysis.items(requestID: requestID),
+                                                       receipts: try await analysis.receipts(requestID: requestID))
+        switch status {
+        case .fulfilled:
+            if !progress.outstanding.isEmpty, why.isEmpty {
+                throw InvestigationHypothesisError.requestItemsOutstanding(progress.outstanding.map(\.label))
+            }
+        case .refused, .unobtainable:
+            if why.isEmpty { throw InvestigationHypothesisError.decisionNoteRequired(status) }
+        case .partial:
+            if progress.received.isEmpty, progress.unassigned == 0, why.isEmpty { throw InvestigationHypothesisError.decisionNoteRequired(status) }
+        case .open, .confirmed, .cancelled:
+            break
+        }
+        return try await analysis.setRequestStatus(requestID: requestID, expectedRevision: expectedRevision, to: status,
+                                                   note: why.isEmpty ? nil : why, actor: actor, at: date)
+    }
+
+    /// Record that the request was sent, what the custodian replied, or a note (the app sends nothing).
+    public func recordRequestEvent(requestID: UUID, kind: EvidenceRequestEventKind, detail: String?, actor: String, at date: Date) async throws {
+        try await analysis.recordRequestEvent(requestID: requestID, kind: kind, detail: detail, actor: actor, at: date)
+    }
+
+    /// Link a document received for the request. The version must be inside the case's authorized scope
+    /// and the object (when given) must belong to it. The request's status is not changed.
+    @discardableResult
+    public func linkReceivedSource(requestID: UUID, itemID: UUID?, sourceVersionID: UUID, knowledgeObjectID: UUID?,
+                                   origin: EvidenceReceiptOrigin = .manual, note: String? = nil,
+                                   actor: String, at date: Date) async throws -> EvidenceRequestReceipt {
+        guard let request = try await analysis.request(id: requestID) else { throw InvestigationHypothesisError.requestNotFound(requestID) }
+        let scope = try await requireOpenCaseScope(request.caseID)
+        if let knowledgeObjectID {
+            try await validateCitation(sourceVersionID: sourceVersionID, knowledgeObjectID: knowledgeObjectID, scope: scope)
+        } else if !scope.authorizedSourceVersionIDs.contains(sourceVersionID) {
+            throw InvestigationHypothesisError.evidenceOutOfScope(sourceVersionID: sourceVersionID)
+        }
+        return try await analysis.linkReceipt(requestID: requestID, itemID: itemID, sourceVersionID: sourceVersionID,
+                                              knowledgeObjectID: knowledgeObjectID, origin: origin, note: note, actor: actor, at: date)
+    }
+
+    public func withdrawReceivedSource(receiptID: UUID, reason: String, actor: String, at date: Date) async throws {
+        try await analysis.withdrawReceipt(receiptID: receiptID, reason: reason, actor: actor, at: date)
+    }
+
+    public func requestFiles(caseID: UUID) async throws -> [EvidenceRequestFile] { try await analysis.requestFiles(caseID: caseID) }
 
     // MARK: - INV-05 5W1H worksheet
 

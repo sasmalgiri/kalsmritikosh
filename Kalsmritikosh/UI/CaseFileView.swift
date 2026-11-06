@@ -44,9 +44,56 @@ final class CaseFileModel {
     var openableCases: Set<UUID> = []
     var openCase: ((UUID) -> Void)?
 
-    init(caseID: UUID, workspaceID: UUID) { self.caseID = caseID; self.workspaceID = workspaceID }
+    /// P1-A — where the person was in this case (tab, selection, filter, last source): a UI preference
+    /// per case id, restored when the case or the app is reopened. Evidence and decisions stay in the ledger.
+    let workspace: CaseWorkspaceHolder
+    /// P0-C — the contradiction review list in the case screen.
+    let review: CaseContradictionReviewModel
+    /// P1-B — the case's evidence requests with their items, receipts and history.
+    var requests: [EvidenceRequestFile] = []
+    /// Job-result rows not yet accepted or rejected (the review queue outside contradictions).
+    var resultRowsUndecided = 0
+    /// How many documents the case's stored AI permission covers (nil: none stored).
+    var aiPermittedDocuments: Int?
+
+    init(caseID: UUID, workspaceID: UUID, defaults: UserDefaults = AppDefaults.store) {
+        self.caseID = caseID; self.workspaceID = workspaceID
+        let holder = CaseWorkspaceHolder(caseID: caseID, defaults: defaults)
+        self.workspace = holder
+        self.review = CaseContradictionReviewModel(caseID: caseID, workspace: holder)
+    }
 
     var actor: String { InvestigatorProfile.name }
+
+    /// The case file tab, remembered per case.
+    var tab: CaseFileTab {
+        get { workspace.state.tab.flatMap(CaseFileTab.init(rawValue:)) ?? .overview }
+        set { workspace.state.tab = newValue.rawValue }
+    }
+
+    /// The overview's facts from what is loaded (nil until the case is read).
+    var glance: CaseGlance? {
+        guard let s = snapshot else { return nil }
+        return CaseGlance.compute(s, contradictions: review.items, requests: requests, resultRowsUndecided: resultRowsUndecided,
+                                  aiPermittedDocuments: aiPermittedDocuments, unresolvedReferences: unresolvedRefs.count,
+                                  custodyReadFailed: custodyReadFailed)
+    }
+
+    /// Re-read what the overview counts: requests, undecided result rows, the AI permission.
+    func refreshGlance(_ app: AppState) async {
+        if let analysis = app.investigationAnalysis {
+            do { requests = try await analysis.requestFiles(caseID: caseID) } catch {
+                KalsmritikoshLog.app.error("Case requests read failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        if let db = app.database {
+            do { resultRowsUndecided = CaseGlance.undecidedRows(Array(try await JobResultRepository(database: db).latestByJob(caseID: caseID).values)) } catch {
+                KalsmritikoshLog.app.error("Case results read failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        aiPermittedDocuments = CaseReadPermissionStore.live.permission(caseID: caseID)?.documentCount
+        if !review.loaded, let desk = app.investigationContradictionGap { await review.load(desk: desk, objects: app.objects) }
+    }
 
     func load(_ app: AppState) async {
         guard let svc = app.caseFiles else { error = "The ledger isn't ready yet."; return }
@@ -78,6 +125,7 @@ final class CaseFileModel {
                 named = await app.studioCaseFacts(StudioCaseChoice(id: caseID, workspaceID: workspaceID, title: title), includePrivileged: false)
             }
             await loadDeconfliction(app, refresh: false)
+            await refreshGlance(app)
         } catch {
             report(error)
         }
@@ -243,7 +291,8 @@ enum CaseFileTab: String, CaseIterable, Identifiable {
 public struct CaseFileView: View {
     @Environment(AppState.self) private var appState
     @State private var model: CaseFileModel
-    @State private var tab: CaseFileTab = .overview
+    @State private var returnSource: CitationOpenTarget?
+    @State private var returnPassage: OpenedSource?
     let onBack: () -> Void
 
     /// `openCase` opens another case from this one (N1 deconfliction); `openableCases` are those it can open.
@@ -268,9 +317,18 @@ public struct CaseFileView: View {
                 }
                 Spacer()
                 if model.busy { ProgressView().controlSize(.small) }
+                // P1-A — the source last opened in this case, one click away after a relaunch too.
+                if let last = model.workspace.state.lastSource {
+                    Button { reopen(last) } label: {
+                        Label("Return to the last source" + (last.label.map { " — \($0)" } ?? ""), systemImage: "arrow.uturn.backward.circle")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("case.returnToSource")
+                }
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
-            Picker("Section", selection: $tab) {
+            Picker("Section", selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
                 ForEach(CaseFileTab.allCases) { Label($0.rawValue, systemImage: $0.icon).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -286,7 +344,7 @@ public struct CaseFileView: View {
             if let s = model.snapshot {
                 ScrollView {
                     Group {
-                        switch tab {
+                        switch model.tab {
                         case .overview: CaseOverviewTab(model: model, s: s)
                         case .plan: CasePlanTab(model: model, s: s)
                         case .tasks: CaseTasksTab(model: model, s: s)
@@ -307,6 +365,27 @@ public struct CaseFileView: View {
         .task {
             await model.load(appState)
             try? await appState.caseFiles?.file.logAction(caseID: model.caseID, action: "viewed", detail: nil, actor: model.actor)
+        }
+        .sheet(item: $returnSource) { target in CitationSourceSheet(target: target) { returnSource = nil } }
+        .sheet(item: $returnPassage) { opened in
+            VStack(spacing: 0) {
+                EvidenceViewer(citation: opened.citation)
+                HStack { Spacer(); Button("Close") { returnPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
+            }
+        }
+    }
+
+    private func reopen(_ last: CaseSourcePosition) {
+        Task { @MainActor in
+            do {
+                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: last.objectID) {
+                    returnSource = CitationOpenTarget(url: url, objectID: last.objectID, quote: last.quote)
+                    return
+                }
+            } catch {
+                KalsmritikoshLog.ui.error("Return to source failed: \(error.localizedDescription, privacy: .public)")
+            }
+            returnPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: last.objectID, snippet: last.quote ?? ""))
         }
     }
 }
@@ -373,17 +452,25 @@ struct CaseOverviewTab: View {
 
     var body: some View {
         let closed = s.caseHeader.status == .closed
-        let steps = CaseNextSteps.compute(s, unresolvedReferences: model.unresolvedRefs.count, custodyReadFailed: model.custodyReadFailed)
+        let steps = CaseNextSteps.compute(s, unresolvedReferences: model.unresolvedRefs.count, custodyReadFailed: model.custodyReadFailed,
+                                          evidenceRequests: model.requests, contradictionsAwaiting: model.review.awaitingCount,
+                                          contradictionsReopened: model.review.reopenedCount)
         VStack(alignment: .leading, spacing: 0) {
+            if let g = model.glance { CaseGlanceSection(model: model, glance: g) }
             if !steps.isEmpty {
-                CaseSection(title: "Next steps", subtitle: "From what this case holds now. They suggest; you decide.") {
+                CaseSection(title: "Next steps", subtitle: "From what this case holds now. They suggest; you decide. Choose one to go to the tab where it is done.") {
                     ForEach(steps.prefix(6)) { step in
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: "arrow.right.circle").foregroundStyle(.tint).accessibilityHidden(true)
-                            Text(step.text)
-                            Spacer()
-                            Text(Self.tabName(step.place)).font(.caption).foregroundStyle(.secondary)
+                        Button { model.tab = Self.tab(step.place) } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: "arrow.right.circle").foregroundStyle(.tint).accessibilityHidden(true)
+                                Text(step.text).multilineTextAlignment(.leading)
+                                Spacer()
+                                Text(Self.tabName(step.place)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens the \(Self.tabName(step.place)) tab.")
                     }
                     if steps.count > 6 { Text("and \(steps.count - 6) more").font(.caption).foregroundStyle(.secondary) }
                 }
@@ -570,6 +657,17 @@ struct CaseOverviewTab: View {
         teamText = s.profile.team.joined(separator: ", ")
     }
 
+    static func tab(_ place: CaseNextStep.Place) -> CaseFileTab {
+        switch place {
+        case .overview: return .overview
+        case .plan: return .plan
+        case .tasks: return .tasks
+        case .people: return .people
+        case .evidence: return .evidence
+        case .log: return .log
+        }
+    }
+
     static func tabName(_ place: CaseNextStep.Place) -> String {
         switch place {
         case .overview: return CaseFileTab.overview.rawValue
@@ -596,6 +694,69 @@ struct CaseOverviewTab: View {
             try await svc.file.markClosed(caseID: caseID, reopened: closed, actor: actor)
         }
         closeRationale = ""; unresolved = ""
+    }
+}
+
+// MARK: - P1-A: the case at a glance
+
+/// The investigation question, what limits the reading, what waits for review, the open evidence
+/// requests and the next case-specific step — all visible text, nothing behind a hover.
+struct CaseGlanceSection: View {
+    let model: CaseFileModel
+    let glance: CaseGlance
+
+    var body: some View {
+        CaseSection(title: "This case at a glance", subtitle: "What the investigation is to answer, what limits what the app could read, and what is waiting for you.") {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Question").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text(glance.question ?? "No question recorded yet — write what was reported in Intake below, or give the case a purpose.")
+                    .foregroundStyle(glance.question == nil ? .secondary : .primary)
+                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            HStack(alignment: .top, spacing: 18) {
+                metric("\(glance.contradictionsAwaiting)", "contradiction(s) waiting for a decision"
+                       + (glance.contradictionsReopened > 0 ? " (\(glance.contradictionsReopened) reopened)" : "")
+                       + (glance.contradictionsDeferred > 0 ? " (\(glance.contradictionsDeferred) deferred)" : ""), tab: .overview)
+                metric("\(glance.resultRowsUndecided)", "job-result row(s) not yet reviewed", tab: nil)
+                metric("\(glance.openRequests)", "open evidence request(s)"
+                       + (glance.missingItems > 0 ? ", \(glance.missingItems) item(s) missing" : "")
+                       + (glance.overdueRequests > 0 ? ", \(glance.overdueRequests) overdue" : ""), tab: .evidence)
+                Spacer(minLength: 0)
+            }
+            if !glance.limitations.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Reading limits").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(glance.limitations, id: \.self) { line in
+                        Label(line, systemImage: "exclamationmark.circle").font(.caption).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityIdentifier("case.glance.limits")
+            }
+            if let next = glance.nextStep {
+                Button { model.tab = CaseOverviewTab.tab(next.place) } label: {
+                    Label("Next: \(next.text)", systemImage: "arrow.right.circle.fill").multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint("Opens the \(CaseOverviewTab.tabName(next.place)) tab.")
+                .accessibilityIdentifier("case.glance.next")
+            }
+        }
+        .accessibilityIdentifier("case.glance")
+    }
+
+    @ViewBuilder private func metric(_ value: String, _ label: String, tab: CaseFileTab?) -> some View {
+        let content = VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(.title3.monospacedDigit().bold())
+            Text(label).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: 220, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        if let tab, tab != model.tab {
+            Button { model.tab = tab } label: { content }.buttonStyle(.plain).accessibilityHint("Opens the \(tab.rawValue) tab.")
+        } else {
+            content
+        }
     }
 }
 
@@ -1256,6 +1417,7 @@ struct CaseEvidenceTab: View {
                 }
                 if s.custody.count > 200 { Text("…and \(s.custody.count - 200) more").font(.caption).foregroundStyle(.secondary) }
             }
+            CaseEvidenceRequestsSection(model: model, s: s)
             CaseSection(title: "Exhibit register") {
                 HStack {
                     TextField("Physical or other exhibit (description)", text: $exDesc)
@@ -1451,6 +1613,7 @@ struct CaseChronologyTab: View {
     /// Open the entry's source document highlighted at the quote. When the document's file cannot be
     /// found, the quote alone is shown (the earlier evidence sheet), so the button never does nothing.
     private func open(objectID: UUID, quote: String?) {
+        model.workspace.state.lastSource = CaseSourcePosition(objectID: objectID, quote: quote, label: nil)
         Task { @MainActor in
             let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
             do {

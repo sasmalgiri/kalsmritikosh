@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 169
+    public static let latestVersion = 170
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -802,7 +802,8 @@ public enum SchemaMigrations {
         (166, v166),
         (167, v167),
         (168, v168),
-        (169, v169)
+        (169, v169),
+        (170, v170)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8061,5 +8062,125 @@ public enum SchemaMigrations {
     WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
     BEGIN SELECT RAISE(ABORT, 'case_fact_attestations is append-only'); END;
+    """
+
+    // MARK: - v170 — review in place, durable decisions and evidence requests that can be followed
+    // through (owner's implementation plan 2026-11-04, P0-C 3–4 and P1-B).
+    // • investigation_review_decisions: every confirm / dismiss / defer of a case review item, with its
+    //   reason, note, who and when, and the source version each side was read from when it was decided —
+    //   so an unchanged rerun keeps the decision and a changed source reopens it visibly. Append-only:
+    //   the current decision is the latest row; investigation_desk_reviews keeps the current
+    //   confirmed/dismissed disposition for the existing desk.
+    // • investigation_evidence_requests is rebuilt (rows carried over unchanged) so a request can also be
+    //   partial, refused or unobtainable, and gains its linked allegation or question, custodian, the
+    //   period asked for and a due date. Expected items, the documents received against them (each a
+    //   source version; a duplicate is kept and marked, never counted twice) and an append-only history
+    //   sit beside it. Fulfilment stays a recorded decision. Removed only with the case or a full erase.
+    private static let v170: String = """
+    CREATE TABLE IF NOT EXISTS investigation_review_decisions (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        item_kind            TEXT NOT NULL CHECK (item_kind IN ('reliability','contradiction','gap')),
+        item_id              TEXT NOT NULL CHECK (length(trim(item_id)) > 0),
+        decision             TEXT NOT NULL CHECK (decision IN ('confirmed','dismissed','deferred')),
+        reason               TEXT CHECK (reason IS NULL OR reason IN ('differentEvent','differentPerson','changedEstimate','transcriptionError','insufficientContext','other')),
+        note                 TEXT,
+        source_versions_json TEXT NOT NULL DEFAULT '{}',
+        actor                TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        decided_at           REAL NOT NULL,
+        CHECK (decision <> 'dismissed' OR reason IS NOT NULL),
+        CHECK (coalesce(reason,'') <> 'other' OR length(trim(coalesce(note,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_review_decisions_item ON investigation_review_decisions(case_id, item_kind, item_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_fixed BEFORE UPDATE ON investigation_review_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_kept BEFORE DELETE ON investigation_review_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+
+    CREATE TABLE IF NOT EXISTS investigation_evidence_requests__new (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        hypothesis_id TEXT,
+        description   TEXT NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'open',
+        revision      INTEGER NOT NULL,
+        actor         TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        updated_at    REAL NOT NULL,
+        allegation_id TEXT,
+        question      TEXT,
+        custodian     TEXT,
+        period_start  REAL,
+        period_end    REAL,
+        due_at        REAL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE SET NULL,
+        CHECK(length(trim(description)) > 0),
+        CHECK(status IN ('open','confirmed','partial','refused','unobtainable','fulfilled','cancelled')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0),
+        CHECK(period_start IS NULL OR period_end IS NULL OR period_start <= period_end)
+    );
+    INSERT INTO investigation_evidence_requests__new (id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at)
+        SELECT id, case_id, hypothesis_id, description, status, revision, actor, created_at, updated_at FROM investigation_evidence_requests;
+    DROP INDEX IF EXISTS idx_investigation_evidence_requests_case;
+    DROP TABLE investigation_evidence_requests;
+    ALTER TABLE investigation_evidence_requests__new RENAME TO investigation_evidence_requests;
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_requests_case ON investigation_evidence_requests(case_id);
+
+    CREATE TABLE IF NOT EXISTS investigation_evidence_request_items (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        request_id   TEXT NOT NULL,
+        ordinal      INTEGER NOT NULL CHECK (ordinal >= 1),
+        label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        period_start REAL,
+        period_end   REAL,
+        created_by   TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at   REAL NOT NULL,
+        UNIQUE(request_id, ordinal)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_request_items_request ON investigation_evidence_request_items(request_id, ordinal);
+    CREATE TABLE IF NOT EXISTS investigation_evidence_request_receipts (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        request_id          TEXT NOT NULL,
+        item_id             TEXT,
+        source_version_id   TEXT NOT NULL,
+        knowledge_object_id TEXT,
+        content_hash        TEXT,
+        duplicate_of        TEXT,
+        origin              TEXT NOT NULL CHECK (origin IN ('manual','suggestion')),
+        note                TEXT,
+        linked_by           TEXT NOT NULL CHECK (length(trim(linked_by)) > 0),
+        linked_at           REAL NOT NULL,
+        withdrawn_by        TEXT,
+        withdrawn_at        REAL,
+        withdrawn_reason    TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_request_receipts_request ON investigation_evidence_request_receipts(request_id, linked_at);
+    CREATE TABLE IF NOT EXISTS investigation_evidence_request_events (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        request_id   TEXT NOT NULL,
+        event        TEXT NOT NULL CHECK (event IN ('created','requested','responded','received','duplicateReceived','receiptWithdrawn','statusDecided','note')),
+        status_after TEXT,
+        item_id      TEXT,
+        receipt_id   TEXT,
+        detail       TEXT,
+        actor        TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        occurred_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_evidence_request_events_request ON investigation_evidence_request_events(request_id, occurred_at);
+    CREATE TRIGGER IF NOT EXISTS investigation_evidence_request_events_fixed BEFORE UPDATE ON investigation_evidence_request_events
+    BEGIN SELECT RAISE(ABORT, 'investigation_evidence_request_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_evidence_request_events_kept BEFORE DELETE ON investigation_evidence_request_events
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'investigation_evidence_request_events is append-only'); END;
     """
 }

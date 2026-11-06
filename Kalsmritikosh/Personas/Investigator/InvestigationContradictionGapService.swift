@@ -273,6 +273,45 @@ public actor InvestigationContradictionGapService {
         try await disposeGap(caseID: caseID, gapID: gapID, decision: .dismissed, note: note, actor: actor, at: date)
     }
 
+    // MARK: - v170: review in place (confirm / dismiss / defer with a reason, kept against source versions)
+
+    /// The case's contradictions with their review status: each decision is compared with the CURRENT
+    /// version of both sides' documents, so a rerun over unchanged documents keeps it and a revised
+    /// document reopens it. Nothing is written here.
+    public func contradictionReviewItems(caseID: UUID, limit: Int = 500) async throws -> [CaseContradictionReviewItem] {
+        let items = try await contradictions(caseID: caseID, limit: limit)
+        let history = try await reviews.decisionHistory(caseID: caseID, itemKind: .contradiction)
+        var out: [CaseContradictionReviewItem] = []
+        for item in items {
+            let c = item.contradiction
+            var current: [UUID: UUID?] = [:]
+            for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) { current[ko] = try await evidence.currentVersionID(forObject: ko) }
+            let status = CaseItemReviewStatus.compute(history: history[c.id.uuidString] ?? [], currentVersions: current)
+            out.append(CaseContradictionReviewItem(contradiction: c, status: status, currentVersions: current))
+        }
+        return out
+    }
+
+    /// Record the person's decision on one in-scope contradiction, with the version of each side's
+    /// document as it is now. A dismissal needs a reason; neither source and not the shared item change.
+    @discardableResult
+    public func reviewContradiction(caseID: UUID, contradictionID: UUID, decision: CaseReviewDecision, reason: CaseReviewReason?,
+                                    note: String?, actor: String, at date: Date) async throws -> CaseReviewDecisionRecord {
+        _ = try await requireOpenCaseScope(caseID)
+        let authorized = try await authorizedSet(caseID)
+        guard let c = try await contradictions.findByIDs([contradictionID]).first else { throw InvestigationDeskError.contradictionNotFound(contradictionID) }
+        guard try await isContradictionInScope(c, authorized: authorized) else { throw InvestigationDeskError.contradictionOutOfScope(contradictionID) }
+        var versions: [UUID: UUID] = [:]
+        for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) {
+            if let v = try await evidence.currentVersionID(forObject: ko) { versions[ko] = v }
+        }
+        let record = try await reviews.recordDecision(caseID: caseID, itemKind: .contradiction, itemID: contradictionID.uuidString,
+                                                      decision: decision, reason: reason, note: note, sourceVersions: versions,
+                                                      actor: actor, at: date)
+        KalsmritikoshLog.knowledge.info("case contradiction \(decision.rawValue, privacy: .public) (reason: \(reason?.rawValue ?? "none", privacy: .public))")
+        return record
+    }
+
     // MARK: - Internals
 
     private func disposeContradiction(caseID: UUID, contradictionID: UUID, decision: DeskDecision, note: String?, actor: String, at date: Date) async throws -> InvestigationDeskReview {

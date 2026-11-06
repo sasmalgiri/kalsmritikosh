@@ -19,8 +19,11 @@ public nonisolated struct CaseNextStep: Identifiable, Sendable, Equatable {
 public nonisolated enum CaseNextSteps {
 
     /// The steps the case's own state calls for, most pressing first.
+    /// `evidenceRequests` and the contradiction counts (P1-A/P1-B, 2026-11-04) add the case's open
+    /// collection follow-up and review queue; callers that pass neither get the steps they always had.
     public static func compute(_ s: CaseFileSnapshot, unresolvedReferences: Int = 0, custodyReadFailed: Bool = false,
-                               now: Date = Date()) -> [CaseNextStep] {
+                               evidenceRequests: [EvidenceRequestFile] = [], contradictionsAwaiting: Int = 0,
+                               contradictionsReopened: Int = 0, now: Date = Date()) -> [CaseNextStep] {
         var out: [CaseNextStep] = []
         let stage = s.caseHeader.status == .closed ? .closed : s.profile.stage
         guard ![.closed, .declined, .referred].contains(stage) else { return [] }
@@ -37,6 +40,25 @@ public nonisolated enum CaseNextSteps {
         let overdue = s.tasks.filter { $0.isOverdue(at: now) }
         if !overdue.isEmpty {
             out.append(.init(id: "overdue", text: "\(overdue.count) task(s) are past their due date.", place: .tasks))
+        }
+        for f in evidenceRequests where f.request.isOverdue(at: now) {
+            let missing = f.progress.outstanding.count
+            out.append(.init(id: "request-overdue-\(f.id)", text: "The request “\(f.request.description)” is past its due date"
+                             + (missing > 0 ? " with \(missing) item(s) still missing." : "."), place: .evidence))
+        }
+        for f in evidenceRequests where f.request.status.isOutstanding && !f.request.isOverdue(at: now) && f.progress.state == .partlyReceived {
+            out.append(.init(id: "request-partial-\(f.id)", text: "“\(f.request.description)”: still missing " + f.progress.outstanding.map(\.label).joined(separator: "; ") + ".",
+                             place: .evidence))
+        }
+        for f in evidenceRequests where f.request.status.isOutstanding && f.progress.state == .allReceived {
+            out.append(.init(id: "request-complete-\(f.id)", text: "Everything asked for in “\(f.request.description)” has arrived. Check it and record whether the request is fulfilled.",
+                             place: .evidence))
+        }
+        if contradictionsReopened > 0 {
+            out.append(.init(id: "contradictions-reopened", text: "\(contradictionsReopened) contradiction(s) reopened because a document changed. Review them again.", place: .overview))
+        }
+        if contradictionsAwaiting > contradictionsReopened {
+            out.append(.init(id: "contradictions-awaiting", text: "\(contradictionsAwaiting - contradictionsReopened) contradiction(s) are waiting for your decision.", place: .overview))
         }
         if s.custody.isEmpty && !custodyReadFailed {
             out.append(.init(id: "sources", text: "No documents are in this case yet. Add the sources the investigation covers.", place: .evidence))

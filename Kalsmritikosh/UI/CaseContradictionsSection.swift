@@ -5,25 +5,178 @@
 //  P3 — the case file's contradictions: "Find contradictions" compares this case's own documents
 //  (rules on the Mac; the person's AI reader too when Online document reading is on, every pair it
 //  proposes checked against the documents). Each contradiction shows both statements verbatim, each
-//  with "Open source" at its words — never averaged, never resolved. Confirm/dismiss stays the case's
-//  disposition (the Contradiction & gap desk).
+//  with "Open source" at its words — never averaged, never resolved.
+//
+//  P0-C 3–4 / P1-A (owner's implementation plan 2026-11-04): the review happens HERE — a list of the
+//  case's contradictions beside the selected one's detail; Confirm, Dismiss (with a reason) or Defer,
+//  recorded through InvestigationContradictionGapService against the version of both documents. An
+//  unchanged rerun keeps the decision; a revised document reopens it and says which. The history stays.
+//  A confirmed item can be added to the chronology or the report without retyping (JobResultHandoff).
+//  The selection, filter and search come back when the case is reopened (CaseWorkspaceState).
 //
 
 import SwiftUI
 import os
 
+/// The case's shared workspace preferences (one per open case file); every change is saved at once.
+@MainActor @Observable
+final class CaseWorkspaceHolder {
+    let caseID: UUID
+    @ObservationIgnored private let defaults: UserDefaults
+    var state: CaseWorkspaceState {
+        didSet { if state != oldValue { CaseWorkspaceStore.save(state, caseID: caseID, defaults: defaults) } }
+    }
+    init(caseID: UUID, defaults: UserDefaults) {
+        self.caseID = caseID; self.defaults = defaults
+        self.state = CaseWorkspaceStore.load(caseID: caseID, defaults: defaults)
+    }
+}
+
+/// The contradiction review list and its decision draft (testable without a view).
+@MainActor @Observable
+final class CaseContradictionReviewModel {
+    let caseID: UUID
+    let workspace: CaseWorkspaceHolder
+    private(set) var items: [CaseContradictionReviewItem] = []
+    /// Document names (knowledge object → file name).
+    var names: [UUID: String] = [:]
+    var loaded = false
+    var busy = false
+    var lastRun: String?
+    var error: String?
+    var notice: String?
+    /// The decision draft for the selected item.
+    var draftReason: CaseReviewReason?
+    var draftNote = ""
+
+    init(caseID: UUID, workspace: CaseWorkspaceHolder) { self.caseID = caseID; self.workspace = workspace }
+
+    var selectedID: UUID? {
+        get { workspace.state.selectedContradictionID }
+        set {
+            guard newValue != workspace.state.selectedContradictionID else { return }
+            workspace.state.selectedContradictionID = newValue
+            draftReason = nil; draftNote = ""
+        }
+    }
+    var filter: CaseReviewFilter {
+        get { workspace.state.contradictionFilter }
+        set { workspace.state.contradictionFilter = newValue }
+    }
+    var search: String {
+        get { workspace.state.contradictionSearch }
+        set { workspace.state.contradictionSearch = newValue }
+    }
+
+    /// The listed items: the filter, then the search words (summary, both quotes, document names).
+    var visible: [CaseContradictionReviewItem] {
+        let words = search.lowercased().split(separator: " ").map(String.init)
+        return items.filter { item in
+            switch filter {
+            case .awaiting: if !item.status.awaitingReview { return false }
+            case .decided: if item.status.awaitingReview { return false }
+            case .all: break
+            }
+            guard !words.isEmpty else { return true }
+            let c = item.contradiction
+            let hay = ([JobResultHandoff.reviewText(c), c.claimA, c.claimB]
+                       + [c.evidenceA, c.evidenceB].compactMap { $0.flatMap { names[$0] } }).joined(separator: " ").lowercased()
+            return words.allSatisfy { hay.contains($0) }
+        }
+    }
+    var selected: CaseContradictionReviewItem? { items.first { $0.id == selectedID } }
+    var awaitingCount: Int { items.filter { $0.status.awaitingReview }.count }
+    var reopenedCount: Int { items.filter { $0.status.isReopened }.count }
+
+    /// Move the selection through the listed items (keyboard review).
+    func move(_ step: Int) {
+        let list = visible
+        guard !list.isEmpty else { return }
+        guard let i = list.firstIndex(where: { $0.id == selectedID }) else { selectedID = list.first?.id; return }
+        selectedID = list[max(0, min(list.count - 1, i + step))].id
+    }
+
+    /// Why the decision cannot be recorded yet (nil: it can).
+    func problem(for decision: CaseReviewDecision) -> String? {
+        if selected == nil { return "Choose a contradiction in the list first." }
+        if decision == .dismissed, draftReason == nil { return "Choose why you are dismissing it." }
+        if draftReason == .other, draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Say why in the note." }
+        return nil
+    }
+
+    func load(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?) async {
+        do {
+            items = try await desk.contradictionReviewItems(caseID: caseID)
+            let ids = Set(items.flatMap { [$0.contradiction.evidenceA, $0.contradiction.evidenceB].compactMap { $0 } })
+            if !ids.isEmpty, let objects { names = try await objects.sourceFilenames(for: ids) }
+            loaded = true
+            // Keep the remembered selection if it still exists; otherwise the first listed item.
+            if selected == nil { workspace.state.selectedContradictionID = visible.first?.id }
+        } catch {
+            KalsmritikoshLog.ui.error("Case contradictions load failed: \(String(describing: error), privacy: .public)")
+            self.error = "The contradictions could not be read: \(error.localizedDescription)"
+        }
+    }
+
+    /// Record the decision on the selected item, then reload. Returns the record (nil: refused).
+    @discardableResult
+    func decide(_ decision: CaseReviewDecision, desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?,
+                actor: String, at date: Date = Date()) async -> CaseReviewDecisionRecord? {
+        if let why = problem(for: decision) { error = why; return nil }
+        guard let item = selected else { return nil }
+        busy = true; defer { busy = false }
+        do {
+            let record = try await desk.reviewContradiction(caseID: caseID, contradictionID: item.id, decision: decision, reason: draftReason,
+                                                            note: draftNote, actor: actor, at: date)
+            error = nil
+            notice = "\(decision.label): \(JobResultHandoff.reviewText(item.contradiction))"
+            draftReason = nil; draftNote = ""
+            let next = visible.first { $0.id != item.id && $0.status.awaitingReview }?.id
+            await load(desk: desk, objects: objects)
+            // Keyboard review: move on to the next item waiting for a decision.
+            if filter == .awaiting, let next { workspace.state.selectedContradictionID = next }
+            return record
+        } catch {
+            KalsmritikoshLog.ui.error("Contradiction decision failed: \(String(describing: error), privacy: .public)")
+            self.error = "Not recorded: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    enum Destination { case chronology, report }
+
+    /// Carry the selected confirmed item into the chronology or the report (both passages, the decision).
+    func carry(_ to: Destination, caseFiles: CaseFileService, actor: String) async {
+        guard let item = selected else { return }
+        do {
+            switch to {
+            case .chronology: try await JobResultHandoff.addReviewedToChronology(item, caseFiles: caseFiles, actor: actor)
+            case .report: try await JobResultHandoff.addReviewedToReport(item, caseFiles: caseFiles, actor: actor)
+            }
+            error = nil
+            notice = to == .chronology ? "Added to the chronology with both passages." : "Selected for the report with both passages."
+        } catch {
+            KalsmritikoshLog.ui.error("Contradiction carry failed: \(String(describing: error), privacy: .public)")
+            self.error = error.localizedDescription
+        }
+    }
+
+    func setLastRun(_ text: String) { lastRun = text }
+}
+
 struct CaseContradictionsSection: View {
     @Environment(AppState.self) private var appState
+    @Environment(CaseFileModel.self) private var caseModel
     let caseID: UUID
     let closed: Bool
-    @State private var items: [CaseContradictionItem] = []
-    @State private var names: [UUID: String] = [:]
     @State private var running = false
-    @State private var lastRun: String?
     @State private var openSource: CitationOpenTarget?
     @State private var openedPassage: OpenedSource?
 
+    private var model: CaseContradictionReviewModel { caseModel.review }
+
     var body: some View {
+        @Bindable var model = model
         CaseSection(title: "Contradictions",
                     subtitle: "Statements in this case's documents that may not both be true — check each pair. Both sides are shown with their sources; nothing is averaged or decided for you.") {
             HStack {
@@ -33,17 +186,47 @@ struct CaseContradictionsSection: View {
                     Label("Find contradictions", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                 }
                 .disabled(running || closed || appState.investigationContradictionGap == nil)
-                .help("Compares this case's documents with each other — never with documents outside the case.")
                 .accessibilityIdentifier("case.contradictions.find")
                 if running { ProgressView().controlSize(.small) }
                 Spacer()
+                Picker("Show", selection: $model.filter) {
+                    ForEach(CaseReviewFilter.allCases) { Text($0.label).tag($0) }
+                }
+                .frame(maxWidth: 260)
+                .accessibilityIdentifier("case.contradictions.filter")
+                TextField("Search contradictions", text: $model.search)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 200)
+                    .accessibilityIdentifier("case.contradictions.search")
             }
-            if let lastRun { Text(lastRun).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
-            if items.isEmpty {
-                Text(lastRun == nil ? "Not checked yet." : "No contradictions found by the checks run. That does not prove the documents agree.")
+            Text("Compares this case's documents with each other — never with documents outside the case. Choose an item, then Confirm, Dismiss (with a reason) or Defer; the decision is kept until one of its documents changes. Keys: ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let lastRun = model.lastRun { Text(lastRun).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            if let e = model.error { Text(e).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            else if let n = model.notice { Text(n).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            if model.items.isEmpty {
+                Text(model.lastRun == nil ? "Not checked yet." : "No contradictions found by the checks run. That does not prove the documents agree.")
                     .font(.callout).foregroundStyle(.secondary)
+            } else if model.visible.isEmpty {
+                Text(model.filter == .awaiting ? "Nothing is waiting for a decision. Choose “All” to see the decided items." : "No contradiction matches.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    list
+                        .frame(width: 300, alignment: .topLeading)
+                    Divider()
+                    if let item = model.selected {
+                        detail(item).frame(maxWidth: .infinity, alignment: .topLeading)
+                    } else {
+                        Text("Choose a contradiction in the list.").font(.callout).foregroundStyle(.secondary)
+                    }
+                }
             }
-            ForEach(items, id: \.contradiction.id) { item in row(item.contradiction, review: item.review) }
+            // Keyboard review: hidden buttons so the shortcuts work wherever the section is visible.
+            Group {
+                Button("Next contradiction") { model.move(1) }.keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                Button("Previous contradiction") { model.move(-1) }.keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            }
+            .frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
         }
         .task(id: caseID) { await reload() }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
@@ -55,15 +238,55 @@ struct CaseContradictionsSection: View {
         }
     }
 
-    private func row(_ c: Contradiction, review: InvestigationDeskReview?) -> some View {
+    private var list: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Text("\(model.visible.count) listed · \(model.awaitingCount) waiting for a decision" + (model.reopenedCount > 0 ? " · \(model.reopenedCount) reopened" : ""))
+                .font(.caption2).foregroundStyle(.secondary)
+            ForEach(model.visible) { item in
+                let isSelected = item.id == model.selectedID
+                Button { model.selectedID = item.id } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(CaseContradictionFinder.kindLabel(of: item.contradiction) ?? item.contradiction.kind.displayName)
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(.tint.opacity(0.15), in: .capsule)
+                            statusBadge(item.status)
+                            Spacer(minLength: 0)
+                        }
+                        Text(Self.summary(item.contradiction)).font(.callout).lineLimit(3).multilineTextAlignment(.leading)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(isSelected ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Color.accentColor : .clear, lineWidth: 1))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(Self.summary(item.contradiction)). \(item.status.label(names: model.names))")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .accessibilityIdentifier("case.contradictions.row")
+            }
+        }
+    }
+
+    private func statusBadge(_ status: CaseItemReviewStatus) -> some View {
+        let (text, color): (String, Color) = status.isReopened ? ("Reopened", .orange)
+            : status.current.map { ($0.label, $0 == .confirmed ? Color.green : $0 == .dismissed ? Color.secondary : Color.orange) } ?? ("Not reviewed", .blue)
+        return Text(text).font(.caption2.weight(.medium)).foregroundStyle(color)
+    }
+
+    @ViewBuilder private func detail(_ item: CaseContradictionReviewItem) -> some View {
+        @Bindable var model = model
+        let c = item.contradiction
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text(CaseContradictionFinder.kindLabel(of: c) ?? c.kind.displayName)
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(.tint.opacity(0.15), in: .capsule)
                 Text(Self.provenanceText(c)).font(.caption2).foregroundStyle(.secondary)
-                if let review { Text("Case decision: \(review.decision.rawValue)").font(.caption2).foregroundStyle(.secondary) }
                 Spacer()
             }
             Text(Self.summary(c)).font(.callout.weight(.medium)).textSelection(.enabled)
@@ -71,10 +294,66 @@ struct CaseContradictionsSection: View {
                 side("A", quote: c.claimA, object: c.evidenceA)
                 side("B", quote: c.claimB, object: c.evidenceB)
             }
+            Label(item.status.label(names: model.names), systemImage: item.status.isReopened ? "arrow.triangle.2.circlepath" : "checkmark.seal")
+                .font(.caption).foregroundStyle(item.status.isReopened ? .orange : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("case.contradictions.status")
+            Divider()
+            Picker("Reason", selection: $model.draftReason) {
+                Text("No reason chosen").tag(CaseReviewReason?.none)
+                ForEach(CaseReviewReason.allCases) { Text($0.label).tag(Optional($0)) }
+            }
+            .frame(maxWidth: 380)
+            .accessibilityHint("Needed to dismiss: why the two statements do not conflict, or why you cannot decide yet.")
+            TextField("Note (optional; needed for “Other”)", text: $model.draftNote, axis: .vertical).lineLimit(1...3)
+            HStack(spacing: 8) {
+                decisionButton(.confirmed, "Confirm", key: "y", hint: "Records that these two statements conflict in this case.")
+                decisionButton(.dismissed, "Dismiss", key: "n", hint: "Sets it aside for this case with the reason chosen. Neither document is changed.")
+                decisionButton(.deferred, "Defer", key: "l", hint: "Keeps it waiting for a decision, with your note.")
+                Spacer()
+            }
+            Text("Dismissing needs a reason. A dismissal changes neither document; it is kept until one of them changes, then the item reopens.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if item.status.current == .confirmed, let caseFiles = appState.caseFiles {
+                HStack(spacing: 8) {
+                    Button("Add to chronology") { Task { await model.carry(.chronology, caseFiles: caseFiles, actor: caseModel.actor); await caseModel.load(appState) } }
+                        .accessibilityHint("Adds this contradiction with both passages to the case chronology; nothing to retype.")
+                    Button("Include in report") { Task { await model.carry(.report, caseFiles: caseFiles, actor: caseModel.actor); await caseModel.load(appState) } }
+                        .accessibilityHint("Selects this contradiction, with both passages, for the case report.")
+                    Spacer()
+                }
+                .disabled(closed)
+            }
+            if !item.status.history.isEmpty {
+                DisclosureGroup("Decision history (\(item.status.history.count))") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(item.status.history.reversed()) { d in
+                            Text(d.summary).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .font(.caption)
+                .accessibilityIdentifier("case.contradictions.history")
+            }
         }
         .padding(10)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityIdentifier("case.contradictions.row")
+    }
+
+    private func decisionButton(_ decision: CaseReviewDecision, _ title: String, key: KeyEquivalent, hint: String) -> some View {
+        Button(title) {
+            guard let desk = appState.investigationContradictionGap else { return }
+            Task {
+                await model.decide(decision, desk: desk, objects: appState.objects, actor: caseModel.actor)
+                await caseModel.refreshGlance(appState)
+            }
+        }
+        .keyboardShortcut(key, modifiers: [.command, .option])
+        .disabled(reason: closed ? "The case is closed." : model.busy ? "A decision is being recorded." : model.problem(for: decision),
+                  remedy: closed ? "Reopen the case to record decisions." : nil)
+        .accessibilityHint(hint)
+        .accessibilityIdentifier("case.contradictions.\(decision.rawValue)")
     }
 
     private func side(_ title: String, quote: String, object: UUID?) -> some View {
@@ -83,7 +362,7 @@ struct CaseContradictionsSection: View {
             Text("\u{201C}\(quote)\u{201D}").font(.callout).textSelection(.enabled)
             if let object {
                 Button { open(object, quote: quote) } label: {
-                    Label(names[object].map { "Open source — \($0)" } ?? "Open source", systemImage: "doc.text.magnifyingglass").font(.caption)
+                    Label(model.names[object].map { "Open source — \($0)" } ?? "Open source", systemImage: "doc.text.magnifyingglass").font(.caption)
                 }
                 .buttonStyle(.link)
                 .accessibilityIdentifier("case.contradictions.open")
@@ -93,10 +372,7 @@ struct CaseContradictionsSection: View {
     }
 
     /// The description without the check's provenance marker (shown separately).
-    nonisolated static func summary(_ c: Contradiction) -> String {
-        guard let p = CaseContradictionFinder.provenance(of: c) else { return c.description }
-        return c.description.replacingOccurrences(of: " " + p.marker, with: "")
-    }
+    nonisolated static func summary(_ c: Contradiction) -> String { JobResultHandoff.reviewText(c) }
 
     nonisolated static func provenanceText(_ c: Contradiction) -> String {
         switch CaseContradictionFinder.provenance(of: c) {
@@ -108,13 +384,7 @@ struct CaseContradictionsSection: View {
 
     private func reload() async {
         guard let desk = appState.investigationContradictionGap else { return }
-        do {
-            items = try await desk.contradictions(caseID: caseID)
-            let ids = Set(items.flatMap { [$0.contradiction.evidenceA, $0.contradiction.evidenceB].compactMap { $0 } })
-            if !ids.isEmpty, let repo = appState.objects { names = try await repo.sourceFilenames(for: ids) }
-        } catch {
-            KalsmritikoshLog.ui.error("Case contradictions load failed: \(String(describing: error), privacy: .public)")
-        }
+        await model.load(desk: desk, objects: appState.objects)
     }
 
     private func find() async {
@@ -133,16 +403,19 @@ struct CaseContradictionsSection: View {
             }
             if run.deniedForCloud > 0 { text += "; \(run.deniedForCloud) document(s) stayed on this Mac" }
             if !run.failures.isEmpty { text += "; \(run.failures.count) request(s) failed — " + Array(NSOrderedSet(array: run.failures).compactMap { $0 as? String }.prefix(3)).joined(separator: "; ") }
-            lastRun = text + "."
-            try? await appState.caseFiles?.file.logAction(caseID: caseID, action: "contradictions checked", detail: lastRun, actor: InvestigatorProfile.name)
+            model.setLastRun(text + ". Decisions already made are kept unless a document changed.")
+            do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: "contradictions checked", detail: model.lastRun, actor: InvestigatorProfile.name) }
+            catch { KalsmritikoshLog.ui.error("Contradiction check log failed: \(error.localizedDescription, privacy: .public)") }
         } catch {
             KalsmritikoshLog.ui.error("Find contradictions failed: \(String(describing: error), privacy: .public)")
-            lastRun = "The check could not run: \(error.localizedDescription)"
+            model.setLastRun("The check could not run: \(error.localizedDescription)")
         }
         await reload()
+        await caseModel.refreshGlance(appState)
     }
 
     private func open(_ objectID: UUID, quote: String) {
+        caseModel.workspace.state.lastSource = CaseSourcePosition(objectID: objectID, quote: quote, label: model.names[objectID])
         Task { @MainActor in
             do {
                 if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: objectID) {

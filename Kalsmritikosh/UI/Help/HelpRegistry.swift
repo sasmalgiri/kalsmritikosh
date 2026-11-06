@@ -235,6 +235,23 @@ public nonisolated enum HelpRegistry {
             controls: ["Save review", "Include in report", "Add to case…", "Case file report…"], destination: .cases,
             keywords: ["approve", "redact", "print", "copy", "report", "output"]),
         HelpTopic(
+            id: "task-case-review-and-requests", kind: .task, title: "Work a case: review contradictions in place and follow up evidence requests",
+            summary: "The case file keeps your place, shows what is waiting for you, lets you decide each contradiction where it is shown, and tracks what you asked custodians for until you decide it is complete.",
+            steps: [
+                "Cases ▸ open a case. Its Overview starts with “This case at a glance”: the question the investigation is to answer, what limits what the app could read (documents not allowed for the AI, references that no longer resolve, a check not yet run), how many contradictions and result rows wait for a decision, the open evidence requests with their missing items, and the next step. Choose a count or a next step to go to the tab where it is done. The case reopens on the tab, item, filter and search you left, after a restart too; “Return to the last source” opens the passage you last opened.",
+                "Overview ▸ Contradictions: “Find contradictions”, then choose an item in the list; its two passages, each with “Open source”, are shown beside it. Choose a reason when needed and “Confirm”, “Dismiss” or “Defer”. Dismissing needs a reason (different event, different person, changed estimate, transcription error, not enough context, or other with a note). Keys: ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers.",
+                "A decision is kept with the version of both documents. Running the check again over the same documents keeps it; when one of the documents is revised the item comes back as “Reopened because … changed”, and the earlier decisions stay in its decision history. A dismissal changes neither document.",
+                "A confirmed contradiction can be carried with “Add to chronology” or “Include in report”: both passages travel as citations with the decision they came from; nothing is retyped.",
+                "Evidence ▸ Evidence requests: “Create request” with what is requested, the custodian, the allegation or question it serves, the expected items (one per month gives three monthly statements as three items) and a due date. When a document arrives, “Link received document” (or “Link” on a suggestion whose date or name fits a missing item); a copy of a document already received is shown as a duplicate and not counted. The row says what is still missing.",
+                "“Record sent” and “Record reply” keep the history of asking and answering; “Draft request text…” prepares a letter to copy and send yourself — the app sends nothing. “Record decision” sets the request to fulfilled, partly provided, refused, cannot be obtained or cancelled; an arrival does not change it, and fulfilled with items still missing needs your reason. When material arrives after the linked allegation was decided, the request says it may need revisiting; the finding is not changed.",
+                "Professional Jobs: the jobs of the next step are shown and the other phases are one click away; “Find a job” (⌥⌘F) searches every job by name, and “Show all jobs” lists the whole catalogue."
+            ],
+            controls: ["Find contradictions", "Open source", "Confirm", "Dismiss", "Defer", "Add to chronology", "Include in report", "Return to the last source",
+                       "Create request", "Link received document", "Link", "Record sent", "Record reply", "Draft request text…", "Record decision",
+                       "Find a job", "Show all jobs"],
+            destination: .cases,
+            keywords: ["contradiction", "conflict", "dismiss", "reopen", "resume", "evidence request", "custodian", "statement", "missing", "due", "collection plan", "jobs"]),
+        HelpTopic(
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
             summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own AI-provider account.",
             steps: [

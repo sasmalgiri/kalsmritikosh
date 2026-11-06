@@ -17,7 +17,15 @@ public struct CasesView: View {
     @State private var showClosed = false
     @State private var showNew = false
     @State private var open: CaseloadRow?
-    @State private var search = ""
+    /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
+    /// open when the app quit opens again (UI preferences only).
+    @State private var search = AppDefaults.store.string(forKey: CasesView.searchKey) ?? ""
+    @State private var selection: CaseloadRow.ID?
+    @State private var resumed = false
+
+    static let lastOpenKey = "kalsmritikosh.cases.lastOpen"
+    static let searchKey = "kalsmritikosh.cases.search"
+    static let showClosedKey = "kalsmritikosh.cases.showClosed"
 
     public init() {}
 
@@ -28,6 +36,7 @@ public struct CasesView: View {
                              openableCases: Set(rows.map(\.caseID)),
                              openCase: { id in if let row = rows.first(where: { $0.caseID == id }) { self.open = row } },
                              onBack: {
+                    selection = open.caseID
                     self.open = nil
                     Task { await load() }
                 })
@@ -36,6 +45,11 @@ public struct CasesView: View {
                 list
             }
         }
+        .onChange(of: open?.caseID) { _, id in
+            if let id { AppDefaults.store.set(id.uuidString, forKey: Self.lastOpenKey) } else { AppDefaults.store.removeObject(forKey: Self.lastOpenKey) }
+        }
+        .onChange(of: search) { _, v in AppDefaults.store.set(v, forKey: Self.searchKey) }
+        .onChange(of: showClosed) { _, v in AppDefaults.store.set(v, forKey: Self.showClosedKey) }
         .navigationTitle(open?.title ?? "Cases")
         .sheet(isPresented: $showNew) {
             NewCaseSheet { created in
@@ -85,7 +99,7 @@ public struct CasesView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(visible) {
+                Table(visible, selection: $selection) {
                     TableColumn("Case") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title).fontWeight(.medium)
@@ -115,6 +129,11 @@ public struct CasesView: View {
                     TableColumn("") { r in
                         Button("Open") { open = r }.accessibilityLabel("Open \(r.title)")
                     }.width(60)
+                }
+                .onKeyPress(.return) {
+                    guard let id = selection, let row = rows.first(where: { $0.caseID == id }) else { return .ignored }
+                    open = row
+                    return .handled
                 }
                 .contextMenu(forSelectionType: CaseloadRow.ID.self) { _ in } primaryAction: { ids in
                     if let id = ids.first { open = rows.first { $0.caseID == id } }
@@ -154,6 +173,15 @@ public struct CasesView: View {
         guard let svc = appState.caseFiles else { return }
         do {
             rows = try await svc.caseload(includeArchived: false)
+            if !resumed {
+                resumed = true
+                showClosed = AppDefaults.store.bool(forKey: Self.showClosedKey)
+                // The case that was open when the app last quit opens again (never in the test host).
+                if open == nil, !TestHost.isActive, let raw = AppDefaults.store.string(forKey: Self.lastOpenKey),
+                   let row = rows.first(where: { $0.caseID.uuidString == raw }) {
+                    open = row
+                }
+            }
         } catch {
             KalsmritikoshLog.app.error("Caseload failed: \(error.localizedDescription, privacy: .public)")
         }
