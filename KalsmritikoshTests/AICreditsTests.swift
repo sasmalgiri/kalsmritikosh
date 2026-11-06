@@ -15,19 +15,21 @@ import Testing
 @Suite("AI credits, estimates and the own-key limit", .serialized)
 struct AICreditsTests {
 
-    @Test("Estimates use Anthropic's published rates: $5 in, $25 out, cache reads 0.1×; 1 credit = $0.01, rounded up, at least 1")
+    @Test("Plan estimates use the relay's Opus 5.5 rates: $4 in, $20 out, cache reads $0.20 (0.05×); 1 credit = $0.01, rounded up, at least 1")
     func estimates() {
-        #expect(AIPricing.estimateCredits(inputTokens: 1_000_000, maxOutputTokens: 0) == 500)
-        #expect(AIPricing.estimateCredits(inputTokens: 0, maxOutputTokens: 1_000_000) == 2_500)
-        #expect(AIPricing.estimateCredits(inputTokens: 1_000_000, maxOutputTokens: 0, cachedTokens: 1_000_000) == 50)
+        #expect(AIPricing.relayModel == "claude-opus-5-5")
+        #expect(AIPricing.estimateCredits(inputTokens: 1_000_000, maxOutputTokens: 0) == 400)
+        #expect(AIPricing.estimateCredits(inputTokens: 0, maxOutputTokens: 1_000_000) == 2_000)
+        #expect(AIPricing.estimateCredits(inputTokens: 1_000_000, maxOutputTokens: 0, cachedTokens: 1_000_000) == 20)
         #expect(AIPricing.estimateCredits(inputTokens: 10, maxOutputTokens: 10) == 1)
-        // A 200,000-token case read with a 10,000-token reply: $1.00 + $0.25 → 125 credits; again from the cache: 10 + 25.
-        #expect(AIPricing.estimateCredits(inputTokens: 200_000, maxOutputTokens: 10_000) == 125)
-        #expect(AIPricing.estimateCredits(inputTokens: 200_000, maxOutputTokens: 10_000, cachedTokens: 200_000) == 35)
+        // A 200,000-token case read with a 10,000-token reply: $0.80 + $0.20 → 100 credits; again from the cache: 4 + 20.
+        #expect(AIPricing.estimateCredits(inputTokens: 200_000, maxOutputTokens: 10_000) == 100)
+        #expect(AIPricing.estimateCredits(inputTokens: 200_000, maxOutputTokens: 10_000, cachedTokens: 200_000) == 24)
         // Own key: dollars at the same table; unknown models have no estimate.
         #expect(AIPricing.estimateUSD(model: "claude-opus-5", inputTokens: 1_000_000, maxOutputTokens: 1_000_000) == 30)
         #expect(AIPricing.estimateUSD(model: "some-other-model", inputTokens: 1, maxOutputTokens: 1) == nil)
-        // The relay's reservation is the conservative worst case (chars ÷ 3, dearest cache rate).
+        // The relay's reservation is the conservative worst case (chars ÷ 3, dearest cache rate) at the
+        // dearest model a request may be billed at — a fallback model (Opus 5, $5 / $25) — never Opus 5.5's.
         let r = AIPricing.relayReservation(inputCharacters: 300_000, maxOutputTokens: 10_000)
         #expect(r == Int(((Double(100_064) * 5 + 10_000 * 25) / 10_000).rounded(.up)))
         #expect(AIPricing.relayReservation(inputCharacters: 300_000, maxOutputTokens: 10_000, cacheWrite1h: true) > r)
@@ -132,7 +134,12 @@ struct AICreditsTests {
         plan("ai", AIPricing.aiIncluded)
         plan("pro", AIPricing.aiPro)
         #expect(ts.contains("[PRODUCTS.credits500]: 500") && ts.contains("[PRODUCTS.credits2000]: 2000"))
+        #expect(ts.contains(#""claude-opus-5-5": { inputPerMTok: 4, outputPerMTok: 20, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.05, batch: 0.5 }"#))
         #expect(ts.contains(#""claude-opus-5": { inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5 }"#))
+        #expect(ts.contains(#"export const DEFAULTANTHROPICMODEL = "\#(AIPricing.relayModel)";"#))
+        #expect(ts.contains(#"export const FALLBACKMODELS: readonly string[] = ["claude-opus-5", "claude-opus-4-8"];"#) && AIPricing.fallbackModels == ["claude-opus-5", "claude-opus-4-8"])
+        #expect(AIPricing.rates["claude-opus-5-5"] == .init(inputPerMTok: 4, outputPerMTok: 20, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.05, batch: 0.5))
+        #expect(AIPricing.relayReservationRates == AIPricing.rates["claude-opus-5"], "reserved at the dearest fallback model")
         for id in PurchaseProducts.storeProducts where id != PurchaseProducts.monthly && id != PurchaseProducts.annual {
             #expect(ts.contains("\"\(id)\""), "\(id) missing from the relay's PRODUCTS")
         }

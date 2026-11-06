@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { appleNotification, handle, publicSellable, purgeOld, type Env, type Deps } from "../src/index.ts";
 import { MemoryStore } from "../src/store.ts";
 import {
-  ANTHROPIC_RATES, APPLE_STATUS, CHARS_PER_TOKEN, IMAGE_TOKENS, LARGE_READ_MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, PRODUCTS,
+  ANTHROPIC_RATES, APPLE_STATUS, DEFAULT_ANTHROPIC_MODEL, FALLBACK_MODELS, dearestRates, ratesFor, reservationRates, CHARS_PER_TOKEN, IMAGE_TOKENS, LARGE_READ_MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, PRODUCTS,
   TOKEN_OVERHEAD, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, maxInputTokens, maxTokensForText,
   monthKey, monthlyAllowance, refundSplit, sellable, usd, worstCaseCost,
 } from "../src/policy.ts";
@@ -12,7 +12,10 @@ import {
 const NOW = new Date("2026-11-15T10:00:00Z");
 const DAY = 86_400_000;
 const SUB = "2000000123456789";
+/** Claude Opus 5 — the dearest fallback model: every reservation is made at these rates. */
 const OPUS = ANTHROPIC_RATES["claude-opus-5"];
+/** Claude Opus 5.5 — the relay's model: replies it answers are charged at these rates. */
+const OPUS55 = ANTHROPIC_RATES["claude-opus-5-5"];
 
 async function pkcs8Pem(): Promise<string> {
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]) as CryptoKeyPair;
@@ -93,17 +96,17 @@ test("forwarded with the relay's model and output ceiling; the ACTUAL cost is ch
   const res = await handle(ask({ ...question, max_tokens: 100000, model: "some-expensive-model", output_config: { effort: "medium", format: { x: 1 } }, tools: [{ name: "t" }] }), s.env, s.deps);
   assert.equal(res.status, 200);
   const sent = JSON.parse(w.providerBodies[0]);
-  assert.equal(sent.model, "claude-opus-5");
+  assert.equal(sent.model, "claude-opus-5-5");
   assert.equal(sent.max_tokens, 24000);
   assert.deepEqual(sent.output_config, { effort: "medium" }, "only the effort is forwarded");
   assert.equal(sent.tools, undefined);
   const body = await res.json() as { content: unknown[]; kals: Record<string, number> };
   assert.ok(Array.isArray(body.content), "Anthropic's reply is passed through");
-  // 1,000 in × $5/MTok + 500 out × $25/MTok = $0.0175 → 2 credits (rounded up).
+  // Opus 5.5: 1,000 in × $4/MTok + 500 out × $20/MTok = $0.014 → 2 credits (rounded up).
   assert.equal(body.kals.charged, 2);
   assert.ok(body.kals.reserved > body.kals.charged, "the worst case was reserved, then the rest refunded");
   assert.equal(body.kals.allowanceLeft, PLANS.ai.monthlyCredits - 2);
-  assert.equal(await s.store.spent(monthKey(NOW), "anthropic"), 1000 * 5 + 500 * 25, "the cap counts real micro-dollars");
+  assert.equal(await s.store.spent(monthKey(NOW), "anthropic"), 1000 * 4 + 500 * 20, "the cap counts real micro-dollars");
 });
 
 test("the price table: cache writes 1.25×/2×, reads 0.1×, thinking billed as output, batch half; at least one credit", () => {
@@ -125,8 +128,8 @@ test("a reply with cache usage is charged by the real split", async () => {
   const s = await setup(w);
   const big = { max_tokens: 9000, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(100_000), cache_control: { type: "ephemeral" } }] }] };
   const k = await kals(await handle(ask(big), s.env, s.deps));
-  // 2,000×5 + 100,000×0.5 + 20,000×6.25 + 3,000×25 = 260,000 µ$ = 26 credits.
-  assert.equal(k.charged, 26);
+  // Opus 5.5: 2,000×4 + 100,000×0.2 + 20,000×5 + 3,000×20 = 188,000 µ$ = 19 credits.
+  assert.equal(k.charged, 19);
 });
 
 test("a provider failure refunds everything — credits and the cap", async () => {
@@ -409,4 +412,50 @@ test("near the limit: the largest whole-case read the app offers on each plan is
   const over = { max_tokens: 4_000, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(LARGE_READ_MAX_INPUT_CHARS + 1) }] }] };
   const r = await handle(ask(over, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
   assert.equal(r.status, 413);
+});
+
+// Package B (2026-11-06) — Claude Opus 5.5 on the relay.
+test("Opus 5.5: the relay's model; $4 / $20, cache writes 1.25× / 2×, cache reads $0.20 (0.05×)", () => {
+  assert.equal(DEFAULT_ANTHROPIC_MODEL, "claude-opus-5-5");
+  assert.equal(anthropicCost({ input_tokens: 1_000_000 }, OPUS55), usd(4));
+  assert.equal(anthropicCost({ output_tokens: 1_000_000 }, OPUS55), usd(20));
+  assert.equal(anthropicCost({ cache_creation_input_tokens: 1_000_000, cache_creation: { ephemeral_5m_input_tokens: 1_000_000, ephemeral_1h_input_tokens: 0 } }, OPUS55), usd(5));
+  assert.equal(anthropicCost({ cache_creation_input_tokens: 1_000_000 }, OPUS55), usd(8), "no split: the dearer 1-hour rate");
+  assert.equal(anthropicCost({ cache_read_input_tokens: 1_000_000 }, OPUS55), usd(0.2));
+  assert.equal(anthropicCost({ input_tokens: 1_000_000, output_tokens: 1_000_000 }, OPUS55, true), usd(12));
+});
+
+test("reservations are made at the dearest rate a request may be billed at (the model or a fallback model)", () => {
+  assert.deepEqual([...FALLBACK_MODELS], ["claude-opus-5", "claude-opus-4-8"]);
+  assert.deepEqual(reservationRates("claude-opus-5-5"), OPUS, "Opus 5 is dearer than Opus 5.5, so it sets the reservation");
+  assert.deepEqual(ratesFor("claude-unknown"), dearestRates([]), "an unknown answering model is charged at the dearest rates");
+  assert.equal(dearestRates(["claude-opus-5-5"]).cacheRead, 0.05);
+});
+
+test("Opus 5.5 request shape: effort always sent (default high), never a thinking or tool_choice field", async () => {
+  const w = world(); const s = await setup(w);
+  await handle(ask({ ...question, thinking: { type: "disabled" }, tool_choice: { type: "any" }, tools: [{ name: "t" }] }), s.env, s.deps);
+  await handle(ask({ ...question, output_config: { effort: "low" } }), s.env, s.deps);
+  await handle(ask({ ...question, output_config: { effort: "max" } }), s.env, s.deps);
+  const [first, low, max] = w.providerBodies.map((b) => JSON.parse(b));
+  assert.deepEqual(first.output_config, { effort: "high" }, "no effort asked: high (Opus 5's default), never Opus 5.5's medium by omission");
+  assert.equal(first.thinking, undefined); assert.equal(first.tool_choice, undefined); assert.equal(first.tools, undefined);
+  assert.deepEqual(low.output_config, { effort: "low" });
+  assert.deepEqual(max.output_config, { effort: "high" }, "only low/medium/high pass; anything else is high");
+  for (const b of [first, low, max]) assert.deepEqual(Object.keys(b).sort(), ["fallbacks", "max_tokens", "messages", "model", "output_config"]);
+});
+
+test("a reply answered by a fallback model is charged at that model's rates, never above the reservation", async () => {
+  const w = world(); const s = await setup(w);
+  const realFetch = s.deps.fetcher;
+  s.deps.fetcher = async (url, init) => {
+    if (!url.includes("anthropic")) return realFetch(url, init);
+    w.providerBodies.push(String(init?.body ?? ""));
+    return new Response(JSON.stringify({ model: "claude-opus-5", content: [{ type: "text", text: "ok" }], usage: { input_tokens: 10_000, output_tokens: 2_000 } }), { status: 200 });
+  };
+  const k = await kals(await handle(ask(question), s.env, s.deps));
+  // Opus 5 rates: 10,000×5 + 2,000×25 = 100,000 µ$ = 10 credits (at Opus 5.5 it would have been 8).
+  assert.equal(k.charged, 10);
+  assert.ok(k.reserved >= k.charged);
+  assert.equal(await s.store.spent(monthKey(NOW), "anthropic"), 100_000);
 });

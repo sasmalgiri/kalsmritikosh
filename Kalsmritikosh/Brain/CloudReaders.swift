@@ -47,9 +47,12 @@ public nonisolated struct CloudReaders: Sendable {
         self.modelsAllowedOverride = modelsAllowedOverride
     }
 
+    /// True only when NO reader is installed — every one of them, including the role, draft and whole-case
+    /// readers that are set after init (Package B 2026-11-06: those three were missing here).
     public var isEmpty: Bool {
         interpreterOnDevice == nil && interpreterCloud == nil && rewriterOnDevice == nil && rewriterCloud == nil
             && recordExtractor == nil && answerComposer == nil && contradictionReader == nil && modelsAllowedOverride == nil
+            && roleReader == nil && draftReader == nil && caseReader == nil
     }
 }
 

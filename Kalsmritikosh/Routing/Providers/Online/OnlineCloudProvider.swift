@@ -213,7 +213,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
     private func send(prompt: String, options: GenerationOptions, carriesDocuments: Bool,
                       images: [OutboundImage] = []) async throws -> String {
-        let scope = options.sourceClearance?.binding.map { Self.caseMarker($0.scopeID) }
+        // LN1 — a question-only send made while asking in a case (no clearance) carries that case's marker too.
+        let scope = options.sourceClearance?.binding.map { Self.caseMarker($0.scopeID) } ?? CaseSendScope.caseID.map(Self.caseMarker)
         return try await Self.$logScope.withValue(scope) {
             try await sendInScope(prompt: prompt, options: options, carriesDocuments: carriesDocuments, images: images)
         }

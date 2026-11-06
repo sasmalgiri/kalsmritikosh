@@ -57,7 +57,7 @@ public nonisolated enum CloudUsageMeter {
 
 /// The estimate shown on a case's AI-reading permission sheet, for the first read of the case.
 public nonisolated enum CaseReadCostEstimate {
-    /// Anthropic list prices for the reader (claude-opus-5), dollars per million tokens.
+    /// Anthropic list prices for the own-key reader (claude-opus-5, the own-key default), dollars per million tokens.
     static let inputPerMillion = 5.0
     static let outputPerMillion = 25.0
     /// Cache writes: 1.25× (5-minute) or 2× (1-hour) input; reads 0.1×.
@@ -78,7 +78,7 @@ public nonisolated enum CaseReadCostEstimate {
     public static func line(kind: OnlineProviderKind, caseTokens: Int, questionTokens: Int, maxOutputTokens: Int, oneHourCache: Bool) -> String {
         if kind == .included {
             // AIPricing (the relay's display mirror): the first read writes the case to the 1-hour cache
-            // (twice the input rate), later questions read it at a tenth.
+            // (twice the input rate), later questions read it at the relay model's cache-read rate.
             let first = CloudUsageMeter.estimateCredits(inputTokens: caseTokens * 2 + questionTokens, maxOutputTokens: maxOutputTokens, cachedTokens: 0)
             let next = CloudUsageMeter.estimateCredits(inputTokens: caseTokens + questionTokens, maxOutputTokens: maxOutputTokens, cachedTokens: caseTokens)
             return "At most about \(first) credits for the first read of this case, then about \(next) per question asked within an hour of the last one (the AI keeps the case for about an hour; after an idle hour the first question costs about the first-read amount again)."

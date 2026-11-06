@@ -41,7 +41,7 @@ struct AISetupSheet: View {
             .padding(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
             Text(AISetupText.accuracy).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text(AISetupText.turnsOn).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(AISetupText.turnsOn(regime: FeatureFlags.aiRegimeValue())).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 14) {
                 Link("Privacy policy", destination: PurchaseLinks.privacy).font(.caption)
                 Link("Terms", destination: PurchaseLinks.terms).font(.caption)
@@ -76,11 +76,17 @@ nonisolated enum AISetupText {
     static let allowButton = "Allow AI to read case documents you permit"
     static let lead = "To answer questions about a case, the AI reads that case's documents. Nothing is sent now. In each case you are asked once, with the list of documents that would go and the ones that never go (privileged material, protected identities); your questions in an allowed case are then sent without a further prompt. You can stop AI for one case in its case file, or switch to Private at any time."
     static let accuracy = "Every statement the AI makes is checked against the quote it cites before you see it. This version's accuracy has not been measured — check each answer against its source before relying on it."
-    static let turnsOn = "This turns on Online mode, “Use AI to write answers” and AI reading of case documents (Settings ▸ Modules), and records that you accepted the terms above. Nothing else changes."
+    /// LN3 (Package B 2026-11-06) — exactly what the button changes: when the AI setting is “Fully private —
+    /// no AI”, the setup also switches it to “AI · evidence-gated” (AISetup.ensureRegimeAllowsAI), and says so.
+    static func turnsOn(regime: AIRegime) -> String {
+        let base = "This turns on Online mode, “Use AI to write answers” and AI reading of case documents (Settings ▸ Modules), and records that you accepted the terms above."
+        guard regime == .fullyPrivate else { return base + " Nothing else changes." }
+        return base + " It also changes the AI setting from “\(AIRegime.fullyPrivate.label)” to “\(AIRegime.gated.label)” (Settings ▸ Modules ▸ AI), because no AI can answer while Fully private is on. Nothing else changes."
+    }
 
     static func destination(_ kind: OnlineProviderKind) -> String {
         kind == .included
-            ? "Where it goes: to Anthropic (Claude Opus 5) through the publisher's relay, which keeps only counts and credits, never content; recordings you choose to transcribe go to Google (Gemini). Charged in your plan's credits."
+            ? "Where it goes: to Anthropic (Claude Opus 5.5) through the publisher's relay, which keeps only counts and credits, never content; recordings you choose to transcribe go to Google (Gemini). Charged in your plan's credits."
             : "Where it goes: directly to Anthropic (Claude) with your own key, billed to your Anthropic account. The publisher receives nothing."
     }
 }

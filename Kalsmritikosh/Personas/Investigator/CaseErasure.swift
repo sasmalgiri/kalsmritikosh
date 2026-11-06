@@ -13,8 +13,8 @@
 //   • A content-free record is kept (`case_erasures`): who, when, why, how many rows — never the
 //     content. A person is recorded by a SHA-256 of the name, not the name.
 //   • Candidate review LB1/PB2 — the text the case sent to the AI ("What was sent", `outbound_log`:
-//     whole-case copies and the passages and questions of sends cleared for the case) is replaced by an
-//     erasure line; each entry keeps its time, destination, size and SHA-256 (the audit value), never
+//     whole-case copies and the passages and questions of sends cleared for the case, and — LN1 — the
+//     question-only sends made while asking in the case, CaseSendScope) is replaced by an erasure line; each entry keeps its time, destination, size and SHA-256 (the audit value), never
 //     the content.
 //
 

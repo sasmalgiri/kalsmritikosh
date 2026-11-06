@@ -122,7 +122,8 @@ struct AIIncludedTests {
     func settings() {
         #expect(!OnlineSettings.setAPIKey("sk-ant-anything", for: .included), "no key is ever stored for AI Included")
         if !AIIncludedRelay.isConfigured { #expect(OnlineSettings.apiKey(for: .included) == nil) }
-        #expect(OnlineProviderKind.included.defaultModel == "claude-opus-5")
+        #expect(OnlineProviderKind.included.defaultModel == "claude-opus-5-5", "AI plans: the relay's Opus 5.5")
+        #expect(OnlineProviderKind.anthropic.defaultModel == "claude-opus-5", "own key: unchanged")
     }
 
     @Test("A3: AI is off by App Store country — blocked and unknown countries refuse, every AI send refuses there, settings and plans follow")

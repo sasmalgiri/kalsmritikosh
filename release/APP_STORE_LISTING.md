@@ -142,7 +142,7 @@ Optional: Settings ▸ Online with the credit meter; "What was sent" log.
 >    Online ▸ "Turn on AI…".) Settings ▸ Online ▸ "Check credits" shows 2,000 credits.
 >    Requests go to the publisher's relay (Cloudflare Worker, <RELAY HOST>), which verifies the subscription with the App
 >    Store Server API (Sandbox transactions are accepted), reserves the request's worst-case cost in credits, forwards to
->    Anthropic (Claude Opus 5) — or, for recordings, Google Gemini — under the publisher's own key, and charges the actual
+>    Anthropic (Claude Opus 5.5) — or, for recordings, Google Gemini — under the publisher's own key, and charges the actual
 >    cost. The relay stores counts and credits only, never content. Your review usage runs on the publisher's key under a
 >    hard monthly safety cap (US$20 at launch); if it were reached, the app says the service is paused until the 1st.
 >

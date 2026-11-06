@@ -38,6 +38,11 @@ struct CaseReadConsentSheet: View {
                 Text("about \(request.estimatedTokens.formatted()) tokens").font(.caption.monospacedDigit())
             }
             Text(request.estimate).font(.caption).fixedSize(horizontal: false, vertical: true)
+            // Package B (P1-E) — what the plan has left, beside the estimate.
+            if let balance = request.balance {
+                Text(balance).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("caseRead.balance")
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(Array(request.documents.enumerated()), id: \.offset) { _, item in
@@ -45,6 +50,15 @@ struct CaseReadConsentSheet: View {
                             Text(item.name).font(.caption).lineLimit(1)
                             Spacer()
                             Text(ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)).font(.caption2.monospacedDigit())
+                        }
+                    }
+                    // Package B (P0-A display) — what this Mac could not read is named, not silently left out.
+                    if !request.notReadable.isEmpty {
+                        Divider().padding(.vertical, 4)
+                        Text("Not read, or read only in part, on this Mac (\(request.notReadable.count)) — what was not read cannot be sent").font(.caption.weight(.semibold))
+                            .accessibilityIdentifier("caseRead.notReadable")
+                        ForEach(Array(request.notReadable.enumerated()), id: \.offset) { _, item in
+                            Text("\(item.name) — \(item.reason ?? "not read")").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if !request.excluded.isEmpty {

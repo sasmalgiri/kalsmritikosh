@@ -11,8 +11,9 @@
 //  does the work, so what they learn is the real app.
 //
 //  The path is the current case-to-report journey: open the sample → choose the investigation question
-//  → inspect and authorise the case documents → ask → open the exact citation → review conflicting
-//  accounts → save a reviewed result → carry it into the report → export and reopen it. It shows both a
+//  → inspect and authorise the case documents → see the case at a glance and what was read → ask → open
+//  the exact citation → review conflicting accounts and decide one in place → save a reviewed result →
+//  carry it into the report → ask a custodian for missing material → export and reopen it (Package B). It shows both a
 //  supported conclusion (Amendment 7: approved 2 May 2024, signed by John Carter and Maria Lopez) and a
 //  question the evidence cannot settle (whether invoice 432 was ever paid — the record stops at “unpaid”).
 //
@@ -81,6 +82,10 @@ public nonisolated enum HelpTutorial {
                      instruction: "Press “Add documents to this case” — or “Review new documents” when the matter already holds the workspace’s documents. Read the preview: how many are in scope now, how many are new, how many stay excluded. Nothing is added until you confirm.",
                      expect: "“Documents: 8 in scope”. Only these documents are read for this matter’s jobs and questions.",
                      destination: .work, controls: ["Add documents to this case", "Review new documents"]),
+        TutorialStep(id: "overview", title: "See the case at a glance and what was read",
+                     instruction: "Open Cases and open the matter. Its Overview starts with “This case at a glance”: the question, what waits for you, the evidence requests and “What the app could read”. Choose a count or the “Next:” step to go where it is done.",
+                     expect: "“What the app could read” gives the documents read, partly read and not read, each one counted once, every unread one with its reason. The case reopens here, on the tab you leave, after a restart too.",
+                     destination: .cases, controls: ["Show all"]),
         TutorialStep(id: "ask", title: "Ask — one settled question, one the record cannot settle",
                      instruction: "Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”.",
                      expect: "The first answer quotes the amendment — effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) — with a citation chip for it. The second quotes the record as it stands: invoice 432 issued 30 May 2024, due 29 June, “unpaid as of June 14, 2024”; no document records a payment and none is invented. The badge says how far the evidence goes.",
@@ -93,6 +98,10 @@ public nonisolated enum HelpTutorial {
                      instruction: "Open Findings ▸ Contradictions. The first-lot delivery date was given as about 13 May 2024 (8 April email), then 28 May 2024 (18 April email and the amendment).",
                      expect: "A row “Conflicting dates for “Delivery delayed”” — “Conflicts with a second source; both claims are preserved and not reconciled automatically”, 2 sources, “Review”. An estimate that was later revised is shown as a conflict to review, not labelled wrong — you decide what it means and record why.",
                      destination: .findings, controls: ["Review"]),
+        TutorialStep(id: "decide", title: "Decide a contradiction where it is shown",
+                     instruction: "In the matter: Overview ▸ Contradictions, press “Find contradictions”. Choose an item: its two passages are shown beside it, each with “Open source”. Record “Confirm”, “Dismiss” (choose a reason) or “Defer”.",
+                     expect: "The item shows your decision and its reason, kept with the version of both documents; neither document is changed. If the check lists nothing for this matter, the list says so and there is nothing to decide.",
+                     destination: .cases, controls: ["Find contradictions", "Open source", "Confirm", "Dismiss", "Defer"]),
         TutorialStep(id: "review", title: "Save a reviewed result",
                      instruction: "Back in Professional Jobs, press “Run” on a Collect & organize job that produces rows — “Documentary evidence register” — then “Open result”. Decide a row (Accepted or Rejected), type a note, press “Save review”.",
                      expect: "The result shows “Reviewed by me, <date>” and your decisions; the jobs summary counts “1 to review”. Unreviewed rows stay marked unreviewed wherever they are carried.",
@@ -101,9 +110,13 @@ public nonisolated enum HelpTutorial {
                      instruction: "On the reviewed row press “Add to case…” and choose “Include in report”; then “Add to chronology”.",
                      expect: "“Row 1 selected for the case report (accepted on review; every citation and the revision kept).” and “Row 1 added to the case chronology …”. The case log records both.",
                      destination: .work, controls: ["Add to case…", "Include in report", "Add to chronology"]),
+        TutorialStep(id: "request", title: "Ask a custodian for missing material",
+                     instruction: "In the matter: Evidence ▸ Evidence requests. Type what is requested (for example “Proof of payment of invoice 432”), the custodian (“Northwind accounts”), and press “Create request”. Then “Draft request text…” to see the letter you would send yourself, and “Record sent”.",
+                     expect: "The request is listed as Open with “No expected items listed.” and its history shows it was sent. The app sends nothing; only “Record decision” ever changes its status.",
+                     destination: .cases, controls: ["Create request", "Draft request text…", "Record sent", "Record decision"]),
         TutorialStep(id: "export", title: "Export the report and reopen it",
                      instruction: "Open Cases, open the matter, go to “Log & exports” and press “Case file report…”. Save the file, then open it from the Finder.",
-                     expect: "The notice reads “Exported <name> (SHA-256 …), recorded.” and the case log gains an “exported” line. The report lists the reviewed rows you included with their sources, the chronology entry, and an “Unresolved questions and limitations” section.",
+                     expect: "The notice reads “Exported <name> (SHA-256 …), recorded.” and the case log gains an “exported” line. The report lists the reviewed rows you included with their sources, the chronology entry, and an “Unresolved questions and limitations” section, followed by “What the app could read” and “Evidence requests” with the request you created.",
                      destination: .cases, controls: ["Case file report…"]),
         TutorialStep(id: "finish", title: "What you saw, and back to your own archive",
                      instruction: "A settled point (the amendment’s approval, quoted from the document) and one the record leaves open (the payment: unpaid as of 14 June 2024, nothing later). Press “Back to my archive” in the banner when you are done.",

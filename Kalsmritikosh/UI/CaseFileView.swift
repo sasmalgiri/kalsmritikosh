@@ -55,6 +55,8 @@ final class CaseFileModel {
     var resultRowsUndecided = 0
     /// How many documents the case's stored AI permission covers (nil: none stored).
     var aiPermittedDocuments: Int?
+    /// Package B (P0-A display) — what this Mac could read of the case's documents (nil until loaded).
+    var coverage: CaseCoverageReadout?
 
     init(caseID: UUID, workspaceID: UUID, defaults: UserDefaults = AppDefaults.store) {
         self.caseID = caseID; self.workspaceID = workspaceID
@@ -92,6 +94,7 @@ final class CaseFileModel {
             }
         }
         aiPermittedDocuments = CaseReadPermissionStore.live.permission(caseID: caseID)?.documentCount
+        coverage = await app.caseCoverage(caseID: caseID)
         if !review.loaded, let desk = app.investigationContradictionGap { await review.load(desk: desk, objects: app.objects) }
     }
 
@@ -219,7 +222,8 @@ final class CaseFileModel {
             do {
                 let pkg = try await outputs.prepare(caseID: caseID, kind: kind, route: .file, actor: actor, render: render)
                 let receipt = await outputs.write(pkg, to: url)
-                outputNotice = receipt.summary
+                // Package B (P0-A display) — the receipt of a case report says what the app could read.
+                outputNotice = receipt.summary + (kind == .caseFileReport ? (coverage.map { " Coverage at export: \($0.summaryLine)." } ?? "") : "")
                 error = receipt.status == .written && receipt.recorded ? nil : receipt.summary
             } catch {
                 outputNotice = nil
@@ -724,6 +728,7 @@ struct CaseGlanceSection: View {
                        + (glance.overdueRequests > 0 ? ", \(glance.overdueRequests) overdue" : ""), tab: .evidence)
                 Spacer(minLength: 0)
             }
+            if let c = model.coverage { CaseCoverageBlock(coverage: c) }
             if !glance.limitations.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Reading limits").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -757,6 +762,32 @@ struct CaseGlanceSection: View {
         } else {
             content
         }
+    }
+}
+
+/// Package B (P0-A display) — read, partly read and not read, with each reason, as visible text.
+struct CaseCoverageBlock: View {
+    let coverage: CaseCoverageReadout
+    @State private var showAll = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("What the app could read").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(coverage.summaryLine).font(.caption).fixedSize(horizontal: false, vertical: true)
+            let lines = coverage.entryLines + coverage.notes
+            ForEach(Array((showAll ? lines : Array(lines.prefix(5))).enumerated()), id: \.offset) { _, line in
+                Label(line, systemImage: "doc.badge.ellipsis").font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            if lines.count > 5 {
+                Button(showAll ? "Show fewer" : "Show all \(lines.count)") { showAll.toggle() }.buttonStyle(.borderless).font(.caption)
+            }
+            if !coverage.entries.isEmpty {
+                Text("A document not read here was not searched, quoted or sent to an AI. Sources ▸ Needs attention can read some of them again.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("case.glance.coverage")
     }
 }
 
@@ -1808,8 +1839,10 @@ struct CaseLogTab: View {
                 HStack {
                     InfoPopoverButton(topic: "task-review-approve-export")   // §6.8 — approvals and exports
                     Button("Case file report…") {
-                        let named = model.named, actor = model.actor
-                        model.exportDocument(appState, kind: .caseFileReport, name: "Case file - \(s.caseHeader.title)", ext: "md") { CaseFileDocuments.caseFileReport($0, named: named, by: actor) }
+                        let named = model.named, actor = model.actor, coverage = model.coverage, requests = model.requests
+                        model.exportDocument(appState, kind: .caseFileReport, name: "Case file - \(s.caseHeader.title)", ext: "md") {
+                            CaseFileDocuments.caseFileReport($0, named: named, coverage: coverage, requests: requests, by: actor)
+                        }
                     }
                     Button("Case log…") { model.exportDocument(appState, kind: .caseLog, name: "Case log - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.actionLogCSV($0) } }
                     Button("Exhibit list…") { model.exportDocument(appState, kind: .exhibitList, name: "Exhibits - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.exhibitListCSV($0) } }

@@ -131,7 +131,7 @@ public nonisolated enum HelpRegistry {
             "Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us."
         ],
         notes: [
-            "Private mode is the default: the app opens no connection for your documents. Online AI is optional, uses your own provider account (which may charge you), shows every send before it leaves, and is never switched on by subscribing.",
+            "Private mode is the default: the app opens no connection for your documents. Online AI is optional — an AI plan (credits) or your own Anthropic key (billed by Anthropic) — asks once per case before that case's documents go, then sends your questions in that case without a further prompt, and is never switched on by subscribing alone.",
             "Before a subscription, and after one ends, every case stays readable and exports, backups, recovery, Help and the privacy controls keep working; only creating, editing and analysing wait for a subscription."
         ],
         controls: ["Add Folder…", "Ready", "Start matter", "Add documents to this case", "Review new documents", "Run", "Send question", "Open source", "Open at this passage", "Open result", "Accept shown", "Reject shown", "Save review", "Mark completed", "Include in report", "Exclude from report (reason = your note)", "Add to case…", "Add to chronology", "Case file report…", "Complete backup"],
@@ -252,8 +252,21 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["contradiction", "conflict", "dismiss", "reopen", "resume", "evidence request", "custodian", "statement", "missing", "due", "collection plan", "jobs"]),
         HelpTopic(
+            id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
+            summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",
+            steps: [
+                "Cases ▸ open a case ▸ Overview ▸ “This case at a glance” ▸ “What the app could read”: how many documents were read, partly read or not read, each with its reason (password-protected, unsupported file type, too large, text recognition failed, waiting to be read). “Show all” lists every one. A document not read was not searched, quoted or sent to an AI.",
+                "The AI permission sheet of a case lists the same documents under “Not read, or read only in part, on this Mac”, beside the documents that would go, the estimate of the first read and, on an AI plan, the credits you have left.",
+                "While a case question runs (Professional Jobs ▸ Ask ▸ “Run”), a line says the AI is reading the case, with “Cancel”. Cancel stops waiting: nothing more is sent; if the AI had started, only what it used is charged and the rest of what was held is returned. After the read the cost charged is shown.",
+                "If the read fails, the cause is named with one fix: not enough credits → “Buy credits…” (or “See plans…”); the network → “Try again”; your Anthropic key refused or out of credit → “Open Settings”; the service paused for the month or today's limit reached → later. A failed request is not charged; after a timeout it may have been, and the meter shows it after the next request.",
+                "The case file report (Log & exports ▸ “Case file report…”) has a “What the app could read” section and an “Evidence requests” section (each request's recorded status, what arrived by source version, what is missing); the export notice repeats the coverage line."
+            ],
+            controls: ["Show all", "Cancel", "Try again", "Buy credits…", "See plans…", "Open Settings", "Case file report…"],
+            destination: .cases,
+            keywords: ["coverage", "not read", "password", "unsupported", "ocr", "credits", "cost", "cancel", "retry", "failed", "balance"]),
+        HelpTopic(
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
-            summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own AI-provider account.",
+            summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own Anthropic key (the only own key the app accepts).",
             steps: [
                 "The easy way: after buying AI Included or AI Pro, or after saving your Anthropic key in Settings ▸ Online, the app shows “Turn on AI”: read the AI's terms and choose “Allow AI to read case documents you permit”. That one step turns on Online mode, “Use AI to write answers” and AI reading of case documents. If you chose Not now, Ask names what is missing and offers “Turn on AI…”. Not available where Online AI is blocked for the App Store country. A badge shows while Online is on; one click returns to Private.",
                 "Inside a case you allow the AI once for that case: the sheet lists the documents that would go (and those that never go — privileged or restricted material) and names where they go; your questions in that case are then sent without a further prompt, and you can stop it in the case file (“Stop AI for this case”). Outside a case, a send carrying document text is always previewed and approved; a question alone is previewed too, unless “Ask before every send” is off and you chose “Send and don’t ask again this session”. Document text goes only to providers whose terms you accepted; protected identities are masked.",

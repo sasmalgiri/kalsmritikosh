@@ -53,7 +53,39 @@ extension AppState {
             })
         plan.otherReadersAvailable = { [weak self] in await self?.aiReadsDocuments() ?? false }
         plan.offlineReason = { await MainActor.run { AISetupCenter.shared.noteOffline()?.note } }
+        // Package B (P0-A display) — the permission sheet also lists what this Mac could not read, and the
+        // plan's balance next to the estimate (P1-E).
+        plan.notReadable = { [weak self] caseID in
+            guard let readout = await self?.caseCoverage(caseID: caseID) else { return [] }
+            return readout.entries.map { CaseReadConsentRequest.Item(name: $0.name, bytes: 0, reason: ($0.status == .notRead ? "not read: " : "partly read: ") + ($0.reason ?? "unknown")) }
+        }
+        plan.balanceLine = {
+            guard OnlineSettings.kind == .included else { return nil }
+            return await MainActor.run { CaseReadCostLines.balance(AICreditMeter.shared.balance) }
+        }
         return plan
+    }
+
+    /// Package B (P0-A display) — the case's reading coverage from what ingestion already recorded (the
+    /// workspace's coverage manifest, limited to the case's authorised sources). nil while the ledger or
+    /// the case is not available. No extraction, no writes.
+    func caseCoverage(caseID: UUID) async -> CaseCoverageReadout? {
+        guard let db = database, let answers = investigationAnswers, let objects else { return nil }
+        do {
+            let context = try await answers.scopeContext(caseID: caseID)
+            let builder = CaseCoverageManifestBuilder(repository: CaseCoverageRepository(database: db),
+                                                      readiness: SourceReadinessRepository(database: db),
+                                                      container: ContainerInspectionRepository(database: db))
+            let manifest = try await builder.build(workspaceID: context.workspaceID, generatedAt: Date())
+            let scope = context.scope.authorizedSourceVersionIDs
+            let ids = manifest.canonicalSources.map(\.sourceVersionID) + manifest.unadmittedContainerMembers.map(\.parentSourceVersionID)
+            let labels = try await CaseCoverageRepository(database: db).labels(for: ids)
+            let withText = Set(try await objects.sourceVersionsByObject(inSourceVersionIDs: scope).values.flatMap { $0 })
+            return CaseCoverageReadout.make(manifest: manifest, scope: scope, labels: labels, hasLedgerText: withText)
+        } catch {
+            KalsmritikoshLog.app.error("Case coverage unavailable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// The one step after the person allowed it on the setup sheet: AI reading on for `kind` (see

@@ -216,9 +216,9 @@ public enum AIRegime: String, CaseIterable, Identifiable, Sendable {
         case .fullyPrivate:
             return "The on-device AI model is never consulted. Everything — answers, topics, summaries — is built from your documents by deterministic rules. Fastest and lowest energy, and the most private. AI-only features below are unavailable and shown greyed."
         case .gated:
-            return "Apple's on-device model is used, but only over your own evidence: every AI-written fact must cite a source in your archive or it is dropped, and the answer abstains rather than guess. Nothing is invented and nothing leaves your Mac. Recommended."
+            return "Apple's on-device model is used, but only over your own evidence: every AI-written fact must cite a source in your archive or it is dropped, and the answer abstains rather than guess. Nothing is invented. The on-device model itself sends nothing; only Online mode, when you turn it on, sends a case you allow to Anthropic. Recommended."
         case .free:
-            return "The on-device model may answer more fluently and reason beyond strict citations. Still 100% on-device, but unconstrained answers are clearly marked and are NOT written into your verified ledger — use it to compare phrasing/coverage against gated mode."
+            return "The on-device model may answer more fluently and reason beyond strict citations. The on-device model itself sends nothing (only Online mode, when on, sends a case you allow), but unconstrained answers are clearly marked and are NOT written into your verified ledger — use it to compare phrasing/coverage against gated mode."
         }
     }
 

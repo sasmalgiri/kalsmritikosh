@@ -97,7 +97,7 @@ import Testing
     @Test("The tutorial follows the mandated path, names its controls, and runs only in the sample case")
     func tutorialPath() async {
         let ids = HelpTutorial.steps.map(\.id)
-        #expect(ids == ["open-sample", "question", "authorise", "ask", "citation", "conflict", "review", "carry", "export", "finish"])
+        #expect(ids == ["open-sample", "question", "authorise", "overview", "ask", "citation", "conflict", "decide", "review", "carry", "request", "export", "finish"])
         for s in HelpTutorial.steps { #expect(!s.instruction.isEmpty && !s.expect.isEmpty, "\(s.id)") }
         // Both a supported conclusion and an insufficient one are shown.
         let all = HelpTutorial.steps.map(\.expect).joined(separator: " ")

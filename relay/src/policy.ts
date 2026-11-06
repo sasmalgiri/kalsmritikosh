@@ -98,11 +98,40 @@ export interface ModelRates {
   batch: number;            // × every price (Batch API; the relay does not use it)
 }
 
+// Package B (2026-11-06): the relay answers with Claude Opus 5.5 ($4 / $20 per MTok; cache reads $0.20 =
+// 0.05× input — Anthropic's published rate, not the 0.1× of earlier models; cache writes 1.25× / 2×).
+// Claude Opus 5 and Opus 4.8 stay in the table because Anthropic's server-side fallback (`fallbacks:
+// "default"`) may answer a declined request with one of them, billed at THEIR rates.
 export const ANTHROPIC_RATES: Record<string, ModelRates> = {
+  "claude-opus-5-5": { inputPerMTok: 4, outputPerMTok: 20, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.05, batch: 0.5 },
   "claude-opus-5": { inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5 },
+  "claude-opus-4-8": { inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5 },
 };
-export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-5";
-export const ratesFor = (model: string): ModelRates => ANTHROPIC_RATES[model] ?? ANTHROPIC_RATES[DEFAULT_ANTHROPIC_MODEL];
+export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-5-5";
+/** The models Anthropic's server-side fallback may answer with when the relay's model declines. */
+export const FALLBACK_MODELS: readonly string[] = ["claude-opus-5", "claude-opus-4-8"];
+
+/** Every price at the dearest of `models` (field by field) — what a request may be billed at at worst.
+ *  An unknown model counts as the dearest model in the table. */
+export function dearestRates(models: readonly string[]): ModelRates {
+  const known = models.map((m) => ANTHROPIC_RATES[m]).filter((r): r is ModelRates => r !== undefined);
+  const pool = known.length === models.length && known.length > 0 ? known : Object.values(ANTHROPIC_RATES);
+  const max = (f: (r: ModelRates) => number) => Math.max(...pool.map(f));
+  return { inputPerMTok: max((r) => r.inputPerMTok), outputPerMTok: max((r) => r.outputPerMTok), cacheWrite5m: max((r) => r.cacheWrite5m),
+           cacheWrite1h: max((r) => r.cacheWrite1h), cacheRead: max((r) => r.cacheRead), batch: max((r) => r.batch) };
+}
+/** The rates of a model that answered (an unknown one: the dearest in the table). */
+export const ratesFor = (model: string): ModelRates => ANTHROPIC_RATES[model] ?? dearestRates([]);
+/** What a request to `model` is RESERVED at: the dearest of the model and its fallbacks, so a declined
+ *  request answered by a fallback model never costs more than was reserved. */
+export const reservationRates = (model: string): ModelRates => dearestRates([model, ...FALLBACK_MODELS]);
+
+/** Effort levels the app may ask for; the relay always sends one (Opus 5.5's own default is `medium`,
+ *  Opus 5's was `high` — the relay keeps `high` when the app does not ask, so nothing changes silently). */
+export const EFFORTS: readonly string[] = ["low", "medium", "high"];
+export const DEFAULT_EFFORT = "high";
+export const effortFor = (asked: unknown): string =>
+  typeof asked === "string" && EFFORTS.includes(asked) ? asked : DEFAULT_EFFORT;
 
 /** What Anthropic reports a request used (`usage` of a Messages reply). */
 export interface AnthropicUsage {

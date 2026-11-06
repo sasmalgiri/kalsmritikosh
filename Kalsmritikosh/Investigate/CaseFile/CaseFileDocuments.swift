@@ -232,7 +232,8 @@ public nonisolated enum CaseFileDocuments {
 
     // MARK: The whole case file
 
-    public static func caseFileReport(_ s: CaseFileSnapshot, named: StudioCaseFacts? = nil, by: String, at: Date = Date()) -> String {
+    public static func caseFileReport(_ s: CaseFileSnapshot, named: StudioCaseFacts? = nil, coverage: CaseCoverageReadout? = nil,
+                                      requests: [EvidenceRequestFile] = [], by: String, at: Date = Date()) -> String {
         let p = s.profile, c = s.caseHeader
         var o = "# \(c.title)\n\n"
         o += "Stage: **\(c.status == .closed ? CaseStage.closed.label : p.stage.label)**"
@@ -360,6 +361,9 @@ public nonisolated enum CaseFileDocuments {
         if unverified > 0 { o += "- \(unverified) evidence link(s) name a source but did not verify (the quoted words were not found, the source left the case or became inaccessible, or the exhibit was withdrawn); they are shown as unverified above and count for nothing.\n" }
         if !s.supersededOrigins.isEmpty { o += "- \(s.supersededOrigins.count) carried item(s) come from a result revision that has since been superseded; re-review them before relying on this report.\n" }
         o += "- This report states what the linked passages support; it reaches no conclusion beyond them, and the chronology entries are the investigator's.\n"
+        // Package B (P1-D) — the reading limits and the collection status travel with the report.
+        if let coverage { o += coverage.reportSection } else { o += "\n## What the app could read\n- Not available when this report was written; check the case overview.\n" }
+        if !requests.isEmpty { o += evidenceRequestsSection(requests, allegations: s.allegations) }
 
         if let named { o += namedInDocuments(named) }
         if !s.people.isEmpty {
@@ -393,6 +397,25 @@ public nonisolated enum CaseFileDocuments {
         if let r = p.retentionPolicy { o += "\n## Retention\n- \(r)" + (p.retainUntil.map { " · review on \(d($0))" } ?? "") + "\n" }
         o += "\n## Case log\n\(s.actions.count) recorded action(s); first \(t(s.actions.first?.at)), last \(t(s.actions.last?.at)).\n"
         return o + footer(by, at)
+    }
+
+    /// Package B (P1-D) — each evidence request with its recorded status, what arrived (by source version)
+    /// and what is still missing. A status is the investigator's recorded decision, never inferred.
+    public static func evidenceRequestsSection(_ files: [EvidenceRequestFile], allegations: [CaseAllegation]) -> String {
+        var o = "\n## Evidence requests\n_Status is the investigator's recorded decision; an arrival alone does not fulfil a request._\n"
+        for f in files.sorted(by: { $0.request.createdAt < $1.request.createdAt }) {
+            let r = f.request
+            o += "- \(r.description) — **\(r.status.label)**"
+            if let c = r.custodian { o += " · from \(c)" }
+            if let due = r.dueAt { o += " · due \(d(due))" }
+            if let aid = r.allegationID, let a = allegations.first(where: { $0.id == aid }) { o += " · for \(a.label)" }
+            o += "\n  - \(f.progress.summary)\n"
+            let received = f.receipts.filter(\.counts)
+            if !received.isEmpty {
+                o += "  - Received (source version): " + received.map { "\($0.sourceVersionID.uuidString.prefix(8))" + ($0.contentHash.map { " SHA-256 \($0.prefix(12))" } ?? "") }.joined(separator: "; ") + "\n"
+            }
+        }
+        return o
     }
 
     // MARK: Named in the documents

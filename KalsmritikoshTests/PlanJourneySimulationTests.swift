@@ -228,13 +228,16 @@ struct PlanJourneySimulationTests {
         }
     }
 
-    /// Mirror of relay/src/policy.ts `anthropicCost` (micro-dollars, rounded up) at claude-opus-5's rates.
-    nonisolated static func costMicro(_ u: [String: Any]) -> Double {
+    /// Mirror of relay/src/policy.ts `anthropicCost` (micro-dollars, rounded up) at `model`'s rates — the
+    /// relay's Claude Opus 5.5 by default (Package B 2026-11-06); the own-key tally passes claude-opus-5.
+    nonisolated static func costMicro(_ u: [String: Any], model: String = "claude-opus-5-5") -> Double {
+        let r = AIPricing.rates[model] ?? AIPricing.Rates(inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5)
         func n(_ k: String, _ d: [String: Any] = u) -> Double { Double(max(0, d[k] as? Int ?? 0)) }
         let split = u["cache_creation"] as? [String: Any] ?? [:]
         let w5 = n("ephemeral_5m_input_tokens", split)
         let w1 = max(n("ephemeral_1h_input_tokens", split), n("cache_creation_input_tokens") - w5)
-        let m = n("input_tokens") * 5 + w5 * 5 * 1.25 + w1 * 5 * 2 + n("cache_read_input_tokens") * 5 * 0.1 + n("output_tokens") * 25
+        let p = r.inputPerMTok
+        let m = n("input_tokens") * p + w5 * p * r.cacheWrite5m + w1 * p * r.cacheWrite1h + n("cache_read_input_tokens") * p * r.cacheRead + n("output_tokens") * r.outputPerMTok
         return m.rounded(.up)
     }
     /// Mirror of `creditsFor`.
@@ -449,7 +452,7 @@ struct PlanJourneySimulationTests {
             let dict: [String: Any] = ["input_tokens": u.inputTokens, "cache_creation_input_tokens": u.cacheWriteTokens,
                                        "cache_read_input_tokens": u.cacheReadTokens, "output_tokens": u.outputTokens]
             OwnKeyBudget.record(usage: dict, model: "claude-opus-5", at: month)
-            expected += Self.costMicro(dict) / 1_000_000
+            expected += Self.costMicro(dict, model: "claude-opus-5") / 1_000_000
         }
         #expect(abs(OwnKeyBudget.spentUSD(now: month) - expected) < 1e-5, "\(OwnKeyBudget.spentUSD(now: month)) vs \(expected)")
         #expect(OwnKeyBudget.spentUSD(now: month) > 0)

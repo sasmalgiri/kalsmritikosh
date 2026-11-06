@@ -35,11 +35,18 @@ public nonisolated struct CaseReadConsentRequest: Sendable, Identifiable, Equata
     public let estimate: String
     /// The document set the permission is pinned to.
     public let fingerprint: String
+    /// Package B (P0-A display) — the case's documents this Mac could not read, or read only in part, each
+    /// with its reason (password-protected, unsupported type, text recognition failed …). They are not sent.
+    public let notReadable: [Item]
+    /// Package B (P1-E) — the AI plan's credits left, next to the estimate (nil: own key, or not known yet).
+    public let balance: String?
     public init(id: UUID = UUID(), caseID: UUID, provider: String, documents: [Item], excluded: [Item], totalBytes: Int,
-                estimatedTokens: Int, readsWhole: Bool, estimate: String, fingerprint: String) {
+                estimatedTokens: Int, readsWhole: Bool, estimate: String, fingerprint: String,
+                notReadable: [Item] = [], balance: String? = nil) {
         self.id = id; self.caseID = caseID; self.provider = provider; self.documents = documents; self.excluded = excluded
         self.totalBytes = totalBytes; self.estimatedTokens = estimatedTokens; self.readsWhole = readsWhole
         self.estimate = estimate; self.fingerprint = fingerprint
+        self.notReadable = notReadable; self.balance = balance
     }
 }
 
@@ -74,6 +81,11 @@ public nonisolated struct CaseWholeReading: Sendable {
     /// Why no AI reader is installed now, in the person's words (the missing setup step: no plan or key,
     /// Online off, AI switched off, terms not accepted, blocked country, relay or credits); nil = unknown.
     public var offlineReason: @Sendable () async -> String? = { nil }
+    /// Package B (P0-A display) — the case's documents not (fully) read on this Mac, for the permission
+    /// sheet. Display only: it changes nothing that is sent. Default: none known.
+    public var notReadable: @Sendable (_ caseID: UUID) async -> [CaseReadConsentRequest.Item] = { _ in [] }
+    /// Package B (P1-E) — the plan's balance line for the permission sheet (nil: none to show).
+    public var balanceLine: @Sendable () async -> String? = { nil }
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseReader.Document],
                 gate: @escaping @Sendable () -> CloudSourceGate?,
@@ -142,7 +154,8 @@ public nonisolated struct CaseWholeReading: Sendable {
             estimatedTokens: prepared.tokens, readsWhole: prepared.fits,
             estimate: estimate(prepared.fits ? prepared.tokens : min(prepared.tokens, prepared.limit),
                                CaseReader.estimatedTokens([CaseReader.questionSuffix(question)])),
-            fingerprint: prepared.fingerprint)
+            fingerprint: prepared.fingerprint,
+            notReadable: await notReadable(caseID), balance: await balanceLine())
         guard await askConsent(request) else {
             KalsmritikoshLog.brain.info("case reading: the person chose not now — nothing sent")
             return false

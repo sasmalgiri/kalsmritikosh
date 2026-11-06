@@ -142,6 +142,14 @@ public actor InvestigationAnswerService {
     /// over the case-scoped retriever, so no unauthorized source can enter the evidence packet or the
     /// citations on any pass. Fast vs Full Evidence is the engine's depth concern; the scope is identical.
     public func answer(caseID: UUID, question: String, access: SensitiveAccessContext) async throws -> InvestigationAnswer {
+        // LN1 — every send made while answering this question (the interpreter's and rewriter's
+        // question-only sends included) is recorded with the case's marker, so erasing the case erases it.
+        try await CaseSendScope.$caseID.withValue(caseID) {
+            try await answerInCase(caseID: caseID, question: question, access: access)
+        }
+    }
+
+    private func answerInCase(caseID: UUID, question: String, access: SensitiveAccessContext) async throws -> InvestigationAnswer {
         let context = try await scopeContext(caseID: caseID)
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
         let brain = makeBrain(scoped)

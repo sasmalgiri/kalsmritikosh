@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Investigations Made Easy — investigation documentation made easy, privately on your Mac.</title>
-<meta name="description" data-claim="privacy.on-device" content="A private, on-device Mac app that turns your documents and emails into a cited evidence ledger. Case chronology, privilege log, document review and Bates-style production for solo and small law firms — plus workflows for investigators, SIU insurance fraud, forensic accounting, workplace investigations, journalism, research, and genealogy (Genealogical Proof Standard). One plain plan — monthly or yearly, every persona included. Nothing is uploaded unless you choose Online mode." />
+<meta name="description" data-claim="privacy.on-device" content="A private, on-device Mac app that turns your documents and emails into a cited evidence ledger. Case chronology, privilege log, document review and Bates-style production for solo and small law firms — plus workflows for investigators, SIU insurance fraud, forensic accounting, workplace investigations, journalism, research, and genealogy (Genealogical Proof Standard). Three plans — Workbench, AI Included and AI Pro, monthly or yearly, every persona included. Nothing is uploaded unless you choose Online mode." />
 <style>
   :root{
     --bg:#0b0d12; --panel:#12151d; --panel2:#171b26; --ink:#eef1f7; --muted:#9aa4b8;
@@ -254,7 +254,7 @@
 
   <p class="subhead">The three steps</p>
   <div class="grid g3">
-    <div class="card"><div class="ic">1</div><h3>Add your documents</h3><p>Point it at a folder — PDFs, Word, Excel, email (EML/MBOX), scans. It reads everything in place; nothing leaves your device. (The words spoken in recordings and videos are turned into text on-device while importing when “Transcribe audio &amp; video” is on, the default — the spoken words only, not what a video shows. Reading is tuned for English.)</p></div>
+    <div class="card"><div class="ic">1</div><h3>Add your documents</h3><p>Point it at a folder — PDFs, Word, Excel, email (EML/MBOX), scans. It reads everything in place; in Private mode nothing leaves your device. (The words spoken in recordings and videos are turned into text on-device while importing when “Transcribe audio &amp; video” is on, the default — the spoken words only, not what a video shows. Reading is tuned for English.)</p></div>
     <div class="card"><div class="ic">2</div><h3>It builds the ledger</h3><p>Formats fall away. Everything becomes cited facts, dated events, people, and relationships in one structured, searchable store.</p></div>
     <div class="card" data-claim="answers.traceable"><div class="ic">3</div><h3>Ask, and verify</h3><p>Ask in plain language. Get an answer with its evidence, a confidence read, and any conflicts — every line traceable to a source.</p></div>
   </div>
@@ -266,7 +266,7 @@
     <div class="card"><div class="ic">⚖️</div><h3>Conflicts are surfaced, not averaged</h3><p>When two documents disagree, you see both sides with their sources — the exact thing other tools quietly paper over.</p></div>
     <div class="card"><div class="ic">🕘</div><h3>A real timeline</h3><p>Dated facts across your whole archive are reconstructed into one chronology — with honest markers for what's proven vs. inferred.</p></div>
     <div class="card"><div class="ic">📤</div><h3>Export with citations intact</h3><p>Turn findings into a work product — a chronology, a brief, a report — with the citations baked in. No walled garden.</p></div>
-    <div class="card" data-claim="privacy.private-by-design"><div class="ic">🔐</div><h3>Private by design</h3><p>The app itself has no network access: in Private mode everything runs on your Mac. With an AI plan or your own Anthropic key, the documents of a case you allow are sent to Anthropic (and recordings you transcribe to Google) — nothing else. No account, no analytics. Erase everything in one click.</p></div>
+    <div class="card" data-claim="privacy.private-by-design"><div class="ic">🔐</div><h3>Private by design</h3><p>The app itself has no network access: in Private mode everything runs on your Mac. With an AI plan or your own Anthropic key, the documents of a case you allow and your questions in it are sent to Anthropic (and recordings you transcribe to Google), plus the Online lookups you run, as listed in the privacy policy. No account, no analytics. Erase everything in one click.</p></div>
   </div>
 </div></section>
 
@@ -403,7 +403,7 @@
     <figure class="shot"><img src="shots/knowledge.png" loading="lazy" alt="Knowledge — extracted people and companies"><figcaption>Knowledge — people, companies and projects, extracted from your evidence.</figcaption></figure>
     <figure class="shot"><img src="shots/timeline.png" loading="lazy" alt="Timeline of dated events"><figcaption>Timeline — dated events reconstructed across your whole archive.</figcaption></figure>
     <figure class="shot"><img src="shots/insights.png" loading="lazy" alt="Insights — gaps and contradictions"><figcaption>Insights — gaps and contradictions, rule-based, no LLM needed.</figcaption></figure>
-    <figure class="shot"><img src="shots/sources.png" loading="lazy" alt="Sources — ingested and cited"><figcaption>Sources — your folder ingested in place; nothing leaves your Mac.</figcaption></figure>
+    <figure class="shot"><img src="shots/sources.png" loading="lazy" alt="Sources — ingested and cited"><figcaption>Sources — your folder ingested in place; in Private mode nothing leaves your Mac.</figcaption></figure>
     <figure class="shot"><img src="shots/live.png" loading="lazy" alt="Live engine dashboard"><figcaption>Live — the ingestion pipeline and engine, in real time.</figcaption></figure>
     <figure class="shot"><img src="shots/search.png" loading="lazy" alt="Instant full-text search"><figcaption>Search — instant full-text across every document and email.</figcaption></figure>
     <figure class="shot"><img src="shots/convert.png" loading="lazy" alt="Convert files between formats"><figcaption>Convert — extract any supported document to TXT, Markdown, HTML, CSV, JSON, RTF, DOCX, XLSX, PDF or PNG, on-device.</figcaption></figure>
@@ -449,7 +449,7 @@
   <h2 class="center" data-claim="privacy.never-leaves">By default, your documents never leave your Mac.</h2>
   <p class="lead center" data-claim="privacy.no-servers">No servers holding your data. No accounts. No analytics or telemetry. We never keep your content; if you turn on Online mode and allow AI for a case, that case's documents and your questions go to Anthropic (Claude) — directly with your own key, or with an AI plan through our relay, which keeps only counts — under Anthropic's terms; recordings you choose to transcribe go to Google (Gemini).</p>
   <div class="grid g3">
-    <div class="card" data-claim="privacy.models-bundled privacy.no-egress"><div class="ic">🖥️</div><h3>On-device AI — nothing to download</h3><p>Reading, search, and answers all run locally: the semantic-search models ship inside the app — a release-acceptance step verifies the compiled models are present in the archive before any build is published — and written answers use Apple's on-device model. In Private mode, the default, the app makes no network connections — the app itself has no network permission; only a separate helper, used solely for the optional Online mode, can reach the AI providers, the AI Included relay and the public-record sources listed in the privacy policy.</p></div>
+    <div class="card" data-claim="privacy.models-bundled privacy.no-egress"><div class="ic">🖥️</div><h3>On-device AI — nothing to download</h3><p>In Private mode, reading, search and answers run locally (with Online AI on, a case you allow is read by Anthropic): the semantic-search models ship inside the app — a release-acceptance step verifies the compiled models are present in the archive before any build is published — and written answers use Apple's on-device model. In Private mode, the default, the app makes no network connections — the app itself has no network permission; only a separate helper, used solely for the optional Online mode, can reach the AI providers, the AI Included relay and the public-record sources listed in the privacy policy.</p></div>
     <div class="card" data-claim="privacy.nothing-collected"><div class="ic">🙈</div><h3>Nothing is kept by us</h3><p>We run no servers that keep your content, and the app has no analytics, tracking or telemetry. What Online mode sends, with your permission, goes straight to the provider you chose — or, with an AI plan (AI Included or AI Pro), through our relay, which passes it on and keeps only counts.</p></div>
     <div class="card" data-claim="privacy.erase-everything"><div class="ic">🗑️</div><h3>Delete anytime</h3><p>One click erases the entire ledger. Your original files are never touched.</p></div>
   </div>

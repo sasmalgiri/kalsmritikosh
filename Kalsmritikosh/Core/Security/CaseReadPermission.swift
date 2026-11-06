@@ -76,6 +76,15 @@ public nonisolated struct CaseReadPermittedSet: Sendable, Equatable {
     }
 }
 
+/// LN1 (Package B 2026-11-06) — the case a question is being asked in, for the sends that carry no source
+/// clearance (the question interpreter and rewriter send only the question). The outbound record of such a
+/// send carries the case's marker, so erasing the case also replaces the question text it sent. Set by the
+/// case answer service around a question asked in a case; nil everywhere else. It widens nothing: it only
+/// labels the record.
+public nonisolated enum CaseSendScope {
+    @TaskLocal public static var caseID: UUID?
+}
+
 /// Where case permissions are kept. Live: the app's defaults (a preference of the person, not ledger
 /// data — erasing a case also revokes it, and "Stop AI for this case" in the case file). Tests: in memory.
 public final nonisolated class CaseReadPermissionStore: Sendable {

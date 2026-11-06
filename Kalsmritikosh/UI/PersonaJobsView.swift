@@ -35,6 +35,42 @@ public final class PersonaJobsModel {
     public private(set) var lastOutcome: String?
     public private(set) var lastError: String?
     public private(set) var busy = false
+    /// Package B (P1-E) — the job running now (its progress line and Cancel), what the last AI read cost,
+    /// and after a failed AI read its named cause with the one fix.
+    public private(set) var runningJob: PersonaJob?
+    public private(set) var costNote: String?
+    public private(set) var recovery: CaseReadRecovery?
+    private var runTask: Task<Void, Never>?
+    private var cancelled = false
+
+    /// Start a job so it can be cancelled (the card's Run button).
+    public func start(_ job: PersonaJob, actor: String, at date: Date) {
+        guard !busy else { return }
+        runTask = Task { [weak self] in await self?.run(job, actor: actor, at: date) }
+    }
+
+    /// Stop waiting for the running job. The AI service settles on its own: only what was used is charged.
+    public func cancelRun() {
+        guard runTask != nil else { return }
+        cancelled = true
+        runTask?.cancel()
+        lastOutcome = CaseReadCostLines.cancelled; lastError = nil; recovery = nil
+    }
+
+    /// The last Ask job started (the recovery's "Try again" runs it again with the same question).
+    public private(set) var lastAskJob: PersonaJob?
+    public func clearRecovery() { recovery = nil }
+
+    /// After an Ask job: the cost reported by the relay, or the cause and fix of a failed AI read.
+    func noteAIOutcome(since started: Date) {
+        let meter = AICreditMeter.shared, status = OnlineStatus.shared
+        if let at = meter.lastChargedAt, at >= started, let c = meter.lastCharged {
+            costNote = CaseReadCostLines.charged(c, balance: meter.balance)
+        }
+        if let at = status.lastFailureAt, at >= started {
+            recovery = CaseReadRecovery.make(kind: status.lastFailureKind, reason: status.lastFailure ?? "", offers: status.lastFailureOffers)
+        }
+    }
     /// JOB-JOURNEY — job ids already run against the active matter. UI journey
     /// state (drives the phase progress + per-card checkmarks), persisted per
     /// case in UserDefaults; the durable truth of what actually happened stays
@@ -458,10 +494,15 @@ public final class PersonaJobsModel {
         if job.kind == .ask, (question ?? "").isEmpty {
             lastError = "\(job.title): type the question to ask first."; lastOutcome = nil; return
         }
-        busy = true; defer { busy = false }
+        busy = true; runningJob = job; cancelled = false; costNote = nil; recovery = nil
+        if job.kind == .ask { lastAskJob = job }
+        let started = Date()
+        defer { busy = false; runningJob = nil; runTask = nil }
         do {
             let out = try await service.launch(job, context: PersonaJobLaunchContext(
                 caseID: caseID, access: access, actor: actor, question: job.kind == .ask ? question : nil, at: date))
+            if job.kind == .ask { noteAIOutcome(since: started) }
+            if cancelled { lastOutcome = CaseReadCostLines.cancelled; lastError = nil; return }
             // T1 race 1 — the result belongs to the matter it was asked in (the service saved it
             // there). If the person switched matters meanwhile, it is logged under the asking matter
             // and never shown as the open matter's result.
@@ -475,6 +516,8 @@ public final class PersonaJobsModel {
                 lastOutcome = "\(job.title) finished for another matter; its result is saved there."; lastError = nil
             }
         } catch {
+            if cancelled || error is CancellationError { lastOutcome = CaseReadCostLines.cancelled; lastError = nil; return }
+            if job.kind == .ask { noteAIOutcome(since: started) }
             lastError = caseID == activeCaseID ? "\(job.title): \(error.localizedDescription)"
                                                : "\(job.title) (another matter): \(error.localizedDescription)"
             lastOutcome = nil
@@ -561,6 +604,60 @@ public struct PersonaJobsView: View {
         model = m
     }
 
+    /// Package B (P1-E) — while a job runs: what it is doing and Cancel; after an AI read: its cost, or
+    /// the named cause of a failure with its one fix.
+    @ViewBuilder
+    private func runStatus(_ model: PersonaJobsModel) -> some View {
+        if let job = model.runningJob {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(job.kind == .ask
+                     ? CaseReadCostLines.progress(planBalance: AICreditMeter.shared.balance, onPlan: OnlineSettings.kind == .included)
+                     : "Running “\(job.title)”…")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Cancel") { model.cancelRun() }
+                    .keyboardShortcut(.cancelAction)
+                    .help("Stop waiting for this job. On an AI plan only what the AI already used is charged.")
+                    .accessibilityIdentifier("jobs.cancelRun")
+            }
+            .accessibilityElement(children: .contain)
+        }
+        if let note = model.costNote {
+            Label(note, systemImage: "creditcard").font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("jobs.costNote")
+        }
+        if let r = model.recovery {
+            VStack(alignment: .leading, spacing: 4) {
+                Label(r.cause, systemImage: "exclamationmark.circle").font(.callout)
+                Text(r.charge).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Button(r.fix.title) { recover(r.fix, model) }
+                    .accessibilityIdentifier("jobs.recoveryFix")
+            }
+            .padding(8)
+            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .accessibilityIdentifier("jobs.recovery")
+        }
+    }
+
+    private func recover(_ fix: CaseReadFix, _ model: PersonaJobsModel) {
+        switch fix {
+        case .buyCredits:
+            if AIRegion.sellsAIProducts, let pack = PurchaseProducts.creditPacks.first {
+                Task { await PurchaseCenter.shared.buyCredits(pack) }
+            }
+        case .upgrade:
+            PurchaseCenter.shared.paywallRequested = "read larger cases with AI Pro"
+        case .retry:
+            if let job = model.lastAskJob { model.start(job, actor: InvestigatorProfile.name, at: Date()) }
+        case .openSettings:
+            NotificationCenter.default.post(name: .kalsmritikoshPaletteEntry, object: "go.\(Destination.settings.rawValue)")
+        case .tryLater:
+            break
+        }
+        model.clearRecovery()
+    }
+
     @ViewBuilder
     private func content(_ model: PersonaJobsModel) -> some View {
         @Bindable var model = model
@@ -575,6 +672,7 @@ public struct PersonaJobsView: View {
                 if let err = model.lastError {
                     Label(err, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
                 }
+                runStatus(model)
                 workLogSection(model)
                 jobGrid(model)
             }
@@ -1074,7 +1172,7 @@ public struct PersonaJobsView: View {
                         Spacer(minLength: 0)
                         HStack(spacing: 8) {
                             if model.activeCaseID != nil {
-                                Button("Run") { Task { await model.run(job, actor: InvestigatorProfile.name, at: Date()) } }
+                                Button("Run") { model.start(job, actor: InvestigatorProfile.name, at: Date()) }
                                     .controlSize(.small)
                                     .disabled(reason: model.busy ? "Another job is running." : nil, remedy: "Wait for it to finish; this button comes back by itself.",
                                               help: "Run this job against the open matter now; its result is saved for review.")

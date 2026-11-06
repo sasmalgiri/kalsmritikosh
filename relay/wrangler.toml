@@ -24,7 +24,7 @@ BUNDLE_ID = "ecosanskritiinnovation.Kalsmritikosh"
 GLOBAL_CAP_USD = "20"
 GEMINI_BUDGET_USD = "5"       # transcription's own monthly cap
 # DAILY_CREDIT_LIMIT = "1500" # optional: one daily credit limit for every plan (default: per plan)
-ANTHROPIC_MODEL = "claude-opus-5"
+ANTHROPIC_MODEL = "claude-opus-5-5"   # Claude Opus 5.5 (src/policy.ts ANTHROPIC_RATES)
 GEMINI_MODEL = "gemini-2.5-flash"
 # Conservative Gemini prices (micro-dollars per token); keep at or above Google's published price.
 GEMINI_INPUT_MICRO_PER_TOKEN = "3"

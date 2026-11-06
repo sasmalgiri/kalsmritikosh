@@ -11,7 +11,7 @@
 import {
   AI_BLOCKED_REQUEST_COUNTRIES, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
   TOPUP_CREDITS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, higherTier, maxInputTokens,
-  monthKey, monthlyAllowance, ratesFor, refundSplit, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost, YEARLY_PRODUCTS,
+  monthKey, monthlyAllowance, ratesFor, refundSplit, reservationRates, effortFor, DEFAULT_ANTHROPIC_MODEL, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost, YEARLY_PRODUCTS,
   type AnthropicUsage, type CacheUse, type Micro, type Refusal, type Tier,
 } from "./policy.ts";
 import { D1Store, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
@@ -28,7 +28,7 @@ export interface Env {
   /** Global monthly safety cap on Anthropic spend over ALL subscribers (default 20 until launch). */
   GLOBAL_CAP_USD?: string;
   GEMINI_BUDGET_USD?: string;      // default 5
-  ANTHROPIC_MODEL?: string;        // default claude-opus-5 (must be in ANTHROPIC_RATES)
+  ANTHROPIC_MODEL?: string;        // default claude-opus-5-5 (must be in ANTHROPIC_RATES)
   GEMINI_MODEL?: string;           // default gemini-2.5-flash
   /** Conservative Gemini prices in micro-dollars per token (input incl. audio, output). */
   GEMINI_INPUT_MICRO_PER_TOKEN?: string;  // default 3
@@ -168,17 +168,19 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
   const size = estimateMessagesInput(body);
   if (size.chars > (large ? LARGE_READ_MAX_INPUT_CHARS : MAX_INPUT_CHARS) || size.images > 20) return refuse(REFUSALS.tooLarge());
   const maxOut = Math.min(MAX_OUTPUT_TOKENS, Math.max(1024, Number(body.max_tokens ?? MAX_OUTPUT_TOKENS) || MAX_OUTPUT_TOKENS));
-  const model = env.ANTHROPIC_MODEL ?? "claude-opus-5";
-  const rates = ratesFor(model);
+  const model = env.ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
   const inputTokens = maxInputTokens(size.chars, size.images);
-  const worst = worstCaseCost(inputTokens, maxOut, rates, size.cache);
+  // Reserved at the dearest rate the request may be billed at (the model, or a fallback model).
+  const worst = worstCaseCost(inputTokens, maxOut, reservationRates(model), size.cache);
   const plan = PLANS[a.tier];
-  // Only these fields are forwarded; the model and the ceiling are the relay's.
+  // Only these fields are forwarded; the model and the ceiling are the relay's. Opus 5.5: thinking is
+  // always on (no `thinking` field is ever sent — "disabled" is a 400), forced tool use is a 400 (no
+  // `tools`/`tool_choice` are forwarded), and the effort is always sent explicitly (its default changed).
   // Effort only lowers or keeps the thinking (and cost) within the reserved max_tokens.
-  const effort = typeof body.output_config?.effort === "string" && ["low", "medium", "high"].includes(body.output_config.effort) ? body.output_config.effort : undefined;
+  const effort = effortFor(body.output_config?.effort);
   const forward = { model, max_tokens: maxOut, messages: body.messages, fallbacks: "default",
                     ...(body.system !== undefined ? { system: body.system } : {}),
-                    ...(effort ? { output_config: { effort } } : {}) };
+                    output_config: { effort } };
   return metered(a, "anthropic", worst, large ? plan.caseReadCredits : plan.perRequestCredits, large, env, d, async () => {
     const res = await d.fetcher("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -189,8 +191,10 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
     const text = await res.text();
     let cost: Micro | null = null;
     try {
-      const u = (JSON.parse(text) as { usage?: AnthropicUsage }).usage;
-      if (u) cost = anthropicCost(u, rates);
+      // Charged at the rates of the model that answered (a fallback model has its own price).
+      const reply = JSON.parse(text) as { usage?: AnthropicUsage; model?: unknown };
+      const served = typeof reply.model === "string" && reply.model ? reply.model : model;
+      if (reply.usage) cost = anthropicCost(reply.usage, ratesFor(served));
     } catch { /* an unreadable reply keeps the worst case */ }
     return { status: res.status, text, cost };
   });

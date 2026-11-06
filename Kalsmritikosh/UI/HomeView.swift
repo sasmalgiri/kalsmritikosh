@@ -228,9 +228,9 @@ public struct HomeView: View {
             // cloud exposure, export lock-in, weeks-long learning curves).
             HStack(alignment: .top, spacing: 16) {
                 promise("lock.shield", "Private by default",
-                        "Your documents are read on this Mac and the app opens no connection for them. Online AI is optional, with your own key and a preview of every send.")
-                promise("creditcard", "One plain plan",
-                        "One edition, all nine personas, monthly or yearly. Cancel any time; your work stays readable and exportable.")
+                        "Your documents are read on this Mac and the app opens no connection for them. Online AI is optional — an AI plan or your own Anthropic key — and asks once per case before that case's documents go.")
+                promise("creditcard", "Three plans",
+                        "Workbench (14-day trial), AI Included or AI Pro, monthly or yearly — all nine personas in each. Cancel any time; your work stays readable and exportable.")
                 promise("square.and.arrow.up", "No lock-in",
                         "Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours.")
                 promise("checkmark.seal", "Answers you can check",

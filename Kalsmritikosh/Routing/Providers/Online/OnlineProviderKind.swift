@@ -20,7 +20,7 @@ import Foundation
 
 public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case anthropic, openai, gemini
-    /// A2 — AI Included / AI Pro: Claude Opus 5 through the publisher's relay, metered in credits.
+    /// A2 — AI Included / AI Pro: Claude Opus 5.5 through the publisher's relay, metered in credits.
     /// Its "key" is the App Store subscription number; the publisher's provider key never reaches the Mac.
     case included
 
@@ -49,7 +49,7 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
         case .anthropic: return "Claude (Anthropic)"
         case .openai:    return "OpenAI"
         case .gemini:    return "Gemini (Google)"
-        case .included:  return "AI Included or AI Pro (Claude Opus 5)"
+        case .included:  return "AI Included or AI Pro (Claude Opus 5.5)"
         }
     }
 
@@ -67,7 +67,10 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
     /// Prefilled model name; the user can change it in Settings.
     public var defaultModel: String {
         switch self {
-        case .anthropic, .included: return "claude-opus-5"
+        // Own key: Claude Opus 5 (unchanged). AI plans: the relay's model (AIPricing.relayModel, Opus 5.5 —
+        // the relay fixes the model itself; this is what the app estimates and names).
+        case .anthropic: return "claude-opus-5"
+        case .included:  return AIPricing.relayModel
         case .openai:    return ""
         case .gemini:    return ""
         }
@@ -410,7 +413,7 @@ nonisolated extension OnlineProviderKind {
         case .gemini:
             return "Google Gemini API: only a PAID (billing-enabled) project. On the unpaid tier Google may use what you send to improve its products, including human review, and asks that sensitive or confidential information not be sent — case documents must not go to an unpaid key. Age, region and permitted-use conditions apply."
         case .included:
-            return "AI Included sends the request through the publisher's relay under the publisher's account: questions, passages and page images to Anthropic's commercial API (Claude Opus 5; if Anthropic declines a request, another Claude model may answer it), and recordings to Google's paid Gemini API for transcription. The relay keeps only counts and credits (credits used and left, the service's total spend) — never a question, passage, image, recording or answer. The providers' commercial terms apply: Anthropic deletes inputs and outputs within 30 days by default, with exceptions for usage-policy enforcement and legal requirements; Google's paid Gemini API keeps prompts and replies for a limited period only to detect abuse and misuse; neither provider uses them for training."
+            return "AI Included sends the request through the publisher's relay under the publisher's account: questions, passages and page images to Anthropic's commercial API (Claude Opus 5.5; if Anthropic declines a request, another Claude model may answer it), and recordings to Google's paid Gemini API for transcription. The relay keeps only counts and credits (credits used and left, the service's total spend) — never a question, passage, image, recording or answer. The providers' commercial terms apply: Anthropic deletes inputs and outputs within 30 days by default, with exceptions for usage-policy enforcement and legal requirements; Google's paid Gemini API keeps prompts and replies for a limited period only to detect abuse and misuse; neither provider uses them for training."
         case .openai:
             return "OpenAI: its API data-use and retention terms have not been reviewed for case material in this release, so no document text is sent to it. Questions alone may still be sent."
         }

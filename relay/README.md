@@ -43,8 +43,17 @@ answer.
 7. Returns the provider's reply with a `kals` receipt: `charged`, `reserved`, `allowanceLeft`, `topUps`,
    `periodEndsAt`, the day's use and the plan's limits.
 
-Rates (`ANTHROPIC_RATES`): claude-opus-5 $5 / MTok input, $25 / MTok output, cache write 5-min 1.25×,
-1-hour 2×, cache read 0.1×, batch 50 %. Transcription (Gemini) is metered in credits too, against its
+Model: **Claude Opus 5.5** (`claude-opus-5-5`, `ANTHROPIC_MODEL` in `wrangler.toml`). Thinking is always on for this
+model, so the relay never sends a `thinking` field; it always sends `output_config.effort` (the app's low/medium/high,
+else `high` — Opus 5.5's own default would be `medium`); it never forwards `tools`/`tool_choice` (forced tool use is
+refused by this model).
+
+Rates (`ANTHROPIC_RATES`, multipliers of the input price): claude-opus-5-5 $4 / MTok input, $20 / MTok output, cache
+write 5-min 1.25× ($5), 1-hour 2× ($8), cache read 0.05× ($0.20), batch 50 %. claude-opus-5 and claude-opus-4-8
+($5 / $25, cache read 0.1×) are in the table because Anthropic's server-side fallback (`fallbacks: "default"`) may answer
+a declined request with one of them: the worst case is **reserved at the dearest of these** (so a fallback never costs
+more than was reserved) and a reply is **charged at the rates of the model that answered** (its `model` field).
+Credits are unchanged (1 credit = US$0.01 of provider cost); a credit now buys 25 % more Opus tokens. Transcription (Gemini) is metered in credits too, against its
 own cap. Settlement runs under `waitUntil`, so it finishes even if the app disconnects.
 
 ## Owner setup (one time, ~20 minutes)

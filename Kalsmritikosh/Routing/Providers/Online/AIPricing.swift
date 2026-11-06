@@ -50,12 +50,33 @@ public nonisolated enum AIPricing {
         public let cacheRead: Double
         public let batch: Double
     }
+    /// Package B (2026-11-06): the relay answers with Claude Opus 5.5 ($4 / $20 per MTok, cache reads
+    /// $0.20 = 0.05×, writes 1.25× / 2×). Claude Opus 5 (the own-key default) and Opus 4.8 stay: Anthropic's
+    /// server-side fallback may answer a declined relay request with one of them, at their own rates.
     public static let rates: [String: Rates] = [
+        "claude-opus-5-5": Rates(inputPerMTok: 4, outputPerMTok: 20, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.05, batch: 0.5),
         "claude-opus-5": Rates(inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5),
+        "claude-opus-4-8": Rates(inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5),
     ]
-    /// The model AI Included and AI Pro use (the relay's; also the default own-key Claude model).
-    static let relayModel = "claude-opus-5"
-    static var relayRates: Rates { rates[relayModel] ?? Rates(inputPerMTok: 5, outputPerMTok: 25, cacheWrite5m: 1.25, cacheWrite1h: 2, cacheRead: 0.1, batch: 0.5) }
+    /// The model AI Included and AI Pro use (the relay's DEFAULT_ANTHROPIC_MODEL). The own-key default
+    /// stays Claude Opus 5 (OnlineProviderKind.defaultModel) — the owner's change was for the relay only.
+    static let relayModel = "claude-opus-5-5"
+    /// Mirror of FALLBACK_MODELS: what Anthropic's server-side fallback may answer a relay request with.
+    static let fallbackModels = ["claude-opus-5", "claude-opus-4-8"]
+    /// The rates a relay reply is estimated at (Opus 5.5).
+    static var relayRates: Rates { rates[relayModel] ?? dearestRates([]) }
+    /// Mirror of `reservationRates`: the relay RESERVES at the dearest of its model and the fallback models.
+    static var relayReservationRates: Rates { dearestRates([relayModel] + fallbackModels) }
+
+    /// Mirror of `dearestRates`: every price at the dearest of `models`, field by field (an unknown model,
+    /// or none: the dearest of the whole table).
+    static func dearestRates(_ models: [String]) -> Rates {
+        let known = models.compactMap { rates[$0] }
+        let pool = (known.count == models.count && !known.isEmpty) ? known : Array(rates.values)
+        func top(_ f: (Rates) -> Double) -> Double { pool.map(f).max() ?? 0 }
+        return Rates(inputPerMTok: top(\.inputPerMTok), outputPerMTok: top(\.outputPerMTok), cacheWrite5m: top(\.cacheWrite5m),
+                     cacheWrite1h: top(\.cacheWrite1h), cacheRead: top(\.cacheRead), batch: top(\.batch))
+    }
 
     /// One credit in US dollars.
     public static let creditUSD = 0.01
@@ -71,7 +92,7 @@ public nonisolated enum AIPricing {
     }
 
     /// Credits a request on AI Included / AI Pro costs at most (whole credits, at least 1), at the relay's
-    /// rates. This is what is shown before a case read ("about 120 credits"); the relay reserves its own
+    /// model's rates (Opus 5.5). This is what is shown before a case read ("about 120 credits"); the relay reserves its own
     /// conservative worst case and charges the actual cost.
     public static func estimateCredits(inputTokens: Int, maxOutputTokens: Int, cachedTokens: Int = 0) -> Int {
         let m = micro(inputTokens: inputTokens, maxOutputTokens: maxOutputTokens, cachedTokens: cachedTokens, rates: relayRates)
@@ -113,7 +134,7 @@ public nonisolated enum AIPricing {
     /// at the dearest rate it may be billed at, the output at its clamped allowance): a request fits only
     /// if this fits the balance and the per-request or case-read limit. Mirror of worstCaseCost + creditsFor.
     public static func relayReservation(inputCharacters: Int, images: Int = 0, maxOutputTokens: Int, cacheWrite1h: Bool = false, cacheWrite5m: Bool = false) -> Int {
-        let r = relayRates
+        let r = relayReservationRates
         let tokens = Double(maxTokensForText(characters: inputCharacters) + images * imageTokens)
         let mult = cacheWrite1h ? r.cacheWrite1h : cacheWrite5m ? r.cacheWrite5m : 1
         let m = (tokens * r.inputPerMTok * max(1, mult) + Double(min(max(1_024, maxOutputTokens), Self.maxOutputTokens)) * r.outputPerMTok).rounded(.up)

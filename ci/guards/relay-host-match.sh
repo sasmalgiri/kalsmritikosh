@@ -32,10 +32,33 @@ for tier in "ai:aiIncluded" "pro:aiPro"; do
     exit 1
   fi
 done
-relayRates=$(grep -E '"claude-opus-5": \{ inputPerMTok' "$ROOT/relay/src/policy.ts" | sed -E 's/.*inputPerMTok/inputPerMTok/' | num)
-appRates=$(grep -E '"claude-opus-5": Rates\(inputPerMTok' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*inputPerMTok/inputPerMTok/' | num)
-if [ -z "$relayRates" ] || [ "$relayRates" != "$appRates" ]; then
-  echo "FAIL: claude-opus-5 rates differ: relay ($relayRates) != app ($appRates)"
+# Every model in the price table (Package B 2026-11-06: the relay's Opus 5.5 plus the fallback models), the
+# same set on both sides, the same rates per model; and the same relay model and fallback list.
+relayModels=$(grep -oE '^  "claude-[a-z0-9-]+": \{ inputPerMTok' "$ROOT/relay/src/policy.ts" | grep -oE 'claude-[a-z0-9-]+' | sort | tr '\n' ' ')
+appModels=$(grep -oE '^        "claude-[a-z0-9-]+": Rates\(inputPerMTok' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | grep -oE 'claude-[a-z0-9-]+' | sort | tr '\n' ' ')
+if [ -z "$relayModels" ] || [ "$relayModels" != "$appModels" ]; then
+  echo "FAIL: priced models differ: relay ($relayModels) != app ($appModels)"
+  exit 1
+fi
+for m in $relayModels; do
+  relayRates=$(grep -E "\"$m\": \{ inputPerMTok" "$ROOT/relay/src/policy.ts" | sed -E 's/.*inputPerMTok/inputPerMTok/' | num)
+  appRates=$(grep -E "\"$m\": Rates\(inputPerMTok" "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*inputPerMTok/inputPerMTok/' | num)
+  if [ -z "$relayRates" ] || [ "$relayRates" != "$appRates" ]; then
+    echo "FAIL: $m rates differ: relay ($relayRates) != app ($appRates)"
+    exit 1
+  fi
+done
+relayModel=$(grep -E '^export const DEFAULT_ANTHROPIC_MODEL = "' "$ROOT/relay/src/policy.ts" | sed -E 's/.*"(.*)".*/\1/')
+appModel=$(grep -E 'static let relayModel = "' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*"(.*)".*/\1/')
+tomlModel=$(grep -E '^ANTHROPIC_MODEL = "' "$ROOT/relay/wrangler.toml" | sed -E 's/^ANTHROPIC_MODEL = "([^"]*)".*/\1/')
+if [ -z "$relayModel" ] || [ "$relayModel" != "$appModel" ] || [ "$relayModel" != "$tomlModel" ]; then
+  echo "FAIL: relay model differs: policy.ts ($relayModel), AIPricing.relayModel ($appModel), wrangler.toml ($tomlModel)"
+  exit 1
+fi
+relayFallback=$(grep -E '^export const FALLBACK_MODELS' "$ROOT/relay/src/policy.ts" | grep -oE '"claude-[a-z0-9-]+"' | tr '\n' ' ')
+appFallback=$(grep -E 'static let fallbackModels = ' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | grep -oE '"claude-[a-z0-9-]+"' | tr '\n' ' ')
+if [ -z "$relayFallback" ] || [ "$relayFallback" != "$appFallback" ]; then
+  echo "FAIL: fallback models differ: relay ($relayFallback) != app ($appFallback)"
   exit 1
 fi
 echo "ok: plan limits and Claude rates identical in app and relay"
