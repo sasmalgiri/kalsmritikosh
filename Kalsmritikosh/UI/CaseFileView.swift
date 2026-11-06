@@ -530,6 +530,8 @@ struct CaseOverviewTab: View {
                                           contradictionsReopened: model.review.reopenedCount)
         VStack(alignment: .leading, spacing: 0) {
             if let g = model.glance { CaseGlanceSection(model: model, glance: g) }
+            // Living case map M6 — this case's own changes since the person's seen position.
+            CaseChangesOverviewSection(model: model)
             if !steps.isEmpty {
                 CaseSection(title: "Next steps", subtitle: "From what this case holds now. They suggest; you decide. Choose one to go to the tab where it is done.") {
                     ForEach(steps.prefix(6)) { step in
@@ -709,6 +711,8 @@ struct CaseOverviewTab: View {
                             let out = try await appState.eraseCase(model.caseID, eraseExclusiveSources: docs, reason: reason,
                                                                    legalBasis: basis, actor: model.actor)
                             eraseStatus = out.summary
+                            // M8 — nothing of an erased case stays on screen, and late loads are dropped.
+                            if out.report.refused == nil { model.map.closeOut() }
                         } catch { eraseStatus = error.localizedDescription }
                     }
                 }

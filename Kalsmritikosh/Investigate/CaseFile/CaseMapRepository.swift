@@ -261,27 +261,46 @@ public actor CaseMapRepository {
     }
 
     /// The case's revision fence: a digest of what changes when the case changes (its header revision, its
-    /// action log, decisions, requests and their history, hypotheses, journal, report items, grid rows and
-    /// map links). A load that reads the same fence before and after saw one consistent state.
+    /// action log, decisions, requests and their history, hypotheses, journal, report items, grid rows, map
+    /// links, people, interviews, exhibits, kept record revisions, the versions of its documents and the
+    /// contradictions detected). A load that reads the same fence before and after saw one consistent state.
+    /// Read in one savepoint, so the fence itself is one consistent reading.
     public func revisionFence(caseID: UUID) async throws -> String {
+        try await database.withSavepoint("cmfence_\(UUID().uuidString.prefix(8))") { db in try Self.fence(db, caseID: caseID) }
+    }
+
+    /// The same fence inside a caller's savepoint (M7: a checkpoint is written only if the fence it was built
+    /// under is still the fence inside the write — a validated revision fence).
+    static func fence(_ db: isolated Database, caseID: UUID) throws -> String {
         let c = SQLValue.uuid(caseID)
         let parts: [(String, [SQLValue])] = [
             ("SELECT revision, status FROM investigation_cases WHERE id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(decided_at), 0) FROM investigation_review_decisions WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(SUM(revision), 0), coalesce(MAX(updated_at), 0) FROM investigation_evidence_requests WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*) FROM investigation_evidence_request_receipts WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*), coalesce(SUM(revision), 0) FROM investigation_hypotheses WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(linked_at), 0), coalesce(MAX(withdrawn_at), 0) FROM investigation_evidence_request_receipts WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(SUM(revision), 0), coalesce(MAX(updated_at), 0) FROM investigation_hypotheses WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*) FROM investigation_hypothesis_evidence WHERE hypothesis_id IN (SELECT id FROM investigation_hypotheses WHERE case_id = ?);", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(created_at), 0) FROM case_journal WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(created_at), 0) FROM case_report_items WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*) FROM case_allegation_evidence WHERE allegation_id IN (SELECT id FROM case_allegations WHERE case_id = ?);", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(removed_at), 0), coalesce(MAX(verified_at), 0) FROM case_journal WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(decided_at), 0), coalesce(MAX(verified_at), 0) FROM case_report_items WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(removed_at), 0), coalesce(MAX(verified_at), 0) FROM case_allegation_evidence WHERE allegation_id IN (SELECT id FROM case_allegations WHERE case_id = ?);", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_map_links WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*) FROM investigation_case_sources WHERE case_id = ? AND in_scope = 1;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(SUM(in_scope), 0) FROM investigation_case_sources WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0) FROM case_record_revisions WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(removed_at), 0) FROM case_people WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(updated_at), 0) FROM case_interviews WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_exhibits WHERE case_id = ?;", [c]),
+            // The versions of the case's documents (a revision arriving changes what the map shows as reopened).
+            ("""
+             SELECT COUNT(*), coalesce(MAX(sv.created_at), 0), coalesce(SUM(sv.is_current), 0) FROM source_versions sv
+             WHERE sv.logical_source_id IN (SELECT v.logical_source_id FROM source_versions v JOIN investigation_case_sources s
+                                            ON s.source_ref IN (v.id, upper(v.id), lower(v.id)) WHERE s.case_id = ? AND s.in_scope = 1);
+             """, [c]),
+            ("SELECT COUNT(*), coalesce(MAX(detected_at), 0) FROM contradictions;", []),
         ]
         var text = ""
         for (sql, binds) in parts {
-            let row = try await database.query(sql, binds).first
+            let row = try db.query(sql, binds).first
             text += (row?.values.map { "\($0)" }.joined(separator: ",") ?? "-") + ";"
         }
         return CaseFileHash.sha256(text)

@@ -1,6 +1,6 @@
 # Data-flow inventory — the one source for privacy statements
 
-Version 4 · 2026-11-06 · adds saved case searches (v172) · version 3 added the case map tables (v171) and the map's preference fields · version 2 (2026-10-28, derived from the code at `investigations-next` after the completeness audit of 182c7e4c, A1–A8) kept in git history.
+Version 5 · 2026-11-07 · adds case history, changes and map export (v173) · version 4 added saved case searches (v172) · version 3 added the case map tables (v171) and the map's preference fields · version 2 (2026-10-28, derived from the code at `investigations-next` after the completeness audit of 182c7e4c, A1–A8) kept in git history.
 
 Every privacy statement must agree with this file: the in-app privacy text (`LegalNotice.privacyStatement`), the
 public pages (`docs/privacy.html`, `docs/terms.html`), `PrivacyInfo.xcprivacy`, `LEGAL_READINESS.md`,
@@ -99,8 +99,23 @@ case (a legal hold refuses it, removing nothing); person erasure removes the sav
 person; a full erase empties the table; backups carry it as part of the ledger. Running a case search reads the ledger only and
 sends nothing.
 
+**Case history and changes (v173).** In the encrypted ledger, keyed by `case_id`: `case_record_revisions` (the stored row of a case
+record before and after an update that overwrites it — the case profile, an allegation's decision and response, a report item's
+selection, a person, an interview, retractions — written in the same savepoint as the change, append-only); `case_checkpoints`
+(recorded states of the case map: every item and link with its display text, review state and revision, the layout, a manifest of
+the source versions, decisions and revisions it rests on, the scope fingerprint and a content digest; never edited);
+`case_change_seen` (each case's seen position for "What changed": a time and identifiers of what was detected, readable and open —
+no document text). `case_history_install` holds one time (when history recording began) and no case content. None of it is in
+preferences. Case erasure removes all of it with the case (a legal hold refuses it, removing nothing); person erasure clears the
+content of every recorded state naming the person (a stub saying it was erased stays) and removes the before/after copies of their
+case-person rows or naming them; a full erase empties the tables; backups carry them as part of the ledger and a restore keeps
+their identities and digests. Reading changes, history or readiness reads the ledger only and sends nothing.
+
+**Case map export (M8).** Exports of the case map (PDF, PNG, CSV, copy, print) go through `CaseOutputService.prepareMap` and are
+recorded in `case_document_outputs` like every case output (routes 42–46 in OUTPUT_ROUTES_INVENTORY.md). Nothing is sent anywhere.
+
 **Person erasure:** Knowledge › People › Erase this person. It removes the person's entity record, aliases, mentions,
-links, case-subject rows (with the case map positions and map links pointing at those rows), the saved case searches naming them and the facts provably theirs. Facts that a same-name person could share are kept and reported as
+links, case-subject rows (with the case map positions and map links pointing at those rows), the saved case searches naming them, the content of recorded case-map states naming them (stubs kept) and the before/after copies of their case-person rows, and the facts provably theirs. Facts that a same-name person could share are kept and reported as
 ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
 answers, topics, conversation turns.
 

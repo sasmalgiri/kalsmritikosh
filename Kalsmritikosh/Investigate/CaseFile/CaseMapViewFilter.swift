@@ -42,7 +42,7 @@ public nonisolated enum CaseMapViewKind: String, Codable, Sendable, CaseIterable
         case .people: return "People and organisations, their statements, events, documents and recorded connections."
         case .chronology: return "Recorded events with their dates and linked evidence."
         case .findings: return "Report items and decided questions, with contrary evidence and what needs review."
-        case .changes: return "Items that changed since they were decided or carried (reopened, superseded, stale)."
+        case .changes: return "Items changed since you last marked the changes as seen, items resting on changed evidence, and items changed since they were decided or carried (reopened, superseded, stale)."
         }
     }
     /// The kinds the view shows by default.
@@ -123,8 +123,11 @@ public nonisolated struct CaseMapViewResult: Equatable, Sendable {
 
 public nonisolated enum CaseMapViewFilter {
     /// Decide what one view shows. Order of accounting: filtered (kinds, waiting-only, search, the Changes
-    /// view's rule), then hidden, then collapsed. Links are shown only between shown items.
-    public static func apply(_ p: CaseMapProjection, view: CaseMapViewKind, filter: CaseMapFilter) -> CaseMapViewResult {
+    /// view's rule), then hidden, then collapsed. Links are shown only between shown items. `changed` (M6) are the
+    /// items the case change feed reports as changed since the person's seen position (and what rests on changed
+    /// evidence): the Changes view shows them too.
+    public static func apply(_ p: CaseMapProjection, view: CaseMapViewKind, filter: CaseMapFilter,
+                             changed: Set<CaseMapNodeID> = []) -> CaseMapViewResult {
         let kinds = filter.kinds ?? view.kinds
         let words = filter.search.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
         let hidden = Set(filter.hidden)
@@ -136,7 +139,7 @@ public nonisolated enum CaseMapViewFilter {
         for n in p.nodes {
             let passes: Bool = {
                 guard kinds.contains(n.kind) else { return false }
-                if view == .changes, n.status.kind != .stale, n.review != .reopened, n.changedSourceWarning == nil { return false }
+                if view == .changes, n.status.kind != .stale, n.review != .reopened, n.changedSourceWarning == nil, !changed.contains(n.id) { return false }
                 if filter.awaitingOnly, !n.review.awaitingReview { return false }
                 if !words.isEmpty {
                     let hay = (n.title + " " + (n.wording ?? "") + " " + n.status.text).lowercased()

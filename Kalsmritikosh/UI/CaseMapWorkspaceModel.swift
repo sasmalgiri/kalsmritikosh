@@ -10,6 +10,11 @@
 //  Identifiers and geometry go to the case's workspace preference (CaseWorkspaceState.map); saved views,
 //  positions, pins and links go to the encrypted ledger through CaseMapRepository.
 //
+//  M6/M7/M8: the case change feed (its own generation; a failed read is shown as a failure), a recorded state
+//  opened READ-ONLY (every change to positions, pins, hidden items, views or links is refused while it is shown;
+//  "Return to current" puts the live case back), and lock/erase handling: on lock or erase the shown case, the
+//  inspector's content, the feed and any recorded state are cleared and late loads are dropped.
+//
 
 import Foundation
 import Observation
@@ -40,10 +45,33 @@ final class CaseMapWorkspaceModel {
     /// Set after the case is erased or the screen is locked: nothing late is shown or written.
     private(set) var closedOut = false
 
+    /// M6 — the case change feed (newest load only) and its own generation.
+    private(set) var feed: CaseChangeFeedLoad?
+    private(set) var feedGeneration: UInt64 = 0
+    var feedLoading = false
+    /// M7 — a recorded state shown read-only (nil: the live case).
+    private(set) var history: CaseCheckpointView?
+
     init(caseID: UUID, workspace: CaseWorkspaceHolder) { self.caseID = caseID; self.workspace = workspace }
 
-    var projection: CaseMapProjection? { current?.projection }
-    var loadState: CaseMapLoadState? { current?.state }
+    /// What the map, the list and the inspector show: a recorded state while one is open, else the live case.
+    var projection: CaseMapProjection? { history?.projection ?? current?.projection }
+    /// The live case's projection (never a recorded state).
+    var liveProjection: CaseMapProjection? { current?.projection }
+    /// The scope the live case was read under.
+    var liveScopeFingerprint: String? { current?.scopeFingerprint }
+    var loadState: CaseMapLoadState? { history != nil ? .complete : current?.state }
+    /// Positions to draw: a recorded state's own layout while it is open.
+    var displayPlacements: [CaseMapNodeID: CaseMapPlacement] { history?.placements ?? placements }
+    /// History is read-only.
+    var isHistorical: Bool { history != nil }
+
+    /// Refuse a change while a recorded state is shown (nothing about the past or the present is edited from it).
+    private func refuseInHistory() -> Bool {
+        guard isHistorical else { return false }
+        notice = "This is a recorded state and it is read-only. Choose “Return to current” to work on the case."
+        return true
+    }
 
     var memory: CaseMapWorkspaceMemory {
         get { workspace.state.map ?? CaseMapWorkspaceMemory() }
@@ -67,8 +95,9 @@ final class CaseMapWorkspaceModel {
         current = load
         placements = load.placements
         savedViews = load.views
-        // A selection whose item is gone (erased, out of scope) is dropped, not shown empty.
-        if let p = load.projection {
+        // A selection whose item is gone (erased, out of scope) is dropped, not shown empty — unless a recorded
+        // state is open (its selection is of that state's items).
+        if !isHistorical, let p = load.projection {
             var m = memory
             if let n = m.selectedNode, p.node(n) == nil { m.selectedNode = nil }
             if let l = m.selectedLink, p.link(l) == nil { m.selectedLink = nil }
@@ -93,12 +122,88 @@ final class CaseMapWorkspaceModel {
     /// The case was erased, or the screen locked: forget what is shown and drop anything still loading.
     func closeOut() {
         generation &+= 1
+        feedGeneration &+= 1
         closedOut = true
         current = nil
         placements = [:]
         savedViews = []
         undoStack = []
         loading = false
+        feed = nil
+        feedLoading = false
+        history = nil
+    }
+
+    /// After an unlock: the case may be read again (the next load fills it).
+    func reopenAfterLock() { closedOut = false }
+
+    // MARK: - M6 change feed
+
+    func beginFeedLoad() -> UInt64 { feedGeneration &+= 1; feedLoading = true; return feedGeneration }
+
+    /// Show a feed if it is the newest for this case and the case was not closed out meanwhile.
+    @discardableResult
+    func applyFeed(_ load: CaseChangeFeedLoad) -> Bool {
+        guard load.caseID == caseID, load.generation == feedGeneration, !closedOut else { return false }
+        feedLoading = false
+        feed = load
+        return true
+    }
+
+    /// Read the feed against the live projection (never a recorded state). Without a live projection it fails
+    /// visibly rather than showing "nothing changed".
+    func refreshFeed(_ service: CaseChangeFeedService) async {
+        let g = beginFeedLoad()
+        guard let p = liveProjection else {
+            applyFeed(.failed(caseID, g, "The case map has not been read yet, so what changed cannot be read either."))
+            return
+        }
+        applyFeed(await service.load(caseID: caseID, projection: p, generation: g))
+    }
+
+    /// "Mark as seen": moves this case's seen position. Nothing is reviewed or accepted.
+    func markSeen(_ service: CaseChangeFeedService, actor: String) async {
+        guard let feed else { return }
+        do {
+            try await service.markSeen(feed, actor: actor)
+            notice = "Marked as seen. Nothing was reviewed, accepted or decided — the items keep their review state."
+            await refreshFeed(service)
+        } catch {
+            KalsmritikoshLog.ui.error("Case changes not marked seen: \(error.localizedDescription, privacy: .public)")
+            self.error = "Not marked as seen: \(error.localizedDescription)"
+        }
+    }
+
+    /// Items the Changes view adds: those with a new change, and what rests directly on changed evidence.
+    var changedRecords: Set<CaseMapNodeID> {
+        guard let feed, let p = liveProjection, !isHistorical else { return [] }
+        var out = feed.changedRecords
+        for ch in feed.newChanges where ch.kind.affectsEvidence {
+            if let r = ch.record { out.formUnion(CaseChangeImpactAnalysis.impact(of: r, in: p).direct.map(\.node)) }
+        }
+        return out
+    }
+
+    // MARK: - M7 history (read-only)
+
+    /// Show a recorded state. The selection and view are kept; nothing is written.
+    func openHistory(_ view: CaseCheckpointView) {
+        guard view.summary.caseID == caseID, !closedOut else { return }
+        history = view
+        undoStack = []
+        notice = nil
+    }
+
+    /// Back to the live case, as it was left.
+    func returnToCurrent() {
+        history = nil
+        notice = nil
+        var m = memory
+        if let p = current?.projection {
+            if let n = m.selectedNode, p.node(n) == nil { m.selectedNode = nil }
+            if let l = m.selectedLink, p.link(l) == nil { m.selectedLink = nil }
+        }
+        if m != memory { memory = m }
     }
 
     // MARK: - Views
@@ -180,11 +285,12 @@ final class CaseMapWorkspaceModel {
 
     var result: CaseMapViewResult? {
         guard let p = projection else { return nil }
-        return CaseMapViewFilter.apply(p, view: baseKind, filter: filter)
+        return CaseMapViewFilter.apply(p, view: baseKind, filter: filter, changed: changedRecords)
     }
 
     /// Hide an item from this view only (no evidentiary effect; Reset view or "Show hidden" brings it back).
     func hide(_ id: CaseMapNodeID, repository: CaseMapRepository?, actor: String) async {
+        if refuseInHistory() { return }
         if let saved = savedView {
             var f = saved.filter
             if !f.hidden.contains(id) { f.hidden.append(id) }
@@ -201,6 +307,7 @@ final class CaseMapWorkspaceModel {
     }
 
     func showHidden(repository: CaseMapRepository?, actor: String) async {
+        if refuseInHistory() { return }
         if let saved = savedView {
             var f = saved.filter; f.hidden = []
             await update(saved, filter: f, repository: repository, actor: actor)
@@ -211,6 +318,7 @@ final class CaseMapWorkspaceModel {
 
     /// Collapse or expand a group in this view.
     func toggleCollapse(_ groupID: String, repository: CaseMapRepository?, actor: String) async {
+        if savedView != nil, refuseInHistory() { return }
         var set = Set(filter.collapsed ?? Array(baseKind.collapsedByDefault))
         if set.contains(groupID) { set.remove(groupID) } else { set.insert(groupID) }
         if let saved = savedView {
@@ -239,6 +347,7 @@ final class CaseMapWorkspaceModel {
     /// Save what is on screen as a named view (its filter, hidden items and collapsed groups) in the ledger.
     @discardableResult
     func saveCurrentView(named name: String, repository: CaseMapRepository, actor: String) async -> UUID? {
+        if refuseInHistory() { return nil }
         var f = filter
         f.kinds = f.kinds ?? baseKind.kinds
         f.collapsed = f.collapsed ?? Array(baseKind.collapsedByDefault).sorted()
@@ -257,6 +366,7 @@ final class CaseMapWorkspaceModel {
     }
 
     func deleteSavedView(_ id: UUID, repository: CaseMapRepository) async {
+        if refuseInHistory() { return }
         do {
             try await repository.deleteView(caseID: caseID, id: id)
             savedViews.removeAll { $0.id == id }
@@ -367,6 +477,7 @@ final class CaseMapWorkspaceModel {
     // MARK: - Layout (ledger), with Undo
 
     func move(_ id: CaseMapNodeID, to point: CaseMapPoint, repository: CaseMapRepository?) async {
+        if refuseInHistory() { return }
         guard var p = placements[id] else { return }
         undoStack.append([id: p])
         p.point = point
@@ -375,6 +486,7 @@ final class CaseMapWorkspaceModel {
     }
 
     func togglePin(_ id: CaseMapNodeID, repository: CaseMapRepository?) async {
+        if refuseInHistory() { return }
         guard var p = placements[id] else { return }
         undoStack.append([id: p])
         p.pinned.toggle()
@@ -400,6 +512,7 @@ final class CaseMapWorkspaceModel {
     /// Arrange the scope (pinned items stay); Undo puts every moved item back.
     @discardableResult
     func arrange(_ scope: ArrangeScope, repository: CaseMapRepository?) async -> Int {
+        if refuseInHistory() { return 0 }
         guard let p = projection else { return 0 }
         let moved = CaseMapLayout.arrangeScope(arrangeScope(scope), in: p, current: placements)
         guard !moved.isEmpty else { return 0 }
@@ -420,6 +533,7 @@ final class CaseMapWorkspaceModel {
     var canUndo: Bool { !undoStack.isEmpty }
 
     func undo(repository: CaseMapRepository?) async {
+        if refuseInHistory() { return }
         guard let last = undoStack.popLast() else { return }
         for (id, p) in last { placements[id] = p }
         await store(last, repository: repository)
@@ -428,6 +542,7 @@ final class CaseMapWorkspaceModel {
     /// "Reset view": this view's geometry and filters, and the case's stored positions and pins — never
     /// case content. Items are placed afresh at the next load.
     func resetView(repository: CaseMapRepository?, service: CaseMapService?) async {
+        if refuseInHistory() { return }
         var m = memory
         m.viewports?[view.key] = nil
         m.hidden?[view.key] = nil
@@ -446,7 +561,7 @@ final class CaseMapWorkspaceModel {
     }
 
     private func store(_ changes: [CaseMapNodeID: CaseMapPlacement], repository: CaseMapRepository?) async {
-        guard let repository, !closedOut else { return }
+        guard let repository, !closedOut, !isHistorical else { return }
         do { try await repository.savePlacements(caseID: caseID, changes) } catch {
             KalsmritikoshLog.ui.error("Case map positions not saved: \(error.localizedDescription, privacy: .public)")
             self.error = "The new position was not saved: \(error.localizedDescription). It is kept on screen; try again."

@@ -35,11 +35,13 @@ public nonisolated enum CaseOutputKind: String, Sendable, CaseIterable {
     case caseFileReport, caseLog, exhibitList, custodyReport, personDataExport, statement, holdNotice, redactionLog, achReport
     /// A Data Lab dataset (CSV / XLSX / DOCX / PDF), a Work Center run report, a studio briefing.
     case dataset, workCenterReport, studioBriefing
+    /// Living case map M8: the map (PDF / PNG) with its relationship and evidence table, or the table alone.
+    case caseMap
 
     /// Prose documents carry banners; CSV lists and binary documents do not.
     var isProse: Bool {
         switch self {
-        case .caseLog, .exhibitList, .redactionLog, .dataset: return false
+        case .caseLog, .exhibitList, .redactionLog, .dataset, .caseMap: return false
         default: return true
         }
     }
@@ -263,6 +265,67 @@ public actor CaseOutputService {
             if let caseID { await recordRefusal(caseID: caseID, kind: kind, route: route, actor: actor, error) }
             throw error
         }
+    }
+
+    /// Living case map M8 — freeze a map export: the shown items and links, the legend, the case, the moment or
+    /// recorded state, the scope and the sources; the restrictions that apply NOW (the case's legal holds as they
+    /// are now; protected identities scrubbed from every text before anything is drawn); then the bytes are
+    /// rendered from the protected text and go through `prepareData` (every cited source re-checked against the
+    /// export policy now, the rendered texts checked again for a protected name). `write` / `release` re-check
+    /// at the moment of release. For `.png` the table is a second package (`.csv`) the caller releases with it.
+    public func prepareMap(_ request: CaseMapExportRequest, format: CaseMapExportFormat, route: CaseOutputRoute, actor: String) async throws -> CaseOutputPackage {
+        let caseID = request.projection.caseID
+        let frozen: CaseMapExportFrozen
+        let csv: String
+        let rendered: Data
+        do {
+            guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
+            let holds = try await currentHoldLines(caseID: caseID)
+            let raw = CaseMapExportRenderer.freeze(request, restrictions: holds + [
+                "Protected source identities are removed from this export, as from every export.",
+                "Every cited source was re-checked against this case's export policy at the moment of release."])
+            guard !raw.items.isEmpty else { throw CaseOutputError.emptyContent }
+            var cache: [String: String] = [:]
+            let names = try await protectedNames()
+            frozen = try raw.mapped { text in
+                if let hit = cache[text] { return hit }
+                let scrubbed = ProtectedIdentities.scrub(text, names: names)
+                guard scrubbed.leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(scrubbed.leaks.count) }
+                cache[text] = scrubbed.text
+                return scrubbed.text
+            }
+            let points = CaseMapExportRenderer.points(request)
+            csv = CaseMapExportRenderer.csv(frozen)
+            switch format {
+            case .pdf: rendered = CaseMapExportRenderer.pdf(frozen, placements: points)
+            case .png: rendered = CaseMapExportRenderer.png(frozen, placements: points)
+            case .csv: rendered = Data(csv.utf8)
+            }
+        } catch {
+            await recordRefusal(caseID: caseID, kind: .caseMap, route: route, actor: actor, error)
+            throw error
+        }
+        // A file carries the rendering; a copy or print releases the table's text. prepareData records its refusals.
+        let data = route == .file ? rendered : Data(csv.utf8)
+        let pkg = try await prepareData(caseID: caseID, kind: .caseMap, route: route, actor: actor, citations: frozen.citations,
+                                        texts: [csv] + frozen.texts, data: data)
+        guard route != .file else { return pkg }
+        return CaseOutputPackage(id: pkg.id, caseID: pkg.caseID, kind: pkg.kind, route: pkg.route, text: csv, data: data, digest: pkg.digest,
+                                 scopeFingerprint: pkg.scopeFingerprint, approved: false, custodyIncomplete: false, actor: actor,
+                                 preparedAt: pkg.preparedAt, citations: pkg.citations)
+    }
+
+    /// The case's legal holds as they are now (stated on every map export, current or historical).
+    private func currentHoldLines(caseID: UUID) async throws -> [String] {
+        let notices = Int(try await database.query("SELECT COUNT(*) FROM case_hold_notices WHERE case_id = ? AND released_at IS NULL;", [.uuid(caseID)]).first?.int(0) ?? 0)
+        let ids = [caseID.uuidString, caseID.uuidString.lowercased()]
+        let held = Int(try await database.query("""
+            SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
+            WHERE h.released_at IS NULL AND i.removed_at IS NULL AND (i.object_id IN (?, ?)
+               OR i.object_id IN (SELECT source_ref FROM investigation_case_sources WHERE case_id = ? AND in_scope = 1));
+            """, ids.map { .text($0) } + [.uuid(caseID)]).first?.int(0) ?? 0)
+        if notices == 0 && held == 0 { return ["Legal holds now: none on this case or its documents."] }
+        return ["Legal holds now: \(notices) unreleased hold notice(s) and \(held) held item(s) on this case or its documents. They stay in force; this export does not change them."]
     }
 
     /// Scrub protected identities from text that will be rendered into a binary document; a name

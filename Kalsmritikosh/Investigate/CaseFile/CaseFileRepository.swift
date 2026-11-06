@@ -4,7 +4,10 @@
 //
 //  The durable case file (schema v151). Every write appends a case_actions row inside the SAME
 //  savepoint, so the action log can never miss a change (S-4). Nothing is deleted: people, journal
-//  entries, exhibits and grid links are retracted with a timestamp and stay in the record.
+//  entries, exhibits and grid links are retracted with a timestamp and stay in the record. Updates that
+//  overwrite a record (the profile, an allegation's decision and response, a report item's selection, a
+//  person, an interview, retractions) also keep its row before and after (case_record_revisions, v173) in
+//  that same savepoint — living case map M7.
 //
 
 import Foundation
@@ -38,7 +41,8 @@ public actor CaseFileRepository {
         merged.intake = p.intake.stored
         merged.updatedAt = date
         let row = merged
-        try await write("cf_profile", caseID: p.caseID, actor: actor, action: "profileSaved", detail: nil, at: date) { db in
+        try await write("cf_profile", caseID: p.caseID, actor: actor, action: "profileSaved", detail: nil, at: date,
+                        capture: .profile(p.caseID)) { db in
             try Self.upsertProfile(db, row)
         }
     }
@@ -52,7 +56,7 @@ public actor CaseFileRepository {
         let row = p
         try await write("cf_stage", caseID: caseID, actor: actor, action: "stage",
                         detail: "\(from.label) → \(stage.label)" + (reason.map { ": \($0)" } ?? ""), at: date,
-                        allowedWhenClosed: from == .closed) { db in
+                        allowedWhenClosed: from == .closed, capture: .profile(caseID)) { db in
             try Self.upsertProfile(db, row)
         }
     }
@@ -77,7 +81,7 @@ public actor CaseFileRepository {
         let row = p
         let detail = [t.severity.map { "severity \($0.label)" }, t.decision.map { "decision \($0.label)" }, t.reason]
             .compactMap { $0 }.joined(separator: "; ")
-        try await write("cf_triage", caseID: caseID, actor: actor, action: "triage", detail: detail, at: date) { db in
+        try await write("cf_triage", caseID: caseID, actor: actor, action: "triage", detail: detail, at: date, capture: .profile(caseID)) { db in
             try Self.upsertProfile(db, row)
         }
     }
@@ -89,7 +93,8 @@ public actor CaseFileRepository {
         p.stage = reopened ? .inProgress : .closed; p.updatedAt = date
         let row = p
         try await write("cf_close", caseID: caseID, actor: try Self.clean(actor, "Actor"),
-                        action: reopened ? "reopened" : "closed", detail: nil, at: date, allowedWhenClosed: reopened) { db in
+                        action: reopened ? "reopened" : "closed", detail: nil, at: date, allowedWhenClosed: reopened,
+                        capture: .profile(caseID)) { db in
             try Self.upsertProfile(db, row)
         }
     }
@@ -99,7 +104,7 @@ public actor CaseFileRepository {
         p.archivedAt = date; p.updatedAt = date
         let row = p
         try await write("cf_archive", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "archived", detail: nil, at: date,
-                        allowedWhenClosed: true) { db in
+                        allowedWhenClosed: true, capture: .profile(caseID)) { db in
             try Self.upsertProfile(db, row)
         }
     }
@@ -123,7 +128,8 @@ public actor CaseFileRepository {
     /// or that none was obtained and why. Recorded in the case log; an adverse finding needs it.
     public func recordResponse(allegationID: UUID, caseID: UUID, response: String, actor: String, at date: Date = Date()) async throws {
         let text = try Self.clean(response, "The response")
-        try await write("cf_resp", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "responseRecorded", detail: text, at: date) { db in
+        try await write("cf_resp", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "responseRecorded", detail: text, at: date,
+                        capture: .allegation(allegationID)) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
             try db.exec("UPDATE case_allegations SET response = ? WHERE id = ? AND case_id = ?;", [.text(text), .uuid(allegationID), .uuid(caseID)])
         }
@@ -133,7 +139,8 @@ public actor CaseFileRepository {
     public func addAllegation(caseID: UUID, text: String, actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, "The allegation")
         let id = UUID()
-        try await write("cf_alg", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "allegationAdded", detail: text, at: date) { db in
+        try await write("cf_alg", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "allegationAdded", detail: text, at: date,
+                        capture: .allegation(id)) { db in
             let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_allegations WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             try db.exec("INSERT INTO case_allegations (id, case_id, sequence, text, disposition, created_at) VALUES (?,?,?,?, 'pending', ?);",
                         [.uuid(id), .uuid(caseID), .integer(next), .text(text), .date(date)])
@@ -152,7 +159,8 @@ public actor CaseFileRepository {
         let exceptionNote = Self.blankToNil(exception)
         if disposition != .pending { _ = try Self.clean(why ?? "", "The rationale") }
         try await write("cf_dec", caseID: caseID, actor: actor, action: "allegationDecided",
-                        detail: "\(disposition.label): \(why ?? "")" + (exceptionNote.map { " (exception: \($0))" } ?? ""), at: date) { db in
+                        detail: "\(disposition.label): \(why ?? "")" + (exceptionNote.map { " (exception: \($0))" } ?? ""), at: date,
+                        capture: .allegation(allegationID)) { db in
             try Self.requireInCase(db, "allegation", allegationID, caseID: caseID)
             if disposition == .substantiated {
                 // §2 — documentary support is a VERIFIED passage or a live exhibit, by the stored
@@ -278,7 +286,8 @@ public actor CaseFileRepository {
         // UI journey run e (E-1): the log row says WHAT was unlinked, not only that something was.
         let row = try await database.query("SELECT COALESCE(label, evidence_ref), stance, quote FROM case_allegation_evidence WHERE id = ? LIMIT 1;", [.uuid(id)]).first
         let detail = row.map { "\($0.string(1) ?? "") \($0.string(0) ?? "")" + (($0.string(2)).map { " — “\($0.prefix(80))”" } ?? "") }
-        try await write("cf_gridx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "gridUnlinked", detail: detail, at: date) { db in
+        try await write("cf_gridx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "gridUnlinked", detail: detail, at: date,
+                        capture: .gridLink(id)) { db in
             try Self.requireInCase(db, "evidence link", id, caseID: caseID)
             try db.exec("UPDATE case_allegation_evidence SET removed_at = ? WHERE id = ?;", [.date(date), .uuid(id)])
         }
@@ -378,7 +387,8 @@ public actor CaseFileRepository {
         let id = UUID()
         let stored: CaseEvidenceSupport? = support ?? (evidenceRef.map(Self.defaultSupport(for:)))
         try await write("cf_rep", caseID: caseID, actor: actor, action: included ? "reportItemIncluded" : "reportItemExcluded",
-                        detail: text + (reason.map { " — excluded: \($0)" } ?? "") + (reviewState.map { " [\($0)]" } ?? ""), at: date) { db in
+                        detail: text + (reason.map { " — excluded: \($0)" } ?? "") + (reviewState.map { " [\($0)]" } ?? ""), at: date,
+                        capture: .reportItem(id)) { db in
             if let allegationID { try Self.requireInCase(db, "allegation", allegationID, caseID: caseID) }
             if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
             if let origin, !allowDuplicate {
@@ -402,7 +412,8 @@ public actor CaseFileRepository {
         let actor = try Self.clean(actor, "Actor")
         let why = Self.blankToNil(reason)
         if !included { _ = try Self.clean(why ?? "", "The exclusion reason") }
-        try await write("cf_repx", caseID: caseID, actor: actor, action: included ? "reportItemIncluded" : "reportItemExcluded", detail: why, at: date) { db in
+        try await write("cf_repx", caseID: caseID, actor: actor, action: included ? "reportItemIncluded" : "reportItemExcluded", detail: why, at: date,
+                        capture: .reportItem(id)) { db in
             try Self.requireInCase(db, "report item", id, caseID: caseID)
             try db.exec("UPDATE case_report_items SET included = ?, exclusion_reason = ?, decided_by = ?, decided_at = ? WHERE id = ? AND case_id = ?;",
                         [.integer(included ? 1 : 0), .optionalText(included ? nil : why), .text(actor), .date(date), .uuid(id), .uuid(caseID)])
@@ -410,7 +421,8 @@ public actor CaseFileRepository {
     }
 
     public func retractJournal(caseID: UUID, id: UUID, actor: String, at date: Date = Date()) async throws {
-        try await write("cf_jrx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "journalRetracted", detail: nil, at: date) { db in
+        try await write("cf_jrx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "journalRetracted", detail: nil, at: date,
+                        capture: .journal(id)) { db in
             try Self.requireInCase(db, "journal entry", id, caseID: caseID)
             try db.exec("UPDATE case_journal SET removed_at = ? WHERE id = ? AND case_id = ?;", [.date(date), .uuid(id), .uuid(caseID)])
         }
@@ -538,7 +550,8 @@ public actor CaseFileRepository {
 
     public func updatePerson(_ p: CasePerson, actor: String, at date: Date = Date()) async throws {
         let name = try Self.clean(p.name, "The name")
-        try await write("cf_pplu", caseID: p.caseID, actor: try Self.clean(actor, "Actor"), action: "personUpdated", detail: name, at: date) { db in
+        try await write("cf_pplu", caseID: p.caseID, actor: try Self.clean(actor, "Actor"), action: "personUpdated", detail: name, at: date,
+                        capture: .person(p.id)) { db in
             try Self.requireInCase(db, "person", p.id, caseID: p.caseID)
             try db.exec("UPDATE case_people SET name = ?, role = ?, entity_id = ?, contact = ?, notes = ? WHERE id = ? AND case_id = ?;",
                         [.text(name), .text(p.role.rawValue), p.entityID.map { .uuid($0) } ?? .null, .optionalText(p.contact), .optionalText(p.notes), .uuid(p.id), .uuid(p.caseID)])
@@ -546,7 +559,8 @@ public actor CaseFileRepository {
     }
 
     public func retractPerson(caseID: UUID, id: UUID, actor: String, at date: Date = Date()) async throws {
-        try await write("cf_pplx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "personRetracted", detail: nil, at: date) { db in
+        try await write("cf_pplx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "personRetracted", detail: nil, at: date,
+                        capture: .person(id)) { db in
             try Self.requireInCase(db, "person", id, caseID: caseID)
             try db.exec("UPDATE case_people SET removed_at = ? WHERE id = ? AND case_id = ?;", [.date(date), .uuid(id), .uuid(caseID)])
         }
@@ -610,7 +624,8 @@ public actor CaseFileRepository {
         }
         let status: InterviewStatus = current.status == .attested ? .attested : iv.status
         guard current.caseID == iv.caseID else { throw CaseFileError.notInCase("interview", iv.id) }
-        try await write("cf_ivu", caseID: iv.caseID, actor: actor, action: "interviewUpdated", detail: status.label, at: date) { db in
+        try await write("cf_ivu", caseID: iv.caseID, actor: actor, action: "interviewUpdated", detail: status.label, at: date,
+                        capture: .interview(iv.id)) { db in
             try Self.requireInCase(db, "interview", iv.id, caseID: iv.caseID)
             if let personID = iv.personID { try Self.requireInCase(db, "person", personID, caseID: iv.caseID) }
             // A changed recording or transcript must be a source in this case.
@@ -635,7 +650,8 @@ public actor CaseFileRepository {
         guard iv.status != .attested else { throw CaseFileError.statementAlreadyAttested }
         guard let text = iv.statementText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { throw CaseFileError.noStatement }
         let hash = CaseFileHash.sha256(iv.statementText ?? "")
-        try await write("cf_att", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "statementAttested", detail: "\(by) · \(hash.prefix(12))", at: date) { db in
+        try await write("cf_att", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "statementAttested", detail: "\(by) · \(hash.prefix(12))", at: date,
+                        capture: .interview(interviewID)) { db in
             try Self.requireInCase(db, "interview", interviewID, caseID: caseID)
             // The statement attested is the one hashed: a change in between refuses the attestation.
             guard try db.query("SELECT 1 FROM case_interviews WHERE id = ? AND case_id = ? AND status != 'attested' AND COALESCE(statement_text, '') = ? LIMIT 1;",
@@ -760,7 +776,8 @@ public actor CaseFileRepository {
     }
 
     public func withdrawExhibit(caseID: UUID, id: UUID, actor: String, at date: Date = Date()) async throws {
-        try await write("cf_exx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "exhibitWithdrawn", detail: nil, at: date) { db in
+        try await write("cf_exx", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "exhibitWithdrawn", detail: nil, at: date,
+                        capture: .exhibit(id)) { db in
             try Self.requireInCase(db, "exhibit", id, caseID: caseID)
             try db.exec("UPDATE case_exhibits SET withdrawn_at = ? WHERE id = ? AND case_id = ?;", [.date(date), .uuid(id), .uuid(caseID)])
         }
@@ -793,7 +810,8 @@ public actor CaseFileRepository {
     }
 
     public func acknowledgeHold(caseID: UUID, id: UUID, acknowledgedAt: Date, actor: String) async throws {
-        try await write("cf_holda", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "holdAcknowledged", detail: nil, at: Date()) { db in
+        try await write("cf_holda", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "holdAcknowledged", detail: nil, at: Date(),
+                        capture: .holdNotice(id)) { db in
             try Self.requireInCase(db, "hold notice", id, caseID: caseID)
             try db.exec("UPDATE case_hold_notices SET acknowledged_at = ? WHERE id = ? AND case_id = ?;", [.date(acknowledgedAt), .uuid(id), .uuid(caseID)])
         }
@@ -801,7 +819,8 @@ public actor CaseFileRepository {
 
     public func releaseHold(caseID: UUID, id: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
         let reason = try Self.clean(reason, "The release reason")
-        try await write("cf_holdr", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "holdReleased", detail: reason, at: date) { db in
+        try await write("cf_holdr", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "holdReleased", detail: reason, at: date,
+                        capture: .holdNotice(id)) { db in
             try Self.requireInCase(db, "hold notice", id, caseID: caseID)
             try db.exec("UPDATE case_hold_notices SET released_at = ?, release_reason = ? WHERE id = ? AND case_id = ?;",
                         [.date(date), .text(reason), .uuid(id), .uuid(caseID)])
@@ -869,7 +888,8 @@ public actor CaseFileRepository {
         if status == .qcDone, let reviewer = b.reviewer, reviewer.caseInsensitiveCompare(actor) == .orderedSame {
             throw CaseFileError.blank("A second reviewer for QC (the first-pass reviewer can't QC their own batch)")
         }
-        try await write("cf_rbs", caseID: caseID, actor: actor, action: "batchAdvanced", detail: "\(b.name): \(status.label)", at: date) { db in
+        try await write("cf_rbs", caseID: caseID, actor: actor, action: "batchAdvanced", detail: "\(b.name): \(status.label)", at: date,
+                        capture: .reviewBatch(id)) { db in
             try Self.requireInCase(db, "batch", id, caseID: caseID)
             try db.exec("UPDATE case_review_batches SET status = ?, qc_reviewer = ?, qc_note = ?, updated_at = ? WHERE id = ? AND case_id = ?;",
                         [.text(status.rawValue), status == .qcDone ? .text(actor) : .optionalText(b.qcReviewer),
@@ -981,9 +1001,9 @@ public actor CaseFileRepository {
 
     // MARK: - Internals
 
-    /// One savepoint: the change and its action-log row.
+    /// One savepoint: the change, its action-log row and (M7) the record's before/after copy when `capture` names it.
     private func write(_ prefix: String, caseID: UUID, actor: String, action: String, detail: String?, at date: Date,
-                       allowedWhenClosed: Bool = false,
+                       allowedWhenClosed: Bool = false, capture: CaseRecordCapture? = nil,
                        _ body: @escaping @Sendable (isolated Database) throws -> Void) async throws {
         let sp = "\(prefix)_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         let clipped = detail.map { String($0.prefix(500)) }
@@ -997,10 +1017,18 @@ public actor CaseFileRepository {
                try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND stage = 'closed' LIMIT 1;", [.uuid(caseID)]).isEmpty {
                 throw CaseFileError.caseClosed
             }
+            // M7 — the record as it was, read inside the same savepoint as the change.
+            let before = try capture.map { try CaseRecordRevisions.rowJSON(db, $0) } ?? nil
             try body(db)
             let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
+            let actionID = UUID()
             try db.exec("INSERT INTO case_actions (id, case_id, sequence, actor, action, detail, at) VALUES (?,?,?,?,?,?,?);",
-                        [.uuid(UUID()), .uuid(caseID), .integer(next), .text(actor), .text(action), .optionalText(clipped), .date(date)])
+                        [.uuid(actionID), .uuid(caseID), .integer(next), .text(actor), .text(action), .optionalText(clipped), .date(date)])
+            // …and as it became: both copies commit with the change, or neither does.
+            if let capture {
+                try CaseRecordRevisions.record(db, caseID: caseID, actionID: actionID, capture: capture, change: action,
+                                               before: before, after: try CaseRecordRevisions.rowJSON(db, capture), actor: actor, at: date)
+            }
         }
     }
 

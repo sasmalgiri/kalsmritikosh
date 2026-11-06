@@ -117,7 +117,17 @@ struct CaseMapInspector: View {
                 }
             }
         }
-        actions(n)
+        if map.isHistorical { historyNote } else { actions(n) }
+    }
+
+    /// M7 — a recorded state is read-only: no review, link, request, hide or carry from here.
+    private var historyNote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Divider()
+            Label("Recorded state — read-only. Its review states and links are as they were then. Choose “Return to current” to act on the case.",
+                  systemImage: "clock.arrow.circlepath")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: Link
@@ -140,7 +150,9 @@ struct CaseMapInspector: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
-        if l.origins.first?.kind == .investigatorLink {
+        if map.isHistorical {
+            historyNote
+        } else if l.origins.first?.kind == .investigatorLink {
             Button("Withdraw link…") { withdrawReason = ""; withdrawing = l }
                 .disabled(reason: closed ? "The case is closed." : nil, remedy: closed ? "Reopen the case to change its links." : nil)
                 .help("Withdraws the link with your reason. It stays in the case record, marked withdrawn.")
@@ -170,7 +182,10 @@ struct CaseMapInspector: View {
                 Text(ref.documentName ?? "A document in the case").font(.caption.weight(.medium))
                 Text(ref.locatorText).font(.caption2).foregroundStyle(.secondary)
                 if let q = ref.quote, !q.isEmpty { Text("\u{201C}\(q)\u{201D}").font(.caption).fixedSize(horizontal: false, vertical: true) }
-                if ref.objectID != nil {
+                if map.isHistorical, ref.objectID == nil, ref.sourceVersionID != nil {
+                    Text("The version this recorded state cited is no longer in the ledger. Its words are not shown, and the current version is not shown in its place.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                } else if ref.objectID != nil {
                     Button("Open source") { openSource(ref) }.buttonStyle(.link).font(.caption)
                 } else {
                     Text("No readable document to open.").font(.caption2).foregroundStyle(.secondary)

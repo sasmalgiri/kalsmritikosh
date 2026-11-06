@@ -34,7 +34,7 @@ struct CaseMapCanvas: View {
         GeometryReader { geo in
             let vp = viewport
             let rect = vp.worldRect(width: geo.size.width, height: geo.size.height)
-            let cull = CaseMapLayout.cull(result.shown, positions: map.placements, in: rect, cap: Self.drawCap)
+            let cull = CaseMapLayout.cull(result.shown, positions: map.displayPlacements, in: rect, cap: Self.drawCap)
             let groups = groupCards
             ZStack(alignment: .topLeading) {
                 Canvas { ctx, _ in draw(&ctx, vp: vp, drawn: cull.drawn, groups: groups) }
@@ -68,7 +68,7 @@ struct CaseMapCanvas: View {
     // MARK: Drawing
 
     private func position(_ id: CaseMapNodeID) -> CaseMapPoint? {
-        guard var p = map.placements[id]?.point else { return nil }
+        guard var p = map.displayPlacements[id]?.point else { return nil }
         if id == dragNode { p.x += dragOffset.width / viewport.scale; p.y += dragOffset.height / viewport.scale }
         return p
     }
@@ -116,7 +116,7 @@ struct CaseMapCanvas: View {
             let fs = max(8, 11 * vp.scale)
             ctx.draw(Image(systemName: n.kind.symbol), in: CGRect(x: box.minX + 6 * vp.scale, y: box.minY + 6 * vp.scale, width: 14 * vp.scale, height: 14 * vp.scale))
             ctx.draw(Image(systemName: n.status.kind.symbol), in: CGRect(x: box.maxX - 20 * vp.scale, y: box.minY + 6 * vp.scale, width: 13 * vp.scale, height: 13 * vp.scale))
-            if map.placements[id]?.pinned == true {
+            if map.displayPlacements[id]?.pinned == true {
                 ctx.draw(Image(systemName: "pin.fill"), in: CGRect(x: box.maxX - 36 * vp.scale, y: box.minY + 6 * vp.scale, width: 11 * vp.scale, height: 11 * vp.scale))
             }
             ctx.draw(Text(n.kind.label).font(.system(size: fs * 0.8)).foregroundStyle(.secondary),
@@ -142,7 +142,7 @@ struct CaseMapCanvas: View {
     /// Where each collapsed group's card sits: the centre of its members' stored positions.
     private var groupCards: [(CaseMapGroup, CaseMapPoint)] {
         result.collapsedGroups.compactMap { g in
-            let pts = g.members.compactMap { map.placements[$0]?.point }
+            let pts = g.members.compactMap { map.displayPlacements[$0]?.point }
             guard let b = CaseMapLayout.bounds(of: pts) else { return nil }
             return (g, b.center)
         }
@@ -155,7 +155,7 @@ struct CaseMapCanvas: View {
             .onChanged { v in
                 if dragNode == nil && panStart == nil {
                     let w = vp.toWorld(x: v.startLocation.x, y: v.startLocation.y)
-                    if let hit = CaseMapLayout.hit(w, ids: drawn, positions: map.placements) { dragNode = hit } else { panStart = vp }
+                    if let hit = CaseMapLayout.hit(w, ids: drawn, positions: map.displayPlacements) { dragNode = hit } else { panStart = vp }
                 }
                 if dragNode != nil { dragOffset = v.translation }
                 else if let start = panStart {
@@ -166,7 +166,7 @@ struct CaseMapCanvas: View {
                 }
             }
             .onEnded { v in
-                if let id = dragNode, let p = map.placements[id]?.point {
+                if let id = dragNode, let p = map.displayPlacements[id]?.point {
                     let target = CaseMapPoint(x: (p.x + v.translation.width / vp.scale).rounded(), y: (p.y + v.translation.height / vp.scale).rounded())
                     Task { await map.move(id, to: target, repository: repository) }
                 }
@@ -176,7 +176,7 @@ struct CaseMapCanvas: View {
 
     private func tap(_ location: CGPoint, vp: CaseMapViewport, drawn: [CaseMapNodeID], groups: [(CaseMapGroup, CaseMapPoint)]) {
         let w = vp.toWorld(x: location.x, y: location.y)
-        if let hit = CaseMapLayout.hit(w, ids: drawn, positions: map.placements) { map.select(.node(hit)); return }
+        if let hit = CaseMapLayout.hit(w, ids: drawn, positions: map.displayPlacements) { map.select(.node(hit)); return }
         if let g = groups.first(where: { abs($0.1.x - w.x) <= CaseMapLayout.nodeWidth / 2 && abs($0.1.y - w.y) <= CaseMapLayout.nodeHeight / 2 }) {
             Task { await map.toggleCollapse(g.0.id, repository: repository, actor: actor) }
             return
@@ -186,7 +186,7 @@ struct CaseMapCanvas: View {
         let drawnSet = Set(drawn)
         for lid in result.links {
             guard let l = projection.link(lid), drawnSet.contains(l.from), drawnSet.contains(l.to),
-                  let a = map.placements[l.from]?.point, let b = map.placements[l.to]?.point else { continue }
+                  let a = map.displayPlacements[l.from]?.point, let b = map.displayPlacements[l.to]?.point else { continue }
             if Self.distance(w, a, b) <= tolerance { map.select(.link(l.id)); return }
         }
         map.select(nil)
@@ -207,7 +207,7 @@ struct CaseMapCanvas: View {
     }
 
     private func fitAll(_ size: CGSize) -> CaseMapViewport? {
-        guard size.width > 0, let b = CaseMapLayout.bounds(of: result.shown.compactMap { map.placements[$0]?.point }) else { return nil }
+        guard size.width > 0, let b = CaseMapLayout.bounds(of: result.shown.compactMap { map.displayPlacements[$0]?.point }) else { return nil }
         return CaseMapLayout.fit(b, width: size.width, height: size.height)
     }
 
@@ -222,13 +222,13 @@ struct CaseMapCanvas: View {
                     .help("Fit everything shown in this view")
                 Button {
                     guard case .node(let id)? = map.selection else { return }
-                    let pts = ([id] + projection.links(of: id).map { $0.from == id ? $0.to : $0.from }).compactMap { map.placements[$0]?.point }
+                    let pts = ([id] + projection.links(of: id).map { $0.from == id ? $0.to : $0.from }).compactMap { map.displayPlacements[$0]?.point }
                     if let b = CaseMapLayout.bounds(of: pts) { map.setViewport(CaseMapLayout.fit(b, width: geo.width, height: geo.height)) }
                 } label: { Label("Fit selection", systemImage: "scope") }
                     .help("Fit the selected item and what links to it")
                 if case .node(let id)? = map.selection {
                     Button { Task { await map.togglePin(id, repository: repository) } } label: {
-                        Label(map.placements[id]?.pinned == true ? "Unpin" : "Pin", systemImage: map.placements[id]?.pinned == true ? "pin.slash" : "pin")
+                        Label(map.displayPlacements[id]?.pinned == true ? "Unpin" : "Pin", systemImage: map.displayPlacements[id]?.pinned == true ? "pin.slash" : "pin")
                     }
                     Button { Task { await map.hide(id, repository: repository, actor: actor) } } label: { Label("Hide from this view", systemImage: "eye.slash") }
                 }
@@ -313,14 +313,14 @@ struct CaseMapList: View {
                 Label(n.status.text, systemImage: n.status.kind.symbol).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
-            if map.placements[n.id]?.pinned == true { Image(systemName: "pin.fill").font(.caption).accessibilityLabel("Pinned") }
+            if map.displayPlacements[n.id]?.pinned == true { Image(systemName: "pin.fill").font(.caption).accessibilityLabel("Pinned") }
             Text(n.review.label).font(.caption2).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(n.kind.label): \(n.title). \(n.status.kind.label): \(n.status.text). \(n.review.label)")
         .contextMenu {
             Button("Hide from this view") { Task { await map.hide(n.id, repository: repository, actor: actor) } }
-            Button(map.placements[n.id]?.pinned == true ? "Unpin" : "Pin") { Task { await map.togglePin(n.id, repository: repository) } }
+            Button(map.displayPlacements[n.id]?.pinned == true ? "Unpin" : "Pin") { Task { await map.togglePin(n.id, repository: repository) } }
         }
     }
 }

@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 172
+    public static let latestVersion = 173
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -805,7 +805,8 @@ public enum SchemaMigrations {
         (169, v169),
         (170, v170),
         (171, v171),
-        (172, v172)
+        (172, v172),
+        (173, v173)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8278,5 +8279,88 @@ public enum SchemaMigrations {
       OR NEW.query_text <> OLD.query_text OR NEW.query_json <> OLD.query_json OR NEW.query_version <> OLD.query_version
       OR NEW.options_json <> OLD.options_json OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
     BEGIN SELECT RAISE(ABORT, 'case_saved_searches: a receipt is frozen and a live search keeps its query; save a new one'); END;
+    """
+
+    // MARK: - v173 — case changes, history and recovery (Living Case Map plan 2026-11-06 §6.3, §6.4, §9; M6–M8).
+    // • case_history_install: the explicit historical baseline — when this build began recording case history.
+    //   Map states before it were never recorded and are never invented ("full map state not recorded before …").
+    //   One row, written by this migration; a full erase empties it and the next read starts a new baseline.
+    // • case_record_revisions: typed before/after copies of a case record, written in the SAME savepoint as the
+    //   change and its case_actions row, for the updates that used to overwrite (the case profile, an allegation's
+    //   disposition and response, a report item's selection, a person, an interview, retractions). Append-only.
+    // • case_change_seen: each case's own "seen" position for its change feed (a time and the identifiers of what
+    //   was detected, readable and open at that moment — no document text). Seen is not reviewed or accepted.
+    // • case_checkpoints: immutable recorded states of the case map (manifest, scope fingerprint, content digest,
+    //   the projected items and links with their display text, and layout), built from one validated revision
+    //   fence. Never edited; a person erasure may only clear a checkpoint's content (marked erased, kept as a stub).
+    // • ledger_person_erase: the marker a person erasure writes and removes inside its savepoint, so the guards on
+    //   revisions and checkpoints stand aside for that act only (like ledger_case_erase for a case erasure).
+    // Everything carries case_id, so case erasure removes it and backups carry it as part of the encrypted ledger.
+    private static let v173: String = """
+    CREATE TABLE IF NOT EXISTS ledger_person_erase (
+        erasure_id TEXT PRIMARY KEY NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_history_install (
+        id           INTEGER PRIMARY KEY CHECK (id = 1),
+        installed_at REAL NOT NULL
+    );
+    INSERT OR IGNORE INTO case_history_install (id, installed_at) VALUES (1, (julianday('now') - 2440587.5) * 86400.0);
+    CREATE TABLE IF NOT EXISTS case_record_revisions (
+        id          TEXT PRIMARY KEY NOT NULL,
+        case_id     TEXT NOT NULL,
+        action_id   TEXT,
+        record_kind TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id   TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        change      TEXT NOT NULL CHECK (length(trim(change)) > 0),
+        before_json TEXT,
+        after_json  TEXT,
+        actor       TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        recorded_at REAL NOT NULL,
+        CHECK (before_json IS NOT NULL OR after_json IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_record_revisions_case ON case_record_revisions(case_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_case_record_revisions_record ON case_record_revisions(case_id, record_kind, record_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_record_revisions_fixed BEFORE UPDATE ON case_record_revisions
+    BEGIN SELECT RAISE(ABORT, 'case_record_revisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_record_revisions_kept BEFORE DELETE ON case_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+     AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_record_revisions is append-only'); END;
+    CREATE TABLE IF NOT EXISTS case_change_seen (
+        case_id      TEXT PRIMARY KEY NOT NULL,
+        seen_through REAL NOT NULL,
+        state_json   TEXT NOT NULL DEFAULT '{}',
+        seen_by      TEXT NOT NULL CHECK (length(trim(seen_by)) > 0),
+        seen_at      REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS case_checkpoints (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        kind              TEXT NOT NULL CHECK (kind IN ('automatic','manual','milestone')),
+        name              TEXT,
+        fence             TEXT NOT NULL,
+        scope_fingerprint TEXT NOT NULL,
+        content_digest    TEXT NOT NULL,
+        manifest_json     TEXT NOT NULL,
+        payload_json      TEXT NOT NULL,
+        format_version    INTEGER NOT NULL CHECK (format_version >= 1),
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        erased_at         REAL,
+        erased_reason     TEXT,
+        CHECK (kind <> 'milestone' OR length(trim(coalesce(name,''))) > 0),
+        CHECK ((erased_at IS NULL) = (erased_reason IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_checkpoints_case ON case_checkpoints(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_checkpoints_fixed BEFORE UPDATE ON case_checkpoints
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_person_erase) OR OLD.erased_at IS NOT NULL OR NEW.erased_at IS NULL
+      OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.kind <> OLD.kind OR NEW.recorded_at <> OLD.recorded_at
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.fence <> OLD.fence
+    BEGIN SELECT RAISE(ABORT, 'case_checkpoints: a recorded state is never edited (an erasure may only clear its content)'); END;
+    CREATE TRIGGER IF NOT EXISTS case_checkpoints_kept BEFORE DELETE ON case_checkpoints
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_checkpoints are kept'); END;
     """
 }

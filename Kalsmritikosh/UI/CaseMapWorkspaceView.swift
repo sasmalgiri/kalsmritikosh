@@ -9,6 +9,9 @@
 //    Previous/Next and keys; it never moves on its own. A breadcrumb and Back to the previous focus.
 //  • The map or the equivalent list (same filters, same selection, same inspector), and one inspector.
 //  Opening, panning or switching views reads the ledger only: nothing is sent anywhere.
+//  M6–M8: "What changed" opens the case's change feed; "History" the recorded states (read-only, with an
+//  obvious "Return to current"); "Readiness" the explicit work states; "Export" goes through CaseOutputService
+//  only (CaseMapExportRoutes). Locking the app clears what is shown and drops late loads.
 //
 
 import SwiftUI
@@ -27,6 +30,12 @@ struct CaseMapWorkspaceView: View {
     @State private var confirmArrange: CaseMapWorkspaceModel.ArrangeScope?
     @State private var openSource: CitationOpenTarget?
     @State private var openedPassage: OpenedSource?
+    @State private var feedService: CaseChangeFeedService?
+    @State private var historyService: CaseHistoryService?
+    @State private var showHistory = false
+    @State private var showReadiness = false
+    @State private var exportStatus: String?
+    @State private var lock = AppLock.shared
     @FocusState private var findFocused: Bool
 
     private var map: CaseMapWorkspaceModel { model.map }
@@ -47,7 +56,27 @@ struct CaseMapWorkspaceView: View {
         .onChange(of: model.snapshot?.actions.count) { _, _ in Task { await reload() } }
         .onChange(of: model.review.items) { _, _ in Task { await reload() } }
         .onChange(of: model.requests.map(\.request.revision)) { _, _ in Task { await reload() } }
-        .sheet(isPresented: $showChanges) { changesSheet }
+        .sheet(isPresented: $showChanges) {
+            CaseChangeFeedPanel(map: map, feedService: feedService, actor: model.actor) { showChanges = false }
+        }
+        .sheet(isPresented: $showHistory) {
+            CaseHistoryPanel(map: map, history: historyService, caseID: model.caseID, actor: model.actor) { showHistory = false }
+        }
+        .sheet(isPresented: $showReadiness) {
+            CaseReadinessPanel(readiness: readiness, select: { map.select(.node($0)) }) { showReadiness = false }
+        }
+        // M8 — locking the app clears the case, the inspector's content, the feed and any recorded state, and
+        // drops whatever is still loading; unlocking reads the case again.
+        .onChange(of: lock.locked) { _, locked in
+            if locked {
+                showChanges = false; showHistory = false; showReadiness = false
+                openSource = nil; openedPassage = nil
+                map.closeOut()
+            } else {
+                map.reopenAfterLock()
+                Task { await reload() }
+            }
+        }
         .sheet(isPresented: $savingView) { saveViewSheet }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
@@ -70,17 +99,30 @@ struct CaseMapWorkspaceView: View {
     // MARK: Loading
 
     private func start() async {
-        if service == nil, let db = appState.database, let files = appState.caseFiles, let objects = appState.objects {
-            service = CaseMapService(sources: .live(database: db, caseFiles: files, custody: appState.investigationCustody,
-                                                   analysis: appState.investigationAnalysis, desk: appState.investigationContradictionGap,
-                                                   objects: objects))
+        if service == nil { service = CaseMapServiceFactory.map(appState) }
+        if let db = appState.database {
+            if feedService == nil { feedService = CaseChangeFeedService(database: db) }
+            if historyService == nil, let service { historyService = CaseHistoryService(database: db, map: service) }
         }
         await reload()
+        // M7 — the daily record: kept when the case changed since its newest recorded state (local ledger only).
+        if let historyService, map.liveProjection != nil, !lock.locked {
+            await historyService.recordAutomaticIfChanged(caseID: model.caseID, actor: model.actor)
+        }
     }
 
+    /// Read the case again (the view, selection and positions are kept), then what changed.
     func reload() async {
         guard let service else { map.error = "The ledger isn't ready yet."; return }
+        guard !lock.locked else { return }
         await map.refresh(service)
+        if let feedService { await map.refreshFeed(feedService) }
+    }
+
+    /// M7 — the readiness panel's states, from the same projection the map shows (the live case).
+    private var readiness: CaseReadiness? {
+        guard let p = map.liveProjection, let snap = model.snapshot else { return nil }
+        return CaseReadiness.compute(projection: p, snapshot: snap, requests: model.requests, coverage: model.coverage)
     }
 
     // MARK: Header (stays visible)
@@ -128,7 +170,14 @@ struct CaseMapWorkspaceView: View {
                 Spacer()
             }
             HStack(spacing: 10) {
-                Button { showChanges = true } label: { Label("What changed", systemImage: "clock.arrow.circlepath") }
+                Button { showChanges = true } label: {
+                    Label("What changed" + (map.feed.map { f in f.newChanges.isEmpty ? "" : " (\(f.newChanges.count))" } ?? ""), systemImage: "clock.arrow.circlepath")
+                }
+                .help("This case's changes since your seen position. Seeing them is not reviewing them.")
+                Button { showHistory = true } label: { Label("History", systemImage: "calendar.badge.clock") }
+                    .help("Recorded states of this case map: open one read-only, or compare two.")
+                Button { showReadiness = true } label: { Label("Readiness", systemImage: "list.bullet.clipboard") }
+                    .help("The state of the work — questions, evidence, review, requests, findings and tasks. No percentage.")
                 Button { nextAction() } label: { Label("Next action", systemImage: "arrow.right.circle") }
                     .disabled(reason: model.glance?.nextStep == nil ? "No next step is recorded for this case." : nil)
                 Menu {
@@ -267,6 +316,23 @@ struct CaseMapWorkspaceView: View {
 
     @ViewBuilder private func banners(_ p: CaseMapProjection) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            if let h = map.history {
+                HStack(spacing: 8) {
+                    Label(h.summary.stateLabel + " Read-only.", systemImage: "clock.arrow.circlepath")
+                        .font(.callout.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button { map.returnToCurrent() } label: { Label("Return to current", systemImage: "arrow.uturn.forward.circle") }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                        .keyboardShortcut(.escape, modifiers: [.command])
+                        .accessibilityIdentifier("case.map.returnToCurrent")
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                if !h.unavailableVersions.isEmpty {
+                    Label("\(h.unavailableVersions.count) source version(s) this state cited are no longer in the ledger: their words are not shown and the current version is not shown in their place.",
+                          systemImage: "questionmark.folder").foregroundStyle(.secondary)
+                }
+            }
             switch map.loadState {
             case .partial(let parts)?:
                 Label("Incomplete: \(parts.map(\.label).joined(separator: ", ")) could not be read. Those items are not on the map; this is not an empty result.",
@@ -279,6 +345,7 @@ struct CaseMapWorkspaceView: View {
                 Label("\(p.danglingLinks) of your map link(s) point at an item no longer in this case; they are not drawn.", systemImage: "link.badge.plus")
                     .foregroundStyle(.secondary)
             }
+            if let e = exportStatus { Label(e, systemImage: "square.and.arrow.up").foregroundStyle(.secondary) }
             if let e = map.error { Label(e, systemImage: "xmark.octagon").foregroundStyle(.red) }
             else if let n = map.notice { Label(n, systemImage: "info.circle").foregroundStyle(.secondary) }
             if let e = model.error { Label(e, systemImage: "xmark.octagon").foregroundStyle(.red) }
@@ -316,6 +383,17 @@ struct CaseMapWorkspaceView: View {
                 .buttonStyle(.borderless)
                 .disabled(reason: map.canUndo ? nil : "Nothing to undo.")
                 .keyboardShortcut("z", modifiers: [.command, .control])
+            Menu("Export") {
+                Button("Export map as PDF (with its relationship table)…") { export(.pdf) }
+                Button("Export map as PNG and the table as CSV…") { export(.png) }
+                Button("Export the relationship table (CSV)…") { export(.csv) }
+                Divider()
+                Button("Copy the relationship table") { exportCopy() }
+                Button("Print the relationship table") { exportPrint() }
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help("Exports what this view shows, with every link traced to its sources, through the app's export checks. A recorded state says which state it is.")
+            .disabled(reason: map.result == nil ? "The map has not been read yet." : nil)
             Menu("Arrange") {
                 if case .node(let id)? = map.selection {
                     Button("Arrange the selected item's branch") { confirmArrange = .branch(id) }
@@ -336,23 +414,6 @@ struct CaseMapWorkspaceView: View {
     }
 
     // MARK: Sheets
-
-    private var changesSheet: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("What changed").font(.headline)
-            Text("The case-scoped list of changes is still being built. Until then: the Changes view in the strip shows this case's items that changed since they were decided or carried (reopened contradictions, superseded results, revised statements); below are the archive-wide changes. Seeing a change is not reviewing it.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Button("Show the Changes view") { map.go(to: .builtIn(.changes)); showChanges = false }
-                Spacer()
-                Button("Close") { showChanges = false }.keyboardShortcut(.cancelAction)
-            }
-            Divider()
-            ChangesView()
-        }
-        .padding(16)
-        .frame(width: 720, height: 560)
-    }
 
     private var saveViewSheet: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -375,6 +436,32 @@ struct CaseMapWorkspaceView: View {
         }
         .padding(16)
         .frame(width: 420)
+    }
+
+    // MARK: Export (M8) — through CaseOutputService only
+
+    private func exportRequest() -> CaseMapExportRequest? {
+        guard let p = map.projection, let r = map.result else { return nil }
+        let selected: CaseMapNodeID? = { if case .node(let id)? = map.selection { return id }; return nil }()
+        let state: CaseMapExportRequest.State = map.history.map { .recorded($0.summary) } ?? .current(Date())
+        let scope = map.history?.summary.scopeFingerprint ?? map.liveScopeFingerprint
+        return CaseMapExportRequest(projection: p, placements: map.displayPlacements, shown: r.shown, links: r.links, selection: selected,
+                                    viewTitle: map.title(map.view), state: state, scopeFingerprint: scope)
+    }
+
+    private func export(_ format: CaseMapExportFormat) {
+        guard let outputs = appState.caseOutputs, let req = exportRequest() else { exportStatus = "The ledger isn't ready yet; nothing was exported."; return }
+        Task { exportStatus = await CaseMapExportRoutes.exportFile(outputs: outputs, request: req, format: format, actor: model.actor) }
+    }
+
+    private func exportCopy() {
+        guard let outputs = appState.caseOutputs, let req = exportRequest() else { exportStatus = "The ledger isn't ready yet; nothing was copied."; return }
+        Task { exportStatus = await CaseMapExportRoutes.copyTable(outputs: outputs, request: req, actor: model.actor) }
+    }
+
+    private func exportPrint() {
+        guard let outputs = appState.caseOutputs, let req = exportRequest() else { exportStatus = "The ledger isn't ready yet; nothing was printed."; return }
+        Task { exportStatus = await CaseMapExportRoutes.printTable(outputs: outputs, request: req, actor: model.actor) }
     }
 
     // MARK: Open a source (the existing source-reopen path; identifiers only in the preference)

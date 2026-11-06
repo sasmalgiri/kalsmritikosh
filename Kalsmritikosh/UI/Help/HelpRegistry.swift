@@ -308,6 +308,57 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["reset", "layout", "positions", "start again", "messy"]),
         HelpTopic(
+            id: "task-case-changes", kind: .task, title: "What changed in a case since you last looked",
+            summary: "The case map's “What changed” lists this case's own changes since your seen position — documents admitted, excluded, revised, readable or not; links added or withdrawn; reviews decided or reopened; request receipts and decisions; tasks; questions, hypotheses and findings revised; outputs released; stage changes; detections that appeared or are no longer detected. Each says where it comes from. Seeing a change is not reviewing it.",
+            steps: [
+                "Turn on “Case map (preview)” in a case, then choose “What changed” in the case map's header (the number is how many changes are new). The case overview also shows “What changed since you last looked”; “Show what changed…” opens the same list.",
+                "Each entry names its kind, when it was recorded, who made it and where it comes from: “Recorded when it happened” (written with the change itself — the case log, the scope log, the request history, a review decision) or “Derived from …” (worked out from the records, such as a newer version of a document or a task's status compared with your seen position).",
+                "For a changed document, “What rests on it” lists the items that cite or link to it, with how they depend on it, and the items linked to those as “may need review”. Their decisions stay as recorded; review them yourself.",
+                "“Show on map” selects the item. “Show the Changes view” opens the map's Changes view, which shows the changed items and those resting on changed evidence.",
+                "“Mark as seen” moves your seen position for this case to now. It does not review, accept or decide anything, and it writes nothing in the case record."
+            ],
+            notes: ["A possible contradiction that disappears is shown as “No longer detected — not resolved”: nobody decided it. If the changes cannot be read, the list says so — it does not show “nothing changed”. If a part cannot be read, the list names it as incomplete."],
+            controls: ["What changed", "Show what changed…", "What rests on it", "Show on map", "Show the Changes view", "Mark as seen", "Refresh"],
+            destination: .cases,
+            keywords: ["changes", "what changed", "new", "since", "seen", "acknowledge", "revised", "reopened", "no longer detected", "impact", "depends"]),
+        HelpTopic(
+            id: "task-case-history", kind: .task, title: "Case history: recorded states, milestones and comparing them",
+            summary: "The case map keeps recorded states of a case — once a day when the case changed, on request, and as named milestones. A recorded state can be opened read-only and compared with another or with the case now. History starts when this version was installed: earlier map states were not recorded and are not reconstructed.",
+            steps: [
+                "Choose “History” in the case map's header. The first line says from when map states are recorded (“Full map state not recorded before …”).",
+                "“Record the current state” keeps the map as it is now — its items, links, review states and layout. Type a name and choose “Name a milestone” to keep it as a milestone (for example “Interviews done”).",
+                "“Open (read-only)” shows that state on the map and in the list with a banner. Nothing can be changed while it is shown — not positions, pins, links, reviews or views. “Return to current” brings back the case as it is.",
+                "“Compare” on one state and then on another lists what was Added, Changed, Withdrawn and what Needs review between them; “Compare with current” compares a state with the case now. Items are matched by their record, not by their title."
+            ],
+            notes: ["Only recorded states can be opened. A recorded state holds what was recorded by then: evidence recorded later is not in it, even when the event it describes is earlier — the item keeps its event date and, separately, when it was recorded. If a source version a state cited is no longer in the ledger, its words are not shown and the current version is not shown in its place. Recorded states are kept in the case's encrypted ledger; erasing the case removes them, and erasing a person clears the states that name them."],
+            controls: ["History", "Record the current state", "Name a milestone", "Open (read-only)", "Compare", "Compare with current", "Return to current"],
+            destination: .cases,
+            keywords: ["history", "checkpoint", "milestone", "snapshot", "past", "earlier", "compare", "read-only", "baseline", "what was known", "return to current"]),
+        HelpTopic(
+            id: "task-case-readiness", kind: .task, title: "Readiness: the state of a case's work, without a percentage",
+            summary: "“Readiness” in the case map's header counts the case's recorded work states: questions unresolved, being investigated, answered with a recorded basis or needing review; documents read, partly read or not read; reviews pending, deferred, reopened or decided; requests by status; findings draft, outdated, reviewed or approved; tasks overdue, outstanding, completed or not applicable with a reason. “Needs attention” lists what is open.",
+            steps: [
+                "Choose “Readiness” in the case map's header. Each line counts items in one state; “Show” selects the first of them on the map.",
+                "A decided question moves back to “needs review” when its basis is missing, contrary evidence was recorded after the decision, or a source behind it changed."
+            ],
+            notes: ["There is no completion percentage and no verdict. A bigger map is not a more finished case, ten citations of one source are not ten sources, and a count of supporting and opposing links decides nothing. The case's stage and approvals stay where you recorded them."],
+            controls: ["Readiness", "Show"],
+            destination: .cases,
+            keywords: ["readiness", "maturity", "progress", "complete", "done", "outstanding", "overdue", "needs attention", "work states"]),
+        HelpTopic(
+            id: "task-case-map-export", kind: .task, title: "Export the case map with its sources",
+            summary: "“Export” in the case map's footer releases what the view shows — the items and links, the selection, the legend, the case, the moment or recorded state, the scope and every source — through the same checks as every case export. A picture alone cannot be traced to its sources, so a map export always comes with a relationship and evidence table.",
+            steps: [
+                "Choose “Export” in the case map's footer: “Export map as PDF (with its relationship table)…”, “Export map as PNG and the table as CSV…” (two files: the image, then its table) or “Export the relationship table (CSV)…”. “Copy the relationship table” and “Print the relationship table” release the table's text.",
+                "The table has one row per link — from, relationship, to, why the link exists, who asserted it, its state and its sources — and one row per item with its state and sources.",
+                "Before anything leaves, every cited source is checked against the case's export policy as it is now (a source taken out of the case or labelled privileged refuses the export), protected source identities are removed, and the case's legal holds are stated as they are now. The release is recorded in the case log with the digest of what left."
+            ],
+            notes: ["Exporting while a recorded state is open says which recorded state it depicts and that it is not the case as it is now; today's restrictions apply to it. There is no screenshot or copy command on the map itself: use Export."],
+            controls: ["Export", "Export map as PDF (with its relationship table)…", "Export map as PNG and the table as CSV…", "Export the relationship table (CSV)…",
+                       "Copy the relationship table", "Print the relationship table"],
+            destination: .cases,
+            keywords: ["export", "map export", "pdf", "png", "csv", "relationship table", "print", "copy", "sources", "historical export"]),
+        HelpTopic(
             id: "task-case-search", kind: .task, title: "Search case evidence: search this case's documents, with what was and was not searched",
             summary: "A word-for-word search of one case's documents only — never the rest of the archive. It lists every matching document (in pages), shows each match in its passage with the rules it met, counts documents, occurrences and passages separately, and says exactly what it searched and what it could not. It finds words; it does not decide what they mean, and no AI is involved.",
             steps: [

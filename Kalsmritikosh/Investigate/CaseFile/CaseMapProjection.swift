@@ -459,6 +459,20 @@ public nonisolated struct CaseMapProjection: Sendable {
 /// the same nodes, links and identities.
 public nonisolated enum CaseMapProjector {
 
+    /// The structural groups of a set of items: one per kind, and the material nothing links to. Used for a
+    /// live projection and for a recorded state rebuilt from a checkpoint (M7), so both group alike.
+    static func groups(_ sortedNodes: [CaseMapNode], _ sortedLinks: [CaseMapLink]) -> [CaseMapGroup] {
+        var linked = Set<CaseMapNodeID>()
+        for l in sortedLinks { linked.insert(l.from); linked.insert(l.to) }
+        var groups: [CaseMapGroup] = CaseMapNodeKind.allCases.compactMap { k in
+            let members = sortedNodes.filter { $0.kind == k }.map(\.id)
+            return members.isEmpty ? nil : CaseMapGroup(id: "group:\(k.rawValue)", title: k.plural, kind: k, members: members)
+        }
+        let unlinked = sortedNodes.filter { $0.kind.isMaterial && !linked.contains($0.id) }.map(\.id)
+        groups.append(CaseMapGroup(id: CaseMapGroup.unlinkedID, title: "Unlinked material", kind: nil, members: unlinked))
+        return groups
+    }
+
     public static func project(_ input: CaseMapInput) -> CaseMapProjection {
         let s = input.snapshot
         let caseID = s.caseHeader.id
@@ -853,14 +867,7 @@ public nonisolated enum CaseMapProjector {
         // Groups: one per kind, and the material nothing links to.
         let sortedNodes = nodes.values.sorted { $0.id < $1.id }
         let sortedLinks = links.values.sorted { $0.id < $1.id }
-        var linked = Set<CaseMapNodeID>()
-        for l in sortedLinks { linked.insert(l.from); linked.insert(l.to) }
-        var groups: [CaseMapGroup] = CaseMapNodeKind.allCases.compactMap { k in
-            let members = sortedNodes.filter { $0.kind == k }.map(\.id)
-            return members.isEmpty ? nil : CaseMapGroup(id: "group:\(k.rawValue)", title: k.plural, kind: k, members: members)
-        }
-        let unlinked = sortedNodes.filter { $0.kind.isMaterial && !linked.contains($0.id) }.map(\.id)
-        groups.append(CaseMapGroup(id: CaseMapGroup.unlinkedID, title: "Unlinked material", kind: nil, members: unlinked))
+        let groups = Self.groups(sortedNodes, sortedLinks)
 
         var parts = input.parts
         for p in CaseMapPart.allCases where parts[p] == nil { parts[p] = .loaded }

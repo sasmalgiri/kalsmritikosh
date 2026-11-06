@@ -1,6 +1,6 @@
 # Output routes — inventory and protection (App Store completion §4)
 
-Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap). Source tree on `investigations-next`.
+Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap). Source tree on `investigations-next`; 2026-11-07 (routes 42–46, case map export).
 
 Every route by which case content can leave the app, the service that authorises and protects it,
 what that service does, and the test that proves it. "Protected" means: content frozen, cited
@@ -62,6 +62,11 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 40 | AskView (answer menu) | Send to DEVONthink | answer note Markdown with passage links, handed to DEVONthink (or shown in Finder) | file (another app) | ProtectedExport.prepare in AppState.sendToDevonthink — added 2026-11-02 (candidate re-review P-B1); a refusal sends nothing | protected |
 | 41 | AskView (AI review sheet) | Copy | an Online-AI review / draft paragraph | clipboard | ProtectedExport.prepare — added 2026-11-02 (candidate re-review P-B1) | protected |
 | 38 | AskView (answer menu) | Export proof bundle… | signed proof bundle | file | ProtectedExport.prepare(refuseIfPresent) on question, answer, passages and file names — added 2026-11-02 after the agent re-review | protected |
+| 42 | CaseMapWorkspaceView › Export | Export map as PDF (with its relationship table)… | the shown map items and links drawn on page one, then the relationship and evidence table; header names the case, view, moment or recorded state, scope fingerprint, selection, current legal holds | file | CaseOutputService.prepareMap(.pdf) → write (UI: CaseMapExportRoutes) — added 2026-11-07 (Living Case Map M8) | protected |
+| 43 | CaseMapWorkspaceView › Export | Export map as PNG and the table as CSV… | the map image, then (second save panel) its relationship and evidence table CSV; a skipped table is reported | file | CaseOutputService.prepareMap(.png) + prepareMap(.csv) → write — added 2026-11-07 (M8) | protected |
+| 44 | CaseMapWorkspaceView › Export | Export the relationship table (CSV)… | relationship and evidence table | file | CaseOutputService.prepareMap(.csv) → write — added 2026-11-07 (M8) | protected |
+| 45 | CaseMapWorkspaceView › Export | Copy the relationship table | relationship and evidence table text | clipboard | CaseOutputService.prepareMap(.csv, .clipboard) → release — added 2026-11-07 (M8) | protected |
+| 46 | CaseMapWorkspaceView › Export | Print the relationship table | relationship and evidence table text | print | CaseOutputService.prepareMap(.csv, .print) → release via the print preview — added 2026-11-07 (M8) | protected |
 
 ## Removed
 
@@ -69,6 +74,13 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 direct `NSSavePanel` + `write` path remains in the case file screen.
 
 ## Known gaps (recorded, not hidden)
+
+- Routes 42–46 (case map, M8): a map export freezes the view as shown, revalidates every cited source against the export
+  policy now (a historical export too — its label names the recorded state and says it is not the current case), scrubs
+  protected identities from every text before drawing, states the case's legal holds as they are now, and is recorded in
+  `case_document_outputs` as kind `caseMap`. The map screens have no screenshot, image, copy or print command of their own;
+  `CaseMapHistoryTests.noCanvasBypass` checks the sources. A PNG and its CSV are two releases (two records); the person may
+  decline the CSV, and the receipt says the image alone does not show the sources.
 
 - Route 14: the findings export is protected by its own check and redaction policy but is not yet
   recorded in `case_document_outputs`; its hand-off model records the outcome.

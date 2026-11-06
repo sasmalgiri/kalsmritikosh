@@ -71,7 +71,7 @@ public actor CaseEraser {
     public init(database: Database) { self.database = database }
 
     /// Tables that are records of erasure itself, never erased by a case or person erasure.
-    nonisolated static let keptTables: Set<String> = ["case_erasures", "studio_erasures", "ledger_case_erase", "ledger_full_erase"]
+    nonisolated static let keptTables: Set<String> = ["case_erasures", "studio_erasures", "ledger_case_erase", "ledger_full_erase", "ledger_person_erase"]
 
     /// Child tables that point at a case table without a declared foreign key: (child, column, parent).
     nonisolated static let undeclaredChildren: [(String, String, String)] = [
@@ -354,6 +354,40 @@ public actor CaseEraser {
         let (theirFacts, ambiguous) = try personFacts(db, ids: ids, name: name)
         let tables = Set(try userTables(db))
         var counts: [String: Int] = [:]
+        // v173 — the case history: recorded map states that name the person (by name, alias or case-person row)
+        // keep a stub marked erased and lose their content; before/after copies of their case-person rows or naming
+        // them go. The guards on both stand aside for this act only (ledger_person_erase, removed again below).
+        if tables.contains("ledger_person_erase") {
+            try db.exec("INSERT INTO ledger_person_erase (erasure_id) VALUES (?);", [.uuid(erasureID)])
+            let personIDs = try db.query("SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+            var terms = [name] + (try db.query("SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) })
+            terms = terms.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { $0.count > 1 } + personIDs
+            let uniqueTerms = Array(Set(terms)).sorted()
+            if !uniqueTerms.isEmpty, tables.contains("case_checkpoints") {
+                let any = uniqueTerms.map { _ in "instr(lower(payload_json), lower(?)) > 0" }.joined(separator: " OR ")
+                let tb = uniqueTerms.map { SQLValue.text($0) }
+                let n = try count(db, "SELECT COUNT(*) FROM case_checkpoints WHERE erased_at IS NULL AND (\(any));", tb)
+                if n > 0 {
+                    try db.exec("""
+                        UPDATE case_checkpoints SET payload_json = '{}', manifest_json = '{}', content_digest = 'erased', erased_at = ?, erased_reason = ?
+                        WHERE erased_at IS NULL AND (\(any));
+                        """, [.date(date), .text("person erasure \(erasureID.uuidString)")] + tb)
+                    counts["case_checkpoints (content cleared)"] = n
+                }
+            }
+            if !uniqueTerms.isEmpty, tables.contains("case_record_revisions") {
+                let any = uniqueTerms.map { _ in "instr(lower(coalesce(before_json,'')), lower(?)) > 0 OR instr(lower(coalesce(after_json,'')), lower(?)) > 0" }
+                    .joined(separator: " OR ")
+                let tb = uniqueTerms.flatMap { [SQLValue.text($0), SQLValue.text($0)] }
+                let personClause = personIDs.isEmpty ? "0" : "(record_kind = 'person' AND record_id IN (\(personIDs.map { _ in "?" }.joined(separator: ","))))"
+                let where_ = "\(personClause) OR \(any)"
+                let wb = personIDs.map { SQLValue.text($0) } + tb
+                let n = try count(db, "SELECT COUNT(*) FROM case_record_revisions WHERE \(where_);", wb)
+                try db.exec("DELETE FROM case_record_revisions WHERE \(where_);", wb)
+                if n > 0 { counts["case_record_revisions"] = n }
+            }
+            try db.exec("DELETE FROM ledger_person_erase WHERE erasure_id = ?;", [.uuid(erasureID)])
+        }
         // v171 — the case map's positions and links that point at the person's case-person rows go first
         // (map identities keep record ids lower-case).
         let personRows = "SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks))"
