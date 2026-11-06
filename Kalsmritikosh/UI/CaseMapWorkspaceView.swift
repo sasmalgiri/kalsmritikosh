@@ -131,8 +131,14 @@ struct CaseMapWorkspaceView: View {
                 Button { showChanges = true } label: { Label("What changed", systemImage: "clock.arrow.circlepath") }
                 Button { nextAction() } label: { Label("Next action", systemImage: "arrow.right.circle") }
                     .disabled(reason: model.glance?.nextStep == nil ? "No next step is recorded for this case." : nil)
-                Button { findFocused = true } label: { Label("Search this case", systemImage: "magnifyingglass") }
-                    .help("Find items on this map — the whole case's items, including collapsed groups. Search ▸ in the sidebar searches the documents' text.")
+                Menu {
+                    Button("Find on this map") { findFocused = true }
+                        .help("Finds items of this whole case on the map by their words, including collapsed groups. It does not look inside documents.")
+                    Button("Search case evidence") { map.searchEvidenceRequested = true }
+                        .help("Searches the text and recorded details of this case's documents, and says what it could not search.")
+                } label: { Label("Search this case", systemImage: "magnifyingglass") }
+                    .fixedSize()
+                    .help("Choose: find items on this map, or search the case's documents.")
                 Button { map.returnToOverview() } label: { Label("Return to overview", systemImage: "house") }
                 Spacer()
             }

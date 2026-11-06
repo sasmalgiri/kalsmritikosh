@@ -1,6 +1,6 @@
 # Data-flow inventory — the one source for privacy statements
 
-Version 3 · 2026-11-06 · adds the case map tables (v171) and the map's preference fields · version 2 (2026-10-28, derived from the code at `investigations-next` after the completeness audit of 182c7e4c, A1–A8) kept in git history.
+Version 4 · 2026-11-06 · adds saved case searches (v172) · version 3 added the case map tables (v171) and the map's preference fields · version 2 (2026-10-28, derived from the code at `investigations-next` after the completeness audit of 182c7e4c, A1–A8) kept in git history.
 
 Every privacy statement must agree with this file: the in-app privacy text (`LegalNotice.privacyStatement`), the
 public pages (`docs/privacy.html`, `docs/terms.html`), `PrivacyInfo.xcprivacy`, `LEGAL_READINESS.md`,
@@ -91,8 +91,16 @@ each keyed by `case_id`. They hold identifiers of case records, never copies of 
 (a legal hold refuses it, removing nothing); a full erase empties them; backups carry them as part of the ledger. Opening or
 moving around the map reads the ledger only and sends nothing.
 
+**Saved case searches (v172).** A search of one case's documents that the person saves — its words, query tree and version,
+options, the case scope it ran over (fingerprint and authorised versions), the index revision, when it ran, and the documents it
+matched with their names and counts (a live search's baseline, or a frozen result) — is stored in the encrypted ledger in
+`case_saved_searches`, keyed by `case_id`. The search words are never written to preferences. Case erasure removes them with the
+case (a legal hold refuses it, removing nothing); person erasure removes the saved searches whose words or saved results name the
+person; a full erase empties the table; backups carry it as part of the ledger. Running a case search reads the ledger only and
+sends nothing.
+
 **Person erasure:** Knowledge › People › Erase this person. It removes the person's entity record, aliases, mentions,
-links, case-subject rows (with the case map positions and map links pointing at those rows) and the facts provably theirs. Facts that a same-name person could share are kept and reported as
+links, case-subject rows (with the case map positions and map links pointing at those rows), the saved case searches naming them and the facts provably theirs. Facts that a same-name person could share are kept and reported as
 ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
 answers, topics, conversation turns.
 

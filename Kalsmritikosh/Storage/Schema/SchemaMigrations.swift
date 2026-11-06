@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 171
+    public static let latestVersion = 172
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -804,7 +804,8 @@ public enum SchemaMigrations {
         (168, v168),
         (169, v169),
         (170, v170),
-        (171, v171)
+        (171, v171),
+        (172, v172)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8243,5 +8244,39 @@ public enum SchemaMigrations {
       OR NEW.from_kind <> OLD.from_kind OR NEW.from_id <> OLD.from_id OR NEW.to_kind <> OLD.to_kind OR NEW.to_id <> OLD.to_id
       OR NEW.rationale <> OLD.rationale OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
     BEGIN SELECT RAISE(ABORT, 'case_map_links: a link is withdrawn with a reason, never edited'); END;
+    """
+
+    // MARK: - v172 — saved case evidence searches (Living Case Map plan 2026-11-06 §8, M5).
+    // • case_saved_searches: a search of ONE case's documents saved by the person. kind 'live' keeps the query
+    //   (its text, version and tree), its options, the case scope it ran over (fingerprint + authorised versions),
+    //   the index revision of the documents searched, when it ran, and the baseline of what it found — so a later
+    //   run can say what is new. kind 'receipt' is a frozen record of one run (the same columns, never updated:
+    //   the trigger refuses it). The query text is the person's search words: it lives here, in the encrypted
+    //   ledger, never in preferences. case_id makes case erasure and full erasure remove it; person erasure
+    //   removes the searches whose words or results name the person; backups carry it as part of the ledger.
+    private static let v172: String = """
+    CREATE TABLE IF NOT EXISTS case_saved_searches (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        name                TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        kind                TEXT NOT NULL CHECK (kind IN ('live','receipt')),
+        query_text          TEXT NOT NULL,
+        query_version       INTEGER NOT NULL CHECK (query_version >= 1),
+        query_json          TEXT NOT NULL,
+        options_json        TEXT NOT NULL,
+        scope_fingerprint   TEXT NOT NULL,
+        scope_versions_json TEXT NOT NULL DEFAULT '[]',
+        index_revision      TEXT NOT NULL,
+        executed_at         REAL NOT NULL,
+        result_json         TEXT NOT NULL,
+        created_by          TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at          REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_saved_searches_case ON case_saved_searches(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_saved_searches_receipt_frozen BEFORE UPDATE ON case_saved_searches
+    WHEN OLD.kind = 'receipt' OR NEW.kind <> OLD.kind OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id
+      OR NEW.query_text <> OLD.query_text OR NEW.query_json <> OLD.query_json OR NEW.query_version <> OLD.query_version
+      OR NEW.options_json <> OLD.options_json OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_saved_searches: a receipt is frozen and a live search keeps its query; save a new one'); END;
     """
 }

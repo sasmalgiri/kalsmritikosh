@@ -30,6 +30,8 @@ final class CaseMapWorkspaceModel {
     var notice: String?
     /// "Find on this map" words for a built-in view (kept in memory only; a saved view keeps its own).
     var search = ""
+    /// M5 — the person chose "Search case evidence" (the case screen opens the panel).
+    var searchEvidenceRequested = false
     var awaitingOnly = false
     /// The kinds a header count narrowed the view to (in memory; cleared when the view changes).
     var kindFocus: Set<CaseMapNodeKind>?

@@ -273,7 +273,7 @@ public nonisolated enum HelpRegistry {
             steps: [
                 "Choose a view in the strip, or “Previous view” and “Next view” (⌃⌘← and ⌃⌘→). Overview starts with the questions and what is unresolved; Questions adds the supporting and challenging material; People, statements and events; Chronology, events with their evidence; Findings, report items and decided questions; Changes, items that changed since they were decided or carried.",
                 "“Back” (⌃⌘[) returns to the previous view and selection. The line beside it shows where you are, for example Overview › A1 › Approval email.",
-                "“Find on this map” finds items of the whole case by their words, including those in collapsed groups; “Waiting for me” keeps only items not yet reviewed, deferred, reopened or pending. It does not search inside documents — Search does.",
+                "“Find on this map” finds items of the whole case by their words, including those in collapsed groups; “Waiting for me” keeps only items not yet reviewed, deferred, reopened or pending. It does not search inside documents — “Search this case” ▸ “Search case evidence” does.",
                 "“Save view…” keeps the current view's kinds, filters, hidden items and collapsed groups under a name in the case's encrypted ledger; it appears at the end of the strip. Right-click a saved view to remove it. A view keeps references and settings only; it never copies the case."
             ],
             controls: ["Previous view", "Next view", "Back", "Find on this map", "Waiting for me", "Save view…", "Save view"],
@@ -307,6 +307,24 @@ public nonisolated enum HelpRegistry {
             controls: ["Reset view"],
             destination: .cases,
             keywords: ["reset", "layout", "positions", "start again", "messy"]),
+        HelpTopic(
+            id: "task-case-search", kind: .task, title: "Search case evidence: search this case's documents, with what was and was not searched",
+            summary: "A word-for-word search of one case's documents only — never the rest of the archive. It lists every matching document (in pages), shows each match in its passage with the rules it met, counts documents, occurrences and passages separately, and says exactly what it searched and what it could not. It finds words; it does not decide what they mean, and no AI is involved.",
+            steps: [
+                "Open a case and choose “Search case evidence” in its top bar (on the case map: “Search this case” ▸ “Search case evidence”; “Find on this map” only finds items on the map).",
+                "Build the search with rules: choose “All of these”, “At least one of these” or “None of these” for a group, “Add rule” for words, a word starting with, exact characters, near each other, a person or organisation, the document type, the file name, a tag or a date, and “Add group” for a group inside it. “Use these rules” writes them as search text. Or type the search text yourself: operators in capitals — AND, OR, NOT, NEAR/5 — brackets, \"a phrase\", invoic*, -draft, person:\"Jane Doe\", type:email, file:report, tag:contract, exact:\"A-17/B\".",
+                "Dates say which date they mean: modified- (the file's modified date), stated- (the date the document states, such as an email's Date) or event- (an event in its text), then before, on or after — stated-on:2024-03, modified-before:2024-01-31, event-after:2023. Before and after leave out the day, month or year you name. A plain before: or after: is not taken as it stands; choose which date.",
+                "Read “What will be searched” before you run: it is the search exactly as it will run, with its grouping. If the search cannot be read, it is not run; where possible a repaired search is offered — “Use the repaired query” puts it in the text field, and it still runs only when you choose “Search”. It says when the repair searches more broadly.",
+                "Results: every matching document, page by page (“Previous page”, “Next page”), in name order. Each shows the passages with the words marked, which rules it met (and which words it lacks, as asked), and whether a match runs across two passages. From a match: “Open source”, “Add to chronology…” or “Select for report” — the passage goes into the case with its citation, checked against the document.",
+                "“What was searched” lists the case's documents searched in full, searched in part (and why), not searched (could not be read, no text, beyond a limit of the run) and excluded from the case, and the passages you set aside. No match means no match in what was searched — nothing more.",
+                "“Save search…” keeps the search in this case's encrypted ledger as a live search (it runs again on the case's documents as they are then) or as a frozen result (this result as it is). For a live search, “Check for new matches” lists what is new since you last looked, and “Mark as seen” starts counting from now. It never adds a document to the case."
+            ],
+            notes: ["Matching: letter case and accents are ignored unless you tick “Match case” or “Match accents”; ligatures and full-width letters match their plain letters. A word is matched whole (invoice does not find invoices; invoic* does). Punctuation between the words of a phrase is ignored; exact: keeps it. Word endings, approximate and meaning-based matching are off. A run stops at its time limit or document limit and lists what it did not reach. The archive's Search (sidebar) is a separate, archive-wide search and works as before."],
+            controls: ["Search case evidence", "Find on this map", "Search this case", "Add rule", "Add group", "Use these rules", "Search", "Use the repaired query",
+                       "Match case", "Match accents", "Previous page", "Next page", "Open source", "Add to chronology…", "Select for report", "Save search…",
+                       "Check for new matches", "Mark as seen"],
+            destination: .cases,
+            keywords: ["search", "find", "query", "boolean", "and", "or", "not", "near", "phrase", "exact", "wildcard", "date", "saved search", "receipt", "coverage", "not searched", "case search"]),
         HelpTopic(
             id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
             summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",

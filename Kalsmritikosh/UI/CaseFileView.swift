@@ -318,6 +318,8 @@ public struct CaseFileView: View {
     @State private var model: CaseFileModel
     @State private var returnSource: CitationOpenTarget?
     @State private var returnPassage: OpenedSource?
+    /// M5 — the "Search case evidence" panel (this case's documents only).
+    @State private var searchingEvidence = false
     /// Living case map — the reversible preview switch (off unless the person turns it on; plan §11).
     @AppStorage(CaseMapPreview.key, store: AppDefaults.store) private var mapPreview = false
     let onBack: () -> Void
@@ -353,6 +355,10 @@ public struct CaseFileView: View {
                     .buttonStyle(.borderless)
                     .accessibilityIdentifier("case.returnToSource")
                 }
+                Button { searchingEvidence = true } label: { Label("Search case evidence", systemImage: "doc.text.magnifyingglass") }
+                    .buttonStyle(.borderless)
+                    .help("Searches the text and recorded details of this case's documents only, and says what it could not search.")
+                    .accessibilityIdentifier("case.search.open")
                 Toggle("Case map (preview)", isOn: $mapPreview)
                     .toggleStyle(.switch).controlSize(.small)
                     .help("Shows this case as a map of its questions, evidence and decisions, with a list beside it. A preview: turning it off returns to the sections and changes nothing in the case.")
@@ -425,6 +431,12 @@ public struct CaseFileView: View {
             try? await appState.caseFiles?.file.logAction(caseID: model.caseID, action: "viewed", detail: nil, actor: model.actor)
         }
         .sheet(item: $returnSource) { target in CitationSourceSheet(target: target) { returnSource = nil } }
+        .sheet(isPresented: $searchingEvidence) {
+            CaseSearchPanel(caseID: model.caseID, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed) { searchingEvidence = false }
+        }
+        .onChange(of: model.map.searchEvidenceRequested) { _, asked in
+            if asked { searchingEvidence = true; model.map.searchEvidenceRequested = false }
+        }
         .sheet(item: $returnPassage) { opened in
             VStack(spacing: 0) {
                 EvidenceViewer(citation: opened.citation)

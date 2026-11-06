@@ -70,22 +70,10 @@ extension AppState {
     /// workspace's coverage manifest, limited to the case's authorised sources). nil while the ledger or
     /// the case is not available. No extraction, no writes.
     func caseCoverage(caseID: UUID) async -> CaseCoverageReadout? {
-        guard let db = database, let answers = investigationAnswers, let objects else { return nil }
+        guard let db = database, let answers = investigationAnswers, objects != nil else { return nil }
         do {
             let context = try await answers.scopeContext(caseID: caseID)
-            let builder = CaseCoverageManifestBuilder(repository: CaseCoverageRepository(database: db),
-                                                      readiness: SourceReadinessRepository(database: db),
-                                                      container: ContainerInspectionRepository(database: db))
-            let manifest = try await builder.build(workspaceID: context.workspaceID, generatedAt: Date())
-            let scope = context.scope.authorizedSourceVersionIDs
-            // The case's own versions too: one the manifest does not list is still counted, by name (LS14).
-            let ids = manifest.canonicalSources.map(\.sourceVersionID) + manifest.unadmittedContainerMembers.map(\.parentSourceVersionID)
-                + Array(scope)
-            let coverageRepo = CaseCoverageRepository(database: db)
-            let labels = try await coverageRepo.labels(for: ids)
-            let logical = try await coverageRepo.logicalSources(for: Array(scope.subtracting(manifest.canonicalSources.map(\.sourceVersionID))))
-            let withText = Set(try await objects.sourceVersionsByObject(inSourceVersionIDs: scope).values.flatMap { $0 })
-            return CaseCoverageReadout.make(manifest: manifest, scope: scope, labels: labels, hasLedgerText: withText, logicalSources: logical)
+            return try await CaseCoverageReadout.load(database: db, workspaceID: context.workspaceID, scope: context.scope.authorizedSourceVersionIDs)
         } catch {
             KalsmritikoshLog.app.error("Case coverage unavailable: \(String(describing: error), privacy: .public)")
             return nil

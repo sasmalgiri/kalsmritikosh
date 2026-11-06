@@ -157,3 +157,30 @@ extension CompleteBackupTests {
         await restored.close()
     }
 }
+
+// MARK: - Saved case searches (v172)
+
+extension CompleteBackupTests {
+
+    @MainActor
+    @Test("Saved case searches travel in a complete backup and come back with their query, options and baseline")
+    func savedCaseSearchRoundTrip() async throws {
+        let f = try await CaseFileTests.fixture()
+        _ = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "memo.txt", text: "The invoice was paid twice.")
+        let service = CaseSearchService(sources: CaseSearchSources.live(database: f.db))
+        let run = try #require(await service.run(caseID: f.caseID, text: "\"paid twice\"", options: CaseSearchOptions(timeZoneID: "UTC")).run)
+        let id = try await service.save(run, name: "Twice", kind: .receipt, actor: "Ada")
+        let snap = try scratch("searchsnap").appendingPathComponent("knowledge.sqlite")
+        try await f.db.backupSnapshot(to: snap)
+        let backup = try scratch("searchbackup")
+        _ = try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [], notIncluded: [], destination: backup,
+                                                     schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+        let newMac = try scratch("searchnew")
+        _ = try await BackupService().restoreComplete(backupFolder: backup, into: newMac, ledgerKey: nil)
+        let restored = try Database(url: newMac.appendingPathComponent("knowledge.sqlite"))
+        let back = try #require(try await CaseSearchRepository(database: restored).savedSearch(id: id))
+        #expect(back.kind == .receipt && back.query == run.query && back.options == run.options && back.indexRevision == run.indexRevision)
+        #expect(back.result.matchedObjectIDs == run.hits.map(\.objectID) && back.result.documents == 1)
+        await restored.close()
+    }
+}

@@ -363,6 +363,10 @@ public actor CaseEraser {
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
+            // v172 — saved case searches whose words or saved results name the person (their name or an alias).
+            ("case_saved_searches", "EXISTS (SELECT 1 FROM (SELECT ? AS n UNION SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks))) names "
+                + "WHERE length(trim(names.n)) > 1 AND (instr(lower(case_saved_searches.query_text), lower(names.n)) > 0 "
+                + "OR instr(lower(case_saved_searches.result_json), lower(names.n)) > 0))", [.text(name)] + binds),
         ]
         for (t, c) in [("entity_aliases", "entity_id"), ("entity_mentions", "entity_id"), ("event_entities", "entity_id"),
                        ("entity_communities", "entity_id"), ("workspace_entities", "entity_id"), ("workspace_derived_entities", "entity_id"),

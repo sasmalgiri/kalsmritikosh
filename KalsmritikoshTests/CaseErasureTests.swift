@@ -630,3 +630,64 @@ extension CaseErasureTests {
         #expect(AppState.erasePreferences.data(forKey: CaseWorkspaceStore.key(f.caseA)) == nil)
     }
 }
+
+// MARK: - Saved case searches (v172)
+
+extension CaseErasureTests {
+
+    static func seedSavedSearch(_ db: Database, caseID: UUID, words: String) async throws {
+        try await db.exec("""
+            INSERT INTO case_saved_searches (id, case_id, name, kind, query_text, query_version, query_json, options_json, scope_fingerprint,
+                scope_versions_json, index_revision, executed_at, result_json, created_by, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(UUID()), .uuid(caseID), .text("secret search"), .text("live"), .text(words), .integer(1), .text("{}"), .text("{}"),
+                  .text("fp"), .text("[]"), .text("v1-x"), .real(1), .text(#"{"names":{}}"#), .text("Tester"), .real(1)])
+    }
+
+    static func savedSearches(_ db: Database, _ caseID: UUID) async throws -> Int {
+        try await count(db, "SELECT COUNT(*) FROM case_saved_searches WHERE case_id = ?;", [.uuid(caseID)])
+    }
+
+    @Test("Saved case searches: a case erase removes them (a hold refuses and keeps them); another case's stay")
+    func caseEraseCoversSavedSearches() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        try await Self.seedSavedSearch(f.db, caseID: f.caseA, words: "secret words")
+        try await Self.seedSavedSearch(f.db, caseID: f.caseB, words: "other words")
+        let hold = UUID()
+        try await f.db.exec("INSERT INTO legal_holds (id, name, created_at) VALUES (?,?,?);", [.uuid(hold), .text("Hold"), .date(Date())])
+        try await f.db.exec("INSERT INTO legal_hold_items (hold_id, object_id, created_at) VALUES (?,?,?);", [.uuid(hold), .text(f.caseA.uuidString), .date(Date())])
+        let refused = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(refused.report.refused?.contains("legal hold") == true)
+        #expect(try await Self.savedSearches(f.db, f.caseA) == 1)
+        try await f.db.exec("UPDATE legal_holds SET released_at = ? WHERE id = ?;", [.date(Date()), .uuid(hold)])
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        #expect(try await Self.savedSearches(f.db, f.caseA) == 0)
+        #expect(try await Self.savedSearches(f.db, f.caseB) == 1)
+    }
+
+    @Test("Saved case searches: a person erase removes the searches whose words name the person; others stay")
+    func personEraseCoversSavedSearches() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let row = try #require(try await f.db.query("SELECT id, value FROM entities WHERE kind = 'person' AND value LIKE '%Roberts%' LIMIT 1;", []).first)
+        let entity = try #require(row.string(0).flatMap(UUID.init(uuidString:)))
+        let name = try #require(row.string(1))
+        try await Self.seedSavedSearch(f.db, caseID: f.caseA, words: "person:\"\(name)\" AND payment")
+        try await Self.seedSavedSearch(f.db, caseID: f.caseA, words: "invoice")
+        let out = try await f.state.erasePerson(entity, reason: "Subject request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil)
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_saved_searches WHERE instr(lower(query_text), lower(?)) > 0;", [.text(name)]) == 0)
+        #expect(try await Self.savedSearches(f.db, f.caseA) == 1)
+    }
+
+    @Test("Saved case searches: a full erase empties them")
+    func fullEraseCoversSavedSearches() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        try await Self.seedSavedSearch(f.db, caseID: f.caseA, words: "secret words")
+        _ = await f.state.deleteAllData()
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_saved_searches;", []) == 0)
+    }
+}
