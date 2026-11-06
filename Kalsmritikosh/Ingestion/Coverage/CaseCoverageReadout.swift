@@ -67,8 +67,12 @@ public nonisolated struct CaseCoverageReadout: Sendable, Equatable {
     /// `scope` the case's authorised source versions (nil: every source of the workspace), `labels` a
     /// file name per source version, `hasLedgerText` the versions that produced a knowledge object (read
     /// on this Mac) — used where the readiness record does not say (a source ingested before it existed).
+    /// Every version in `scope` is counted once, also one the manifest does not list (`total` is the
+    /// number of documents in the case plus the archive members that were not taken out).
+    /// `logicalSources` (version → logical source) keeps an older version of a listed document from being
+    /// counted as another document.
     public static func make(manifest: CaseCoverageManifest, scope: Set<UUID>?, labels: [UUID: String],
-                            hasLedgerText: Set<UUID>) -> CaseCoverageReadout {
+                            hasLedgerText: Set<UUID>, logicalSources: [UUID: UUID] = [:]) -> CaseCoverageReadout {
         let items = manifest.canonicalSources.filter { scope?.contains($0.sourceVersionID) ?? true }
         var read = 0
         var entries: [Entry] = []
@@ -77,6 +81,19 @@ public nonisolated struct CaseCoverageReadout: Sendable, Equatable {
             switch classify(item, hasLedgerText: hasLedgerText.contains(item.sourceVersionID)) {
             case (.read, _): read += 1
             case (let status, let reason): entries.append(Entry(name: name, status: status, reason: reason))
+            }
+        }
+        // LS14 — a document in the case that the coverage record does not list is still counted: read when
+        // the ledger holds its text, otherwise not read, saying there is no reading record for it.
+        if let scope {
+            let listed = Set(items.map(\.sourceVersionID))
+            var counted = Set(items.map(\.logicalSourceID))
+            for v in scope.subtracting(listed).sorted(by: { $0.uuidString < $1.uuidString }) {
+                // Another version of a document already counted is not another document.
+                if let logical = logicalSources[v] { guard counted.insert(logical).inserted else { continue } }
+                if hasLedgerText.contains(v) { read += 1; continue }
+                let name = labels[v] ?? "Source \(v.uuidString.prefix(8))"
+                entries.append(Entry(name: name, status: .notRead, reason: noReadingRecord))
             }
         }
         let parents = Set(items.map(\.sourceVersionID))
@@ -95,6 +112,9 @@ public nonisolated struct CaseCoverageReadout: Sendable, Equatable {
         entries.sort { ($0.status == .notRead ? 0 : 1, $0.name) < ($1.status == .notRead ? 0 : 1, $1.name) }
         return CaseCoverageReadout(read: read, entries: entries, notes: notes)
     }
+
+    /// The reason given for a case document the coverage record does not list (LS14).
+    static let noReadingRecord = "no reading record"
 
     static func classify(_ item: CaseCoverageItem, hasLedgerText: Bool) -> (Status, String?) {
         switch item.completionState {

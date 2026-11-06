@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import Kalsmritikosh
 
@@ -223,12 +224,13 @@ struct CaseWorkspaceTests {
         #expect(model.tab == .overview)   // a new case lands on the overview
         model.tab = .evidence
         model.workspace.state.selectedRequestID = request
-        model.workspace.state.lastSource = CaseSourcePosition(objectID: object, quote: "paid twice", label: "ledger.xlsx")
+        let position = CaseSourcePosition(objectID: object, origin: .contradiction(id: UUID(), side: .b), revision: UUID())
+        model.workspace.state.lastSource = position
         model.review.filter = .decided
         model = CaseFileModel(caseID: caseID, workspaceID: UUID(), defaults: defaults)
         #expect(model.tab == .evidence)
         #expect(model.workspace.state.selectedRequestID == request)
-        #expect(model.workspace.state.lastSource == CaseSourcePosition(objectID: object, quote: "paid twice", label: "ledger.xlsx"))
+        #expect(model.workspace.state.lastSource == position)
         #expect(model.review.filter == .decided)
         let fresh = CaseFileModel(caseID: other, workspaceID: UUID(), defaults: defaults)
         #expect(fresh.tab == .overview && fresh.workspace.state.lastSource == nil)
@@ -255,7 +257,8 @@ struct CaseWorkspaceTests {
         #expect(g.contradictionsAwaiting == 1 && g.resultRowsUndecided == 3 && g.awaitingReview == 4)
         #expect(g.openRequests == 1 && g.overdueRequests == 1 && g.missingItems == 2)
         #expect(g.limitations.contains { $0.contains("allowed to read 1 of the 2 documents") })
-        #expect(g.limitations.contains { $0.contains("not been compared for contradictions") })
+        // A finding of the case's own check (rules) is listed: the overview does not say the documents were never compared.
+        #expect(!g.limitations.contains { $0.contains("not been compared for contradictions") || $0.contains("archive scan") })
         // The next step is the case's most pressing one (triage for a new case); the request and the review
         // queue are among the steps, each pointing at the tab where it is done.
         let items = try await rig.desk.contradictionReviewItems(caseID: rig.f.caseID)
@@ -266,6 +269,92 @@ struct CaseWorkspaceTests {
         #expect(steps.contains { $0.id == "contradictions-awaiting" && $0.place == .overview })
         // Callers that pass no requests or counts get the steps they always had.
         #expect(CaseNextSteps.compute(snap).allSatisfy { !$0.id.hasPrefix("request-") && !$0.id.hasPrefix("contradictions-") })
+    }
+
+    @Test("Walk 2026-11-06: the reading limit about contradictions accounts for what is listed — none, archive-scan only, or the case check's own")
+    func contradictionLimitMatchesWhatIsListed() async throws {
+        let rig = try await ReviewRig.make()
+        let custody = [CustodyManifestEntry(sourceVersionID: rig.a.version, contentHash: nil, custodyEvents: [])]
+        let snap = try #require(try await rig.f.svc.snapshot(caseID: rig.f.caseID, custody: custody))
+        let open = CaseItemReviewStatus(history: [], changedObjects: [])
+        let scan = CaseContradictionReviewItem(contradiction: Contradiction(description: "Conflicting dates for \"Delivery delayed\"",
+                                                                           claimA: "delayed on 3 May", claimB: "delayed on 9 May"),
+                                               status: open, currentVersions: [:])
+        func limit(_ items: [CaseContradictionReviewItem]) -> String? {
+            CaseGlance.compute(snap, contradictions: items, requests: [], resultRowsUndecided: 0, aiPermittedDocuments: nil,
+                               unresolvedReferences: 0, custodyReadFailed: false)
+                .limitations.first { $0.contains("contradiction") }
+        }
+        #expect(limit([])?.contains("have not been compared for contradictions yet") == true)
+        let scanOnly = try #require(limit([scan, scan]))
+        #expect(scanOnly.contains("The archive scan compared these documents and found 2 contradiction(s)"))
+        #expect(scanOnly.contains("this case's own comparison (“Find contradictions”") && !scanOnly.contains("have not been compared"))
+        #expect(limit([scan, try await rig.item()]) == nil, "the case check's finding is listed: it ran")
+        // No documents in the case: nothing to compare, no line.
+        let empty = try #require(try await rig.f.svc.snapshot(caseID: rig.f.caseID, custody: []))
+        #expect(CaseGlance.contradictionCheckLimit(empty, contradictions: []) == nil)
+    }
+
+    @Test("LB3: the workspace preference holds identifiers only; the passage is re-read from the ledger; a state from an earlier build loses its quote and name")
+    func workspacePreferenceHoldsNoDocumentText() async throws {
+        let rig = try await ReviewRig.make()
+        let defaults = tempDefaults()
+        let item = try await rig.item()
+        var state = CaseWorkspaceState()
+        state.lastSource = CaseSourcePosition(objectID: rig.b.object, origin: .contradiction(id: rig.id, side: .b), revision: rig.b.version)
+        CaseWorkspaceStore.save(state, caseID: rig.f.caseID, defaults: defaults)
+        let raw = String(decoding: try #require(defaults.data(forKey: CaseWorkspaceStore.key(rig.f.caseID))), as: UTF8.self)
+        #expect(!raw.contains("650") && !raw.contains("invoice") && !raw.contains("quote") && !raw.contains("label"), "\(raw)")
+        // The passage comes back from the ledger's contradiction, at the version it was opened at.
+        let back = try #require(CaseWorkspaceStore.load(caseID: rig.f.caseID, defaults: defaults).lastSource)
+        #expect(back.passage(contradictions: [item], entries: [], objectForVersion: [:]) == rig.qB)
+        // A newer version of the document: it opens without a highlight; a vanished item gives nothing.
+        let moved = CaseSourcePosition(objectID: rig.b.object, origin: .contradiction(id: rig.id, side: .b), revision: UUID())
+        #expect(moved.passage(contradictions: [item], entries: [], objectForVersion: [:]) == nil)
+        #expect(back.passage(contradictions: [], entries: [], objectForVersion: [:]) == nil)
+        // A case entry's quote is read from the entry.
+        let entryID = UUID()
+        let entry = CaseJournalEntry(id: entryID, caseID: rig.f.caseID, kind: .chronology, eventDate: nil, text: "t", evidenceRef: nil,
+                                     author: "Ada", createdAt: Date(), quote: "paid twice",
+                                     citations: [StudioEvidenceRef(sourceVersionID: rig.a.version, objectID: rig.a.object, quote: "paid twice")])
+        let fromEntry = CaseSourcePosition(objectID: rig.a.object, origin: .caseEntry(id: entryID), revision: rig.a.version)
+        #expect(fromEntry.passage(contradictions: [], entries: [entry], objectForVersion: [:]) == "paid twice")
+        // A state written by the earlier build (quote and file name in the preference) is rewritten without them.
+        let legacyCase = UUID()
+        let legacy = #"{"contradictionFilter":"all","contradictionSearch":"","lastSource":{"objectID":"\#(rig.a.object.uuidString)","quote":"The invoice total was 500 dollars.","label":"invoice-a.txt"}}"#
+        defaults.set(Data(legacy.utf8), forKey: CaseWorkspaceStore.key(legacyCase))
+        let loaded = CaseWorkspaceStore.load(caseID: legacyCase, defaults: defaults)
+        #expect(loaded.lastSource?.objectID == rig.a.object && loaded.contradictionFilter == .all)
+        let rewritten = String(decoding: try #require(defaults.data(forKey: CaseWorkspaceStore.key(legacyCase))), as: UTF8.self)
+        #expect(!rewritten.contains("500 dollars") && !rewritten.contains("invoice-a.txt"), "\(rewritten)")
+    }
+
+    @Test("Walk 2026-11-06: the review keys act while a note is being typed — the menu's keys go through the model, keep the note and say a missing reason")
+    func reviewKeysWithNoteTyped() async throws {
+        let rig = try await ReviewRig.make()
+        let model = CaseContradictionReviewModel(caseID: rig.f.caseID, workspace: CaseWorkspaceHolder(caseID: rig.f.caseID, defaults: tempDefaults()))
+        await model.load(desk: rig.desk, objects: nil)
+        // The keys: ⌥⌘ with ↓ ↑ Y N L, each a distinct menu item; the section's help text names the same keys.
+        #expect(CaseReviewKey.modifiers == [.command, .option])
+        #expect(CaseReviewKey.allCases.map(\.key.character) == [KeyEquivalent.downArrow.character, KeyEquivalent.upArrow.character, "y", "n", "l"])
+        #expect(CaseReviewKey.allCases.compactMap(\.decision) == [.confirmed, .dismissed, .deferred])
+        #expect(Set(CaseReviewKey.allCases.map(\.title)).count == CaseReviewKey.allCases.count)
+        // A note typed, focus still in the field: Dismiss (⌥⌘N) without a reason is refused and said; nothing recorded.
+        model.draftNote = "Waiting for the signed amendment original"
+        await model.perform(.dismiss, desk: rig.desk, objects: nil, actor: "Ada")
+        #expect(model.error == "Choose why you are dismissing it.")
+        #expect(try await rig.item().status.latest == nil)
+        #expect(model.draftNote == "Waiting for the signed amendment original", "the note typed so far is kept")
+        // Defer (⌥⌘L) records the decision with the note typed.
+        await model.perform(.deferIt, desk: rig.desk, objects: nil, actor: "Ada")
+        let latest = try #require(try await rig.item().status.latest)
+        #expect(latest.decision == .deferred && latest.note == "Waiting for the signed amendment original")
+        #expect(model.error == nil && model.draftNote.isEmpty)
+        // ⌥⌘↓ / ⌥⌘↑ move through the listed items (one listed here: the selection stays on it).
+        await model.perform(.next, desk: rig.desk, objects: nil, actor: "Ada")
+        #expect(model.selectedID == rig.id)
+        await model.perform(.previous, desk: rig.desk, objects: nil, actor: "Ada")
+        #expect(model.selectedID == rig.id)
     }
 
     @Test("Undecided result rows count only in results still under review")

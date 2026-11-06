@@ -1,0 +1,4 @@
+stopped: 12:11:58 - the Mac's screen locked during the walk (frontmost app became loginwindow pid 413 while sending the ⌥⌘↓ key; still locked after 19 minutes of polling); the app's AX windows were unreadable, so no further keys or presses were sent
+quit: 12:11:58 kill -TERM 99845
+instances of the Debug app binary after quit: []
+disk free after: 14Gi

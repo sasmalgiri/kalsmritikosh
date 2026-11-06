@@ -158,6 +158,77 @@ struct CaseErasureTests {
         #expect(rows[4].detail?.contains(markB) == true)
     }
 
+    @Test("LS13: asking in a case with a cloud interpreter and rewriter installed (fake transport), then erasing the case, replaces the stored question text; a question outside the case keeps its text")
+    func askInCaseThenEraseReplacesQuestionText() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        // The person's provider with a fake transport (no network): every send is recorded in the ledger's
+        // outbound log, exactly as in the app.
+        let log = OutboundLogRepository(database: f.db)
+        let snapshot = OnlineSnapshot(cloudAllowed: true, kind: .anthropic, model: "test-model", apiKey: "test-key",
+                                      confirmedDocumentTerms: OnlineProviderKind.anthropic.documentTermsVersion, dailyByteCap: nil)
+        let reply = Data(#"{"content":[{"type":"text","text":"{}"}],"usage":{"input_tokens":3,"output_tokens":2}}"#.utf8)
+        var seams = OnlineCloudProvider.Seams(settings: { snapshot }, consent: { _ in true },
+                                              transport: { _ in OutboundHTTPResponse(status: 200, body: reply) })
+        seams.ownKeyRefusal = { _ in nil }
+        seams.ownKeyTally = { _, _ in }
+        let provider = OnlineCloudProvider(outboundLog: log, knownNames: { [] }, seams: seams)
+        // The cloud steps of question understanding, wired as AppState.installCloudReaders wires them.
+        let readers = CloudReaders(
+            interpreterCloud: CloudQuestionInterpreter { prompt in
+                try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
+            },
+            rewriterCloud: CloudQuestionRewriter { prompt in
+                try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0))
+            },
+            // A document reader is installed (so the case question takes the AI path, not offline search
+            // results, which clear every reader), but it sends nothing: this test is about question-only sends.
+            answerComposer: VerifiedAnswerComposer { _, _ in throw VerifiedAnswerComposer.NotSent("test: no document reading") },
+            modelsAllowedOverride: true)
+        // The app's own case-ask service (booted brain, case-scoped retrieval over the ingested documents),
+        // with the readers installed the way the app installs them.
+        f.state.cloudReaderHolder.set(readers)
+        let service = try #require(await f.state.investigationAnswers)
+        // Names from the case documents (so their extracted facts are retrieved) and no field word, so the
+        // rules cannot place the question and the cloud interpreter is asked.
+        let question = "Wyko Tire Technology and Bancitaly Corporation: the zebrafinch SECRET bit?"
+        _ = try await service.answer(caseID: f.caseA, question: question, access: .testUnrestricted())
+        // Outside any case: the same provider, no case scope.
+        _ = try await provider.generateQuestionOnly(prompt: "an archive question about zebrafinch", options: GenerationOptions(maxTokens: 16))
+        let before = try await log.recent()
+        let inCase = before.filter { $0.payloadText.contains("zebrafinch SECRET") }
+        #expect(!inCase.isEmpty, "the in-case question was not sent by the interpreter, so this proves nothing: \(before.map { $0.payloadText.prefix(80) })")
+        #expect(inCase.allSatisfy { ($0.detail ?? "").contains(OnlineCloudProvider.caseMarker(f.caseA)) }, "\(inCase.map(\.detail))")
+
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Retention ended", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        let after = Dictionary(uniqueKeysWithValues: try await log.recent().map { ($0.id, $0) })
+        for e in inCase {
+            let kept = try #require(after[e.id], "the entry itself is kept")
+            #expect(kept.payloadText.hasPrefix(CaseEraser.erasedOutboundPrefix + f.caseA.uuidString), "\(kept.payloadText)")
+            #expect(!kept.payloadText.contains("SECRET"))
+            #expect(kept.payloadSHA256 == e.payloadSHA256 && kept.bytesSent == e.bytesSent)
+        }
+        #expect(after.values.contains { $0.payloadText.contains("an archive question about zebrafinch") }, "a send outside the case keeps its text")
+    }
+
+    @Test("LB3: a case erase removes that case's workspace preference (search text, last source); another case's stays")
+    func caseEraseRemovesWorkspacePreference() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let prefs = AppState.erasePreferences
+        var state = CaseWorkspaceState()
+        state.contradictionSearch = "Jane Doe payment"
+        state.lastSource = CaseSourcePosition(objectID: UUID(), origin: .caseEntry(id: UUID()), revision: nil)
+        CaseWorkspaceStore.save(state, caseID: f.caseA, defaults: prefs)
+        CaseWorkspaceStore.save(state, caseID: f.caseB, defaults: prefs)
+        defer { CaseWorkspaceStore.forget(caseID: f.caseB, defaults: prefs) }
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        #expect(prefs.object(forKey: CaseWorkspaceStore.key(f.caseA)) == nil)
+        #expect(CaseWorkspaceStore.load(caseID: f.caseB, defaults: prefs).contradictionSearch == "Jane Doe payment")
+    }
+
     @Test("A case erase without its documents keeps them in the library and says so")
     func caseEraseKeepsDocuments() async throws {
         let f = try await Self.boot()

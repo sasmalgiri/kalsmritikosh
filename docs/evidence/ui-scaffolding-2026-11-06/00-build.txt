@@ -1,0 +1,16 @@
+recorded: Fri Nov  6 08:42:53 IST 2026
+HEAD: 572b5893c9130fcb31bb8ffd784ea32798c6286b
+branch: investigations-next
+build: xcode-tools BuildProject, scheme Kalsmritikosh (Debug), 08:27 IST, 'The project built successfully.'
+last commit touching Kalsmritikosh/: 572b5893c9130fcb31bb8ffd784ea32798c6286b 2026-11-06 08:26:17 +0530
+binary mtime: 2026-11-06 08:27:20 +0530
+debug dylib mtime: 2026-11-06 08:27:17 +0530
+Swift files under Kalsmritikosh/ newer than the dylib:
+(end of list)
+--- git status --short
+ M Kalsmritikosh.xcodeproj/xcuserdata/shirshendusasmal.xcuserdatad/xcschemes/xcschememanagement.plist
+ M Kalsmritikosh/InfoPlist.xcstrings
+ M KalsmritikoshShare/InfoPlist.xcstrings
+?? docs/agent-reviews/candidate-review-572b5893-legal-privacy.md
+?? docs/evidence/ui-scaffolding-2026-11-06/
+disk free before run: 13Gi

@@ -167,7 +167,7 @@
 
 <!-- HOW -->
 <section id="how"><div class="wrap">
-  <h2>Three steps. All on your Mac.</h2>
+  <h2>Three steps. Private by default.</h2>
   <div class="grid g3">
     <div class="card"><div class="ic">1</div><h3>Add your documents</h3><p>Point it at a folder — PDFs, Word, Excel, email (EML/MBOX), scans. It reads everything in place; in Private mode nothing leaves your device.</p></div>
     <div class="card"><div class="ic">2</div><h3>It builds the ledger</h3><p>Formats fall away. Everything becomes cited facts, dated events, people, and relationships in one structured, searchable store.</p></div>
@@ -190,11 +190,11 @@
 
 <!-- PRIVACY -->
 <section id="privacy"><div class="wrap">
-  <h2 class="center" data-claim="privacy.never-leaves">Your documents never leave your Mac.</h2>
-  <p class="lead center" data-claim="privacy.no-servers">No servers holding your data. No accounts. No analytics or telemetry. We never keep your content; if you turn on Online mode, what you approve goes to the AI provider you chose under that provider's terms — or, with AI Included, through our relay to Anthropic, and the relay keeps only counts.</p>
+  <h2 class="center" data-claim="privacy.never-leaves">By default, your documents never leave your Mac.</h2>
+  <p class="lead center" data-claim="privacy.no-servers">No servers holding your data. No accounts. No analytics or telemetry. We never keep your content; if you turn on Online mode and allow AI for a case, that case's documents and your questions go to Anthropic (Claude) — directly with your own key, or with an AI plan (AI Included or AI Pro) through our relay, which keeps only counts — under Anthropic's terms; recordings you choose to transcribe go to Google (Gemini).</p>
   <div class="grid g3">
     <div class="card" data-claim="privacy.on-device"><div class="ic">🖥️</div><h3>On-device AI</h3><p>In Private mode, reading, search and answers run locally with Apple's frameworks and on-device model; with Online AI on, a case you allow is read by Anthropic.</p></div>
-    <div class="card" data-claim="privacy.nothing-collected"><div class="ic">🙈</div><h3>Nothing is kept by us</h3><p>We run no servers that keep your content, and the app has no analytics, tracking or telemetry. What Online mode sends goes straight to the provider you chose — or, with AI Included, through our relay, which passes it on and keeps only counts.</p></div>
+    <div class="card" data-claim="privacy.nothing-collected"><div class="ic">🙈</div><h3>Nothing is kept by us</h3><p>We run no servers that keep your content, and the app has no analytics, tracking or telemetry. What Online mode sends, with your permission, goes straight to the provider you chose — or, with an AI plan (AI Included or AI Pro), through our relay, which passes it on and keeps only counts.</p></div>
     <div class="card" data-claim="privacy.erase-everything"><div class="ic">🗑️</div><h3>Delete anytime</h3><p>One click erases the entire ledger. Your original files are never touched.</p></div>
   </div>
 </div></section>
@@ -224,7 +224,7 @@
 <!-- FAQ -->
 <section class="faq"><div class="wrap">
   <h2>Questions</h2>
-  <details data-claim="privacy.never-leaves"><summary>Does anything I add get uploaded?</summary><p>Not in Private mode, the default: your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
+  <details data-claim="privacy.never-leaves"><summary>Does anything I add get uploaded?</summary><p>Not in Private mode, the default: your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics. Online mode is off unless you turn it on: then an AI plan (AI Included or AI Pro), or your own Anthropic key, can read a case and word an answer. The first time you use AI in a case, you see exactly which of its documents would go to Anthropic (Claude) and which would not, and nothing leaves your Mac until you allow it for that case.</p></details>
   <details data-claim="answers.refuses-unsupported"><summary>Can it still be wrong?</summary><p>Any AI can be. The difference is that Kalsmritikosh only answers from your documents, shows the exact evidence for every claim, flags conflicts, and refuses when the record doesn't support an answer — so you can verify in one click instead of trusting blindly.</p></details>
   <details><summary>What can I feed it?</summary><p>Documents (PDF, Word DOC/DOCX, RTF, OpenDocument, EPUB, HTML, Markdown, text), spreadsheets (Excel XLS/XLSX, CSV, ODS), PowerPoint (PPTX), and email (EML, MBOX, Apple Mail, Outlook MSG/PST, Lotus Notes NSF). ZIP archives are opened and read file by file, within safety limits; RAR and 7z archives are kept but not opened. Scans and images are read with on-device OCR, so their accuracy depends on the scan. With “Transcribe audio &amp; video” on (the default), the words spoken in recordings and videos are turned into text on your Mac by Apple’s on-device speech recognition (English), with a time on every line so you can play the moment back; with it off they are kept and searchable by name and date. The transcript is as accurate as the recording allows — clear speech is transcribed closely, noise, accents and crosstalk lower it, and numbers may be written differently — so check any quote you rely on against the recording. The app reads what is <em>said</em>; it does not watch a video, recognise who is speaking or what is shown, or work out what happened from the footage. PowerPoint 97–2003 (PPT) and Keynote files are kept but not read yet. Reading is tuned for English: documents in other languages are kept and keyword-searchable, but names, dates and facts in them may be missed.</p></details>
   <details><summary>Will it mix up two people with the same name?</summary><p>It combines two names only when they clearly refer to the same person or organization, and every combination is listed under Knowledge → Merged. You can undo any of them with Unmerge; nothing is deleted.</p></details>

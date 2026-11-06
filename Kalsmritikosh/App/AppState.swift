@@ -4332,13 +4332,15 @@ public final class AppState {
 
     /// Preferences that hold case content (`docs/DATA_FLOW_INVENTORY.md` L15): the studio stores from
     /// before the move into the ledger, the self-score questions/answers and per-case job logs. SOP
-    /// drafts and reviews are method authoring, not case content, and stay.
+    /// drafts and reviews are method authoring, not case content, and stay. The per-case workspace state
+    /// (`CaseWorkspaceStore`, candidate review LB3) holds identifiers and the person's search text, and
+    /// goes with the case data.
     nonisolated static let caseContentPreferenceKeys = [
         "kalsmritikosh.fa.store", "kalsmritikosh.jn.store", "kalsmritikosh.pl.store", "kalsmritikosh.rca.store",
         "kalsmritikosh.siu.store", "kalsmritikosh.wi.store", "kalsmritikosh.cc.store", "kalsmritikosh.ds.store",
         "kalsmritikosh.gn.store", "kalsmritikosh.in.store", "kalsmritikosh.rs.store", "kalsmritikosh.selfscore.latest",
     ]
-    nonisolated static let caseContentPreferencePrefixes = ["kalsmritikosh.jobs.log.", "kalsmritikosh.jobs.ran."]
+    nonisolated static let caseContentPreferencePrefixes = ["kalsmritikosh.jobs.log.", "kalsmritikosh.jobs.ran.", "kalsmritikosh.jobs.na.", CaseWorkspaceStore.keyPrefix]
     /// The preferences a full erase clears. In the test host (same bundle id as the app) this is a
     /// separate suite, so a test erase can never remove the owner's real preferences.
     nonisolated static let erasePreferences: UserDefaults =

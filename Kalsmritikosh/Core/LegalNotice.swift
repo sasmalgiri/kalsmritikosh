@@ -182,7 +182,7 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.11 (2026-11-04)"
+    public static let termsVersion = "1.12 (2026-11-06)"
 
     /// Payment terms (owner decisions 2026-11-04): one subscription group, three levels; credit packs.
     public static let subscriptionStatement = """

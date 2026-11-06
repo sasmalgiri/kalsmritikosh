@@ -96,6 +96,21 @@ final class CaseContradictionReviewModel {
         selectedID = list[max(0, min(list.count - 1, i + step))].id
     }
 
+    /// One review key (⌥⌘↓ ⌥⌘↑ ⌥⌘Y ⌥⌘N ⌥⌘L), from the Case Review menu. The menu carries the keys so
+    /// they work while the note field is being typed in (UI walk 2026-11-06: a button's key inside the
+    /// page did not fire with the note field focused). A decision goes through `decide`, so a missing
+    /// reason is said, never skipped; the note typed so far is kept with it.
+    func perform(_ key: CaseReviewKey, desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?,
+                 actor: String, at date: Date = Date()) async {
+        switch key {
+        case .next: move(1)
+        case .previous: move(-1)
+        case .confirm, .dismiss, .deferIt:
+            guard let decision = key.decision, !busy else { return }
+            await decide(decision, desk: desk, objects: objects, actor: actor, at: date)
+        }
+    }
+
     /// Why the decision cannot be recorded yet (nil: it can).
     func problem(for decision: CaseReviewDecision) -> String? {
         if selected == nil { return "Choose a contradiction in the list first." }
@@ -215,19 +230,16 @@ struct CaseContradictionsSection: View {
                         .frame(width: 300, alignment: .topLeading)
                     Divider()
                     if let item = model.selected {
-                        detail(item).frame(maxWidth: .infinity, alignment: .topLeading)
+                        detail(item).frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading).layoutPriority(1)
                     } else {
                         Text("Choose a contradiction in the list.").font(.callout).foregroundStyle(.secondary)
                     }
                 }
             }
-            // Keyboard review: hidden buttons so the shortcuts work wherever the section is visible.
-            Group {
-                Button("Next contradiction") { model.move(1) }.keyboardShortcut(.downArrow, modifiers: [.command, .option])
-                Button("Previous contradiction") { model.move(-1) }.keyboardShortcut(.upArrow, modifiers: [.command, .option])
-            }
-            .frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
         }
+        // Keyboard review: the Case Review menu's keys act on this section while it is on screen, also
+        // while the note field has focus (a menu key equivalent is not taken by the text field).
+        .focusedSceneValue(\.caseReview, CaseReviewCommandTarget { key in Task { await perform(key) } })
         .task(id: caseID) { await reload() }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
@@ -291,8 +303,8 @@ struct CaseContradictionsSection: View {
             }
             Text(Self.summary(c)).font(.callout.weight(.medium)).textSelection(.enabled)
             HStack(alignment: .top, spacing: 10) {
-                side("A", quote: c.claimA, object: c.evidenceA)
-                side("B", quote: c.claimB, object: c.evidenceB)
+                side("A", quote: c.claimA, object: c.evidenceA, item: item, which: .a)
+                side("B", quote: c.claimB, object: c.evidenceB, item: item, which: .b)
             }
             Label(item.status.label(names: model.names), systemImage: item.status.isReopened ? "arrow.triangle.2.circlepath" : "checkmark.seal")
                 .font(.caption).foregroundStyle(item.status.isReopened ? .orange : .secondary)
@@ -305,11 +317,17 @@ struct CaseContradictionsSection: View {
             }
             .frame(maxWidth: 380)
             .accessibilityHint("Needed to dismiss: why the two statements do not conflict, or why you cannot decide yet.")
-            TextField("Note (optional; needed for “Other”)", text: $model.draftNote, axis: .vertical).lineLimit(1...3)
+            // UI walk 2026-11-06: typing a long note widened the page past the window. The field has a
+            // fixed largest width and grows downwards (wraps) instead.
+            TextField("Note (optional; needed for “Other”)", text: $model.draftNote, axis: .vertical)
+                .lineLimit(1...4)
+                .frame(maxWidth: 480, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("case.contradictions.note")
             HStack(spacing: 8) {
-                decisionButton(.confirmed, "Confirm", key: "y", hint: "Records that these two statements conflict in this case.")
-                decisionButton(.dismissed, "Dismiss", key: "n", hint: "Sets it aside for this case with the reason chosen. Neither document is changed.")
-                decisionButton(.deferred, "Defer", key: "l", hint: "Keeps it waiting for a decision, with your note.")
+                decisionButton(.confirmed, "Confirm", hint: "Records that these two statements conflict in this case. Key: ⌥⌘Y.")
+                decisionButton(.dismissed, "Dismiss", hint: "Sets it aside for this case with the reason chosen. Neither document is changed. Key: ⌥⌘N.")
+                decisionButton(.deferred, "Defer", hint: "Keeps it waiting for a decision, with your note. Key: ⌥⌘L.")
                 Spacer()
             }
             Text("Dismissing needs a reason. A dismissal changes neither document; it is kept until one of them changes, then the item reopens.")
@@ -341,7 +359,7 @@ struct CaseContradictionsSection: View {
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func decisionButton(_ decision: CaseReviewDecision, _ title: String, key: KeyEquivalent, hint: String) -> some View {
+    private func decisionButton(_ decision: CaseReviewDecision, _ title: String, hint: String) -> some View {
         Button(title) {
             guard let desk = appState.investigationContradictionGap else { return }
             Task {
@@ -349,19 +367,22 @@ struct CaseContradictionsSection: View {
                 await caseModel.refreshGlance(appState)
             }
         }
-        .keyboardShortcut(key, modifiers: [.command, .option])
         .disabled(reason: closed ? "The case is closed." : model.busy ? "A decision is being recorded." : model.problem(for: decision),
                   remedy: closed ? "Reopen the case to record decisions." : nil)
         .accessibilityHint(hint)
         .accessibilityIdentifier("case.contradictions.\(decision.rawValue)")
     }
 
-    private func side(_ title: String, quote: String, object: UUID?) -> some View {
+    private func side(_ title: String, quote: String, object: UUID?, item: CaseContradictionReviewItem,
+                      which: CaseSourcePosition.Side) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
-            Text("\u{201C}\(quote)\u{201D}").font(.callout).textSelection(.enabled)
+            Text("\u{201C}\(quote)\u{201D}").font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             if let object {
-                Button { open(object, quote: quote) } label: {
+                Button {
+                    open(object, quote: quote, position: CaseSourcePosition(objectID: object, origin: .contradiction(id: item.id, side: which),
+                                                                           revision: item.currentVersions[object] ?? nil))
+                } label: {
                     Label(model.names[object].map { "Open source — \($0)" } ?? "Open source", systemImage: "doc.text.magnifyingglass").font(.caption)
                 }
                 .buttonStyle(.link)
@@ -380,6 +401,13 @@ struct CaseContradictionsSection: View {
         case .aiRead?: return "Found by the AI reading — both quotes checked against the documents"
         case nil: return "Found by the archive scan"
         }
+    }
+
+    private func perform(_ key: CaseReviewKey) async {
+        guard let desk = appState.investigationContradictionGap else { return }
+        if key.decision != nil, closed { model.error = "The case is closed. Reopen the case to record decisions."; return }
+        await model.perform(key, desk: desk, objects: appState.objects, actor: caseModel.actor)
+        if key.decision != nil { await caseModel.refreshGlance(appState) }
     }
 
     private func reload() async {
@@ -414,8 +442,9 @@ struct CaseContradictionsSection: View {
         await caseModel.refreshGlance(appState)
     }
 
-    private func open(_ objectID: UUID, quote: String) {
-        caseModel.workspace.state.lastSource = CaseSourcePosition(objectID: objectID, quote: quote, label: model.names[objectID])
+    private func open(_ objectID: UUID, quote: String, position: CaseSourcePosition) {
+        // LB3 — only identifiers are remembered; the passage is read again from the ledger on return.
+        caseModel.workspace.state.lastSource = position
         Task { @MainActor in
             do {
                 if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: objectID) {
@@ -426,6 +455,74 @@ struct CaseContradictionsSection: View {
                 KalsmritikoshLog.ui.error("Contradiction open source failed: \(error.localizedDescription, privacy: .public)")
             }
             openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: objectID, snippet: quote))
+        }
+    }
+}
+
+// MARK: - Keyboard review from the menu bar
+
+/// The contradiction review keys — one table for the Case Review menu, its titles and the help text.
+enum CaseReviewKey: String, CaseIterable, Identifiable {
+    case next, previous, confirm, dismiss, deferIt
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .next: return "Next Contradiction"
+        case .previous: return "Previous Contradiction"
+        case .confirm: return "Confirm Contradiction"
+        case .dismiss: return "Dismiss Contradiction"
+        case .deferIt: return "Defer Contradiction"
+        }
+    }
+    var key: KeyEquivalent {
+        switch self {
+        case .next: return .downArrow
+        case .previous: return .upArrow
+        case .confirm: return "y"
+        case .dismiss: return "n"
+        case .deferIt: return "l"
+        }
+    }
+    /// Always ⌥⌘.
+    static let modifiers: EventModifiers = [.command, .option]
+    var decision: CaseReviewDecision? {
+        switch self {
+        case .next, .previous: return nil
+        case .confirm: return .confirmed
+        case .dismiss: return .dismissed
+        case .deferIt: return .deferred
+        }
+    }
+}
+
+/// What the open case's contradiction section offers the menu (nil when no such section is on screen).
+struct CaseReviewCommandTarget {
+    let perform: @MainActor (CaseReviewKey) -> Void
+}
+
+struct CaseReviewFocusKey: FocusedValueKey {
+    typealias Value = CaseReviewCommandTarget
+}
+
+extension FocusedValues {
+    var caseReview: CaseReviewCommandTarget? {
+        get { self[CaseReviewFocusKey.self] }
+        set { self[CaseReviewFocusKey.self] = newValue }
+    }
+}
+
+/// The Case Review menu: the review keys as menu key equivalents, so they work whichever control in the
+/// window has focus — the note field included. Disabled when no case contradiction list is on screen.
+struct CaseReviewCommands: Commands {
+    @FocusedValue(\.caseReview) private var review
+
+    var body: some Commands {
+        CommandMenu("Case Review") {
+            ForEach(CaseReviewKey.allCases) { key in
+                Button(key.title) { review?.perform(key) }
+                    .keyboardShortcut(key.key, modifiers: CaseReviewKey.modifiers)
+                    .disabled(review == nil)
+            }
         }
     }
 }

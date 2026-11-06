@@ -7,7 +7,9 @@ build, whose identifiers the *owner* records in `release/approvals/distribution-
 
 ## Owner gate decision (2026-11-04) and the fixes of the AGENT candidate reviews of 7d720fe1
 
-**Owner decided to ship with Opus 5 and without live accuracy measurement; agent reviews kept as evidence, not as gates.**
+**Owner decided to ship without live accuracy measurement; agent reviews kept as evidence, not as gates.** (The decision was
+recorded as "ship with Opus 5". Owner decision 2026-11-06: the AI plans — AI Included and AI Pro, through the relay on the
+owner's key — answer with **Claude Opus 5.5**; an own Anthropic key stays on **Claude Opus 5**. `SHIP_DECISIONS.md` §5.)
 The gates `accuracy-adjudication`, `practitioner-review` and `user-evaluation` are removed from `ci/release-gates.json`;
 `legal-privacy` stays a gate. The four reviews (`docs/agent-reviews/candidate-review-7d720fe1-*.md`) stay as evidence.
 
@@ -19,22 +21,31 @@ PB1 (an unverified reading is "could not be confirmed", never "the documents don
 LS1–LS9 (permission sheet names Anthropic and the relay and shows the terms; permission tied to its destination and withdrawable
 per case; privacy policy wording; `GLOBAL_CAP_USD` in one place, raised before release; review notes' setup steps).
 
-## Current candidate (2026-11-04, plans and credits + whole-case reader) — simulation-tested only
+## Current candidate (2026-11-06, packages A and B, Opus 5.5 on the AI plans) — simulation-tested only
 
-Candidate: c30d21916fbc030ea5b16dc33045273d0587c96e
+Candidate: [owner: the full 40-hex commit of the build you upload — set once the 2026-11-06 fixes are committed]
+
+Contains, on top of the 2026-11-04 candidate below (`c30d2191`): `9da8a81d` (candidate-review blockers: AI setup after a
+purchase, public-site wording, erasure of a case's outbound text, unconfirmed readings), **package A** `8a1a23cc`
+(contradictions reviewed in place, persistent case workspace, evidence requests followed through — schema **v170**),
+**package B** `572b5893` (the AI plans on **Claude Opus 5.5** through the relay, own key stays Opus 5; coverage shown as read /
+partly read / not read; report coverage and evidence-request sections; cost and recovery wording; LN1–LN3), and the
+2026-11-06 fixes of the AGENT legal re-review and the GUI walk (LB3 workspace preference erased with everything and no longer
+holding document text; LS11–LS16; review keys, overview counts and layout). Earlier candidate line, kept for the record:
+`c30d21916fbc030ea5b16dc33045273d0587c96e` (2026-11-04).
 
 | Field | Value |
 |---|---|
 | Branch / PR | `investigations-next`, PR #169 (open) |
 | Code commits since the 2026-10-31 packet | … `67ba9bfb` (plans, AI credits, relay metering) · `7bb6323b` (whole-case reader, consent once per case, offline search results) · `b66cf7a9` (case analysis on the whole case, outbound log keeps the case text once, no second preview) · `70897448` (release package) · `c30d2191` (AI Pro limit from the plan, one size estimator, own-key limit on case reads, local credit pre-check, no public accuracy figures) |
 | Working tree at packet time | clean apart from Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries — no product code uncommitted |
-| Schema | **v169** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh` PASS) |
+| Schema | **v170** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) — v169 on the 2026-11-04 tree |
 | Testing mode | **Simulation only** (owner decision 2026-11-04: no paid live testing). StoreKit in-process (SKTestSession), fake relay mirroring `relay/src`, fake Anthropic API, no-network replay reader. The owner funds US$20 on the relay's Anthropic key for App Review only |
 | Hosted CI | **not run** on `67ba9bfb` … `c30d2191` (Actions budget; last green head `4147e106`) |
 | Unsigned Release digests | not built for this tree |
 | Signed Distribution build | none — *owner* (`release/OWNER_LAUNCH_CHECKLIST.md` §8) |
 | Relay | not deployed; `AIIncludedRelay.host` empty → gate `relay-host-configured` FAIL until the owner deploys (§5–§6 of the checklist) |
-| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (4 November 2026; notices version 1.11) |
+| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (terms 6 November 2026; notices version 1.12) |
 
 ### Simulation evidence on this tree (agent run, 2026-11-04, this Mac — not hosted CI)
 

@@ -126,8 +126,8 @@ bash scripts/release-check.sh
 ```
 
 The human gates need records **you** write in `release/approvals/<gate>.md` (format in `release/approvals/README.md`):
-`legal-privacy` and `publisher-decision`. By your decision of 2026-11-04 (ship with Opus 5 and without live accuracy
-measurement) `accuracy-adjudication`, `practitioner-review` and `user-evaluation` are no longer gates; the agent reviews stay as
+`legal-privacy` and `publisher-decision`. By your decision of 2026-11-04 (ship without live accuracy measurement; recorded then as "ship
+with Opus 5" — since your decision of 2026-11-06 the AI plans answer with Claude Opus 5.5 and an own key stays on Opus 5) `accuracy-adjudication`, `practitioner-review` and `user-evaluation` are no longer gates; the agent reviews stay as
 evidence in `docs/agent-reviews/`. Never sign a record for a commit other than the one you upload.
 
 ## 10. TestFlight (optional, free)

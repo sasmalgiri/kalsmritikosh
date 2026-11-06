@@ -97,6 +97,25 @@ public struct CaseCoverageRepository: Sendable {
         return out
     }
 
+    /// The logical source each source version belongs to (LS14: a case's older version of a document the
+    /// coverage record already lists is not counted as a second document).
+    public func logicalSources(for ids: [UUID]) async throws -> [UUID: UUID] {
+        let unique = Array(Set(ids))
+        guard !unique.isEmpty else { return [:] }
+        var out: [UUID: UUID] = [:]
+        for start in stride(from: 0, to: unique.count, by: 400) {
+            let chunk = Array(unique[start..<min(start + 400, unique.count)])
+            let rows = try await database.query(
+                "SELECT id, logical_source_id FROM source_versions WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows {
+                guard let id = r.uuid(0), let logical = r.uuid(1) else { continue }
+                out[id] = logical
+            }
+        }
+        return out
+    }
+
     /// Whether a container coverage manifest exists for this source version (v87). Absence on a
     /// container source becomes a "container inspection missing" limitation — never a false "0 members".
     public func hasContainerManifest(sourceVersionID: UUID) async throws -> Bool {

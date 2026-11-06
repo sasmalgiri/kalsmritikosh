@@ -877,6 +877,14 @@ struct DiagnosticEndToEndTests {
         let prefs = AppState.erasePreferences
         prefs.set("[]", forKey: "kalsmritikosh.siu.store")
         prefs.set("job summary", forKey: "kalsmritikosh.jobs.log.\(UUID().uuidString)")
+        // The typed "not applicable" reasons per case.
+        prefs.set(["job": "witness unavailable"], forKey: "kalsmritikosh.jobs.na.\(UUID().uuidString)")
+        // LB3 — a case's workspace state (the person's search text, the last source opened).
+        var workspace = CaseWorkspaceState()
+        workspace.contradictionSearch = "Jane Doe payment"
+        workspace.lastSource = CaseSourcePosition(objectID: UUID(), origin: .caseEntry(id: UUID()), revision: UUID())
+        CaseWorkspaceStore.save(workspace, caseID: UUID(), defaults: prefs)
+        #expect(prefs.dictionaryRepresentation().keys.contains { $0.hasPrefix(CaseWorkspaceStore.keyPrefix) })
         // An open studio with a saved draft.
         let storage = StudioStorage(studio: "siu", legacyKey: "test.erase.\(UUID().uuidString)")
         let repo = StudioRecordRepository(database: db)
@@ -892,6 +900,9 @@ struct DiagnosticEndToEndTests {
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(AppState.fullEraseRecordName).path))
         #expect(prefs.object(forKey: "kalsmritikosh.siu.store") == nil)
         #expect(!prefs.dictionaryRepresentation().keys.contains { $0.hasPrefix("kalsmritikosh.jobs.log.") })
+        #expect(!prefs.dictionaryRepresentation().keys.contains { $0.hasPrefix("kalsmritikosh.jobs.na.") })
+        #expect(!prefs.dictionaryRepresentation().keys.contains { $0.hasPrefix("kalsmritikosh.case.workspace.") },
+                "LB3: Delete all my data left a case workspace preference behind")
         #expect(try await repo.records(studio: "siu").isEmpty)
         // The studio screen still holds the old draft; its next save must not recreate it.
         storage.persist([draft], app: nil)

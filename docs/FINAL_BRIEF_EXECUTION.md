@@ -234,6 +234,10 @@ above), remaining limitation, responsible person, evidence location. Commits aft
 gate command is `bash scripts/release-check.sh` over `ci/release-gates.json`; human gates are retained records under
 `release/approvals/` (format in its README), never generated.
 
+**Owner decision 2026-11-06 (model of the AI plans):** the AI plans (AI Included and AI Pro, through the relay on the owner's
+key) use **Claude Opus 5.5**; an own Anthropic key stays on **Claude Opus 5** (`572b5893`; `SHIP_DECISIONS.md` §5). Records of
+2026-11-04 that say "ship with Opus 5" mean shipping without live accuracy measurement; for the AI plans the model is now Opus 5.5.
+
 | § | Requirement | Commit | Test case | Artifact / build | Outcome | Remaining limitation | Responsible | Evidence |
 |---|---|---|---|---|---|---|---|---|
 | 1 | One baseline and evidence table; stale release docs reconciled; candidate packet consolidated; gate manifest + release-check command | this commit (after `a738c56b`) | `scripts/release-check.sh` (runs guards, claims gate, schema pin, Release-excludes-debug-args; reads evidence and approval records) | — | implemented | push + hosted CI on the new head still to run (batched with the next code push, Actions budget) | agent | this table; `docs/RELEASE_CANDIDATE.md` §Current; `release/README.md`, `release/RELEASE_EVIDENCE_v1.md` marked historical; `ci/release-gates.json` |

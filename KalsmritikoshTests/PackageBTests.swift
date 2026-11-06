@@ -123,6 +123,24 @@ struct PackageBTests {
         #expect(r.total == 3 + 5)
     }
 
+    @Test("LS14: a case document the coverage record does not list is counted — read with ledger text, else not read with no reading record; another version of a listed document is not a second document")
+    func coverageCountsUnlistedCaseDocuments() {
+        let listed = UUID(), withText = UUID(), noRecord = UUID(), olderOfListed = UUID(), twinA = UUID(), twinB = UUID()
+        let item = Self.item(listed, .evidenceReady)
+        let m = Self.manifest([item])
+        let twinSource = UUID()
+        let r = CaseCoverageReadout.make(manifest: m, scope: [listed, withText, noRecord, olderOfListed, twinA, twinB],
+                                         labels: [listed: "a.pdf", noRecord: "memo.docx"], hasLedgerText: [withText, twinA, twinB],
+                                         logicalSources: [olderOfListed: item.logicalSourceID, twinA: twinSource, twinB: twinSource])
+        #expect(r.read == 3, "a.pdf, the unlisted document with text, and the two versions of one document counted once")
+        #expect(r.notRead == [.init(name: "memo.docx", status: .notRead, reason: CaseCoverageReadout.noReadingRecord)])
+        #expect(r.total == 4)
+        #expect(r.summaryLine == "Read: 3 · Partly read: 0 · Not read: 1 (1 no reading record)")
+        #expect(r.entryLines == ["memo.docx — not read: no reading record"])
+        // Without a scope (the whole workspace) nothing is added.
+        #expect(CaseCoverageReadout.make(manifest: m, scope: nil, labels: [:], hasLedgerText: []).total == 1)
+    }
+
     @Test("B5: the permission sheet carries what was not read and the balance; a plain request has neither")
     func consentRequestCarriesCoverage() {
         let plain = CaseReadConsentRequest(caseID: UUID(), provider: "p", documents: [], excluded: [], totalBytes: 0, estimatedTokens: 0,

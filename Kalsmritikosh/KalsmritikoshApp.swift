@@ -146,6 +146,7 @@ struct KalsmritikoshApp: App {
         .defaultSize(width: 1100, height: 720)
         .commands {
             ImportFromDevicesCommands()   // P-3 — Take Photo / Scan Documents from a nearby iPhone or iPad
+            CaseReviewCommands()          // ⌥⌘↓ ⌥⌘↑ ⌥⌘Y ⌥⌘N ⌥⌘L in a case's contradiction review, the note field focused too
             // D-10 — menu-bar mirrors of palette entries. Each item posts its
             // catalog entry id; RootView resolves it through the SAME target
             // router as ⌘K, so the menu can never drift from the palette.

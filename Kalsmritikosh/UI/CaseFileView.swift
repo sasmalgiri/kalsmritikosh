@@ -57,6 +57,9 @@ final class CaseFileModel {
     var aiPermittedDocuments: Int?
     /// Package B (P0-A display) — what this Mac could read of the case's documents (nil until loaded).
     var coverage: CaseCoverageReadout?
+    /// A section of the open tab to scroll to (the overview's counts point at the contradiction list).
+    var scrollTarget: String?
+    static let contradictionsAnchor = "case.contradictions.section"
 
     init(caseID: UUID, workspaceID: UUID, defaults: UserDefaults = AppDefaults.store) {
         self.caseID = caseID; self.workspaceID = workspaceID
@@ -66,6 +69,16 @@ final class CaseFileModel {
     }
 
     var actor: String { InvestigatorProfile.name }
+
+    /// LB3 — the current source version of a document in this case (nil: not in the loaded custody).
+    func versionForObject(_ objectID: UUID) -> UUID? {
+        objectByVersion.first { $0.value == objectID }?.key
+    }
+
+    /// LB3 — a document's name from what the case has loaded (the contradiction list or the custody labels).
+    func sourceName(_ objectID: UUID) -> String? {
+        review.names[objectID] ?? versionForObject(objectID).flatMap { labels[$0] }
+    }
 
     /// The case file tab, remembered per case.
     var tab: CaseFileTab {
@@ -324,7 +337,7 @@ public struct CaseFileView: View {
                 // P1-A — the source last opened in this case, one click away after a relaunch too.
                 if let last = model.workspace.state.lastSource {
                     Button { reopen(last) } label: {
-                        Label("Return to the last source" + (last.label.map { " — \($0)" } ?? ""), systemImage: "arrow.uturn.backward.circle")
+                        Label("Return to the last source" + (model.sourceName(last.objectID).map { " — \($0)" } ?? ""), systemImage: "arrow.uturn.backward.circle")
                             .lineLimit(1)
                     }
                     .buttonStyle(.borderless)
@@ -346,20 +359,34 @@ public struct CaseFileView: View {
             }
             Divider().padding(.top, 10)
             if let s = model.snapshot {
-                ScrollView {
-                    Group {
-                        switch model.tab {
-                        case .overview: CaseOverviewTab(model: model, s: s)
-                        case .plan: CasePlanTab(model: model, s: s)
-                        case .tasks: CaseTasksTab(model: model, s: s)
-                        case .people: CasePeopleTab(model: model, s: s)
-                        case .evidence: CaseEvidenceTab(model: model, s: s)
-                        case .chronology: CaseChronologyTab(model: model, s: s)
-                        case .log: CaseLogTab(model: model, s: s)
+                // UI walk 2026-11-06: typing in a field made the page wider than the window and pushed the
+                // sidebar off-screen (the macOS 26 split view takes its detail's ideal width). The page is
+                // pinned to the width it is given: the GeometryReader passes no ideal width upwards, and
+                // the content is laid out at that width at most.
+                GeometryReader { geo in
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            Group {
+                                switch model.tab {
+                                case .overview: CaseOverviewTab(model: model, s: s)
+                                case .plan: CasePlanTab(model: model, s: s)
+                                case .tasks: CaseTasksTab(model: model, s: s)
+                                case .people: CasePeopleTab(model: model, s: s)
+                                case .evidence: CaseEvidenceTab(model: model, s: s)
+                                case .chronology: CaseChronologyTab(model: model, s: s)
+                                case .log: CaseLogTab(model: model, s: s)
+                                }
+                            }
+                            .padding(20)
+                            .frame(maxWidth: 980, alignment: .leading)
+                            .frame(width: max(0, geo.size.width))
+                        }
+                        .onChange(of: model.scrollTarget) { _, target in
+                            guard let target else { return }
+                            withAnimation { proxy.scrollTo(target, anchor: .top) }
+                            model.scrollTarget = nil
                         }
                     }
-                    .padding(20)
-                    .frame(maxWidth: 980, alignment: .leading)
                 }
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -380,16 +407,19 @@ public struct CaseFileView: View {
     }
 
     private func reopen(_ last: CaseSourcePosition) {
+        // LB3 — the passage comes from the ledger (the contradiction or the case entry), never from the preference.
+        let quote = last.passage(contradictions: model.review.items, entries: model.snapshot?.journal ?? [],
+                                 objectForVersion: model.objectByVersion)
         Task { @MainActor in
             do {
                 if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: last.objectID) {
-                    returnSource = CitationOpenTarget(url: url, objectID: last.objectID, quote: last.quote)
+                    returnSource = CitationOpenTarget(url: url, objectID: last.objectID, quote: quote)
                     return
                 }
             } catch {
                 KalsmritikoshLog.ui.error("Return to source failed: \(error.localizedDescription, privacy: .public)")
             }
-            returnPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: last.objectID, snippet: last.quote ?? ""))
+            returnPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: last.objectID, snippet: quote ?? ""))
         }
     }
 }
@@ -464,7 +494,7 @@ struct CaseOverviewTab: View {
             if !steps.isEmpty {
                 CaseSection(title: "Next steps", subtitle: "From what this case holds now. They suggest; you decide. Choose one to go to the tab where it is done.") {
                     ForEach(steps.prefix(6)) { step in
-                        Button { model.tab = Self.tab(step.place) } label: {
+                        Button { CaseGlanceSection.follow(step, model: model) } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Image(systemName: "arrow.right.circle").foregroundStyle(.tint).accessibilityHidden(true)
                                 Text(step.text).multilineTextAlignment(.leading)
@@ -480,6 +510,7 @@ struct CaseOverviewTab: View {
                 }
             }
             CaseContradictionsSection(caseID: model.caseID, closed: closed)
+                .id(CaseFileModel.contradictionsAnchor)
             CaseDraftsSection(model: model, s: s, closed: closed)
             CaseSection(title: "Stage", subtitle: "Move the case along. Closing is a recorded decision below.") {
                 HStack {
@@ -721,11 +752,14 @@ struct CaseGlanceSection: View {
             HStack(alignment: .top, spacing: 18) {
                 metric("\(glance.contradictionsAwaiting)", "contradiction(s) waiting for a decision"
                        + (glance.contradictionsReopened > 0 ? " (\(glance.contradictionsReopened) reopened)" : "")
-                       + (glance.contradictionsDeferred > 0 ? " (\(glance.contradictionsDeferred) deferred)" : ""), tab: .overview)
-                metric("\(glance.resultRowsUndecided)", "job-result row(s) not yet reviewed", tab: nil)
+                       + (glance.contradictionsDeferred > 0 ? " (\(glance.contradictionsDeferred) deferred)" : ""),
+                       go: .contradictions, hint: "Goes to the contradiction list below.")
+                metric("\(glance.resultRowsUndecided)", "job-result row(s) not yet reviewed",
+                       go: .jobs, hint: "Opens Professional Jobs, where job results are reviewed.")
                 metric("\(glance.openRequests)", "open evidence request(s)"
                        + (glance.missingItems > 0 ? ", \(glance.missingItems) item(s) missing" : "")
-                       + (glance.overdueRequests > 0 ? ", \(glance.overdueRequests) overdue" : ""), tab: .evidence)
+                       + (glance.overdueRequests > 0 ? ", \(glance.overdueRequests) overdue" : ""),
+                       go: .tab(.evidence), hint: "Opens the \(CaseFileTab.evidence.rawValue) tab.")
                 Spacer(minLength: 0)
             }
             if let c = model.coverage { CaseCoverageBlock(coverage: c) }
@@ -739,7 +773,7 @@ struct CaseGlanceSection: View {
                 .accessibilityIdentifier("case.glance.limits")
             }
             if let next = glance.nextStep {
-                Button { model.tab = CaseOverviewTab.tab(next.place) } label: {
+                Button { Self.follow(next, model: model) } label: {
                     Label("Next: \(next.text)", systemImage: "arrow.right.circle.fill").multilineTextAlignment(.leading)
                 }
                 .buttonStyle(.borderless)
@@ -750,17 +784,40 @@ struct CaseGlanceSection: View {
         .accessibilityIdentifier("case.glance")
     }
 
-    @ViewBuilder private func metric(_ value: String, _ label: String, tab: CaseFileTab?) -> some View {
-        let content = VStack(alignment: .leading, spacing: 1) {
-            Text(value).font(.title3.monospacedDigit().bold())
-            Text(label).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    /// Where a count leads (UI walk 2026-11-06: every count is a control, as Help says).
+    enum Place: Equatable { case contradictions, jobs, tab(CaseFileTab) }
+
+    @ViewBuilder private func metric(_ value: String, _ label: String, go place: Place, hint: String) -> some View {
+        Button { Self.go(place, model: model) } label: {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value).font(.title3.monospacedDigit().bold())
+                Text(label).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: 220, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: 220, alignment: .leading)
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        if let tab, tab != model.tab {
-            Button { model.tab = tab } label: { content }.buttonStyle(.plain).accessibilityHint("Opens the \(tab.rawValue) tab.")
-        } else {
-            content
+        .accessibilityHint(hint)
+    }
+
+    /// Follow a next step: its tab, or — for the contradictions waiting on the overview — the list itself.
+    static func follow(_ step: CaseNextStep, model: CaseFileModel) {
+        if step.place == .overview, step.id.hasPrefix("contradictions-") { go(.contradictions, model: model) }
+        else { model.tab = CaseOverviewTab.tab(step.place) }
+    }
+
+    /// Follow a count: the contradiction list on the overview, Professional Jobs, or a case tab.
+    static func go(_ place: Place, model: CaseFileModel) {
+        switch place {
+        case .contradictions:
+            model.tab = .overview
+            model.scrollTarget = CaseFileModel.contradictionsAnchor
+        case .jobs:
+            SurfaceOpener.open(.work)
+        case .tab(let tab):
+            model.tab = tab
         }
     }
 }
@@ -1643,8 +1700,10 @@ struct CaseChronologyTab: View {
 
     /// Open the entry's source document highlighted at the quote. When the document's file cannot be
     /// found, the quote alone is shown (the earlier evidence sheet), so the button never does nothing.
-    private func open(objectID: UUID, quote: String?) {
-        model.workspace.state.lastSource = CaseSourcePosition(objectID: objectID, quote: quote, label: nil)
+    private func open(objectID: UUID, quote: String?, entryID: UUID) {
+        // LB3 — only identifiers are remembered; the passage is read again from the ledger on return.
+        model.workspace.state.lastSource = CaseSourcePosition(objectID: objectID, origin: .caseEntry(id: entryID),
+                                                              revision: model.versionForObject(objectID))
         Task { @MainActor in
             let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
             do {
@@ -1696,7 +1755,7 @@ struct CaseChronologyTab: View {
                     if e.kind == .chronology { attestButtons(e) }
                     if let target = PassageChronology.openTarget(for: e, objectForVersion: model.objectByVersion) {
                         Button("Open source") {
-                            open(objectID: target.objectID, quote: target.quote)
+                            open(objectID: target.objectID, quote: target.quote, entryID: e.id)
                         }
                         .buttonStyle(.borderless).font(.caption)
                         .help("Open the source this entry cites, at the quoted passage.")
