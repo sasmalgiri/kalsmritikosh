@@ -30,7 +30,7 @@ import sys
 KINDS = {"command", "evidence", "artifact", "human"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-PLACEHOLDER_RE = re.compile(r"\[owner:|\bTODO\b|\bTBD\b")
+PLACEHOLDER_RE = re.compile(r"\[owner:|\bTODO\b|\bTBD\b|\bINCOMPLETE\b|\bNOT RUN\b")
 DECISIONS = {"APPROVED", "ACCEPTED", "PASS"}
 HUMAN_FIELDS = ("Decision", "By", "Role", "Date", "Commit")
 

@@ -3,15 +3,16 @@
 Decision: APPROVED
 By: AGENT (Claude) — agent review per owner decision 2026-11-01
 Role: AGENT legal/privacy reviewer
-Date: 2026-11-04
-Commit: 9da8a81d2357f78ba73da91e9240cb31b588e1f1
+Date: 2026-11-06
+Commit: 06e4b3a93edfad2864b3e5a084ab4c187c349ebd
 
 This is an agent review, not a lawyer's opinion. It is a read-only review of the code and the release package; I did not build, run tests or use the GUI.
 
-Summary: Both earlier blockers are fixed. LB1: erasing a case now replaces the text it sent in "What was sent" with an erasure line that keeps the time, destination, size and SHA-256, and withdraws the case's AI permission. LB2: the Marketing URL no longer says "100% on your Mac / no uploads" without the Online AI qualifier. Practitioner PB1 and should-fix items LS1–LS5 and LS7–LS9 are also fixed. LS6 is partly fixed: the owner must confirm Anthropic's retention figure at submission. LS10 is not fixed: the candidate packet still names c30d2191. New should-fix items, none blocking:
-- LN1: question-only sends made in a case (the cloud interpreter and rewriter) carry no case marker, so the question text survives case erasure.
-- LN2: index.html:269 says "— nothing else", but GLEIF and CourtListener lookups send names; the meta description still says "One plain plan".
-- LN3: the one-step setup switches "Fully private — no AI" to evidence-gated without saying so on the sheet.
-- LN4: the legacy full-copy match can also erase another case's identical full copy.
+Summary: The blocker LB3 from the review of 572b5893 is fixed. "Delete all my data" now clears the per-case workspace preference and the per-case "not applicable" reasons. The workspace preference no longer stores any document text or file name, only identifiers, and the passage is re-read from the ledger. LS11–LS16 are fixed. LS10 is left for the owner: the candidate packet holds a placeholder until the owner names the uploaded commit. The diff adds no new sending, consent or retention path. No public page or in-app text says "never leave your Mac" or "100 % on your Mac" without a qualifier. New should-fix items, none blocking:
+- LS17: docs/sop-register.html:63 says "every send is previewed". Inside a case the person allowed, documents and questions go without a further preview.
+- LS18: ProductModule.swift:402 says "You see exactly what will be sent before it goes", which is inaccurate in the same way.
+- LN4, LN6 and the owner step LS6 (confirm the retention figures at submission) carry over.
 
-Review: [docs/agent-reviews/candidate-review-9da8a81d-legal-privacy.md](../../docs/agent-reviews/candidate-review-9da8a81d-legal-privacy.md)
+If the uploaded commit is not 06e4b3a9, re-point this record after a confirmation review.
+
+Review: [docs/agent-reviews/candidate-review-06e4b3a9-legal-privacy.md](../../docs/agent-reviews/candidate-review-06e4b3a9-legal-privacy.md)

@@ -1,11 +1,14 @@
-instances of any Kalsmritikosh app before launch: []
-launch 1: 08:54:43 open -n -a <Debug app> --args -kalsmritikosh.sampleArchiveMode YES
-pid: 99845
+instances before: 
+launch 1: 13:51:06 open -n -a <Debug app> --args -kalsmritikosh.sampleArchiveMode YES -> pid 23061
 --- lsof (sqlite/ledger/store)
-/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db 
 /Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-shm 
-/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-wal 
-/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite 
-/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-shm 
-/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-wal 
 /private/var/folders/g2/myp743w11n9181www_xkjdjm0000gn/0/com.apple.LaunchServices.dv/com.apple.LaunchServices-33554481-v2.csstore 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-shm 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-wal 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-shm 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-wal 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-shm 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db 
+/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db-wal 

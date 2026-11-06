@@ -1,4 +1,17 @@
-stopped: 12:11:58 - the Mac's screen locked during the walk (frontmost app became loginwindow pid 413 while sending the ⌥⌘↓ key; still locked after 19 minutes of polling); the app's AX windows were unreadable, so no further keys or presses were sent
-quit: 12:11:58 kill -TERM 99845
+stopped: 14:16:36 - frontmost app was loginwindow (pid 413) when the walk's first AX read ran at 14:11 (the app's AX tree showed no windows); polled 14:11:27-14:16:28, still locked
+screen lock state: 
+power assertions held by caffeinate:
+   pid 22192(caffeinate): [0x0005430e00018b82] 01:16:58 PreventUserIdleSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+   pid 22192(caffeinate): [0x0005430e00058b83] 01:16:58 PreventUserIdleDisplaySleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+   pid 22192(caffeinate): [0x0005430e00078b84] 01:16:58 PreventSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+no keys, clicks or presses were sent to the app in this run
+quit: 14:16:39 kill -TERM 23061
 instances of the Debug app binary after quit: []
-disk free after: 14Gi
+disk free after: 13Gi
+caffeinate after kill: []
