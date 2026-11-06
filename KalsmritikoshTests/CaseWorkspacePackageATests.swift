@@ -535,3 +535,42 @@ struct EvidenceRequestFollowThroughTests {
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }
 }
+
+// MARK: - Living case map M4: one decision, everywhere
+
+extension ContradictionReviewInPlaceTests {
+
+    @Test("Case map M4: a decision made from the map (through the case's review model) is the same record the contradiction list, the map and the report show; carrying it twice is refused")
+    func decisionFromMapIsTheSameRecord() async throws {
+        let rig = try await ReviewRig.make()
+        let model = CaseFileModel(caseID: rig.f.caseID, workspaceID: rig.f.workspaceID, defaults: tempDefaults())
+        let review = model.review
+        await review.load(desk: rig.desk, objects: nil)
+        // What the map inspector does: select the item in the case's review model, set the reason/note, decide.
+        review.selectedID = rig.id
+        review.draftNote = "both on the same invoice"
+        let record = try #require(await review.decide(.confirmed, desk: rig.desk, objects: nil, actor: "Ada"))
+        // The contradiction list (the old section) shows the decision.
+        #expect(review.items.first { $0.id == rig.id }?.status.current == .confirmed)
+        #expect(try await rig.item().status.history.map(\.id) == [record.id])
+        // The map shows the same record: confirmed, the same decision id as its revision, one history line.
+        let p = try #require(await caseMapLoad(rig.f).projection)
+        let node = try #require(p.node(CaseMapNodeID(caseID: rig.f.caseID, kind: .contradiction, id: rig.id)))
+        #expect(node.review == .confirmed && node.revision == record.id.uuidString.lowercased() && node.history.count == 1)
+        // Carry from the map to the report: both passages, no retyping; the report prints it.
+        await review.carry(.report, caseFiles: rig.f.svc, actor: "Ada")
+        #expect(review.error == nil)
+        let snap = try #require(try await rig.f.svc.snapshot(caseID: rig.f.caseID, custody: []))
+        let item = try #require(snap.reportItems.first)
+        let shownText = JobResultHandoff.reviewText(try await rig.item().contradiction)
+        #expect(snap.reportItems.count == 1 && item.citations.count == 2 && item.text == shownText)
+        #expect(CaseFileDocuments.caseFileReport(snap, by: "Ada").contains(item.text))
+        let after = try #require(await caseMapLoad(rig.f).projection)
+        let finding = try #require(after.node(CaseMapNodeID(caseID: rig.f.caseID, kind: .reportItem, id: item.id)))
+        #expect(finding.sources.count == 2 && finding.review == .confirmed)
+        // The service guard stays: carrying the same decision again records nothing new.
+        await review.carry(.report, caseFiles: rig.f.svc, actor: "Ada")
+        #expect(review.error != nil)
+        #expect(try #require(try await rig.f.svc.snapshot(caseID: rig.f.caseID, custody: [])).reportItems.count == 1)
+    }
+}

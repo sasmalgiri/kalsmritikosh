@@ -1,6 +1,6 @@
 # Data-flow inventory — the one source for privacy statements
 
-Version 2 · 2026-10-28 · derived from the code at `investigations-next` (after the completeness audit of 182c7e4c, A1–A8) · supersedes version 1 (2026-10-27), kept in git history.
+Version 3 · 2026-11-06 · adds the case map tables (v171) and the map's preference fields · version 2 (2026-10-28, derived from the code at `investigations-next` after the completeness audit of 182c7e4c, A1–A8) kept in git history.
 
 Every privacy statement must agree with this file: the in-app privacy text (`LegalNotice.privacyStatement`), the
 public pages (`docs/privacy.html`, `docs/terms.html`), `PrivacyInfo.xcprivacy`, `LEGAL_READINESS.md`,
@@ -55,7 +55,7 @@ The terms the app shows live in `OnlineProviderKind.documentTerms`, reviewed 202
 | L12 | DEVONthink hand-off: question, answer, citations as Markdown | `$TMPDIR/kalsmritikosh-devonthink/`, then DEVONthink | Not encrypted | Person's action (module on by default) |
 | L13 | MetricKit diagnostics | `Diagnostics/*.json`, last 30 kept | Not encrypted | Automatic. Apple receives them only if the person shares analytics with developers in macOS. |
 | L14 | Unified log: counts and errors; **file names and provider error texts are logged as public** | macOS log | System | Automatic |
-| L15 | Preferences that hold content: self-score questions and expected answers, SOP drafts and reviews, job titles and result summaries per case, investigator name and organisation (default: the macOS full name), Online provider, model and terms confirmations; the per-case workspace state (`kalsmritikosh.case.workspace.<case id>`: the open tab, the selected contradiction and evidence request, the contradiction filter, the contradiction search text the person typed, and the last source opened — as identifiers only, its document, its origin (contradiction side or case entry) and source version; the passage and file name are read again from the ledger and are not stored; a state written by an earlier build that held them is rewritten without them when the case is next opened) | The app's preferences file | Not encrypted | As used. Studio drafts moved into the ledger (v158/v159); the old preference copy is cleared only after verification. The case workspace state is removed with its case (case erasure) and with everything (Delete all my data). |
+| L15 | Preferences that hold content: self-score questions and expected answers, SOP drafts and reviews, job titles and result summaries per case, investigator name and organisation (default: the macOS full name), Online provider, model and terms confirmations; the per-case workspace state (`kalsmritikosh.case.workspace.<case id>`: the open tab, the selected contradiction and evidence request, the contradiction filter, the contradiction search text the person typed, and the last source opened — as identifiers only, its document, its origin (contradiction side or case entry) and source version; the passage and file name are read again from the ledger and are not stored; a state written by an earlier build that held them is rewritten without them when the case is next opened; and, when the case map preview is used, the map's place in the case — the current view, map or list, the selected item or link and earlier focus for Back as identifiers (case id, record kind, record id; a link's digest id), each view's zoom and position, and the items hidden or groups collapsed in a built-in view, as identifiers. No item names, quotes, view names or search words are stored there) | The app's preferences file | Not encrypted | As used. Studio drafts moved into the ledger (v158/v159); the old preference copy is cleared only after verification. The case workspace state is removed with its case (case erasure) and with everything (Delete all my data). |
 | L16 | Keychain: ledger key, Online API keys, sync keys, seal, audit and team keys | Keychain, this device only | Keychain | — |
 | L17 | Clipboard: answers and reports the person copies. The recovery key is copied for this Mac only and marked concealed and transient. | Pasteboard | — | Person's action |
 
@@ -84,8 +84,15 @@ their captured legacy stores. When asked, it also removes the documents no other
 
 Shared documents are kept and reported.
 
+**Case map (v171, preview).** Saved map views (name, base view, filters including the person's search words, hidden items
+and collapsed groups), map positions and pins, and the typed links the investigator draws (with their reason, author and,
+when withdrawn, who, when and why) are stored in the encrypted ledger — `case_map_views`, `case_map_layout`, `case_map_links`,
+each keyed by `case_id`. They hold identifiers of case records, never copies of them. Case erasure removes them with the case
+(a legal hold refuses it, removing nothing); a full erase empties them; backups carry them as part of the ledger. Opening or
+moving around the map reads the ledger only and sends nothing.
+
 **Person erasure:** Knowledge › People › Erase this person. It removes the person's entity record, aliases, mentions,
-links, case-subject rows and the facts provably theirs. Facts that a same-name person could share are kept and reported as
+links, case-subject rows (with the case map positions and map links pointing at those rows) and the facts provably theirs. Facts that a same-name person could share are kept and reported as
 ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
 answers, topics, conversation turns.
 

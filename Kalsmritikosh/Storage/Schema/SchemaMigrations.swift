@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 170
+    public static let latestVersion = 171
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -803,7 +803,8 @@ public enum SchemaMigrations {
         (167, v167),
         (168, v168),
         (169, v169),
-        (170, v170)
+        (170, v170),
+        (171, v171)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8182,5 +8183,65 @@ public enum SchemaMigrations {
     WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
     BEGIN SELECT RAISE(ABORT, 'investigation_evidence_request_events is append-only'); END;
+    """
+
+    // MARK: - v171 — the living case map (plan 2026-11-06, M2/M3): only what has no other canonical home.
+    // • case_map_views: the person's saved views of a case — a name, the view it is based on, its filters
+    //   (identifiers, kinds, review states and the person's search words) and its place in the strip. A view
+    //   stores references and display settings only; it never copies or forks case records.
+    // • case_map_layout: where each map item sits (world coordinates) and whether the person pinned it,
+    //   keyed by the item's stable identity (record kind + canonical record id). Geometry only.
+    // • case_map_links: typed links the investigator draws that no existing record can hold, each with
+    //   its rationale and author. A link is withdrawn with a reason, never edited; withdrawn links stay.
+    // All three carry case_id, so case erasure and full erasure remove them; person erasure removes the
+    // layout and links that point at the erased person's case-person rows. Everything is in the encrypted
+    // ledger (and therefore in backups); the preferences file keeps identifiers and geometry only.
+    private static let v171: String = """
+    CREATE TABLE IF NOT EXISTS case_map_views (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        name         TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        base_view    TEXT NOT NULL CHECK (base_view IN ('overview','questions','people','chronology','findings','changes')),
+        filters_json TEXT NOT NULL DEFAULT '{}',
+        ordinal      INTEGER NOT NULL DEFAULT 0,
+        created_by   TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_map_views_case ON case_map_views(case_id, ordinal);
+    CREATE TABLE IF NOT EXISTS case_map_layout (
+        case_id     TEXT NOT NULL,
+        record_kind TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id   TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        x           REAL NOT NULL,
+        y           REAL NOT NULL,
+        pinned      INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
+        updated_at  REAL NOT NULL,
+        PRIMARY KEY (case_id, record_kind, record_id)
+    );
+    CREATE TABLE IF NOT EXISTS case_map_links (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_type        TEXT NOT NULL CHECK (link_type IN ('supports','challenges','mentions','attributedTo','occurredBefore','occurredAfter','possibleSamePerson','dependsOn','requestsEvidenceFor','receivedInResponseTo','derivedFrom','supersedes','selectedForReport')),
+        from_kind        TEXT NOT NULL,
+        from_id          TEXT NOT NULL,
+        to_kind          TEXT NOT NULL,
+        to_id            TEXT NOT NULL,
+        rationale        TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (from_kind = to_kind AND from_id = to_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_case ON case_map_links(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_map_links_fixed BEFORE UPDATE ON case_map_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.link_type <> OLD.link_type
+      OR NEW.from_kind <> OLD.from_kind OR NEW.from_id <> OLD.from_id OR NEW.to_kind <> OLD.to_kind OR NEW.to_id <> OLD.to_id
+      OR NEW.rationale <> OLD.rationale OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: a link is withdrawn with a reason, never edited'); END;
     """
 }

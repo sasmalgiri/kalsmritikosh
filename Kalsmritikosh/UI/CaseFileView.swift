@@ -61,12 +61,20 @@ final class CaseFileModel {
     var scrollTarget: String?
     static let contradictionsAnchor = "case.contradictions.section"
 
+    /// Living case map (M2) — the map workspace over the same workspace preference and the same review model.
+    let map: CaseMapWorkspaceModel
+
     init(caseID: UUID, workspaceID: UUID, defaults: UserDefaults = AppDefaults.store) {
         self.caseID = caseID; self.workspaceID = workspaceID
         let holder = CaseWorkspaceHolder(caseID: caseID, defaults: defaults)
         self.workspace = holder
         self.review = CaseContradictionReviewModel(caseID: caseID, workspace: holder)
+        self.map = CaseMapWorkspaceModel(caseID: caseID, workspace: holder)
     }
+
+    /// Whether this case shows the case map: the "Case map (preview)" switch is on and the person has not
+    /// chosen the sections for this case.
+    func showsMap(previewOn: Bool) -> Bool { previewOn && workspace.state.map?.showsSections != true }
 
     var actor: String { InvestigatorProfile.name }
 
@@ -310,6 +318,8 @@ public struct CaseFileView: View {
     @State private var model: CaseFileModel
     @State private var returnSource: CitationOpenTarget?
     @State private var returnPassage: OpenedSource?
+    /// Living case map — the reversible preview switch (off unless the person turns it on; plan §11).
+    @AppStorage(CaseMapPreview.key, store: AppDefaults.store) private var mapPreview = false
     let onBack: () -> Void
 
     /// `openCase` opens another case from this one (N1 deconfliction); `openableCases` are those it can open.
@@ -343,14 +353,29 @@ public struct CaseFileView: View {
                     .buttonStyle(.borderless)
                     .accessibilityIdentifier("case.returnToSource")
                 }
+                Toggle("Case map (preview)", isOn: $mapPreview)
+                    .toggleStyle(.switch).controlSize(.small)
+                    .help("Shows this case as a map of its questions, evidence and decisions, with a list beside it. A preview: turning it off returns to the sections and changes nothing in the case.")
+                    .accessibilityIdentifier("case.map.preview")
+                if mapPreview {
+                    Button(model.showsMap(previewOn: true) ? "Case sections" : "Case map") {
+                        var m = model.workspace.state.map ?? CaseMapWorkspaceMemory()
+                        m.showsSections = model.showsMap(previewOn: true)
+                        model.workspace.state.map = m
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("case.map.switch")
+                }
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
-            Picker("Section", selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
-                ForEach(CaseFileTab.allCases) { Label($0.rawValue, systemImage: $0.icon).tag($0) }
+            if !model.showsMap(previewOn: mapPreview) {
+                Picker("Section", selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
+                    ForEach(CaseFileTab.allCases) { Label($0.rawValue, systemImage: $0.icon).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 20)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 20)
             if let e = model.error {
                 Text(e).foregroundStyle(.red).font(.callout).padding(.horizontal, 20).padding(.top, 8)
             } else if let n = model.outputNotice {
@@ -358,7 +383,9 @@ public struct CaseFileView: View {
                     .accessibilityIdentifier("case.output.notice")
             }
             Divider().padding(.top, 10)
-            if let s = model.snapshot {
+            if model.showsMap(previewOn: mapPreview), let s = model.snapshot {
+                CaseMapWorkspaceView(model: model, s: s)
+            } else if let s = model.snapshot {
                 // UI walk 2026-11-06: typing in a field made the page wider than the window and pushed the
                 // sidebar off-screen (the macOS 26 split view takes its detail's ideal width). The page is
                 // pinned to the width it is given: the GeometryReader passes no ideal width upwards, and

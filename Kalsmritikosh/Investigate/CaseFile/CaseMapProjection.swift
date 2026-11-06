@@ -1,0 +1,871 @@
+//
+//  CaseMapProjection.swift
+//  Kalsmritikosh
+//
+//  Living case map, package M1 (docs/IME_Living_Case_Map_Implementation_Plan_2026-11-06.md §5): the case's
+//  existing records projected into typed nodes and typed links. PURE — it reads what the case services
+//  already hold (the case file snapshot, the case's documents, contradictions with their review state,
+//  hypotheses and their citations, evidence requests, the investigator's own map links) and decides
+//  nothing. There is no second store of case records: every node names its canonical record.
+//
+//  • Identity is the case id + the canonical record kind + the canonical record id; the revision (a source
+//    version, a record revision, a decision id) is kept separately, so re-reading the same records in
+//    another order, or a re-ingested document, keeps the same identity.
+//  • A link carries its endpoints, direction, the records and revisions it comes from, every source with its
+//    version and locator, who asserted it (investigator, rule or model), its review state and whether it is
+//    stale. Provenance, review, reliability and truth are never folded into one number.
+//  • A note is labelled a note and never counts as documentary support; a document's presence says nothing
+//    about the truth of what it states; same name is not same person.
+//
+
+import CryptoKit
+import Foundation
+
+// MARK: - Identity
+
+/// The canonical record a map item stands for. Nodes are made from the first group; the rest are records
+/// a link can come from (origins) without being drawn.
+public nonisolated enum CaseMapRecordKind: String, Codable, Sendable, CaseIterable {
+    case caseFile = "case", allegation, person, document, exhibit, interview, addendum, journal, hypothesis
+    case contradiction, request, task, reportItem
+    // origin-only records
+    case allegationEvidence, hypothesisEvidence, requestReceipt, reviewDecision, investigatorLink, rule
+
+    /// Kinds an investigator's own map link may point at: each has a case-owned table the write checks.
+    public static let linkable: Set<CaseMapRecordKind> = [.caseFile, .allegation, .person, .document, .exhibit, .interview,
+                                                          .addendum, .journal, .hypothesis, .request, .reportItem, .task]
+}
+
+/// One map item's stable identity: case + canonical record kind + canonical record id (no revision).
+public nonisolated struct CaseMapNodeID: Hashable, Codable, Sendable, Comparable, CustomStringConvertible {
+    public let caseID: UUID
+    public let kind: CaseMapRecordKind
+    public let recordID: String
+    public init(caseID: UUID, kind: CaseMapRecordKind, recordID: String) {
+        self.caseID = caseID; self.kind = kind; self.recordID = recordID.lowercased()
+    }
+    public init(caseID: UUID, kind: CaseMapRecordKind, id: UUID) { self.init(caseID: caseID, kind: kind, recordID: id.uuidString) }
+    /// The key inside one case ("allegation:…").
+    public var key: String { "\(kind.rawValue):\(recordID)" }
+    public var description: String { key }
+    public static func < (a: CaseMapNodeID, b: CaseMapNodeID) -> Bool {
+        (a.caseID.uuidString, a.kind.rawValue, a.recordID) < (b.caseID.uuidString, b.kind.rawValue, b.recordID)
+    }
+}
+
+// MARK: - Node and link vocabulary
+
+/// What a node is, as the person reads it.
+public nonisolated enum CaseMapNodeKind: String, Codable, Sendable, CaseIterable, Identifiable {
+    case question, person, event, evidence, statement, hypothesis, contradiction, action, finding, note, group
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .question: return "Question"
+        case .person: return "Person or organisation"
+        case .event: return "Event"
+        case .evidence: return "Evidence"
+        case .statement: return "Statement"
+        case .hypothesis: return "Hypothesis or lead"
+        case .contradiction: return "Contradiction"
+        case .action: return "Action or request"
+        case .finding: return "Finding or report item"
+        case .note: return "Investigator's note"
+        case .group: return "Group"
+        }
+    }
+    public var plural: String {
+        switch self {
+        case .question: return "Questions"
+        case .person: return "People and organisations"
+        case .event: return "Events"
+        case .evidence: return "Evidence"
+        case .statement: return "Statements"
+        case .hypothesis: return "Hypotheses and leads"
+        case .contradiction: return "Contradictions"
+        case .action: return "Actions and requests"
+        case .finding: return "Findings and report items"
+        case .note: return "Notes"
+        case .group: return "Groups"
+        }
+    }
+    /// An SF Symbol: every kind has its own icon, so the map never relies on colour alone.
+    public var symbol: String {
+        switch self {
+        case .question: return "questionmark.circle"
+        case .person: return "person.crop.circle"
+        case .event: return "calendar"
+        case .evidence: return "doc.text"
+        case .statement: return "quote.bubble"
+        case .hypothesis: return "lightbulb"
+        case .contradiction: return "exclamationmark.triangle"
+        case .action: return "checklist"
+        case .finding: return "checkmark.seal"
+        case .note: return "note.text"
+        case .group: return "square.stack.3d.up"
+        }
+    }
+    /// Material the "Unlinked material" group collects when nothing links to it.
+    public var isMaterial: Bool { [.evidence, .statement, .event, .note].contains(self) }
+}
+
+/// The typed link vocabulary (plan §5.2).
+public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable, Identifiable {
+    case supports, challenges, mentions, attributedTo, occurredBefore, occurredAfter, possibleSamePerson
+    case dependsOn, requestsEvidenceFor, receivedInResponseTo, derivedFrom, supersedes, selectedForReport
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .supports: return "supports"
+        case .challenges: return "challenges"
+        case .mentions: return "mentions"
+        case .attributedTo: return "attributed to"
+        case .occurredBefore: return "occurred before"
+        case .occurredAfter: return "occurred after"
+        case .possibleSamePerson: return "possibly the same person (pending review)"
+        case .dependsOn: return "depends on"
+        case .requestsEvidenceFor: return "requests evidence for"
+        case .receivedInResponseTo: return "received in response to"
+        case .derivedFrom: return "derived from"
+        case .supersedes: return "supersedes"
+        case .selectedForReport: return "selected for report"
+        }
+    }
+    /// How the line is drawn (never colour alone): solid, dashed or dotted.
+    public enum Stroke: String, Sendable { case solid, dashed, dotted }
+    public var stroke: Stroke {
+        switch self {
+        case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom: return .solid
+        case .challenges, .supersedes, .occurredBefore, .occurredAfter: return .dashed
+        case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor: return .dotted
+        }
+    }
+    /// A link with an explicit direction (all of them except a possible-same-person pairing).
+    public var directed: Bool { self != .possibleSamePerson }
+}
+
+/// Who asserted a link or produced an item.
+public nonisolated enum CaseMapAssertion: Hashable, Sendable {
+    case investigator(String)
+    case rule(String)
+    case model(String)
+    public var label: String {
+        switch self {
+        case .investigator(let who): return "Recorded by \(who)"
+        case .rule(let what): return "Found by a rule (\(what))"
+        case .model(let what): return "Proposed by the AI reading (\(what)) — checked against the documents, not a decision"
+        }
+    }
+}
+
+/// The human review state of an item or link, as recorded.
+public nonisolated enum CaseMapReviewState: String, Codable, Sendable, CaseIterable {
+    case notApplicable, unreviewed, pendingReview, accepted, completed, confirmed, dismissed, deferred, reopened, rejected, withdrawn
+    public var label: String {
+        switch self {
+        case .notApplicable: return "No review needed"
+        case .unreviewed: return "Not reviewed yet"
+        case .pendingReview: return "Pending review"
+        case .accepted: return "Accepted on review"
+        case .completed: return "Completed result"
+        case .confirmed: return "Confirmed"
+        case .dismissed: return "Dismissed"
+        case .deferred: return "Deferred"
+        case .reopened: return "Reopened — a source changed"
+        case .rejected: return "Rejected on review"
+        case .withdrawn: return "Withdrawn"
+        }
+    }
+    /// Waiting for the person.
+    public var awaitingReview: Bool { [.unreviewed, .pendingReview, .deferred, .reopened].contains(self) }
+}
+
+/// The honest state of an item or link. Each kind is distinct: a failed read is not "unsupported", an
+/// unassessed item is not "unsupported", a restricted source is not "unavailable".
+public nonisolated struct CaseMapStatus: Hashable, Sendable {
+    public enum Kind: String, Sendable, CaseIterable {
+        /// A state a person (or the record itself) recorded: "Open", "Confirmed by Ada", "Pending".
+        case recorded
+        /// Nobody has assessed it yet (e.g. a link recorded before verification existed).
+        case unassessed
+        /// Not supported by a verified passage or a live exhibit (a note, a passage that did not verify).
+        case unsupported
+        /// The source is not in this case any more, or was withdrawn.
+        case unavailable
+        /// The source is in the case but not readable under the current access policy.
+        case restricted
+        /// Changed since it was decided or carried (a revised source, a superseded result revision).
+        case stale
+        /// It could not be read.
+        case failed
+
+        public var label: String {
+            switch self {
+            case .recorded: return "Recorded"
+            case .unassessed: return "Not yet assessed"
+            case .unsupported: return "Not supported by a verified source"
+            case .unavailable: return "Source unavailable"
+            case .restricted: return "Restricted"
+            case .stale: return "Needs review — changed since"
+            case .failed: return "Could not be read"
+            }
+        }
+        public var symbol: String {
+            switch self {
+            case .recorded: return "circle"
+            case .unassessed: return "circle.dashed"
+            case .unsupported: return "minus.circle"
+            case .unavailable: return "questionmark.folder"
+            case .restricted: return "lock"
+            case .stale: return "arrow.triangle.2.circlepath"
+            case .failed: return "xmark.octagon"
+            }
+        }
+    }
+    public let kind: Kind
+    public let text: String
+    public init(_ kind: Kind, _ text: String) { self.kind = kind; self.text = text }
+    public static func recorded(_ text: String) -> CaseMapStatus { CaseMapStatus(.recorded, text) }
+}
+
+/// One source an item or link rests on: the exact version, the document, the passage locator.
+public nonisolated struct CaseMapSourceRef: Hashable, Sendable {
+    public let sourceVersionID: UUID?
+    public let objectID: UUID?
+    public let blockID: UUID?
+    public let documentName: String?
+    /// The exact words, held in memory for the inspector only (never written to preferences or logs).
+    public let quote: String?
+    public init(sourceVersionID: UUID?, objectID: UUID?, blockID: UUID? = nil, documentName: String?, quote: String?) {
+        self.sourceVersionID = sourceVersionID; self.objectID = objectID; self.blockID = blockID
+        self.documentName = documentName; self.quote = quote
+    }
+    /// A position inside the document is known (a block, or quoted words to find). A bare document
+    /// reference shows "Position unavailable".
+    public var positionAvailable: Bool { blockID != nil || !(quote ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    public var locatorText: String {
+        var parts: [String] = []
+        if let sourceVersionID { parts.append("version \(sourceVersionID.uuidString.prefix(8))") } else { parts.append("no source version") }
+        parts.append(blockID.map { "passage \($0.uuidString.prefix(8))" } ?? (positionAvailable ? "quoted words" : "Position unavailable"))
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// A record (and its revision) a link or node comes from.
+public nonisolated struct CaseMapOrigin: Hashable, Sendable {
+    public let kind: CaseMapRecordKind
+    public let recordID: String
+    public let revision: String?
+    public init(_ kind: CaseMapRecordKind, _ recordID: String, revision: String? = nil) {
+        self.kind = kind; self.recordID = recordID.lowercased(); self.revision = revision
+    }
+    var key: String { "\(kind.rawValue):\(recordID)@\(revision ?? "-")" }
+}
+
+public nonisolated struct CaseMapNode: Identifiable, Hashable, Sendable {
+    public let id: CaseMapNodeID
+    /// The record's current revision (a source version, a record revision or a decision id); not identity.
+    public let revision: String?
+    public let kind: CaseMapNodeKind
+    public let title: String
+    /// The record's exact wording (statement text, quote, allegation, note) as stored.
+    public let wording: String?
+    public let status: CaseMapStatus
+    public let review: CaseMapReviewState
+    public let sources: [CaseMapSourceRef]
+    public let author: CaseMapAssertion?
+    public let recordedAt: Date?
+    /// For events: when it happened, as recorded (never inferred here).
+    public let eventDate: Date?
+    /// Every recorded review decision, oldest first, as plain lines.
+    public let history: [String]
+    /// Set when a source behind it changed since it was decided or carried.
+    public let changedSourceWarning: String?
+    /// Verified documentary support (a verified passage or a live exhibit). A note is never documentary.
+    public let isDocumentary: Bool
+}
+
+public nonisolated struct CaseMapLink: Identifiable, Hashable, Sendable {
+    /// Stable: a digest of the type, the endpoints and the origin records (not of row order or time).
+    public let id: String
+    public let caseID: UUID
+    public let from: CaseMapNodeID
+    public let to: CaseMapNodeID
+    public let type: CaseMapLinkType
+    public let origins: [CaseMapOrigin]
+    public let sources: [CaseMapSourceRef]
+    public let assertedBy: CaseMapAssertion
+    public let review: CaseMapReviewState
+    public let status: CaseMapStatus
+    /// Why this connection exists, in words (the recorded rationale or the record it comes from).
+    public let basis: String
+    public var directed: Bool { type.directed }
+
+    static func makeID(type: CaseMapLinkType, from: CaseMapNodeID, to: CaseMapNodeID, origins: [CaseMapOrigin]) -> String {
+        let canonical = ([type.rawValue, from.key, to.key] + origins.map { "\($0.kind.rawValue):\($0.recordID)" }.sorted()).joined(separator: "|")
+        return "link-" + SHA256.hash(data: Data(canonical.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+/// A structural group: it summarises (and names) its members; it states nothing new.
+public nonisolated struct CaseMapGroup: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public let kind: CaseMapNodeKind?
+    public let members: [CaseMapNodeID]
+    public static let unlinkedID = "group:unlinked"
+}
+
+// MARK: - Loading state
+
+/// The parts of a case the map reads; each loads or fails on its own.
+public nonisolated enum CaseMapPart: String, Sendable, CaseIterable, Hashable {
+    case caseFile, documents, contradictions, hypotheses, requests, investigatorLinks
+    public var label: String {
+        switch self {
+        case .caseFile: return "the case file"
+        case .documents: return "the case's documents"
+        case .contradictions: return "contradictions"
+        case .hypotheses: return "hypotheses and leads"
+        case .requests: return "evidence requests"
+        case .investigatorLinks: return "your map links"
+        }
+    }
+}
+
+public nonisolated enum CaseMapPartState: Hashable, Sendable {
+    case loaded
+    case failed(String)
+    case unavailable(String)
+    public var isLoaded: Bool { if case .loaded = self { return true }; return false }
+}
+
+/// What the person sees about the load as a whole — never a failed read shown as an empty case.
+public nonisolated enum CaseMapLoadState: Hashable, Sendable {
+    /// Everything was read and the case holds nothing to map yet.
+    case empty
+    /// Everything was read.
+    case complete
+    /// Some parts could not be read; what is shown is incomplete and says which.
+    case partial([CaseMapPart])
+    /// The case itself could not be read: nothing is shown as if it were the case.
+    case failed(String)
+    /// The case changed while it was being read twice in a row; what is shown may mix two states.
+    case stale(String)
+}
+
+// MARK: - Input from the canonical services
+
+/// One of the case's documents: its stable logical source, the version in the case and the read document.
+public nonisolated struct CaseMapDocument: Hashable, Sendable {
+    public let sourceVersionID: UUID
+    public let logicalSourceID: UUID
+    public let name: String?
+    public let objectID: UUID?
+    public let isCurrent: Bool
+    public init(sourceVersionID: UUID, logicalSourceID: UUID, name: String?, objectID: UUID?, isCurrent: Bool) {
+        self.sourceVersionID = sourceVersionID; self.logicalSourceID = logicalSourceID; self.name = name
+        self.objectID = objectID; self.isCurrent = isCurrent
+    }
+}
+
+/// A hypothesis with the citations recorded for and against it.
+public nonisolated struct CaseMapHypothesis: Equatable, Sendable {
+    public let hypothesis: InvestigationHypothesis
+    public let evidence: [HypothesisEvidenceLink]
+    public init(hypothesis: InvestigationHypothesis, evidence: [HypothesisEvidenceLink]) { self.hypothesis = hypothesis; self.evidence = evidence }
+}
+
+/// A link the investigator drew on the map (v171 case_map_links) — the only links with no other home.
+public nonisolated struct CaseMapInvestigatorLink: Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public let caseID: UUID
+    public let type: CaseMapLinkType
+    public let from: CaseMapNodeID
+    public let to: CaseMapNodeID
+    public let rationale: String
+    public let createdBy: String
+    public let createdAt: Date
+    public let withdrawnBy: String?
+    public let withdrawnAt: Date?
+    public let withdrawnReason: String?
+    public var isActive: Bool { withdrawnAt == nil }
+}
+
+/// Everything the projection reads. A nil part was not read (its state says why).
+public nonisolated struct CaseMapInput: Sendable {
+    public var snapshot: CaseFileSnapshot
+    public var documents: [CaseMapDocument]
+    public var contradictions: [CaseContradictionReviewItem]
+    public var hypotheses: [CaseMapHypothesis]
+    public var requests: [EvidenceRequestFile]
+    public var investigatorLinks: [CaseMapInvestigatorLink]
+    public var parts: [CaseMapPart: CaseMapPartState]
+    public init(snapshot: CaseFileSnapshot, documents: [CaseMapDocument] = [], contradictions: [CaseContradictionReviewItem] = [],
+                hypotheses: [CaseMapHypothesis] = [], requests: [EvidenceRequestFile] = [], investigatorLinks: [CaseMapInvestigatorLink] = [],
+                parts: [CaseMapPart: CaseMapPartState] = [:]) {
+        self.snapshot = snapshot; self.documents = documents; self.contradictions = contradictions; self.hypotheses = hypotheses
+        self.requests = requests; self.investigatorLinks = investigatorLinks; self.parts = parts
+    }
+}
+
+// MARK: - The projection
+
+public nonisolated struct CaseMapProjection: Sendable {
+    public let caseID: UUID
+    public let title: String
+    public let stage: CaseStage
+    public let isClosed: Bool
+    /// The question the investigation is to answer (purpose, else what was reported); nil when not recorded.
+    public let question: String?
+    public let nodes: [CaseMapNode]
+    public let links: [CaseMapLink]
+    public let groups: [CaseMapGroup]
+    public let parts: [CaseMapPart: CaseMapPartState]
+    /// Investigator links whose endpoint is no longer in this case (shown as a count, never drawn to nothing).
+    public let danglingLinks: Int
+    /// Withdrawn investigator links (kept in the ledger, not drawn).
+    public let withdrawnLinks: Int
+    private let index: [CaseMapNodeID: Int]
+
+    init(caseID: UUID, title: String, stage: CaseStage, isClosed: Bool, question: String?, nodes: [CaseMapNode], links: [CaseMapLink],
+         groups: [CaseMapGroup], parts: [CaseMapPart: CaseMapPartState], danglingLinks: Int, withdrawnLinks: Int) {
+        self.caseID = caseID; self.title = title; self.stage = stage; self.isClosed = isClosed; self.question = question
+        self.nodes = nodes; self.links = links; self.groups = groups; self.parts = parts
+        self.danglingLinks = danglingLinks; self.withdrawnLinks = withdrawnLinks
+        var idx: [CaseMapNodeID: Int] = [:]
+        for (i, n) in nodes.enumerated() { idx[n.id] = i }
+        self.index = idx
+    }
+
+    public func node(_ id: CaseMapNodeID) -> CaseMapNode? { index[id].map { nodes[$0] } }
+    public func link(_ id: String) -> CaseMapLink? { links.first { $0.id == id } }
+    public func links(of id: CaseMapNodeID) -> [CaseMapLink] { links.filter { $0.from == id || $0.to == id } }
+    public var failedParts: [CaseMapPart] {
+        CaseMapPart.allCases.filter { parts[$0].map { !$0.isLoaded } ?? false }
+    }
+    /// How the whole load reads.
+    public var loadState: CaseMapLoadState {
+        let failed = failedParts
+        if !failed.isEmpty { return .partial(failed) }
+        return nodes.count <= 1 ? .empty : .complete   // the case question alone is an empty case
+    }
+    public func count(_ kind: CaseMapNodeKind) -> Int { nodes.filter { $0.kind == kind }.count }
+    /// Material nothing links to.
+    public var unlinked: [CaseMapNodeID] { groups.first { $0.id == CaseMapGroup.unlinkedID }?.members ?? [] }
+}
+
+/// Builds the projection from the canonical records. Deterministic: the same records in any order give
+/// the same nodes, links and identities.
+public nonisolated enum CaseMapProjector {
+
+    public static func project(_ input: CaseMapInput) -> CaseMapProjection {
+        let s = input.snapshot
+        let caseID = s.caseHeader.id
+        var nodes: [CaseMapNodeID: CaseMapNode] = [:]
+        var links: [String: CaseMapLink] = [:]
+        func id(_ kind: CaseMapRecordKind, _ uuid: UUID) -> CaseMapNodeID { CaseMapNodeID(caseID: caseID, kind: kind, id: uuid) }
+        func add(_ n: CaseMapNode) { nodes[n.id] = n }
+        func link(_ type: CaseMapLinkType, _ from: CaseMapNodeID, _ to: CaseMapNodeID, origins: [CaseMapOrigin], sources: [CaseMapSourceRef],
+                  by: CaseMapAssertion, review: CaseMapReviewState, status: CaseMapStatus, basis: String) {
+            guard from != to else { return }
+            let lid = CaseMapLink.makeID(type: type, from: from, to: to, origins: origins)
+            links[lid] = CaseMapLink(id: lid, caseID: caseID, from: from, to: to, type: type, origins: origins, sources: sources,
+                                     assertedBy: by, review: review, status: status, basis: basis)
+        }
+
+        // Documents: identity is the logical source (stable across re-ingest); the revision is the version.
+        let docsByLogical = Dictionary(grouping: input.documents, by: \.logicalSourceID)
+        var docForVersion: [UUID: CaseMapNodeID] = [:]
+        var docForObject: [UUID: CaseMapNodeID] = [:]
+        var nameForVersion: [UUID: String] = [:]
+        var objectForVersion: [UUID: UUID] = [:]
+        for (logical, versions) in docsByLogical {
+            let ordered = versions.sorted { ($0.isCurrent ? 0 : 1, $0.sourceVersionID.uuidString) < ($1.isCurrent ? 0 : 1, $1.sourceVersionID.uuidString) }
+            guard let current = ordered.first else { continue }
+            let nid = id(.document, logical)
+            for v in ordered {
+                docForVersion[v.sourceVersionID] = nid
+                if let o = v.objectID { docForObject[o] = nid; objectForVersion[v.sourceVersionID] = o }
+                if let n = v.name { nameForVersion[v.sourceVersionID] = n }
+            }
+            let name = current.name ?? "Document \(logical.uuidString.prefix(8))"
+            let older = ordered.count - 1
+            add(CaseMapNode(id: nid, revision: current.sourceVersionID.uuidString.lowercased(), kind: .evidence, title: name, wording: nil,
+                            status: .recorded(older > 0 ? "In the case — \(older) other version(s) also in scope" : "In the case"),
+                            review: .notApplicable,
+                            sources: ordered.map { CaseMapSourceRef(sourceVersionID: $0.sourceVersionID, objectID: $0.objectID, documentName: $0.name, quote: nil) },
+                            author: nil, recordedAt: nil, eventDate: nil, history: [], changedSourceWarning: nil,
+                            // A document's presence is not support for anything it states.
+                            isDocumentary: false))
+        }
+        func docNode(version: UUID?, object: UUID?) -> CaseMapNodeID? {
+            if let version, let d = docForVersion[version] { return d }
+            if let object, let d = docForObject[object] { return d }
+            return nil
+        }
+        func source(_ ref: StudioEvidenceRef) -> CaseMapSourceRef {
+            CaseMapSourceRef(sourceVersionID: ref.sourceVersionID, objectID: ref.objectID ?? ref.sourceVersionID.flatMap { objectForVersion[$0] },
+                             blockID: ref.blockID, documentName: ref.sourceVersionID.flatMap { nameForVersion[$0] }, quote: ref.quote)
+        }
+        /// The honest state of a stored verification, told apart: restricted (in the case, not readable under
+        /// the policy), unavailable (not in the case), unassessed (never checked), failed (unreadable).
+        func status(of support: CaseEvidenceSupport, version: UUID?) -> CaseMapStatus {
+            switch support {
+            case .documentary: return .recorded("Verified passage")
+            case .exhibit(let n): return .recorded("Exhibit \(n) on the live register")
+            case .note: return CaseMapStatus(.unsupported, "Investigator's note — not documentary support")
+            case .unverified(let why):
+                if why.contains("could not be read") { return CaseMapStatus(.failed, why) }
+                if why.contains("before passage verification existed") { return CaseMapStatus(.unassessed, why) }
+                if why.contains("not in this case or is not accessible") {
+                    let inCase = version.map { docForVersion[$0] != nil } ?? false
+                    return inCase ? CaseMapStatus(.restricted, "The source is in this case but not readable under the current access policy")
+                                  : CaseMapStatus(.unavailable, "The cited source is not in this case")
+                }
+                if why.contains("not on this case's live register") { return CaseMapStatus(.unavailable, why) }
+                return CaseMapStatus(.unsupported, why)
+            }
+        }
+        func carried(_ state: String?) -> CaseMapReviewState {
+            switch state.flatMap(CarriedReviewState.init(rawValue:)) {
+            case .accepted?: return .accepted
+            case .completed?: return .completed
+            case .undecided?: return .unreviewed
+            case .rejected?: return .rejected
+            case nil:
+                if state == "confirmed" { return .confirmed }
+                return .notApplicable
+            }
+        }
+
+        // The case and its question.
+        let purpose = s.caseHeader.purpose?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reported = s.profile.intake.allegationSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let question = (purpose?.isEmpty == false ? purpose : nil) ?? (reported?.isEmpty == false ? reported : nil)
+        let caseNode = id(.caseFile, caseID)
+        add(CaseMapNode(id: caseNode, revision: String(s.caseHeader.revision), kind: .question, title: s.caseHeader.title,
+                        wording: question, status: .recorded(question == nil ? "No question recorded yet" : "The question this case is to answer"),
+                        review: .notApplicable, sources: [], author: .investigator(s.caseHeader.actor), recordedAt: s.caseHeader.createdAt,
+                        eventDate: nil, history: [], changedSourceWarning: nil, isDocumentary: false))
+
+        // Allegations (the case's questions).
+        for a in s.allegations {
+            let decided = a.disposition != .pending
+            add(CaseMapNode(id: id(.allegation, a.id), revision: a.decidedAt.map { String($0.timeIntervalSince1970) }, kind: .question,
+                            title: "\(a.label) — \(a.text)", wording: a.text,
+                            status: .recorded(decided ? "\(a.disposition.label)" + (a.decidedBy.map { " — decided by \($0)" } ?? "") : "Open — not decided"),
+                            review: decided ? .confirmed : .unreviewed, sources: [], author: nil, recordedAt: a.createdAt, eventDate: nil,
+                            history: decided ? ["\(a.disposition.label) by \(a.decidedBy ?? "—")" + (a.rationale.map { ": \($0)" } ?? "")] : [],
+                            changedSourceWarning: nil, isDocumentary: false))
+        }
+
+        // The evidence grid: one link per stored row. A typed note becomes a note node, never a document.
+        for e in s.grid {
+            let target = id(.allegation, e.allegationID)
+            guard nodes[target] != nil else { continue }
+            let support = e.support
+            let ref = CaseEvidenceReference.parse(e.evidenceRef)
+            var fromNode: CaseMapNodeID?
+            switch ref {
+            case .sourceVersion(let v): fromNode = docNode(version: v, object: e.objectID)
+            case .exhibit(let n): fromNode = s.exhibits.first { $0.number == n }.map { id(.exhibit, $0.id) }
+            case .investigatorNote, .unresolved: fromNode = nil
+            }
+            if fromNode == nil {
+                // A note or a reference that no longer resolves: its own node, labelled as what it is.
+                let nid = id(.allegationEvidence, e.id)
+                let isNote: Bool = { if case .investigatorNote = ref { return true }; return false }()
+                add(CaseMapNode(id: nid, revision: nil, kind: isNote ? .note : .evidence,
+                                title: e.label ?? (isNote ? "Note on \(e.allegationID.uuidString.prefix(4))" : e.evidenceRef),
+                                wording: e.note ?? e.quote,
+                                status: isNote ? CaseMapStatus(.unsupported, "Investigator's note — not documentary support")
+                                               : CaseMapStatus(.unavailable, "The reference \(e.evidenceRef) does not resolve in this case"),
+                                review: .notApplicable, sources: [], author: .investigator(e.addedBy), recordedAt: e.createdAt, eventDate: nil,
+                                history: [], changedSourceWarning: nil, isDocumentary: false))
+                fromNode = nid
+            }
+            guard let from = fromNode else { continue }
+            let type: CaseMapLinkType = e.stance == .supports ? .supports : e.stance == .contradicts ? .challenges : .mentions
+            var st = status(of: support, version: e.passage?.sourceVersionID)
+            if s.isSuperseded(e.origin) { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
+            let src = e.passage.map(source) ?? (e.objectID.map { CaseMapSourceRef(sourceVersionID: nil, objectID: $0, blockID: e.blockID, documentName: nil, quote: e.quote) })
+            link(type, from, target, origins: [CaseMapOrigin(.allegationEvidence, e.id.uuidString, revision: e.originDigest)],
+                 sources: src.map { [$0] } ?? [], by: .investigator(e.addedBy), review: carried(e.reviewState), status: st,
+                 basis: "Evidence grid row for \(s.allegations.first { $0.id == e.allegationID }?.label ?? "the allegation")"
+                    + (e.note.map { ": \($0)" } ?? "") + (e.origin.map { " (carried from \($0))" } ?? ""))
+        }
+
+        // People. Same name is not same person: each case-person row is its own node; a same-name pair whose
+        // links do not tell them apart is offered as "possibly the same person", pending review.
+        for p in s.people {
+            add(CaseMapNode(id: id(.person, p.id), revision: nil, kind: .person, title: p.name, wording: p.notes,
+                            status: .recorded(p.role.label + (p.entityID == nil ? " — not linked to a person in the documents" : "")),
+                            review: .notApplicable, sources: [], author: nil, recordedAt: p.createdAt, eventDate: nil, history: [],
+                            changedSourceWarning: nil, isDocumentary: false))
+        }
+        let byName = Dictionary(grouping: s.people) { $0.name.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ") }
+        for (_, same) in byName where same.count > 1 {
+            let sorted = same.sorted { $0.id.uuidString < $1.id.uuidString }
+            for i in 0..<sorted.count { for j in (i + 1)..<sorted.count {
+                let a = sorted[i], b = sorted[j]
+                if let ea = a.entityID, let eb = b.entityID, ea != eb { continue }   // linked to different people: distinct
+                if let ea = a.entityID, let eb = b.entityID, ea == eb {
+                    link(.possibleSamePerson, id(.person, a.id), id(.person, b.id), origins: [CaseMapOrigin(.rule, "same-entity")], sources: [],
+                         by: .rule("both rows are linked to the same person in the documents"), review: .pendingReview,
+                         status: .recorded("Linked to the same person in the documents — still two rows until you merge them"),
+                         basis: "Both case-person rows name the same person in the documents.")
+                    continue
+                }
+                link(.possibleSamePerson, id(.person, a.id), id(.person, b.id), origins: [CaseMapOrigin(.rule, "same-name")], sources: [],
+                     by: .rule("same name"), review: .pendingReview,
+                     status: CaseMapStatus(.unassessed, "Same name only — not evidence that they are the same person"),
+                     basis: "The two rows have the same name. A name alone does not make them the same person.")
+            }}
+        }
+
+        // Exhibits.
+        for x in s.exhibits {
+            let nid = id(.exhibit, x.id)
+            let withdrawn = x.withdrawnAt != nil
+            add(CaseMapNode(id: nid, revision: x.sha256, kind: .evidence, title: "Exhibit \(x.number) — \(x.description)", wording: x.description,
+                            status: withdrawn ? CaseMapStatus(.unavailable, "Withdrawn from the exhibit register") : .recorded("Exhibit on the live register"),
+                            review: .notApplicable, sources: [], author: x.collectedBy.map { .investigator($0) }, recordedAt: x.createdAt, eventDate: x.collectedAt,
+                            history: [], changedSourceWarning: nil, isDocumentary: !withdrawn))
+            if let ref = x.sourceRef, case .sourceVersion(let v) = CaseEvidenceReference.parse(ref), let d = docNode(version: v, object: nil) {
+                link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.exhibit, x.id.uuidString, revision: x.sha256)],
+                     sources: [CaseMapSourceRef(sourceVersionID: v, objectID: objectForVersion[v], documentName: nameForVersion[v], quote: nil)],
+                     by: .investigator(x.collectedBy ?? "the investigator"), review: .notApplicable, status: .recorded("Exhibit made from this document"),
+                     basis: "Exhibit \(x.number) records this document as its source.")
+            }
+        }
+
+        // Statements: interviews with an account, and corrections to attested statements.
+        for i in s.interviews {
+            let nid = id(.interview, i.id)
+            let wording = i.statementText ?? i.summary
+            let speaker = s.person(i.personID)?.name
+            var st: CaseMapStatus = .recorded(i.status.label + (i.attestedBy.map { " — attested by \($0)" } ?? ""))
+            if i.statementSHA256 != nil, !i.statementIntact { st = CaseMapStatus(.stale, "The statement changed after it was attested") }
+            add(CaseMapNode(id: nid, revision: i.statementSHA256, kind: .statement,
+                            title: "Statement" + (speaker.map { " of \($0)" } ?? "") + " (\(i.status.label.lowercased()))", wording: wording,
+                            status: st, review: i.attestedBy != nil ? .confirmed : .notApplicable, sources: [], author: nil, recordedAt: i.createdAt,
+                            eventDate: i.scheduledAt, history: [], changedSourceWarning: nil, isDocumentary: false))
+            if let pid = i.personID, nodes[id(.person, pid)] != nil {
+                link(.attributedTo, nid, id(.person, pid), origins: [CaseMapOrigin(.interview, i.id.uuidString)], sources: [],
+                     by: .investigator("the interview record"), review: .notApplicable, status: .recorded("Speaker recorded on the interview"),
+                     basis: "The interview names \(speaker ?? "this person") as the person interviewed (direct account).")
+            }
+            for ref in [i.transcriptRef, i.recordingRef].compactMap({ $0 }) {
+                if case .sourceVersion(let v) = CaseEvidenceReference.parse(ref), let d = docNode(version: v, object: nil) {
+                    link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.interview, i.id.uuidString)],
+                         sources: [CaseMapSourceRef(sourceVersionID: v, objectID: objectForVersion[v], documentName: nameForVersion[v], quote: nil)],
+                         by: .investigator("the interview record"), review: .notApplicable, status: .recorded("Recording or transcript of the interview"),
+                         basis: "The interview names this document as its recording or transcript.")
+                }
+            }
+        }
+        for a in s.addenda {
+            let nid = id(.addendum, a.id)
+            add(CaseMapNode(id: nid, revision: a.sha256, kind: .statement, title: "Correction to a statement", wording: a.text,
+                            status: a.intact ? .recorded(a.confirmedBy.map { "Confirmed by \($0)" } ?? "Recorded, not yet confirmed by the interviewee")
+                                             : CaseMapStatus(.stale, "The correction's text does not match its fingerprint"),
+                            review: a.confirmedBy != nil ? .confirmed : .unreviewed, sources: [], author: .investigator(a.recordedBy),
+                            recordedAt: a.recordedAt, eventDate: nil, history: [], changedSourceWarning: nil, isDocumentary: false))
+            if nodes[id(.interview, a.interviewID)] != nil {
+                link(.supersedes, nid, id(.interview, a.interviewID), origins: [CaseMapOrigin(.addendum, a.id.uuidString, revision: a.sha256)],
+                     sources: [], by: .investigator(a.recordedBy), review: a.confirmedBy != nil ? .confirmed : .unreviewed,
+                     status: .recorded("Correction: \(a.reason)"), basis: "A correction recorded against the attested statement: \(a.reason)")
+            }
+        }
+
+        // Chronology entries (events) and notes.
+        for e in s.journal {
+            let nid = id(.journal, e.id)
+            let refs = e.citations.isEmpty
+                ? (e.evidenceRef.flatMap { r -> StudioEvidenceRef? in
+                    if case .sourceVersion(let v) = CaseEvidenceReference.parse(r) { return StudioEvidenceRef(sourceVersionID: v, objectID: objectForVersion[v], quote: e.quote) }
+                    return nil } .map { [$0] } ?? [])
+                : e.citations
+            let isNote = e.kind == .note
+            var st = isNote ? CaseMapStatus(.unsupported, "Investigator's note — not documentary support")
+                            : (refs.isEmpty ? CaseMapStatus(.unsupported, "An entry with no cited source") : status(of: e.support, version: refs.first?.sourceVersionID))
+            if s.isSuperseded(e.origin) { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
+            let attest = s.attestations.filter { $0.journalEntryID == e.id }
+            add(CaseMapNode(id: nid, revision: e.originDigest, kind: isNote ? .note : .event,
+                            title: isNote ? "Note — \(String(e.text.prefix(60)))" : String(e.text.prefix(80)), wording: e.text,
+                            status: st, review: carried(e.reviewState), sources: refs.map(source), author: .investigator(e.author),
+                            recordedAt: e.createdAt, eventDate: isNote ? nil : e.eventDate,
+                            history: attest.map { "\($0.state.rawValue.capitalized) by \($0.attestedBy) on \($0.attestedAt.formatted(date: .abbreviated, time: .omitted))" },
+                            changedSourceWarning: s.isSuperseded(e.origin) ? "The result revision this entry came from was replaced." : nil,
+                            isDocumentary: !isNote && !refs.isEmpty && e.support.isDocumentary))
+            for ref in refs {
+                guard let d = docNode(version: ref.sourceVersionID, object: ref.objectID) else { continue }
+                link(isNote ? .mentions : .derivedFrom, nid, d, origins: [CaseMapOrigin(.journal, e.id.uuidString, revision: e.originDigest)],
+                     sources: [source(ref)], by: .investigator(e.author), review: carried(e.reviewState),
+                     status: isNote ? CaseMapStatus(.unsupported, "A note citing this document is not documentary support") : st,
+                     basis: isNote ? "The note cites this document." : "The chronology entry cites this passage.")
+            }
+        }
+
+        // Hypotheses and leads with their citations.
+        for h in input.hypotheses {
+            let hy = h.hypothesis
+            guard hy.caseID == caseID else { continue }
+            let nid = id(.hypothesis, hy.id)
+            add(CaseMapNode(id: nid, revision: String(hy.revision), kind: .hypothesis,
+                            title: (hy.kind == .lead ? "Lead — " : "Hypothesis — ") + hy.statement, wording: hy.statement,
+                            status: .recorded(hy.status.rawValue.capitalized + (hy.status == .proposed ? " — not decided" : " by \(hy.actor)")),
+                            review: hy.status == .proposed ? .unreviewed : (hy.status == .confirmed ? .confirmed : .rejected),
+                            sources: [], author: .investigator(hy.actor), recordedAt: hy.createdAt, eventDate: nil, history: [],
+                            changedSourceWarning: nil, isDocumentary: false))
+            for ev in h.evidence {
+                guard let d = docNode(version: ev.sourceVersionID, object: ev.knowledgeObjectID) else { continue }
+                link(ev.stance == .supporting ? .supports : .challenges, d, nid,
+                     origins: [CaseMapOrigin(.hypothesisEvidence, ev.id.uuidString)],
+                     sources: [CaseMapSourceRef(sourceVersionID: ev.sourceVersionID, objectID: ev.knowledgeObjectID, documentName: nameForVersion[ev.sourceVersionID], quote: nil)],
+                     by: .investigator(ev.addedBy), review: .notApplicable,
+                     status: docForVersion[ev.sourceVersionID] == nil ? CaseMapStatus(.stale, "Cited at a version no longer in the case") : .recorded("Cited \(ev.stance == .supporting ? "for" : "against")"),
+                     basis: "Cited \(ev.stance == .supporting ? "for" : "against") the hypothesis" + (ev.note.map { ": \($0)" } ?? "") + ". A citation count does not decide it.")
+            }
+        }
+
+        // Contradictions with their review state.
+        for item in input.contradictions {
+            let c = item.contradiction
+            let nid = id(.contradiction, c.id)
+            let review: CaseMapReviewState = item.status.isReopened ? .reopened : {
+                switch item.status.current {
+                case .confirmed?: return .confirmed
+                case .dismissed?: return .dismissed
+                case .deferred?: return .deferred
+                case nil: return .unreviewed
+                }
+            }()
+            let by: CaseMapAssertion = {
+                switch CaseContradictionFinder.provenance(of: c) {
+                case .rules?: return .rule("the case's contradiction rules")
+                case .aiRead?: return .model("case contradiction reading")
+                case nil: return .rule("the archive scan")
+                }
+            }()
+            let changed = item.status.changedObjects.compactMap { o in docForObject[o].flatMap { nodes[$0]?.title } }
+            add(CaseMapNode(id: nid, revision: item.status.latest?.id.uuidString.lowercased(), kind: .contradiction,
+                            title: JobResultHandoff.reviewText(c), wording: "A: \u{201C}\(c.claimA)\u{201D}\nB: \u{201C}\(c.claimB)\u{201D}",
+                            status: item.status.isReopened ? CaseMapStatus(.stale, item.status.label()) : .recorded(item.status.latest == nil ? "Suggested — not reviewed" : item.status.label()),
+                            review: review,
+                            sources: [(c.evidenceA, c.claimA), (c.evidenceB, c.claimB)].map { obj, quote in
+                                let v = obj.flatMap { o in item.currentVersions[o] ?? nil }
+                                return CaseMapSourceRef(sourceVersionID: v, objectID: obj, documentName: obj.flatMap { docForObject[$0].flatMap { nodes[$0]?.title } }, quote: quote)
+                            },
+                            author: by, recordedAt: c.detectedAt, eventDate: nil, history: item.status.history.map(\.summary),
+                            changedSourceWarning: changed.isEmpty ? (item.status.isReopened ? "A document behind it changed since it was decided." : nil)
+                                                                  : "Changed since the decision: \(changed.joined(separator: ", ")).",
+                            isDocumentary: false))
+            for (obj, quote, side) in [(c.evidenceA, c.claimA, "A"), (c.evidenceB, c.claimB, "B")] {
+                guard let obj, let d = docForObject[obj] else { continue }
+                let v = item.currentVersions[obj] ?? nil
+                link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.contradiction, c.id.uuidString, revision: item.status.latest?.id.uuidString)],
+                     sources: [CaseMapSourceRef(sourceVersionID: v, objectID: obj, documentName: nodes[d]?.title, quote: quote)],
+                     by: by, review: review,
+                     status: item.status.changedObjects.contains(obj) ? CaseMapStatus(.stale, "This document changed since the decision") : .recorded("Side \(side)"),
+                     basis: "Side \(side) of a possible contradiction. Suggested conflicts stay open until a person decides.")
+            }
+        }
+
+        // Evidence requests: what they serve and what arrived (a duplicate is shown and not counted).
+        for file in input.requests {
+            let r = file.request
+            guard r.caseID == caseID else { continue }
+            let nid = id(.request, r.id)
+            let progress = file.progress
+            add(CaseMapNode(id: nid, revision: String(r.revision), kind: .action, title: "Request — \(r.description)",
+                            wording: [r.description, r.custodian.map { "Custodian: \($0)" }, r.question.map { "Question: \($0)" }].compactMap { $0 }.joined(separator: "\n"),
+                            status: .recorded(r.status.rawValue.capitalized + " — " + progress.summary),
+                            review: r.status.isOutstanding ? .pendingReview : .confirmed, sources: [], author: .investigator(r.actor),
+                            recordedAt: r.createdAt, eventDate: r.dueAt,
+                            history: file.events.map { "\($0.kind.rawValue) by \($0.actor) on \($0.occurredAt.formatted(date: .abbreviated, time: .omitted))" + ($0.detail.map { ": \($0)" } ?? "") },
+                            changedSourceWarning: nil, isDocumentary: false))
+            if let a = r.allegationID, nodes[id(.allegation, a)] != nil {
+                link(.requestsEvidenceFor, nid, id(.allegation, a), origins: [CaseMapOrigin(.request, r.id.uuidString, revision: String(r.revision))], sources: [],
+                     by: .investigator(r.actor), review: .notApplicable, status: .recorded("Recorded on the request"), basis: "The request names this allegation.")
+            }
+            if let h = r.hypothesisID, nodes[id(.hypothesis, h)] != nil {
+                link(.requestsEvidenceFor, nid, id(.hypothesis, h), origins: [CaseMapOrigin(.request, r.id.uuidString, revision: String(r.revision))], sources: [],
+                     by: .investigator(r.actor), review: .notApplicable, status: .recorded("Recorded on the request"), basis: "The request names this hypothesis.")
+            }
+            for rec in file.receipts where rec.isActive {
+                guard let d = docNode(version: rec.sourceVersionID, object: rec.knowledgeObjectID) else { continue }
+                link(.receivedInResponseTo, d, nid, origins: [CaseMapOrigin(.requestReceipt, rec.id.uuidString)],
+                     sources: [CaseMapSourceRef(sourceVersionID: rec.sourceVersionID, objectID: rec.knowledgeObjectID, documentName: nameForVersion[rec.sourceVersionID], quote: nil)],
+                     by: .investigator(rec.linkedBy), review: .notApplicable,
+                     status: rec.duplicateOf != nil ? .recorded("Duplicate of a document already received — not counted") : .recorded("Received"),
+                     basis: "Linked as received for this request" + (rec.duplicateOf != nil ? " (a duplicate copy; it does not count towards the request)" : "")
+                        + ". An arrival does not fulfil the request; fulfilment is a recorded decision.")
+            }
+        }
+
+        // Tasks.
+        for t in s.tasks {
+            let overdue = t.isOverdue(at: Date())
+            add(CaseMapNode(id: id(.task, t.task.id), revision: nil, kind: .action, title: "Task — \(t.task.title)", wording: t.task.detail,
+                            status: .recorded(t.task.status.rawValue.capitalized + (overdue ? " — overdue" : "")),
+                            review: .notApplicable, sources: [], author: nil, recordedAt: t.task.createdAt, eventDate: t.deadline?.value.date,
+                            history: [], changedSourceWarning: nil, isDocumentary: false))
+        }
+
+        // Report selections (findings / work products), with every citation.
+        for r in s.reportItems {
+            let nid = id(.reportItem, r.id)
+            let refs = r.citations.isEmpty
+                ? (r.evidenceRef.flatMap(UUID.init(uuidString:)).map { [StudioEvidenceRef(sourceVersionID: $0, objectID: objectForVersion[$0], quote: r.quote)] } ?? [])
+                : r.citations
+            let superseded = s.isSuperseded(r.origin)
+            let st: CaseMapStatus = superseded ? CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one")
+                : (!r.included ? .recorded("Excluded from the report — \(r.exclusionReason ?? "reason not recorded")")
+                   : (refs.isEmpty ? CaseMapStatus(.unsupported, "Selected for the report with no cited source") : status(of: r.support, version: refs.first?.sourceVersionID)))
+            add(CaseMapNode(id: nid, revision: r.originDigest, kind: .finding, title: (r.included ? "Report — " : "Excluded — ") + String(r.text.prefix(80)),
+                            wording: r.text, status: st, review: carried(r.reviewState), sources: refs.map(source), author: .investigator(r.addedBy),
+                            recordedAt: r.createdAt, eventDate: nil, history: r.decidedBy.map { ["Decided by \($0)"] } ?? [],
+                            changedSourceWarning: superseded ? "The result revision this item came from was replaced; review it again." : nil,
+                            isDocumentary: r.included && !refs.isEmpty && r.support.isDocumentary))
+            if let a = r.allegationID, nodes[id(.allegation, a)] != nil {
+                link(.selectedForReport, nid, id(.allegation, a), origins: [CaseMapOrigin(.reportItem, r.id.uuidString, revision: r.originDigest)], sources: [],
+                     by: .investigator(r.addedBy), review: carried(r.reviewState), status: st, basis: "Selected for the report under this allegation.")
+            }
+            for ref in refs {
+                guard let d = docNode(version: ref.sourceVersionID, object: ref.objectID) else { continue }
+                link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.reportItem, r.id.uuidString, revision: r.originDigest)], sources: [source(ref)],
+                     by: .investigator(r.addedBy), review: carried(r.reviewState), status: st, basis: "The report item cites this passage.")
+            }
+        }
+
+        // The investigator's own links: drawn only between items in this case; others are counted.
+        var dangling = 0
+        var withdrawn = 0
+        for l in input.investigatorLinks where l.caseID == caseID {
+            guard l.isActive else { withdrawn += 1; continue }
+            guard nodes[l.from] != nil, nodes[l.to] != nil else { dangling += 1; continue }
+            link(l.type, l.from, l.to, origins: [CaseMapOrigin(.investigatorLink, l.id.uuidString)], sources: [],
+                 by: .investigator(l.createdBy), review: .notApplicable, status: .recorded("Drawn by \(l.createdBy)"), basis: l.rationale)
+        }
+
+        // Groups: one per kind, and the material nothing links to.
+        let sortedNodes = nodes.values.sorted { $0.id < $1.id }
+        let sortedLinks = links.values.sorted { $0.id < $1.id }
+        var linked = Set<CaseMapNodeID>()
+        for l in sortedLinks { linked.insert(l.from); linked.insert(l.to) }
+        var groups: [CaseMapGroup] = CaseMapNodeKind.allCases.compactMap { k in
+            let members = sortedNodes.filter { $0.kind == k }.map(\.id)
+            return members.isEmpty ? nil : CaseMapGroup(id: "group:\(k.rawValue)", title: k.plural, kind: k, members: members)
+        }
+        let unlinked = sortedNodes.filter { $0.kind.isMaterial && !linked.contains($0.id) }.map(\.id)
+        groups.append(CaseMapGroup(id: CaseMapGroup.unlinkedID, title: "Unlinked material", kind: nil, members: unlinked))
+
+        var parts = input.parts
+        for p in CaseMapPart.allCases where parts[p] == nil { parts[p] = .loaded }
+        return CaseMapProjection(caseID: caseID, title: s.caseHeader.title, stage: s.caseHeader.status == .closed ? .closed : s.profile.stage,
+                                 isClosed: s.caseHeader.status == .closed, question: question, nodes: sortedNodes, links: sortedLinks,
+                                 groups: groups, parts: parts, danglingLinks: dangling, withdrawnLinks: withdrawn)
+    }
+}

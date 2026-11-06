@@ -538,3 +538,95 @@ struct CaseErasureTests {
         #expect(!FileManager.default.fileExists(atPath: cache.path) && !FileManager.default.fileExists(atPath: record.path))
     }
 }
+
+// MARK: - Living case map (v171)
+
+extension CaseErasureTests {
+
+    static func seedMapRows(_ db: Database, caseID: UUID, personID: UUID? = nil) async throws {
+        try await db.exec("""
+            INSERT INTO case_map_views (id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?);
+            """, [.uuid(UUID()), .uuid(caseID), .text("secret view name"), .text("overview"), .text(#"{"search":"secret words"}"#), .integer(0), .text("Tester"), .real(1), .real(1)])
+        try await db.exec("INSERT INTO case_map_layout (case_id, record_kind, record_id, x, y, pinned, updated_at) VALUES (?,?,?,?,?,?,?);",
+                          [.uuid(caseID), .text("case"), .text(caseID.uuidString.lowercased()), .real(1), .real(2), .integer(1), .real(1)])
+        try await db.exec("""
+            INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(UUID()), .uuid(caseID), .text("dependsOn"), .text("case"), .text(caseID.uuidString.lowercased()), .text("allegation"),
+                  .text(UUID().uuidString.lowercased()), .text("secret rationale"), .text("Tester"), .real(1)])
+        if let personID {
+            let pid = personID.uuidString.lowercased()
+            try await db.exec("INSERT INTO case_map_layout (case_id, record_kind, record_id, x, y, pinned, updated_at) VALUES (?,?,?,?,?,?,?);",
+                              [.uuid(caseID), .text("person"), .text(pid), .real(5), .real(6), .integer(0), .real(1)])
+            try await db.exec("""
+                INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .uuid(caseID), .text("attributedTo"), .text("case"), .text(caseID.uuidString.lowercased()), .text("person"),
+                      .text(pid), .text("about the person"), .text("Tester"), .real(1)])
+        }
+    }
+
+    static func mapRows(_ db: Database, _ caseID: UUID) async throws -> Int {
+        var n = 0
+        for t in ["case_map_views", "case_map_layout", "case_map_links"] { n += try await count(db, "SELECT COUNT(*) FROM \(t) WHERE case_id = ?;", [.uuid(caseID)]) }
+        return n
+    }
+
+    @Test("Case map: a case erase removes its saved views, layout and links (a hold refuses and keeps them); another case's map rows stay")
+    func caseEraseCoversMap() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        try await Self.seedMapRows(f.db, caseID: f.caseA)
+        try await Self.seedMapRows(f.db, caseID: f.caseB)
+        #expect(try await Self.mapRows(f.db, f.caseA) == 3)
+        // A hold on the case refuses the erase: nothing goes.
+        let hold = UUID()
+        try await f.db.exec("INSERT INTO legal_holds (id, name, created_at) VALUES (?,?,?);", [.uuid(hold), .text("Hold"), .date(Date())])
+        try await f.db.exec("INSERT INTO legal_hold_items (hold_id, object_id, created_at) VALUES (?,?,?);", [.uuid(hold), .text(f.caseA.uuidString), .date(Date())])
+        let refused = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(refused.report.refused?.contains("legal hold") == true)
+        #expect(try await Self.mapRows(f.db, f.caseA) == 3)
+        try await f.db.exec("UPDATE legal_holds SET released_at = ? WHERE id = ?;", [.date(Date()), .uuid(hold)])
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        #expect(try await Self.mapRows(f.db, f.caseA) == 0)
+        #expect(try await Self.mapRows(f.db, f.caseB) == 3)
+        let json = try #require(try await f.db.query("SELECT rows_json FROM case_erasures WHERE case_id = ?;", [.uuid(f.caseA)]).first?.string(0))
+        #expect(json.contains("case_map_links") && !json.contains("secret"))
+    }
+
+    @Test("Case map: a person erase removes the map positions and links that point at their case-person rows; the case's other map rows stay")
+    func personEraseCoversMap() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let row = try #require(try await f.db.query("SELECT id, value FROM entities WHERE kind = 'person' AND value LIKE '%Roberts%' LIMIT 1;", []).first)
+        let entity = try #require(row.string(0).flatMap(UUID.init(uuidString:)))
+        let person = UUID()
+        try await f.db.exec("INSERT INTO case_people (id, case_id, name, role, entity_id, created_at) VALUES (?,?,?,?,?,?);",
+                            [.uuid(person), .uuid(f.caseA), .text(row.string(1) ?? "x"), .text("witness"), .uuid(entity), .real(1)])
+        try await Self.seedMapRows(f.db, caseID: f.caseA, personID: person)
+        #expect(try await Self.mapRows(f.db, f.caseA) == 5)
+        let out = try await f.state.erasePerson(entity, reason: "Subject request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil)
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_map_layout WHERE record_kind = 'person';", []) == 0)
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_map_links WHERE to_kind = 'person' OR from_kind = 'person';", []) == 0)
+        #expect(try await Self.mapRows(f.db, f.caseA) == 3)
+    }
+
+    @Test("Case map: a full erase empties the map tables and the per-case workspace preference holding map state")
+    func fullEraseCoversMap() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        try await Self.seedMapRows(f.db, caseID: f.caseA)
+        var state = CaseWorkspaceState()
+        var m = CaseMapWorkspaceMemory(); m.view = "people"; m.selectedNode = CaseMapNodeID(caseID: f.caseA, kind: .caseFile, id: f.caseA)
+        state.map = m
+        CaseWorkspaceStore.save(state, caseID: f.caseA, defaults: AppState.erasePreferences)
+        _ = await f.state.deleteAllData()
+        for t in ["case_map_views", "case_map_layout", "case_map_links"] {
+            #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM \(t);", []) == 0, "\(t) not emptied")
+        }
+        #expect(AppState.erasePreferences.data(forKey: CaseWorkspaceStore.key(f.caseA)) == nil)
+    }
+}

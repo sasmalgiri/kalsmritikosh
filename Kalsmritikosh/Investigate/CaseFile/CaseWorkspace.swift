@@ -72,7 +72,48 @@ public nonisolated struct CaseWorkspaceState: Codable, Sendable, Equatable {
     public var contradictionSearch: String = ""
     public var selectedRequestID: UUID?
     public var lastSource: CaseSourcePosition?
+    /// Living case map (M2) — where the person was on the map: identifiers and geometry only.
+    public var map: CaseMapWorkspaceMemory?
     public init() {}
+}
+
+/// The case map's place in a case, kept with the case's workspace preference (identifiers and geometry
+/// only — no names, quotes or search words; saved views with their words live in the encrypted ledger).
+/// Every field is optional so a state written by any earlier build still reads.
+public nonisolated struct CaseMapWorkspaceMemory: Codable, Sendable, Equatable {
+    /// The person chose the tabbed sections for this case instead of the map.
+    public var showsSections: Bool?
+    /// The view in the strip: a built-in view's id, or "saved:<uuid>".
+    public var view: String?
+    /// The list instead of the map.
+    public var listMode: Bool?
+    public var selectedNode: CaseMapNodeID?
+    public var selectedLink: String?
+    /// Per view: where the map was looking.
+    public var viewports: [String: CaseMapViewport]?
+    /// Per built-in view: items hidden from it and groups collapsed in it (saved views keep theirs in the ledger).
+    public var hidden: [String: [CaseMapNodeID]]?
+    public var collapsed: [String: [String]]?
+    /// Earlier focus, for Back (bounded).
+    public var back: [CaseMapFocus]?
+    public init() {}
+}
+
+/// One focus the person can go Back to: a view and what was selected in it.
+public nonisolated struct CaseMapFocus: Codable, Sendable, Equatable {
+    public var view: String
+    public var node: CaseMapNodeID?
+    public var link: String?
+    public init(view: String, node: CaseMapNodeID?, link: String?) { self.view = view; self.node = node; self.link = link }
+}
+
+/// The reversible "Case map (preview)" switch (plan §11: the map does not become the default for anyone
+/// until M1–M9 pass). Off unless the person turns it on; turning it off returns every case to its sections
+/// and changes no case record.
+public nonisolated enum CaseMapPreview {
+    public static let key = "kalsmritikosh.caseMap.preview"
+    public static func isEnabled(_ defaults: UserDefaults) -> Bool { defaults.bool(forKey: key) }
+    public static func set(_ on: Bool, _ defaults: UserDefaults) { defaults.set(on, forKey: key) }
 }
 
 /// Load and save a case's workspace state (UI preferences only). The store is injectable for tests.

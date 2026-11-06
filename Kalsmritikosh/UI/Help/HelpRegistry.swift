@@ -252,6 +252,62 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["contradiction", "conflict", "dismiss", "reopen", "resume", "evidence request", "custodian", "statement", "missing", "due", "collection plan", "jobs"]),
         HelpTopic(
+            id: "task-case-map", kind: .task, title: "The case map (preview): see a case's questions, evidence and decisions together",
+            summary: "A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is a preview: it is off until you turn it on, and the case sections stay available.",
+            steps: [
+                "Cases ▸ open a case ▸ turn on “Case map (preview)” in the case's top bar. The case opens on the map; “Case sections” returns to the tabs for this case (and “Case map” comes back). Turning the switch off returns every case to its sections; nothing in any case changes.",
+                "The top of the map stays in place: the case's title and stage, the question it is to answer (“More” shows it all), what the app could read, and counts — open questions, items awaiting review, outstanding requests, overdue actions. Choose a count to open exactly those items in the list. “What changed”, “Next action”, “Search this case” and “Return to overview” are beside them.",
+                "Choose “Map” or “List” at any time: the list shows the same items with the same filters, and what you selected stays selected. The list works with the keyboard and VoiceOver.",
+                "On the map: drag the background to move around, pinch or use “Zoom in” and “Zoom out”, “Fit all” to see everything shown, “Fit selection” for the selected item and what links to it. Drag an item to move it; “Pin” keeps it where you put it. A collapsed group shows how many items it holds; choose it to open it. Material nothing links to is listed under “Unlinked material”.",
+                "When new material arrives, items already on the map stay where they are; new ones appear next to what they link to, or beside the map. “Arrange” tidies the selected item's branch or the whole view — it asks first, leaves pinned items alone, and “Undo” puts everything back.",
+                "Opening, moving around or switching views reads this Mac's ledger only: nothing is sent anywhere."
+            ],
+            notes: ["The map shows at most 400 items in the visible area at once and says how many more there are; zoom in or use the list to reach the rest. The footer always counts what is shown, in collapsed groups, filtered out and hidden, against everything in the case. If a part of the case could not be read, the map says “Incomplete” and names it — that is never shown as an empty case."],
+            controls: ["Case map (preview)", "Case sections", "Case map", "What changed", "Next action", "Search this case", "Return to overview",
+                       "Zoom in", "Zoom out", "Fit all", "Fit selection", "Pin", "Arrange", "Undo", "Refresh"],
+            destination: .cases,
+            keywords: ["map", "graph", "canvas", "board", "visual", "relationships", "links", "layout", "preview", "list", "table"]),
+        HelpTopic(
+            id: "task-case-map-views", kind: .task, title: "Case map views: Overview, Questions, People, Chronology, Findings, Changes",
+            summary: "The strip above the map holds focused views of the same case. You move between them yourself; nothing moves on its own. Each keeps its own zoom, hidden items and collapsed groups, and Back returns to where you were.",
+            steps: [
+                "Choose a view in the strip, or “Previous view” and “Next view” (⌃⌘← and ⌃⌘→). Overview starts with the questions and what is unresolved; Questions adds the supporting and challenging material; People, statements and events; Chronology, events with their evidence; Findings, report items and decided questions; Changes, items that changed since they were decided or carried.",
+                "“Back” (⌃⌘[) returns to the previous view and selection. The line beside it shows where you are, for example Overview › A1 › Approval email.",
+                "“Find on this map” finds items of the whole case by their words, including those in collapsed groups; “Waiting for me” keeps only items not yet reviewed, deferred, reopened or pending. It does not search inside documents — Search does.",
+                "“Save view…” keeps the current view's kinds, filters, hidden items and collapsed groups under a name in the case's encrypted ledger; it appears at the end of the strip. Right-click a saved view to remove it. A view keeps references and settings only; it never copies the case."
+            ],
+            controls: ["Previous view", "Next view", "Back", "Find on this map", "Waiting for me", "Save view…", "Save view"],
+            destination: .cases,
+            keywords: ["view strip", "carousel", "overview", "questions", "people", "chronology", "findings", "changes", "saved view", "breadcrumb", "back"]),
+        HelpTopic(
+            id: "task-case-map-inspector", kind: .task, title: "The case map inspector: sources, state and actions for one item or link",
+            summary: "Selecting an item or a link opens one panel: what it is, its recorded state, its exact wording, every source with its version and position, who recorded or proposed it, its review history, and the actions the case already has for it.",
+            steps: [
+                "Each source shows the document, the version and where in it (“Position unavailable” when only the document is known), with “Open source”. Every citation is listed, not only the first.",
+                "A link says why it exists — the record it comes from, or the reason you gave — and who asserted it: you, a rule, or the AI reading (a proposal checked against the documents, never a decision).",
+                "Contradictions: choose a reason when needed and “Confirm”, “Dismiss” or “Defer” — the same decision as in the case's contradiction list, kept with both documents' versions. A confirmed one can be carried with “Add to chronology” or “Include in report”, both passages included, nothing retyped.",
+                "Documents: “Link to allegation…” (supports, challenges or mentions), “Link to hypothesis…” (for or against) and “Received for request…”. A whole document links without a passage and shows as unverified until a passage is chosen. Questions and hypotheses: “Create evidence request…”. Requests, entries and report items open in their case section.",
+                "“Link to another item…” draws a typed link with your reason, for a connection no other record holds; “Withdraw link…” withdraws it with a reason and keeps it in the record. “Hide from this view” hides an item from this view only."
+            ],
+            notes: ["States are kept apart: not yet assessed, not supported by a verified source, source unavailable, restricted, needs review (changed since), could not be read. An investigator's note is always labelled a note and is never documentary support. Same name is not the same person: two people with one name stay two items, offered as “possibly the same person” until you decide."],
+            controls: ["Open source", "Confirm", "Dismiss", "Defer", "Add to chronology", "Include in report", "Link to allegation…", "Link to hypothesis…",
+                       "Received for request…", "Create evidence request…", "Link to another item…", "Withdraw link…", "Hide from this view", "Record link"],
+            destination: .cases,
+            keywords: ["inspector", "provenance", "source", "version", "locator", "position unavailable", "link", "rationale", "asserted", "note", "namesake"]),
+        HelpTopic(
+            id: "concept-case-map-legend", kind: .concept, title: "Case map legend: icons, lines and states",
+            summary: "“Legend” at the foot of the map is always available. Each kind of item has its own icon; each kind of link its own line — solid, dashed or dotted — with an arrow for its direction; each state its own symbol. Every item has the same size: size, position, the number of links and how tidy the map looks say nothing about whether something is proved. Ten citations of one source are not ten sources.",
+            controls: ["Legend"],
+            destination: .cases,
+            keywords: ["legend", "icons", "lines", "dashed", "dotted", "arrow", "states", "colour", "color"]),
+        HelpTopic(
+            id: "task-case-map-reset-view", kind: .task, title: "Reset the case map view",
+            summary: "“Reset view” puts the current view's zoom, filters, hidden items and collapsed groups, and the map's positions and pins, back to their starting state. It removes or changes no case record, decision, link or document.",
+            steps: ["At the foot of the map choose “Reset view”. The items are placed afresh around their questions; your saved views and your links stay."],
+            controls: ["Reset view"],
+            destination: .cases,
+            keywords: ["reset", "layout", "positions", "start again", "messy"]),
+        HelpTopic(
             id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
             summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",
             steps: [

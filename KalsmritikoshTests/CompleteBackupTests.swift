@@ -124,3 +124,36 @@ struct CompleteBackupTests {
         #expect(try String(contentsOf: target.appendingPathComponent("knowledge.sqlite"), encoding: .utf8) == "existing ledger")
     }
 }
+
+// MARK: - Living case map (v171)
+
+extension CompleteBackupTests {
+
+    @Test("Case map: saved views, positions with pins and investigator links travel in a complete backup and come back by identity on restore")
+    func caseMapStateRoundTrip() async throws {
+        let f = try await CaseFileTests.fixture()
+        let repo = CaseMapRepository(database: f.db)
+        let allegation = try await f.file.addAllegation(caseID: f.caseID, text: "Paid twice", actor: "Ada")
+        let caseNode = CaseMapNodeID(caseID: f.caseID, kind: .caseFile, id: f.caseID)
+        let aNode = CaseMapNodeID(caseID: f.caseID, kind: .allegation, id: allegation)
+        let view = try await repo.saveView(caseID: f.caseID, name: "Payments", base: .questions, filter: CaseMapFilter(search: "invoice"), actor: "Ada")
+        try await repo.savePlacements(caseID: f.caseID, [aNode: CaseMapPlacement(point: CaseMapPoint(x: 42, y: -7), pinned: true)])
+        let link = try await repo.addLink(caseID: f.caseID, type: .dependsOn, from: caseNode, to: aNode, rationale: "the question rests on it", actor: "Ada")
+
+        let snap = try scratch("mapsnap").appendingPathComponent("knowledge.sqlite")
+        try await f.db.backupSnapshot(to: snap)
+        let backup = try scratch("mapbackup")
+        _ = try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [], notIncluded: [], destination: backup,
+                                                     schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+        let newMac = try scratch("mapnew")
+        _ = try await BackupService().restoreComplete(backupFolder: backup, into: newMac, ledgerKey: nil)
+        let restored = try Database(url: newMac.appendingPathComponent("knowledge.sqlite"))
+        let back = CaseMapRepository(database: restored)
+        let views = try await back.views(caseID: f.caseID)
+        #expect(views.map(\.id) == [view] && views.first?.name == "Payments" && views.first?.filter.search == "invoice" && views.first?.base == .questions)
+        #expect(try await back.layout(caseID: f.caseID) == [aNode: CaseMapPlacement(point: CaseMapPoint(x: 42, y: -7), pinned: true)])
+        let links = try await back.links(caseID: f.caseID)
+        #expect(links.map(\.id) == [link] && links.first?.from == caseNode && links.first?.to == aNode && links.first?.rationale == "the question rests on it")
+        await restored.close()
+    }
+}

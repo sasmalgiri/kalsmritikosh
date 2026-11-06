@@ -354,7 +354,12 @@ public actor CaseEraser {
         let (theirFacts, ambiguous) = try personFacts(db, ids: ids, name: name)
         let tables = Set(try userTables(db))
         var counts: [String: Int] = [:]
+        // v171 — the case map's positions and links that point at the person's case-person rows go first
+        // (map identities keep record ids lower-case).
+        let personRows = "SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks))"
         var steps: [(String, String, [SQLValue])] = [
+            ("case_map_layout", "record_kind = 'person' AND record_id IN (\(personRows))", binds),
+            ("case_map_links", "(from_kind = 'person' AND from_id IN (\(personRows))) OR (to_kind = 'person' AND to_id IN (\(personRows)))", binds + binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
