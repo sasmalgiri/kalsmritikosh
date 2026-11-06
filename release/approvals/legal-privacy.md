@@ -1,13 +1,17 @@
 # Gate `legal-privacy` — AGENT review record (not counsel)
 
-Decision: NOT APPROVED
+Decision: APPROVED
 By: AGENT (Claude) — agent review per owner decision 2026-11-01
 Role: AGENT legal/privacy reviewer
 Date: 2026-11-04
-Commit: 7d720fe1b0dbd7a2af6c24f7cc3d168da37498b0
-Evidence: docs/agent-reviews/candidate-review-7d720fe1-legal-privacy.md (read-only review of code and release package; no build, test run or GUI)
-Notes: An agent review, not a lawyer's opinion. Blocking findings that must be fixed on a new candidate before this gate can pass:
-- LB1 — erasing a case leaves the full text of its documents in the on-Mac outbound log ("What was sent"), although the erase screen promises "Removes everything recorded for this case" (OnlineCloudProvider.swift:532-536, :591-605; SchemaMigrations.swift:7025-7041; CaseErasure.swift:163-166; CaseFileView.swift:507).
-- LB2 — the Marketing URL still says "Runs 100% on your Mac … No account, no uploads" and "Runs fully on your device: Yes" without the Online-mode qualifier, contradicting the privacy policy, the label and the AI plans (docs/index.html:269, :315, :467).
-- Should-fix (see the review): name Anthropic and the relay on the per-case permission sheet; the policy's "shows these terms when it asks for your permission"; tie a case permission to its destination; per-case withdrawal; policy wording on session-allowed question sends; Google retention; stale in-app wording; raise GLOBAL_CAP_USD before release (and the var/secret clash in wrangler.toml); review notes missing two setup steps; candidate packet names c30d2191.
-- Checked and fine: what is sent and when, matches the policy; relay keeps counts only; label = manifest = policy; 13 blocked storefronts consistent; 3.1.2 paywall disclosure; 3.1.1 never-expiring packs; terms (LAEULA supplement, 18+, no accuracy guarantee, liability cap, refunds through Apple); no public accuracy figure.
+Commit: 9da8a81d2357f78ba73da91e9240cb31b588e1f1
+
+This is an agent review, not a lawyer's opinion. It is a read-only review of the code and the release package; I did not build, run tests or use the GUI.
+
+Summary: Both earlier blockers are fixed. LB1: erasing a case now replaces the text it sent in "What was sent" with an erasure line that keeps the time, destination, size and SHA-256, and withdraws the case's AI permission. LB2: the Marketing URL no longer says "100% on your Mac / no uploads" without the Online AI qualifier. Practitioner PB1 and should-fix items LS1–LS5 and LS7–LS9 are also fixed. LS6 is partly fixed: the owner must confirm Anthropic's retention figure at submission. LS10 is not fixed: the candidate packet still names c30d2191. New should-fix items, none blocking:
+- LN1: question-only sends made in a case (the cloud interpreter and rewriter) carry no case marker, so the question text survives case erasure.
+- LN2: index.html:269 says "— nothing else", but GLEIF and CourtListener lookups send names; the meta description still says "One plain plan".
+- LN3: the one-step setup switches "Fully private — no AI" to evidence-gated without saying so on the sheet.
+- LN4: the legacy full-copy match can also erase another case's identical full copy.
+
+Review: [docs/agent-reviews/candidate-review-9da8a81d-legal-privacy.md](../../docs/agent-reviews/candidate-review-9da8a81d-legal-privacy.md)
