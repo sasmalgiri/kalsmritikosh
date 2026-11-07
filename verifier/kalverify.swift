@@ -89,16 +89,22 @@ public nonisolated enum LegalNotice {
     answers use Apple’s on-device model (part of macOS), and the semantic-search models ship \
     inside the app package — nothing to install and nothing to download. The ledger is \
     encrypted on your Mac, with its key in your Keychain. Online mode is off unless you turn \
-    it on: then AI Included or the cloud AI you choose with your own API key may help understand \
+    it on: then an AI plan (AI Included or AI Pro) or Claude with your own Anthropic API key may help understand \
     a question and, if you allow it, read passages, page images or a recording to word an answer \
     or a transcript — you see exactly what would be sent, and nothing is sent until you agree. \
-    Document text goes only to a provider whose terms permit it, after you confirm, and that \
-    provider keeps what it receives under its own terms. With AI Included, requests pass through \
-    the publisher's relay to Anthropic (Claude) or Google (Gemini, for recordings) under the \
-    publisher's account; the relay keeps only counts and the subscription's transaction number, \
-    never content. Online tools look up public records (exchange rates, registries, court \
+    Inside a case you are asked once: the first time you use AI there, the app lists which of the case's \
+    documents would go to Anthropic (Claude) and which would not, and if you allow it for that case, those \
+    documents and your questions in that case are sent to Anthropic, without a further prompt, until its documents \
+    change, when you are asked again. Recordings you choose to transcribe go to Google (Gemini) through an AI plan. Privileged material, protected \
+    source identities and other cases' documents are not sent. The app itself has no network permission; \
+    only its separate network helper connects, and only in Online mode. \
+    With your own key, document text goes only to Anthropic after you confirm its commercial terms apply \
+    to your account, and Anthropic keeps what it receives under those terms. With AI Included or AI Pro, requests pass \
+    through the publisher's relay to Anthropic (Claude) or Google (Gemini, for recordings) under the \
+    publisher's account and are charged in credits at their actual cost; the relay keeps only counts, \
+    credits and the subscription's transaction number, never content. Online tools look up public records (exchange rates, registries, court \
     records), search downloaded sanctions lists on this Mac, and capture web pages you choose, \
-    each shown to you first. Online AI is not offered in some countries. Sync through a folder, if \
+    each shown to you first. Online AI is not offered in some countries; there only Workbench is sold and an own key cannot be used. Sync through a folder, if \
     you turn it on, writes your own work into a folder you choose, encrypted with your \
     passphrase; that folder's service moves it. The subscription, its free trial, renewals, refunds \
     and restore are handled by Apple through the App Store; the app never sees payment details and \
@@ -146,7 +152,7 @@ public nonisolated enum LegalNotice {
     is not liable for indirect, incidental, special, consequential, exemplary, or \
     punitive damages, or for lost profits, lost data, or business interruption, under \
     any legal theory, even if advised of the possibility. Total aggregate liability for \
-    all claims is capped at the amount you paid for the app in the twelve months before \
+    all claims is capped at the amount you paid for the app, its subscriptions and credit packs in the twelve months before \
     the claim arose. Some jurisdictions do not allow some of these exclusions, so parts \
     may not apply to you. These provisions allocate risk and are a basis of the bargain.
     """
@@ -195,16 +201,18 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.8 (2026-10-18)"
+    public static let termsVersion = "1.12 (2026-11-06)"
 
-    /// Payment terms (SHIP_DECISIONS 2026-10-30): one edition, sold as an auto-renewable
-    /// subscription; verified legacy one-time unlocks stay valid.
+    /// Payment terms (owner decisions 2026-11-04): one subscription group, three levels; credit packs.
     public static let subscriptionStatement = """
-    One edition with all nine personas, sold through the Mac App Store as an auto-renewable \
-    subscription — monthly or annual at the price shown for your storefront, the same access \
-    either way. Eligible new subscribers get a 14-day free trial; the chosen plan then renews \
-    automatically unless cancelled at least a day before the period ends, in your Apple Account. \
-    A permanent unlock bought under the earlier one-time offer remains valid. All payments, \
+    All nine personas, sold through the Mac App Store as one auto-renewable subscription at three \
+    levels, each monthly or yearly at the price shown for your storefront: Workbench (no AI of ours; \
+    Online AI with your own Anthropic key, billed by Anthropic), AI Included (2,000 AI credits a month) and AI Pro \
+    (6,000 AI credits a month, 5,400 a month on the yearly plan, and larger whole-case reads); where Online AI is not offered only Workbench is sold. One credit is US$0.01 of the AI provider's \
+    cost; each request is charged what it actually cost. Credit packs (500 or 2,000 credits) never \
+    expire and are spent after the month's credits while an AI plan is active. Eligible new Workbench \
+    subscribers get a 14-day free trial; the AI plans have none. A plan renews automatically unless \
+    cancelled at least a day before the period ends, in your Apple Account. All payments, \
     renewals, refunds and restores are handled by Apple under Apple’s terms; the developer never \
     sees or stores your payment details. Prices may change prospectively with notice — never \
     retroactively. Whatever the plan or its state: your documents, ledger and reports remain \
