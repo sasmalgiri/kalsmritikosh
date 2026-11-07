@@ -53,6 +53,19 @@ import Testing
                 #expect(HelpRegistry.screenTopic(for: dest) != nil, "no screen topic for \(dest.rawValue)")
             }
         }
+        // Navigation merge: every destination, not only the listed ones — a screen whose optional pack is off
+        // is not listed, and explains itself when its route is followed.
+        for dest in Destination.allCases {
+            if let pack = dest.requiredPack, !ProductModuleFlags.isEnabled(pack) {
+                #expect(PackNotice.text(for: dest)?.contains(PackNotice.remedy) == true, "\(dest.rawValue)")
+            } else {
+                #expect(HelpRegistry.screenTopic(for: dest) != nil, "no screen topic for \(dest.rawValue)")
+            }
+        }
+        for dest in Destination.primaries + [.moreTools] {
+            #expect(HelpRegistry.screenTopic(for: dest)?.title.hasPrefix(dest.title) == true, "\(dest.rawValue) has only a generated topic")
+        }
+        #expect(HelpRegistry.topic("task-find-your-way") != nil)
     }
 
     @Test("Nine persona recipes, derived from the real jobs, in the mandate's order")

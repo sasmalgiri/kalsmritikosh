@@ -256,9 +256,9 @@ public struct OnboardingView: View {
                     .accessibilityIdentifier("onboarding.startDocuments")
                 Button {
                     dismiss()
-                    SurfaceOpener.open(.work)
+                    SurfaceOpener.open(.cases)
                 } label: { Label("Resume a case", systemImage: "folder.badge.person.crop") }
-                    .help("Open Professional Jobs with the matters you can return to.")
+                    .help("Open Cases with the cases you can return to.")
                     .accessibilityIdentifier("onboarding.resumeCase")
             }
             .controlSize(.large)

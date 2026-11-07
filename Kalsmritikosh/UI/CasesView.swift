@@ -80,6 +80,16 @@ public struct CasesView: View {
                 Spacer()
                 TextField("Filter", text: $search).textFieldStyle(.roundedBorder).frame(width: 180)
                 Toggle("Show closed", isOn: $showClosed).toggleStyle(.checkbox)
+                // Navigation merge (scope §3): projects that group several cases, and the caseload triage,
+                // stay one step away from the case list — out of the beginner's path, not removed.
+                Menu {
+                    Button("Projects and workspaces") { SurfaceOpener.open(.workspaces) }
+                    Button("Caseload triage") { SurfaceOpener.open(.caseload) }
+                    Button("Start page") { SurfaceOpener.open(.home) }
+                } label: { Label("Projects", systemImage: "folder") }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
                 Button { showNew = true } label: { Label("New case", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut("n", modifiers: [.command, .shift])

@@ -294,7 +294,7 @@ struct ScopeRetiredSurfaceTests {
         defer { if let saved { AppDefaults.store.set(saved, forKey: key) } else { AppDefaults.store.removeObject(forKey: key) } }
         AppDefaults.store.set(false, forKey: key)
         #expect(!PaletteCatalog.visibleEntries().contains { $0.id == "go.ccStudio" })
-        #expect(!Destination.Group.reconstruct.items.contains(.ccStudio))
+        #expect(!Destination.Group.professional.items.contains(.ccStudio) && Destination.Group.professional.allItems.contains(.ccStudio))
         // The route still exists: a menu item or a saved route lands on the screen with the saved packages.
         #expect(PaletteCatalog.entries().contains { $0.id == "go.ccStudio" })
         // Retired tools are never listed, even switched on.

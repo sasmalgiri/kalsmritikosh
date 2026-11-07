@@ -359,6 +359,12 @@ public struct CaseFileView: View {
                     .buttonStyle(.borderless)
                     .help("Searches the text and recorded details of this case's documents only, and says what it could not search.")
                     .accessibilityIdentifier("case.search.open")
+                // Navigation merge (scope §3): Ask lives in the case's context — Search ▸ Ask a question,
+                // scoped to this case (the open case is the active one).
+                Button { SurfaceOpener.open(.ask) } label: { Label("Ask about this case", systemImage: "bubble.left.and.text.bubble.right") }
+                    .buttonStyle(.borderless)
+                    .help("Opens Search ▸ Ask a question on this case: answers come only from this case's documents.")
+                    .accessibilityIdentifier("case.ask.open")
                 Toggle("Case map (preview)", isOn: $mapPreview)
                     .toggleStyle(.switch).controlSize(.small)
                     .help("Shows this case as a map of its questions, evidence and decisions, with a list beside it. A preview: turning it off returns to the sections and changes nothing in the case.")

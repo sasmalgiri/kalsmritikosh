@@ -190,12 +190,12 @@ public struct HomeView: View {
                 .accessibilityIdentifier("home.startInvestigation")
 
                 Button {
-                    onNavigate(.work)
+                    onNavigate(.cases)
                 } label: {
                     Label("Resume a case", systemImage: "folder.badge.person.crop")
                 }
                 .buttonStyle(.bordered)
-                .help("Open Professional Jobs with the matters you can return to — every job run, review and document decision as you left it.")
+                .help("Open Cases with the cases you can return to — each opens where you left it.")
                 .accessibilityIdentifier("home.resumeCase")
 
                 Button {

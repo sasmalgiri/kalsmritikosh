@@ -17,6 +17,11 @@ struct CaseSearchPanel: View {
     let caseID: UUID
     let actor: String
     var closed = false
+    /// Navigation merge — shown inside the Search area (no Close button, no sheet size, no Return shortcut
+    /// that would answer for the whole window) instead of as a sheet from the case file.
+    var embedded = false
+    /// A query handed over from the header search box: put in the text field and run once.
+    @Binding var seed: String?
     let onDone: () -> Void
 
     @State private var model: CaseSearchModel
@@ -29,8 +34,10 @@ struct CaseSearchPanel: View {
     @State private var openedPassage: OpenedSource?
     @State private var chronologyPassage: ChronologyPassage?
 
-    init(caseID: UUID, actor: String, closed: Bool = false, onDone: @escaping () -> Void) {
-        self.caseID = caseID; self.actor = actor; self.closed = closed; self.onDone = onDone
+    init(caseID: UUID, actor: String, closed: Bool = false, embedded: Bool = false, seed: Binding<String?> = .constant(nil),
+         onDone: @escaping () -> Void) {
+        self.caseID = caseID; self.actor = actor; self.closed = closed; self.embedded = embedded; self.onDone = onDone
+        _seed = seed
         _model = State(initialValue: CaseSearchModel(caseID: caseID))
     }
 
@@ -41,7 +48,7 @@ struct CaseSearchPanel: View {
                 InfoPopoverButton(topic: "task-case-search")
                 Spacer()
                 if model.running { ProgressView().controlSize(.small); Button("Cancel") { model.cancel() } }
-                Button("Close") { onDone() }.keyboardShortcut(.cancelAction)
+                if !embedded { Button("Close") { onDone() }.keyboardShortcut(.cancelAction) }
             }
             .padding(14)
             Text("Searches only this case's documents, word for word, on this Mac. It finds the words you ask for; it does not decide what they mean.")
@@ -58,13 +65,15 @@ struct CaseSearchPanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(minWidth: 820, idealWidth: 960, minHeight: 600, idealHeight: 760)
+        .frame(minWidth: embedded ? nil : 820, idealWidth: embedded ? nil : 960, minHeight: embedded ? nil : 600, idealHeight: embedded ? nil : 760)
         .task {
             if model.service == nil, let db = appState.database {
                 model.service = CaseSearchService(sources: CaseSearchSources.live(database: db))
             }
             await model.loadSaved()
+            takeSeed()
         }
+        .onChange(of: seed) { _, _ in takeSeed() }
         .sheet(isPresented: $saving) { saveSheet }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
@@ -75,6 +84,15 @@ struct CaseSearchPanel: View {
         }
         .sheet(item: $chronologyPassage) { p in AddPassageToChronologySheet(passage: p) { chronologyPassage = nil } }
         .sheet(item: $model.viewingReceipt) { s in frozenSheet(s) }
+    }
+
+    /// Run a handed-over query once: it goes in the text field, and runs when it reads as a valid search
+    /// (otherwise its explanation says what to fix, and nothing runs).
+    private func takeSeed() {
+        guard let q = seed, model.service != nil else { return }
+        seed = nil
+        model.text = q
+        if model.parse.isValid { model.search() }
     }
 
     // MARK: Rules
@@ -108,7 +126,7 @@ struct CaseSearchPanel: View {
                     .onSubmit { if model.parse.isValid { model.search() } }
                     .accessibilityLabel("Search text")
                 Button("Search") { model.search() }
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(embedded ? nil : .defaultAction)
                     .disabled(reason: model.parse.isValid ? (model.running ? "A search is running." : nil) : "Fix the search first — it is not run as it stands.")
             }
             HStack(spacing: 14) {

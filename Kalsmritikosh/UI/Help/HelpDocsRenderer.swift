@@ -113,7 +113,13 @@ public nonisolated enum HelpDocsRenderer {
         .sources: ["sources.*"],
         .settings: ["settings.subscription.status", "info.subscription-plans"],
         .guide: ["help.guide", "help.search", "help.topic.<id>", "help.replayTutorial", "help.replayMapTutorial", "help.replayIntro", "help.open.<screen>"],
-        .knowledge: ["info.task-people-and-namesakes"]
+        .knowledge: ["info.task-people-and-namesakes"],
+        // Navigation merge (2026-11-07): the areas' context line, section and scope controls.
+        .evidence: ["nav.context", "nav.evidence.section"],
+        .outputs: ["nav.context", "nav.outputs.section"],
+        .search: ["nav.search.mode", "nav.search.scope", "nav.search.detail"],
+        .ask: ["nav.search.mode", "nav.search.scope", "nav.search.detail", "case.ask.open"],
+        .moreTools: ["nav.moreTools", "nav.moreTools.<screen>"]
     ]
 
     static let criticalActions: [(action: String, hover: String, topic: String, where_: String)] = [

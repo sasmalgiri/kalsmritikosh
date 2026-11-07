@@ -45,6 +45,8 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case sources, convert, completeness, live
     case redaction, caseload
     case cases
+    /// Navigation merge (scope 2026-11-06 §3): the Evidence and Outputs areas and the More tools list.
+    case evidence, outputs, moreTools
     case guide, settings, sutra
 
     public var id: String { rawValue }
@@ -103,6 +105,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .query:        return "Query"
         case .caseload:     return "Caseload"
         case .cases:        return "Cases"
+        case .evidence:     return "Evidence"
+        case .outputs:      return "Outputs"
+        case .moreTools:    return "More tools"
         case .sources:      return "Sources"
         case .convert:      return "Convert"
         case .completeness: return "Completeness"
@@ -168,6 +173,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .query:        return "line.3.horizontal.decrease.circle"
         case .caseload:     return "square.stack.3d.up"
         case .cases:        return "folder.badge.person.crop"
+        case .evidence:     return "tray.and.arrow.down.fill"
+        case .outputs:      return "tray.full"
+        case .moreTools:    return "square.grid.2x2"
         case .sources:      return "folder"
         case .convert:      return "arrow.right.doc.on.clipboard"
         case .completeness: return "checklist"
@@ -179,13 +187,24 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// Curated ⌘1…⌘9 quick-jumps — a game-style "hotbar" of the nine
-    /// most-used screens. Shown as hints in the sidebar rows.
+    /// ⌘1…⌘9 quick-jumps. Navigation merge (2026-11-07): ⌘1–⌘4 are the four areas (Cases, Evidence,
+    /// Search, Outputs); ⌘5 asks a question (Search ▸ Ask), ⌘6 More tools, ⌘7 Timeline, ⌘8 Processing,
+    /// ⌘9 Settings. Before: ⌘1 Ask, ⌘2 Search, ⌘3 Timeline, ⌘4 Insights, ⌘5 Knowledge, ⌘6 Sources,
+    /// ⌘7 Convert, ⌘8 Live, ⌘9 Settings (Insights, Knowledge and Convert are in More tools and ⌘K).
     static let quickShortcuts: [(key: KeyEquivalent, dest: Destination)] = [
-        ("1", .ask), ("2", .search), ("3", .timeline), ("4", .insights),
-        ("5", .knowledge), ("6", .sources), ("7", .convert),
+        ("1", .cases), ("2", .evidence), ("3", .search), ("4", .outputs),
+        ("5", .ask), ("6", .moreTools), ("7", .timeline),
         ("8", .live), ("9", .settings)
     ]
+
+    /// The shortcut card's wording for a quick-jump (the area a screen opens in, where it is not obvious).
+    var shortcutLabel: String {
+        switch self {
+        case .ask: return "Ask a question (Search)"
+        case .live: return "Processing (Evidence)"
+        default: return title
+        }
+    }
 
     /// The visible "⌘N" hint for a hotbar screen, or nil if it has none.
     var shortcutHint: String? {
@@ -249,6 +268,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .query:        return "Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want"
         case .caseload:     return "Every matter triaged by how much attention it needs"
         case .cases:        return "Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings"
+        case .evidence:     return "Add and review documents — sources, library, processing and what could be read — for the open case or the whole library"
+        case .outputs:      return "Saved answers, saved questions, notes, work products and exports"
+        case .moreTools:    return "Every specialist screen — case analysis views, professional workspaces, records and checks, archive analysis"
         case .sources:      return "Folders being watched and ingested"
         case .convert:      return "Turn files between formats, back and forth"
         case .completeness: return "How fully your archive has been processed"
@@ -260,59 +282,87 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Sidebar / More tools groups (navigation merge 2026-11-07). The first four are the global areas;
+    /// the rest are what More tools lists. Every destination is in exactly one group.
     enum Group: String, CaseIterable, Identifiable {
-        case converse   = "Ask & Search"
-        case reconstruct = "Reconstruct"
-        case knowledge   = "Knowledge"
-        case workspace   = "Workspace"
-        case system      = "System"
+        case cases        = "Cases"
+        case evidence     = "Evidence"
+        case search       = "Search"
+        case outputs      = "Outputs"
+        case caseViews    = "Case analysis views"
+        case professional = "Professional workspaces"
+        case records      = "Records and checks"
+        case archive      = "Archive and analysis"
+        case system       = "Settings and help"
 
         var id: String { rawValue }
 
-        var items: [Destination] {
+        /// Every member, whatever is switched on.
+        var allItems: [Destination] {
             switch self {
-            case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct:
-                // A5 — the creator's Publish Package studio only with its persona module on.
-                return [.cases, .workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes].filter { $0 != .ccStudio || ProductModuleFlags.isEnabled(.contentCreatorPersona) }
-            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
-            case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
-            case .system:      return [.guide, .sutra, .sopBoard, .settings]
+            case .cases:        return [.cases, .home, .workspaces, .caseload]
+            case .evidence:     return [.evidence, .sources, .library, .completeness, .live]
+            case .search:       return [.search, .ask]
+            case .outputs:      return [.outputs, .answers, .saved, .notebook, .handoff]
+            case .caseViews:    return [.timeline, .history, .story, .dossier, .explore, .connections, .findings, .assertions,
+                                        .hypotheses, .review, .insights, .changes, .matrix, .compareDocs, .fundFlow, .emailThreads, .transcripts]
+            case .professional: return [.work, .workCenter, .registers, .dataLab, .reasoning, .hrStudio, .privilegeStudio, .siuStudio,
+                                        .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio]
+            case .records:      return [.audit, .verifyReceipt, .authenticity, .citations, .redaction, .convert]
+            case .archive:      return [.knowledge, .trends, .freshness, .query]
+            case .system:       return [.settings, .guide, .moreTools, .sutra, .sopBoard]
             }
         }
 
-        /// The SINGLE destination kept in Simple mode for this group — Simple collapses each group to one
-        /// primary surface for a calmer first-run. Everything else stays reachable via the always-on header
-        /// search and the ⌘K palette, so nothing is lost (Simple state == Advanced state).
+        /// What is listed: a retired pack's screen only with its pack on (A5 — the creator's Publish
+        /// Package studio). Its route still resolves either way (PaletteCatalog.entries, SurfaceOpener).
+        var items: [Destination] {
+            allItems.filter { $0.requiredPack.map(ProductModuleFlags.isEnabled) ?? true }
+        }
+
+        /// Whether More tools lists this group (the four areas are in the sidebar instead).
+        var inMoreTools: Bool { ![.cases, .evidence, .search, .outputs].contains(self) }
+
+        /// The destination the simplified sidebar shows for this group: an area's own row, More tools for
+        /// the specialist groups, Settings for the utilities.
         var simplePrimary: Destination {
             switch self {
-            case .converse:    return .ask
-            case .reconstruct: return .cases
-            case .knowledge:   return .knowledge
-            case .workspace:   return .sources
-            case .system:      return .settings
+            case .cases:    return .cases
+            case .evidence: return .evidence
+            case .search:   return .search
+            case .outputs:  return .outputs
+            case .caseViews, .professional, .records, .archive: return .moreTools
+            case .system:   return .settings
             }
         }
 
         /// Short uppercase caption shown under each header group.
         var shortTitle: String {
             switch self {
-            case .converse:    return "ASK"
-            case .reconstruct: return "REBUILD"
-            case .knowledge:   return "KNOW"
-            case .workspace:   return "WORK"
-            case .system:      return "SYSTEM"
+            case .cases:        return "CASES"
+            case .evidence:     return "EVIDENCE"
+            case .search:       return "SEARCH"
+            case .outputs:      return "OUTPUTS"
+            case .caseViews:    return "VIEWS"
+            case .professional: return "WORK"
+            case .records:      return "RECORDS"
+            case .archive:      return "ARCHIVE"
+            case .system:       return "SYSTEM"
             }
         }
 
-        /// One-line explanation of what the group is for (header tooltip).
+        /// One-line explanation of what the group is for (header tooltip, More tools).
         var blurb: String {
             switch self {
-            case .converse:    return "Ask questions and search your archive"
-            case .reconstruct: return "Rebuild timelines, histories and dossiers"
-            case .knowledge:   return "Browse the structured knowledge base"
-            case .workspace:   return "Add sources, convert files, watch activity"
-            case .system:      return "Settings and diagnostics"
+            case .cases:        return "Start and resume a case; projects that group several cases"
+            case .evidence:     return "Add and review documents for the open case or the whole library"
+            case .search:       return "Search or ask — in the open case first, the whole library when you choose it"
+            case .outputs:      return "Saved answers, notes, work products and exports"
+            case .caseViews:    return "Timelines, people, connections, findings and comparisons. These read the whole library; a case file has its own chronology, people and evidence."
+            case .professional: return "Professional jobs, guided workflows, registers and the profession studios"
+            case .records:      return "Custody and audit records, receipts, provenance checks, citations, redaction and file conversion"
+            case .archive:      return "The structured knowledge base, trends, stale facts and precise queries over the whole archive"
+            case .system:       return "Settings, help and the procedures the app follows"
             }
         }
     }
@@ -327,7 +377,7 @@ public struct RootView: View {
     @State private var selection: Destination? = RootView.launchDestination(restored: nil)
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
-    @State private var previousSelection: Destination = .ask
+    @State private var previousSelection: Destination = .cases
     /// HYBRID MODE (owner request 2026-09-16) — the app runs ONE unified mode
     /// with NO user toggle. The presentation is the calm primary navigation
     /// (Stage 7: a new user completes the flagship workflows without learning a
@@ -479,6 +529,9 @@ public struct RootView: View {
              .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
              .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .dsStudio: return .reports
         case .guide, .settings, .sutra, .sopBoard:                    return .settings
+        case .evidence:                                               return .sources
+        case .outputs:                                                return .reports
+        case .moreTools:                                              return .home
         }
     }
 
@@ -853,10 +906,10 @@ public struct RootView: View {
                 onboardingTip
                 personaSection
                 if simpleMode {
-                    // Stage 7 — the work-oriented primary destinations: Home,
-                    // Ask (flagship A), Projects, Files, Outputs, then Settings.
-                    // Every other surface is one ⌘K palette / header-search away,
-                    // so nothing is lost — only decluttered.
+                    // Navigation merge (scope 2026-11-06 §3): the four areas — Cases, Evidence, Search,
+                    // Outputs — then More tools, Settings and Help. Every other screen opens from its
+                    // area, from More tools or from the ⌘K palette, so nothing is lost. A row stays
+                    // highlighted for every screen of its area (Library highlights Evidence).
                     Text("GO TO")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -864,16 +917,19 @@ public struct RootView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 12)
                         .padding(.bottom, 2)
-                    ForEach(stagePrimaries, id: \.dest) { item in
-                        SidebarRow(dest: item.dest, isSelected: selection == item.dest,
-                                   namespace: sidebarNS,
-                                   labelOverride: item.label, iconOverride: item.icon) {
-                            navigate(to: item.dest)
+                    ForEach(Destination.primaries) { dest in
+                        SidebarRow(dest: dest, isSelected: areaSelected(dest),
+                                   namespace: sidebarNS) {
+                            navigate(to: dest)
                         }
                     }
                     Divider().padding(.horizontal, 12).padding(.vertical, 4)
-                    SidebarRow(dest: .settings, isSelected: selection == .settings, namespace: sidebarNS) {
-                        navigate(to: .settings)
+                    ForEach(Destination.utilities) { dest in
+                        SidebarRow(dest: dest, isSelected: areaSelected(dest),
+                                   namespace: sidebarNS,
+                                   labelOverride: dest == .guide ? "Help" : nil) {
+                            navigate(to: dest)
+                        }
                     }
                 } else {
                     // Advanced mode: every screen, grouped and collapsible (groups start expanded).
@@ -978,24 +1034,18 @@ public struct RootView: View {
         return t
     }
 
-    /// Stage 7 primary destinations (label/icon overrides map existing screens
-    /// to the work-oriented names). Home · Ask · Projects · Files · Outputs.
-    /// Settings is shown separately below a divider as the utility destination.
-    private var stagePrimaries: [(dest: Destination, label: String, icon: String)] {
-        [(.home, "Home", "house"),
-         (.ask, "Ask", "bubble.left.and.text.bubble.right"),
-         (.workspaces, "Projects", "folder"),
-         (.sources, "Files", "tray.and.arrow.down.fill"),
-         (.answers, "Outputs", "tray.full")]
+    /// An area row is highlighted for every screen of its area, unless that screen has its own
+    /// persona shortcut row (one highlighted row at a time — the selection pill is shared).
+    private func areaSelected(_ dest: Destination) -> Bool {
+        let current = selection ?? .home
+        return current.home == dest.home && !recentDestinations.contains(current)
     }
 
-    /// The permanent sidebar destinations always shown under GO TO — the Stage 7
-    /// primaries plus Settings. Recents are deduplicated against this set so
-    /// nothing appears twice (Stage 7).
+    /// The permanent sidebar destinations always shown under GO TO — the four areas, More tools,
+    /// Settings and Help. The persona shortcuts are deduplicated against this set so nothing appears
+    /// twice. (Before the merge: Home · Ask · Projects · Files · Outputs, then Settings.)
     private var permanentSidebarDestinations: Set<Destination> {
-        var set = Set(stagePrimaries.map { $0.dest })
-        set.insert(.settings)
-        return set
+        Set(Destination.primaries + Destination.utilities)
     }
 
     /// The last 4 screens the user actually visited, newest first, EXCLUDING
@@ -1006,8 +1056,7 @@ public struct RootView: View {
     /// recently-visited list changed its rows on every screen change and pushed the permanent rows below
     /// it up and down (user evaluation 2026-11-02, M5; again in the agent UI run on f766b035).
     private var recentDestinations: [Destination] {
-        let permanent = permanentSidebarDestinations
-        return [Destination.work, .cases, .review, .guide].filter { !permanent.contains($0) }
+        NavigationCompat.personaShortcuts(permanent: permanentSidebarDestinations)
     }
 
     /// Record a visit: newest first, deduplicated, capped.
@@ -1254,7 +1303,7 @@ public struct RootView: View {
     private var headerSearchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search your archive — type and press return…", text: $headerSearch)
+            TextField("Search — the open case, or the whole library — type and press return…", text: $headerSearch)
                 .textFieldStyle(.plain)
                 .focused($headerSearchFocused)
                 .onSubmit(runHeaderSearch)
@@ -1356,7 +1405,7 @@ public struct RootView: View {
                     shortcutRow("⌘\\", "Swap back to the previous screen")
                     shortcutRow("⌘[  ⌘]", "Back / forward through your location history")
                     ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
-                        shortcutRow("⌘\(item.key.character)", item.dest.title)
+                        shortcutRow("⌘\(item.key.character)", item.dest.shortcutLabel)
                     }
                     shortcutRow("?", "Show this card")
                 }
@@ -1429,27 +1478,34 @@ public struct RootView: View {
     private var detail: some View {
         switch selection ?? .home {
         case .home:         HomeView(onNavigate: { navigate(to: $0) })
-        case .ask:
-            // Hard-frame Ask to the REAL viewport. On macOS 26 the split-view
+        // Navigation merge: Ask lives in Search (scope §3). Both share one position in this switch, so
+        // the scope the person chose survives switching between finding words and asking.
+        case .ask, .search:
+            // Hard-frame to the REAL viewport. On macOS 26 the split-view
             // detail can propose a pathological size to non-scroll content
             // (measured: 210×1698 for a 850×630 viewport), which pushed the
-            // composer/header off-window. GeometryReader reports the actual
-            // available area; pinning AskView to it makes the layout immune
-            // to whatever the container proposes.
+            // Ask composer/header off-window. GeometryReader reports the actual
+            // available area; pinning the Search area to it makes the layout
+            // immune to whatever the container proposes.
             GeometryReader { g in
-                AskView().frame(width: g.size.width, height: g.size.height)
+                SearchAreaView(mode: (selection ?? .search) == .ask ? .ask : .find, onNavigate: { navigate(to: $0) })
+                    .frame(width: g.size.width, height: g.size.height)
             }
-        case .search:       SearchView()
+        // The Evidence and Outputs areas host the existing screens as sections; an old destination opens
+        // its section (Sources, Library, … / Saved answers, Notebook, …).
+        case .evidence, .sources, .library, .completeness, .live:
+            EvidenceAreaView(section: (selection ?? .evidence).evidenceSection, onNavigate: { navigate(to: $0) })
+        case .outputs, .answers, .saved, .notebook, .handoff:
+            OutputsAreaView(section: (selection ?? .outputs).outputsSection, onNavigate: { navigate(to: $0) })
+        case .moreTools:    MoreToolsView(onNavigate: { navigate(to: $0) })
         case .work:         PersonaJobsView()
         case .workCenter:   WorkCenterView(onNavigate: { navigate(to: $0) })
         case .registers:    RegistersView()
         case .dataLab:      DataLabView()
-        case .handoff:      WorkProductHandoffView()
         case .workspaces:   WorkspacesView()
         case .timeline:     TimelineView()
         case .history:      HistoryView()
         case .findings:     FactStatusView()
-        case .notebook:     NotebookView()
         case .dossier:      DossierView()
         case .explore:      ExplorerView()
         // Pinned to the real viewport like Ask: on macOS 26 their content's height grew the split view and
@@ -1470,7 +1526,7 @@ public struct RootView: View {
         case .jnStudio:     JournalistStudioView()
         case .rsStudio:     ResearcherStudioView()
         case .gnStudio:     GenealogistStudioView()
-        case .ccStudio:     CreatorStudioView()
+        case .ccStudio:     PackGatedScreen(dest: .ccStudio) { CreatorStudioView() }
         case .inStudio:     BinderStudioView()
         case .dsStudio:     DisputeFileStudioView()
         case .sopBoard:     ComplianceBoardView()
@@ -1480,11 +1536,8 @@ public struct RootView: View {
         case .changes:      ChangesView()
         case .knowledge:    KnowledgeView()
         case .assertions:   AssertionsView()
-        case .answers:      AnswersView()
         case .audit:        AuditView()
         case .verifyReceipt: ReceiptVerifierView()
-        case .library:      LibraryView()
-        case .saved:        SavedQueriesView()
         case .authenticity: AuthenticityView()
         case .citations:    CitationBuilderView()
         case .freshness:    FreshnessView()
@@ -1492,10 +1545,7 @@ public struct RootView: View {
         case .query:        QueryView()
         case .caseload:     CaseloadView()
         case .cases:        CasesView()
-        case .sources:      SourcesView()
         case .convert:      ConvertView()
-        case .completeness: CompletenessView()
-        case .live:         LiveDashboardView()
         case .redaction:    RedactionView()
         case .guide:        GuideView(onNavigate: { navigate(to: $0) })
         case .sutra:        SutraView()

@@ -67,7 +67,11 @@ public struct AskView: View {
     /// positioned at the quoted passage.
     @State private var openSource: CitationOpenTarget?
 
-    public init() {}
+    /// Navigation merge (scope §3) — Ask inside the open case: questions are answered only from that case's
+    /// documents (InvestigationAnswerService, the same path as a case's Ask job). nil: the whole library.
+    let caseScope: AskCaseScope?
+
+    public init(caseScope: AskCaseScope? = nil) { self.caseScope = caseScope }
 
     public var body: some View {
         // The middle is ALWAYS a ScrollView (empty-state hero centered via
@@ -1086,15 +1090,22 @@ public struct AskView: View {
             //    brain answer, so nothing ungrounded ever reaches the user.
             // OPS-003D — production screen scope (not DEBUG-only testUnrestricted).
             // Global Q&A: no workspace restriction, full sensitivity ceiling, privilege hidden.
-            let pipelineAnswer = await appState.brain.answer(question: q,
-                                                              access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-            // Plan A — without an AI reader, Ask returns search results (the best matching passages),
-            // never rules-written prose; a verified exact field value shows as "Found in the record".
-            // Candidate review UB1: the search results name the missing setup step, and the prompt above
-            // the window offers the one action that fixes it.
-            let answer = await appState.aiReadsDocuments()
-                ? pipelineAnswer
-                : OfflineSearchResults.present(pipelineAnswer, question: q, reason: AISetupCenter.shared.noteOffline()?.note)
+            let answer: VerifiedAnswer
+            if let caseScope {
+                // In a case: the case's own answering path (its source scope, its AI permission, its
+                // offline search results) — nothing outside the case can enter the answer.
+                answer = await appState.answerInCase(caseScope, question: q)
+            } else {
+                let pipelineAnswer = await appState.brain.answer(question: q,
+                                                                  access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+                // Plan A — without an AI reader, Ask returns search results (the best matching passages),
+                // never rules-written prose; a verified exact field value shows as "Found in the record".
+                // Candidate review UB1: the search results name the missing setup step, and the prompt above
+                // the window offers the one action that fixes it.
+                answer = await appState.aiReadsDocuments()
+                    ? pipelineAnswer
+                    : OfflineSearchResults.present(pipelineAnswer, question: q, reason: AISetupCenter.shared.noteOffline()?.note)
+            }
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)
@@ -1127,9 +1138,11 @@ public struct AskView: View {
             // §1.3 — closest match: after a genuine not-found (never a
             // conversational brush-off, never an out-of-scope question), show
             // the single passage sharing the most question terms, if any.
+            // Both extra lanes read beyond the case (the whole archive's text; general knowledge), so a
+            // question asked in a case gets neither (AskCaseScope.extraLanesAllowed).
             let notFound = answer.answerState == .notFound
                 || GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason)
-            if notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
+            if AskCaseScope.extraLanesAllowed(caseScope), notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
                let chunksRepo = appState.chunks {
                 let hits = (try? await chunksRepo.searchFTS(q, limit: 12)) ?? []
                 if let near = NearestPassageFinder.pick(
@@ -1143,7 +1156,7 @@ public struct AskView: View {
             // retrieval; FM unavailable → the honest note. The block is UI
             // state keyed to this turn — nothing here is persisted, recorded,
             // cited, or exportable.
-            if FeatureFlags.generalKnowledgeLaneValue(),
+            if AskCaseScope.extraLanesAllowed(caseScope), FeatureFlags.generalKnowledgeLaneValue(),
                GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason) {
                 if let caps = appState.capabilities {
                     let gkText = await GeneralKnowledgeLane.answer(question: q, capabilities: caps)
@@ -1568,5 +1581,49 @@ nonisolated enum AnswerCopyText {
             if names.count > 1 { lines += names.map { "• \($0)" } }
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Ask inside a case (navigation merge, scope §3)
+
+/// The case a question is asked in: its id, its workspace (the access scope) and its title (for the label).
+public nonisolated struct AskCaseScope: Equatable, Sendable {
+    public let caseID: UUID
+    public let workspaceID: UUID
+    public let title: String
+
+    public init(caseID: UUID, workspaceID: UUID, title: String) {
+        self.caseID = caseID; self.workspaceID = workspaceID; self.title = title
+    }
+
+    /// The closest-passage note and the general-knowledge block read outside the case, so they run only
+    /// for a question asked across the whole library.
+    public static func extraLanesAllowed(_ scope: AskCaseScope?) -> Bool { scope == nil }
+
+    /// The access a case question is read under — the same as a case's Ask job (PersonaJobsView.run).
+    public var access: SensitiveAccessContext {
+        SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: workspaceID, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .export))
+    }
+
+    /// What is shown when the case could not answer (the reason is logged; nothing is guessed).
+    static func failure(_ reason: String) -> VerifiedAnswer {
+        VerifiedAnswer(body: "This question could not be answered in this case: \(reason) Nothing was guessed.",
+                       citations: [], confidence: .zero, refused: true, refusalReason: reason, answerState: .notFound)
+    }
+}
+
+extension AppState {
+    /// Answer a question from the case's documents only, through the case's answering service.
+    func answerInCase(_ scope: AskCaseScope, question: String) async -> VerifiedAnswer {
+        guard let service = investigationAnswers else {
+            return AskCaseScope.failure("the ledger isn't ready yet.")
+        }
+        do {
+            return try await service.answer(caseID: scope.caseID, question: question, access: scope.access).verified
+        } catch {
+            KalsmritikoshLog.ui.error("Case question failed: \(error.localizedDescription, privacy: .public)")
+            return AskCaseScope.failure(error.localizedDescription)
+        }
     }
 }

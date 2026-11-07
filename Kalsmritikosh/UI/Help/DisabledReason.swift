@@ -53,9 +53,9 @@ public nonisolated enum EmptyStateKind: Sendable, Equatable {
     public var message: String {
         switch self {
         case .noFiles:
-            return "Add a folder in Sources. Files are read where they are; nothing is moved or copied."
+            return "Add a folder in Evidence ▸ Sources. Files are read where they are; nothing is moved or copied."
         case .unreadableFiles(let n):
-            return "\(n) file\(n == 1 ? "" : "s") failed to read — see Needs attention in Sources for each reason (format kept but not read, password, corrupt file, scan without text, text recognition failed) and press Read again."
+            return "\(n) file\(n == 1 ? "" : "s") failed to read — see Needs attention in Evidence ▸ Sources for each reason (format kept but not read, password, corrupt file, scan without text, text recognition failed) and press Read again."
         case .outsideScope(let n):
             return "\(n) document\(n == 1 ? " is" : "s are") in the workspace but not in this case. Press “Review new documents” in Professional Jobs and confirm the scope preview."
         case .insufficientEvidence:
@@ -80,7 +80,7 @@ public nonisolated enum EmptyStateKind: Sendable, Equatable {
 
     public var remedy: (title: String, destination: Destination)? {
         switch self {
-        case .noFiles, .unreadableFiles: return ("Open Sources", .sources)
+        case .noFiles, .unreadableFiles: return ("Open Evidence ▸ Sources", .sources)
         case .outsideScope: return nil   // shown beside “Review new documents” itself
         case .insufficientEvidence: return ("Open Findings ▸ Missing Proof", .findings)
         case .pendingReview: return ("Open Review", .review)

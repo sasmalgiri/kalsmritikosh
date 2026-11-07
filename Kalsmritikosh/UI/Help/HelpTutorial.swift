@@ -104,7 +104,7 @@ public nonisolated enum HelpTutorial {
 
     public static let steps: [TutorialStep] = [
         TutorialStep(id: "open-sample", title: "You are in the sample case",
-                     instruction: "The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read.",
+                     instruction: "The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Evidence ▸ Sources to see them read.",
                      expect: "Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened.",
                      destination: .sources, controls: ["Ready"]),
         TutorialStep(id: "question", title: "Choose the investigation question",
@@ -120,9 +120,9 @@ public nonisolated enum HelpTutorial {
                      expect: "“What the app could read” gives the documents read, partly read and not read, each one counted once, every unread one with its reason. The case reopens here, on the tab you leave, after a restart too.",
                      destination: .cases, controls: ["Show all"]),
         TutorialStep(id: "ask", title: "Ask — one settled question, one the record cannot settle",
-                     instruction: "Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”.",
+                     instruction: "In the matter press “Ask about this case” (or open Search and choose “Ask a question”): with the matter open, the question is asked in it. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”.",
                      expect: "The first answer quotes the amendment — effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) — with a citation chip for it. The second quotes the record as it stands: invoice 432 issued 30 May 2024, due 29 June, “unpaid as of June 14, 2024”; no document records a payment and none is invented. The badge says how far the evidence goes.",
-                     destination: .ask, controls: ["Send question"]),
+                     destination: .ask, controls: ["Ask about this case", "Ask a question", "Send question"]),
         TutorialStep(id: "citation", title: "Open the exact citation",
                      instruction: "Under the first answer press the numbered citation chip “1 amendment-7.md”.",
                      expect: "The amendment opens in a sheet with the cited passage highlighted. The quotation is checked against the document; whether the document is right is your judgement. “Done” closes it.",

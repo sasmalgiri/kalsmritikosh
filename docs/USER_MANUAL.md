@@ -11,11 +11,11 @@ Single-user, English-language v1. The app documents and finds; the decisions are
 
 Ten steps that take a folder of documents to a cited, reviewed, exported report. Each step names the exact control. The isolated sample case (Help ▸ Replay the tutorial) walks the same path on bundled documents.
 
-1. Add documents. Open Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” when every file has been processed; a count “could not be read — see Needs attention” lists the files that failed and why.
+1. Add documents. Open Evidence ▸ Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” when every file has been processed; a count “could not be read — see Needs attention” lists the files that failed and why.
 2. Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace.
 3. Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.
 4. Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet).
-5. Ask a question. Open Ask, type the question and press “Send question”. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed.
+5. Ask a question. Open Search and choose “Ask a question” (or “Ask about this case” in the case file), type the question and press “Send question”. With a case open the question is asked in that case; “Whole library” asks across everything. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed.
 6. Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute.
 7. Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried.
 8. Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”.
@@ -30,11 +30,29 @@ Screen: **Professional Jobs**.
 
 ## How do I…
 
+### Where things are: Cases, Evidence, Search and Outputs
+
+Four areas hold an ordinary case from intake to report; Settings and Help sit under them, and every specialist screen is in More tools and the ⌘K palette. Nothing was taken away — a screen you used before opens in its new place.
+
+1. Cases (⌘1): start a case with “New case”, or open one to resume it. A case open here is the active case for Evidence, Search and Outputs. Projects that group several cases, and the caseload triage, are under “Projects”.
+2. Evidence (⌘2): add and review documents — Sources, Library, Completeness and Processing, with the import queue. The line at the top says whether a case is open and how many of its documents are in scope or excluded; excluded documents stay excluded.
+3. Search (⌘3): “Find words” or “Ask a question”. With a case open both look only in that case (“This case”); choose “Whole library” to look everywhere. Nothing widens by itself. ⌘5 opens “Ask a question” directly.
+4. Outputs (⌘4): saved answers, saved questions, the Notebook and work products, and “Export timeline, people or documents…”. A case's own report is in its file ▸ Log & exports.
+5. More tools (⌘6): timelines, dossiers, connections, findings, comparisons, Professional Jobs, Work Center, the registers and studios, audit and receipts, and archive analysis. ⌘7 opens the Timeline, ⌘8 Processing, ⌘9 Settings.
+
+Screens you knew by their old names keep them in the ⌘K palette (for example “Sources”, “Library”, “Answers”, “Ask”), and a saved Back/Forward history or a link opens the same screen inside its area.
+
+A screen whose optional tool is switched off still opens, says that it is off and offers “Turn on in Settings ▸ Modules”; work made with it stays readable.
+
+Keyboard shortcuts before this change: ⌘1 Ask, ⌘2 Search, ⌘3 Timeline, ⌘4 Insights, ⌘5 Knowledge, ⌘6 Sources, ⌘7 Convert, ⌘8 Live, ⌘9 Settings. Insights, Knowledge and Convert are now in More tools and the palette.
+
+Screen: **More tools**.
+
 ### A file could not be read, a scan has no text, or a recording was not transcribed
 
 Every file ends in one recorded state: read, kept but not read, or failed with a reason. Nothing is silently skipped and nothing is invented for an unreadable file.
 
-1. Open Sources. The indicator reads “Ready” when the folder is fully processed; a line “could not be read — see Needs attention” counts the failures.
+1. Open Evidence ▸ Sources. The indicator reads “Ready” when the folder is fully processed; a line “could not be read — see Needs attention” counts the failures.
 2. Open Needs attention for the file’s reason: corrupt or password-protected file, an unsupported format (PPT, RAR and 7z are kept but not read; DOC, XLS, MSG and PST are read), a scan with too little text for OCR, or a recording that could not be transcribed.
 3. Scans: OCR quality follows scan quality. Tools ▸ Documents ▸ Improved text recognition lists weak scans and can save a searchable copy.
 4. Recordings: with “Transcribe audio & video” on (Settings ▸ Modules, the default) recordings are transcribed on your Mac while importing (Apple Speech, English). With it off, recordings are catalogued and kept, and can be transcribed on demand in Transcripts. Transcripts are evidence of what the speech model heard, not a certified transcript.
@@ -740,7 +758,7 @@ Screen: **Cases**.
 
 ### Ask — cited answers from your evidence
 
-Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed. With “Answer general questions too” on (Settings), questions outside your documents get a separate block marked “Not from your documents” — general knowledge from the on-device AI, no sources, may be wrong, and never part of your evidence or exports.
+Ask lives in Search (“Ask a question”, ⌘5) and in the case file (“Ask about this case”). With a case open, the question is asked in that case only; choose “Whole library” to ask across everything. Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed. With “Answer general questions too” on (Settings), questions outside your documents get a separate block marked “Not from your documents” — general knowledge from the on-device AI, no sources, may be wrong, and never part of your evidence or exports.
 
 Screen: **Ask**.
 
@@ -770,7 +788,7 @@ Screen: **Timeline**.
 
 ### Search — exact or by meaning
 
-Keyword mode finds exact terms, names, and numbers. Semantic mode finds passages that mean the same thing even with different words (needs an embedding model).
+With a case open, Search looks only in that case's documents (“This case”), word for word, and says what it could not search; choose “Whole library” to search everything — nothing widens by itself. In the whole library, keyword mode finds exact terms, names, and numbers. Semantic mode finds passages that mean the same thing even with different words (needs an embedding model).
 
 Screen: **Search**.
 
@@ -882,6 +900,24 @@ System mode, Private/Online, the optional tools (Modules, listed by the task eac
 
 Screen: **Settings**.
 
+### Evidence — add and review documents
+
+Sources (add folders and files; what was read, partly read or not read, each with its reason), Library (every document), Completeness (how much is processed) and Processing (what runs now), with the import queue. The line at the top says whether a case is open: with one, it counts the case's documents in scope and those excluded, which stay excluded. The lists are the whole library; “Open this case's evidence” opens the case's own Evidence section.
+
+Screen: **Evidence**.
+
+### Outputs — saved work and exports
+
+Saved answers (replayable, with their evidence), saved questions, the Notebook and work products (Handoff & Review), and “Export timeline, people or documents…” for CSV, Word and PDF with a receipt. A case's report and its exports are in its file ▸ Log & exports — “Open this case's report and exports” goes there.
+
+Screen: **Outputs**.
+
+### More tools — every specialist screen
+
+Case analysis views (timeline, dossier, connections, findings, comparisons — these read the whole library), professional workspaces (Professional Jobs, Work Center, registers, DataLab and the profession studios), records and checks (audit, receipts, authenticity, citations, redaction, conversion) and archive analysis (knowledge, trends, freshness, query). None is needed for an ordinary case; every one is also in the ⌘K palette.
+
+Screen: **More tools**.
+
 ### Guide — this help
 
 Searchable offline help: Get started, tasks, recipes by profession, the screens, the words the app uses, reading results carefully, subscription and troubleshooting.
@@ -900,6 +936,48 @@ Organize a matter, case, or project — a filtered view over your evidence
 
 Screen: **Workspaces**.
 
+### Caseload — Every matter triaged by how much attention it needs
+
+Every matter triaged by how much attention it needs
+
+Screen: **Caseload**.
+
+### Live — Live pipeline and background activity
+
+Live pipeline and background activity
+
+Screen: **Live**.
+
+### Answers — Past answers with their evidence — replayable and auditable
+
+Past answers with their evidence — replayable and auditable
+
+Screen: **Answers**.
+
+### Saved — Your bookmarked questions
+
+Your bookmarked questions
+
+Screen: **Saved**.
+
+### Notebook — Your saved notes and working pages
+
+Your saved notes and working pages
+
+Screen: **Notebook**.
+
+### Case Story — The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps
+
+The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps
+
+Screen: **Case Story**.
+
+### Connections — Find the shortest chain of relationships linking two people or organizations
+
+Find the shortest chain of relationships linking two people or organizations
+
+Screen: **Connections**.
+
 ### Cross-Doc Matrix — Ask one question across every document — what each source says, cited
 
 Ask one question across every document — what each source says, cited
@@ -912,12 +990,6 @@ Compare two or more documents field by field — agreements, disagreements, and 
 
 Screen: **Compare Documents**.
 
-### Connections — Find the shortest chain of relationships linking two people or organizations
-
-Find the shortest chain of relationships linking two people or organizations
-
-Screen: **Connections**.
-
 ### Fund Flow — See how money moved between parties — payer to payee — drawn from your evidence
 
 See how money moved between parties — payer to payee — drawn from your evidence
@@ -929,12 +1001,6 @@ Screen: **Fund Flow**.
 A big email dump, deduplicated and grouped into conversations
 
 Screen: **Email Threads**.
-
-### Case Story — The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps
-
-The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps
-
-Screen: **Case Story**.
 
 ### Reasoning Studio — Run a root-cause investigation start to finish — brainstorm, 5 Whys, a fishbone diagram, a conclusion, and an approval-ready report
 
@@ -996,18 +1062,6 @@ Put a personal dispute on paper — insurance claim, deposit, employment or refu
 
 Screen: **Dispute File**.
 
-### Notebook — Your saved notes and working pages
-
-Your saved notes and working pages
-
-Screen: **Notebook**.
-
-### Answers — Past answers with their evidence — replayable and auditable
-
-Past answers with their evidence — replayable and auditable
-
-Screen: **Answers**.
-
 ### Audit — Chain-of-custody and every human decision — the append-only record
 
 Chain-of-custody and every human decision — the append-only record
@@ -1019,12 +1073,6 @@ Screen: **Audit**.
 Open an exported receipt and re-check its hash chain — genuine or tampered
 
 Screen: **Verify Receipt**.
-
-### Saved — Your bookmarked questions
-
-Your bookmarked questions
-
-Screen: **Saved**.
 
 ### Authenticity — Check a file's provenance — fingerprint, capture metadata, editing traces, PDF edit markers
 
@@ -1038,11 +1086,11 @@ Build layered Evidence Explained citations — full note, short note, bibliograp
 
 Screen: **Citations**.
 
-### Freshness — Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused
+### Redaction — Remove text from a PDF for real — flattened and verified, not just a black box
 
-Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused
+Remove text from a PDF for real — flattened and verified, not just a black box
 
-Screen: **Freshness**.
+Screen: **Redaction**.
 
 ### Trends — Patterns across everything — activity over time, event types, entity makeup
 
@@ -1050,29 +1098,17 @@ Patterns across everything — activity over time, event types, entity makeup
 
 Screen: **Trends**.
 
+### Freshness — Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused
+
+Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused
+
+Screen: **Freshness**.
+
 ### Query — Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want
 
 Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want
 
 Screen: **Query**.
-
-### Live — Live pipeline and background activity
-
-Live pipeline and background activity
-
-Screen: **Live**.
-
-### Redaction — Remove text from a PDF for real — flattened and verified, not just a black box
-
-Remove text from a PDF for real — flattened and verified, not just a black box
-
-Screen: **Redaction**.
-
-### Caseload — Every matter triaged by how much attention it needs
-
-Every matter triaged by how much attention it needs
-
-Screen: **Caseload**.
 
 ### Constitution — The constitution the app runs on — every phase, the tooling it earns, its obligations, human decisions, and prohibited conclusions
 
@@ -1279,11 +1315,11 @@ Screen: **Live**.
 
 Help ▸ Replay the Tutorial opens the isolated sample case (its own ledger, bundled Project Delta documents) and walks these steps; nothing touches your own archive.
 
-1. **You are in the sample case.** The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Sources to see them read. *You should see:* Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened.
+1. **You are in the sample case.** The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Evidence ▸ Sources to see them read. *You should see:* Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened.
 2. **Choose the investigation question.** Open Professional Jobs, choose the “Investigator” card and press “Start matter” after typing the title “Project Delta slip”. The question for this matter: why did the first delivery slip, and who approved the change? *You should see:* “Created case “Project Delta slip” … with 8 source(s) in scope”, the jobs grouped in phases, and “Start here — open a matter” done.
 3. **Inspect and authorise the case documents.** Press “Add documents to this case” — or “Review new documents” when the matter already holds the workspace’s documents. Read the preview: how many are in scope now, how many are new, how many stay excluded. Nothing is added until you confirm. *You should see:* “Documents: 8 in scope”. Only these documents are read for this matter’s jobs and questions.
 4. **See the case at a glance and what was read.** Open Cases and open the matter. Its Overview starts with “This case at a glance”: the question, what waits for you, the evidence requests and “What the app could read”. Choose a count or the “Next:” step to go where it is done. *You should see:* “What the app could read” gives the documents read, partly read and not read, each one counted once, every unread one with its reason. The case reopens here, on the tab you leave, after a restart too.
-5. **Ask — one settled question, one the record cannot settle.** Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”. *You should see:* The first answer quotes the amendment — effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) — with a citation chip for it. The second quotes the record as it stands: invoice 432 issued 30 May 2024, due 29 June, “unpaid as of June 14, 2024”; no document records a payment and none is invented. The badge says how far the evidence goes.
+5. **Ask — one settled question, one the record cannot settle.** In the matter press “Ask about this case” (or open Search and choose “Ask a question”): with the matter open, the question is asked in it. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”. *You should see:* The first answer quotes the amendment — effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) — with a citation chip for it. The second quotes the record as it stands: invoice 432 issued 30 May 2024, due 29 June, “unpaid as of June 14, 2024”; no document records a payment and none is invented. The badge says how far the evidence goes.
 6. **Open the exact citation.** Under the first answer press the numbered citation chip “1 amendment-7.md”. *You should see:* The amendment opens in a sheet with the cited passage highlighted. The quotation is checked against the document; whether the document is right is your judgement. “Done” closes it.
 7. **Review conflicting accounts.** Open Findings ▸ Contradictions. The first-lot delivery date was given as about 13 May 2024 (8 April email), then 28 May 2024 (18 April email and the amendment). *You should see:* A row “Conflicting dates for “Delivery delayed”” — “Conflicts with a second source; both claims are preserved and not reconciled automatically”, 2 sources, “Review”. An estimate that was later revised is shown as a conflict to review, not labelled wrong — you decide what it means and record why.
 8. **Decide a contradiction where it is shown.** In the matter: Overview ▸ Contradictions, press “Find contradictions”. Choose an item: its two passages are shown beside it, each with “Open source”. Record “Confirm”, “Dismiss” (choose a reason) or “Defer”. *You should see:* The item shows your decision and its reason, kept with the version of both documents; neither document is changed. If the check lists nothing for this matter, the list says so and there is nothing to decide.
