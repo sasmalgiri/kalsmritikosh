@@ -100,7 +100,10 @@ struct CaseChangeFeedTests {
         #expect(seen.seenBy == "Ada" && seen.state.detections == [rig.contradictionID.uuidString.lowercased()])
         // The preference holds none of it; the state holds identifiers only.
         let raw = try #require(try await f.db.query("SELECT state_json FROM case_change_seen WHERE case_id = ?;", [.uuid(f.caseID)]).first?.string(0))
-        for word in ["invoice", "500", "Supplier", "paid"] { #expect(!raw.contains(word), "\(word) in the seen state") }
+        // Identifiers are random UUIDs and can contain "500" by chance: check the words outside them.
+        let words = raw.replacingOccurrences(of: "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}",
+                                             with: "<id>", options: .regularExpression)
+        for word in ["invoice", "500", "Supplier", "paid"] { #expect(!words.contains(word), "\(word) in the seen state") }
 
         let quiet = await feeds.load(caseID: f.caseID, projection: after, now: Date().addingTimeInterval(1))
         #expect(quiet.newChanges.isEmpty, "\(quiet.newChanges.map(\.summary))")

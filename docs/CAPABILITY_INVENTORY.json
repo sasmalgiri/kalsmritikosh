@@ -394,7 +394,7 @@
       "verificationEvidence" : [
 
       ],
-      "whenOff" : "Online answers send the passages the question needs, still previewed and logged; no daily limit."
+      "whenOff" : "Online answers send the passages the question needs, every send logged; no daily limit. No case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt)."
     },
     {
       "coreRetained" : null,
@@ -1032,7 +1032,7 @@
       "verificationEvidence" : [
         "PIIMasker"
       ],
-      "whenOff" : "Passages are sent unmasked, still previewed first."
+      "whenOff" : "Passages are sent unmasked. No case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt); every send is logged."
     },
     {
       "coreRetained" : null,

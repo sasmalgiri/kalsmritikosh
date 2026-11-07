@@ -43,7 +43,7 @@ The terms the app shows live in `OnlineProviderKind.documentTerms`, reviewed 202
 |---|---|---|---|---|
 | L1 | Copies of originals (managed vault) | `EvidenceVault/` beside the ledger; files 0400, folders 0700 (owner-only) | **Not encrypted** by the app. FileVault protects them only where the person has it on (not verified by the app). A recorded, bounded decision: SHIP_DECISIONS §5 K11 | `managedEvidenceMode`, off by default |
 | L2 | Vector index cache: quantised chunk embeddings and chunk ids | `hnsw-index.bin` beside the ledger, mode 0600 | **Encrypted**: AES-GCM under a key derived (HKDF-SHA256) from the ledger key; never written without that key; an unsealed or foreign cache is rebuilt, not read | Automatic |
-| L3 | Captured / shared items and their custody log | `Intake/<date>/`, the App Group `Inbox/` until drained | Not encrypted | When capture is used (`captureExtensions` off by default; on in the "standalone" preset) |
+| L3 | Captured / shared items and their custody log | `Intake/<date>/`, the App Group `Inbox/` until drained | Not encrypted | When capture is used. Share and Services menu capture ("Save to Investigations Made Easy") is part of the core and on unless the person switched `captureExtensions` off themselves (`ProductModule.shareMenuCaptureAvailable`); each capture is started by the person in another app and is local. Import from iPhone or iPad (Continuity Camera) stays behind `captureExtensions`, off by default; on in the "standalone" preset |
 | L4 | Import receipts: file names, hashes, errors, sometimes paths | `Receipts/` beside the ledger | Signed, not encrypted | `signedReceipts` |
 | L5 | Exports: studio reports, case reports, proof bundles, CSVs | Where the person saves them | Not encrypted (they are the deliverable) | Person's action |
 | L6 | Backups | Where the person chooses | Ledger encrypted with the ledger key. In a *complete* backup, **originals and the source map are not encrypted**. | Person's action |
@@ -52,7 +52,7 @@ The terms the app shows live in `OnlineProviderKind.documentTerms`, reviewed 202
 | L9 | Team review: case name, member name, document names, coding, notes | A shared folder | Signed and hash-chained, not encrypted | **Not available in v1** (single-user contract): it cannot be switched on, even as a preview (`ProductModuleFlags.outOfV1Scope`) |
 | L10 | Spotlight: file name and the first 240 characters of a document (up to 2,000) | The macOS index | System | `spotlightIndex`, off by default; on in the "standalone" preset. Turning it off removes the items. |
 | L11 | Temporary files during import (unzipped office files, renders, email attachments, archive members) | `$TMPDIR` | Not encrypted | Automatic |
-| L12 | DEVONthink hand-off: question, answer, citations as Markdown | `$TMPDIR/kalsmritikosh-devonthink/`, then DEVONthink | Not encrypted | Person's action (module on by default) |
+| L12 | DEVONthink hand-off: question, answer, citations as Markdown | `$TMPDIR/kalsmritikosh-devonthink/`, then DEVONthink | Not encrypted | Person's action. `sendToDevonthink` is off by default on new installs; an install from before 2026-11-06 that never chose keeps its earlier default (on) (`ModuleScopeMigration`) |
 | L13 | MetricKit diagnostics | `Diagnostics/*.json`, last 30 kept | Not encrypted | Automatic. Apple receives them only if the person shares analytics with developers in macOS. |
 | L14 | Unified log: counts and errors; **file names and provider error texts are logged as public** | macOS log | System | Automatic |
 | L15 | Preferences that hold content: self-score questions and expected answers, SOP drafts and reviews, job titles and result summaries per case, investigator name and organisation (default: the macOS full name), Online provider, model and terms confirmations; the per-case workspace state (`kalsmritikosh.case.workspace.<case id>`: the open tab, the selected contradiction and evidence request, the contradiction filter, the contradiction search text the person typed, and the last source opened — as identifiers only, its document, its origin (contradiction side or case entry) and source version; the passage and file name are read again from the ledger and are not stored; a state written by an earlier build that held them is rewritten without them when the case is next opened; and, when the case map preview is used, the map's place in the case — the current view, map or list, the selected item or link and earlier focus for Back as identifiers (case id, record kind, record id; a link's digest id), each view's zoom and position, and the items hidden or groups collapsed in a built-in view, as identifiers. No item names, quotes, view names or search words are stored there) | The app's preferences file | Not encrypted | As used. Studio drafts moved into the ledger (v158/v159); the old preference copy is cleared only after verification. The case workspace state is removed with its case (case erasure) and with everything (Delete all my data). |
@@ -88,14 +88,16 @@ Shared documents are kept and reported.
 and collapsed groups), map positions and pins, and the typed links the investigator draws (with their reason, author and,
 when withdrawn, who, when and why) are stored in the encrypted ledger — `case_map_views`, `case_map_layout`, `case_map_links`,
 each keyed by `case_id`. They hold identifiers of case records, never copies of them. Case erasure removes them with the case
-(a legal hold refuses it, removing nothing); a full erase empties them; backups carry them as part of the ledger. Opening or
+(a legal hold refuses it, removing nothing); person erasure removes the positions and links on the person's case-person rows and
+the saved views whose name or filters name the person, and reports (keeps) the reasons of links between other records that name
+them, since a link is never edited; a full erase empties them; backups carry them as part of the ledger. Opening or
 moving around the map reads the ledger only and sends nothing.
 
 **Saved case searches (v172).** A search of one case's documents that the person saves — its words, query tree and version,
 options, the case scope it ran over (fingerprint and authorised versions), the index revision, when it ran, and the documents it
 matched with their names and counts (a live search's baseline, or a frozen result) — is stored in the encrypted ledger in
 `case_saved_searches`, keyed by `case_id`. The search words are never written to preferences. Case erasure removes them with the
-case (a legal hold refuses it, removing nothing); person erasure removes the saved searches whose words or saved results name the
+case (a legal hold refuses it, removing nothing); person erasure removes the saved searches whose name, words or saved results name the
 person; a full erase empties the table; backups carry it as part of the ledger. Running a case search reads the ledger only and
 sends nothing.
 
@@ -107,17 +109,24 @@ the source versions, decisions and revisions it rests on, the scope fingerprint 
 `case_change_seen` (each case's seen position for "What changed": a time and identifiers of what was detected, readable and open —
 no document text). `case_history_install` holds one time (when history recording began) and no case content. None of it is in
 preferences. Case erasure removes all of it with the case (a legal hold refuses it, removing nothing); person erasure clears the
-content of every recorded state naming the person (a stub saying it was erased stays) and removes the before/after copies of their
+content of every recorded state naming the person in its content or its milestone name (a stub saying it was erased stays, its
+name replaced) and removes the before/after copies of their
 case-person rows or naming them; a full erase empties the tables; backups carry them as part of the ledger and a restore keeps
 their identities and digests. Reading changes, history or readiness reads the ledger only and sends nothing.
+**Residue of forgotten documents:** a recorded state keeps the names and quoted passages of the documents it cited. When such a
+document later leaves the ledger by another route ("Stop and forget" a folder), the history view hides those words and shows the
+version as "Retained version no longer available", but the text stays in `case_checkpoints.payload_json` — and in backups made
+since — until a case, person or full erasure removes it (case records such as report items keep quotes the same way).
 
 **Case map export (M8).** Exports of the case map (PDF, PNG, CSV, copy, print) go through `CaseOutputService.prepareMap` and are
 recorded in `case_document_outputs` like every case output (routes 42–46 in OUTPUT_ROUTES_INVENTORY.md). Nothing is sent anywhere.
 
 **Person erasure:** Knowledge › People › Erase this person. It removes the person's entity record, aliases, mentions,
-links, case-subject rows (with the case map positions and map links pointing at those rows), the saved case searches naming them, the content of recorded case-map states naming them (stubs kept) and the before/after copies of their case-person rows, and the facts provably theirs. Facts that a same-name person could share are kept and reported as
+links, case-subject rows (with the case map positions and map links pointing at those rows), the saved case searches and saved map views naming them, the content and name of recorded case-map states naming them (stubs kept) and the before/after copies of their case-person rows, and the facts provably theirs. Facts that a same-name person could share are kept and reported as
 ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
-answers, topics, conversation turns.
+answers, topics, conversation turns, case map link reasons between other records, and names of recorded states erased earlier.
+Name matching ignores case and diacritics in any script for the case-map, saved-search and history tables ("Zoë Müller" is found
+as "zoe muller").
 
 Both keep a fixed erasure record: who, when, the reason as written, the legal basis, and row counts. A person is recorded
 by a SHA-256 of the lower-cased name. **A hash of a name and a free-text reason are not anonymous by themselves**: a

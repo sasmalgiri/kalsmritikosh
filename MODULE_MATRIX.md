@@ -27,7 +27,7 @@ Disposition is the 2026-11-06 scope decision (docs/IME_Core_and_Add_On_Scope_202
 | I-5 | Filter by document date | SPLIT | Presentation and history exploration | yes | off | — | Answers always use all evidence. |
 | I-6 | Fact-check my writing | MERGE | Core investigation workflow | yes | off | — | The fact-check tool is hidden. |
 | I-7 | Archive self-test (diagnostic) | INTERNAL | Diagnostics | yes | off | — | No self-test runs. |
-| I-8 | Send the least data | CORE | AI assistance | yes | off | Online mode, needs O-4 | Online answers send the passages the question needs, still previewed and logged; no daily limit. |
+| I-8 | Send the least data | CORE | AI assistance | yes | off | Online mode, needs O-4 | Online answers send the passages the question needs, every send logged; no daily limit. No case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt). |
 | I-9 | How an account changed | OPTIONAL | Advanced analysis | yes | off | — | Contradictions between documents only. |
 | I-10 | Signed case slices | SPLIT | Professional workflows | yes | off | needs W1-4 | Work products export as documents only. |
 | I-11 | How this answer was found | CORE | Core investigation workflow | yes | off | — | The answer and its citations only. |
@@ -56,7 +56,7 @@ Disposition is the 2026-11-06 scope decision (docs/IME_Core_and_Add_On_Scope_202
 | N-7 | Similar images | OPTIONAL | Media and geography | yes | off | — | Images are searchable by their text only. |
 | N-8 | Places | OPTIONAL | Media and geography | yes | off | — | Not shown. |
 | N-9 | Import notes apps | OPTIONAL | Connections and automation | yes | off | — | These folders import as plain files. |
-| N-10 | Mask personal details before sending | CORE | AI assistance | yes | off | Online mode, needs O-4 | Passages are sent unmasked, still previewed first. |
+| N-10 | Mask personal details before sending | CORE | AI assistance | yes | off | Online mode, needs O-4 | Passages are sent unmasked. No case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt); every send is logged. |
 | N-11 | Watch a question | OPTIONAL | Connections and automation | yes | off | — | Pinned questions are kept but not re-asked. |
 | N-12 | Your own record types | OPTIONAL | Advanced analysis | yes | off | — | Types are kept but not filled. |
 | N-13 | Review priority (documents) | SPLIT | Advanced analysis | yes | off | needs N-4 | Documents are listed in the order they were added. |

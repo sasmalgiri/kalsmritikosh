@@ -211,7 +211,11 @@ The case map keeps recorded states of a case — once a day when the case change
 3. “Open (read-only)” shows that state on the map and in the list with a banner. Nothing can be changed while it is shown — not positions, pins, links, reviews or views. “Return to current” brings back the case as it is.
 4. “Compare” on one state and then on another lists what was Added, Changed, Withdrawn and what Needs review between them; “Compare with current” compares a state with the case now. Items are matched by their record, not by their title.
 
-Only recorded states can be opened. A recorded state holds what was recorded by then: evidence recorded later is not in it, even when the event it describes is earlier — the item keeps its event date and, separately, when it was recorded. If a source version a state cited is no longer in the ledger, its words are not shown and the current version is not shown in its place. Recorded states are kept in the case's encrypted ledger; erasing the case removes them, and erasing a person clears the states that name them.
+Only recorded states can be opened. A recorded state holds what was recorded by then: evidence recorded later is not in it, even when the event it describes is earlier — the item keeps its event date and, separately, when it was recorded. If a source version a state cited is no longer in the ledger, its words are not shown and the current version is not shown in its place.
+
+A recorded state keeps the names and quoted passages of the documents it cited. If you later remove a document with “Stop and forget”, the state hides its words on screen, but they stay in the recorded state in the case's encrypted ledger — and in backups — until you erase the case, a person it names, or all data.
+
+Recorded states are kept in the case's encrypted ledger; erasing the case removes them, and erasing a person clears the states that name them (in their content or their milestone name), keeping only a note that a state existed.
 
 Screen: **Cases**.
 

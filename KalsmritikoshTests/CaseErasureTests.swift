@@ -691,3 +691,74 @@ extension CaseErasureTests {
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_saved_searches;", []) == 0)
     }
 }
+
+// MARK: - LS19: person erasure reaches the map's free text; names match across case and accents
+
+extension CaseErasureTests {
+
+    @Test("LS19: names match ignoring case and diacritics in any script; another name does not match")
+    func unicodeNameMatch() {
+        #expect(CaseEraser.names("met zoe muller on Monday", ["Zoë Müller"]))
+        #expect(CaseEraser.names("ZOË MÜLLER signed", ["Zoë Müller"]))
+        #expect(CaseEraser.names("Zoe\u{0308} Mu\u{0308}ller (decomposed)", ["zoë müller"]))
+        #expect(CaseEraser.names("Иван ПЕТРОВ", ["петров"]))
+        #expect(!CaseEraser.names("Zoe Miller", ["Zoë Müller"]))
+        #expect(!CaseEraser.names(nil, ["Zoë Müller"]))
+    }
+
+    @Test("LS19: a person erase removes saved map views and saved searches naming them (accented name saved unaccented), clears recorded states naming them in content or milestone name to a stub, and reports link reasons it keeps")
+    func personEraseCoversMapFreeText() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let entity = UUID()
+        try await f.db.exec("INSERT INTO entities (id, kind, value, normalized, source_object_id) VALUES (?,?,?,?,?);",
+                            [.uuid(entity), .text("person"), .text("Zoë Müller"), .text("zoë müller"), .text(try await Self.firstKO(f.db, f.exclusiveFile))])
+        func view(_ name: String, _ filters: String) async throws {
+            try await f.db.exec("""
+                INSERT INTO case_map_views (id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .uuid(f.caseA), .text(name), .text("overview"), .text(filters), .integer(0), .text("Tester"), .real(1), .real(1)])
+        }
+        try await view("ZOË MÜLLER timeline", "{}")
+        try await view("Payments", #"{"search":"zoe muller"}"#)
+        try await view("Invoices", #"{"search":"invoice"}"#)
+        try await Self.seedSavedSearch(f.db, caseID: f.caseA, words: "zoe muller AND payment")
+        try await Self.seedSavedSearch(f.db, caseID: f.caseA, words: "invoice")
+        try await f.db.exec("""
+            INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(UUID()), .uuid(f.caseA), .text("dependsOn"), .text("case"), .text(f.caseA.uuidString.lowercased()), .text("allegation"),
+                  .text(UUID().uuidString.lowercased()), .text("Told to us by zoe muller"), .text("Tester"), .real(1)])
+        let milestone = UUID(), named = UUID(), other = UUID()
+        for (id, kind, label, payload) in [(milestone, "milestone", "Before the Zoe Müller interview" as String?, "{}"),
+                                           (named, "manual", nil, #"{"items":[{"title":"zoe muller"}]}"#),
+                                           (other, "manual", "Week 2" as String?, #"{"items":[{"title":"Invoice 7"}]}"#)] {
+            try await f.db.exec("""
+                INSERT INTO case_checkpoints (id, case_id, kind, name, fence, scope_fingerprint, content_digest, manifest_json, payload_json, format_version, recorded_by, recorded_at)
+                VALUES (?,?,?,?,'f','s','d','{}',?,1,'Tester',1);
+                """, [.uuid(id), .uuid(f.caseA), .text(kind), label.map { .text($0) } ?? .null, .text(payload)])
+        }
+        let out = try await f.state.erasePerson(entity, reason: "Subject request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        let views = try await f.db.query("SELECT name FROM case_map_views WHERE case_id = ?;", [.uuid(f.caseA)]).compactMap { $0.string(0) }
+        #expect(views == ["Invoices"])
+        let searches = try await f.db.query("SELECT query_text FROM case_saved_searches WHERE case_id = ?;", [.uuid(f.caseA)]).compactMap { $0.string(0) }
+        #expect(searches == ["invoice"])
+        #expect(out.report.rowsErased["case_map_views"] == 2 && out.report.rowsErased["case_saved_searches"] == 1)
+        // Recorded states: the two naming her are stubs (content and name gone); the other is untouched.
+        for id in [milestone, named] {
+            let r = try #require(try await f.db.query("SELECT name, payload_json, erased_at FROM case_checkpoints WHERE id = ?;", [.uuid(id)]).first)
+            #expect(r.date(2) != nil && r.string(1) == "{}")
+            #expect(!CaseEraser.names(r.string(0), ["Zoë Müller"]))
+        }
+        let milestoneName = try await f.db.query("SELECT name FROM case_checkpoints WHERE id = ?;", [.uuid(milestone)]).first?.string(0)
+        #expect(milestoneName == CaseEraser.erasedCheckpointName)
+        let kept = try #require(try await f.db.query("SELECT name, erased_at FROM case_checkpoints WHERE id = ?;", [.uuid(other)]).first)
+        #expect(kept.string(0) == "Week 2" && kept.date(1) == nil)
+        #expect(out.report.rowsErased["case_checkpoints (content cleared)"] == 2)
+        // The link between other records keeps its reason (links are never edited) and is reported.
+        #expect(out.report.stillNamedIn["case map link reasons"] == 1)
+        #expect(out.summary.contains("case map link reasons"))
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM ledger_person_erase;", []) == 0)
+    }
+}

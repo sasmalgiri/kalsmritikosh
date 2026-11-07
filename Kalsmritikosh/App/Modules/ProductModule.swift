@@ -175,7 +175,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .leastDataOnline:
             return Spec(planID: "I-8", group: "Online (your own key)", title: "Send the least data",
                         detail: "Answers the ledger can give without AI never go online; for the rest, a daily limit on bytes sent (lower it to zero to send nothing), with every send measured and logged.",
-                        whenOff: "Online answers send the passages the question needs, still previewed and logged; no daily limit.",
+                        whenOff: "Online answers send the passages the question needs, every send logged; no daily limit. No case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt).",
                         implemented: true, requiresOnline: true, dependsOn: [.onlineAnswers])
         case .statementDrift:
             return Spec(planID: "I-9", group: "Investigation", title: "How an account changed",
@@ -356,7 +356,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
         case .onlinePIIMasking:
             return Spec(planID: "N-10", group: "Online (your own key)", title: "Mask personal details before sending",
                         detail: "Before anything goes online, names, emails, phone numbers, addresses, ID and account numbers are replaced with placeholders; the answer is restored on your Mac.",
-                        whenOff: "Passages are sent unmasked, still previewed first.",
+                        whenOff: "Passages are sent unmasked. No case document is sent until you allow AI for that case (questions inside an allowed case go without a further prompt); every send is logged.",
                         implemented: true, requiresOnline: true, dependsOn: [.onlineAnswers])
         case .questionMonitors:
             return Spec(planID: "N-11", group: "Investigation", title: "Watch a question",

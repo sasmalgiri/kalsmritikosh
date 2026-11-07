@@ -354,39 +354,54 @@ public actor CaseEraser {
         let (theirFacts, ambiguous) = try personFacts(db, ids: ids, name: name)
         let tables = Set(try userTables(db))
         var counts: [String: Int] = [:]
-        // v173 — the case history: recorded map states that name the person (by name, alias or case-person row)
-        // keep a stub marked erased and lose their content; before/after copies of their case-person rows or naming
-        // them go. The guards on both stand aside for this act only (ledger_person_erase, removed again below).
+        // LS19 — the words that name the person in free text: their name and every alias (read before the
+        // aliases go below). Matched with `names(_:_:)`: case- and diacritic-insensitive in any script, so
+        // "Zoë Müller" is found as "zoe muller" or "ZOË MÜLLER" (SQLite's lower() folds ASCII only).
+        let personIDs = try db.query("SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+        let nameTerms = Array(Set(([name] + (try db.query("SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { $0.count > 1 })).sorted()
+        let historyTerms = Array(Set(nameTerms + personIDs)).sorted()
+        // v173 — the case history: recorded map states that name the person (by name, alias or case-person row, in
+        // their content or their milestone name) keep a stub marked erased and lose their content and their name;
+        // before/after copies of their case-person rows or naming them go. The guards on both stand aside for this
+        // act only (ledger_person_erase, removed again below).
         if tables.contains("ledger_person_erase") {
             try db.exec("INSERT INTO ledger_person_erase (erasure_id) VALUES (?);", [.uuid(erasureID)])
-            let personIDs = try db.query("SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
-            var terms = [name] + (try db.query("SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) })
-            terms = terms.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { $0.count > 1 } + personIDs
-            let uniqueTerms = Array(Set(terms)).sorted()
-            if !uniqueTerms.isEmpty, tables.contains("case_checkpoints") {
-                let any = uniqueTerms.map { _ in "instr(lower(payload_json), lower(?)) > 0" }.joined(separator: " OR ")
-                let tb = uniqueTerms.map { SQLValue.text($0) }
-                let n = try count(db, "SELECT COUNT(*) FROM case_checkpoints WHERE erased_at IS NULL AND (\(any));", tb)
-                if n > 0 {
+            if !historyTerms.isEmpty, tables.contains("case_checkpoints") {
+                let ids = try matchingIDs(db, table: "case_checkpoints", columns: ["name", "payload_json", "manifest_json"],
+                                          where: "erased_at IS NULL", terms: historyTerms)
+                for chunk in chunked(ids) {
                     try db.exec("""
-                        UPDATE case_checkpoints SET payload_json = '{}', manifest_json = '{}', content_digest = 'erased', erased_at = ?, erased_reason = ?
-                        WHERE erased_at IS NULL AND (\(any));
-                        """, [.date(date), .text("person erasure \(erasureID.uuidString)")] + tb)
-                    counts["case_checkpoints (content cleared)"] = n
+                        UPDATE case_checkpoints SET payload_json = '{}', manifest_json = '{}', content_digest = 'erased',
+                            name = CASE WHEN name IS NULL THEN NULL ELSE ? END, erased_at = ?, erased_reason = ?
+                        WHERE erased_at IS NULL AND id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));
+                        """, [.text(erasedCheckpointName), .date(date), .text("person erasure \(erasureID.uuidString)")] + chunk.map { .text($0) })
                 }
+                if !ids.isEmpty { counts["case_checkpoints (content cleared)"] = ids.count }
             }
-            if !uniqueTerms.isEmpty, tables.contains("case_record_revisions") {
-                let any = uniqueTerms.map { _ in "instr(lower(coalesce(before_json,'')), lower(?)) > 0 OR instr(lower(coalesce(after_json,'')), lower(?)) > 0" }
-                    .joined(separator: " OR ")
-                let tb = uniqueTerms.flatMap { [SQLValue.text($0), SQLValue.text($0)] }
-                let personClause = personIDs.isEmpty ? "0" : "(record_kind = 'person' AND record_id IN (\(personIDs.map { _ in "?" }.joined(separator: ","))))"
-                let where_ = "\(personClause) OR \(any)"
-                let wb = personIDs.map { SQLValue.text($0) } + tb
-                let n = try count(db, "SELECT COUNT(*) FROM case_record_revisions WHERE \(where_);", wb)
-                try db.exec("DELETE FROM case_record_revisions WHERE \(where_);", wb)
-                if n > 0 { counts["case_record_revisions"] = n }
+            if tables.contains("case_record_revisions") {
+                var ids = Set(try matchingIDs(db, table: "case_record_revisions", columns: ["before_json", "after_json"], where: nil, terms: historyTerms))
+                if !personIDs.isEmpty {
+                    ids.formUnion(try db.query("SELECT id FROM case_record_revisions WHERE record_kind = 'person' AND record_id IN (\(personIDs.map { _ in "?" }.joined(separator: ",")));",
+                                               personIDs.map { .text($0) }).compactMap { $0.string(0) })
+                }
+                for chunk in chunked(ids.sorted()) {
+                    try db.exec("DELETE FROM case_record_revisions WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));", chunk.map { .text($0) })
+                }
+                if !ids.isEmpty { counts["case_record_revisions"] = ids.count }
             }
             try db.exec("DELETE FROM ledger_person_erase WHERE erasure_id = ?;", [.uuid(erasureID)])
+        }
+        // v171 / v172 — saved map views whose name or filters (the person's search words) name the person, and saved
+        // case searches whose name, words or saved results name them, go whole (a view or a search is the person's
+        // own working aid, not evidence; nothing else refers to it).
+        for (table, cols) in [("case_map_views", ["name", "filters_json"]), ("case_saved_searches", ["name", "query_text", "result_json"])]
+        where tables.contains(table) && !nameTerms.isEmpty {
+            let ids = try matchingIDs(db, table: table, columns: cols, where: nil, terms: nameTerms)
+            for chunk in chunked(ids) {
+                try db.exec("DELETE FROM \"\(table)\" WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));", chunk.map { .text($0) })
+            }
+            if !ids.isEmpty { counts[table, default: 0] += ids.count }
         }
         // v171 — the case map's positions and links that point at the person's case-person rows go first
         // (map identities keep record ids lower-case).
@@ -397,10 +412,6 @@ public actor CaseEraser {
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
-            // v172 — saved case searches whose words or saved results name the person (their name or an alias).
-            ("case_saved_searches", "EXISTS (SELECT 1 FROM (SELECT ? AS n UNION SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks))) names "
-                + "WHERE length(trim(names.n)) > 1 AND (instr(lower(case_saved_searches.query_text), lower(names.n)) > 0 "
-                + "OR instr(lower(case_saved_searches.result_json), lower(names.n)) > 0))", [.text(name)] + binds),
         ]
         for (t, c) in [("entity_aliases", "entity_id"), ("entity_mentions", "entity_id"), ("event_entities", "entity_id"),
                        ("entity_communities", "entity_id"), ("workspace_entities", "entity_id"), ("workspace_derived_entities", "entity_id"),
@@ -437,7 +448,47 @@ public actor CaseEraser {
             if n > 0 { report.stillNamedIn[kind] = n }
         }
         if ambiguous > 0 { report.stillNamedIn["facts kept as ambiguous"] = ambiguous }
+        // LS19 — free text the erasure keeps by design and reports: the reasons on map links between other
+        // records (a link is withdrawn with a reason, never edited), and the names of recorded states already
+        // erased before (a stub is never edited again).
+        for (kind, table, cols, filter) in [("case map link reasons", "case_map_links", ["rationale", "withdrawn_reason"], nil as String?),
+                                            ("erased recorded-state names", "case_checkpoints", ["name"], "erased_at IS NOT NULL")]
+        where tables.contains(table) && !nameTerms.isEmpty {
+            do {
+                let n = try matchingIDs(db, table: table, columns: cols, where: filter, terms: nameTerms).count
+                if n > 0 { report.stillNamedIn[kind] = n }
+            } catch {
+                KalsmritikoshLog.app.error("Person erasure: the \(table, privacy: .public) inventory could not be read: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         return report
+    }
+
+    // MARK: - LS19 name matching (inside the savepoint)
+
+    /// The label a recorded state's name is replaced with when a person erasure clears it.
+    nonisolated static let erasedCheckpointName = "Recorded state (content erased)"
+
+    /// Whether `text` contains any of `terms`, ignoring case and diacritics in any script (so "zoe muller"
+    /// and "ZOË MÜLLER" both name "Zoë Müller"); composed and decomposed forms compare equal.
+    nonisolated static func names(_ text: String?, _ terms: [String]) -> Bool {
+        guard let text, !text.isEmpty else { return false }
+        return terms.contains { !$0.isEmpty && text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]) != nil }
+    }
+
+    /// The ids of `table`'s rows (optionally narrowed by `filter`) whose `columns` name any of `terms`.
+    static func matchingIDs(_ db: isolated Database, table: String, columns: [String], where filter: String?, terms: [String]) throws -> [String] {
+        guard !terms.isEmpty, !columns.isEmpty else { return [] }
+        let cols = columns.map { "coalesce(\"\($0)\", '')" }.joined(separator: ", ")
+        let rows = try db.query("SELECT id, \(cols) FROM \"\(table)\"\(filter.map { " WHERE \($0)" } ?? "");", [])
+        return rows.compactMap { row -> String? in
+            guard let id = row.string(0) else { return nil }
+            return (1...columns.count).contains { names(row.string($0), terms) } ? id : nil
+        }
+    }
+
+    nonisolated static func chunked(_ ids: [String], size: Int = 400) -> [[String]] {
+        stride(from: 0, to: ids.count, by: size).map { Array(ids[$0..<min($0 + size, ids.count)]) }
     }
 
     // MARK: - Helpers (inside the savepoint)
