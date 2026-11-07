@@ -307,8 +307,16 @@ public nonisolated struct CaseMapLink: Identifiable, Hashable, Sendable {
 
     static func makeID(type: CaseMapLinkType, from: CaseMapNodeID, to: CaseMapNodeID, origins: [CaseMapOrigin]) -> String {
         let canonical = ([type.rawValue, from.key, to.key] + origins.map { "\($0.kind.rawValue):\($0.recordID)" }.sorted()).joined(separator: "|")
-        return "link-" + SHA256.hash(data: Data(canonical.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+        // The same lower-case hex as String(format: "%02x") per byte, without a format call per byte (M9 §13.3:
+        // building link ids was the largest part of a projection at 50,000 records).
+        var hex: [UInt8] = []
+        hex.reserveCapacity(32)
+        for b in SHA256.hash(data: Data(canonical.utf8)).prefix(16) {
+            hex.append(hexDigits[Int(b >> 4)]); hex.append(hexDigits[Int(b & 0x0f)])
+        }
+        return "link-" + String(decoding: hex, as: UTF8.self)
     }
+    private static let hexDigits: [UInt8] = Array("0123456789abcdef".utf8)
 }
 
 /// A structural group: it summarises (and names) its members; it states nothing new.
@@ -482,28 +490,64 @@ public nonisolated enum CaseMapProjector {
     static func groups(_ sortedNodes: [CaseMapNode], _ sortedLinks: [CaseMapLink]) -> [CaseMapGroup] {
         var linked = Set<CaseMapNodeID>()
         for l in sortedLinks { linked.insert(l.from); linked.insert(l.to) }
-        var groups: [CaseMapGroup] = CaseMapNodeKind.allCases.compactMap { k in
-            let members = sortedNodes.filter { $0.kind == k }.map(\.id)
-            return members.isEmpty ? nil : CaseMapGroup(id: "group:\(k.rawValue)", title: k.plural, kind: k, members: members)
+        // One pass over the items (M9 §13.3), each kind's members kept in item order.
+        var byKind: [CaseMapNodeKind: [CaseMapNodeID]] = [:]
+        var unlinked: [CaseMapNodeID] = []
+        for n in sortedNodes {
+            byKind[n.kind, default: []].append(n.id)
+            if n.kind.isMaterial && !linked.contains(n.id) { unlinked.append(n.id) }
         }
-        let unlinked = sortedNodes.filter { $0.kind.isMaterial && !linked.contains($0.id) }.map(\.id)
+        var groups: [CaseMapGroup] = CaseMapNodeKind.allCases.compactMap { k in
+            guard let members = byKind[k], !members.isEmpty else { return nil }
+            return CaseMapGroup(id: "group:\(k.rawValue)", title: k.plural, kind: k, members: members)
+        }
         groups.append(CaseMapGroup(id: CaseMapGroup.unlinkedID, title: "Unlinked material", kind: nil, members: unlinked))
         return groups
     }
 
-    public static func project(_ input: CaseMapInput) -> CaseMapProjection {
+    public static func project(_ input: CaseMapInput) -> CaseMapProjection { project(input, reusing: nil).projection }
+
+    /// `kept` (already in order) and `added` (any order, none of them in `kept`) as one ordered list.
+    static func mergeOrdered<T>(kept: [T], added: [T], by less: (T, T) -> Bool) -> [T] {
+        guard !added.isEmpty else { return kept }
+        let b = added.sorted(by: less)
+        var out: [T] = []
+        out.reserveCapacity(kept.count + b.count)
+        var i = 0, j = 0
+        while i < kept.count, j < b.count {
+            if less(b[j], kept[i]) { out.append(b[j]); j += 1 } else { out.append(kept[i]); i += 1 }
+        }
+        out += kept[i...]; out += b[j...]
+        return out
+    }
+
+    /// The projection, reusing what an earlier projection of the same case built for chronology entries that are
+    /// unchanged (M9 §13.3: a refresh that adds 100 entries builds those 100, not all 50,000). An entry's item and
+    /// links are reused only when the entry, its verification marks, whether its origin is superseded and the
+    /// case's documents are all exactly as they were — the same inputs give the same output, so the result is
+    /// identical to projecting from scratch. Returns the memo for the next refresh.
+    public static func project(_ input: CaseMapInput, reusing memo: CaseMapProjectionMemo?) -> (projection: CaseMapProjection, memo: CaseMapProjectionMemo) {
         let s = input.snapshot
         let caseID = s.caseHeader.id
+        let reuse = memo.flatMap { $0.caseID == caseID && $0.documents == input.documents ? $0.journal : nil } ?? [:]
+        var nextJournal: [UUID: CaseMapProjectionMemo.JournalPiece] = [:]
+        nextJournal.reserveCapacity(s.journal.count)
+        var reusedEntries = 0
         var nodes: [CaseMapNodeID: CaseMapNode] = [:]
         var links: [String: CaseMapLink] = [:]
+        nodes.reserveCapacity(s.journal.count + input.documents.count + s.people.count + s.grid.count + 16)
+        links.reserveCapacity(s.journal.count + s.grid.count + 16)
         func id(_ kind: CaseMapRecordKind, _ uuid: UUID) -> CaseMapNodeID { CaseMapNodeID(caseID: caseID, kind: kind, id: uuid) }
         func add(_ n: CaseMapNode) { nodes[n.id] = n }
+        @discardableResult
         func link(_ type: CaseMapLinkType, _ from: CaseMapNodeID, _ to: CaseMapNodeID, origins: [CaseMapOrigin], sources: [CaseMapSourceRef],
-                  by: CaseMapAssertion, review: CaseMapReviewState, status: CaseMapStatus, basis: String) {
-            guard from != to else { return }
+                  by: CaseMapAssertion, review: CaseMapReviewState, status: CaseMapStatus, basis: String) -> CaseMapLink? {
+            guard from != to else { return nil }
             let lid = CaseMapLink.makeID(type: type, from: from, to: to, origins: origins)
-            links[lid] = CaseMapLink(id: lid, caseID: caseID, from: from, to: to, type: type, origins: origins, sources: sources,
-                                     assertedBy: by, review: review, status: status, basis: basis)
+            let l = CaseMapLink(id: lid, caseID: caseID, from: from, to: to, type: type, origins: origins, sources: sources,
+                                assertedBy: by, review: review, status: status, basis: basis)
+            links[lid] = l
+            return l
         }
 
         // Documents: identity is the logical source (stable across re-ingest); the revision is the version.
@@ -717,6 +761,15 @@ public nonisolated enum CaseMapProjector {
         // Chronology entries (events) and notes.
         let attestationsByEntry = Dictionary(grouping: s.attestations, by: \.journalEntryID)
         for e in s.journal {
+            let attest = attestationsByEntry[e.id] ?? []
+            let superseded = s.isSuperseded(e.origin)
+            if let piece = reuse[e.id], piece.entry == e, piece.attestations == attest, piece.superseded == superseded {
+                add(piece.node)
+                for l in piece.links { links[l.id] = l }
+                nextJournal[e.id] = piece
+                reusedEntries += 1
+                continue
+            }
             let nid = id(.journal, e.id)
             let refs = e.citations.isEmpty
                 ? (e.evidenceRef.flatMap { r -> StudioEvidenceRef? in
@@ -726,22 +779,26 @@ public nonisolated enum CaseMapProjector {
             let isNote = e.kind == .note
             var st = isNote ? CaseMapStatus(.unsupported, "Investigator's note — not documentary support")
                             : (refs.isEmpty ? CaseMapStatus(.unsupported, "An entry with no cited source") : status(of: e.support, version: refs.first?.sourceVersionID))
-            if s.isSuperseded(e.origin) { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
-            let attest = attestationsByEntry[e.id] ?? []
-            add(CaseMapNode(id: nid, revision: e.originDigest, kind: isNote ? .note : .event,
+            if superseded { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
+            let node = CaseMapNode(id: nid, revision: e.originDigest, kind: isNote ? .note : .event,
                             title: isNote ? "Note — \(String(e.text.prefix(60)))" : String(e.text.prefix(80)), wording: e.text,
                             status: st, review: carried(e.reviewState), sources: refs.map(source), author: .investigator(e.author),
                             recordedAt: e.createdAt, eventDate: isNote ? nil : e.eventDate,
                             history: attest.map { "\($0.state.rawValue.capitalized) by \($0.attestedBy) on \($0.attestedAt.formatted(date: .abbreviated, time: .omitted))" },
-                            changedSourceWarning: s.isSuperseded(e.origin) ? "The result revision this entry came from was replaced." : nil,
-                            isDocumentary: !isNote && !refs.isEmpty && e.support.isDocumentary))
+                            changedSourceWarning: superseded ? "The result revision this entry came from was replaced." : nil,
+                            isDocumentary: !isNote && !refs.isEmpty && e.support.isDocumentary)
+            add(node)
+            var made: [CaseMapLink] = []
             for ref in refs {
                 guard let d = docNode(version: ref.sourceVersionID, object: ref.objectID) else { continue }
-                link(isNote ? .mentions : .derivedFrom, nid, d, origins: [CaseMapOrigin(.journal, e.id.uuidString, revision: e.originDigest)],
-                     sources: [source(ref)], by: .investigator(e.author), review: carried(e.reviewState),
-                     status: isNote ? CaseMapStatus(.unsupported, "A note citing this document is not documentary support") : st,
-                     basis: isNote ? "The note cites this document." : "The chronology entry cites this passage.")
+                if let l = link(isNote ? .mentions : .derivedFrom, nid, d, origins: [CaseMapOrigin(.journal, e.id.uuidString, revision: e.originDigest)],
+                                sources: [source(ref)], by: .investigator(e.author), review: carried(e.reviewState),
+                                status: isNote ? CaseMapStatus(.unsupported, "A note citing this document is not documentary support") : st,
+                                basis: isNote ? "The note cites this document." : "The chronology entry cites this passage.") {
+                    made.append(l)
+                }
             }
+            nextJournal[e.id] = CaseMapProjectionMemo.JournalPiece(entry: e, attestations: attest, superseded: superseded, node: node, links: made)
         }
 
         // Hypotheses and leads with their citations.
@@ -887,14 +944,46 @@ public nonisolated enum CaseMapProjector {
         }
 
         // Groups: one per kind, and the material nothing links to.
-        let sortedNodes = nodes.values.sorted { $0.id < $1.id }
-        let sortedLinks = links.values.sorted { $0.id < $1.id }
+        // M9 (§13.3): with the previous projection of this case, its order is kept for the items still present and
+        // only the new ones are sorted and merged in (the same order as sorting everything; linear, not n log n).
+        let previous = memo.flatMap { $0.caseID == caseID ? $0.previous : nil }
+        let sortedNodes: [CaseMapNode] = previous.map { prev in
+            mergeOrdered(kept: prev.nodes.compactMap { nodes[$0.id] }, added: nodes.values.filter { prev.node($0.id) == nil }, by: { $0.id < $1.id })
+        } ?? nodes.values.sorted { $0.id < $1.id }
+        let sortedLinks: [CaseMapLink] = previous.map { prev in
+            mergeOrdered(kept: prev.links.compactMap { links[$0.id] }, added: links.values.filter { prev.link($0.id) == nil }, by: { $0.id < $1.id })
+        } ?? links.values.sorted { $0.id < $1.id }
         let groups = Self.groups(sortedNodes, sortedLinks)
 
         var parts = input.parts
         for p in CaseMapPart.allCases where parts[p] == nil { parts[p] = .loaded }
-        return CaseMapProjection(caseID: caseID, title: s.caseHeader.title, stage: s.caseHeader.status == .closed ? .closed : s.profile.stage,
-                                 isClosed: s.caseHeader.status == .closed, question: question, nodes: sortedNodes, links: sortedLinks,
-                                 groups: groups, parts: parts, danglingLinks: dangling, withdrawnLinks: withdrawn)
+        let projection = CaseMapProjection(caseID: caseID, title: s.caseHeader.title, stage: s.caseHeader.status == .closed ? .closed : s.profile.stage,
+                                           isClosed: s.caseHeader.status == .closed, question: question, nodes: sortedNodes, links: sortedLinks,
+                                           groups: groups, parts: parts, danglingLinks: dangling, withdrawnLinks: withdrawn)
+        return (projection, CaseMapProjectionMemo(caseID: caseID, documents: input.documents, journal: nextJournal, previous: projection,
+                                                         reusedEntries: reusedEntries))
     }
+}
+
+/// M9 (§13.3) — what one projection built for each chronology entry, with the inputs it was built from, so the next
+/// projection of the same case can reuse it when those inputs are unchanged. Holds no record that the projection
+/// itself does not hold; kept in memory only (never stored).
+public nonisolated struct CaseMapProjectionMemo: Sendable {
+    struct JournalPiece: Sendable {
+        let entry: CaseJournalEntry
+        let attestations: [CaseFactAttestation]
+        let superseded: Bool
+        let node: CaseMapNode
+        let links: [CaseMapLink]
+    }
+    let caseID: UUID
+    /// The case's documents the pieces were built against (a document's name, version or object changes every piece).
+    let documents: [CaseMapDocument]
+    let journal: [UUID: JournalPiece]
+    /// The projection this memo came from (its order is reused for the items still present).
+    let previous: CaseMapProjection
+    /// How many chronology entries this projection took from the memo it was given (not built again).
+    public let reusedEntries: Int
+    /// How many chronology entries this memo holds.
+    public var entries: Int { journal.count }
 }

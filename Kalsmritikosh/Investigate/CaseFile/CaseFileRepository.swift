@@ -304,13 +304,65 @@ public actor CaseFileRepository {
         var b: [SQLValue] = [.uuid(caseID)]
         if let kind { sql += " AND entry_kind = ?"; b.append(.text(kind.rawValue)) }
         sql += " ORDER BY COALESCE(event_date, created_at), created_at;"
-        return (try await database.query(sql, b)).compactMap { r in
-            guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(2).flatMap(CaseJournalKind.init(rawValue:)),
-                  let text = r.string(4), let author = r.string(6), let at = r.date(7) else { return nil }
-            return CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at,
-                                    quote: r.string(8), origin: r.string(9),
-                                    verification: r.string(10), verificationDetail: r.string(11), verifiedAt: r.date(12),
-                                    citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15))
+        return (try await database.query(sql, b)).compactMap { Self.journalEntry($0) }
+    }
+
+    /// One journal row in the column order of `journal(caseID:)` (columns 0–15).
+    static func journalEntry(_ r: SQLRow) -> CaseJournalEntry? {
+        guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(2).flatMap(CaseJournalKind.init(rawValue:)),
+              let text = r.string(4), let author = r.string(6), let at = r.date(7) else { return nil }
+        return CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at,
+                                quote: r.string(8), origin: r.string(9),
+                                verification: r.string(10), verificationDetail: r.string(11), verifiedAt: r.date(12),
+                                citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15))
+    }
+
+    // MARK: - Case map (M9 §13.3): the journal read incrementally
+
+    /// A digest of the case's journal rows up to `rowID`: their number and everything about them that can change
+    /// after they are written (verification, its detail and time, removal, review state, citations). Equal digests
+    /// mean those rows read the same as before; a new row has a larger rowid and is read on its own.
+    static func journalDigest(_ db: isolated Database, caseID: UUID, upToRowID rowID: Int64) throws -> String {
+        let row = try db.query("""
+            SELECT COUNT(*), total(rowid), total(verified_at), COUNT(verified_at), total(removed_at), COUNT(removed_at),
+                   total(length(verification)), total(length(verification_detail)), total(length(review_state)),
+                   total(length(citations_json)), total(length(origin_digest))
+            FROM case_journal WHERE case_id = ? AND rowid <= ?;
+            """, [.uuid(caseID), .integer(rowID)]).first
+        return row?.values.map { "\($0)" }.joined(separator: ",") ?? "-"
+    }
+
+    /// What `journalSince` read: `changed` when the rows up to the given rowid no longer match the digest the
+    /// caller holds (nothing else is read then); else the live rows written after it, the largest rowid seen
+    /// (removed rows included, so the next read starts after them) and the digest up to that rowid.
+    public nonisolated struct JournalDelta: Sendable {
+        public let changed: Bool
+        public let entries: [CaseJournalEntry]
+        public let maxRowID: Int64
+        public let digest: String
+    }
+
+    /// Case map (M9 §13.3): the journal rows written after `rowID`, if the rows up to it still match `known`
+    /// (nil: read from `rowID` without a check). One savepoint, so the check and the read see one state.
+    public func journalSince(caseID: UUID, afterRowID rowID: Int64, known: String?) async throws -> JournalDelta {
+        try await database.withSavepoint("cf_jdelta_\(UUID().uuidString.prefix(8))") { db in
+            if let known, try Self.journalDigest(db, caseID: caseID, upToRowID: rowID) != known {
+                return JournalDelta(changed: true, entries: [], maxRowID: rowID, digest: "")
+            }
+            let rows = try db.query("""
+                SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
+                       verification, verification_detail, verified_at, citations_json, review_state, origin_digest, rowid, removed_at
+                FROM case_journal WHERE case_id = ? AND rowid > ? ORDER BY rowid;
+                """, [.uuid(caseID), .integer(rowID)])
+            var out: [CaseJournalEntry] = []
+            var top = rowID
+            for r in rows {
+                if let rid = r.int(16) { top = max(top, rid) }
+                guard r.isNull(17), let e = Self.journalEntry(r) else { continue }
+                out.append(e)
+            }
+            let digest = (known != nil && rows.isEmpty) ? (known ?? "") : try Self.journalDigest(db, caseID: caseID, upToRowID: top)
+            return JournalDelta(changed: false, entries: out, maxRowID: top, digest: digest)
         }
     }
 

@@ -291,10 +291,13 @@ public actor CaseMapRepository {
             ("SELECT COUNT(*), coalesce(MAX(updated_at), 0) FROM case_interviews WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_exhibits WHERE case_id = ?;", [c]),
             // The versions of the case's documents (a revision arriving changes what the map shows as reopened).
+            // Driven from the case's sources into source_versions by its primary key (the same pairs as matching
+            // v.id against each source_ref in any case): the earlier form scanned every version for each source,
+            // quadratic in the case size (4–5 s per fence at 5,000 documents; the fence is read twice per load).
             ("""
              SELECT COUNT(*), coalesce(MAX(sv.created_at), 0), coalesce(SUM(sv.is_current), 0) FROM source_versions sv
-             WHERE sv.logical_source_id IN (SELECT v.logical_source_id FROM source_versions v JOIN investigation_case_sources s
-                                            ON s.source_ref IN (v.id, upper(v.id), lower(v.id)) WHERE s.case_id = ? AND s.in_scope = 1);
+             WHERE sv.logical_source_id IN (SELECT v.logical_source_id FROM investigation_case_sources s CROSS JOIN source_versions v
+                                            ON v.id IN (s.source_ref, upper(s.source_ref), lower(s.source_ref)) WHERE s.case_id = ? AND s.in_scope = 1);
              """, [c]),
             ("SELECT COUNT(*), coalesce(MAX(detected_at), 0) FROM contradictions;", []),
         ]

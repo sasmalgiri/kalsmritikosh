@@ -761,4 +761,39 @@ extension CaseErasureTests {
         #expect(out.summary.contains("case map link reasons"))
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM ledger_person_erase;", []) == 0)
     }
+
+    @Test("LS23: the 'still named in' counts match the name ignoring case and accents — 'Zoë Müller' written 'zoe muller' in a saved answer, a document and a studio draft is counted; 'Zoe Miller' is not")
+    func personEraseInventoryMatchesUnicode() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let now = Date()
+        let entity = UUID()
+        let ko = try await Self.firstKO(f.db, f.sharedFile)
+        try await f.db.exec("INSERT INTO entities (id, kind, value, normalized, source_object_id) VALUES (?,?,?,?,?);",
+                            [.uuid(entity), .text("person"), .text("Zoë Müller"), .text("zoë müller"), .text(ko)])
+        // A document naming her without accents (originals are kept and counted, never edited).
+        try await f.db.exec("UPDATE knowledge_objects SET content = coalesce(content, '') || ' Signed by ZOE MULLER.' WHERE id = ?;", [.text(ko)])
+        for (body, n) in [("We met zoe muller on Monday.", 1), ("Zoe Miller is someone else.", 2)] {
+            try await f.db.exec("INSERT INTO answers (id, question, answer_state, body, created_at) VALUES (?,?,?,?,?);",
+                                [.text(UUID().uuidString), .text("q\(n)"), .text("verifiedFinal"), .text(body), .date(now)])
+        }
+        for payload in [#"{"note":"interview zoe muller"}"#, #"{"note":"interview Zoe Miller"}"#] {
+            try await f.db.exec("""
+                INSERT INTO studio_records (id, studio, case_id, payload_json, payload_sha256, created_by, created_at, updated_by, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .text("siu"), .uuid(f.caseB), .text(payload), .text("h"), .text("T"), .date(now), .text("T"), .date(now)])
+        }
+        // More rows than one page, so the paged scan crosses a page boundary.
+        for i in 0..<(CaseEraser.namingPageSize + 5) {
+            try await f.db.exec("INSERT INTO answers (id, question, answer_state, body, created_at) VALUES (?,?,?,?,?);",
+                                [.text(UUID().uuidString), .text("filler \(i)"), .text("verifiedFinal"), .text("unrelated \(i)"), .date(now)])
+        }
+        try await f.db.exec("INSERT INTO answers (id, question, answer_state, body, created_at) VALUES (?,?,?,?,?);",
+                            [.text(UUID().uuidString), .text("last"), .text("verifiedFinal"), .text("Zoe\u{0308} Mu\u{0308}ller, decomposed"), .date(now)])
+        let out = try await f.state.erasePerson(entity, reason: "Subject request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        #expect(out.report.documentsStillNaming == 1)
+        #expect(out.report.stillNamedIn["saved answers"] == 2, "the plain and the decomposed answer; not the Zoe Miller one")
+        #expect(out.report.stillNamedIn["studio drafts"] == 1)
+    }
 }

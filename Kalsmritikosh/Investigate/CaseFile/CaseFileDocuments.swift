@@ -58,9 +58,19 @@ public nonisolated struct CaseFileSnapshot: Sendable {
 extension CaseFileService {
     /// Read the whole case file (custody manifest passed in — it comes from the custody service).
     public func snapshot(caseID: UUID, custody: [CustodyManifestEntry]) async throws -> CaseFileSnapshot? {
+        try await snapshot(caseID: caseID, custody: custody, journal: nil, forMap: false)
+    }
+
+    /// The case file as the case map reads it (M9 §13.3): `journal`, when given, is the case's journal as read by
+    /// the caller (the map reads it incrementally); `forMap` leaves out what the map does not show — the contact
+    /// log, credibility notes, hold notices, redactions, review batches, conflict checks and the action log —
+    /// as empty lists. Every other part is read exactly as `snapshot(caseID:custody:)` reads it.
+    public func snapshot(caseID: UUID, custody: [CustodyManifestEntry], journal given: [CaseJournalEntry]?,
+                         forMap: Bool) async throws -> CaseFileSnapshot? {
         guard let header = try await caseHeader(caseID) else { return nil }
         let grid = try await file.allegationEvidence(caseID: caseID)
-        let journal = try await file.journal(caseID: caseID)
+        let journal: [CaseJournalEntry]
+        if let given { journal = given } else { journal = try await file.journal(caseID: caseID) }
         let items = try await file.reportItems(caseID: caseID)
         // §3 — a carried row whose result revision is no longer the job's current one is superseded:
         // the report says so and asks for re-review instead of silently showing the old revision as current.
@@ -78,11 +88,11 @@ extension CaseFileService {
             caseHeader: header, profile: try await file.profile(caseID: caseID), allegations: try await file.allegations(caseID: caseID),
             grid: grid, tasks: try await caseTasks(caseID: caseID),
             journal: journal, people: try await file.people(caseID: caseID),
-            contacts: try await file.contacts(caseID: caseID), interviews: try await file.interviews(caseID: caseID),
-            credibility: try await file.credibility(caseID: caseID), exhibits: try await file.exhibits(caseID: caseID, includeWithdrawn: true),
-            holds: try await file.holdNotices(caseID: caseID), redactions: try await file.redactions(caseID: caseID),
-            batches: try await file.reviewBatches(caseID: caseID), conflicts: try await file.conflictChecks(caseID: caseID),
-            actions: try await file.actions(caseID: caseID), custody: custody, addenda: try await file.addenda(caseID: caseID),
+            contacts: forMap ? [] : try await file.contacts(caseID: caseID), interviews: try await file.interviews(caseID: caseID),
+            credibility: forMap ? [] : try await file.credibility(caseID: caseID), exhibits: try await file.exhibits(caseID: caseID, includeWithdrawn: true),
+            holds: forMap ? [] : try await file.holdNotices(caseID: caseID), redactions: forMap ? [] : try await file.redactions(caseID: caseID),
+            batches: forMap ? [] : try await file.reviewBatches(caseID: caseID), conflicts: forMap ? [] : try await file.conflictChecks(caseID: caseID),
+            actions: forMap ? [] : try await file.actions(caseID: caseID), custody: custody, addenda: try await file.addenda(caseID: caseID),
             reportItems: items, supersededOrigins: superseded, attestations: try await file.attestations(caseID: caseID))
     }
 }

@@ -410,8 +410,8 @@ public actor CaseChangeFeedService {
                        EXISTS (SELECT 1 FROM investigation_case_sources s WHERE s.case_id = ? AND s.in_scope = 1 AND s.source_ref IN (sv.id, upper(sv.id), lower(sv.id)))
                 FROM source_versions sv
                 WHERE sv.created_at > ?
-                  AND sv.logical_source_id IN (SELECT v.logical_source_id FROM source_versions v JOIN investigation_case_sources s
-                                                 ON s.source_ref IN (v.id, upper(v.id), lower(v.id)) WHERE s.case_id = ? AND s.in_scope = 1)
+                  AND sv.logical_source_id IN (SELECT v.logical_source_id FROM investigation_case_sources s CROSS JOIN source_versions v
+                                                 ON v.id IN (s.source_ref, upper(s.source_ref), lower(s.source_ref)) WHERE s.case_id = ? AND s.in_scope = 1)
                   AND EXISTS (SELECT 1 FROM source_versions o WHERE o.logical_source_id = sv.logical_source_id AND o.created_at < sv.created_at)
                 ORDER BY sv.created_at DESC;
                 """, [c, sinceValue, c])

@@ -223,6 +223,12 @@ struct CaseMapPerfResult: Codable {
     var seedSeconds = 0.0
     var loadColdMs = 0.0
     var loadWarmMs: [Double] = []
+    /// A warm ledger read by a NEW service (nothing remembered from an earlier load: the map opened again).
+    var loadFreshServiceMs: [Double] = []
+    /// Where a fresh warm load spends its time, each read timed on its own.
+    var warmStagesMs: [String: Double] = [:]
+    /// Chronology entries the incremental refresh reused from the previous projection (not built again).
+    var incrementalReusedEntries = 0
     var loadState = ""
     var initialLayoutMs: [Double] = []
     var viewSwitchMs: [Double] = []
@@ -283,6 +289,13 @@ struct CaseMapPerfHarnessTests {
             r.loadWarmMs.append(await CaseMapPerf.msAsync { warm = await service.load(caseID: f.caseID, generation: UInt64(g)) })
             #expect(warm?.placements == cold?.placements, "a warm load moved a position")
         }
+        for g in 7...9 {
+            var fresh: CaseMapLoad?
+            r.loadFreshServiceMs.append(await CaseMapPerf.msAsync { fresh = await CaseMapService(sources: caseMapSources(f)).load(caseID: f.caseID, generation: UInt64(g)) })
+            #expect(fresh?.placements == cold?.placements, "a fresh load moved a position")
+            #expect(fresh?.projection?.nodes == first.nodes && fresh?.projection?.links == first.links, "a fresh load read a different case")
+        }
+        r.warmStagesMs = try await Self.stages(f, caseMapSources(f))
 
         // Pure initial layout (what a cold load computes).
         for _ in 0..<3 { r.initialLayoutMs.append(CaseMapPerf.ms { _ = CaseMapLayout.initial(first) }) }
@@ -359,7 +372,11 @@ struct CaseMapPerfHarnessTests {
                                             evidenceRef: d.version.uuidString, quote: nil, actor: "Ada")
         }
         r.incrementalLoadMs = await CaseMapPerf.msAsync { await model.refresh(service) }
+        r.incrementalReusedEntries = await service.lastReusedEntries
         let grown = try #require(model.projection)
+        // The incremental result is exactly what a load from scratch reads (same items, links, groups and counts).
+        let scratch = try #require(await CaseMapService(sources: caseMapSources(f)).load(caseID: f.caseID, generation: 99).projection)
+        #expect(grown.nodes == scratch.nodes && grown.links == scratch.links && grown.groups == scratch.groups, "the incremental refresh differs from a full read")
         r.incrementalNewRecords = grown.nodes.count - p.nodes.count
         r.existingPositionsMoved = before.filter { model.placements[$0.key]?.point != $0.value.point }.count
         #expect(r.incrementalNewRecords == 100)
@@ -441,7 +458,8 @@ struct CaseMapPerfHarnessTests {
             out += "| Measurement | p50 | p95 | n |\n|---|---|---|---|\n"
             func row(_ name: String, _ xs: [Double]) -> String { String(format: "| %@ | %.1f ms | %.1f ms | %d |\n", name, r.p(xs, 0.5), r.p(xs, 0.95), xs.count) }
             out += String(format: "| Projection load, cold (first layout computed and stored) | %.1f ms | — | 1 |\n", r.loadColdMs)
-            out += row("Projection load, warm", r.loadWarmMs)
+            out += row("Projection load, warm (same service: incremental journal read, unchanged entries reused)", r.loadWarmMs)
+            out += row("Projection load, warm, new service (everything read and built again)", r.loadFreshServiceMs)
             out += row("Initial layout (pure)", r.initialLayoutMs)
             out += row("View switch (model + view result)", r.viewSwitchMs)
             out += row("Local filter (Find on this map / Waiting for me)", r.localFilterMs)
@@ -451,6 +469,11 @@ struct CaseMapPerfHarnessTests {
             out += String(format: "| Incremental: placeNew only | %.1f ms | — | 1 |\n", r.incrementalPlaceNewMs)
             for (q, t) in r.searchMs.sorted(by: { $0.key < $1.key }) {
                 out += String(format: "| Case search `%@` (%d documents) | %.1f ms | — | 1 |\n", q, r.searchDocuments[q] ?? -1, t)
+            }
+            if !r.warmStagesMs.isEmpty {
+                out += "\nWhere a fresh warm load spends its time (each read timed on its own; the parts overlap the whole snapshot):\n\n| Stage | ms |\n|---|---|\n"
+                for (k, v) in r.warmStagesMs.sorted(by: { $0.value > $1.value }) { out += String(format: "| %@ | %.1f |\n", k, v) }
+                out += "\nIncremental refresh: \(r.incrementalReusedEntries) chronology entries reused from the previous projection.\n"
             }
             out += "\nCulling at fit-all: \(r.cullDrawn) drawn, \(r.cullOverCap) held back (disclosed on screen). Overview collapsed groups: \(r.collapsedGroupsOverview). "
             out += "List pages to reach every record: \(r.listPagesToReachAll). Every record reachable: \(r.everyRecordReachable). New records: \(r.incrementalNewRecords); existing positions moved: \(r.existingPositionsMoved). "
@@ -489,6 +512,53 @@ struct CaseMapPerfHarnessTests {
             try json.write(to: dir.appendingPathComponent("case-map-perf-\(spec.label).json"), atomically: true, encoding: .utf8)
             try md.write(to: dir.appendingPathComponent("case-map-perf-\(spec.label).md"), atomically: true, encoding: .utf8)
         }
+    }
+
+    /// Where a warm load spends its time: each read the service makes, timed on its own (same ledger, warm).
+    static func stages(_ f: CaseFileTests.Fixture, _ sources: CaseMapSources) async throws -> [String: Double] {
+        var t: [String: Double] = [:]
+        let caseID = f.caseID
+        t["fence"] = try await CaseMapPerf.msAsync { _ = try await sources.map.revisionFence(caseID: caseID) }
+        var custody: [CustodyManifestEntry] = []
+        t["custody"] = try await CaseMapPerf.msAsync { custody = try await sources.custody?(caseID) ?? [] }
+        let c = custody
+        t["snapshot as the map reads it (whole)"] = try await CaseMapPerf.msAsync { _ = try await sources.snapshot(caseID, c) }
+        let file = f.file, svc = f.svc
+        t["snapshot.header"] = try await CaseMapPerf.msAsync { _ = try await svc.caseHeader(caseID) }
+        t["snapshot.grid"] = try await CaseMapPerf.msAsync { _ = try await file.allegationEvidence(caseID: caseID) }
+        t["snapshot.journal (full read; the map reads new rows only)"] = try await CaseMapPerf.msAsync { _ = try await file.journal(caseID: caseID) }
+        t["snapshot.reportItems"] = try await CaseMapPerf.msAsync { _ = try await file.reportItems(caseID: caseID) }
+        t["snapshot.profile"] = try await CaseMapPerf.msAsync { _ = try await file.profile(caseID: caseID) }
+        t["snapshot.allegations"] = try await CaseMapPerf.msAsync { _ = try await file.allegations(caseID: caseID) }
+        t["snapshot.tasks"] = try await CaseMapPerf.msAsync { _ = try await svc.caseTasks(caseID: caseID) }
+        t["snapshot.people"] = try await CaseMapPerf.msAsync { _ = try await file.people(caseID: caseID) }
+        t["snapshot.actions (full read; the map no longer reads it)"] = try await CaseMapPerf.msAsync { _ = try await file.actions(caseID: caseID) }
+        t["snapshot.attestations"] = try await CaseMapPerf.msAsync { _ = try await file.attestations(caseID: caseID) }
+        t["snapshot.exhibits"] = try await CaseMapPerf.msAsync { _ = try await file.exhibits(caseID: caseID, includeWithdrawn: true) }
+        let versions = Set(custody.map(\.sourceVersionID))
+        var objects: [UUID: UUID] = [:]
+        t["objectsByVersion"] = try await CaseMapPerf.msAsync { objects = try await sources.objectsByVersion(versions) }
+        let o = objects
+        var documents: [CaseMapDocument] = []
+        t["documents"] = try await CaseMapPerf.msAsync { documents = try await sources.map.documents(versionIDs: versions, objectsByVersion: o) }
+        var contradictions: [CaseContradictionReviewItem] = [], hypotheses: [CaseMapHypothesis] = [], requests: [EvidenceRequestFile] = []
+        var links: [CaseMapInvestigatorLink] = []
+        t["contradictions"] = try await CaseMapPerf.msAsync { contradictions = try await sources.contradictions?(caseID) ?? [] }
+        t["hypotheses"] = try await CaseMapPerf.msAsync { hypotheses = try await sources.hypotheses?(caseID) ?? [] }
+        t["requests"] = try await CaseMapPerf.msAsync { requests = try await sources.requests?(caseID) ?? [] }
+        t["investigatorLinks"] = try await CaseMapPerf.msAsync { links = try await sources.map.links(caseID: caseID) }
+        var stored: [CaseMapNodeID: CaseMapPlacement] = [:]
+        t["layout read"] = try await CaseMapPerf.msAsync { stored = try await sources.map.layout(caseID: caseID) }
+        t["views"] = try await CaseMapPerf.msAsync { _ = try await sources.map.views(caseID: caseID) }
+        guard let snap = try await sources.snapshot(caseID, c) else { return t }
+        let input = CaseMapInput(snapshot: snap, documents: documents, contradictions: contradictions, hypotheses: hypotheses,
+                                 requests: requests, investigatorLinks: links)
+        var projection: CaseMapProjection?
+        t["project (pure)"] = CaseMapPerf.ms { projection = CaseMapProjector.project(input) }
+        if let p = projection {
+            t["placeNew, all stored (pure)"] = CaseMapPerf.ms { _ = CaseMapLayout.placeNew(p, existing: stored) }
+        }
+        return t
     }
 
     @Test("Full §13.3 measurement, normal case: 500 documents, ~2,000 records, ~3,000 links (CASE_MAP_PERF only)", .enabled(if: perfEnabled), .timeLimit(.minutes(30)))

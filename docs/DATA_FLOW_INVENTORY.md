@@ -126,7 +126,8 @@ links, case-subject rows (with the case map positions and map links pointing at 
 ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
 answers, topics, conversation turns, case map link reasons between other records, and names of recorded states erased earlier.
 Name matching ignores case and diacritics in any script for the case-map, saved-search and history tables ("Zoë Müller" is found
-as "zoe muller").
+as "zoe muller"), and (LS23) for the counts of what still names them: documents, studio drafts, saved answers, topics and
+conversation turns.
 
 Both keep a fixed erasure record: who, when, the reason as written, the legal basis, and row counts. A person is recorded
 by a SHA-256 of the lower-cased name. **A hash of a name and a free-text reason are not anonymous by themselves**: a

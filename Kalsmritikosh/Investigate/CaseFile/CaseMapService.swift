@@ -42,13 +42,19 @@ public nonisolated struct CaseMapSources: Sendable {
         self.contradictions = contradictions; self.hypotheses = hypotheses; self.requests = requests; self.map = map
     }
 
-    /// The live sources over the app's services.
+    /// The live sources over the app's services. The case file is read as the map shows it, with the journal
+    /// read incrementally (M9 §13.3: only rows written since the last read are read again).
     public static func live(database: Database, caseFiles: CaseFileService, custody: InvestigationCustodyService?,
                             analysis: InvestigationAnalysisService?, desk: InvestigationContradictionGapService?,
                             objects: KnowledgeObjectRepository) -> CaseMapSources {
-        CaseMapSources(
+        let journal = CaseMapJournalCache(file: caseFiles.file)
+        return CaseMapSources(
             custody: custody.map { c in { id in try await c.manifest(caseID: id) } },
-            snapshot: { id, custody in try await caseFiles.snapshot(caseID: id, custody: custody) },
+            snapshot: { id, custody in
+                // The header first: an erased case reads as "not in the ledger", and its journal is forgotten.
+                guard try await caseFiles.caseHeader(id) != nil else { await journal.forget(id); return nil }
+                return try await caseFiles.snapshot(caseID: id, custody: custody, journal: try await journal.journal(caseID: id), forMap: true)
+            },
             objectsByVersion: { versions in
                 var map: [UUID: UUID] = [:]
                 for (object, vs) in try await objects.sourceVersionsByObject(inSourceVersionIDs: versions) {
@@ -67,6 +73,70 @@ public nonisolated struct CaseMapSources: Sendable {
     }
 }
 
+/// M9 (§13.3) — the case journal as the map last read it, so a refresh reads only the rows written since. The
+/// rows read before are reused only while their digest (number, verification, removal, review state, citations)
+/// is unchanged; any difference, or any failed read, reads the whole journal again. One case is kept at a time.
+public actor CaseMapJournalCache {
+    private let file: CaseFileRepository
+    private var caseID: UUID?
+    private var entries: [CaseJournalEntry] = []
+    private var maxRowID: Int64 = 0
+    private var digest = ""
+    /// How the last read was made (tests and the harness read it): rows reused, rows read.
+    public private(set) var lastRead: (reused: Int, read: Int) = (0, 0)
+
+    public init(file: CaseFileRepository) { self.file = file }
+
+    public func forget(_ id: UUID) {
+        guard caseID == id else { return }
+        caseID = nil; entries = []; maxRowID = 0; digest = ""
+    }
+
+    /// The case's live journal entries, in the order `CaseFileRepository.journal(caseID:)` returns them.
+    public func journal(caseID id: UUID) async throws -> [CaseJournalEntry] {
+        if caseID == id {
+            do {
+                let delta = try await file.journalSince(caseID: id, afterRowID: maxRowID, known: digest)
+                if !delta.changed {
+                    let reused = entries.count
+                    if !delta.entries.isEmpty { entries = Self.merge(entries, Self.ordered(delta.entries)) }
+                    maxRowID = delta.maxRowID
+                    digest = delta.digest
+                    lastRead = (reused, delta.entries.count)
+                    return entries
+                }
+            } catch {
+                KalsmritikoshLog.app.error("Case map journal: the incremental read failed, reading it whole: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        forget(caseID ?? id)
+        let all = try await file.journalSince(caseID: id, afterRowID: Int64.min, known: nil)
+        caseID = id; entries = Self.ordered(all.entries); maxRowID = all.maxRowID; digest = all.digest
+        lastRead = (0, all.entries.count)
+        return entries
+    }
+
+    /// The order of `CaseFileRepository.journal(caseID:)`: by event date (else when it was written), then when written.
+    static func precedes(_ a: CaseJournalEntry, _ b: CaseJournalEntry) -> Bool {
+        let ka = a.eventDate ?? a.createdAt, kb = b.eventDate ?? b.createdAt
+        if ka != kb { return ka < kb }
+        return a.createdAt < b.createdAt
+    }
+    static func ordered(_ list: [CaseJournalEntry]) -> [CaseJournalEntry] { list.sorted(by: precedes) }
+
+    /// Two ordered lists merged in one pass (a refresh adds a few rows to many).
+    static func merge(_ a: [CaseJournalEntry], _ b: [CaseJournalEntry]) -> [CaseJournalEntry] {
+        var out: [CaseJournalEntry] = []
+        out.reserveCapacity(a.count + b.count)
+        var i = 0, j = 0
+        while i < a.count, j < b.count {
+            if precedes(b[j], a[i]) { out.append(b[j]); j += 1 } else { out.append(a[i]); i += 1 }
+        }
+        out += a[i...]; out += b[j...]
+        return out
+    }
+}
+
 /// One load of the case map.
 public nonisolated struct CaseMapLoad: Sendable {
     public let caseID: UUID
@@ -82,6 +152,10 @@ public nonisolated struct CaseMapLoad: Sendable {
 
 public actor CaseMapService {
     private let sources: CaseMapSources
+    /// M9 (§13.3) — what the last projection built per chronology entry (one case; memory only).
+    private var memo: CaseMapProjectionMemo?
+    /// How many chronology entries the last load reused from the previous projection (tests and the harness).
+    public private(set) var lastReusedEntries = 0
     public init(sources: CaseMapSources) { self.sources = sources }
 
     public nonisolated var repository: CaseMapRepository { sources.map }
@@ -132,7 +206,10 @@ public actor CaseMapService {
         }
         let snapshot: CaseFileSnapshot
         do {
-            guard let s = try await sources.snapshot(caseID, custody) else { return failed("This case is not in the ledger (it may have been erased).") }
+            guard let s = try await sources.snapshot(caseID, custody) else {
+                if memo?.caseID == caseID { memo = nil }   // an erased case keeps nothing in memory
+                return failed("This case is not in the ledger (it may have been erased).")
+            }
             snapshot = s
         } catch {
             KalsmritikoshLog.app.error("Case map snapshot read failed: \(error.localizedDescription, privacy: .public)")
@@ -164,8 +241,13 @@ public actor CaseMapService {
         let requests = await part(.requests, sources.requests)
         let links = await part(.investigatorLinks, { [map = sources.map] id in try await map.links(caseID: id) })
 
-        let projection = CaseMapProjector.project(CaseMapInput(snapshot: snapshot, documents: documents, contradictions: contradictions,
-                                                               hypotheses: hypotheses, requests: requests, investigatorLinks: links, parts: parts))
+        // M9 (§13.3): chronology entries unchanged since the last projection of this case are reused, not rebuilt.
+        let built = CaseMapProjector.project(CaseMapInput(snapshot: snapshot, documents: documents, contradictions: contradictions,
+                                                          hypotheses: hypotheses, requests: requests, investigatorLinks: links, parts: parts),
+                                             reusing: memo?.caseID == caseID ? memo : nil)
+        let projection = built.projection
+        memo = built.memo
+        lastReusedEntries = built.memo.reusedEntries
         let fingerprint = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: snapshot.caseHeader.revision,
                                                              scope: .authorizing(versions)).value
         // Layout: stored positions are kept as they are; only items without one are placed and stored.

@@ -16,6 +16,7 @@
 //  v171 migration from v170 keeps earlier rows.
 //
 
+import CryptoKit
 import Foundation
 import Testing
 @testable import Kalsmritikosh
@@ -542,5 +543,93 @@ struct CaseMapLinkTests {
         #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await MigrationFaultHarness.integrityOK(db))
         #expect(SchemaMigrations.isIdempotent(try #require(SchemaMigrations.migrationSQL(for: 171))), "v171 can be re-run by the repair pass")
+    }
+}
+
+// MARK: - M9 §13.3 incremental refresh
+
+extension CaseMapProjectionTests {
+
+    /// The live map projection read from scratch (a new service: nothing remembered).
+    static func scratch(_ f: CaseFileTests.Fixture) async throws -> CaseMapProjection {
+        try #require(await CaseMapService(sources: caseMapSources(f)).load(caseID: f.caseID, generation: 1).projection)
+    }
+
+    static func same(_ a: CaseMapProjection, _ b: CaseMapProjection) -> Bool {
+        a.nodes == b.nodes && a.links == b.links && a.groups == b.groups && a.danglingLinks == b.danglingLinks && a.withdrawnLinks == b.withdrawnLinks
+    }
+
+    @Test("M9: a refresh reads only new chronology rows and reuses unchanged entries, and gives exactly what a full read gives; a removal or a re-verification reads the journal whole again")
+    func incrementalRefreshMatchesFullRead() async throws {
+        let rig = try await CaseMapRig.make()
+        let f = rig.f
+        var entries: [UUID] = []
+        for i in 0..<6 {
+            entries.append(try await f.file.addJournal(caseID: f.caseID, kind: i % 3 == 0 ? .note : .chronology, text: "Entry \(i)",
+                                                       eventDate: Date(timeIntervalSince1970: 1_700_000_000 + Double(i)),
+                                                       evidenceRef: (i % 2 == 0 ? rig.a : rig.b).version.uuidString, quote: nil, actor: "Ada"))
+        }
+        let journal = CaseMapJournalCache(file: f.file)
+        var sources = caseMapSources(f)
+        sources.snapshot = { id, custody in try await f.svc.snapshot(caseID: id, custody: custody, journal: try await journal.journal(caseID: id), forMap: true) }
+        let service = CaseMapService(sources: sources)
+        let first = try #require(await service.load(caseID: f.caseID, generation: 1).projection)
+        #expect(Self.same(first, try await Self.scratch(f)))
+        #expect(await journal.lastRead.read == 6)
+
+        // Three new entries (one dated before the others): only they are read and built.
+        for i in 6..<9 {
+            entries.append(try await f.file.addJournal(caseID: f.caseID, kind: .chronology, text: "Late \(i)",
+                                                       eventDate: Date(timeIntervalSince1970: i == 7 ? 1_600_000_000 : 1_800_000_000),
+                                                       evidenceRef: rig.a.version.uuidString, quote: nil, actor: "Ada"))
+        }
+        let second = try #require(await service.load(caseID: f.caseID, generation: 2).projection)
+        let read = await journal.lastRead
+        #expect(read.reused == 6 && read.read == 3)
+        #expect(await service.lastReusedEntries == 6)
+        #expect(Self.same(second, try await Self.scratch(f)))
+        #expect(second.nodes.count == first.nodes.count + 3)
+        let fullJournal = try await f.file.journal(caseID: f.caseID).map(\.id)
+        #expect(try await journal.journal(caseID: f.caseID).map(\.id) == fullJournal, "the incremental journal is in the repository's order")
+
+        // A removed entry and a re-verified one: the rows read before changed, so the journal is read whole again.
+        try await f.file.retractJournal(caseID: f.caseID, id: entries[1], actor: "Ada")
+        try await f.file.recordVerification(journalID: entries[2], caseID: f.caseID,
+                                            CaseEvidenceVerification(support: .unverified("quoted words not found"), passage: nil))
+        let third = try #require(await service.load(caseID: f.caseID, generation: 3).projection)
+        #expect(await journal.lastRead.reused == 0)
+        #expect(Self.same(third, try await Self.scratch(f)))
+        #expect(third.node(rig.node(.journal, entries[1])) == nil)
+        #expect(third.node(rig.node(.journal, entries[2]))?.status.kind == .unsupported)
+
+        // Nothing changed: the same projection again, every entry reused.
+        let fourth = try #require(await service.load(caseID: f.caseID, generation: 4).projection)
+        #expect(Self.same(fourth, third))
+        #expect(await service.lastReusedEntries == fullJournal.count - 1)
+    }
+
+    @Test("M9: a document renamed between refreshes rebuilds the entries citing it (nothing stale is reused)")
+    func documentChangeRebuildsEntries() async throws {
+        let rig = try await CaseMapRig.make()
+        let f = rig.f
+        _ = try await f.file.addJournal(caseID: f.caseID, kind: .chronology, text: "Paid", eventDate: Date(), evidenceRef: rig.a.version.uuidString,
+                                        quote: nil, actor: "Ada")
+        let service = CaseMapService(sources: caseMapSources(f))
+        _ = await service.load(caseID: f.caseID, generation: 1)
+        try await f.db.exec("UPDATE source_versions SET filename = 'renamed-invoice.txt' WHERE id = ?;", [.uuid(rig.a.version)])
+        let after = try #require(await service.load(caseID: f.caseID, generation: 2).projection)
+        #expect(await service.lastReusedEntries == 0)
+        #expect(Self.same(after, try await Self.scratch(f)))
+        #expect(after.links.contains { $0.sources.contains { $0.documentName == "renamed-invoice.txt" } })
+    }
+
+    @Test("M9: link ids are the same lower-case hex digest as before the faster encoding")
+    func linkIDEncodingUnchanged() {
+        let c = UUID()
+        let from = CaseMapNodeID(caseID: c, kind: .journal, id: UUID()), to = CaseMapNodeID(caseID: c, kind: .document, id: UUID())
+        let origins = [CaseMapOrigin(.journal, from.recordID, revision: "r1"), CaseMapOrigin(.rule, "same-name")]
+        let canonical = ([CaseMapLinkType.derivedFrom.rawValue, from.key, to.key] + origins.map { "\($0.kind.rawValue):\($0.recordID)" }.sorted()).joined(separator: "|")
+        let expected = "link-" + SHA256.hash(data: Data(canonical.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+        #expect(CaseMapLink.makeID(type: .derivedFrom, from: from, to: to, origins: origins) == expected)
     }
 }

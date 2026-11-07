@@ -431,7 +431,10 @@ public actor CaseEraser {
         if try count(db, "SELECT COUNT(*) FROM entities WHERE id IN (\(marks));", binds) > 0 {
             throw Refused(why: "Not erased: the person's record could not be removed. Nothing was deleted.")
         }
-        let naming = try count(db, "SELECT COUNT(*) FROM knowledge_objects WHERE instr(lower(content), lower(?)) > 0;", [.text(name)])
+        // LS23 — the documents and other free text that still name them are counted with the same Unicode
+        // matcher (case-, diacritic- and width-insensitive), read a page at a time. No SQL prefilter: lower()/LIKE
+        // fold ASCII only and would miss "zoe muller" for "Zoë Müller".
+        let naming = try matchingCount(db, table: "knowledge_objects", columns: ["content"], where: nil, terms: [name])
         let subject = StudioRecordRepository.sha256(Data(name.lowercased().utf8))
         try record(db, id: erasureID, scope: "person", caseID: nil, subject: subject, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: 0, kept: 0, actor: actor, at: date)
@@ -439,13 +442,15 @@ public actor CaseEraser {
                                        sourcesKeptInLibrary: 0, documentsStillNaming: naming, vaultAddresses: [])
         report.ambiguousFactsKept = ambiguous
         // A5 — the complete inventory of what still names them.
-        for (kind, sql) in [("studio drafts", "SELECT COUNT(*) FROM studio_records WHERE instr(lower(payload_json), lower(?)) > 0"),
-                            ("saved answers", "SELECT COUNT(*) FROM answers WHERE instr(lower(body), lower(?)) > 0"),
-                            ("topics", "SELECT COUNT(*) FROM memory_objects WHERE instr(lower(narrative), lower(?)) > 0"),
-                            ("conversation turns", "SELECT COUNT(*) FROM conversation_turns WHERE instr(lower(body), lower(?)) > 0"),
-                            ("facts kept as ambiguous", "")] where !sql.isEmpty {
-            let n = (try? count(db, sql + ";", [.text(name)])) ?? 0
-            if n > 0 { report.stillNamedIn[kind] = n }
+        for (kind, table, column) in [("studio drafts", "studio_records", "payload_json"), ("saved answers", "answers", "body"),
+                                      ("topics", "memory_objects", "narrative"), ("conversation turns", "conversation_turns", "body")]
+        where tables.contains(table) {
+            do {
+                let n = try matchingCount(db, table: table, columns: [column], where: nil, terms: [name])
+                if n > 0 { report.stillNamedIn[kind] = n }
+            } catch {
+                KalsmritikoshLog.app.error("Person erasure: the \(table, privacy: .public) inventory could not be read: \(error.localizedDescription, privacy: .public)")
+            }
         }
         if ambiguous > 0 { report.stillNamedIn["facts kept as ambiguous"] = ambiguous }
         // LS19 — free text the erasure keeps by design and reports: the reasons on map links between other
@@ -477,13 +482,42 @@ public actor CaseEraser {
     }
 
     /// The ids of `table`'s rows (optionally narrowed by `filter`) whose `columns` name any of `terms`.
+    /// LN7 — rows are read a page at a time (keyset on rowid), so only the matching ids, not every row's
+    /// text, are held in memory.
     static func matchingIDs(_ db: isolated Database, table: String, columns: [String], where filter: String?, terms: [String]) throws -> [String] {
-        guard !terms.isEmpty, !columns.isEmpty else { return [] }
+        var ids: [String] = []
+        try scanNaming(db, table: table, columns: columns, where: filter, terms: terms) { ids.append($0) }
+        return ids
+    }
+
+    /// LS23 — how many of `table`'s rows (optionally narrowed by `filter`) have `columns` naming any of `terms`.
+    static func matchingCount(_ db: isolated Database, table: String, columns: [String], where filter: String?, terms: [String]) throws -> Int {
+        var n = 0
+        try scanNaming(db, table: table, columns: columns, where: filter, terms: terms) { _ in n += 1 }
+        return n
+    }
+
+    /// Rows read per page by `scanNaming` (bounded memory on a large ledger).
+    nonisolated static let namingPageSize = 256
+
+    /// Calls `found` with the id of every row whose `columns` name any of `terms`, reading `namingPageSize`
+    /// rows at a time in rowid order.
+    static func scanNaming(_ db: isolated Database, table: String, columns: [String], where filter: String?, terms: [String],
+                           found: (String) -> Void) throws {
+        let terms = terms.filter { !$0.isEmpty }
+        guard !terms.isEmpty, !columns.isEmpty else { return }
         let cols = columns.map { "coalesce(\"\($0)\", '')" }.joined(separator: ", ")
-        let rows = try db.query("SELECT id, \(cols) FROM \"\(table)\"\(filter.map { " WHERE \($0)" } ?? "");", [])
-        return rows.compactMap { row -> String? in
-            guard let id = row.string(0) else { return nil }
-            return (1...columns.count).contains { names(row.string($0), terms) } ? id : nil
+        let narrowed = filter.map { " AND (\($0))" } ?? ""
+        var after: Int64 = Int64.min
+        while true {
+            let rows = try db.query("SELECT rowid, id, \(cols) FROM \"\(table)\" WHERE rowid > ?\(narrowed) ORDER BY rowid LIMIT ?;",
+                                    [.integer(after), .integer(Int64(namingPageSize))])
+            for row in rows {
+                guard let id = row.string(1) else { continue }
+                if (2...(columns.count + 1)).contains(where: { names(row.string($0), terms) }) { found(id) }
+            }
+            guard rows.count == namingPageSize, let last = rows.last?.int(0) else { return }
+            after = last
         }
     }
 
