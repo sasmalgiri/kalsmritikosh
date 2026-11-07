@@ -45,6 +45,11 @@ public nonisolated enum HelpDocsRenderer {
         for (i, s) in HelpTutorial.steps.enumerated() {
             out += "\(i + 1). **\(s.title).** \(s.instruction) *You should see:* \(s.expect)\n"
         }
+        out += "\n## The case map tutorial\n\n"
+        out += "Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and walks the case map path, one step at a time, nothing advancing by itself: question → document → passage → review → request → new evidence → revised view → report.\n\n"
+        for (i, s) in HelpTutorial.caseMapSteps.enumerated() {
+            out += "\(i + 1). **\(s.title).** \(s.instruction) *You should see:* \(s.expect)\n"
+        }
         out += "\n"
         return out
     }
@@ -102,11 +107,12 @@ public nonisolated enum HelpDocsRenderer {
     static let accessibility: [Destination: [String]] = [
         .home: ["home.startInvestigation", "home.resumeCase", "purchase.screen", "purchase.strip"],
         .work: ["jobs.*", "result.*", "info.task-review-approve-export"],
-        .cases: ["case.output.notice", "allegation.link.support", "info.safety-decisions", "info.task-keys-backup-erase"],
+        .cases: ["case.output.notice", "allegation.link.support", "info.safety-decisions", "info.task-keys-backup-erase",
+                 "case.map.list", "case.map.inspector", "case.map.counts", "case.map.returnToCurrent", "case.map.showDetails", "case.map.legend"],
         .hypotheses: ["ach.*"],
         .sources: ["sources.*"],
         .settings: ["settings.subscription.status", "info.subscription-plans"],
-        .guide: ["help.guide", "help.search", "help.topic.<id>", "help.replayTutorial", "help.replayIntro", "help.open.<screen>"],
+        .guide: ["help.guide", "help.search", "help.topic.<id>", "help.replayTutorial", "help.replayMapTutorial", "help.replayIntro", "help.open.<screen>"],
         .knowledge: ["info.task-people-and-namesakes"]
     ]
 

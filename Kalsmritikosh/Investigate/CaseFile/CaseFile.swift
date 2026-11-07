@@ -295,7 +295,9 @@ public nonisolated struct CaseReportItem: Identifiable, Sendable, Equatable {
     }
 
     /// An item the report may print as a reviewed finding: carried from an accepted or completed row.
-    public var isAcceptedReview: Bool { reviewState == "accepted" || reviewState == "completed" }
+    /// A human-accepted review: "accepted"/"completed" job rows, and "confirmed" — a contradiction the investigator
+    /// confirmed in place and carried (JobResultHandoff+Review carries only confirmed decisions).
+    public var isAcceptedReview: Bool { reviewState == "accepted" || reviewState == "completed" || reviewState == "confirmed" }
     public var support: CaseEvidenceSupport {
         CaseEvidenceSupport.from(stored: verification, detail: verificationDetail, reference: evidenceRef ?? "")
     }

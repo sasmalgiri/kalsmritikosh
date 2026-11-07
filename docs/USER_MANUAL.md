@@ -238,6 +238,54 @@ Exporting while a recorded state is open says which recorded state it depicts an
 
 Screen: **Cases**.
 
+### First use of the case map: items, links, review state and what changed
+
+Four things to know before you start. An item is one of the case's own records — a question, a document, a statement, an event, a contradiction, a request, a report item or your note. A link says how two items relate and why: the record it comes from, or the reason you gave. A review state says what a person decided, which is separate from what the documents say. “What changed” lists this case's changes since you last marked them as seen; seeing a change is not reviewing it.
+
+1. Start with the header: the question the case is to answer, what the app could read, and the counts. Choose a count to see exactly those items in the list.
+2. Choose an item on the map or in the list. The inspector shows its sources (“Open source” opens each one), its state, its review history and the actions the case already has for it.
+3. Read a link before you rely on it: its line style and arrow say its type, and the inspector says who asserted it — you, a rule, or the AI reading (a proposal checked against the documents, never a decision).
+4. Review states: “Not reviewed yet”, “Pending review”, “Deferred” and “Reopened — a source changed” wait for you (“Waiting for me” keeps only those). “Confirmed”, “Dismissed”, “Accepted on review” and “Rejected on review” are decisions someone recorded.
+5. When you come back, choose “What changed”. New items appear beside what they link to; nothing you placed moves. “Mark as seen” only moves your seen position.
+6. The legend (“Legend” at the foot of the map) explains every icon, line and state at any time; Help ▸ Case Map Keyboard Shortcuts lists the keys; Help ▸ Replay the Case Map Tutorial walks a sample case step by step.
+
+Empty, failed and incomplete are different: “Nothing to map yet” names the next thing to do; “Incomplete” names the part that could not be read; a failed read says so and shows nothing as if it were the case.
+
+Screen: **Cases**.
+
+### Case map keyboard shortcuts and the list path
+
+Everything the map does can be done from the list with the keyboard: the list, the header, the view strip, the inspector and the footer are the same in both. Choose “List” in the strip (or use VoiceOver), then select with the arrow keys.
+
+1. Tab and Shift-Tab move between the header, the view strip, the map or list, the inspector and the footer.
+2. ⌃⌘← and ⌃⌘→: previous and next view in the strip. ⌃⌘[: Back to the previous view and selection.
+3. In the list, ↑ and ↓ select an item or a link; the inspector shows it. Space or Return on a collapsed group opens it.
+4. ⌃⌘I: show or hide the details drawer when the window is narrow.
+5. ⌃⌘= and ⌃⌘-: zoom the map in and out. ⌃⌘Z: Undo a move, pin or Arrange.
+6. ⌘⎋: Return to current from a recorded state.
+7. Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does.
+
+The map path and the list path run the same commands: review — inspector; link — inspector; request — inspector; chronology — inspector; report — inspector; openSource — inspector; viewStrip — view strip (⌃⌘← / ⌃⌘→); back — view strip (⌃⌘[); resetView — footer; history — header; returnToCurrent — history banner (⌘⎋); pin — inspector; hide — inspector; select — list (↑ ↓ in the list); searchEvidence — header; export — footer; showDetails — content (⌃⌘I).
+
+Screen: **Cases**.
+
+### The case map tutorial: question to report in the sample case
+
+Help ▸ Replay the Case Map Tutorial opens the isolated sample case and walks one real workflow on the map, one step at a time: the question, a document, a passage, a review, a request, new evidence, the revised view and the report. Nothing moves on its own: Back and Next are yours, and you can work at any step.
+
+1. Open the sample case on the map: Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)” in the case's top bar.
+2. The question: Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list.
+3. A document: Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”.
+4. A passage: Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”.
+5. A review: Choose the “Questions” view. Select a contradiction (the first-lot delivery date) and, in the inspector, record “Confirm”, “Dismiss” (choose a reason) or “Defer”.
+6. A request: Select the case's question and press “Create evidence request…”. Type what is requested (for example “Proof of payment of invoice 432”) and the custodian, then “Create request”.
+7. New evidence: Select a document that answers part of the request and choose “Received for request…” ▸ the request.
+8. The revised view: Choose “What changed” in the header, read the list, then “Mark as seen”. Choose “Back” to return to where you were.
+9. The report: Select the confirmed contradiction and press “Include in report”. Then choose “Export” at the foot of the map ▸ “Export map as PDF (with its relationship table)…”, or the case's “Case file report…”.
+10. What you did, and back to your own archive: Question, document, passage, review, request, new evidence, revised view, report — the whole path on the map, with the list doing the same. “Reset view” tidies the map without changing the case. Press “Back to my archive” in the banner when you are done.
+
+Screen: **Cases**.
+
 ### Search case evidence: search this case's documents, with what was and was not searched
 
 A word-for-word search of one case's documents only — never the rest of the archive. It lists every matching document (in pages), shows each match in its passage with the rules it met, counts documents, occurrences and passages separately, and says exactly what it searched and what it could not. It finds words; it does not decide what they mean, and no AI is involved.
@@ -1086,6 +1134,37 @@ Screen: **Compliance Board**.
 - **More formats** — PowerPoint 97–2003 (PPT) and Keynote, which are kept but not read today.
 - **Better transcription** — On-demand transcription improvements for long audio and video.
 - **The promise that doesn't change** — Private mode stays the default: your documents are read on this Mac, and nothing is sent anywhere unless you turn on Online mode and approve each send.
+- **Case map link: supports** — The item at the start supports the one the arrow points to, as recorded in the case (an evidence-grid row, a hypothesis citation or your link). Support is a recorded stance, not proof. Drawn as a solid line with an arrow.
+- **Case map link: challenges** — The item at the start challenges the one the arrow points to — contrary evidence, kept beside the supporting material and never averaged away. Drawn as a dashed line with an arrow.
+- **Case map link: mentions** — The item mentions the other without a stance for or against it. Drawn as a dotted line with an arrow.
+- **Case map link: attributed to** — A statement or document is attributed to this person or organisation, as the record states it. Drawn as a solid line with an arrow.
+- **Case map link: occurred before** — One recorded event is dated before the other. The order comes from the recorded dates, not from an inference. Drawn as a dashed line with an arrow.
+- **Case map link: occurred after** — One recorded event is dated after the other. The order comes from the recorded dates, not from an inference. Drawn as a dashed line with an arrow.
+- **Case map link: possibly the same person (pending review)** — Two people with the same name, offered as possibly the same person. It stays pending until you decide; the same name is not the same person. Drawn as a dotted line without an arrow.
+- **Case map link: depends on** — The item rests on the other: if the other changes, this one may need review. Drawn as a dotted line with an arrow.
+- **Case map link: requests evidence for** — An evidence request asks for material about this question. The request records what you will ask for; the app sends nothing. Drawn as a dotted line with an arrow.
+- **Case map link: received in response to** — A document received for an evidence request. Arriving does not fulfil the request — only your recorded decision changes its status. Drawn as a solid line with an arrow.
+- **Case map link: derived from** — The item was carried from this passage (a chronology entry or report item citing it), with its citation. Drawn as a solid line with an arrow.
+- **Case map link: supersedes** — A later record replaces an earlier one — for example a correction to an attested statement. The earlier one is kept. Drawn as a dashed line with an arrow.
+- **Case map link: selected for report** — You selected this item for the case report under that question. Drawn as a solid line with an arrow.
+- **Case map state: Recorded** — Recorded as stated in the case. It is what the record says, not a judgement that it is true.
+- **Case map state: Not yet assessed** — Not yet assessed: recorded before passage checking existed, or never checked. Select a passage to check it.
+- **Case map state: Not supported by a verified source** — Not supported by a verified source — for example an investigator's note or an entry with no cited passage. A note is never documentary support.
+- **Case map state: Source unavailable** — The source is not in this case (it was taken out of the case scope or withdrawn). Bring it back with “Review new documents”, or cite another source.
+- **Case map state: Restricted** — The source is in the case but cannot be read under the current access policy (for example labelled privileged). It is not shown or exported.
+- **Case map state: Needs review — changed since** — Needs review — a source behind it changed since it was decided or carried. The decision stays as recorded until you review it.
+- **Case map state: Could not be read** — The source could not be read (damaged, password-protected or unsupported). It was not searched or quoted; Sources ▸ Needs attention says why.
+- **Case map review state: No review needed** — No review is needed for this kind of record.
+- **Case map review state: Not reviewed yet** — Nobody has reviewed it yet. It waits for you.
+- **Case map review state: Pending review** — Waiting for a decision (for example an open evidence request or a possible same person).
+- **Case map review state: Accepted on review** — A reviewer accepted it. Its citations and revision are kept.
+- **Case map review state: Completed result** — A completed result carried from a job.
+- **Case map review state: Confirmed** — Confirmed by a reviewer, with the reason and the versions of the sources it rests on.
+- **Case map review state: Dismissed** — Dismissed by a reviewer, with a reason. Both sources are kept.
+- **Case map review state: Deferred** — Deferred: the reviewer chose to decide later. It still waits.
+- **Case map review state: Reopened — a source changed** — Reopened because a source changed. The earlier decision stays in the history.
+- **Case map review state: Rejected on review** — Rejected on review. It is kept, and not carried as accepted.
+- **Case map review state: Withdrawn** — Withdrawn with a reason. It stays in the record and is no longer drawn.
 
 ## Reading results carefully
 
@@ -1160,6 +1239,19 @@ The evidence gate found no supporting passage in the documents in scope.
 
 Screen: **Sources**.
 
+### The case map or case search shows an error, or something was not saved
+
+Every case map and case search error says what failed and one thing to do next, and keeps what you typed or moved on screen.
+
+1. “The case map could not be read”: choose “Refresh”. If it fails again, use “Case sections” — they hold the same records.
+2. “Incomplete: … could not be read”: the named part is missing from the map, not empty. Choose “Refresh”; the rest of the map can be used meanwhile.
+3. “The new position was not saved” or “The view was not saved”: the change stays on screen; choose “Try again”. Your saved views, links and records are unchanged.
+4. “Not marked as seen”: nothing was reviewed either way; choose “Try again”.
+5. A search that cannot be read is not run; “Use the repaired query” offers a repair when one exists. A search that stopped at its limit lists what it did not reach under “What was searched”.
+6. A map that looks messy: “Reset view” resets the zoom, filters, hidden items and positions only — no case record, decision, link or saved view is changed.
+
+Screen: **Cases**.
+
 ### A button is greyed out
 
 A disabled control carries the reason and the remedy as its tooltip and in its accessibility description; empty screens say which of five things is true.
@@ -1196,4 +1288,19 @@ Help ▸ Replay the Tutorial opens the isolated sample case (its own ledger, bun
 11. **Ask a custodian for missing material.** In the matter: Evidence ▸ Evidence requests. Type what is requested (for example “Proof of payment of invoice 432”), the custodian (“Northwind accounts”), and press “Create request”. Then “Draft request text…” to see the letter you would send yourself, and “Record sent”. *You should see:* The request is listed as Open with “No expected items listed.” and its history shows it was sent. The app sends nothing; only “Record decision” ever changes its status.
 12. **Export the report and reopen it.** Open Cases, open the matter, go to “Log & exports” and press “Case file report…”. Save the file, then open it from the Finder. *You should see:* The notice reads “Exported <name> (SHA-256 …), recorded.” and the case log gains an “exported” line. The report lists the reviewed rows you included with their sources, the chronology entry, and an “Unresolved questions and limitations” section, followed by “What the app could read” and “Evidence requests” with the request you created.
 13. **What you saw, and back to your own archive.** A settled point (the amendment’s approval, quoted from the document) and one the record leaves open (the payment: unpaid as of 14 June 2024, nothing later). Press “Back to my archive” in the banner when you are done. *You should see:* The app relaunches on your own archive. Nothing from the sample was written to it; the tutorial can be replayed any time from Help ▸ Replay the Tutorial.
+
+## The case map tutorial
+
+Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and walks the case map path, one step at a time, nothing advancing by itself: question → document → passage → review → request → new evidence → revised view → report.
+
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)” in the case's top bar. *You should see:* The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.
+2. **The question.** Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list. *You should see:* The list shows the items the count names, under the same filters the map uses. Nothing is decided by opening them.
+3. **A document.** Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”. *You should see:* The inspector shows the document's version and where each citation points (“Position unavailable” when only the document is known). The source opens in a sheet; closing it brings you back to the same item.
+4. **A passage.** Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”. *You should see:* Every matching document is listed with the matched words in their passage and what was searched. The passage goes into the case's chronology with its citation, checked against the document; on the map it appears next to the document it cites.
+5. **A review.** Choose the “Questions” view. Select a contradiction (the first-lot delivery date) and, in the inspector, record “Confirm”, “Dismiss” (choose a reason) or “Defer”. *You should see:* The item shows your decision and its reason — the same decision as in the case's contradiction list, kept with the versions of both documents. Neither document changes.
+6. **A request.** Select the case's question and press “Create evidence request…”. Type what is requested (for example “Proof of payment of invoice 432”) and the custodian, then “Create request”. *You should see:* A request item appears linked to the question, Open, with what is expected. The app sends nothing.
+7. **New evidence.** Select a document that answers part of the request and choose “Received for request…” ▸ the request. *You should see:* The request shows what arrived, by source version, and what is still missing. It stays Open: arriving does not fulfil a request; only “Record decision” in Evidence requests changes its status.
+8. **The revised view.** Choose “What changed” in the header, read the list, then “Mark as seen”. Choose “Back” to return to where you were. *You should see:* The receipt, the chronology entry and your review are listed, each with where it comes from. Items you saw before stayed where they were; new ones sit next to what they link to. Marking as seen reviews nothing.
+9. **The report.** Select the confirmed contradiction and press “Include in report”. Then choose “Export” at the foot of the map ▸ “Export map as PDF (with its relationship table)…”, or the case's “Case file report…”. *You should see:* The item is selected for the report with both passages, nothing retyped. The export is checked against the case's sources as they are now and recorded in the case log; the relationship table lists every link with why it exists and its sources.
+10. **What you did, and back to your own archive.** Question, document, passage, review, request, new evidence, revised view, report — the whole path on the map, with the list doing the same. “Reset view” tidies the map without changing the case. Press “Back to my archive” in the banner when you are done. *You should see:* The app relaunches on your own archive. Nothing from the sample was written to it; Help ▸ Replay the Case Map Tutorial plays this again.
 

@@ -44,24 +44,57 @@ public nonisolated struct TutorialStep: Identifiable, Sendable, Equatable {
 @Observable
 public final class TutorialProgress {
     static let stepKey = "kalsmritikosh.tutorial.step"
+    static let pathKey = "kalsmritikosh.tutorial.path"
+
+    /// Which tutorial runs (M9: the case map has its own path); mirrored to the preference store.
+    public private(set) var path: TutorialPath = TutorialPath(rawValue: AppDefaults.store.string(forKey: pathKey) ?? "") ?? .caseToReport
 
     /// The current step index, or nil when the tutorial is not running.
     public private(set) var index: Int? = {
         let d = AppDefaults.store
-        return d.object(forKey: stepKey) == nil ? nil : min(max(d.integer(forKey: stepKey), 0), HelpTutorial.steps.count - 1)
+        let steps = HelpTutorial.steps(for: TutorialPath(rawValue: d.string(forKey: pathKey) ?? "") ?? .caseToReport)
+        return d.object(forKey: stepKey) == nil ? nil : min(max(d.integer(forKey: stepKey), 0), steps.count - 1)
     }()
 
     public var isRunning: Bool { index != nil }
 
+    /// The steps of the running path.
+    public var steps: [TutorialStep] { HelpTutorial.steps(for: path) }
+
     public func set(_ i: Int) {
-        let clamped = min(max(i, 0), HelpTutorial.steps.count - 1)
+        let clamped = min(max(i, 0), steps.count - 1)
         index = clamped
         AppDefaults.store.set(clamped, forKey: Self.stepKey)
+    }
+
+    /// Choose a path (from its first step). Nothing advances by itself.
+    public func start(_ p: TutorialPath) {
+        path = p
+        AppDefaults.store.set(p.rawValue, forKey: Self.pathKey)
+        set(0)
     }
 
     public func stop() {
         index = nil
         AppDefaults.store.removeObject(forKey: Self.stepKey)
+        path = .caseToReport
+        AppDefaults.store.removeObject(forKey: Self.pathKey)
+    }
+}
+
+/// The replayable tutorials. Both run only in the isolated sample case.
+public nonisolated enum TutorialPath: String, CaseIterable, Sendable {
+    /// Matter → documents → ask → citation → contradiction → review → report → request → export.
+    case caseToReport
+    /// M9 (plan §10): the same work on the case map — question → document → passage → review → request →
+    /// new evidence → revised view → report.
+    case caseMap
+
+    public var title: String {
+        switch self {
+        case .caseToReport: return "Tutorial"
+        case .caseMap: return "Case map tutorial"
+        }
     }
 }
 
@@ -124,10 +157,62 @@ public nonisolated enum HelpTutorial {
                      destination: .home, controls: ["Back to my archive"])
     ]
 
+    /// M9 (plan §10) — the case map path in the sample case: the real workflow, manually stepped. Each step is
+    /// done by the person on the real map; the "What you should see" lines describe the map's own behaviour.
+    public static let caseMapSteps: [TutorialStep] = [
+        TutorialStep(id: "map-open", title: "Open the sample case on the map",
+                     instruction: "Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)” in the case's top bar.",
+                     expect: "The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.",
+                     destination: .cases, controls: ["Start matter", "Case map (preview)", "Case sections"]),
+        TutorialStep(id: "map-question", title: "The question",
+                     instruction: "Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list.",
+                     expect: "The list shows the items the count names, under the same filters the map uses. Nothing is decided by opening them.",
+                     destination: .cases, controls: ["More"]),
+        TutorialStep(id: "map-document", title: "A document",
+                     instruction: "Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”.",
+                     expect: "The inspector shows the document's version and where each citation points (“Position unavailable” when only the document is known). The source opens in a sheet; closing it brings you back to the same item.",
+                     destination: .cases, controls: ["List", "Open source"]),
+        TutorialStep(id: "map-passage", title: "A passage",
+                     instruction: "Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”.",
+                     expect: "Every matching document is listed with the matched words in their passage and what was searched. The passage goes into the case's chronology with its citation, checked against the document; on the map it appears next to the document it cites.",
+                     destination: .cases, controls: ["Search this case", "Search case evidence", "Add to chronology…"]),
+        TutorialStep(id: "map-review", title: "A review",
+                     instruction: "Choose the “Questions” view. Select a contradiction (the first-lot delivery date) and, in the inspector, record “Confirm”, “Dismiss” (choose a reason) or “Defer”.",
+                     expect: "The item shows your decision and its reason — the same decision as in the case's contradiction list, kept with the versions of both documents. Neither document changes.",
+                     destination: .cases, controls: ["Confirm", "Dismiss", "Defer"]),
+        TutorialStep(id: "map-request", title: "A request",
+                     instruction: "Select the case's question and press “Create evidence request…”. Type what is requested (for example “Proof of payment of invoice 432”) and the custodian, then “Create request”.",
+                     expect: "A request item appears linked to the question, Open, with what is expected. The app sends nothing.",
+                     destination: .cases, controls: ["Create evidence request…", "Create request"]),
+        TutorialStep(id: "map-new-evidence", title: "New evidence",
+                     instruction: "Select a document that answers part of the request and choose “Received for request…” ▸ the request.",
+                     expect: "The request shows what arrived, by source version, and what is still missing. It stays Open: arriving does not fulfil a request; only “Record decision” in Evidence requests changes its status.",
+                     destination: .cases, controls: ["Received for request…", "Record decision"]),
+        TutorialStep(id: "map-revised", title: "The revised view",
+                     instruction: "Choose “What changed” in the header, read the list, then “Mark as seen”. Choose “Back” to return to where you were.",
+                     expect: "The receipt, the chronology entry and your review are listed, each with where it comes from. Items you saw before stayed where they were; new ones sit next to what they link to. Marking as seen reviews nothing.",
+                     destination: .cases, controls: ["What changed", "Mark as seen", "Back"]),
+        TutorialStep(id: "map-report", title: "The report",
+                     instruction: "Select the confirmed contradiction and press “Include in report”. Then choose “Export” at the foot of the map ▸ “Export map as PDF (with its relationship table)…”, or the case's “Case file report…”.",
+                     expect: "The item is selected for the report with both passages, nothing retyped. The export is checked against the case's sources as they are now and recorded in the case log; the relationship table lists every link with why it exists and its sources.",
+                     destination: .cases, controls: ["Include in report", "Export", "Export map as PDF (with its relationship table)…", "Case file report…"]),
+        TutorialStep(id: "map-finish", title: "What you did, and back to your own archive",
+                     instruction: "Question, document, passage, review, request, new evidence, revised view, report — the whole path on the map, with the list doing the same. “Reset view” tidies the map without changing the case. Press “Back to my archive” in the banner when you are done.",
+                     expect: "The app relaunches on your own archive. Nothing from the sample was written to it; Help ▸ Replay the Case Map Tutorial plays this again.",
+                     destination: .home, controls: ["Reset view", "Back to my archive"])
+    ]
+
+    public static func steps(for path: TutorialPath) -> [TutorialStep] {
+        switch path {
+        case .caseToReport: return steps
+        case .caseMap: return caseMapSteps
+        }
+    }
+
     /// Start (or restart) from the first step. Enters the sample case first when not already in it;
     /// the person's own archive is never used for the tutorial.
-    @MainActor public static func replay() {
-        progress.set(0)
+    @MainActor public static func replay(_ path: TutorialPath = .caseToReport) {
+        progress.start(path)
         if !SampleArchiveMode.isActive { SampleArchiveMode.enter() }
     }
 }
@@ -142,12 +227,13 @@ struct TutorialPanel: View {
 
     var body: some View {
         if let index = progress.index {
-            let step = HelpTutorial.steps[index]
+            let steps = progress.steps
+            let step = steps[min(index, steps.count - 1)]
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Tutorial", systemImage: "graduationcap").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Label(progress.path.title, systemImage: "graduationcap").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
-                    Text("Step \(index + 1) of \(HelpTutorial.steps.count)").font(.caption).foregroundStyle(.secondary)
+                    Text("Step \(index + 1) of \(steps.count)").font(.caption).foregroundStyle(.secondary)
                         .accessibilityIdentifier("tutorial.position")
                     Button { progress.stop() } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -170,7 +256,7 @@ struct TutorialPanel: View {
                             .accessibilityIdentifier("tutorial.showMe")
                     }
                     Spacer()
-                    if index == HelpTutorial.steps.count - 1 {
+                    if index >= steps.count - 1 {
                         Button("Finish") { progress.stop() }.buttonStyle(.borderedProminent)
                             .accessibilityIdentifier("tutorial.next")
                     } else {

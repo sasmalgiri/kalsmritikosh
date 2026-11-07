@@ -49,12 +49,30 @@ struct CaseMapCanvas: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("Case map: \(cull.drawn.count) items drawn. The list shows the same items for the keyboard and VoiceOver.")
                     .accessibilityChildren {
+                        // M9 — items and links drawn on the canvas, each with its label and value (state, review,
+                        // pinned, selected); activating one selects it for the inspector.
                         ForEach(cull.drawn, id: \.self) { id in
                             if let n = projection.node(id) {
-                                Rectangle().accessibilityLabel("\(n.kind.label): \(n.title). \(n.status.kind.label): \(n.status.text)")
+                                Rectangle().accessibilityLabel(CaseMapSpoken.nodeLabel(n))
+                                    .accessibilityValue(CaseMapSpoken.nodeValue(n, pinned: map.displayPlacements[id]?.pinned == true, selected: map.selection == .node(id)))
                                     .accessibilityAddTraits(.isButton)
                                     .accessibilityAction { map.select(.node(id)) }
                             }
+                        }
+                        let drawnSet = Set(cull.drawn)
+                        ForEach(result.links.filter { lid in projection.link(lid).map { drawnSet.contains($0.from) && drawnSet.contains($0.to) } ?? false }, id: \.self) { lid in
+                            if let l = projection.link(lid) {
+                                Rectangle().accessibilityLabel(CaseMapSpoken.linkLabel(l, in: projection))
+                                    .accessibilityValue(CaseMapSpoken.linkValue(l, selected: map.selection == .link(lid)))
+                                    .accessibilityAddTraits(.isButton)
+                                    .accessibilityAction { map.select(.link(lid)) }
+                            }
+                        }
+                        ForEach(groups, id: \.0.id) { g, _ in
+                            Rectangle().accessibilityLabel("\(g.title): \(g.members.count) item(s), collapsed")
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityHint("Opens the group.")
+                                .accessibilityAction { Task { await map.toggleCollapse(g.id, repository: repository, actor: actor) } }
                         }
                     }
                 controls(vp: vp, geo: geo.size, cull: cull)
@@ -254,14 +272,18 @@ struct CaseMapList: View {
     let result: CaseMapViewResult
     let repository: CaseMapRepository?
     let actor: String
+    /// M9 — pages shown per section (and for the links); every row stays reachable through "Show more".
+    @State private var pages: [String: Int] = [:]
 
     var body: some View {
         List(selection: Binding<CaseMapWorkspaceModel.Selection?>(get: { map.selection }, set: { map.select($0) })) {
-            ForEach(sections, id: \.0) { title, ids in
-                Section(title) {
-                    ForEach(ids, id: \.self) { id in
+            ForEach(CaseMapListPaging.sections(projection, result: result), id: \.title) { section in
+                let page = CaseMapListPaging.visible(section.ids, pages: pages[section.title] ?? 1)
+                Section("\(section.title) (\(section.ids.count))") {
+                    ForEach(Array(page.rows), id: \.self) { id in
                         if let n = projection.node(id) { row(n).tag(CaseMapWorkspaceModel.Selection.node(id)) }
                     }
+                    if page.remaining > 0 { moreButton(section.title, remaining: page.remaining) }
                 }
             }
             if !result.collapsedGroups.isEmpty {
@@ -275,16 +297,19 @@ struct CaseMapList: View {
                 }
             }
             if !result.links.isEmpty {
+                let linkPage = CaseMapListPaging.visible(result.links, pages: pages["links"] ?? 1)
                 Section("Links (\(result.links.count))") {
-                    ForEach(result.links, id: \.self) { lid in
+                    ForEach(Array(linkPage.rows), id: \.self) { lid in
                         if let l = projection.link(lid) {
                             Label("\(projection.node(l.from)?.title ?? "?") — \(l.type.label) → \(projection.node(l.to)?.title ?? "?")",
                                   systemImage: l.type.stroke == .solid ? "line.diagonal" : "line.diagonal.arrow")
                                 .font(.caption).lineLimit(2)
                                 .tag(CaseMapWorkspaceModel.Selection.link(lid))
-                                .accessibilityLabel("Link: \(projection.node(l.from)?.title ?? "") \(l.type.label) \(projection.node(l.to)?.title ?? ""). \(l.review.label)")
+                                .accessibilityLabel(CaseMapSpoken.linkLabel(l, in: projection))
+                                .accessibilityValue(CaseMapSpoken.linkValue(l, selected: map.selection == .link(lid)))
                         }
                     }
+                    if linkPage.remaining > 0 { moreButton("links", remaining: linkPage.remaining) }
                 }
             }
         }
@@ -292,17 +317,10 @@ struct CaseMapList: View {
         .accessibilityIdentifier("case.map.list")
     }
 
-    /// The shown items by kind, unlinked material first among material.
-    private var sections: [(String, [CaseMapNodeID])] {
-        let shown = Set(result.shown)
-        var out: [(String, [CaseMapNodeID])] = []
-        let unlinked = projection.unlinked.filter { shown.contains($0) }
-        for kind in CaseMapNodeKind.allCases {
-            let ids = projection.nodes.filter { $0.kind == kind && shown.contains($0.id) && !unlinked.contains($0.id) }.map(\.id)
-            if !ids.isEmpty { out.append((kind.plural, ids)) }
-        }
-        if !unlinked.isEmpty { out.append(("Unlinked material", unlinked)) }
-        return out
+    private func moreButton(_ key: String, remaining: Int) -> some View {
+        Button("Show \(min(remaining, CaseMapListPaging.pageSize)) more (\(remaining) not shown yet)") { pages[key] = (pages[key] ?? 1) + 1 }
+            .buttonStyle(.borderless).font(.caption)
+            .help("The list shows long sections a page at a time so it stays quick; every item is reachable.")
     }
 
     private func row(_ n: CaseMapNode) -> some View {
@@ -317,7 +335,8 @@ struct CaseMapList: View {
             Text(n.review.label).font(.caption2).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(n.kind.label): \(n.title). \(n.status.kind.label): \(n.status.text). \(n.review.label)")
+        .accessibilityLabel(CaseMapSpoken.nodeLabel(n))
+        .accessibilityValue(CaseMapSpoken.nodeValue(n, pinned: map.displayPlacements[n.id]?.pinned == true, selected: map.selection == .node(n.id)))
         .contextMenu {
             Button("Hide from this view") { Task { await map.hide(n.id, repository: repository, actor: actor) } }
             Button(map.displayPlacements[n.id]?.pinned == true ? "Unpin" : "Pin") { Task { await map.togglePin(n.id, repository: repository) } }

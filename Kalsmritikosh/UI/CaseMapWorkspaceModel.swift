@@ -52,6 +52,15 @@ final class CaseMapWorkspaceModel {
     /// M7 — a recorded state shown read-only (nil: the live case).
     private(set) var history: CaseCheckpointView?
 
+    /// M9 (§10) — what failed to save, kept so "Try again" repeats it; what was on screen stays on screen.
+    enum Retry: Equatable {
+        case placements([CaseMapNodeID: CaseMapPlacement])
+        case saveView(String)
+        case resetLayout
+        case markSeen
+    }
+    private(set) var retry: Retry?
+
     init(caseID: UUID, workspace: CaseWorkspaceHolder) { self.caseID = caseID; self.workspace = workspace }
 
     /// What the map, the list and the inspector show: a recorded state while one is open, else the live case.
@@ -132,6 +141,7 @@ final class CaseMapWorkspaceModel {
         feed = nil
         feedLoading = false
         history = nil
+        retry = nil
     }
 
     /// After an unlock: the case may be read again (the next load fills it).
@@ -167,10 +177,12 @@ final class CaseMapWorkspaceModel {
         do {
             try await service.markSeen(feed, actor: actor)
             notice = "Marked as seen. Nothing was reviewed, accepted or decided — the items keep their review state."
+            if retry == .markSeen { retry = nil; error = nil }
             await refreshFeed(service)
         } catch {
             KalsmritikoshLog.ui.error("Case changes not marked seen: \(error.localizedDescription, privacy: .public)")
-            self.error = "Not marked as seen: \(error.localizedDescription)"
+            self.error = "Not marked as seen: \(error.localizedDescription). Nothing was reviewed either way — choose “Try again”."
+            retry = .markSeen
         }
     }
 
@@ -340,7 +352,7 @@ final class CaseMapWorkspaceModel {
             if let i = savedViews.firstIndex(where: { $0.id == saved.id }) { savedViews[i].filter = filter }
         } catch {
             KalsmritikoshLog.ui.error("Case map view not saved: \(error.localizedDescription, privacy: .public)")
-            self.error = "The view was not saved: \(error.localizedDescription)"
+            self.error = "The change to the view “\(saved.name)” was not saved: \(error.localizedDescription). Do it again, or choose Refresh to see the view as saved."
         }
     }
 
@@ -357,10 +369,12 @@ final class CaseMapWorkspaceModel {
             search = ""; awaitingOnly = false
             go(to: .saved(id))
             notice = "Saved the view “\(name.trimmingCharacters(in: .whitespacesAndNewlines))”."
+            if case .saveView? = retry { retry = nil; self.error = nil }
             return id
         } catch {
             KalsmritikoshLog.ui.error("Case map view not saved: \(error.localizedDescription, privacy: .public)")
-            self.error = "The view was not saved: \(error.localizedDescription)"
+            self.error = "The view “\(name)” was not saved: \(error.localizedDescription). The name and the view are kept — choose “Try again”."
+            retry = .saveView(name)
             return nil
         }
     }
@@ -373,7 +387,7 @@ final class CaseMapWorkspaceModel {
             if case .saved(id) = view { var m = memory; m.view = CaseMapViewKind.overview.rawValue; memory = m }
         } catch {
             KalsmritikoshLog.ui.error("Case map view not removed: \(error.localizedDescription, privacy: .public)")
-            self.error = "The view was not removed: \(error.localizedDescription)"
+            self.error = "The view was not removed: \(error.localizedDescription). It is still in the strip; choose Refresh, then remove it again."
         }
     }
 
@@ -551,9 +565,13 @@ final class CaseMapWorkspaceModel {
         search = ""; awaitingOnly = false; kindFocus = nil
         undoStack = []
         if let repository {
-            do { try await repository.resetLayout(caseID: caseID) } catch {
+            do {
+                try await repository.resetLayout(caseID: caseID)
+                if retry == .resetLayout { retry = nil; self.error = nil }
+            } catch {
                 KalsmritikoshLog.ui.error("Case map reset failed: \(error.localizedDescription, privacy: .public)")
-                self.error = "The layout was not reset: \(error.localizedDescription)"
+                self.error = "The positions were not reset: \(error.localizedDescription). The zoom and filters were reset; choose “Try again” for the positions."
+                retry = .resetLayout
             }
         }
         if let service { await refresh(service) }
@@ -562,11 +580,40 @@ final class CaseMapWorkspaceModel {
 
     private func store(_ changes: [CaseMapNodeID: CaseMapPlacement], repository: CaseMapRepository?) async {
         guard let repository, !closedOut, !isHistorical else { return }
-        do { try await repository.savePlacements(caseID: caseID, changes) } catch {
+        do {
+            try await repository.savePlacements(caseID: caseID, changes)
+            if case .placements? = retry { retry = nil; self.error = nil }
+        } catch {
             KalsmritikoshLog.ui.error("Case map positions not saved: \(error.localizedDescription, privacy: .public)")
-            self.error = "The new position was not saved: \(error.localizedDescription). It is kept on screen; try again."
+            self.error = "The new position was not saved: \(error.localizedDescription). It is kept on screen — choose “Try again”."
+            var pending: [CaseMapNodeID: CaseMapPlacement] = [:]
+            if case .placements(let earlier)? = retry { pending = earlier }
+            for (id, p) in changes { pending[id] = p }
+            retry = .placements(pending)
         }
     }
+
+    /// "Try again": repeat what failed to save. Nothing else is written.
+    func retryLast(repository: CaseMapRepository?, service: CaseMapService?, feedService: CaseChangeFeedService?, actor: String) async {
+        guard let r = retry else { return }
+        if refuseInHistory() { return }
+        switch r {
+        case .placements(let changes):
+            // Only what is still on screen (a newer move of the same item wins).
+            var current: [CaseMapNodeID: CaseMapPlacement] = [:]
+            for id in changes.keys { if let p = placements[id] { current[id] = p } }
+            await store(current, repository: repository)
+        case .saveView(let name):
+            if let repository { await saveCurrentView(named: name, repository: repository, actor: actor) }
+        case .resetLayout:
+            await resetView(repository: repository, service: service)
+        case .markSeen:
+            if let feedService { await markSeen(feedService, actor: actor) }
+        }
+    }
+
+    /// The error was read and set aside; nothing failed is retried.
+    func dismissError() { error = nil; retry = nil }
 
     // MARK: - Header counts (from the same projection the map shows)
 

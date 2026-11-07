@@ -36,6 +36,9 @@ struct CaseMapWorkspaceView: View {
     @State private var showReadiness = false
     @State private var exportStatus: String?
     @State private var lock = AppLock.shared
+    @State private var drawerOpen = false
+    @State private var firstUse = CaseMapFirstUse.shouldShow(AppDefaults.store)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var findFocused: Bool
 
     private var map: CaseMapWorkspaceModel { model.map }
@@ -51,6 +54,8 @@ struct CaseMapWorkspaceView: View {
             Divider()
             footer
         }
+        // M9 — Reduce Motion: no animated transition anywhere in the map workspace.
+        .transaction { t in if reduceMotion { t.animation = nil; t.disablesAnimations = true } }
         .task(id: model.caseID) { await start() }
         .onDisappear { map.cancelPending() }
         .onChange(of: model.snapshot?.actions.count) { _, _ in Task { await reload() } }
@@ -200,7 +205,9 @@ struct CaseMapWorkspaceView: View {
         Button { map.open(which) } label: { Label("\(n) \(label)", systemImage: symbol).font(.caption.monospacedDigit()) }
             .buttonStyle(.borderless)
             .help("Open these items in the list.")
-            .accessibilityHint("Opens the matching items in the list.")
+            .accessibilityLabel(label)
+            .accessibilityValue(String(n))
+            .accessibilityHint(CaseMapSpoken.countHint())
     }
 
     private func nextAction() {
@@ -223,7 +230,8 @@ struct CaseMapWorkspaceView: View {
                     .help("Previous view (⌃⌘←)")
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 4) {
-                        ForEach(map.strip, id: \.self) { ref in
+                        let refs = map.strip
+                        ForEach(Array(refs.enumerated()), id: \.element) { index, ref in
                             let selected = ref == map.view
                             Button { map.go(to: ref) } label: {
                                 Label(map.title(ref), systemImage: symbol(ref)).font(.callout)
@@ -232,6 +240,8 @@ struct CaseMapWorkspaceView: View {
                                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: selected ? 1.5 : 0.5))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(CaseMapSpoken.stripLabel(map.title(ref)))
+                            .accessibilityValue(CaseMapSpoken.stripValue(index: index, count: refs.count, selected: selected))
                             .accessibilityAddTraits(selected ? [.isSelected] : [])
                             .contextMenu {
                                 if case .saved(let id) = ref, let repository {
@@ -290,28 +300,88 @@ struct CaseMapWorkspaceView: View {
         } else if let p = map.projection, let result = map.result {
             VStack(alignment: .leading, spacing: 0) {
                 banners(p)
-                HStack(spacing: 0) {
-                    Group {
-                        if p.nodes.count <= 1 {
-                            stateMessage("Nothing to map yet",
-                                         "Record the question this case is to answer, then bring documents into the case (Case sections ▸ Evidence ▸ “Add documents to this case”), select passages and decide contradictions. Each appears here.",
-                                         "map")
-                        } else if map.listMode {
-                            CaseMapList(map: map, projection: p, result: result, repository: repository, actor: model.actor)
-                        } else {
-                            CaseMapCanvas(map: map, projection: p, result: result, repository: repository, actor: model.actor)
+                if firstUse { firstUseCard }
+                // M9 — narrow windows: below the threshold the inspector is a drawer over the map. The width comes
+                // from the GeometryReader and every part is pinned to it (macOS 26 split-view sizing).
+                GeometryReader { geo in
+                    let drawer = CaseMapWorkspaceLayout.inspectorIsDrawer(width: geo.size.width)
+                    ZStack(alignment: .topTrailing) {
+                        HStack(spacing: 0) {
+                            mainArea(p, result)
+                                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                            if !drawer {
+                                Divider()
+                                inspector(p).frame(width: CaseMapWorkspaceLayout.inspectorWidth)
+                            }
+                        }
+                        if drawer {
+                            Button { setDrawer(!drawerOpen) } label: {
+                                Label(drawerOpen ? "Hide details" : "Show details", systemImage: "sidebar.trailing")
+                            }
+                            .keyboardShortcut("i", modifiers: [.command, .control])
+                            .help("Shows the inspector for the selected item over the map (⌃⌘I). The window is too narrow to show it beside the map.")
+                            .accessibilityIdentifier("case.map.showDetails")
+                            .padding(8)
+                            .zIndex(2)
+                            if drawerOpen {
+                                VStack(spacing: 0) {
+                                    Color.clear.frame(height: 40)
+                                    inspector(p)
+                                }
+                                .frame(width: CaseMapWorkspaceLayout.drawerWidth(for: geo.size.width), height: geo.size.height)
+                                .background(.regularMaterial)
+                                .overlay(alignment: .leading) { Divider() }
+                                .zIndex(1)
+                                .accessibilityElement(children: .contain)
+                                .accessibilityLabel("Details")
+                            }
                         }
                     }
-                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
-                    Divider()
-                    CaseMapInspector(model: model, s: s, projection: p, repository: repository,
-                                     reload: { await reload() }, openSource: { open($0) })
-                        .frame(width: 340)
+                    .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
         } else {
             ProgressView("Reading the case…").frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    @ViewBuilder private func mainArea(_ p: CaseMapProjection, _ result: CaseMapViewResult) -> some View {
+        if p.nodes.count <= 1 {
+            stateMessage("Nothing to map yet",
+                         "Next: record the question this case is to answer, then bring documents into the case (Case sections ▸ Evidence ▸ “Add documents to this case”), select passages and decide contradictions. Each appears here.",
+                         "map")
+        } else if let empty = CaseMapEmptyState.viewEmpty(result.counts, view: map.baseKind) {
+            stateMessage(empty.title, "Next: " + empty.next, "eye.slash")
+        } else if map.listMode {
+            CaseMapList(map: map, projection: p, result: result, repository: repository, actor: model.actor)
+        } else {
+            CaseMapCanvas(map: map, projection: p, result: result, repository: repository, actor: model.actor)
+        }
+    }
+
+    private func inspector(_ p: CaseMapProjection) -> some View {
+        CaseMapInspector(model: model, s: s, projection: p, repository: repository,
+                         reload: { await reload() }, openSource: { open($0) })
+    }
+
+    private func setDrawer(_ open: Bool) {
+        if let a = CaseMapMotion.animation(reduceMotion: reduceMotion) { withAnimation(a) { drawerOpen = open } } else { drawerOpen = open }
+    }
+
+    /// The first-use explanation: once, above the map, dismissible; the person can work while it shows.
+    private var firstUseCard: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lightbulb").foregroundStyle(.secondary).accessibilityHidden(true)
+            Text(CaseMapFirstUse.text).font(.caption).fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("More about the case map") { SurfaceOpener.openHelp("task-case-map-first-use") }.buttonStyle(.link).font(.caption)
+            Button("Got it") { CaseMapFirstUse.dismiss(AppDefaults.store); firstUse = false }.controlSize(.small)
+        }
+        .padding(8)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, 16).padding(.bottom, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("case.map.firstUse")
     }
 
     @ViewBuilder private func banners(_ p: CaseMapProjection) -> some View {
@@ -346,7 +416,18 @@ struct CaseMapWorkspaceView: View {
                     .foregroundStyle(.secondary)
             }
             if let e = exportStatus { Label(e, systemImage: "square.and.arrow.up").foregroundStyle(.secondary) }
-            if let e = map.error { Label(e, systemImage: "xmark.octagon").foregroundStyle(.red) }
+            if let e = map.error {
+                HStack(spacing: 8) {
+                    Label(e, systemImage: "xmark.octagon").foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                    if map.retry != nil {
+                        Button("Try again") {
+                            Task { await map.retryLast(repository: repository, service: service, feedService: feedService, actor: model.actor) }
+                        }
+                        .controlSize(.small)
+                    }
+                    Button("Dismiss") { map.dismissError() }.buttonStyle(.borderless).controlSize(.small)
+                }
+            }
             else if let n = map.notice { Label(n, systemImage: "info.circle").foregroundStyle(.secondary) }
             if let e = model.error { Label(e, systemImage: "xmark.octagon").foregroundStyle(.red) }
         }
@@ -375,7 +456,9 @@ struct CaseMapWorkspaceView: View {
             Spacer()
             Button { showLegend.toggle() } label: { Label("Legend", systemImage: "info.square") }
                 .buttonStyle(.borderless)
-                .popover(isPresented: $showLegend) { CaseMapLegend().padding(14).frame(width: 380) }
+                .help("Every icon, line and state, with what each means; and the keys.")
+                .accessibilityIdentifier("case.map.legend")
+                .popover(isPresented: $showLegend) { CaseMapLegend().padding(14).frame(width: 420) }
             Button("Reset view") { Task { await map.resetView(repository: repository, service: service) } }
                 .buttonStyle(.borderless)
                 .help("Puts this view's zoom, filters, hidden items and the map's positions back to their starting state. No case record is changed or removed.")
@@ -494,13 +577,28 @@ struct CaseMapLegend: View {
                 ForEach(CaseMapNodeKind.allCases) { k in Label(k.label, systemImage: k.symbol).font(.caption) }
                 Text("Links (the arrow points from the item to what it relates to)").font(.caption.weight(.semibold))
                 ForEach(CaseMapLinkType.allCases) { t in
-                    HStack {
+                    HStack(alignment: .firstTextBaseline) {
                         Text(t.stroke == .solid ? "———" : t.stroke == .dashed ? "– – –" : "· · · ·").font(.caption.monospaced()).frame(width: 52, alignment: .leading)
-                        Text(t.label).font(.caption)
+                            .accessibilityLabel("\(t.stroke.rawValue) line" + (t.directed ? " with an arrow" : ""))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(t.label).font(.caption.weight(.medium))
+                            Text(HelpRegistry.caseMapLinkHelp(t)).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 Text("States").font(.caption.weight(.semibold))
-                ForEach(CaseMapStatus.Kind.allCases, id: \.self) { k in Label(k.label, systemImage: k.symbol).font(.caption) }
+                ForEach(CaseMapStatus.Kind.allCases, id: \.self) { k in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Label(k.label, systemImage: k.symbol).font(.caption.weight(.medium))
+                        Text(HelpRegistry.caseMapStatusHelp(k)).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Text("Review states").font(.caption.weight(.semibold))
+                ForEach(CaseMapReviewState.allCases, id: \.self) { r in
+                    Text("\(r.label) — \(HelpRegistry.caseMapReviewHelp(r))").font(.caption2).fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Keys").font(.caption.weight(.semibold))
+                ForEach(CaseMapKeyboard.lines, id: \.self) { Text($0).font(.caption2).fixedSize(horizontal: false, vertical: true) }
                 Text("Every item has the same size. Size, position, the number of links and how tidy the map looks say nothing about whether something is proved. A pin keeps an item where you put it. Hiding an item removes it from this view only.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }

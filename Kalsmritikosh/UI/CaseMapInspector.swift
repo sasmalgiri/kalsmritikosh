@@ -141,6 +141,8 @@ struct CaseMapInspector: View {
         }
         .font(.callout).lineLimit(2)
         stateLine(l.status, review: l.review)
+        // M9 — what this kind of link means, in words (not only on hover).
+        Text(HelpRegistry.caseMapLinkHelp(l.type)).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         section("Why this link exists") { Text(l.basis).font(.callout).fixedSize(horizontal: false, vertical: true) }
         section("Asserted by") { Text(l.assertedBy.label).font(.caption).fixedSize(horizontal: false, vertical: true) }
         if !l.sources.isEmpty { section("Sources (\(l.sources.count))") { sources(l.sources) } }
@@ -164,6 +166,9 @@ struct CaseMapInspector: View {
     private func stateLine(_ st: CaseMapStatus, review: CaseMapReviewState) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Label("\(st.kind.label): \(st.text)", systemImage: st.kind.symbol).font(.caption).fixedSize(horizontal: false, vertical: true)
+            if st.kind != .recorded {
+                Text(HelpRegistry.caseMapStatusHelp(st.kind)).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             if review != .notApplicable { Label(review.label, systemImage: review.awaitingReview ? "hourglass" : "checkmark.circle").font(.caption) }
         }
     }
@@ -237,6 +242,10 @@ struct CaseMapInspector: View {
             }
             Button("Hide from this view") { Task { await map.hide(n.id, repository: repository, actor: model.actor) } }
                 .help("Removes it from this view only. Nothing in the case changes.")
+            // M9 — the map's Pin, also here so the list path can do it with the keyboard.
+            let pinned = map.displayPlacements[n.id]?.pinned == true
+            Button(pinned ? "Unpin" : "Pin") { Task { await map.togglePin(n.id, repository: repository) } }
+                .help("Keeps the item where it is on the map, through refreshes and Arrange. Changes no case record.")
         }
         .controlSize(.small)
     }

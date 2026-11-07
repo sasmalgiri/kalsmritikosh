@@ -72,7 +72,8 @@ import Testing
 
     @Test("Every quoted control name exists as a literal in the UI sources")
     func controlsExist() {
-        let names = Set(HelpRegistry.all.flatMap(\.controls) + HelpTutorial.steps.flatMap(\.controls))
+        let names = Set(HelpRegistry.all.flatMap(\.controls) + HelpTutorial.steps.flatMap(\.controls) + HelpTutorial.caseMapSteps.flatMap(\.controls)
+                        + CaseMapCommand.allCases.flatMap(\.controls))
         #expect(names.count >= 20)
         for name in names {
             #expect(Self.uiSources.contains("\"\(name)") || Self.uiSources.contains("\(name)\""), "control “\(name)” not found in UI sources")
@@ -116,6 +117,56 @@ import Testing
         }
         // The panel is gated on the sample mode in RootView (source check: the overlay condition).
         #expect(Self.uiSources.contains("SampleArchiveMode.isActive && HelpTutorial.progress.isRunning"))
+    }
+
+    /// M9 (plan §10) — the case map tutorial teaches the real workflow, in order, manually stepped, in the sample
+    /// case only; it has its own path in the same progress object, and stopping returns to the default path.
+    @Test("The case map tutorial: question → document → passage → review → request → new evidence → revised view → report")
+    func caseMapTutorialPath() async {
+        let ids = HelpTutorial.caseMapSteps.map(\.id)
+        #expect(ids == ["map-open", "map-question", "map-document", "map-passage", "map-review", "map-request", "map-new-evidence", "map-revised", "map-report", "map-finish"])
+        for s in HelpTutorial.caseMapSteps { #expect(!s.instruction.isEmpty && !s.expect.isEmpty && !s.controls.isEmpty, "\(s.id)") }
+        #expect(HelpTutorial.steps(for: .caseMap) == HelpTutorial.caseMapSteps && HelpTutorial.steps(for: .caseToReport) == HelpTutorial.steps)
+        await MainActor.run {
+            let p = HelpTutorial.progress
+            p.stop()
+            p.start(.caseMap)
+            #expect(p.isRunning && p.index == 0 && p.path == .caseMap && p.steps.count == HelpTutorial.caseMapSteps.count)
+            #expect(AppDefaults.store.string(forKey: TutorialProgress.pathKey) == TutorialPath.caseMap.rawValue)
+            // Nothing advances by itself: only set() moves it, and it clamps to this path.
+            p.set(99)
+            #expect(p.index == HelpTutorial.caseMapSteps.count - 1)
+            p.stop()
+            #expect(!p.isRunning && p.path == .caseToReport && AppDefaults.store.object(forKey: TutorialProgress.pathKey) == nil)
+        }
+        // Replay enters the sample case (the same gate as the main tutorial) and is reachable from Help and the Guide.
+        let tutorialSource = (try? String(contentsOf: Self.repoRoot.appendingPathComponent("Kalsmritikosh/UI/Help/HelpTutorial.swift"), encoding: .utf8)) ?? ""
+        #expect(tutorialSource.contains("if !SampleArchiveMode.isActive { SampleArchiveMode.enter() }"))
+        let app = (try? String(contentsOf: Self.repoRoot.appendingPathComponent("Kalsmritikosh/KalsmritikoshApp.swift"), encoding: .utf8)) ?? ""
+        #expect(app.contains("HelpTutorial.replay(.caseMap)") && app.contains("Case Map Keyboard Shortcuts"))
+        #expect(Self.uiSources.contains("HelpTutorial.replay(.caseMap)"))
+    }
+
+    /// M9 (plan §10) — first-use explanation, keyboard instructions, context help for every link type, item state
+    /// and review state, the error topic; the legend shows the same explanations as text.
+    @Test("Case map help: first use, keyboard, every link type and state, errors; the legend reads the same text")
+    func caseMapContextHelp() {
+        for id in ["task-case-map-first-use", "task-case-map-keyboard", "task-case-map-tutorial", "trouble-case-map", "concept-case-map-legend", "task-case-map-reset-view"] {
+            #expect(HelpRegistry.topic(id) != nil, "\(id)")
+        }
+        let firstUse = HelpRegistry.topic("task-case-map-first-use")?.searchText ?? ""
+        for word in ["item", "link", "review state", "what changed"] { #expect(firstUse.contains(word), "\(word)") }
+        for t in CaseMapLinkType.allCases {
+            #expect(HelpRegistry.topic("concept-case-map-link-" + HelpRegistry.slug(t.rawValue))?.summary.contains(HelpRegistry.caseMapLinkHelp(t)) == true, "\(t)")
+        }
+        for k in CaseMapStatus.Kind.allCases { #expect(HelpRegistry.topic("concept-case-map-state-" + HelpRegistry.slug(k.rawValue)) != nil, "\(k)") }
+        for r in CaseMapReviewState.allCases { #expect(HelpRegistry.topic("concept-case-map-review-" + HelpRegistry.slug(r.rawValue)) != nil, "\(r)") }
+        #expect(HelpRegistry.topic("task-case-map-keyboard")?.steps == CaseMapKeyboard.lines)
+        #expect(HelpRegistry.search("keyboard case map").contains { $0.id == "task-case-map-keyboard" })
+        // The legend renders the explanations (not hover-only) and is always in the footer.
+        let view = (try? String(contentsOf: Self.repoRoot.appendingPathComponent("Kalsmritikosh/UI/CaseMapWorkspaceView.swift"), encoding: .utf8)) ?? ""
+        #expect(view.contains("HelpRegistry.caseMapLinkHelp(t)") && view.contains("HelpRegistry.caseMapStatusHelp(k)") && view.contains("CaseMapKeyboard.lines"))
+        #expect(view.contains("accessibilityIdentifier(\"case.map.legend\")"))
     }
 
     @Test("Search finds tasks by plain words and ranks title matches first")

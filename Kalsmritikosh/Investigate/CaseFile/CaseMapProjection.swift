@@ -49,7 +49,11 @@ public nonisolated struct CaseMapNodeID: Hashable, Codable, Sendable, Comparable
     public var key: String { "\(kind.rawValue):\(recordID)" }
     public var description: String { key }
     public static func < (a: CaseMapNodeID, b: CaseMapNodeID) -> Bool {
-        (a.caseID.uuidString, a.kind.rawValue, a.recordID) < (b.caseID.uuidString, b.kind.rawValue, b.recordID)
+        // The same order as comparing (case id text, kind, record id); the case id's text is only built when
+        // the two cases differ (M9 §13.3: sorting tens of thousands of items built two strings per comparison).
+        if a.caseID != b.caseID { return a.caseID.uuidString < b.caseID.uuidString }
+        if a.kind != b.kind { return a.kind.rawValue < b.kind.rawValue }
+        return a.recordID < b.recordID
     }
 }
 
@@ -427,6 +431,10 @@ public nonisolated struct CaseMapProjection: Sendable {
     /// Withdrawn investigator links (kept in the ledger, not drawn).
     public let withdrawnLinks: Int
     private let index: [CaseMapNodeID: Int]
+    /// M9 (§13.3): link id → position, and each item's links by position, so a lookup is not a scan of every
+    /// link (the stress case holds tens of thousands).
+    private let linkIndex: [String: Int]
+    private let adjacency: [CaseMapNodeID: [Int]]
 
     init(caseID: UUID, title: String, stage: CaseStage, isClosed: Bool, question: String?, nodes: [CaseMapNode], links: [CaseMapLink],
          groups: [CaseMapGroup], parts: [CaseMapPart: CaseMapPartState], danglingLinks: Int, withdrawnLinks: Int) {
@@ -436,11 +444,21 @@ public nonisolated struct CaseMapProjection: Sendable {
         var idx: [CaseMapNodeID: Int] = [:]
         for (i, n) in nodes.enumerated() { idx[n.id] = i }
         self.index = idx
+        var lidx: [String: Int] = [:]
+        var adj: [CaseMapNodeID: [Int]] = [:]
+        for (i, l) in links.enumerated() {
+            if lidx[l.id] == nil { lidx[l.id] = i }
+            adj[l.from, default: []].append(i)
+            if l.to != l.from { adj[l.to, default: []].append(i) }
+        }
+        self.linkIndex = lidx
+        self.adjacency = adj
     }
 
     public func node(_ id: CaseMapNodeID) -> CaseMapNode? { index[id].map { nodes[$0] } }
-    public func link(_ id: String) -> CaseMapLink? { links.first { $0.id == id } }
-    public func links(of id: CaseMapNodeID) -> [CaseMapLink] { links.filter { $0.from == id || $0.to == id } }
+    public func link(_ id: String) -> CaseMapLink? { linkIndex[id].map { links[$0] } }
+    /// The links that touch an item, in the projection's link order.
+    public func links(of id: CaseMapNodeID) -> [CaseMapLink] { (adjacency[id] ?? []).map { links[$0] } }
     public var failedParts: [CaseMapPart] {
         CaseMapPart.allCases.filter { parts[$0].map { !$0.isLoaded } ?? false }
     }
@@ -575,6 +593,9 @@ public nonisolated enum CaseMapProjector {
         }
 
         // The evidence grid: one link per stored row. A typed note becomes a note node, never a document.
+        // M9 (§13.3): look-ups by key, not a scan per row.
+        let exhibitByNumber = Dictionary(s.exhibits.map { ($0.number, $0.id) }, uniquingKeysWith: { a, _ in a })
+        let allegationLabel = Dictionary(s.allegations.map { ($0.id, $0.label) }, uniquingKeysWith: { a, _ in a })
         for e in s.grid {
             let target = id(.allegation, e.allegationID)
             guard nodes[target] != nil else { continue }
@@ -583,7 +604,7 @@ public nonisolated enum CaseMapProjector {
             var fromNode: CaseMapNodeID?
             switch ref {
             case .sourceVersion(let v): fromNode = docNode(version: v, object: e.objectID)
-            case .exhibit(let n): fromNode = s.exhibits.first { $0.number == n }.map { id(.exhibit, $0.id) }
+            case .exhibit(let n): fromNode = exhibitByNumber[n].map { id(.exhibit, $0) }
             case .investigatorNote, .unresolved: fromNode = nil
             }
             if fromNode == nil {
@@ -606,7 +627,7 @@ public nonisolated enum CaseMapProjector {
             let src = e.passage.map(source) ?? (e.objectID.map { CaseMapSourceRef(sourceVersionID: nil, objectID: $0, blockID: e.blockID, documentName: nil, quote: e.quote) })
             link(type, from, target, origins: [CaseMapOrigin(.allegationEvidence, e.id.uuidString, revision: e.originDigest)],
                  sources: src.map { [$0] } ?? [], by: .investigator(e.addedBy), review: carried(e.reviewState), status: st,
-                 basis: "Evidence grid row for \(s.allegations.first { $0.id == e.allegationID }?.label ?? "the allegation")"
+                 basis: "Evidence grid row for \(allegationLabel[e.allegationID] ?? "the allegation")"
                     + (e.note.map { ": \($0)" } ?? "") + (e.origin.map { " (carried from \($0))" } ?? ""))
         }
 
@@ -694,6 +715,7 @@ public nonisolated enum CaseMapProjector {
         }
 
         // Chronology entries (events) and notes.
+        let attestationsByEntry = Dictionary(grouping: s.attestations, by: \.journalEntryID)
         for e in s.journal {
             let nid = id(.journal, e.id)
             let refs = e.citations.isEmpty
@@ -705,7 +727,7 @@ public nonisolated enum CaseMapProjector {
             var st = isNote ? CaseMapStatus(.unsupported, "Investigator's note — not documentary support")
                             : (refs.isEmpty ? CaseMapStatus(.unsupported, "An entry with no cited source") : status(of: e.support, version: refs.first?.sourceVersionID))
             if s.isSuperseded(e.origin) { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
-            let attest = s.attestations.filter { $0.journalEntryID == e.id }
+            let attest = attestationsByEntry[e.id] ?? []
             add(CaseMapNode(id: nid, revision: e.originDigest, kind: isNote ? .note : .event,
                             title: isNote ? "Note — \(String(e.text.prefix(60)))" : String(e.text.prefix(80)), wording: e.text,
                             status: st, review: carried(e.reviewState), sources: refs.map(source), author: .investigator(e.author),

@@ -108,7 +108,7 @@ public nonisolated enum HelpRegistry {
     }
 
     public static let all: [HelpTopic] =
-        [getStarted] + tasks + personaRecipes + screens + concepts + safety + subscription + troubleshooting
+        [getStarted] + tasks + personaRecipes + screens + concepts + caseMapContext + safety + subscription + troubleshooting
 
     private static let byID: [String: HelpTopic] = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
@@ -358,6 +358,37 @@ public nonisolated enum HelpRegistry {
                        "Copy the relationship table", "Print the relationship table"],
             destination: .cases,
             keywords: ["export", "map export", "pdf", "png", "csv", "relationship table", "print", "copy", "sources", "historical export"]),
+        HelpTopic(
+            id: "task-case-map-first-use", kind: .task, title: "First use of the case map: items, links, review state and what changed",
+            summary: "Four things to know before you start. An item is one of the case's own records — a question, a document, a statement, an event, a contradiction, a request, a report item or your note. A link says how two items relate and why: the record it comes from, or the reason you gave. A review state says what a person decided, which is separate from what the documents say. “What changed” lists this case's changes since you last marked them as seen; seeing a change is not reviewing it.",
+            steps: [
+                "Start with the header: the question the case is to answer, what the app could read, and the counts. Choose a count to see exactly those items in the list.",
+                "Choose an item on the map or in the list. The inspector shows its sources (“Open source” opens each one), its state, its review history and the actions the case already has for it.",
+                "Read a link before you rely on it: its line style and arrow say its type, and the inspector says who asserted it — you, a rule, or the AI reading (a proposal checked against the documents, never a decision).",
+                "Review states: “Not reviewed yet”, “Pending review”, “Deferred” and “Reopened — a source changed” wait for you (“Waiting for me” keeps only those). “Confirmed”, “Dismissed”, “Accepted on review” and “Rejected on review” are decisions someone recorded.",
+                "When you come back, choose “What changed”. New items appear beside what they link to; nothing you placed moves. “Mark as seen” only moves your seen position.",
+                "The legend (“Legend” at the foot of the map) explains every icon, line and state at any time; Help ▸ Case Map Keyboard Shortcuts lists the keys; Help ▸ Replay the Case Map Tutorial walks a sample case step by step."
+            ],
+            notes: ["Empty, failed and incomplete are different: “Nothing to map yet” names the next thing to do; “Incomplete” names the part that could not be read; a failed read says so and shows nothing as if it were the case."],
+            controls: ["Open source", "Waiting for me", "What changed", "Mark as seen", "Legend"],
+            destination: .cases,
+            keywords: ["first use", "introduction", "nodes", "items", "links", "edges", "review state", "what changed", "beginner", "start"]),
+        HelpTopic(
+            id: "task-case-map-keyboard", kind: .task, title: "Case map keyboard shortcuts and the list path",
+            summary: "Everything the map does can be done from the list with the keyboard: the list, the header, the view strip, the inspector and the footer are the same in both. Choose “List” in the strip (or use VoiceOver), then select with the arrow keys.",
+            steps: CaseMapKeyboard.lines,
+            notes: ["The map path and the list path run the same commands: " + CaseMapCommand.allCases.map { c in
+                "\(c.rawValue) — \(c.listSurface)" + (c.shortcut.map { " (\($0))" } ?? "") }.joined(separator: "; ") + "."],
+            controls: ["Previous view", "Next view", "Back", "Show details", "Zoom in", "Zoom out", "Undo", "Return to current"],
+            destination: .cases,
+            keywords: ["keyboard", "shortcuts", "keys", "voiceover", "accessibility", "list", "table", "tab", "arrow"]),
+        HelpTopic(
+            id: "task-case-map-tutorial", kind: .task, title: "The case map tutorial: question to report in the sample case",
+            summary: "Help ▸ Replay the Case Map Tutorial opens the isolated sample case and walks one real workflow on the map, one step at a time: the question, a document, a passage, a review, a request, new evidence, the revised view and the report. Nothing moves on its own: Back and Next are yours, and you can work at any step.",
+            steps: HelpTutorial.caseMapSteps.map { "\($0.title): \($0.instruction)" },
+            controls: Array(Set(HelpTutorial.caseMapSteps.flatMap(\.controls))).sorted(),
+            destination: .cases,
+            keywords: ["tutorial", "sample", "walkthrough", "learn", "case map", "practice"]),
         HelpTopic(
             id: "task-case-search", kind: .task, title: "Search case evidence: search this case's documents, with what was and was not searched",
             summary: "A word-for-word search of one case's documents only — never the rest of the archive. It lists every matching document (in pages), shows each match in its passage with the rules it met, counts documents, occurrences and passages separately, and says exactly what it searched and what it could not. It finds words; it does not decide what they mean, and no AI is involved.",
@@ -616,6 +647,68 @@ public nonisolated enum HelpRegistry {
         }
     }
 
+    // MARK: - Case map context help (M9, plan §10): one topic per link type, item state and review state
+
+    public static func caseMapLinkHelp(_ t: CaseMapLinkType) -> String {
+        switch t {
+        case .supports: return "The item at the start supports the one the arrow points to, as recorded in the case (an evidence-grid row, a hypothesis citation or your link). Support is a recorded stance, not proof."
+        case .challenges: return "The item at the start challenges the one the arrow points to — contrary evidence, kept beside the supporting material and never averaged away."
+        case .mentions: return "The item mentions the other without a stance for or against it."
+        case .attributedTo: return "A statement or document is attributed to this person or organisation, as the record states it."
+        case .occurredBefore: return "One recorded event is dated before the other. The order comes from the recorded dates, not from an inference."
+        case .occurredAfter: return "One recorded event is dated after the other. The order comes from the recorded dates, not from an inference."
+        case .possibleSamePerson: return "Two people with the same name, offered as possibly the same person. It stays pending until you decide; the same name is not the same person."
+        case .dependsOn: return "The item rests on the other: if the other changes, this one may need review."
+        case .requestsEvidenceFor: return "An evidence request asks for material about this question. The request records what you will ask for; the app sends nothing."
+        case .receivedInResponseTo: return "A document received for an evidence request. Arriving does not fulfil the request — only your recorded decision changes its status."
+        case .derivedFrom: return "The item was carried from this passage (a chronology entry or report item citing it), with its citation."
+        case .supersedes: return "A later record replaces an earlier one — for example a correction to an attested statement. The earlier one is kept."
+        case .selectedForReport: return "You selected this item for the case report under that question."
+        }
+    }
+
+    public static func caseMapStatusHelp(_ k: CaseMapStatus.Kind) -> String {
+        switch k {
+        case .recorded: return "Recorded as stated in the case. It is what the record says, not a judgement that it is true."
+        case .unassessed: return "Not yet assessed: recorded before passage checking existed, or never checked. Select a passage to check it."
+        case .unsupported: return "Not supported by a verified source — for example an investigator's note or an entry with no cited passage. A note is never documentary support."
+        case .unavailable: return "The source is not in this case (it was taken out of the case scope or withdrawn). Bring it back with “Review new documents”, or cite another source."
+        case .restricted: return "The source is in the case but cannot be read under the current access policy (for example labelled privileged). It is not shown or exported."
+        case .stale: return "Needs review — a source behind it changed since it was decided or carried. The decision stays as recorded until you review it."
+        case .failed: return "The source could not be read (damaged, password-protected or unsupported). It was not searched or quoted; Sources ▸ Needs attention says why."
+        }
+    }
+
+    public static func caseMapReviewHelp(_ r: CaseMapReviewState) -> String {
+        switch r {
+        case .notApplicable: return "No review is needed for this kind of record."
+        case .unreviewed: return "Nobody has reviewed it yet. It waits for you."
+        case .pendingReview: return "Waiting for a decision (for example an open evidence request or a possible same person)."
+        case .accepted: return "A reviewer accepted it. Its citations and revision are kept."
+        case .completed: return "A completed result carried from a job."
+        case .confirmed: return "Confirmed by a reviewer, with the reason and the versions of the sources it rests on."
+        case .dismissed: return "Dismissed by a reviewer, with a reason. Both sources are kept."
+        case .deferred: return "Deferred: the reviewer chose to decide later. It still waits."
+        case .reopened: return "Reopened because a source changed. The earlier decision stays in the history."
+        case .rejected: return "Rejected on review. It is kept, and not carried as accepted."
+        case .withdrawn: return "Withdrawn with a reason. It stays in the record and is no longer drawn."
+        }
+    }
+
+    public static var caseMapContext: [HelpTopic] {
+        CaseMapLinkType.allCases.map { t in
+            HelpTopic(id: "concept-case-map-link-" + slug(t.rawValue), kind: .concept, title: "Case map link: \(t.label)",
+                      summary: caseMapLinkHelp(t) + " Drawn as a \(t.stroke.rawValue) line" + (t.directed ? " with an arrow." : " without an arrow."),
+                      keywords: ["case map", "link", "edge", "line"])
+        } + CaseMapStatus.Kind.allCases.map { k in
+            HelpTopic(id: "concept-case-map-state-" + slug(k.rawValue), kind: .concept, title: "Case map state: \(k.label)",
+                      summary: caseMapStatusHelp(k), keywords: ["case map", "state", "status"])
+        } + CaseMapReviewState.allCases.map { r in
+            HelpTopic(id: "concept-case-map-review-" + slug(r.rawValue), kind: .concept, title: "Case map review state: \(r.label)",
+                      summary: caseMapReviewHelp(r), keywords: ["case map", "review", "decision"])
+        }
+    }
+
     /// Stable lowercase-kebab id fragment from a title.
     static func slug(_ text: String) -> String {
         text.lowercased()
@@ -688,6 +781,18 @@ public nonisolated enum HelpRegistry {
                     "Open Findings ▸ Missing Proof for what would be needed to establish the claim."
                   ],
                   controls: ["Add documents to this case"], destination: .sources, keywords: ["no answer", "missing", "not found"]),
+        HelpTopic(id: "trouble-case-map", kind: .troubleshooting, title: "The case map or case search shows an error, or something was not saved",
+                  summary: "Every case map and case search error says what failed and one thing to do next, and keeps what you typed or moved on screen.",
+                  steps: [
+                    "“The case map could not be read”: choose “Refresh”. If it fails again, use “Case sections” — they hold the same records.",
+                    "“Incomplete: … could not be read”: the named part is missing from the map, not empty. Choose “Refresh”; the rest of the map can be used meanwhile.",
+                    "“The new position was not saved” or “The view was not saved”: the change stays on screen; choose “Try again”. Your saved views, links and records are unchanged.",
+                    "“Not marked as seen”: nothing was reviewed either way; choose “Try again”.",
+                    "A search that cannot be read is not run; “Use the repaired query” offers a repair when one exists. A search that stopped at its limit lists what it did not reach under “What was searched”.",
+                    "A map that looks messy: “Reset view” resets the zoom, filters, hidden items and positions only — no case record, decision, link or saved view is changed."
+                  ],
+                  controls: ["Refresh", "Case sections", "Try again", "Use the repaired query", "Reset view"],
+                  destination: .cases, keywords: ["case map", "error", "not saved", "failed", "incomplete", "retry", "case search"]),
         HelpTopic(id: "trouble-disabled", kind: .troubleshooting, title: "A button is greyed out",
                   summary: "A disabled control carries the reason and the remedy as its tooltip and in its accessibility description; empty screens say which of five things is true.",
                   steps: [

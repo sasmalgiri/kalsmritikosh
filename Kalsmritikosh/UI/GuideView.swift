@@ -93,6 +93,12 @@ public struct GuideView: View {
                 Button { HelpTutorial.replay() } label: { Label("Replay the tutorial (sample case)", systemImage: "graduationcap") }
                     .help("Opens the isolated sample case and walks the path from documents to an exported report. Your own documents are not touched.")
                     .accessibilityIdentifier("help.replayTutorial")
+                Button { HelpTutorial.replay(.caseMap) } label: { Label("Replay the case map tutorial", systemImage: "map") }
+                    .help("Opens the isolated sample case and walks the case map from the question to the report, one step at a time. Your own documents are not touched.")
+                    .accessibilityIdentifier("help.replayMapTutorial")
+                Button { SurfaceOpener.openHelp("task-case-map-keyboard") } label: { Label("Case map keyboard shortcuts", systemImage: "keyboard") }
+                    .help("The keys of the case map and how the list does everything the map does.")
+                    .accessibilityIdentifier("help.caseMapKeyboard")
                 Button { SurfaceOpener.replayOnboarding() } label: { Label("Replay the introduction", systemImage: "hand.wave") }
                     .help("Shows the first-run introduction again. It changes nothing unless you choose to.")
                     .accessibilityIdentifier("help.replayIntro")

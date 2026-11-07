@@ -170,6 +170,8 @@ struct KalsmritikoshApp: App {
                 Button("Get Started Guide") { SurfaceOpener.openHelp(HelpRegistry.getStarted.id) }
                 Divider()
                 Button("Replay the Tutorial (Sample Case)") { HelpTutorial.replay() }
+                Button("Replay the Case Map Tutorial") { HelpTutorial.replay(.caseMap) }
+                Button("Case Map Keyboard Shortcuts") { SurfaceOpener.openHelp("task-case-map-keyboard") }
                 Button("Replay the Introduction") { SurfaceOpener.replayOnboarding() }
                 Divider()
                 Button("Subscription, Trial and Cancelling") { SurfaceOpener.openHelp("subscription-plans") }

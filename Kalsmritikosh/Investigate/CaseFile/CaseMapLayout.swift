@@ -78,11 +78,16 @@ public nonisolated enum CaseMapLayout {
         let rank = Dictionary(uniqueKeysWithValues: anchors.enumerated().map { ($1, $0) })
         var neighbours: [CaseMapNodeID: Set<CaseMapNodeID>] = [:]
         for l in p.links { neighbours[l.from, default: []].insert(l.to); neighbours[l.to, default: []].insert(l.from) }
+        // The best (lowest-rank) anchor among each item's own neighbours, computed once; the second hop is then
+        // the best of the neighbours' best (the same answer as scanning every neighbour's neighbours, M9 §13.3).
+        var bestAnchorNeighbour: [CaseMapNodeID: CaseMapNodeID] = [:]
+        for (id, set) in neighbours {
+            if let best = set.filter({ rank[$0] != nil }).min(by: { rank[$0, default: .max] < rank[$1, default: .max] }) { bestAnchorNeighbour[id] = best }
+        }
         var out: [CaseMapNodeID: CaseMapNodeID] = [:]
         for n in p.nodes where rank[n.id] == nil {
-            let direct = (neighbours[n.id] ?? []).compactMap { rank[$0] != nil ? $0 : nil }.min { rank[$0, default: .max] < rank[$1, default: .max] }
-            if let direct { out[n.id] = direct; continue }
-            let second = (neighbours[n.id] ?? []).flatMap { neighbours[$0] ?? [] }.filter { rank[$0] != nil }.min { rank[$0, default: .max] < rank[$1, default: .max] }
+            if let direct = bestAnchorNeighbour[n.id] { out[n.id] = direct; continue }
+            let second = (neighbours[n.id] ?? []).compactMap { bestAnchorNeighbour[$0] }.min { rank[$0, default: .max] < rank[$1, default: .max] }
             if let second { out[n.id] = second }
         }
         return out
@@ -100,9 +105,9 @@ public nonisolated enum CaseMapLayout {
         let anchorList = allAnchors.filter { scope.contains($0) }
         let owner = owners(p, anchors: allAnchors)
         var out: [CaseMapNodeID: CaseMapPoint] = [:]
-        var taken = Array(fixed.values)
-        func free(_ c: CaseMapPoint) -> Bool { taken.allSatisfy { $0.distance(to: c) >= minGap } }
-        func put(_ id: CaseMapNodeID, _ c: CaseMapPoint) { out[id] = c; taken.append(c) }
+        var taken = OccupancyGrid(fixed.values)
+        func free(_ c: CaseMapPoint) -> Bool { taken.isFree(c) }
+        func put(_ id: CaseMapNodeID, _ c: CaseMapPoint) { out[id] = c; taken.insert(c) }
         for (i, a) in anchorList.enumerated() { put(a, CaseMapPoint(x: origin.x + Double(i) * anchorGap, y: origin.y)) }
         // Members around their anchor, in rings, ordered by identity; the angle comes from the anchor's seed.
         var members: [CaseMapNodeID: [CaseMapNodeID]] = [:]
@@ -155,8 +160,8 @@ public nonisolated enum CaseMapLayout {
         }
         var neighbours: [CaseMapNodeID: [CaseMapNodeID]] = [:]
         for l in p.links { neighbours[l.from, default: []].append(l.to); neighbours[l.to, default: []].append(l.from) }
-        var taken = out.values.map(\.point)
-        func free(_ c: CaseMapPoint) -> Bool { taken.allSatisfy { $0.distance(to: c) >= minGap } }
+        var taken = OccupancyGrid(out.values.map(\.point))
+        func free(_ c: CaseMapPoint) -> Bool { taken.isFree(c) }
         let bounds = Self.bounds(of: out.values.map(\.point)) ?? CaseMapRect(minX: 0, minY: 0, maxX: 0, maxY: 0)
         var arrivals = 0
         for id in missing.sorted() {
@@ -180,7 +185,7 @@ public nonisolated enum CaseMapLayout {
                 placed = c
                 arrivals += 1
             }
-            if let c = placed { out[id] = CaseMapPlacement(point: c); taken.append(c) }
+            if let c = placed { out[id] = CaseMapPlacement(point: c); taken.insert(c) }
         }
         return out
     }
@@ -207,7 +212,14 @@ public nonisolated enum CaseMapLayout {
     /// The viewport that fits the given world bounds into a view of this size (fit = the actual bounds).
     public static func fit(_ rect: CaseMapRect, width: Double, height: Double, margin: Double = 40) -> CaseMapViewport {
         let r = rect.insetBy(margin)
-        let scale = min(CaseMapViewport.maxScale, max(CaseMapViewport.minScale, min(width / max(r.width, 1), height / max(r.height, 1))))
+        let wanted = min(width / max(r.width, 1), height / max(r.height, 1))
+        let scale = min(CaseMapViewport.maxScale, max(CaseMapViewport.minScale, wanted))
+        // Too large to fit even at the smallest zoom: centring would land on the empty middle of the grouped
+        // layout (walk/perf 2026-11-07: 0 drawn at 50,000 records). Show the start of the map instead; the
+        // off-screen count and the list still disclose and reach the rest.
+        if wanted < CaseMapViewport.minScale {
+            return CaseMapViewport(scale: scale, originX: r.minX, originY: r.minY)
+        }
         let ox = r.center.x - width / scale / 2
         let oy = r.center.y - height / scale / 2
         return CaseMapViewport(scale: scale, originX: ox, originY: oy)
@@ -226,6 +238,27 @@ public nonisolated enum CaseMapLayout {
         }
         if inside.count <= cap { return (inside, off, 0) }
         return (Array(inside.sorted().prefix(cap)), off, inside.count - cap)
+    }
+
+    /// M9 (§13.3) — the taken positions bucketed into cells of `minGap`, so "is this spot at least `minGap` from
+    /// every taken position?" looks at the nine cells around it instead of every position (the same answer:
+    /// a point closer than `minGap` is always in a neighbouring cell). Placement was quadratic without it.
+    struct OccupancyGrid {
+        private var cells: [Cell: [CaseMapPoint]] = [:]
+        private struct Cell: Hashable { let x: Int; let y: Int }
+        private static func cell(_ p: CaseMapPoint) -> Cell { Cell(x: Int((p.x / CaseMapLayout.minGap).rounded(.down)), y: Int((p.y / CaseMapLayout.minGap).rounded(.down))) }
+        init<S: Sequence>(_ points: S) where S.Element == CaseMapPoint { for p in points { insert(p) } }
+        mutating func insert(_ p: CaseMapPoint) { cells[Self.cell(p), default: []].append(p) }
+        func isFree(_ c: CaseMapPoint) -> Bool {
+            let k = Self.cell(c)
+            for dx in -1...1 {
+                for dy in -1...1 {
+                    guard let pts = cells[Cell(x: k.x + dx, y: k.y + dy)] else { continue }
+                    for p in pts where p.distance(to: c) < CaseMapLayout.minGap { return false }
+                }
+            }
+            return true
+        }
     }
 
     /// The item under a world point (topmost = last in draw order), if any.

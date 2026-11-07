@@ -170,6 +170,9 @@ struct CaseSearchPanel: View {
                         Button("Mark as seen") { Task { await model.acknowledge() } }.controlSize(.small)
                             .help("New matches are counted from now on. It records nothing about the documents.")
                     }
+                    // M9 — vital information is not only on hover.
+                    Text("“Mark as seen” counts new matches from now on; it records nothing about the documents and reviews nothing.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Text(run.countsLine).font(.callout.monospacedDigit()).accessibilityIdentifier("case.search.counts")
                 if let z = run.zeroMatchStatement { Text(z).font(.callout).fixedSize(horizontal: false, vertical: true) }
@@ -315,6 +318,8 @@ struct CaseSearchPanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 Divider()
                 Text("Saved searches of this case").font(.subheadline.weight(.semibold))
+                Text("A live search runs again on the case's documents as they are then; “Check for new matches” lists what is new and adds no document to the case. A frozen result stays as it was.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 ForEach(model.saved) { s in
                     HStack {
                         Image(systemName: s.kind == .live ? "arrow.triangle.2.circlepath" : "lock.doc").accessibilityHidden(true)
