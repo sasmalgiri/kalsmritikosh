@@ -446,7 +446,7 @@ public actor CaseHistoryService {
                 KalsmritikoshLog.app.notice("Case checkpoint: the case changed between the read and the write (attempt \(attempt, privacy: .public)); reading again")
                 continue
             }
-            return CaseCheckpointSummary(id: id, caseID: caseID, kind: kind, name: label?.isEmpty == false ? label : nil, recordedAt: date, recordedBy: who,
+            return CaseCheckpointSummary(id: id, caseID: caseID, kind: kind, name: label?.isEmpty == false ? label : nil, recordedAt: Date(timeIntervalSince1970: date.timeIntervalSince1970), recordedBy: who,
                                          contentDigest: digest, scopeFingerprint: scope, fence: fence, nodeCount: payload.nodes.count,
                                          linkCount: payload.links.count, erasedAt: nil, erasedReason: nil)
         }
@@ -516,7 +516,9 @@ public actor CaseHistoryService {
     public func knownAt(caseID: UUID, _ moment: Date) async throws -> CaseKnownAt {
         let base = try await baseline(caseID: caseID).effective
         if moment < base { return .notRecorded(baseline: base) }
-        let list = try await checkpoints(caseID: caseID).filter { $0.erasedAt == nil && $0.recordedAt <= moment }
+        // Times are stored as seconds since 1970 in a REAL, so a time read back can differ from the one
+        // written by a fraction of a microsecond: a state recorded at exactly this moment still counts.
+        let list = try await checkpoints(caseID: caseID).filter { $0.erasedAt == nil && $0.recordedAt <= moment.addingTimeInterval(0.001) }
         guard let nearest = list.last else { return .noRecordedStateYet(baseline: base) }
         return .recorded(nearest, exact: abs(nearest.recordedAt.timeIntervalSince(moment)) < 0.001)
     }
