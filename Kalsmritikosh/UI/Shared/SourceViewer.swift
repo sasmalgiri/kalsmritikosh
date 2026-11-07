@@ -44,17 +44,20 @@ public struct SourceViewer: View {
     /// character range is only the fallback, because chunk offsets index the
     /// normalised text, not the raw file.
     let quote: String?
+    /// The exact matched words to mark inside the quote (a screened name); nil marks the quote.
+    let focus: String?
 
     @Environment(AppState.self) private var appState
     @State private var authorized: Bool? = nil
     /// X-3 — marks on this PDF (only when "Rich text notes and PDF marks" is on).
     @State private var marks: PDFMarksController?
 
-    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil) {
+    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil, focus: String? = nil) {
         self.url = url
         self.koID = koID
         self.range = range
         self.quote = quote
+        self.focus = focus
     }
 
     public var body: some View {
@@ -119,7 +122,7 @@ public struct SourceViewer: View {
     private var pdfBody: some View {
         #if canImport(PDFKit)
         VStack(spacing: 0) {
-            PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote,
+            PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote, focus: focus,
                           onView: { view in marks?.attach(view) })
                 .overlay(alignment: .topTrailing) { revealButton.padding(8) }
             if let marks { PDFMarksBar(controller: marks, original: url) }
@@ -140,7 +143,7 @@ public struct SourceViewer: View {
 
     @ViewBuilder
     private var textBody: some View {
-        TextInlineView(url: url, characterRange: range?.characterRange, quote: quote)
+        TextInlineView(url: url, characterRange: range?.characterRange, quote: quote, focus: focus)
             .overlay(alignment: .topTrailing) { revealButton.padding(8) }
     }
 
@@ -211,6 +214,7 @@ private struct PDFInlineView: NSViewRepresentable {
     let page: Int?
     let characterRange: Range<Int>?
     let quote: String?
+    var focus: String? = nil
     /// X-3 — hands the view to the marks controller (which draws marks in memory only).
     var onView: ((PDFView) -> Void)? = nil
 
@@ -245,12 +249,12 @@ private struct PDFInlineView: NSViewRepresentable {
         guard let document = view.document else { return }
         // §1.3 — quote first: find the cited words on whichever page holds
         // them (starting at the cited page) and select exactly that text.
-        if let quote, !quote.isEmpty {
+        if (quote?.isEmpty == false) || (focus?.isEmpty == false) {
             let start = max(0, min((page ?? 1) - 1, document.pageCount - 1))
             let order = Array(start..<document.pageCount) + Array(0..<start)
             for i in order {
                 guard let pdfPage = document.page(at: i), let text = pdfPage.string,
-                      let hit = CitedPassageLocator.locate(quote, in: text),
+                      let hit = TextInlineView.hit(quote: quote, focus: focus, in: text),
                       let selection = pdfPage.selection(for: hit) else { continue }
                 view.go(to: pdfPage)
                 view.setCurrentSelection(selection, animate: true)
@@ -297,6 +301,15 @@ private struct TextInlineView: NSViewRepresentable {
     let url: URL
     let characterRange: Range<Int>?
     let quote: String?
+    let focus: String?
+
+    /// What to mark: the focus words inside the quoted passage when a focus is given (a screened
+    /// name is too short for `locate` on its own), else the quote.
+    static func hit(quote: String?, focus: String?, in text: String) -> NSRange? {
+        if let focus, !focus.isEmpty, let r = CitedPassageLocator.locate(focus: focus, near: quote, in: text) { return r }
+        if let quote, !quote.isEmpty { return CitedPassageLocator.locate(quote, in: text) }
+        return nil
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -347,8 +360,7 @@ private struct TextInlineView: NSViewRepresentable {
             ]
         )
         // §1.3 — the quoted words win over raw offsets (see SourceViewer.quote).
-        if let quote, !quote.isEmpty,
-           let hit = CitedPassageLocator.locate(quote, in: truncated),
+        if let hit = Self.hit(quote: quote, focus: focus, in: truncated),
            NSMaxRange(hit) <= attributed.length {
             attributed.addAttributes(
                 [

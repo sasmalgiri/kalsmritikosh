@@ -87,7 +87,7 @@ public nonisolated enum ConformanceSigningKey {
     }
 
     private static let testHostKey: P256.Signing.PrivateKey? =
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ? P256.Signing.PrivateKey() : nil
+        TestHost.isActive ? P256.Signing.PrivateKey() : nil
 
     /// Compatibility: the software key path (used before Secure Enclave support).
     public static func loadOrGenerate() -> P256.Signing.PrivateKey? {

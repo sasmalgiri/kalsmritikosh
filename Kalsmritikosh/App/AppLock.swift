@@ -34,8 +34,8 @@ public final class AppLock {
     private static let idleKey = "kalsmritikosh.applock.idleMinutes"
     /// Minutes away before the app locks on return (default 5).
     public static var idleMinutes: Int {
-        get { (UserDefaults.standard.object(forKey: idleKey) as? Int) ?? 5 }
-        set { UserDefaults.standard.set(max(1, newValue), forKey: idleKey) }
+        get { (AppDefaults.store.object(forKey: idleKey) as? Int) ?? 5 }
+        set { AppDefaults.store.set(max(1, newValue), forKey: idleKey) }
     }
 
     public func start() {

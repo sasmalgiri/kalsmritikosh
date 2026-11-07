@@ -17,21 +17,39 @@ public struct CasesView: View {
     @State private var showClosed = false
     @State private var showNew = false
     @State private var open: CaseloadRow?
-    @State private var search = ""
+    /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
+    /// open when the app quit opens again (UI preferences only).
+    @State private var search = AppDefaults.store.string(forKey: CasesView.searchKey) ?? ""
+    @State private var selection: CaseloadRow.ID?
+    @State private var resumed = false
+
+    static let lastOpenKey = "kalsmritikosh.cases.lastOpen"
+    static let searchKey = "kalsmritikosh.cases.search"
+    static let showClosedKey = "kalsmritikosh.cases.showClosed"
 
     public init() {}
 
     public var body: some View {
         Group {
             if let open {
-                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID, onBack: {
+                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID,
+                             openableCases: Set(rows.map(\.caseID)),
+                             openCase: { id in if let row = rows.first(where: { $0.caseID == id }) { self.open = row } },
+                             onBack: {
+                    selection = open.caseID
                     self.open = nil
                     Task { await load() }
                 })
+                .id(open.caseID)   // N1 — opening another case from this one starts a fresh case file
             } else {
                 list
             }
         }
+        .onChange(of: open?.caseID) { _, id in
+            if let id { AppDefaults.store.set(id.uuidString, forKey: Self.lastOpenKey) } else { AppDefaults.store.removeObject(forKey: Self.lastOpenKey) }
+        }
+        .onChange(of: search) { _, v in AppDefaults.store.set(v, forKey: Self.searchKey) }
+        .onChange(of: showClosed) { _, v in AppDefaults.store.set(v, forKey: Self.showClosedKey) }
         .navigationTitle(open?.title ?? "Cases")
         .sheet(isPresented: $showNew) {
             NewCaseSheet { created in
@@ -62,6 +80,16 @@ public struct CasesView: View {
                 Spacer()
                 TextField("Filter", text: $search).textFieldStyle(.roundedBorder).frame(width: 180)
                 Toggle("Show closed", isOn: $showClosed).toggleStyle(.checkbox)
+                // Navigation merge (scope §3): projects that group several cases, and the caseload triage,
+                // stay one step away from the case list — out of the beginner's path, not removed.
+                Menu {
+                    Button("Projects and workspaces") { SurfaceOpener.open(.workspaces) }
+                    Button("Caseload triage") { SurfaceOpener.open(.caseload) }
+                    Button("Start page") { SurfaceOpener.open(.home) }
+                } label: { Label("Projects", systemImage: "folder") }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
                 Button { showNew = true } label: { Label("New case", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -81,23 +109,26 @@ public struct CasesView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(visible) {
+                Table(visible, selection: $selection) {
                     TableColumn("Case") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title).fontWeight(.medium)
                             if let k = CaseTemplate.template(id: r.kind) { Text(k.title).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
                     }
+                    // The case name is the column people read; the fixed columns beside it left it about 15 pt
+                    // wide in a normal window, so every name showed as "…" (user evaluation 2026-11-02, M1).
+                    .width(min: 200, ideal: 300)
                     TableColumn("Stage") { r in StageChip(stage: r.stage) }.width(110)
                     TableColumn("Severity") { r in Text(r.severity?.label ?? "—").foregroundStyle(severityColor(r.severity)) }.width(80)
-                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(120)
+                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(min: 70, ideal: 110)
                     TableColumn("Next due") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.nextDue.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—")
                                 .foregroundStyle((r.nextDue ?? .distantFuture) < Date() ? .red : .primary)
                             if let t = r.nextTask { Text(t).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
-                    }.width(min: 140, ideal: 200)
+                    }.width(min: 110, ideal: 180)
                     TableColumn("Tasks") { r in
                         HStack(spacing: 4) {
                             Text("\(r.openTasks) open")
@@ -108,6 +139,11 @@ public struct CasesView: View {
                     TableColumn("") { r in
                         Button("Open") { open = r }.accessibilityLabel("Open \(r.title)")
                     }.width(60)
+                }
+                .onKeyPress(.return) {
+                    guard let id = selection, let row = rows.first(where: { $0.caseID == id }) else { return .ignored }
+                    open = row
+                    return .handled
                 }
                 .contextMenu(forSelectionType: CaseloadRow.ID.self) { _ in } primaryAction: { ids in
                     if let id = ids.first { open = rows.first { $0.caseID == id } }
@@ -147,6 +183,15 @@ public struct CasesView: View {
         guard let svc = appState.caseFiles else { return }
         do {
             rows = try await svc.caseload(includeArchived: false)
+            if !resumed {
+                resumed = true
+                showClosed = AppDefaults.store.bool(forKey: Self.showClosedKey)
+                // The case that was open when the app last quit opens again (never in the test host).
+                if open == nil, !TestHost.isActive, let raw = AppDefaults.store.string(forKey: Self.lastOpenKey),
+                   let row = rows.first(where: { $0.caseID.uuidString == raw }) {
+                    open = row
+                }
+            }
         } catch {
             KalsmritikoshLog.app.error("Caseload failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -238,7 +283,8 @@ struct NewCaseSheet: View {
                 Button("Create case") { Task { await create() } }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || working)
+                    .disabled(reason: working ? "The case is being created." : title.trimmingCharacters(in: .whitespaces).isEmpty ? "A case title is required." : nil,
+                              remedy: working ? nil : "Type a title for the case.")
             }
             .padding(20)
         }
@@ -319,22 +365,6 @@ enum CaseReminders {
             do { try await center.add(request) } catch {
                 KalsmritikoshLog.app.error("Reminder failed: \(error.localizedDescription, privacy: .public)")
             }
-        }
-    }
-}
-
-// MARK: - Saving exports
-
-@MainActor
-enum CaseFileSave {
-    static func save(_ text: String, name: String, ext: String) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
-            KalsmritikoshLog.app.error("Case export failed: \(error.localizedDescription, privacy: .public)")
-            NSAlert(error: error).runModal()
         }
     }
 }

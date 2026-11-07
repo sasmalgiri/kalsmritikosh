@@ -1,163 +1,186 @@
-# Investigations Made Easy — App Store Listing (draft)
+# Investigations Made Easy — App Store Listing
 
-_Draft copy + review notes for App Store Connect (REL-005). Owner fills the bracketed items,
-adds screenshots, and submits. Every claim below is deliberately kept within the "Do NOT claim"
-list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. Last reviewed
-2026-10-24 (R-2 App Review 2.3.1 pass: evidence-only answers by default, English only, no judgement promised)._
+_The ONLY paste source for App Store Connect (`APP_STORE_METADATA.md` is superseded). Updated 2026-11-04 for the candidate
+`investigations-next` @ `7bb6323b`: plans and credits (owner decisions 2026-11-04), the whole-case reader with permission once per
+case, offline search results, simulation-only testing (owner decision 2026-11-04). Every sentence stays inside the "Do NOT claim"
+checklist at the end and the locked contract in `SHIP_DECISIONS.md`. Claim fragments registered in `CLAIMS_APP.md` are checked by
+`ci/guards/app-claims-coverage.sh` — reword them only together with that file. Agent-prepared, not counsel-reviewed._
+_2026-11-06 (owner scope decision, `docs/IME_Core_and_Add_On_Scope_2026-11-06.md`): the copy describes the core workflow by its
+outcomes and names specialist tools as optional; it no longer counts jobs. No price, plan or entitlement changed._
+
+Related: privacy answers → `release/APP_PRIVACY_LABEL.md`; products → `release/IAP_SETUP.md`; owner steps →
+`release/OWNER_LAUNCH_CHECKLIST.md`.
 
 ## Metadata
 
-- **Name:** Investigations Made Easy
-- **Subtitle (≤30 chars):** `From evidence to findings`
-- **Name note:** App Store names are limited to 30 characters, so the owner's full name "Investigation documentation made easy" (37) ships as **Investigations Made Easy** (28); the full phrase opens the description and the website (owner decision 2026-10-18).
-- **Category:** Productivity (secondary: Reference)
-- **Age rating:** 4+ (no objectionable content; user supplies their own files)
-- **Price:** **Free download with a 14-day free trial, then one $79 in-app purchase that unlocks everything for good** — no subscription, no yearly fee (SHIP_DECISIONS 2026-10-18). App price tier: Free. In-app purchases (non-consumable, Family Sharing on): `ecosanskritiinnovation.Kalsmritikosh.trial14` "14-day free trial" at Free; `ecosanskritiinnovation.Kalsmritikosh.unlock` "Investigations Made Easy" at $79. Optional launch price $59 for two weeks (price schedule). The iPhone/iPad app is free.
-- **Export compliance:** declared in the build (`ITSAppUsesNonExemptEncryption = NO` — Apple OS crypto only; SHIP_DECISIONS 2026-10-17).
-- **Keywords (≤100 chars):**
-  `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private`
+| Field | Value |
+|---|---|
+| Name (≤30) | **Investigations Made Easy** (28). The owner's full phrase "Investigation documentation made easy" opens the description. |
+| Subtitle (≤30) | `Private case files, cited` (25) |
+| Primary / secondary category | Productivity / Business |
+| Age rating | **18+** (owner decision 2026-11-02). Questionnaire: answer honestly; "Unrestricted Web Access: **Yes**" (web capture); then set the age to 18+. Reasons: Gemini API terms require 18+, Anthropic restricts minors. |
+| Seller / copyright | `© 2026 Shrabani Sasmal` — exactly the individual Apple Developer account name, everywhere (site, terms, policy, app). |
+| Support email | sasmalgiri@gmail.com |
+| Price | Free download; one auto-renewable subscription group (Workbench, AI Included, AI Pro) + two credit packs — `release/IAP_SETUP.md` |
+| Export compliance | `ITSAppUsesNonExemptEncryption = NO` in the build (Apple OS crypto only; SHIP_DECISIONS 2026-10-17) |
+| Availability | The app: all storefronts. Online AI is switched off inside the app (and refused by the relay) for App Store accounts in CHN, HKG, MAC, RUS, BLR, VEN, AFG, MMR, YEM, IRN, PRK, SYR, CUB; the app itself still works there without AI. **In those 13 storefronts only Workbench is sold**: the four AI subscriptions and both credit packs are removed from their availability in App Store Connect (`release/IAP_SETUP.md` §2–§3), and the app hides the AI plans, the packs and the own-key option there (release decisions 2026-11-04). |
 
-## Promotional text (≤170 chars)
-
-> Run every investigation from intake to findings — evidence, interviews, exhibits and a cited
-> report — privately on your Mac. The app keeps the record; you make the call.
-
-## Description
-
-> **Investigation documentation made easy.**
->
-> **Investigations Made Easy is a private, on-device case file for investigators** — HR and
-> compliance teams, fraud and insurance investigators, lawyers, journalists, researchers, and
-> anyone putting a personal dispute in order. It organises, finds and documents; **every finding
-> is yours to make.**
->
-> **Run the whole case.** Record how a matter came in (anonymously if needed), triage it, and pick
-> the kind of investigation — the plan and the usual tasks with due dates are set up for you. Add
-> the evidence, register exhibits, issue preservation notices, plan and hold interviews and record
-> the statement the person confirms. For each allegation, link the evidence for and against it,
-> then record your finding and why. Close the case with your reasons; everything done is in the
-> case log.
->
-> Point it at your folders of documents and email. It builds a structured record — people,
-> dates, events, facts — and lets you ask questions and get answers that **cite the exact source
-> passages** they came from. When the evidence isn't there, it tells you honestly instead of
-> guessing.
->
-> **Private by design.** Everything runs on your Mac, and the knowledge base is encrypted on
-> disk. There's no account, no sign-in, and no analytics. By default your files and questions
-> never leave your device. By default answers come from your evidence only: every answer is a
-> value or a passage your documents state, with its source, or an honest "the documents don't say".
-> If you choose, turn on AI — Apple's on-device model, or your own cloud AI key, where you see
-> exactly what would be sent before anything leaves your Mac.
->
-> **What you can do**
-> • Cases: intake, triage, plan, tasks and reminders, people and interviews, exhibits, holds, redaction log, review batches with a second-person check, chronology, journal and an append-only case log.
-> • Evidence from documents, email (including PST), chat exports (WhatsApp, Slack, Teams and more), Cellebrite phone reports, scans and recordings.
-> • Follow the money: totals per currency and where each flow stops — every figure lists its sources.
-> • Export the case file report, exhibit list, custody report, statements for signature and a personal-data export.
-> • Search and ask questions across everything you've added — answers come with clickable citations.
-> • Build timelines and see how events connect across sources.
-> • Surface contradictions and gaps between documents.
-> • Organize evidence into workspaces and export cited work products.
-> • See exactly what's been processed, and what couldn't be, with honest per-source coverage.
-> • Works beside DEVONthink: import a DEVONthink database in place, send items back to it.
-> • Save to Investigations Made Easy from the Share and Services menus in Safari, Mail, Finder and more.
-> • Scan a document or take a photo with your iPhone or iPad straight into your archive (Continuity Camera).
-> • Write your own notes in Markdown — searchable, with every earlier version kept.
-> • Automate with Shortcuts and AppleScript.
-> • Use it beside DEVONthink, or on its own: one switch turns on tags, highlights, smart collections and the other organising tools.
-> • Arrange documents in your own folders — one document can live in several at once — and see what else in your archive is alike, with suggestions for where to file it.
-> • Highlight, underline and comment on PDFs without changing the original; export a marked copy.
-> • Clip any page from Safari: the page, your selection, or a clean Markdown copy.
-> • Keep your Macs and your iPhone or iPad in step through a folder you choose (iCloud Drive, Dropbox, a disk), encrypted with your passphrase. Scan paper on your phone straight into your archive.
-> • Take a signed, read-only snapshot to your iPhone or iPad with the companion viewer.
->
-> **Try it free for 14 days, then buy it once — no subscription, no yearly fee.**
->
-> **No AI writes your answers unless you turn it on.** Out of the box, answers, search, timelines,
-> matrices, contradictions, gaps and cited reports all come from your evidence alone. Turn on
-> "Use AI to write answers" in Settings to use Apple's on-device intelligence where your Mac
-> supports it, or your own cloud AI key in Online mode.
->
-> **English only in this version.** The app's screens are in English. Documents in other languages
-> are kept and searchable by keyword, but names and dates in them may be missed.
->
-> **Supported files** include common document, spreadsheet, presentation, email, image (with text
-> recognition), and structured-data formats. Some formats are supported with limits and are shown
-> honestly in-app; the words spoken in audio and video are turned into text while importing (on by default; Settings ▸ Modules ▸ “Transcribe audio & video”), fully on-device with Apple’s speech recognition, English, each line timecoded — the transcript is as accurate as the recording, and the app reads only what is said: it does not watch video, identify speakers or judge what the footage shows.
-> Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
->
-> _Investigations Made Easy is an informational aid. It organises and cites your evidence; it does not
-> decide findings, guilt or outcomes — you do. Verify important answers against the cited originals; it
-> is not legal, financial, or professional advice._
-
-## Privacy nutrition labels
-
-- **Data Not Collected.** No data is collected, tracked, or linked to the user. No account.
+**Keywords (≤100 chars):** `investigation,case,evidence,interview,exhibit,chronology,custody,hr,fraud,compliance,report,private` (99)
 
 ## URLs
 
-- **Privacy URL:** https://sasmalgiri.github.io/kalsmritikosh/privacy.html
+- **Privacy Policy URL:** https://sasmalgiri.github.io/kalsmritikosh/privacy.html
 - **Support URL:** https://sasmalgiri.github.io/kalsmritikosh/support.html
-- **Terms/EULA:** https://sasmalgiri.github.io/kalsmritikosh/terms.html (Apple's standard LEULA also applies where no custom EULA is presented)
+- **Marketing URL:** https://sasmalgiri.github.io/kalsmritikosh/
+- **Terms of Use (EULA):** https://sasmalgiri.github.io/kalsmritikosh/terms.html — add this link at the end of the description
+  (App Review 3.1.2 requires a functional EULA link in the metadata) and, optionally, as a custom EULA in App Store Connect.
 
-## Screenshots (plan — capture on a demo corpus with NO real PII)
+## Promotional text (≤170 chars)
 
-1. **"What are you investigating?"** — the first-run question that opens the right persona with a case ready.
-2. **Case file** — the case's documents in scope, with custody hashes and the chronology.
-3. **Contradictions & gaps** — two sources that disagree, both shown with their citations.
-4. **A persona studio filled from the case** — e.g. the SIU referral or privilege log, each filled line marked with its source document, typed lines marked "investigator entry".
-5. **Findings report** — sections with claims, every sentence linked to its source, and the sealed receipt.
+> Run an investigation from intake to findings on your Mac. Ask AI about a case and every statement it makes is checked against
+> the exact source line. You decide.
 
-Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic) or the public-domain case packs in
-`KalsmritikoshTests/Fixtures/InvestigationCases` (DOJ releases, court opinions, an NTSB docket — no private data).
+## Description
 
-## Review notes (paste into App Review Notes)
+_Plain text (App Store Connect does not render Markdown). Keep each paragraph on one line here (the claims guard matches fragments line by line). Limit 4,000 characters._
 
-> Investigations Made Easy is **investigation documentation software**: it keeps every source of an
-> investigation with custody, builds the chronology, finds contradictions and gaps, and produces the
-> report where every sentence points at its source. **Judgement stays human** — the app never decides
-> guilt, privilege, credibility or root cause, and its studios never fill those fields; it documents the
-> investigation a person runs. It is a **local evidence workspace**. It processes only files the user
-> explicitly selects via macOS security-scoped folder access. **No account is required** and
-> **core processing is on-device**. The app starts in **Private mode**, in which it makes no network
-> connections at all; its knowledge base is encrypted at rest with a key kept in the Keychain.
+> Investigation documentation made easy.
 >
-> **Online mode (optional, off by default).** Settings ▸ Modules ▸ Connection ▸ Online. The user
-> enters their own API key for Anthropic, OpenAI or Google Gemini. Before any text is sent, a
-> consent screen shows the exact text, the destination host and its size; nothing is sent unless
-> the user presses Send. Network access is confined to the bundled, sandboxed extension
-> KalsmritikoshNetworkHelper, which may only make HTTPS requests to those three hosts; the main
-> app has no network entitlement. To test: switch to Online, enter a key, ask a question, and
-> observe the consent screen. (Cloud AI is used only when "Use AI to write answers" is also on —
-> see below.)
+> Investigations Made Easy is a private, on-device case file for investigators in HR, compliance, fraud, insurance, law, journalism and research. It organises, finds and documents; every finding is yours to make.
 >
-> **To demo:** launch → Sources → add the included demo folder (or any folder of documents) →
-> "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
-> citations. Work products export from the Studio/report screens.
+> Run the whole case: intake, triage, plan, evidence and exhibits, preservation notices, interviews, evidence for and against each allegation, your finding and closure — all in the case log.
 >
-> **Free trial and one purchase.** On first launch the app offers "Start free trial" (a free
-> non-consumable in-app purchase that starts a 14-day trial) or "Buy now" ($79 non-consumable that
-> unlocks everything for good). "Restore purchase" is on the same screen. After the trial, the main
-> window shows the purchase screen; Settings (backup and export) stays usable. To test in the
-> sandbox: start the trial, then buy; or buy directly. **No subscription, no other purchases.** **No model download** in this version. Minimum OS
-> macOS 15.6. **By default no AI model is used**: answers are built from the person's documents by
-> keyword, structured-field and document matching. AI is optional (Settings → Modules → "Use AI to
-> write answers"): Apple's on-device model on macOS 26+ with Apple Intelligence, or the person's own
-> cloud key in Online mode, with consent before every send.
-> Workflows cite US and international instruments; procedures are jurisdiction-neutral and
-> deviations are recorded on the certificate.
+> Point it at your folders of documents and email. It builds a structured record — people, dates, events, facts — and answers your questions citing the exact source passages. When no passage supports an answer, it says so and shows the closest passage. Answers can still be incomplete or wrong — check the cited source.
+>
+> Ask AI about a case — with your permission, once per case. With an AI plan or your own Anthropic key, Claude can read a whole case. The first time, the app lists which documents would go to Anthropic and which would not (privileged material never does), with the estimated cost; you are asked again when they change. Every AI statement is checked against the exact source line it cites before you see it; what cannot be matched is left out. The investigator decides.
+>
+> Private by design. The app itself has no network access, and the knowledge base is encrypted on disk. No account, no sign-in, no analytics. Without AI, nothing leaves your Mac and Ask returns the matching passages with a link to the source. With an AI plan or your own Anthropic key, the documents of a case you allow go to Anthropic (recordings you transcribe to Google).
+>
+> • No AI or add-on needed: intake showing what failed, exact search, review, cited PDF/Word/CSV reports
+> • Documents, email (including Outlook MSG and PST), chat exports, Cellebrite reports, scans and recordings
+> • Search and ask across everything — answers come with clickable citations
+> • Timelines, contradictions and gaps between documents; follow the money with sources
+> • Specialist tools (Bates, email forensics, watchlists) stay off until needed
+> • Optional Online lookups: exchange rates, sanctions, registries, court records, transcription
+>
+> Plans (auto-renewing; your storefront's price is shown in the app):
+> • Workbench $4.99/month or $39.99/year — every feature on your Mac, no AI of ours; optional Online AI with your own Anthropic key, billed by Anthropic. Eligible new subscribers can try every Workbench feature free for 14 days (no AI credits), then the Workbench price.
+> • AI Included $39/month or $389.99/year — Workbench plus 2,000 AI credits a month.
+> • AI Pro $99/month (6,000 AI credits a month) or $989.99/year (5,400 a month) — Workbench plus larger whole-case reads.
+> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. A case's first read costs about 1–2 credits per 1,000 words; a question within an hour of the last usually 5–30. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No trial on the AI plans. Where Online AI is not offered, only Workbench is sold.
+>
+> Payment is charged to your Apple Account. Subscriptions renew automatically unless cancelled at least 24 hours before the period ends; manage or cancel in your Apple Account settings. When a plan ends, your cases stay readable and exportable.
+>
+> No AI writes your answers unless you turn it on. After buying an AI plan or saving your Anthropic key, one step turns it on: "Allow AI to read case documents you permit". AI answers need macOS 26 or later.
+>
+> English only in this version; other languages are kept and keyword-searchable, but names and dates in them may be missed.
+>
+> An investigation aid for adults (18+). It organises and cites your evidence; it does not decide findings, guilt or outcomes — you do. AI output can be incomplete or wrong; verify against the cited originals. Not legal, financial or professional advice.
+>
+> Terms of Use: https://sasmalgiri.github.io/kalsmritikosh/terms.html · Privacy: https://sasmalgiri.github.io/kalsmritikosh/privacy.html
 
-## Do-NOT-claim checklist (verified against this copy)
+## What's New (version 1.0)
 
-- [x] Does not claim *every* format (says "common … formats", "some with limits").
-- [x] Does not claim legal admissibility (explicit "not legal advice / verify against sources").
-- [x] Does not claim video understanding: speech is transcribed on-device (Apple speech recognition, English, on by default, timecoded); the app does not watch footage, identify speakers or decide what happened. Does not name Whisper — the app does not use it.
-- [x] Does not claim 1 TB / unlimited scale (no scale number in copy; store page uses tested figure).
-- [x] Does not claim a bundled reasoning model (says Apple on-device where supported, else deterministic).
-- [x] Does not imply AI writes answers by default (says no AI writes answers unless "Use AI to write answers" is on; SHIP_DECISIONS 2026-10-24).
-- [x] Does not promise judgement (no "proves", "determines guilt", "finds the truth", "solves"); says every finding is the investigator's (App Review 2.3.1, R-2 2026-10-24).
-- [x] States English only for this version (SHIP_DECISIONS 2026-10-23).
-- [x] Quotes no accuracy figures (measured figures live in docs/CASE_BENCH_AI_ROUNDS.md only).
-- [x] Does not claim "no network" falsely (accurate: Private mode — the default — makes no connections; Online mode is opt-in, user-keyed and consented per send; no downloader).
-- [x] Zero-data-collection claim is accurate (no telemetry/analytics/account exist).
+> First release. Cases from intake to findings, cited answers, chronology, contradictions and gaps; optional AI with your
+> permission once per case, every AI statement checked against its source line; Workbench, AI Included and AI Pro plans.
+
+## Subscription disclosure (App Review 3.1.2) — what the in-app paywall and the description must both state
+
+The paywall (`Kalsmritikosh/UI/PurchaseGate.swift`) shows StoreKit's own localized prices; the copy below is the reference text.
+
+- **Title and period of each plan:** Workbench monthly / yearly; AI Included monthly / yearly; AI Pro monthly / yearly.
+- **Price per period (US):** Workbench $4.99 / month, $39.99 / year; AI Included $39 / month, $389.99 / year; AI Pro $99 / month,
+  $989.99 / year; packs $9.99 / $34.99. **India** (set in App Store Connect; Apple's storefront prices include GST): Workbench
+  ₹249 / ₹1,999; AI Included ₹3,499 / ₹34,999; AI Pro ₹8,999 / ₹89,999; packs ₹899 (500) / ₹2,999 (2,000). The monthly AI
+  prices assume Apple's rounded US points $39.00 / $99.00 exist (owner check, `release/IAP_SETUP.md` §6).
+- **What each includes:** Workbench — the whole investigation workflow, every optional tool and all personas, no AI of ours, Online AI with your own Anthropic key (billed by
+  Anthropic). AI Included — Workbench + 2,000 AI credits a month. AI Pro — Workbench + 6,000 AI credits a month (AI Pro yearly: 5,400 a month) + larger
+  whole-case reads (up to 3,000 credits per confirmed read vs 600). AI Included yearly gets the same 2,000 credits every month.
+- **Free trial:** Workbench only, 14 days, for eligible new subscribers; then the chosen Workbench price. The AI plans have none.
+- **Credits:** 1 credit = US$0.01 of Claude cost at Anthropic's published rates; each request is charged its actual cost rounded
+  up (at least 1), a failed request costs nothing; the estimate is shown before a whole-case read; one request ≤ 400 credits; a
+  daily limit applies (1,500 AI Included / 4,000 AI Pro). Monthly credits reset on the purchase day and do not carry over.
+- **Credit packs:** 500 credits $9.99, 2,000 credits $34.99, consumable, **never expire**, used after the month's credits while
+  an AI plan is active; a refunded pack's remaining credits are removed.
+- **Auto-renewal and cancellation:** renews automatically unless cancelled at least 24 hours before the period ends; manage or
+  cancel in the Apple Account (System Settings ▸ your name ▸ Media & Purchases ▸ Subscriptions, or App Store ▸ your name ▸
+  Subscriptions). Moving up takes effect at once; moving down at the next renewal. 3-day billing grace.
+- **Links shown on the paywall:** Terms of Use (EULA) and Privacy Policy; Restore purchases; Manage subscription.
+
+## Screenshots to capture (2880×1800 or 1440×900; demo data only — no real PII)
+
+Use `Resources/Fixtures/ProjectDelta` (synthetic) or the public-domain packs in `KalsmritikoshTests/Fixtures/InvestigationCases`.
+
+1. **Home / "What are you investigating?"** — the first-run question that opens a persona with a case ready.
+2. **Case file** — the case's documents with custody hashes and the chronology.
+3. **Ask in a case with AI** — an answer whose every statement links to its source line (quality strip visible).
+4. **The once-per-case permission sheet** — "Let the AI read this case?" with the documents sent / not sent and the estimate.
+5. **Contradictions & gaps** — two sources that disagree, both cited.
+6. **Findings report** — sections with claims, every sentence linked to its source.
+7. **Plans** — the paywall with Workbench / AI Included / AI Pro, prices, the trial line and the credit packs.
+8. **Offline search results** — Ask with AI off: matching passages with the question's words in bold and "Open source".
+
+Optional: Settings ▸ Online with the credit meter; "What was sent" log.
+
+## App Review notes (paste into App Review Information ▸ Notes)
+
+> Investigations Made Easy is investigation documentation software for adults (18+). It keeps every source of an
+> investigation with custody, builds the chronology, finds contradictions and gaps, and produces a report where every
+> sentence points at its source. Judgement stays human: the app never decides guilt, privilege, credibility or root cause.
+> No account or sign-in. The main app has no network entitlement; the knowledge base is encrypted at rest.
+>
+> 1. QUICK LOOK WITHOUT AI (no purchase needed for the sample): on the subscription screen choose "Try a sample case" (or
+>    Help ▸ tutorial). Open the sample case, then Ask a question (e.g. "Who was charged and with what?"). With AI off the
+>    answer is "Search results for …": matching passages, words in bold, "Open source" opens the cited document.
+>
+> 2. SUBSCRIBE (Sandbox account): the paywall shows Workbench (14-day free trial), AI Included and AI Pro, monthly and
+>    yearly, at storefront prices, with Restore purchases, Manage subscription, Terms and Privacy links.
+>
+> 3. AI INCLUDED (the publisher pays): buy AI Included monthly with the Sandbox account. Right after the purchase the app
+>    shows "Turn on AI for your AI plan" with the AI's terms and where documents go (Anthropic, through the publisher's
+>    relay). Choose "Allow AI to read case documents you permit". This one step turns on Online mode, "Use AI to write
+>    answers" and AI reading of case documents, and records the terms acceptance — no other setting is needed. (If you
+>    chose "Not now": Ask shows search results that name the missing step, with a "Turn on AI…" button; or Settings ▸
+>    Online ▸ "Turn on AI…".) Settings ▸ Online ▸ "Check credits" shows 2,000 credits.
+>    Requests go to the publisher's relay (Cloudflare Worker, <RELAY HOST>), which verifies the subscription with the App
+>    Store Server API (Sandbox transactions are accepted), reserves the request's worst-case cost in credits, forwards to
+>    Anthropic (Claude Opus 5.5) — or, for recordings, Google Gemini — under the publisher's own key, and charges the actual
+>    cost. The relay stores counts and credits only, never content. Your review usage runs on the publisher's key under a
+>    hard monthly safety cap (US$20 at launch); if it were reached, the app says the service is paused until the 1st.
+>
+> 4. THE PERMISSION SHEET (Guideline 5.1.2(i)): open a case (the sample case or a new case with a few documents) and Ask
+>    a question. The first AI use in that case shows "Let the AI read this case?": exactly which documents go to Anthropic,
+>    which do not and why (e.g. privileged), size, and the estimate in credits. "Allow for this case" sends; "Not now" sends
+>    nothing and returns search results. You are asked again only if the case's documents change. The answer's statements
+>    are each checked against the source line they cite; everything sent is listed in Settings ▸ Online ▸ What was sent.
+>
+> 5. CREDIT PACKS: Settings ▸ Online ▸ "Buy 500 credits" (consumable, never expires), usable while an AI plan is active.
+>
+> 6. OWN KEY (Workbench): with Workbench, Settings ▸ Online ▸ "Claude (Anthropic)" — the only own-key provider — paste an
+>    Anthropic API key (Keychain) and choose "Save key"; the same one-step sheet appears ("Allow AI to read case documents
+>    you permit").
+>    The same permission sheet appears, with the estimate in dollars; requests go directly from the Mac to api.anthropic.com.
+>    We do not provide a key for this path.
+>
+> Network access is confined to the bundled, sandboxed extension KalsmritikoshNetworkHelper: HTTPS POST only to
+> api.anthropic.com (own key) and the relay (AI plans), and HTTPS GET only to five public-record sources (data-api.ecb.europa.eu,
+> sanctionslistservice.ofac.treas.gov, scsanctions.un.org, api.gleif.org, www.courtlistener.com) or a page the user asks to
+> capture. Online AI is switched off for App Store accounts in CN, HK, MO, RU, BY, VE, AF, MM, YE, IR, KP, SY, CU, and only
+> Workbench is sold there (no AI plan, no credit pack, no own-key setup).
+> Minimum macOS 15.6. Contact: Shrabani Sasmal, sasmalgiri@gmail.com.
+
+_Before pasting: replace `<RELAY HOST>` with the deployed host (OWNER_LAUNCH_CHECKLIST step 6). If the relay is not deployed,
+do NOT attach the AI plans or packs to the submission and delete steps 3–5 (Guideline 2.1: IAPs must be testable)._
+
+## Do-NOT-claim checklist (verified against this copy, 2026-11-04)
+
+- [x] No accuracy percentages, no "solves cases", no "proves", "finds the truth", "determines guilt"; the investigator decides (2.3.1).
+- [x] Says the app is an investigation aid and AI output can be wrong; not legal, financial or professional advice.
+- [x] "Every AI statement is checked against the exact source line it cites" — registered (`asc.ai-checked`, CLAIMS_APP.md);
+      it says checked, not "correct".
+- [x] Does not claim every format, legal admissibility, video understanding, a scale number, or a bundled reasoning model.
+- [x] Does not imply AI by default; English only stated.
+- [x] Does not claim "no network" falsely: default on-device; Online mode, AI plans and own keys are opt-in with a permission sheet.
+- [x] No zero-data-collection claim; the privacy label declares the AI sends and the relay's counts.
+- [x] States each plan's price, period, content, credits, that packs never expire (3.1.1), that only Workbench has a trial, and
+      auto-renew/cancel terms (3.1.2); no free AI anywhere.

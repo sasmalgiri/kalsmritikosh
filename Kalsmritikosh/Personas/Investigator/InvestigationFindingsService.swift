@@ -29,12 +29,17 @@ public actor InvestigationFindingsService {
     private let runs: WorkProductRunRepository
     private let approvals: InvestigationFindingsApprovalRepository
     private let receiptBuilder = WorkProductReceiptBuilder()
+    /// P4 — a pass run over the case's authorized source versions before its findings are composed
+    /// (the verified role reading). It may only set claims aside through the review log; nil: none.
+    private let prepare: (@Sendable (UUID, Set<UUID>) async -> Void)?
 
     public init(cases: InvestigationCaseRepository, resolver: CaseRetrievalScopeResolver,
                 workspaces: WorkspaceRepository, assembly: WorkProductAssemblyService,
-                runs: WorkProductRunRepository, approvals: InvestigationFindingsApprovalRepository) {
+                runs: WorkProductRunRepository, approvals: InvestigationFindingsApprovalRepository,
+                prepare: (@Sendable (UUID, Set<UUID>) async -> Void)? = nil) {
         self.cases = cases; self.resolver = resolver; self.workspaces = workspaces
         self.assembly = assembly; self.runs = runs; self.approvals = approvals
+        self.prepare = prepare
     }
 
     /// Build the case's findings work product over the shared assembly path, restricted to
@@ -42,6 +47,7 @@ public actor InvestigationFindingsService {
     /// approve or close anything — approval is a separate recorded human decision (`approveFindings`).
     public func buildFindings(caseID: UUID, access: SensitiveAccessContext,
                               actor: String, at date: Date) async throws -> InvestigationFindings {
+        try PaidUse.require("build findings")
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationFindingsError.caseNotFound(caseID) }
         let workspaceID = record.caseHeader.workspaceID
         guard let workspace = try await workspaces.find(workspaceID) else {
@@ -50,6 +56,7 @@ public actor InvestigationFindingsService {
         let scope = try await resolver.scope(for: record)
         let authorized = scope.authorizedSourceVersionIDs
         let fingerprint = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
+        await prepare?(caseID, authorized)
 
         let assembled = try await assembly.compose(
             workspace: workspace, template: .investigationFindings,
@@ -64,26 +71,48 @@ public actor InvestigationFindingsService {
             authorizedSourceVersionIDs: authorized.sorted(by: { $0.uuidString < $1.uuidString }))
     }
 
-    /// Record the explicit human approval of a specific findings run as the case's findings. Pins the sealed
-    /// receipt seal (report==receipt integrity) and the case scope fingerprint (no export-time widening).
+    /// Record the explicit human approval of a specific findings run as the case's findings, under a declared
+    /// decision policy (brief §6). Refused unless the findings belong to THIS case, the case scope is
+    /// unchanged since they were built (a later scope change makes them stale), and the persisted run still
+    /// rebuilds to the receipt being approved. Pins the receipt seal and the scope fingerprint.
     @discardableResult
-    public func approveFindings(caseID: UUID, findings: InvestigationFindings, rationale: String,
-                                actor: String, at date: Date) async throws -> InvestigationFindingsApproval {
-        try await approvals.approve(caseID: caseID, workProductRunID: findings.run.id,
-                                    receiptSeal: findings.receipt.seal, scopeFingerprint: findings.scopeFingerprint,
-                                    rationale: rationale, actor: actor, at: date)
+    public func approveFindings(caseID: UUID, findings: InvestigationFindings, policy: FindingsDecisionPolicy,
+                                rationale: String, actor: String, at date: Date) async throws -> InvestigationFindingsApproval {
+        if case .notApplicable(let why) = policy, why.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw InvestigationFindingsError.blankPolicyJustification
+        }
+        let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !why.isEmpty else { throw InvestigationFindingsError.blankRationale }
+        try await requireCurrent(findings, caseID: caseID)
+        return try await approvals.approve(caseID: caseID, workProductRunID: findings.run.id,
+                                           receiptSeal: findings.receipt.seal, scopeFingerprint: findings.scopeFingerprint,
+                                           rationale: "\(policy.rationaleLine) \(why)", actor: actor, at: date)
     }
 
-    /// Approve findings under an EXPLICIT standard of proof (INV-19 gap fix). The chosen standard is stamped
-    /// into the recorded rationale so the approval states, on its face, the evidentiary threshold applied — an
-    /// approval can never be recorded without one. Scope, receipt and fingerprint behaviour are unchanged; this
-    /// only composes the rationale and delegates to the base recorder.
+    /// Approve findings under an explicit standard of proof (INV-19).
     @discardableResult
     public func approveFindings(caseID: UUID, findings: InvestigationFindings, proofStandard: EvidentiaryStandard,
                                 rationale: String, actor: String, at date: Date) async throws -> InvestigationFindingsApproval {
-        let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
-        let composed = why.isEmpty ? proofStandard.rationaleLine : "\(proofStandard.rationaleLine) \(why)"
-        return try await approveFindings(caseID: caseID, findings: findings, rationale: composed, actor: actor, at: date)
+        try await approveFindings(caseID: caseID, findings: findings, policy: .standard(proofStandard),
+                                  rationale: rationale.isEmpty ? "Approved." : rationale, actor: actor, at: date)
+    }
+
+    /// The findings are case `caseID`'s, its scope has not moved since they were built, and the persisted run
+    /// reproduces the receipt (report == receipt). Every approval path calls this first, including the
+    /// atomic strict-mode composite that writes the approval row itself.
+    public func requireCurrent(_ findings: InvestigationFindings, caseID: UUID) async throws {
+        guard findings.caseID == caseID else {
+            throw InvestigationFindingsError.findingsCaseMismatch(findingsCase: findings.caseID, approvingCase: caseID)
+        }
+        guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationFindingsError.caseNotFound(caseID) }
+        let scope = try await resolver.scope(for: record)
+        let current = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
+        guard current == findings.scopeFingerprint else { throw InvestigationFindingsError.staleFindings }
+        let reopened = try await runs.reopen(findings.run.id)
+        guard VerifiableReceipt.verify(findings.receipt),
+              try receiptBuilder.build(from: reopened).seal == findings.receipt.seal else {
+            throw InvestigationFindingsError.receiptIntegrityFailed
+        }
     }
 
     /// Withdraw approval of a findings run (a new recorded decision; the prior approval is preserved).

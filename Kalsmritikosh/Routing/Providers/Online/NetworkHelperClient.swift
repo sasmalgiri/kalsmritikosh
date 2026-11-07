@@ -44,12 +44,26 @@ public enum NetworkHelperError: Error, LocalizedError {
 
 public nonisolated enum NetworkHelperClient {
 
+    /// The same rule the helper applies: POST to the AI hosts only; GET to the public-record hosts, or to
+    /// a page the person asked to capture.
+    static func allows(host: String, method: String?, purpose: String?) -> Bool {
+        switch method {
+        case nil: return OnlineProviderKind.allowedHosts.contains(host)
+        case "GET": return PublicSource.allHosts.contains(host) || purpose == "capture"
+        default: return false
+        }
+    }
+
     public static func send(_ request: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {
         guard ConnectivityMode.onlineAvailableInThisBuild else { throw NetworkHelperError.unavailable }
-        guard let host = URL(string: request.url)?.host, OnlineProviderKind.allowedHosts.contains(host),
-              request.url.hasPrefix("https://") else {
+        guard let host = URL(string: request.url)?.host, request.url.hasPrefix("https://"),
+              Self.allows(host: host, method: request.method, purpose: request.purpose) else {
             throw NetworkHelperError.hostNotAllowed(URL(string: request.url)?.host ?? request.url)
         }
+        // A3 — every AI destination (the providers and AI Included) is closed where the App Store
+        // country does not allow generative AI; the check sits here so no caller can skip it.
+        // Public-record lookups and web capture are not AI and are not affected.
+        if OnlineProviderKind.allowedHosts.contains(host), let why = AIRegion.current.explanation { throw NetworkHelperError.failed(why) }
         let payload = try JSONEncoder().encode(request)
         guard #available(macOS 26.0, *) else { throw NetworkHelperError.unavailable }
         return try await sendViaHelper(payload)
@@ -57,48 +71,76 @@ public nonisolated enum NetworkHelperClient {
 
     @available(macOS 26.0, *)
     private static func sendViaHelper(_ payload: Data) async throws -> OutboundHTTPResponse {
+        // A7 — cancellation is honoured at every step: nothing is dispatched once the caller cancelled,
+        // and a cancel during the request invalidates the helper connection (the helper's own request
+        // stops with it). Bytes the helper already sent cannot be withdrawn.
+        try Task.checkCancellation()
         let monitor = try await AppExtensionPoint.Monitor(appExtensionPoint: .kalsmritikoshNetworkHelper)
         guard let identity = monitor.identities.first else { throw NetworkHelperError.unavailable }
+        try Task.checkCancellation()
         let process = try await AppExtensionProcess(configuration: .init(appExtensionIdentity: identity, onInterruption: {}))
         defer { process.invalidate() }
+        try Task.checkCancellation()
         let connection = try process.makeXPCConnection()
         connection.remoteObjectInterface = NSXPCInterface(with: KalsmritikoshNetworkProtocol.self)
         connection.resume()
         defer { connection.invalidate() }
-        return try await withCheckedThrowingContinuation { continuation in
-            // The XPC error handler and the reply can both fire (e.g. the helper
-            // replies, then the connection drops); resume exactly once.
-            let once = ResumeOnce(continuation)
-            let proxy = connection.remoteObjectProxyWithErrorHandler { error in
-                once.resume(.failure(NetworkHelperError.failed(error.localizedDescription)))
-            } as? KalsmritikoshNetworkProtocol
-            guard let proxy else {
-                once.resume(.failure(NetworkHelperError.unavailable))
-                return
-            }
-            proxy.send(payload) { data, message in
-                if let data, let response = try? JSONDecoder().decode(OutboundHTTPResponse.self, from: data) {
-                    once.resume(.success(response))
-                } else {
-                    once.resume(.failure(NetworkHelperError.failed(message ?? "No reply from the network helper.")))
+        let call = HelperCall()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                // The XPC error handler and the reply can both fire (e.g. the helper
+                // replies, then the connection drops); resume exactly once.
+                guard call.attach(continuation) else { return }   // cancelled before dispatch: nothing sent
+                let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+                    call.resume(.failure(NetworkHelperError.failed(error.localizedDescription)))
+                } as? KalsmritikoshNetworkProtocol
+                guard let proxy else {
+                    call.resume(.failure(NetworkHelperError.unavailable))
+                    return
+                }
+                proxy.send(payload) { data, message in
+                    if let data, let response = try? JSONDecoder().decode(OutboundHTTPResponse.self, from: data) {
+                        call.resume(.success(response))
+                    } else {
+                        call.resume(.failure(NetworkHelperError.failed(message ?? "No reply from the network helper.")))
+                    }
                 }
             }
+        } onCancel: {
+            call.cancel()
+            connection.invalidate()
         }
     }
 }
 
-/// Resumes a checked continuation at most once, from any thread.
-private nonisolated final class ResumeOnce: @unchecked Sendable {
+/// One helper request: resumes its continuation exactly once, from any thread; a cancel that comes
+/// before the continuation is attached means the request is never dispatched.
+nonisolated final class HelperCall: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<OutboundHTTPResponse, Error>?
+    private var cancelled = false
+    private var done = false
 
-    init(_ continuation: CheckedContinuation<OutboundHTTPResponse, Error>) { self.continuation = continuation }
+    /// Attach the continuation; false (and resumed with cancellation) when already cancelled.
+    func attach(_ c: CheckedContinuation<OutboundHTTPResponse, Error>) -> Bool {
+        lock.lock()
+        if cancelled { done = true; lock.unlock(); c.resume(throwing: CancellationError()); return false }
+        continuation = c
+        lock.unlock()
+        return true
+    }
+
+    func cancel() {
+        lock.lock(); cancelled = true; lock.unlock()
+        resume(.failure(CancellationError()))
+    }
 
     func resume(_ result: Result<OutboundHTTPResponse, Error>) {
         lock.lock()
-        let c = continuation
-        continuation = nil
+        guard !done, let c = continuation else { lock.unlock(); return }
+        done = true; continuation = nil
         lock.unlock()
-        c?.resume(with: result)
+        c.resume(with: result)
     }
 }
+

@@ -169,7 +169,7 @@ struct PersonaAcceptanceHarness {
         let f = try await findings.buildFindings(caseID: caseID, access: exportAccess(wsID), actor: actor, at: t0)
         let text = f.assembled.workProduct.sections.flatMap(\.claims).map(\.text).joined(separator: "\n")
         #expect(text.contains(sentinelA) && !text.contains(sentinelB))
-        _ = try await findings.approveFindings(caseID: caseID, findings: f, rationale: "ready: \(title)", actor: actor, at: t0)
+        _ = try await findings.approveFindings(caseID: caseID, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "ready: \(title)", actor: actor, at: t0)
         #expect(try await status(caseID) == "open")
         let recNow = try #require(try await cases.fetch(caseID: caseID))
         _ = try await closure.closeCase(caseID: caseID, expectedRevision: recNow.caseHeader.revision,

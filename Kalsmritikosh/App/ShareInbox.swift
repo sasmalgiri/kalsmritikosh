@@ -21,7 +21,8 @@ nonisolated enum ShareInbox {
     static let appGroup = "6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh"
     static let inboxFolder = "Inbox"
     static let itemFile = "item.json"
-    /// The extension reads this to know whether "Share and capture" is on.
+    /// The extension reads this to know whether Share-menu capture is available (core since 2026-11-06,
+    /// unless the person switched it off themselves — `ProductModuleFlags.shareMenuCaptureAvailable`).
     static let enabledKey = "kalsmritikosh.share.enabled"
 
     static var inbox: URL? {
@@ -31,7 +32,7 @@ nonisolated enum ShareInbox {
 
     /// Copy the module switch where the extension can read it.
     static func mirrorSwitch() {
-        UserDefaults(suiteName: appGroup)?.set(ProductModuleFlags.isEnabled(.captureExtensions), forKey: enabledKey)
+        UserDefaults(suiteName: appGroup)?.set(ProductModuleFlags.shareMenuCaptureAvailable, forKey: enabledKey)
     }
 
     struct Result: Sendable, Equatable {
@@ -91,11 +92,13 @@ nonisolated enum ShareInbox {
 }
 
 extension AppState {
-    /// Drain the Share inbox (when the module is on) and read the intake.
+    /// Drain the Share inbox (core capture, unless the person switched it off) and read the intake.
     func receiveSharedItems() async {
+        // N4 — the sample case never takes the person's shared items; they stay in the inbox for their archive.
+        guard !SampleArchiveMode.isActive else { return }
         ShareInbox.mirrorSwitch()
         // Items wait in the inbox until the ledger is open, so a drain never outruns the read.
-        guard database != nil, ProductModuleFlags.isEnabled(.captureExtensions), let inbox = ShareInbox.inbox else { return }
+        guard database != nil, ProductModuleFlags.shareMenuCaptureAvailable, let inbox = ShareInbox.inbox else { return }
         let r = await Task.detached { ShareInbox.drain(inbox) }.value
         for line in r.refused { KalsmritikoshLog.app.notice("Share inbox kept: \(line, privacy: .private)") }
         // X-4 — "Clip page as Markdown": the clipped HTML is kept; a Markdown copy is added beside it.

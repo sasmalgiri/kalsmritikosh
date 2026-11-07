@@ -60,12 +60,14 @@ public struct StructuredComparisonView: View {
             if !loadedList {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if documents.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.on.doc").font(.title).foregroundStyle(.secondary)
-                    Text("No documents yet.").foregroundStyle(.secondary)
-                    Button { SurfaceOpener.open(.sources) } label: {
-                        Label("Add your files", systemImage: "folder")
-                    }.controlSize(.small)
+                LedgerEmptyState {
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.on.doc").font(.title).foregroundStyle(.secondary)
+                        Text("No documents yet.").foregroundStyle(.secondary)
+                        Button { SurfaceOpener.open(.sources) } label: {
+                            Label("Add your files", systemImage: "folder")
+                        }.controlSize(.small)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -146,7 +148,11 @@ public struct StructuredComparisonView: View {
 
     private func exportMarkdown(_ brief: ComparisonBrief) {
         #if canImport(AppKit)
-        let md = "# Comparison brief\n\n" + brief.text + "\n"
+        let md: String
+        switch ProtectedExport.prepare("# Comparison brief\n\n" + brief.text + "\n") {
+        case .success(let safe): md = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let mdType = UTType(filenameExtension: "md") { panel.allowedContentTypes = [mdType] }
         panel.nameFieldStringValue = "comparison-brief.md"

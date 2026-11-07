@@ -1,0 +1,75 @@
+## Sūtra conformance (per-rule)
+
+**Constitution:** Investigation doctrine v1 · sutra.investigation
+**Constitution SHA-256:** `a18d83e8f3aa3b45c8c693c7fd59fd63935ca01de8f050239b02cf5323025183`
+**Status:** Not conformant — at least one mandatory rule failed.
+**Phases machine-observed:** caseIntake, contradictionGap, evidenceCustody, findings
+**Phases asserted (not machine-observed):** none
+
+- ◻︎ `caseIntake.obligation.0` [notEvaluated] Set the mandate and the authorized evidence scope — _human.attest.v1_: awaiting reviewer attestation
+- ✗ `caseIntake.humanDecision.0` [failed] Authorize the scope — _gate.humanDecision.v1_: reserved decision not recorded
+- ◻︎ `caseIntake.prohibition.0` [notEvaluated] Investigate outside the authorized scope — _human.attest.v1_: awaiting reviewer attestation
+- – `ask.obligation.0` [notApplicable] Answer only from cited evidence — _gate.applicability.v1_: phase not reached in this run
+- – `ask.prohibition.0` [notApplicable] State an answer the evidence doesn't support — _gate.applicability.v1_: phase not reached in this run
+- – `methods.obligation.0` [notApplicable] Apply a recognized structured method — _gate.applicability.v1_: phase not reached in this run
+- – `methods.prohibition.0` [notApplicable] Skip the method's steps — _gate.applicability.v1_: phase not reached in this run
+- – `dataLab.obligation.0` [notApplicable] Cite every row to a source document — _gate.applicability.v1_: phase not reached in this run
+- – `dataLab.prohibition.0` [notApplicable] Enter a figure with no source — _gate.applicability.v1_: phase not reached in this run
+- – `subjectDossier.obligation.0` [notApplicable] Cite each fact to its source, within scope — _gate.applicability.v1_: phase not reached in this run
+- – `subjectDossier.prohibition.0` [notApplicable] Assert unsourced background — _gate.applicability.v1_: phase not reached in this run
+- – `identityResolution.obligation.0` [notApplicable] Propose a merge, then confirm it (reversible) — _gate.applicability.v1_: phase not reached in this run
+- – `identityResolution.humanDecision.0` [notApplicable] Confirm the merge — _gate.applicability.v1_: phase not reached in this run
+- – `identityResolution.prohibition.0` [notApplicable] Auto-merge without review — _gate.applicability.v1_: phase not reached in this run
+- – `analysis.obligation.0` [notApplicable] List every plausible hypothesis — _gate.applicability.v1_: phase not reached in this run
+- – `analysis.obligation.1` [notApplicable] Rate each against the evidence — disprove, don't confirm — _gate.applicability.v1_: phase not reached in this run
+- – `analysis.obligation.2` [notApplicable] Rank by fewest inconsistencies — _gate.applicability.v1_: phase not reached in this run
+- – `analysis.humanDecision.0` [notApplicable] Record the leading hypothesis and a confidence — _gate.applicability.v1_: phase not reached in this run
+- – `analysis.prohibition.0` [notApplicable] Claim a computed verdict — _gate.applicability.v1_: phase not reached in this run
+- – `analysis.prohibition.1` [notApplicable] Overstate certainty when several hypotheses remain live — _gate.applicability.v1_: phase not reached in this run
+- – `sourceReliability.obligation.0` [notApplicable] Rate each source on the Admiralty scale (A–F × 1–6) — _gate.applicability.v1_: phase not reached in this run
+- – `sourceReliability.prohibition.0` [notApplicable] Treat a reliability rating as a proven fact — _gate.applicability.v1_: phase not reached in this run
+- ◻︎ `contradictionGap.obligation.0` [notEvaluated] Preserve both sides of a conflict verbatim — _human.attest.v1_: awaiting reviewer attestation
+- ◻︎ `contradictionGap.obligation.1` [notEvaluated] Record a disposition for each — _human.attest.v1_: awaiting reviewer attestation
+- ✗ `contradictionGap.humanDecision.0` [failed] Dispose of each conflict — _gate.humanDecision.v1_: reserved decision not recorded
+- ◻︎ `contradictionGap.prohibition.0` [notEvaluated] Average a conflict away — _human.attest.v1_: awaiting reviewer attestation
+- ◻︎ `contradictionGap.prohibition.1` [notEvaluated] Treat an absence of evidence as proof — _human.attest.v1_: awaiting reviewer attestation
+- – `causalAnalysis.obligation.0` [notApplicable] Trace causes with evidence at each step (5 Whys / fishbone) — _gate.applicability.v1_: phase not reached in this run
+- – `causalAnalysis.humanDecision.0` [notApplicable] Confirm the root cause — _gate.applicability.v1_: phase not reached in this run
+- – `causalAnalysis.prohibition.0` [notApplicable] Assert a root cause the evidence doesn't support — _gate.applicability.v1_: phase not reached in this run
+- – `linkage.obligation.0` [notApplicable] Cite each edge, event, and transaction — _gate.applicability.v1_: phase not reached in this run
+- – `linkage.prohibition.0` [notApplicable] Draw a link with no evidence — _gate.applicability.v1_: phase not reached in this run
+- – `capaRegister.obligation.0` [notApplicable] Track each corrective/preventive action to closure — _gate.applicability.v1_: phase not reached in this run
+- – `effectivenessReview.obligation.0` [notApplicable] Verify the action actually resolved the exposure — _gate.applicability.v1_: phase not reached in this run
+- – `effectivenessReview.humanDecision.0` [notApplicable] Judge effectiveness — _gate.applicability.v1_: phase not reached in this run
+- – `effectivenessReview.prohibition.0` [notApplicable] Close an action that didn't work — _gate.applicability.v1_: phase not reached in this run
+- ◻︎ `evidenceCustody.obligation.0` [notEvaluated] Record custody contemporaneously — _human.attest.v1_: awaiting reviewer attestation
+- ◻︎ `evidenceCustody.obligation.1` [notEvaluated] Hash evidence as early as possible (SWGDE/NIST) — _human.attest.v1_: awaiting reviewer attestation
+- ◻︎ `evidenceCustody.prohibition.0` [notEvaluated] Break the chain of custody silently — _human.attest.v1_: awaiting reviewer attestation
+- ✗ `findings.obligation.0` [failed] Declare a standard of proof — _gate.standardOfProof.v1_: no standard of proof declared
+- ✗ `findings.obligation.1` [failed] Surface every open contradiction and gap — _gate.openItems.v1_: open items not acknowledged
+- ✗ `findings.humanDecision.0` [failed] Approve the findings — _gate.humanDecision.v1_: reserved decision not recorded
+- ◻︎ `findings.prohibition.0` [notEvaluated] Approve beyond the declared standard of proof — _human.attest.v1_: awaiting reviewer attestation
+- ◻︎ `findings.prohibition.1` [notEvaluated] Hide open conflicts at report time — _human.attest.v1_: awaiting reviewer attestation
+- – `closure.obligation.0` [notApplicable] Record unresolved items honestly — _gate.applicability.v1_: phase not reached in this run
+- – `closure.humanDecision.0` [notApplicable] Decide to close or reopen — _gate.applicability.v1_: phase not reached in this run
+- – `closure.prohibition.0` [notApplicable] Imply completeness when items remain open — _gate.applicability.v1_: phase not reached in this run
+
+_Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body._
+
+## Conformance seal (ECDSA P-256)
+
+| Field | Value |
+|---|---|
+| Constitution | Investigation doctrine v1 · sutra.investigation |
+| Constitution SHA-256 | `a18d83e8f3aa3b45c8c693c7fd59fd63935ca01de8f050239b02cf5323025183` |
+| Rule evaluations SHA-256 | `5dc64bf760f3120b25b73fd844a6cddbe7218200d55b3cba835b30c594fdb844` |
+| Status | notConformant (47 rules) |
+| App build | 1.0 (1) |
+| Evidence manifest SHA-256 | `b085be392b70fd0d9959fe0e443b9af38dc5b616f070e807a32dd19883f2bc4d` |
+| Key assurance | secure-enclave |
+| Signer key ID | `f760b04ce2d5030c` |
+| Algorithm | ECDSA-P256-SHA256 |
+| Signature (DER, hex) | `304602210086bbae4343db4bf6ada3ca9f3370de609ecc36cd9b9767be72e5299ea8f14b27022100ca9e102aa0cd7d583d2f06065516151342c1007f6f45c8f5317620353fe01e16` |
+| Public key (X9.63, hex) | `04891f8f48d236d4148ed6b9b3d0de0218e51fe92ac9467b7d15e06f0072b724835a5fd863d2379176112fe390ad7bf0d63ce7c777c03d9068eba82bdee3baecc7` |
+
+_Verify independently: canonical JSON of the envelope (sorted keys, ISO-8601 dates) signed with ECDSA P-256/SHA-256. The seal proves this installation's key signed this exact assessment; it is not third-party certification._

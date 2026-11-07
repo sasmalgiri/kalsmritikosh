@@ -195,7 +195,8 @@ public struct NLEntityExtractor: EntityExtractor {
         }
 
         // Money / currency
-        let moneyPattern = #"(?:USD|EUR|GBP|INR|\$|€|£|₹)\s?\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?"#
+        // Indian grouping ("₹2,40,000") is read whole; a space separates only full thousands groups.
+        let moneyPattern = #"(?:USD|EUR|GBP|INR|\$|€|£|₹)\s?\d{1,3}(?:,\d{2,3}|\s\d{3})*(?:\.\d+)?"#
         if let regex = try? NSRegularExpression(pattern: moneyPattern) {
             let range = NSRange(content.startIndex..<content.endIndex, in: content)
             for m in regex.matches(in: content, range: range) {

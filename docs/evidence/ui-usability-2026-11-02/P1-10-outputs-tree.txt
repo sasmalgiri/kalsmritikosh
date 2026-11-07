@@ -1,0 +1,216 @@
+AXWindow/AXStandardWindow title="Answers" id=<swiftui> [185,33 1100x847] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x723]
+      AXGroup/AXHostingView [185,121 244x723]
+        AXScrollArea [185,121 244x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Investigations Made Easy" [241,135 118x42] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,302 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,343 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Knowledge, ⌘5" help="Knowledge — Canonical entities, events and distilled memory  (⌘5)" [193,384 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [193,425 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="GO TO" [205,478 35x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,799 224x35] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXSplitter value="244" [429,121 0x723]
+      AXGroup/AXHostingView [185,121 1100x723]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+        AXScrollArea [429,172 856x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Answer Journal" [453,196 184x31] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Every answer is recorded with its evidence, so any reply can be traced back to the files, events and blocks that supported it." [453,233 701x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,282 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,285 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,311 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="2 Nov 2026 at 3:48 AM" [581,311 133x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [727,311 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,334 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,395 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,398 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,424 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="2 Nov 2026 at 3:48 AM" [581,424 133x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [727,424 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,447 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,508 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,511 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,537 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="1 Nov 2026 at 11:41 PM" [581,537 132x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [727,537 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,560 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,621 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,624 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,650 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="1 Nov 2026 at 11:41 PM" [581,650 132x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [727,650 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,673 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,734 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,737 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,763 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="1 Nov 2026 at 11:30 PM" [581,763 134x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [728,763 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,786 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,847 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,850 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,876 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="1 Nov 2026 at 11:30 PM" [581,876 134x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [728,876 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,899 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,960 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,963 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,989 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="1 Nov 2026 at 11:18 PM" [581,989 132x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [727,989 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1012 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1073 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1076 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1102 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="1 Nov 2026 at 11:18 PM" [581,1102 132x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [727,1102 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1125 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1186 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1189 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1215 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 10:42 PM" [581,1215 141x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [735,1215 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1238 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1299 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1302 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1328 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 10:42 PM" [581,1328 141x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [735,1328 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1351 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1412 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1415 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1441 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 10:41 PM" [581,1441 139x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,1441 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1464 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1525 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1528 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1554 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 10:41 PM" [581,1554 139x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,1554 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1577 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1638 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1641 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1667 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:57 PM" [581,1667 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,1667 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1690 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Who signed the master supply agreement?" [467,1751 248x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1754 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="59% confidence" [468,1780 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:57 PM" [581,1780 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,1780 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1803 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,1864 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1867 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,1893 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:22 PM" [581,1893 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,1893 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,1916 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,1977 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,1980 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2006 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:22 PM" [581,2006 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,2006 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2029 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,2090 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,2093 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2119 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:19 PM" [581,2119 139x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [733,2119 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2142 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,2203 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,2206 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2232 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:19 PM" [581,2232 139x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [733,2232 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2255 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Was invoice 432 paid?" [467,2316 129x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Supported" [1186,2319 53x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="63% confidence" [468,2345 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:16 PM" [581,2345 139x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [733,2345 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2368 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Was invoice 432 paid?" [467,2429 129x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Supported" [1186,2432 53x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="63% confidence" [468,2458 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 12:16 PM" [581,2458 139x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [733,2458 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2481 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,2542 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,2545 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2571 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 11:58 AM" [581,2571 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,2571 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2594 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,2655 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,2658 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2684 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 11:58 AM" [581,2684 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,2684 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2707 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,2768 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,2771 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2797 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 11:56 AM" [581,2797 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,2797 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2820 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [467,2881 316x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Partial" [1206,2884 32x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="48% confidence" [468,2910 100x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="31 Oct 2026 at 11:56 AM" [581,2910 140x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="experts" [734,2910 56x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXButton desc="Show answer & evidence" [467,2933 122x13] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXScrollBar value="0" [1267,171 19x674]
+            AXValueIndicator value="0" [1276,175 6x159]
+            AXButton/AXIncrementPage [1276,334 6x506] actions=AXPress
+            AXButton/AXDecrementPage [1276,175 6x0] actions=AXPress
+        AXMenu id=ask.evidence [0,956 0x0] actions=AXCancel
+          AXMenuItem title="Export verifiable receipt…" id=checkmark.seal [451,44 187x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem title="Send to DEVONthink" id=square.and.arrow.up.on.square [451,68 187x24] actions=AXCancel,AXPress,AXPick
+          AXMenuItem [451,39 0x0] actions=AXCancel,AXPress,AXPick
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton [730,478 10x22] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,855 16x14] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,854 618x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="See plans" id=purchase.strip [1190,850 83x24] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Answers" [554,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Answers" id=<swiftui> [185,33 1100x847] actions=AXRaise

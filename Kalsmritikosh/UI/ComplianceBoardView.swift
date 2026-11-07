@@ -203,7 +203,7 @@ public struct ComplianceBoardView: View {
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let data = try ProtocolPacks.export(sutra: sutra, publisher: "Eco Sanskriti Innovation",
+            let data = try ProtocolPacks.export(sutra: sutra, publisher: "Shrabani Sasmal",
                                                 assurance: "developer", at: Date())
             try data.write(to: url)
             packStatus = "Exported signed pack: \(url.lastPathComponent)"

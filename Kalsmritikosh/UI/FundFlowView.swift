@@ -100,9 +100,11 @@ public struct FundFlowView: View {
     }
 
     private var empty: some View {
-        ContentUnavailableView("No payment flows yet",
-            systemImage: "arrow.triangle.branch",
-            description: Text("When the ledger extracts payment relationships (payer → payee) from your documents, they'll be drawn here."))
+        LedgerEmptyState {
+            ContentUnavailableView("No payment flows yet",
+                systemImage: "arrow.triangle.branch",
+                description: Text("When the ledger extracts payment relationships (payer → payee) from your documents, they'll be drawn here."))
+        }
     }
 
     private func diagram(payers: [Node], payees: [Node], links: [Link], labelFor: ((Node) -> String)?) -> some View {

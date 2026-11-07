@@ -33,6 +33,21 @@ public actor EvidenceVault {
         self.root = root
     }
 
+    /// K11 — copies made before owner-only permissions (0444 files, default folders) are tightened
+    /// once: files 0400, folders 0700. A marker records that the pass completed.
+    public func protectExisting() {
+        let marker = root.appendingPathComponent(".owner-only-v1")
+        guard fm.fileExists(atPath: root.path), !fm.fileExists(atPath: marker.path) else { return }
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+        let e = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey])
+        while let url = e?.nextObject() as? URL {
+            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            do { try fm.setAttributes([.posixPermissions: isDir ? 0o700 : 0o400], ofItemAtPath: url.path) }
+            catch { KalsmritikoshLog.storage.error("Vault permission not tightened: \(error.localizedDescription, privacy: .public)"); return }
+        }
+        fm.createFile(atPath: marker.path, contents: nil, attributes: [.posixPermissions: 0o400])
+    }
+
     /// Lower-case hex SHA-256 of `data` — the content address.
     public nonisolated static func address(for data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -54,10 +69,10 @@ public actor EvidenceVault {
         let dest = location(for: hash)
         if fm.fileExists(atPath: dest.path) { return hash }   // already vaulted (dedup)
         try fm.createDirectory(at: dest.deletingLastPathComponent(),
-                               withIntermediateDirectories: true)
+                               withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try data.write(to: dest, options: .atomic)
         // Best-effort immutability: read-only perms. Not a security boundary, a guard.
-        try? fm.setAttributes([.posixPermissions: 0o444], ofItemAtPath: dest.path)
+        try? fm.setAttributes([.posixPermissions: 0o400], ofItemAtPath: dest.path)
         return hash
     }
 
@@ -87,7 +102,7 @@ public actor EvidenceVault {
 
         // Stage into a unique temp file while hashing the SAME bytes in one pass.
         let stagingDir = root.appendingPathComponent("staging", isDirectory: true)
-        try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let tmp = stagingDir.appendingPathComponent("tmp-\(UUID().uuidString)")
         fm.createFile(atPath: tmp.path, contents: nil)
         guard let out = try? FileHandle(forWritingTo: tmp) else {
@@ -114,9 +129,9 @@ public actor EvidenceVault {
         let dest = location(for: hash)
         if fm.fileExists(atPath: dest.path) { try? fm.removeItem(at: tmp); return hash }   // dedup
         do {
-            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try fm.moveItem(at: tmp, to: dest)
-            try? fm.setAttributes([.posixPermissions: 0o444], ofItemAtPath: dest.path)
+            try? fm.setAttributes([.posixPermissions: 0o400], ofItemAtPath: dest.path)
         } catch {
             try? fm.removeItem(at: tmp)
             if fm.fileExists(atPath: dest.path) { return hash }   // a concurrent writer won the race

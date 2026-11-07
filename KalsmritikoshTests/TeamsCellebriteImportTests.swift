@@ -351,6 +351,138 @@ struct TeamsCellebriteImportTests {
         #expect(try SourceByteCapture.capture(plain).detectedType == .xml)
     }
 
+    // MARK: - G3 call & message facts
+
+    /// Two incoming calls (one answered with a duration, one missed) and a sent
+    /// SMS from the flagged phone owner.
+    private static let phoneReport = #"""
+    <?xml version="1.0" encoding="utf-8"?>
+    <project id="p2" xmlns="http://pa.cellebrite.com/report/2.0">
+      <decodedData>
+        <modelType type="Call">
+          <model type="Call" id="call-in" deleted_state="Intact">
+            <field name="Source"><value>Phone</value></field>
+            <field name="Type"><value>Incoming</value></field>
+            <field name="Status"><value>Established</value></field>
+            <field name="TimeStamp"><value>2019-03-14T11:00:00.000+00:00</value></field>
+            <field name="Duration"><value>00:02:05</value></field>
+            <multiModelField name="Parties" type="Party">
+              <model type="Party"><field name="Identifier"><value>+1 555-0100</value></field><field name="Name"><value>Dave</value></field><field name="Role"><value>From</value></field></model>
+              <model type="Party"><field name="Identifier"><value>+15550999</value></field><field name="Name"><value>Owner</value></field><field name="Role"><value>To</value></field><field name="IsPhoneOwner"><value>True</value></field></model>
+            </multiModelField>
+          </model>
+          <model type="Call" id="call-missed" deleted_state="Intact">
+            <field name="Source"><value>Phone</value></field>
+            <field name="Type"><value>Missed</value></field>
+            <field name="TimeStamp"><value>2019-03-20T08:00:00.000+00:00</value></field>
+            <field name="Duration"><value>0</value></field>
+            <multiModelField name="Parties" type="Party">
+              <model type="Party"><field name="Identifier"><value>+1 555-0100</value></field><field name="Name"><value>Dave</value></field><field name="Role"><value>From</value></field></model>
+              <model type="Party"><field name="Identifier"><value>+15550999</value></field><field name="Role"><value>To</value></field><field name="IsPhoneOwner"><value>True</value></field></model>
+            </multiModelField>
+          </model>
+        </modelType>
+        <modelType type="SMS">
+          <model type="SMS" id="sms-out" deleted_state="Intact">
+            <field name="Source"><value>Native Messages</value></field>
+            <field name="TimeStamp"><value>2019-04-02T10:00:00.000+00:00</value></field>
+            <field name="Folder"><value>Sent</value></field>
+            <field name="Body"><value>On my way</value></field>
+            <multiModelField name="Parties" type="Party">
+              <model type="Party"><field name="Identifier"><value>+15550999</value></field><field name="Role"><value>From</value></field><field name="IsPhoneOwner"><value>True</value></field></model>
+              <model type="Party"><field name="Identifier"><value>+15550004</value></field><field name="Name"><value>Erin</value></field><field name="Role"><value>To</value></field></model>
+            </multiModelField>
+          </model>
+        </modelType>
+      </decodedData>
+    </project>
+    """#
+
+    @Test("G3: calls carry direction, duration, status and recipients; the body is unchanged")
+    func ufdrCallFacts() throws {
+        let export = CellebriteReportMapper().map(data: Data(Self.phoneReport.utf8), filename: "report.xml")
+        let answered = try #require(export.records.first { $0.recordID == "calls#call-in" })
+        #expect(answered.body == "[Phone] Incoming call from Dave (+1 555-0100) to Owner (+15550999), duration 00:02:05, Established")
+        #expect(answered.authorID == "+1 555-0100")
+        #expect(answered.recipients == ["+15550999"])
+        #expect(answered.direction == "incoming")
+        #expect(answered.durationSeconds == 125)
+        #expect(answered.callStatus == "Established")
+
+        let missed = try #require(export.records.first { $0.recordID == "calls#call-missed" })
+        #expect(missed.body == "[Phone] Missed call from Dave (+1 555-0100) to +15550999, duration 0")
+        #expect(missed.direction == "incoming")
+        #expect(missed.durationSeconds == 0)
+        #expect(missed.callStatus == "Missed")
+        #expect(missed.recipients == ["+15550999"])
+
+        // The earlier fixture's outgoing call names only the callee; no caller is invented.
+        let original = CellebriteReportMapper().map(data: Data(Self.cellebriteReport.utf8), filename: "report.xml")
+        let outgoing = original.records.first { $0.threadID == "calls" }
+        #expect(outgoing?.body == "[Phone] Outgoing call to Bob (+15550002), duration 00:01:23")
+        #expect(outgoing?.authorHandle == nil)
+        #expect(outgoing?.recipients == ["+15550002"])
+        #expect(outgoing?.direction == "outgoing")
+        #expect(outgoing?.durationSeconds == 83)
+        #expect(outgoing?.callStatus == nil)
+
+        #expect(CellebriteReportMapper.parseDurationSeconds("1:02:03") == 3723)
+        #expect(CellebriteReportMapper.parseDurationSeconds("02:03") == 123)
+        #expect(CellebriteReportMapper.parseDurationSeconds("00:01:23.500") == 83)
+        #expect(CellebriteReportMapper.parseDurationSeconds("about a minute") == nil)
+    }
+
+    @Test("G3: messages carry recipients and direction only where the report states them")
+    func ufdrMessageFacts() {
+        let export = CellebriteReportMapper().map(data: Data(Self.phoneReport.utf8), filename: "report.xml")
+        let sent = export.records.first { $0.body == "On my way" }
+        #expect(sent?.authorID == "+15550999")
+        #expect(sent?.recipients == ["+15550004"])
+        #expect(sent?.direction == "outgoing")
+        #expect(sent?.durationSeconds == nil)
+
+        let original = CellebriteReportMapper().map(data: Data(Self.cellebriteReport.utf8), filename: "report.xml")
+        // Inbox SMS: the sender is named, the receiving phone is not — nothing invented.
+        let inbox = original.records.first { $0.body == "Payment received" }
+        #expect(inbox?.direction == "incoming")
+        #expect(inbox?.recipients == [])
+        // A chat message goes to the chat's other participant; no owner flag → no direction.
+        let chat = original.records.first { $0.body == "Meet at the dock & bring the papers" }
+        #expect(chat?.recipients == ["15550002@s.whatsapp.net"])
+        #expect(chat?.direction == nil)
+        // A name-only sender is still recognised among the participants.
+        let nameOnly = original.records.first { $0.body.contains("IMG_0042.jpg") }
+        #expect(nameOnly?.recipients == ["15550002@s.whatsapp.net"])
+    }
+
+    @Test("G3: the block attributes carry the new keys only when the record has them")
+    func ufdrAttributesOnlyWhenPresent() async throws {
+        let doc = try await parse(Self.phoneReport, "report.xml")
+        let call = try #require(messages(doc).first { attribute($0, "recordID") == "calls#call-in" })
+        #expect(call.attributes["recipients"]?.value == .array([.string("+15550999")]))
+        #expect(call.attributes["durationSeconds"]?.value == .int(125))
+        #expect(attribute(call, "direction") == "incoming")
+        #expect(attribute(call, "callStatus") == "Established")
+
+        let sms = try #require(messages(doc).first { $0.rawText.contains("On my way") })
+        #expect(sms.attributes["durationSeconds"] == nil)
+        #expect(sms.attributes["callStatus"] == nil)
+        #expect(attribute(sms, "direction") == "outgoing")
+
+        // A Teams message has none of them.
+        let teams = try await parse(Self.teamsExport, "messages.json")
+        for block in messages(teams) {
+            for key in ["recipients", "direction", "durationSeconds", "callStatus"] {
+                #expect(block.attributes[key] == nil, "\(key) on a Teams block")
+            }
+        }
+        // An inbox SMS with no named receiver writes no recipients key.
+        let original = try await parse(Self.cellebriteReport, "report.xml")
+        let inbox = try #require(messages(original).first { $0.rawText.contains("Payment received") })
+        #expect(inbox.attributes["recipients"] == nil)
+        #expect(attribute(inbox, "direction") == "incoming")
+    }
+
     // MARK: - Registry
 
     @Test("Each new export is claimed by exactly one mapper")

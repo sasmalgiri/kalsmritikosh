@@ -58,7 +58,7 @@ public struct EmailLoader: StreamingIngestor {
     ///      tested by smoke; the per-thread KOs produce richer
     ///      memory_objects at the cost of slightly larger chunks.
     public nonisolated static var threadCoalescingEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+        AppDefaults.store.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     }
 
     public nonisolated init() {}
@@ -344,6 +344,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -364,6 +365,16 @@ public struct EmailLoader: StreamingIngestor {
             metadata: meta,
             confidence: .high
         )
+    }
+
+    /// Exchange-style exports keep the people's names only in X-From / X-To ("From:
+    /// pete.davis@enron.com", "X-From: Schedule Crawler"): kept as lines of their own, so a question
+    /// that names the person finds the message.
+    nonisolated static func exportNameLines(_ headers: [String: String]) -> [String] {
+        [("x-from", "X-From", "from"), ("x-to", "X-To", "to")].compactMap { key, label, plain in
+            guard let value = headers[key]?.trimmingCharacters(in: .whitespaces), !value.isEmpty, value != headers[plain] else { return nil }
+            return "\(label): \(String(value.prefix(600)))"
+        }
     }
 
     private func ingestEML(at url: URL) throws -> KnowledgeObject {
@@ -412,6 +423,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -698,6 +710,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -1224,6 +1237,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -1368,6 +1382,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -1540,6 +1555,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody

@@ -169,19 +169,24 @@ public struct GenerationOptions: Sendable, Hashable {
     public var topP: Double
     public var stopSequences: [String]
     public var systemPrompt: String?
+    /// K1 — the documents a cloud prompt was built from, as checked by `CloudSourceGate`. A
+    /// document-bearing request without it is refused by the Online provider.
+    public var sourceClearance: CloudSourceClearance?
 
     public nonisolated init(
         maxTokens: Int = 1024,
         temperature: Double = 0.4,
         topP: Double = 0.95,
         stopSequences: [String] = [],
-        systemPrompt: String? = nil
+        systemPrompt: String? = nil,
+        sourceClearance: CloudSourceClearance? = nil
     ) {
         self.maxTokens = maxTokens
         self.temperature = temperature
         self.topP = topP
         self.stopSequences = stopSequences
         self.systemPrompt = systemPrompt
+        self.sourceClearance = sourceClearance
     }
 }
 

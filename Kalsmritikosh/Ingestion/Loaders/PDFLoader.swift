@@ -43,6 +43,10 @@ public struct PDFLoader: Ingestor {
         var combined = ""
         var pageOffsets: [Int] = []
         var ocrPagesUsed = 0
+        #if canImport(Vision)
+        // N8 — this document's own recognitions (not the process-wide count another file can move).
+        let tally = VisionPerform.Tally()
+        #endif
 
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
@@ -61,7 +65,15 @@ public struct PDFLoader: Ingestor {
 
             // Fallback: render the page and OCR it.
             #if canImport(AppKit)
-            let ocrText = await renderAndOCR(page: page, index: index)
+            // OCR output with no letter or digit (a table pass that returned separators only, a
+            // recogniser that returned nothing readable) is no text (held-out chronology 10,
+            // 2026-10-29: two PDFs came back as empty knowledge objects with no error).
+            #if canImport(Vision)
+            var ocrText = await VisionPerform.tallying(tally) { await renderAndOCR(page: page, index: index) }
+            #else
+            var ocrText = await renderAndOCR(page: page, index: index)
+            #endif
+            if ocrText.rangeOfCharacter(from: .alphanumerics) == nil { ocrText = "" }
             if !ocrText.isEmpty {
                 combined.append(ocrText)
                 if !ocrText.hasSuffix("\n") { combined.append("\n") }
@@ -75,7 +87,18 @@ public struct PDFLoader: Ingestor {
             #endif
         }
 
-        if combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        // A document with no readable character is reported as empty, never saved as a silent,
+        // searchless knowledge object (the caller records the error; the file stays listed).
+        if combined.rangeOfCharacter(from: .alphanumerics) == nil {
+            // Text recognition itself failed (not a page without text): say so, so the file is listed
+            // with the real reason and "Read again" can succeed once the Mac is less busy.
+            #if canImport(Vision)
+            if Task.isCancelled { throw CancellationError() }
+            let failed = tally.failed
+            if failed > 0 {
+                throw IngestorError.parseFailure(url, reason: "text recognition failed on \(failed) page(s) — the Mac may have been busy; use Read again in Sources ▸ Needs attention")
+            }
+            #endif
             throw IngestorError.empty(url)
         }
 

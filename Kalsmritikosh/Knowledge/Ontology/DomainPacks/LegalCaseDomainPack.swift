@@ -97,8 +97,12 @@ public enum LegalCaseDomainPack {
         // The decision date: "Decided July 23, 1993", "Opinion filed August 3, 1971", or the
         // caption's own date line ("August 8, 1924.)"). Case bench 2026-10-18: US decisions
         // carried no decision-date fact at all, so "When was X decided?" had nothing to read.
+        // A long body paragraph saying "decided" is citing another decision ("Acacia Park Cemetery
+        // Ass'n v. Commissioner, supra, decided January 11, 1934" — held-out case bench 2026-10-25
+        // gave a 1955 decision that 1934 date): outside a caption only its opening is read.
+        let labelText = captionLike ? text : String(text.prefix(600))
         if let raw = DomainPackText.labeledDate(after: ["decided", "opinion filed", "date of decision",
-                                                        "date of judgment", "judgment dated"], in: text)
+                                                        "date of judgment", "judgment dated"], in: labelText)
             ?? captionDateLine(in: text) ?? courtLineDate(in: text),
            let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10 {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "decisionDate", value: iso,
@@ -208,7 +212,10 @@ public enum LegalCaseDomainPack {
         let joined = head.map(\.text).joined(separator: " ")
         // A caption line that is only the date ("March 16, 1939.") when the court line does not
         // run straight into it.
-        guard let raw = courtLineDate(in: joined) ?? captionDateLine(in: head.map(\.text).joined(separator: "\n")),
+        // "Decided April 5, 1926." among the caption's lines (wide case bench 2026-10-25: a caption
+        // whose court line is in parentheses filed no decision date).
+        let labeled = DomainPackText.labeledDate(after: ["decided", "opinion filed", "date of decision"], in: head.map(\.text).joined(separator: "\n"))
+        guard let raw = courtLineDate(in: joined) ?? labeled ?? captionDateLine(in: head.map(\.text).joined(separator: "\n")),
               let iso = PatentDomainPack.normalizeDate(raw), iso.count == 10,
               let at = head.firstIndex(where: { $0.text.contains(raw) }) else { return nil }
         var cited = [head[at].id]
@@ -231,7 +238,7 @@ public enum LegalCaseDomainPack {
                                                  have: Set<String>) -> [GenericFact] {
         let head = Array(blocks.prefix(20))
         let joined = head.map(\.text).joined(separator: "\n")
-        guard numberedBesideCourt(joined) || courtLineDate(in: joined) != nil else { return [] }
+        guard numberedBesideCourt(joined) || courtLineDate(in: joined) != nil || opensWithReportedCaption(joined) else { return [] }
         func block(containing value: String) -> UUID? { head.first(where: { $0.text.contains(value) })?.id }
         // Field names are compared normalized ("decisionDate" is stored as "decisiondate").
         let filed = Set(have.map(FactSchemaRegistry.normalizeField))
@@ -251,6 +258,16 @@ public enum LegalCaseDomainPack {
             out.append(fact(subjectLabel, "parties", v, b, 0.75))
         }
         return out
+    }
+
+    /// A decision that opens with its case name and its reporter citation ("Pinching v. Wurdeman" /
+    /// "12 F.2d 164") is a caption even when its court line is printed in a form the other tests do
+    /// not read ("(Court of Appeals of District of Columbia. Submitted March. 5, 1926. …"). Wide
+    /// case bench 2026-10-25.
+    nonisolated static func opensWithReportedCaption(_ text: String) -> Bool {
+        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(3)
+        guard lines.contains(where: { $0.range(of: #"^[A-Z].{0,120}\s(?:v\.|vs\.)\s[A-Z]|^In re\s[A-Z]"#, options: .regularExpression) != nil }) else { return false }
+        return lines.contains { $0.range(of: #"^\d{1,4}\s+(?:[A-Z][A-Za-z.]*\s?(?:\d[a-z]{1,2}\s?)?){1,4}\d{1,5}$"#, options: .regularExpression) != nil }
     }
 
     /// The parties as the caption's case name gives them: "Sims v. Dallas Ry. & Terminal Co.",

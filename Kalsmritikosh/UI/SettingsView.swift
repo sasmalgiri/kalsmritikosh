@@ -108,7 +108,12 @@ public struct SettingsView: View {
     /// the app auto-selects the best model for the device. Those sections live
     /// under a collapsed "Advanced" disclosure, off by default.
     @AppStorage(FeatureFlags.aiModeKey) private var aiModeRaw = AIMode.guided.rawValue
-    @AppStorage("kalsmritikosh.settings.showAdvanced") private var showAdvanced = false
+    // Collapsed every time Settings opens (user evaluation 2026-11-02, M4: a remembered expansion put
+    // "RELEASE READY: NO" and "Wipe & re-ingest everything" in front of a first-time user).
+    @State private var showAdvanced = false
+    /// 2026-11-06 scope: the engine (KnowledgeModule) switchboard is for troubleshooting, collapsed by default.
+    @State private var showEngineComponents = false
+    @State private var showRetiredStudio = false
     /// Collapses the many individual diagnostic tools so only the single
     /// "release readiness" check is prominent. Off by default.
     @AppStorage("kalsmritikosh.settings.showMoreDiagnostics") private var showMoreDiagnostics = false
@@ -142,13 +147,19 @@ public struct SettingsView: View {
                     Text("Investigations Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    // Usability evaluation 2026-11-02 (M4): a red developer self-check at the top of Settings
+                    // alarmed first-time users; the full self-test stays under Advanced ▸ Diagnostics.
+                    #if DEBUG
                     selfCheckChip
+                    #endif
                 }
                 InvestigatorProfileSection()
 
                 // ── Everyday settings — each category collapsed behind its
                 //    header so Settings opens minimal. Click a header to expand.
-                if let advice = appState.modelChoiceAdvice, advice.severity != .ok {
+                // M4: with AI off (the evidence-only default) no model is needed, so a red "Model won't run
+                // well" is a false alarm.
+                if !EvidenceOnlyRelease.enforced, let advice = appState.modelChoiceAdvice, advice.severity != .ok {
                     modelChoiceBanner(advice)
                 }
                 #if DEBUG
@@ -161,6 +172,7 @@ public struct SettingsView: View {
                 settingsGroup("Privacy", "hand.raised", anchor: .privacy) { privacySection }
                 settingsGroup("Background maintenance", "moon.zzz", anchor: .backgroundMaintenance) { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
+                settingsGroup("Subscription", "creditcard", anchor: .subscription) { subscriptionSection }
                 settingsGroup("Your data", "trash", anchor: .yourData) { dataSection }
                 settingsGroup("Help & feedback", "envelope", anchor: .helpFeedback) { feedbackSection }
                 settingsGroup("Legal & privacy", "checkmark.shield", anchor: .legalPrivacy) { legalSection }
@@ -529,16 +541,18 @@ public struct SettingsView: View {
                     .textSelection(.enabled)
             }
 
-            // I-7 — accuracy on your own archive (module "Accuracy on your archive").
+            // I-7 — the archive self-test, a diagnostic (owner decision 2026-11-06: INTERNAL, not an accuracy claim).
+            Divider().padding(.vertical, 4)
+            moduleToggle(.archiveSelfScore)
             if ProductModuleFlags.isEnabled(.archiveSelfScore) {
                 Divider().padding(.vertical, 4)
-                Text("Measure accuracy — asks up to 20 questions whose answers your ledger already proves, plus 3 that have no answer, and scores the results. Answers then show how often answers at their confidence were right on your archive. Uses the on-device model, so it takes a few minutes.")
+                Text("Archive self-test (troubleshooting) — asks up to 20 questions whose answers your ledger already states, plus 3 that have no answer, and counts the results. The questions come from the same archive, so this is a consistency check, not a measure of real-world accuracy; nothing is shown with answers. Uses the on-device model, so it takes a few minutes.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
                     Task { await runSelfScore() }
                 } label: {
-                    Label(selfScoreRunning ? "Measuring…" : "Measure accuracy on my archive",
+                    Label(selfScoreRunning ? "Running…" : "Run the archive self-test",
                           systemImage: selfScoreRunning ? "hourglass" : "target")
                 }
                 .disabled(selfScoreRunning)
@@ -1476,7 +1490,7 @@ public struct SettingsView: View {
                     set: { EvidenceOnlyRelease.aiEnabled = $0; moduleFlagsVersion &+= 1 }
                 ))
                 Text(EvidenceOnlyRelease.aiEnabled
-                     ? "AI may write answers from your evidence. Choose Apple's on-device model below, or your own cloud AI key under Online mode (you approve every send)."
+                     ? "AI may write answers from your evidence: with an AI plan (AI Included or AI Pro) or your own Anthropic key under Online mode, a case's documents are read by the AI once you allow that case (asked once per case); questions in an allowed case are then sent without a further prompt. Apple's on-device model can be chosen below."
                      : "Off — evidence only. Every answer is a value or passage your documents state, with its source, or an honest \u{201C}the documents don't say\u{201D}. No AI model is used.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1520,36 +1534,48 @@ public struct SettingsView: View {
             }
             }
             Divider()
-            Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(groups.keys.sorted(), id: \.self) { groupName in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
-                        let reason = KnowledgeModuleFlags.disabledReason(module)
-                        Toggle(isOn: Binding(
-                            get: { KnowledgeModuleFlags.isEnabled(module) },
-                            set: {
-                                KnowledgeModuleFlags.setEnabled(module, $0)
-                                moduleFlagsVersion &+= 1
-                            }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(module.title)
-                                Text(module.detail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let reason {
-                                    Label(reason, systemImage: "lock.fill")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.orange)
+            DisclosureGroup(isExpanded: $showEngineComponents) {
+                VStack(alignment: .leading, spacing: 16) {
+                Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(groups.keys.sorted(), id: \.self) { groupName in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                            let reason = KnowledgeModuleFlags.disabledReason(module)
+                            Toggle(isOn: Binding(
+                                get: { KnowledgeModuleFlags.isEnabled(module) },
+                                set: {
+                                    KnowledgeModuleFlags.setEnabled(module, $0)
+                                    moduleFlagsVersion &+= 1
+                                }
+                            )) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(module.title)
+                                    Text(module.detail)
+                                        .font(.caption).foregroundStyle(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
+                                    if let reason {
+                                        Label(reason, systemImage: "lock.fill")
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(.orange)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
                                 }
                             }
+                            .disabled(reason != nil)
                         }
-                        .disabled(reason != nil)
                     }
+                }
+                }
+                .padding(.top, 6)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show engine components").font(.subheadline.weight(.semibold))
+                    Text("For troubleshooting with support. The app does not need you to change these to run a case; coverage, citation checks and other safeguards stay enforced whatever is set here.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Divider()
@@ -1594,98 +1620,67 @@ public struct SettingsView: View {
         }
     }
 
-    /// W0-M — product modules from the beat-DEVONthink plan. Built modules get
-    /// a switch; the rest are counted so the list stays short.
+    /// W0-M — product modules as a small capability catalog (owner decision 2026-11-06, scope §9.6):
+    /// the core workflow first, then each optional family with the investigative task it supports,
+    /// then retired features (kept so earlier work stays reachable). Diagnostics live under Advanced;
+    /// deferred modules (team review) are not listed.
     @ViewBuilder
     private var productModulesSection: some View {
         let _ = moduleFlagsVersion
         let built = ProductModule.allCases.filter(\.implemented)
-        // Companion positioning: what fills DEVONthink's gaps first; what DEVONthink already does
-        // is listed separately and stays off until switched on.
-        let groups = Dictionary(grouping: built.filter { !$0.alsoInDevonthink }, by: \.group)
-        let overlap = built.filter(\.alsoInDevonthink).sorted { $0.title < $1.title }
+        let families: [CapabilityFamily] = [.core, .professional, .analysis, .media, .connections, .ai, .presentation]
         VStack(alignment: .leading, spacing: 10) {
             Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Text("The core workflow — bring records in, search them exactly, review, track what is open and export a cited report — works with every optional tool off. Turn on a tool only when your case needs it; turning one off hides it and keeps everything it made.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Toggle(isOn: Binding(get: { ProductModuleFlags.showPreviewFeatures },
                                  set: { ProductModuleFlags.showPreviewFeatures = $0; moduleFlagsVersion &+= 1 })) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show preview features")
-                    Text("Features that are built but not yet verified on real data or hardware (team review, places, iPhone/iPad snapshot). Use them knowing they may change.")
+                    Text("Features that are built but not yet verified on real data or hardware (places, iPhone/iPad snapshot). Use them knowing they may change.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            ForEach(groups.keys.sorted(), id: \.self) { groupName in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(groupName).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
-                        let reason = ProductModuleFlags.disabledReason(module)
-                        Toggle(isOn: Binding(
-                            get: { ProductModuleFlags.isEnabled(module) },
-                            set: {
-                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
-                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
-                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+            ForEach(families, id: \.self) { family in
+                let members = built.filter { $0.family == family }.sorted { $0.title < $1.title }
+                if !members.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(family.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(family.task).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if family == .connections {
+                            Button("Use on its own: turn on the organising tools") {
+                                ModulePreset.applyStandalone(); moduleFlagsVersion &+= 1
                             }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
-                                Text(module.detail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text("Off: \(module.spec.whenOff)")
-                                    .font(.caption2).foregroundStyle(.tertiary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let reason {
-                                    Label(reason, systemImage: "lock.fill")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.orange)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
+                            .controlSize(.small)
+                            .help("For using Investigations Made Easy without DEVONthink: switches on tags, highlights, rules, capture and the other organising tools. Spotlight and folder sync stay as they are; you can turn any of them off again.")
                         }
-                        .disabled(reason != nil)
+                        ForEach(members) { module in moduleToggle(module) }
                     }
                 }
             }
-            if !overlap.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Also in DEVONthink — off until you turn them on").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text("Investigations Made Easy works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too.")
-                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    Button("Use on its own: turn all of these on") {
-                        ModulePreset.applyStandalone(); moduleFlagsVersion &+= 1
-                        if ProductModuleFlags.isEnabled(.spotlightIndex) { Task { await appState.syncSpotlight() } }
-                    }
-                    .controlSize(.small)
-                    .help("For using Investigations Made Easy without DEVONthink. Switches on every feature in this list; nothing else changes, and you can turn any of them off again.")
-                    ForEach(overlap) { module in
-                        let reason = ProductModuleFlags.disabledReason(module)
-                        Toggle(isOn: Binding(
-                            get: { ProductModuleFlags.isEnabled(module) },
-                            set: {
-                                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
-                                // W3-7 — adding or removing Spotlight entries follows the switch at once.
-                                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+            let retired = built.filter { $0.family == .retired }.sorted { $0.title < $1.title }
+            if !retired.isEmpty {
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(CapabilityFamily.retired.task).font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(retired) { module in moduleToggle(module) }
+                        if ProductModuleFlags.isEnabled(.contentCreatorPersona) {
+                            Button("Open saved publish packages") {
+                                NotificationCenter.default.post(name: .kalsmritikoshPaletteEntry, object: "go.\(Destination.ccStudio.rawValue)")
                             }
-                        )) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
-                                Text(module.detail)
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Text("Off: \(module.spec.whenOff)")
-                                    .font(.caption2).foregroundStyle(.tertiary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let reason {
-                                    Label(reason, systemImage: "lock.fill")
-                                        .font(.caption2.weight(.medium))
-                                        .foregroundStyle(.orange)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
+                            .controlSize(.small)
                         }
-                        .disabled(reason != nil)
+                        if ProductModuleFlags.isEnabled(.studioOutputs) {
+                            Button("Open briefings, FAQs and mind maps") { showRetiredStudio = true }
+                                .controlSize(.small)
+                                .sheet(isPresented: $showRetiredStudio) { StudioOutputsView().environment(appState) }
+                        }
                     }
+                    .padding(.top, 4)
+                } label: {
+                    Text(CapabilityFamily.retired.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
             }
             let coming = ProductModule.allCases.count - built.count
@@ -1694,6 +1689,37 @@ public struct SettingsView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// One product-module switch, with what it does, what stays when it is off, and why it is greyed.
+    @ViewBuilder
+    private func moduleToggle(_ module: ProductModule) -> some View {
+        let reason = ProductModuleFlags.disabledReason(module)
+        Toggle(isOn: Binding(
+            get: { ProductModuleFlags.isEnabled(module) },
+            set: {
+                ProductModuleFlags.setEnabled(module, $0); moduleFlagsVersion &+= 1
+                // W3-7 — adding or removing Spotlight entries follows the switch at once.
+                if module == .spotlightIndex { Task { await appState.syncSpotlight() } }
+            }
+        )) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
+                Text(module.detail)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Off: \(module.spec.whenOff)")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let reason {
+                    Label(reason, systemImage: "lock.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .disabled(reason != nil)
     }
 
     @ViewBuilder
@@ -1744,6 +1770,7 @@ public struct SettingsView: View {
         case .privacy:               return "Privacy"
         case .backgroundMaintenance: return "Background maintenance"
         case .ingestOptions:         return "Ingest options"
+        case .subscription:          return "Subscription"
         case .yourData:              return "Your data"
         case .helpFeedback:          return "Help & feedback"
         case .legalPrivacy:          return "Legal & privacy"
@@ -1760,7 +1787,7 @@ public struct SettingsView: View {
                 Image(systemName: "externaldrive.badge.timemachine").foregroundStyle(Theme.brand)
                 Text("Back up your knowledge base").font(.title3.bold())
             }
-            Text("Save a copy of your extracted ledger (knowledge.sqlite) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused.")
+            Text("Save a copy of everything the app has read and recorded (your ledger) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
@@ -1775,10 +1802,24 @@ public struct SettingsView: View {
                 }
                 .disabled(backingUp)
                 Button {
+                    backUpEverything()
+                } label: {
+                    Label("Back up everything…", systemImage: "externaldrive.fill.badge.plus")
+                }
+                .disabled(backingUp)
+                .help("The ledger and a copy of every original file it can read, so the whole archive can be restored on another Mac.")
+                Button {
                     inspectBackup()
                 } label: {
                     Label("Check a backup…", systemImage: "checkmark.seal")
                 }
+                Button {
+                    restoreFromBackup()
+                } label: {
+                    Label("Restore from a backup…", systemImage: "arrow.counterclockwise.circle")
+                }
+                .disabled(backingUp)
+                .help("Replace this ledger with a verified backup. The app quits and restores it when it opens again; the current ledger is kept in a “Before restore” folder.")
                 MoveToNewMacButton()
                 // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
                 if ProductModuleFlags.showPreviewFeatures {
@@ -1803,12 +1844,95 @@ public struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if let note = appState.restoreNotice {
+                Label(note, systemImage: "arrow.counterclockwise.circle").font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    /// Brief §11 — choose a backup, verify it, confirm, and quit; the next launch restores it before
+    /// the ledger opens (a live ledger is never replaced).
+    private func restoreFromBackup() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.prompt = "Restore This Backup"
+        panel.message = "Choose a backup folder made by “Back up now…” or “Back up everything…”."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        let scoped = dir.startAccessingSecurityScopedResource()
+        defer { if scoped { dir.stopAccessingSecurityScopedResource() } }
+        if let problem = PendingRestore.schedule(backupFolder: dir) { backupStatus = problem; return }
+        let alert = NSAlert()
+        alert.messageText = "Restore “\(dir.lastPathComponent)”?"
+        alert.informativeText = "Investigations Made Easy will quit. When you open it again, it replaces this ledger with the backup (checked file by file), and keeps the current ledger in a “Before restore” folder beside it. If anything fails, the current ledger is left as it is."
+        alert.addButton(withTitle: "Quit and Restore")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { PendingRestore.cancel(); return }
+        NSApp.terminate(nil)
+        #endif
     }
 
     /// Copy the live database (+ its -wal/-shm sidecars, if present) into a
     /// timestamped backup folder the user selects. Read-only w.r.t. the app's
     /// own data; failures are surfaced, never swallowed.
+    /// Brief §11 — a complete backup: the ledger snapshot plus every readable original, with the map
+    /// that relinks them on restore. Originals that cannot be read are listed in the backup, not hidden.
+    private func backUpEverything() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+        panel.prompt = "Back Up Here"
+        panel.message = "Choose a folder for a complete backup: the ledger and a copy of every original file."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        backingUp = true; backupStatus = nil
+        Task {
+            let stamp = Int(Date().timeIntervalSince1970)
+            let dest = dir.appendingPathComponent("Investigations Made Easy-Complete-Backup-\(stamp)")
+            // Review R5: every open studio's pending writes land in the ledger first; a change that
+            // failed to save would be missing from the backup, so the backup waits for it.
+            guard await StudioStorage.flushAll() else {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup not made: a studio change has not been saved yet. Choose Retry in that studio, then back up again."
+                }
+                return
+            }
+            let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("kalsmritikosh-cbackup-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: scratch) }
+            var opened: [URL] = []
+            defer { for u in opened { appState.bookmarks.stopAccessing(u) } }
+            do {
+                guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
+                try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+                let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
+                try await database.backupSnapshot(to: snapshot)
+                for root in appState.bookmarks.roots { if let u = try? appState.bookmarks.resolve(root) { opened.append(u) } }
+                var originals: [(fileID: UUID, url: URL)] = [], missing: [String] = []
+                for r in try await database.query("SELECT id, url FROM files;", []) {
+                    guard let id = r.uuid(0), let url = r.string(1).flatMap(URL.init(string:)) else { continue }
+                    if FileManager.default.isReadableFile(atPath: url.path) { originals.append((id, url)) } else { missing.append(url.path) }
+                }
+                let manifest = try BackupService().createCompleteBackup(
+                    databaseSnapshot: snapshot, originals: originals, notIncluded: missing, destination: dest,
+                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970)
+                let copied = manifest.entries.filter { $0.kind == .originalSource }.count
+                await MainActor.run {
+                    backingUp = false
+                    // Final brief §3.8: "complete" only when every original is in it.
+                    let left = (try? BackupService.sourcesMap(in: dest).notIncluded.count) ?? missing.count
+                    backupStatus = (manifest.coverage == .complete
+                        ? "Complete backup “\(dest.lastPathComponent)”: the ledger and all \(copied) original file(s), each with its SHA-256."
+                        : "Backup “\(dest.lastPathComponent)” is NOT complete: the ledger and \(copied) original file(s); \(left) original(s) could not be read and are listed in the backup as not included — keep those files yourself.")
+                        + " The ledger stays encrypted; keep the recovery key (Settings ▸ Data ▸ Encryption) separately."
+                }
+            } catch {
+                await MainActor.run { backingUp = false; backupStatus = "Complete backup failed: \(error.localizedDescription)" }
+            }
+        }
+        #endif
+    }
+
     private func backUpNow() {
         #if canImport(AppKit)
         let panel = NSOpenPanel()
@@ -1824,6 +1948,15 @@ public struct SettingsView: View {
             let dbURL = DatabaseLocations.defaultDatabaseURL
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Investigations Made Easy-Backup-\(stamp)")
+            // Review R5: every open studio's pending writes land in the ledger first; a change that
+            // failed to save would be missing from the backup, so the backup waits for it.
+            guard await StudioStorage.flushAll() else {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup not made: a studio change has not been saved yet. Choose Retry in that studio, then back up again."
+                }
+                return
+            }
             // F18 — a CONSISTENT live snapshot via SQLite's Online Backup API, taken inside the
             // Database actor, instead of "checkpoint, then copy the files": nothing stopped writes
             // between those copies, so a busy ledger could be captured torn. The snapshot is one
@@ -2056,6 +2189,7 @@ public struct SettingsView: View {
             HStack(spacing: 6) {
                 Image(systemName: "trash").foregroundStyle(.red)
                 Text("Your data").font(.title3.bold())
+                InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — backup, recovery, erasure
             }
             Text("Erase everything Investigations Made Easy has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -2152,6 +2286,33 @@ public struct SettingsView: View {
     /// Legal & Privacy — accuracy disclaimer, privacy posture, terms, and
     /// third-party notices. Always visible (not hidden under Advanced) so the
     /// declarations are easy to find.
+    /// §11 — the verified subscription state, from StoreKit; management happens in the Apple Account.
+    private var subscriptionSection: some View {
+        let store = PurchaseCenter.shared
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard").foregroundStyle(Theme.brand)
+                Text("Subscription").font(.title3.bold())
+                InfoPopoverButton(topic: "subscription-plans")   // §6.8 — purchases
+            }
+            Text(store.statusText).font(.callout).accessibilityIdentifier("settings.subscription.status")
+            Text("Three plans with all nine personas, each monthly or yearly: Workbench (Online AI with your own Anthropic key; 14-day free trial for eligible new subscribers), AI Included (2,000 AI credits a month) and AI Pro (6,000 a month; 5,400 a month on the yearly plan). They are one subscription — change plan in your Apple Account. Plans renew automatically unless cancelled at least a day before. Your cases stay readable and exportable whatever the subscription state; backup, recovery, Help, privacy and erasure never need one.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if !store.entitlement.allowsPaidUse || store.entitlement.hadAccessBefore {
+                    Button("See plans") { store.paywallRequested = "subscribe" }.buttonStyle(.borderedProminent).controlSize(.small)
+                }
+                Button("Restore purchases") { Task { await store.restore() } }.controlSize(.small).disabled(store.busy)
+                Button("Manage subscription") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }.controlSize(.small)
+                    .help("Opens your Apple Account's subscription page to change the plan or cancel. Cancel at least a day before the period ends to avoid the next charge.")
+                Link("How to cancel (Apple)", destination: PurchaseProducts.cancelInstructionsURL).font(.caption)
+            }
+            if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary) }
+            Text("Payment, renewal, refunds and restore are handled by Apple; the app never sees payment details and subscribing turns nothing else on (not Online mode). The subscription applies on the Macs signed in with your Apple account; your archive is not copied between them.")
+                .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var legalSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -2256,6 +2417,9 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 2)
 
+            // M4: these shape what an AI model writes; with no model in use they were a contradiction
+            // ("Apple AI writes the final answer" ticked under "no AI model is used").
+            if !EvidenceOnlyRelease.enforced {
             Toggle("Apple AI writes the final answer", isOn: Binding(
                 get: { FeatureFlags.shared.llmAnswerSynthesis },
                 set: { FeatureFlags.shared.llmAnswerSynthesis = $0 }
@@ -2279,6 +2443,7 @@ public struct SettingsView: View {
             Text("After drafting, the model fact-checks itself against the findings and revises. Improves faithfulness; adds ~2 model passes.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            }
 
             Toggle("Relevance-gated experts", isOn: Binding(
                 get: { FeatureFlags.shared.expertRelevanceGating },
@@ -2371,28 +2536,29 @@ public struct SettingsView: View {
             // U-0 (privacy invariant closure): the old dev-only cloud toggle
             // was a false affordance — the product has no network entitlement
             // in any build, so there is nothing a switch could enable.
-            Label("This app has no network access; there is nothing to toggle.", systemImage: "lock.shield")
-            Text("Every model runs on this Mac. The app is built without the network permission, so no document, question, or answer can leave your computer.")
+            // Usability evaluation 2026-11-02: the statement must stay true with Online mode in the product.
+            Label("The app itself has no network permission. In Private mode — the default — nothing leaves this Mac.", systemImage: "lock.shield")
+            Text("Every on-device model runs on this Mac. Only if you turn on Online mode (Settings ▸ Modules ▸ Connection) can a request you approve be sent, through a separate sandboxed helper — to AI Included, your own AI provider, or a public-record lookup. Each send is shown to you first and recorded.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 4)
 
-            Toggle("Coalesce email threads (Move A)", isOn: $threadCoalescing)
+            Toggle("Keep each email thread as one document", isOn: $threadCoalescing)
                 .onChange(of: threadCoalescing) { _, newValue in
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.moveA.threadCoalescing")
                 }
-            Text("When on, email ingest folds an entire reply chain into a single KO instead of one KO per message. Memory distillation gets the whole conversation in one shot; storage drops on busy mailboxes. **Requires re-ingest of affected mailboxes** to take effect.")
+            Text("When on, a whole reply chain is read as one document instead of one document per message — summaries see the whole conversation, and busy mailboxes take less space. **Mailboxes already added must be added again** for this to apply.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 4)
 
-            Toggle("Show low-quality (T3) entities in results", isOn: $showT3InResults)
+            Toggle("Show low-quality names in results", isOn: $showT3InResults)
                 .onChange(of: showT3InResults) { _, newValue in
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.history.showT3InResults")
                 }
-            Text("HISTORY Phase A. When off, the retriever filters out entities tagged T3 (mail-server hostnames like `Tyzpr01mb4530`, weekday tokens, base64-ish IDs) from results — they stay on disk, just don't pollute answers. Flip on to see everything every extractor produced.")
+            Text("When off, names that are almost certainly not people or organisations — mail-server names like `Tyzpr01mb4530`, weekday words, long random IDs — are left out of results. They are kept, not deleted. Turn on to see everything that was read.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -3166,6 +3332,20 @@ private struct LedgerEncryptionSubsection: View {
                 Image(systemName: encrypted ? "lock.shield.fill" : "lock.open").foregroundStyle(Theme.brand)
                 Text("Encryption").font(.title3.bold())
             }
+            if !appState.schemaUnrepaired.isEmpty {
+                // Brief §11: a repair that could not finish is shown before anyone relies on the ledger.
+                Label("This ledger is missing \(appState.schemaUnrepaired.count) part(s) of its structure that could not be added automatically: \(appState.schemaUnrepaired.prefix(3).joined(separator: "; ")). Back it up and contact support before approving findings or exporting.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !appState.pendingErasureWork.isEmpty {
+                // B1 — an erasure whose file steps did not finish is named, never shown as done.
+                Label("An erasure is not finished: \(appState.pendingErasureWork.values.flatMap { $0 }.prefix(3).joined(separator: "; ")). Its files are kept and it is retried the next time the app opens.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(encrypted
                  ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them."
                  : "The ledger is not open yet.")
@@ -3186,8 +3366,7 @@ private struct LedgerEncryptionSubsection: View {
                     }
                     if let revealed {
                         Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(revealed, forType: .string)
+                            NSPasteboard.general.copySecret(revealed)
                         }
                     }
                 }
@@ -3220,3 +3399,15 @@ struct InvestigatorProfileSection: View {
     }
 }
 
+#if canImport(AppKit)
+extension NSPasteboard {
+    /// The recovery key on the clipboard: this Mac only (never Universal Clipboard), and marked
+    /// concealed + transient so clipboard managers do not record it.
+    func copySecret(_ secret: String) {
+        prepareForNewContents(with: .currentHostOnly)
+        setString(secret, forType: .string)
+        setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+    }
+}
+#endif

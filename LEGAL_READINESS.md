@@ -13,10 +13,14 @@ Status keys: ✅ done · ◻︎ owner/counsel action · ⚠️ verify.
 - ✅ **Every exported report leads with the disclaimer** — including the two studios shipped this cycle: **Reasoning Studio (RCA)** and **Competing Hypotheses (ACH)** reports now prepend `LegalNotice.reportDisclaimer` (locked by tests). "Not legal, financial, or professional advice" — which covers the illustrative **clinical differential** discipline (also flagged "not medical advice" in its Sūtra provenance).
 - ✅ **AI SOP→Sūtra import** is framed as "a draft to review and ratify, not an authority"; the model can't invent tooling and nothing is auto-adopted.
 
-## 2. Privacy posture — ✅ matches "Data Not Collected"
-- ✅ Fully **on-device**: documents, ledger, questions, answers never leave the device; **no analytics or telemetry**; `PrivacyGate` filters cloud providers out of capability resolution.
-- ✅ The only network use is an *optional, user-initiated* model download — user documents are never part of it (stated in `privacyStatement`).
-- ◻︎ **App Store privacy label:** set **"Data Not Collected"** in App Store Connect (matches the above). *(owner)*
+## 2. Privacy posture — ◻︎ OPEN (superseded 2026-10-27, review L1)
+The earlier text here ("fully on-device", "the only network use is a model download", "set Data Not Collected") is
+**superseded**: there are no model downloads, and Online mode, when the person turns it on, sends questions and —
+if allowed — document passages to the AI provider they chose. Every flow is listed in
+**`docs/DATA_FLOW_INVENTORY.md`**, the one source for privacy statements.
+- ✅ Private mode (default): nothing leaves the Mac; no analytics or telemetry.
+- ✅ Online mode: off by default. Every send is previewed and recorded. Document text goes only to a provider reviewed for case material after the person confirms their account's terms (review L2).
+- ◻︎ **App Store privacy label:** decide on the inventory and the provider configuration — "Data Not Collected" is neither assumed nor replaced without that analysis. *(owner/counsel)*
 - ⚠️ Confirm no third-party SDK silently collects (there are none in the shipping target; re-verify before submission).
 
 ## 3. Third-party notices & model licences — ✅ present, ◻︎ one file to drop in
@@ -44,8 +48,8 @@ Status keys: ✅ done · ◻︎ owner/counsel action · ⚠️ verify.
 
 ## Blocking items before submission (all owner/counsel — none are code)
 1. ◻︎ Counsel review + jurisdiction adaptation of **Privacy Policy, Terms/EULA, disclaimers** (esp. investigative personas).
-2. ◻︎ App Store Connect: **"Data Not Collected"** label; encryption declaration (`ITSAppUsesNonExemptEncryption`); age rating; category.
+2. ◻︎ App Store Connect: privacy label decided from `docs/DATA_FLOW_INVENTORY.md` (§4 there); encryption declaration (`ITSAppUsesNonExemptEncryption`); age rating; category.
 3. ✅ Bundle third-party licence text: DONE for v1 — the BGE MIT notice ships in the app bundle (`Resources/THIRD_PARTY_NOTICES.txt`, verified in the built app). Llama licence N/A for v1 (no Llama model ships).
 4. ⚠️ Final pass: confirm no telemetry/third-party SDK in the shipping target.
 
-**Bottom line:** the app is **legally hardened in code** — private by design, disclaimed on every AI output and every exported report (now including the new studios), lawful-use terms in place, notices present. What remains is **not code**: counsel review of the policy text and the App-Store/Info.plist declarations, which only the owner can complete.
+**Bottom line (superseded in part 2026-10-27 — see the ship-readiness review L1–L6 in `docs/FINAL_BRIEF_EXECUTION.md` §A3):** the app is private by design, disclaimed on every AI output and every exported report (now including the new studios), lawful-use terms in place, notices present. What remains is **not code**: counsel review of the policy text and the App-Store/Info.plist declarations, which only the owner can complete.

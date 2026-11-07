@@ -1,0 +1,104 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [49,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1421x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1421x721]
+      AXGroup/AXHostingView [49,121 244x721]
+        AXScrollArea [49,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [69,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,302 228x38] actions=AXPress
+          AXButton desc="Work Center" help="Work Center — Run a guided workflow step by step — gated steps, per-field guidance, and a numbered document for every confirmed step" [57,343 228x38] actions=AXPress
+          AXButton desc="Findings" help="Findings — Every fact by status — proven, inferred, contradicted, missing" [57,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,797 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x721]
+      AXGroup/AXHostingView [49,121 1421x721]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 1073x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Ask" [313,186 39x26] actions=AXCancel
+        AXStaticText value="Grounded in your archive — every answer cites its evidence" [313,213 286x13] actions=AXCancel
+        AXButton desc="Information about How answers work" id=info help="Shows what this does, what it needs and what follows" [929,204 18x18] actions=AXCancel,AXPress
+        AXButton desc="History" help="Browse past conversations — every Ask is saved." [1336,206 59x14] actions=AXCancel,AXPress
+        AXButton desc="New" [1405,206 45x14] actions=AXCancel,AXPress
+        AXStaticText value="Answers are reconstructed from your documents and can contain mistakes — always check them against the cited sources." [313,227 608x13] actions=AXCancel
+        AXButton desc="Help for Save question" help="What is this?" [1202,790 14x14] actions=AXCancel,AXPress
+        AXButton desc="Help for Investigate" help="What is this?" [1240,790 14x14] actions=AXCancel,AXPress
+        AXTextField [487,802 646x16] actions=AXConfirm,AXCancel
+        AXButton desc="Attach files" help="Attach files — Ingests files into your archive so they become searchable, citable evidence for this and every future question. Nothing is uploaded." [1148,804 15x17] actions=AXCancel,AXPress
+        AXButton desc="Bookmark" help="Save question — Bookmarks this question so you can return to it from the Saved surface.  •  Available when: Type a question first." [1188,805 10x16] actions=AXCancel,AXPress
+        AXButton desc="Investigate question" help="Investigate — Breaks a big question into focused sub-questions, answers each from your evidence, and synthesizes a cited result. Slower than Ask, but deeper.  •  Available when: Type a question, and wait for any running investigation to finish." [1224,805 15x15] actions=AXCancel,AXPress
+        AXButton desc="Send question" id=arrow.up help="Send — Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.  •  Available when: Type a question first." [1253,793 32x32] actions=AXCancel,AXPress
+        AXButton desc="Help for Send" help="What is this?" [1278,786 14x14] actions=AXCancel,AXPress
+        AXScrollArea [293,255 1177x523] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [310,282 1140x373] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="Who signed the master supply agreement?" [1179,282 259x16]
+              AXStaticText value="Who signed the master supply agreement?" [1179,282 259x16]
+            AXStaticText value="3:29 PM" [1410,313 40x13]
+            AXImage desc="Sparkle" id=sparkles [310,342 9x11]
+            AXStaticText value="3:29 PM" [326,341 40x13]
+            AXButton desc="Copy" help="Copy this answer" [374,341 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [393,341 9x12] actions=AXPress
+            AXStaticText value="The document states: “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”" [323,370 573x32]
+              AXStaticText value="The document states: “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”" [323,370 573x32]
+            AXImage desc="Answer status: Supported" id=checkmark.seal.fill [331,412 12x12]
+            AXStaticText value="Answer status: Supported" [349,411 53x13]
+            AXStaticText value="Confidence: strong · 1 source" [323,434 141x13]
+            AXStaticText value="Evidence" id=ask.evidence [320,462 64x13]
+            AXStaticText value="(Quoted verbatim from the cited document; no model was consulted.)
+
+Answered from your records — no AI involved. Verify against the cited sources." id=ask.evidence [319,482 476x48]
+              AXStaticText value="(Quoted verbatim from the cited document; no model was consulted.)
+
+Answered from your records — no AI involved. Verify against the cited sources." [319,482 476x48]
+            AXScrollArea id=ask.evidence [319,536 600x19] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXButton desc="Source 1: contract.md. Opens at the quoted passage." help="This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC)." [318,536 87x20] actions=AXPress
+            AXImage desc="Verified" id=ask.evidence [328,566 12x12]
+            AXStaticText value="Supported" id=ask.evidence [346,566 53x13]
+            AXStaticText value="Confidence: strong · Evidence: 1 passage, 1 file · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0" id=ask.evidence [319,589 600x12]
+              AXStaticText value="Confidence: strong · Evidence: 1 passage, 1 file · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0" [319,589 600x12]
+            AXButton desc="Technical details" id=ask.evidence help="Shows how the answer was built and the raw identifiers behind it." [320,608 102x13] actions=AXPress
+            AXImage desc="Warning" id=ask.evidence [320,630 10x9]
+            AXStaticText value="AI-assisted answer — it can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice." id=ask.evidence [336,629 578x26]
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXButton [754,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [49,33 1421x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [245,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [297,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [341,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [377,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Ask" [418,33 1004x52] actions=AXPress
+FOCUSED: AXTextField [487,802 646x16] actions=AXConfirm,AXCancel

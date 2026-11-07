@@ -287,7 +287,7 @@ struct NamedDocumentFocusLedgerTests {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-focus-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("focus.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest else {
             Issue.record("ledger did not boot"); return

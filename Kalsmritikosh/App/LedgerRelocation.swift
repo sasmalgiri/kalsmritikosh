@@ -63,7 +63,8 @@ public enum LedgerRelocation {
         if fm.fileExists(atPath: destDB.path) { throw LedgerRelocationError.destinationHasLedger(destDir) }
         try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
 
-        // 1. Consistent database snapshot.
+        // 1. Consistent database snapshot — after every open studio's pending writes landed (review R5).
+        try await StudioStorage.requireAllSaved()
         try await database.backupSnapshot(to: destDB)
         let copy = try Database(url: destDB, key: database.key)
         let check = try await copy.query("PRAGMA quick_check;", []).first?.string(0) ?? "no result"

@@ -1,0 +1,11 @@
+{
+  "name": "kalsmritikosh-ai-relay",
+  "private": true,
+  "type": "module",
+  "description": "AI Included relay for Investigations Made Easy (Cloudflare Worker). Counts only; no content stored.",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute kals-relay --remote --file=schema.sql"
+  }
+}

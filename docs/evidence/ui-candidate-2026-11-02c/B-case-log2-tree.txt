@@ -1,0 +1,191 @@
+AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x849] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x849]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x725]
+      AXGroup/AXHostingView [0,121 244x725]
+        AXScrollArea [0,121 244x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,801 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x725]
+      AXGroup/AXHostingView [0,121 1470x725]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [265,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Investigator sample case" [331,184 178x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [521,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7abd030690> {pid=3485}" desc="Section" [264,215 1008x24] actions=AXCancel
+          AXRadioButton/AXSegment value="0" desc="Overview" id=doc.text.magnifyingglass [264,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [408,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [552,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="People & interviews" id=person.2 [696,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=archivebox [840,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Chronology & notes" id=calendar.day.timeline.left [984,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="Log & exports" id=square.and.arrow.up [1128,215 144x24] actions=AXPress
+        AXStaticText value="Exported Custody - Investigator sample case.md (SHA-256 2c5d2c82bb67…), recorded." id=case.output.notice [264,247 501x15] actions=AXCancel
+        AXScrollArea [244,273 980x573] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Export" [278,307 43x16]
+          AXStaticText value="Each export is frozen, re-checked against the case's sources and access, scrubbed of protected identities, written, read back and recorded in the case log." [278,325 750x13]
+          AXButton desc="Information about Review, approve, redact and export" id=info.task-review-approve-export help="Shows what this does, what it needs and what follows" [278,351 18x18] actions=AXPress
+          AXButton desc="Case file report…" [304,348 127x24] actions=AXPress
+          AXButton desc="Case log…" [439,348 87x24] actions=AXPress
+          AXButton desc="Exhibit list…" [535,348 96x24] actions=AXPress
+          AXButton desc="Custody report…" [639,348 126x24] actions=AXPress
+          AXStaticText value="Personal data about someone" [278,412 191x16]
+          AXStaticText value="For a data-subject request: everything this case file records about one named person. Documents that mention them are found with Search and the person's dossier." [278,430 797x13]
+          AXStaticText value="Person" [343,457 42x16]
+          AXPopUpButton value="Choose" [393,453 119x24] actions=AXPress
+          AXButton desc="Export…" [586,453 74x24] actions=AXPress
+          AXStaticText value="Case log" [278,517 55x16]
+          AXStaticText value="Every change, view and export, in order. It can't be edited." [278,535 281x13]
+          AXStaticText value="#25" [278,558 19x13]
+          AXStaticText value="2 Nov 2026 at 6:57 PM" [330,558 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,558 92x13]
+          AXStaticText value="exported — custodyReport · file · Custody - Investigator sample case.md · sha256 2c5d2c82bb678f3e" [606,558 494x13]
+          AXStaticText value="#24" [278,581 19x13]
+          AXStaticText value="2 Nov 2026 at 6:57 PM" [330,581 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,581 92x13]
+          AXStaticText value="exported — exhibitList · file · Exhibits - Investigator sample case.csv · sha256 628f530f6bf22cfd" [606,581 466x13]
+          AXStaticText value="#23" [278,604 19x13]
+          AXStaticText value="2 Nov 2026 at 6:57 PM" [330,604 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,604 92x13]
+          AXStaticText value="exported — caseLog · file · Case log - Investigator sample case.csv · sha256 0d77112072d3b6a1" [606,604 464x13]
+          AXStaticText value="#22" [278,627 19x13]
+          AXStaticText value="2 Nov 2026 at 6:57 PM" [330,627 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,627 92x13]
+          AXStaticText value="exported — caseFileReport · file · Case file - Investigator sample case.md · sha256 41f1aa75748be4d5" [606,627 493x13]
+          AXStaticText value="#21" [278,650 19x13]
+          AXStaticText value="2 Nov 2026 at 6:56 PM" [330,650 111x13]
+          AXStaticText value="Shirshendu Sasmal" [478,650 92x13]
+          AXStaticText value="viewed" [606,650 34x13]
+          AXStaticText value="#20" [278,673 19x13]
+          AXStaticText value="2 Nov 2026 at 5:31 PM" [330,673 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,673 92x13]
+          AXStaticText value="exported — redactionLog · file · B08-redaction-log.csv · sha256 c1e8bf47de742c38" [606,673 403x13]
+          AXStaticText value="#19" [278,696 19x13]
+          AXStaticText value="2 Nov 2026 at 5:31 PM" [330,696 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,696 92x13]
+          AXStaticText value="redactionLogged — Signatures: Personal phone number" [606,696 268x13]
+          AXStaticText value="#18" [278,719 19x13]
+          AXStaticText value="2 Nov 2026 at 5:30 PM" [330,719 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,719 92x13]
+          AXStaticText value="exported — holdNotice · file · B07-hold-notice-John-Carter.txt · sha256 c01227bbe8c79c3d" [606,719 444x13]
+          AXStaticText value="#17" [278,742 19x13]
+          AXStaticText value="2 Nov 2026 at 5:28 PM" [330,742 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,742 92x13]
+          AXStaticText value="exported — personDataExport · file · B05-personal-data-John-Carter.md · sha256 f4b5f4a372338a79" [606,742 491x13]
+          AXStaticText value="#16" [278,765 19x13]
+          AXStaticText value="2 Nov 2026 at 5:27 PM" [330,765 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,765 92x13]
+          AXStaticText value="exported — personDataExport · file · Personal data - John Carter.md · sha256 01358df241ef6862" [606,765 469x13]
+          AXStaticText value="#15" [278,788 19x13]
+          AXStaticText value="2 Nov 2026 at 5:25 PM" [330,788 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,788 92x13]
+          AXStaticText value="exported — statement · file · B06-statement-John-Carter.md · sha256 fb78446325e72919" [606,788 436x13]
+          AXStaticText value="#14" [278,811 19x13]
+          AXStaticText value="2 Nov 2026 at 5:24 PM" [330,811 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,811 92x13]
+          AXStaticText value="exported — statement · file · Statement - John Carter.md · sha256 44bfb8caa7d1d2bc" [606,811 415x13]
+          AXStaticText value="#13" [278,834 19x13]
+          AXStaticText value="2 Nov 2026 at 5:20 PM" [330,834 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,834 92x13]
+          AXStaticText value="interviewPlanned" [606,834 83x13]
+          AXStaticText value="#12" [278,857 19x13]
+          AXStaticText value="2 Nov 2026 at 5:16 PM" [330,857 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,857 92x13]
+          AXStaticText value="personAdded — Witness: John Carter" [606,857 180x13]
+          AXStaticText value="#11" [278,880 19x13]
+          AXStaticText value="2 Nov 2026 at 5:13 PM" [330,880 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,880 92x13]
+          AXStaticText value="exported — custodyReport · file · Custody - Investigator sample case.md · sha256 a9674b1837dce325" [606,880 494x13]
+          AXStaticText value="#10" [278,903 19x13]
+          AXStaticText value="2 Nov 2026 at 5:13 PM" [330,903 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,903 92x13]
+          AXStaticText value="exported — exhibitList · file · Exhibits - Investigator sample case.csv · sha256 628f530f6bf22cfd" [606,903 466x13]
+          AXStaticText value="#9" [278,926 13x13]
+          AXStaticText value="2 Nov 2026 at 5:13 PM" [330,926 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,926 92x13]
+          AXStaticText value="exported — caseLog · file · Case log - Investigator sample case.csv · sha256 8c91b6b360d61f94" [606,926 466x13]
+          AXStaticText value="#8" [278,949 13x13]
+          AXStaticText value="2 Nov 2026 at 5:13 PM" [330,949 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,949 92x13]
+          AXStaticText value="exported — caseFileReport · file · Case file - Investigator sample case.md · sha256 867d0edfde2001cd" [606,949 495x13]
+          AXStaticText value="#7" [278,972 13x13]
+          AXStaticText value="2 Nov 2026 at 5:12 PM" [330,972 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,972 92x13]
+          AXStaticText value="viewed" [606,972 34x13]
+          AXStaticText value="#6" [278,995 13x13]
+          AXStaticText value="2 Nov 2026 at 3:53 PM" [330,995 111x13]
+          AXStaticText value="Shirshendu Sasmal" [478,995 92x13]
+          AXStaticText value="exported — custodyReport · file · Custody - Investigator sample case.md · sha256 5872ceffa1d43408" [606,995 490x13]
+          AXStaticText value="#5" [278,1018 13x13]
+          AXStaticText value="2 Nov 2026 at 3:52 PM" [330,1018 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,1018 92x13]
+          AXStaticText value="exported — exhibitList · file · Exhibits - Investigator sample case.csv · sha256 628f530f6bf22cfd" [606,1018 466x13]
+          AXStaticText value="#4" [278,1041 13x13]
+          AXStaticText value="2 Nov 2026 at 3:52 PM" [330,1041 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,1041 92x13]
+          AXStaticText value="exported — caseLog · file · Case log - Investigator sample case.csv · sha256 393fab3c58fba265" [606,1041 464x13]
+          AXStaticText value="#3" [278,1064 13x13]
+          AXStaticText value="2 Nov 2026 at 3:52 PM" [330,1064 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,1064 92x13]
+          AXStaticText value="exported — caseFileReport · file · Case file - Investigator sample case.md · sha256 27dbe75ba10751da" [606,1064 493x13]
+          AXStaticText value="#2" [278,1087 13x13]
+          AXStaticText value="2 Nov 2026 at 3:51 PM" [330,1087 109x13]
+          AXStaticText value="Shirshendu Sasmal" [478,1087 92x13]
+          AXStaticText value="viewed" [606,1087 34x13]
+          AXStaticText value="#1" [278,1110 13x13]
+          AXStaticText value="1 Nov 2026 at 11:12 PM" [330,1110 110x13]
+          AXStaticText value="Shirshendu Sasmal" [478,1110 92x13]
+          AXStaticText value="viewed" [606,1110 34x13]
+          AXScrollBar value="0" [1206,272 19x575]
+            AXValueIndicator value="0" [1215,276 6x362]
+            AXButton/AXIncrementPage [1215,639 6x204] actions=AXPress
+            AXButton/AXDecrementPage [1215,276 6x0] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,857 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,856 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,852 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Investigator sample case" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x849] actions=AXRaise

@@ -50,4 +50,5 @@ public nonisolated enum InvestigationClosureError: Error, Sendable, Equatable {
     case revisionConflict(expected: Int, actual: Int)
     case blankRationale
     case blankActor
+    case findingsNotApproved(UUID)         // the pinned findings run is not this case's approved run
 }

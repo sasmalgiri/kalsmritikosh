@@ -35,16 +35,29 @@ public nonisolated struct CorroborationReading: Sendable, Equatable {
     /// Groups with more than one member — the copies the user should know about.
     public var copyGroups: [[KnowledgeObject.ID]] { groups.filter { $0.count > 1 } }
 
+    /// Explicit counts only (owner decision 2026-11-06): no meter, no "corroborated" verdict word. How many
+    /// documents are cited and how many distinct origins they come from after copies are counted once.
     public var headline: String {
         switch verdict {
         case .none:
             return "No sources cited"
-        case .singleSource:
-            return "Single source — treat this as a lead, not a fact"
-        case .corroborated:
-            return "\(verifiedIndependent) independent sources"
+        case .singleSource, .corroborated:
+            let origins = verifiedIndependent
+            return "\(citedSources) document\(citedSources == 1 ? "" : "s") cited · \(origins) distinct origin\(origins == 1 ? "" : "s") after copies"
         }
     }
+
+    /// Why a count is not an assessment: separate documents can repeat one original account.
+    public var dependenceNote: String {
+        switch verdict {
+        case .none: return "Nothing to check."
+        case .singleSource: return "Everything here comes from one origin, so nothing repeats it independently. Treat it as a lead."
+        case .corroborated: return "Distinct origins are not proven independent: separate documents can still repeat one original account."
+        }
+    }
+
+    /// The review state the count leaves open: counting is never reviewing.
+    public static let reviewState = "Not assessed by you yet — open each source and judge it before relying on it."
 
     public var detail: String {
         var parts: [String] = []

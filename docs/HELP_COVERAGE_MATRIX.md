@@ -1,0 +1,91 @@
+<!-- GENERATED from Kalsmritikosh/UI/Help/HelpRegistry.swift by HelpDocsRenderer; do not edit by hand. Regenerate: HELP_DOCS_WRITE=1 HelpRegistryTests.generatedDocsMatch -->
+# Help coverage matrix
+
+One row per active screen (every sidebar destination), linking its Get started step, its detailed help topic, the critical explanations (ⓘ information buttons reading the registry) on it, its accessibility identifiers for help controls, and the UI journey that verified it on the current code. “gap” means not yet verified through the UI — stated, not hidden.
+
+| Screen | Get started step | Detailed topic(s) | Critical explanations (ⓘ topics) | Accessibility ids | Verified journey |
+|---|---|---|---|---|---|
+| Cases | — | screen-cases, task-statements-and-interviews, task-review-approve-export, task-case-review-and-requests, task-case-map, task-case-map-views, task-case-map-inspector, concept-case-map-legend, task-case-map-reset-view, task-case-changes, task-case-history, task-case-readiness, task-case-map-export, task-case-map-first-use, task-case-map-keyboard, task-case-map-tutorial, task-case-search, task-case-coverage-cost-recovery, trouble-case-map | safety-decisions (Record finding), task-review-approve-export (Export), task-keys-backup-erase (Erase case) | case.output.notice, allegation.link.support, info.safety-decisions, info.task-keys-backup-erase, case.map.list, case.map.inspector, case.map.counts, case.map.returnToCurrent, case.map.showDetails, case.map.legend | ui-journeys-2026-10-30d, -e (case file, evidence links, Open passage, exports, case log) |
+| Home | — | screen-home | — | home.startInvestigation, home.resumeCase, purchase.screen, purchase.strip | ui-journeys-2026-10-31g (first screen; subscription screen leads when nothing is bought) |
+| Workspaces | — | screen-workspaces | — | — | gap |
+| Caseload | — | screen-caseload | — | — | gap |
+| Evidence | step 1 | screen-evidence | — | nav.context, nav.evidence.section | gap |
+| Sources | step 1 | screen-sources, task-import-failures, task-online-ai-helps, task-online-tools, trouble-nothing-found | task-import-failures | sources.* | ui-journeys-2026-10-30d, -e (folder picker reads at once; failed file stays failed; Ready) |
+| Library | step 5 | screen-library | — | — | gap |
+| Completeness | — | screen-completeness | — | — | gap |
+| Live | — | screen-live, trouble-slow | — | — | gap |
+| Search | step 5 | screen-search | — | nav.search.mode, nav.search.scope, nav.search.detail | gap |
+| Ask | step 5 | screen-ask, task-search-and-refusals | task-search-and-refusals | nav.search.mode, nav.search.scope, nav.search.detail, case.ask.open | gap |
+| Outputs | — | screen-outputs | — | nav.context, nav.outputs.section | gap |
+| Answers | step 3 | screen-answers | — | — | gap |
+| Saved | — | screen-saved | — | — | gap |
+| Notebook | — | screen-notebook | — | — | gap |
+| Handoff & Review | — | screen-handoff | — | — | gap |
+| Timeline | — | screen-timeline, task-chronology-and-hypotheses | — | — | gap |
+| History | — | screen-history | — | — | gap |
+| Case Story | — | screen-story | — | — | gap |
+| Dossier | — | screen-dossier | — | — | gap |
+| Explore | — | screen-explore | — | — | gap |
+| Connections | — | screen-connections | — | — | gap |
+| Findings | — | screen-findings, task-evidence-status | — | — | gap |
+| Assertions | — | screen-assertions | — | — | gap |
+| Competing Hypotheses | — | screen-hypotheses | — | ach.* | ui-journeys-2026-10-30d, -e (ACH filed under a case; copy/export recorded) |
+| Review | step 3 | screen-review | — | — | gap |
+| Insights | — | screen-insights | — | — | gap |
+| What Changed | — | screen-changes | — | — | gap |
+| Cross-Doc Matrix | — | screen-matrix | — | — | gap |
+| Compare Documents | — | screen-comparedocs | — | — | gap |
+| Fund Flow | — | screen-fundflow, task-money | — | — | gap |
+| Email Threads | — | screen-emailthreads | — | — | gap |
+| Transcripts | — | screen-transcripts | — | — | gap |
+| Professional Jobs | step 2 | screen-work, get-started, task-protect-source, persona-com-kalsmritikosh-persona-investigator, persona-com-kalsmritikosh-persona-lawyer, persona-com-kalsmritikosh-persona-compliance, persona-com-kalsmritikosh-persona-forensicaccountant, persona-com-kalsmritikosh-persona-siu, persona-com-kalsmritikosh-persona-journalist, persona-com-kalsmritikosh-persona-researcher, persona-com-kalsmritikosh-persona-genealogist, persona-com-kalsmritikosh-persona-individual | task-review-approve-export (Add documents to this case) | jobs.*, result.*, info.task-review-approve-export | ui-journeys-2026-10-30d, -e (start matter, Add documents to this case, run, result, handoff) |
+| Work Center | — | screen-workcenter | — | — | gap |
+| Logs & Trackers | — | screen-registers | — | — | gap |
+| DataLab | — | screen-datalab | — | — | ui-journeys-2026-10-30d (query above the table, unresolved-only, source pane) |
+| Reasoning Studio | — | screen-reasoning | — | — | gap |
+| HR Investigation | — | screen-hrstudio | — | — | gap |
+| Privilege Log | — | screen-privilegestudio | — | — | gap |
+| SIU Report | — | screen-siustudio | — | — | gap |
+| Expert Report | — | screen-fastudio | — | — | gap |
+| Fact-Check | — | screen-jnstudio | — | — | gap |
+| Evidence Review | — | screen-rsstudio | — | — | gap |
+| Proof Argument | — | screen-gnstudio | — | — | gap |
+| Emergency Binder | — | screen-instudio | — | — | gap |
+| Dispute File | — | screen-dsstudio | — | — | gap |
+| Audit | — | screen-audit | — | — | gap |
+| Verify Receipt | — | screen-verifyreceipt | — | — | gap |
+| Authenticity | — | screen-authenticity | — | — | gap |
+| Citations | — | screen-citations | — | — | gap |
+| Redaction | — | screen-redaction | — | — | gap |
+| Convert | — | screen-convert | — | — | gap |
+| Knowledge | — | screen-knowledge, task-people-and-namesakes | task-people-and-namesakes (Unmerge) | info.task-people-and-namesakes | gap |
+| Trends | — | screen-trends | — | — | gap |
+| Freshness | — | screen-freshness | — | — | gap |
+| Query | — | screen-query | — | — | gap |
+| Settings | step 1 | screen-settings, task-core-and-optional-tools, task-private-online, task-ai-included, task-keys-backup-erase, task-support, subscription-plans, subscription-restore-offline, subscription-expiry | task-keys-backup-erase (Your data), subscription-plans (Subscription) | settings.subscription.status, info.subscription-plans | ui-journeys-2026-10-30f (Subscription section, Restore outcome) |
+| Guide | — | screen-guide | — | help.guide, help.search, help.topic.<id>, help.replayTutorial, help.replayMapTutorial, help.replayIntro, help.open.<screen> | gap |
+| More tools | — | screen-moretools, task-find-your-way | — | nav.moreTools, nav.moreTools.<screen> | gap |
+| Constitution | — | screen-sutra | — | — | gap |
+| Compliance Board | — | screen-sopboard | — | — | gap |
+
+## Critical actions and their explanations (§6.8)
+
+| Action | Hover (what it does) | ⓘ topic (prerequisites, consequences) | Where |
+|---|---|---|---|
+| Add documents to this case | scope preview: in scope / new / excluded; nothing added until confirmed | task-review-approve-export, trouble-nothing-found | Professional Jobs |
+| Send (Online) | what is sent, to which host, with which key; bytes; masked details | task-private-online | Outbound consent sheet |
+| Accept shown / Save review | one decision over the shown rows; each row records its own | task-review-approve-export | Job result |
+| Unmerge | splits a merged identity; nothing deleted; recorded | task-people-and-namesakes | Knowledge ▸ Merged |
+| Record finding | re-verifies every link before an adverse finding is written | safety-decisions | Case file ▸ Allegations |
+| Case file report… / Export… | frozen, re-checked, scrubbed, written, read back, recorded | task-review-approve-export | Case file ▸ Export; Job result |
+| Erase case… / Delete All My Data… | fail-closed; holds block; what is not reached | task-keys-backup-erase | Case file; Settings ▸ Your data |
+| Complete backup / recovery key | ledger + originals with SHA-256; key shown once | task-keys-backup-erase | Settings ▸ Your data |
+| Subscribe / Restore purchases / Manage subscription | storefront price and period, trial eligibility, renewal, cancel ≥ a day before | subscription-plans, subscription-restore-offline | Subscription screen; Settings ▸ Subscription |
+
+## Beginner acceptance targets (§6, pilot — not measured yet)
+
+- Open and check the first sample citation within 10 minutes of indexing.
+- Finish a small guided draft/export exercise within 20 minutes.
+- Complete without developer rescue; keyboard and VoiceOver findings recorded.
+
+These are targets for the five-user evaluation on the distribution build; no result is claimed here.

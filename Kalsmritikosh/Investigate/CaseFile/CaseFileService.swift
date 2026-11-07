@@ -37,13 +37,124 @@ public actor CaseFileService {
     private let deadlines: DeadlineRepository
     private let cases: InvestigationCaseRepository
     private let workspaces: WorkspaceRepository
+    /// §2 — the one verifier for case evidence (allegation links, chronology, report items, ACH
+    /// citations, handoffs). Built over the same ledger with the same access policy the studios use.
+    public nonisolated let verifier: CaseEvidenceVerifier
+    /// §3 — the snapshot reads job-result revisions to flag superseded origins.
+    nonisolated let results: JobResultRepository
 
     public init(database: Database, cases: InvestigationCaseRepository, workspaces: WorkspaceRepository) {
-        self.file = CaseFileRepository(database: database)
+        let file = CaseFileRepository(database: database)
+        self.file = file
+        self.results = JobResultRepository(database: database)
         self.tasks = ProfessionalTaskRepository(database: database)
         self.deadlines = DeadlineRepository(database: database)
         self.cases = cases
         self.workspaces = workspaces
+        self.verifier = Self.makeVerifier(database: database, cases: cases, file: file)
+    }
+
+    /// The verifier's dependencies: the case's eligible source versions under the export policy
+    /// (`InvestigationDataLabService.eligibleSourceVersions`, as every studio and export uses), the
+    /// case's documents and their text, the version's blocks, and the live exhibit register.
+    nonisolated static func makeVerifier(database: Database, cases: InvestigationCaseRepository, file: CaseFileRepository) -> CaseEvidenceVerifier {
+        let evidence = EvidenceStore(database: database)
+        let objects = KnowledgeObjectRepository(database: database)
+        let dataLab = InvestigationDataLabService(cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence),
+                                                  datasets: WorkbenchDatasetRepository(database: database), scopes: SensitiveScopeRepository(database: database))
+        return CaseEvidenceVerifier(
+            context: { caseID in
+                guard let record = try? await cases.fetch(caseID: caseID) else { return nil }
+                let access = SensitiveAccessContext(scope: SensitiveScope(workspaceID: record.caseHeader.workspaceID, maximumSensitivity: .restricted,
+                                                                          permitsPrivilegedMaterial: false, purpose: .export))
+                guard let (included, _) = try? await dataLab.eligibleSourceVersions(caseID: caseID, access: access) else { return nil }
+                let versions = Set(included)
+                guard let objectIDs = try? await objects.objectIDs(inSourceVersionIDs: versions),
+                      let names = try? await objects.sourceFilenames(for: objectIDs),
+                      let objectVersions = try? await objects.sourceVersionsByObject(inSourceVersionIDs: versions) else { return nil }
+                return StudioEvidenceContext(
+                    eligibleSourceVersions: versions, caseObjects: objectIDs, documentNames: names, objectVersions: objectVersions,
+                    blockText: { id in
+                        guard let r = try? await database.query("SELECT source_version_id, raw_text FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(id)]).first,
+                              let text = r.string(1) else { return nil }
+                        return (r.uuid(0), text)
+                    },
+                    objectText: { id in (try? await objects.fetchContent(id: id)) ?? nil })
+            },
+            exhibitLive: { caseID, number in
+                ((try? await file.exhibits(caseID: caseID, includeWithdrawn: false)) ?? []).contains { $0.number == number }
+            },
+            blocksForVersion: { version in
+                let rows = (try? await database.query("""
+                    SELECT b.id, b.raw_text, (SELECT o.knowledge_object_id FROM evidence_block_objects o WHERE o.evidence_block_id = b.id LIMIT 1)
+                    FROM evidence_blocks b WHERE b.source_version_id = ? ORDER BY b.ordinal;
+                    """, [.uuid(version)])) ?? []
+                return rows.compactMap { r in r.uuid(0).map { (id: $0, object: r.uuid(2), text: r.string(1) ?? "") } }
+            })
+    }
+
+    // MARK: - §2 — verified evidence
+
+    /// Verify a reference and passage in the case (no write).
+    public func verify(reference: String, passage: StudioEvidenceRef?, caseID: UUID) async -> CaseEvidenceVerification {
+        await verifier.verify(reference: reference, passage: passage, caseID: caseID)
+    }
+
+    /// Link evidence to an allegation THROUGH verification: the passage is checked against the source
+    /// text in this case under the current policy, the result is stored with the link, and a quote
+    /// found in exactly one block is pinned to it. An unverified link is still recorded — labelled
+    /// unverified — because the person may fix or reject it; it is never documentary support.
+    @discardableResult
+    public func linkEvidence(caseID: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance, note: String?,
+                             passage: StudioEvidenceRef? = nil, origin: String? = nil, reviewState: String? = nil, originDigest: String? = nil,
+                             allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> (id: UUID, verification: CaseEvidenceVerification) {
+        let result = await verifier.verify(reference: evidenceRef, passage: passage, caseID: caseID)
+        let id = try await file.addAllegationEvidence(caseID: caseID, allegationID: allegationID, evidenceRef: evidenceRef, label: label, stance: stance, note: note,
+                                                      passage: result.passage ?? passage, origin: origin, support: result.support,
+                                                      reviewState: reviewState, originDigest: originDigest, allowDuplicate: allowDuplicate, actor: actor, at: date)
+        return (id, result)
+    }
+
+    /// Re-verify every live link of a case against the ledger as it is NOW (a source removed from the
+    /// case, a withdrawn exhibit, a changed access label or a re-ingested version changes the stored
+    /// state). Returns the links with their fresh verification.
+    @discardableResult
+    public func reverifyLinks(caseID: UUID, at date: Date = Date()) async throws -> [(link: AllegationEvidence, verification: CaseEvidenceVerification)] {
+        var out: [(AllegationEvidence, CaseEvidenceVerification)] = []
+        for link in try await file.allegationEvidence(caseID: caseID) {
+            let v = await verifier.verify(reference: link.evidenceRef, passage: link.passage, caseID: caseID)
+            try await file.recordVerification(linkID: link.id, caseID: caseID, v, at: date)
+            out.append((link, v))
+        }
+        return out
+    }
+
+    /// Re-verify the chronology entries and report items that carry citations.
+    public func reverifyCarriedItems(caseID: UUID, at date: Date = Date()) async throws {
+        for e in try await file.journal(caseID: caseID) where e.evidenceRef != nil || !e.citations.isEmpty {
+            let primary = e.citations.first ?? StudioEvidenceRef(sourceVersionID: e.evidenceRef.flatMap(UUID.init(uuidString:)), quote: e.quote)
+            let ref = e.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
+            let v = await verifier.verify(reference: ref, passage: primary, caseID: caseID)
+            try await file.recordVerification(journalID: e.id, caseID: caseID, v, at: date)
+        }
+        for i in try await file.reportItems(caseID: caseID) where i.evidenceRef != nil || !i.citations.isEmpty {
+            let primary = i.citations.first ?? StudioEvidenceRef(sourceVersionID: i.evidenceRef.flatMap(UUID.init(uuidString:)), quote: i.quote)
+            let ref = i.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
+            let v = await verifier.verify(reference: ref, passage: primary, caseID: caseID)
+            try await file.recordVerification(reportItemID: i.id, caseID: caseID, v, at: date)
+        }
+    }
+
+    /// Record a disposition. An adverse finding (substantiated) first RE-VERIFIES every link of the
+    /// allegation against the ledger as it is now, so the repository's gate reads fresh states: a
+    /// passage that no longer verifies, a withdrawn exhibit or a source that left the case is not
+    /// documentary support at the moment of decision. An exception waives only the respondent's
+    /// response, never this verification.
+    public func decide(allegationID: UUID, caseID: UUID, disposition: AllegationDisposition, rationale: String?,
+                       exception: String? = nil, actor: String, at date: Date = Date()) async throws {
+        if disposition == .substantiated { try await reverifyLinks(caseID: caseID, at: date) }
+        try await file.decide(allegationID: allegationID, caseID: caseID, disposition: disposition, rationale: rationale,
+                              exception: exception, actor: actor, at: date)
     }
 
     public func caseHeader(_ id: UUID) async throws -> InvestigationCase? { try await cases.fetch(caseID: id)?.caseHeader }

@@ -24,6 +24,9 @@ public struct CitationOpenTarget: Identifiable, Hashable {
     public let url: URL
     public let objectID: UUID
     public let quote: String?
+    /// The exact matched words to mark inside the quoted passage (a screened name, too short to be
+    /// found on its own). Nil: the whole quote is marked.
+    public var focus: String? = nil
 }
 
 /// One chip per distinct cited source, numbered in first-citation order.
@@ -33,6 +36,8 @@ public struct CitationChips: View {
 
     @Environment(AppState.self) private var appState
     @State private var names: [UUID: String] = [:]
+    /// G1 — the passage being added to a case chronology from a chip's menu.
+    @State private var chronologyPassage: ChronologyPassage?
 
     public init(citations: [VerifiedAnswer.Citation],
                 onOpen: @escaping @MainActor (VerifiedAnswer.Citation) -> Void) {
@@ -81,6 +86,13 @@ public struct CitationChips: View {
                                     appState.copyLink(objectID: citation.objectID, quote: citation.snippet)
                                 }
                             }
+                            // G1 — make a chronology entry from this passage, linked to it.
+                            if !citation.snippet.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Button("Add to case chronology…") {
+                                    chronologyPassage = ChronologyPassage(objectID: citation.objectID, quote: citation.snippet)
+                                }
+                                .accessibilityIdentifier("citation.chip.\(index).addToChronology")
+                            }
                         }
                     }
                 }
@@ -88,6 +100,9 @@ public struct CitationChips: View {
             .task(id: sources.map(\.objectID)) {
                 let ids = Set(sources.map(\.objectID))
                 names = (try? await appState.objects?.sourceFilenames(for: ids)) ?? [:]
+            }
+            .sheet(item: $chronologyPassage) { p in
+                AddPassageToChronologySheet(passage: p) { chronologyPassage = nil }
             }
         }
     }
@@ -125,6 +140,74 @@ public enum CitedPassageLocator {
             }
         }
         return nil
+    }
+
+    /// The exact words `focus` (a screened name, phone or address — often shorter than `minimumProbe`)
+    /// where they occur inside the located `quote` passage; else their first occurrence in the text.
+    /// Whitespace- and case-tolerant like `locate`. Nil when the words are not in the text at all.
+    public nonisolated static func locate(focus: String, near quote: String?, in haystack: String) -> NSRange? {
+        let probe = normalize(focus).trimmingCharacters(in: .whitespaces)
+        guard !probe.isEmpty else { return nil }
+        let (normHay, map) = normalizeWithMap(haystack)
+        let passage = quote.flatMap { locate($0, in: haystack) }
+        var first: NSRange?
+        var from = normHay.startIndex
+        while from < normHay.endIndex, let r = normHay.range(of: probe, range: from..<normHay.endIndex) {
+            let lo = normHay.distance(from: normHay.startIndex, to: r.lowerBound)
+            let hi = normHay.distance(from: normHay.startIndex, to: r.upperBound)
+            guard lo < map.count, hi - 1 < map.count, hi > lo else { break }
+            let found = NSRange(location: map[lo].lowerBound, length: map[hi - 1].upperBound - map[lo].lowerBound)
+            guard let passage else { return found }
+            if found.location >= passage.location, NSMaxRange(found) <= NSMaxRange(passage) { return found }
+            if first == nil { first = found }
+            from = r.upperBound
+        }
+        return first
+    }
+
+    /// Candidate UI run (A4) — a contradiction's claim is the ledger's phrasing ("Invoice issued on
+    /// May 30, 2024"), not the source's words, so `locate` finds nothing and the source opened with
+    /// nothing highlighted. This returns the SOURCE's own line that states the claim: the longest
+    /// leading run of the claim's words (at least `minimumProbe` characters) found in the text, widened
+    /// to its line. Nil when not even that is found — the viewer then opens un-highlighted, honestly.
+    public nonisolated static func claimPassage(_ claim: String, in source: String) -> String? {
+        let words = normalize(claim).split(separator: " ")
+        var count = words.count
+        while count > 0 {
+            let probe = words.prefix(count).joined(separator: " ")
+            guard probe.count >= minimumProbe else { break }
+            if let r = locate(probe, in: source), let range = Range(r, in: source) {
+                let start = source[..<range.lowerBound].lastIndex(where: \.isNewline).map { source.index(after: $0) } ?? source.startIndex
+                let end = source[range.upperBound...].firstIndex(where: \.isNewline) ?? source.endIndex
+                let line = source[start..<end].trimmingCharacters(in: .whitespaces)
+                return line.isEmpty ? nil : line
+            }
+            count -= 1
+        }
+        return bestSharedLine(claim, in: source)
+    }
+
+    /// Fallback when no run of the claim's words occurs: the source line sharing the most of the claim's
+    /// words and numbers (numbers compared without leading zeros, so "Apr 8, 2024" meets "08 Apr 2024"),
+    /// at least two of them — "Contract modified on Apr 8, 2024" opens at the e-mail's "Date:" line
+    /// (agent UI run on 82127048). Nil when no line shares two.
+    nonisolated static func bestSharedLine(_ claim: String, in source: String) -> String? {
+        func tokens(_ t: String) -> Set<String> {
+            Set(t.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).compactMap { w -> String? in
+                guard !w.isEmpty else { return nil }
+                if w.allSatisfy(\.isNumber) { let n = w.drop { $0 == "0" }; return n.isEmpty ? "0" : String(n) }
+                return w.count >= 3 && !["the", "and", "for", "was", "were", "with", "from"].contains(w) ? w : nil
+            })
+        }
+        let wanted = tokens(claim)
+        var best: (score: Int, line: String)?
+        for raw in source.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let score = tokens(line).intersection(wanted).count
+            if score >= 2, score > (best?.score ?? 0) { best = (score, line) }
+        }
+        return best?.line
     }
 
     /// Lower-cased, whitespace runs collapsed to one space.
@@ -165,6 +248,8 @@ public enum CitedPassageLocator {
 public struct CitationSourceSheet: View {
     let target: CitationOpenTarget
     let onDone: () -> Void
+    /// G1 — the passage being added to a case chronology from this sheet.
+    @State private var chronologyPassage: ChronologyPassage?
 
     public init(target: CitationOpenTarget, onDone: @escaping () -> Void) {
         self.target = target
@@ -179,6 +264,13 @@ public struct CitationSourceSheet: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
+                if let quote = target.quote, !quote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button("Add to case chronology…") {
+                        chronologyPassage = ChronologyPassage(objectID: target.objectID, quote: quote)
+                    }
+                    .help("Make a chronology entry in a case from this passage, with the passage as its citation.")
+                    .accessibilityIdentifier("citation.source.addToChronology")
+                }
                 Button("Done", action: onDone)
                     .keyboardShortcut(.cancelAction)
             }
@@ -186,14 +278,17 @@ public struct CitationSourceSheet: View {
             Divider()
             // W2-1 — highlights and notes beside the source (never written into it).
             if ProductModuleFlags.isEnabled(.annotations) {
-                AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.quote)
+                AnnotationBar(objectID: target.objectID, sourceURL: target.url, suggestedQuote: target.focus ?? target.quote)
                 Divider()
             }
             if ProductModuleFlags.isEnabled(.notesImport) {
                 NoteLinksStrip(objectID: target.objectID)
             }
-            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
+            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus)
         }
         .frame(minWidth: 640, minHeight: 480)
+        .sheet(item: $chronologyPassage) { p in
+            AddPassageToChronologySheet(passage: p) { chronologyPassage = nil }
+        }
     }
 }

@@ -1,0 +1,293 @@
+AXWindow/AXStandardWindow title="Settings" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField [273,138 1146x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [465,172 760x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Settings" [489,196 102x31]
+          AXStaticText value="Investigations Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced." [489,233 707x26]
+          AXButton desc="Self-check found issues, 13/15 checks · all formats" help="Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds." [488,264 348x26] actions=AXPress
+          AXStaticText value="You" [489,314 24x16]
+          AXTextField [489,336 352x24] actions=AXConfirm
+          AXTextField [849,336 352x24] actions=AXConfirm
+          AXStaticText value="Recorded on every change, decision and export in your cases, and printed on notices and reports." [489,366 472x13]
+          AXDisclosureTriangle value="0" desc="Answering & modes" [466,410 187x16] actions=AXPress
+          AXDisclosureTriangle value="1" desc="Modules" [466,464 113x16] actions=AXPress
+          AXStaticText value="Answers" [491,490 47x14]
+          AXCheckBox value="0" desc="Use AI to write answers" [491,510 163x16] actions=AXPress
+          AXStaticText value="Off — evidence only. Every answer is a value or passage your documents state, with its source, or an honest “the documents don't say”. No AI model is used." [491,532 685x26]
+          AXStaticText value="Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question." [491,591 710x26]
+          AXStaticText value="Answer composition" [491,633 111x14]
+          AXCheckBox value="0" desc="AI writes every answer, When the on-device model is available, compose every grounded answer as fluent prose (not just complex ones). Grounding is preserved — the model rewrites over the verified evidence and citations; if no model is available it falls back to the exact deterministic answer., Not in this version — answers are evidence-only (no AI model)" [491,657 697x59] actions=AXPress
+          AXCheckBox value="1" desc="Actor answers (who did X), Route who-did-this questions to the passage naming the acting party and compose a grounded answer." [491,726 521x31] actions=AXPress
+          AXCheckBox value="0" desc="Let your cloud AI read the documents about a person (Online), Online mode only, off until you turn it on. For a question about one person's proceeding — when they were charged or sentenced, the sentence, the charge, whether they pleaded guilty — up to eight of the documents that name that person (up to 7,000 characters of each) are sent to YOUR cloud AI, through the same preview, consent and masking as every Online request — always previewed, with the provider's retention terms — and the send is recorded. Only to a provider whose terms permit case material (Claude on the commercial API, or a paid Gemini project; not OpenAI in this release), after you confirm your account is on those terms. Privileged material is never sent. The AI proposes an answer with a quote; the app shows it only if that quote is found word for word in that document, is about that person and states the step — otherwise the built-in answer stands. Off: this feature sends no document text. (Online answers, if you turn them on, are a separate switch — what they send is previewed the same way.)" [491,767 710x122] actions=AXPress
+          AXCheckBox value="1" desc="Progressive answer streaming, Render the answer as it forms — instant context, then synthesis, then the verified result." [491,899 446x31] actions=AXPress
+          AXCheckBox value="1" desc="Story review (approve / correct / reject), Let you approve, correct, or reject individual beats of a reconstructed story; rejected beats drop and corrected beats are prioritized when the story is rebuilt." [491,940 705x44] actions=AXPress
+          AXCheckBox value="0" desc="Topic-first composition, Give the model composer the matched topic first, so answers lead with the topic rather than raw facts., Not in this version — answers are evidence-only (no AI model)" [491,994 515x46] actions=AXPress
+          AXCheckBox value="1" desc="Understand any wording of a question, When the built-in rules cannot tell which fact a question asks for (“What did the court rule?”, “Who made the announcement?”), Apple's on-device model picks it from the facts your documents hold — it never writes the answer, which still comes word for word from your documents, and nothing leaves your Mac. In Online mode, a question both miss can go to your own cloud AI with your consent: only the question and the names of the facts are sent, never your documents." [491,1050 706x70] actions=AXPress
+          AXStaticText value="Extraction & search" [491,1136 107x14]
+          AXCheckBox value="1" desc="Read names from authorisation forms, Read the person's name out of a power-of-attorney or authorisation form even when the form is typed in lower case (“I, jane doe having”). Restricted to that exact document phrasing, so ordinary sentences that begin with “I” are never mistaken for a name. Off keeps the stricter rule, which needs the name capitalised." [491,1160 693x57] actions=AXPress
+          AXCheckBox value="1" desc="Story chapters & recorded disagreements, Read back the chapter structure of a reconstructed story, and keep a record of disagreements found between sources so the same contradiction is not rediscovered on every rebuild. Off falls back to an unchaptered list and forgets disagreements between builds." [491,1227 655x44] actions=AXPress
+          AXCheckBox value="1" desc="Whole-document keyword search, Also search each document's full text, not only its individual passages. A phrase whose words fall either side of a passage boundary — a name, an address, a clause — can never match the passage index, because no single passage contains all of it. Runs only when the passage search finds nothing, so precise passage hits still lead." [491,1281 699x57] actions=AXPress
+          AXStaticText value="Import integrity" [491,1354 86x14]
+          AXCheckBox value="1" desc="Record why an import step failed, When a step of an import fails in a way that can be tolerated — an embedding, one file inside a zip, an email attachment — record WHY, so a gap in your library can be explained instead of just being smaller than expected. Off reverts to a log line only, and the import report loses its reasons." [491,1378 698x57] actions=AXPress
+          AXCheckBox value="1" desc="Strict derivation (stop on a failed step), If a file's people-and-organisations step fails, stop processing that file rather than continuing with the steps that depend on it. Off still never produces wrong data — it skips only the dependent step (events) and keeps the text, chunks and facts, so you get a partial file instead of none. Either way nothing incorrect is stored." [491,1445 700x57] actions=AXPress
+          AXCheckBox value="1" desc="Track unfinished imports, Mark each file as fully processed only when every step finished, so an import interrupted by a crash or shutdown can be spotted and finished later. Without it, a half-processed file looks identical to a fully-processed one that simply had little in it." [491,1512 704x44] actions=AXPress
+          AXStaticText value="Knowledge synthesis" [491,1572 116x14]
+          AXCheckBox value="0" desc="AI subject resolution (merge duplicate topics), Before topics are built, the on-device model groups labels that name the same real-world subject (e.g. several copies of one résumé) into a single topic — but only merges when the two share enough evidence terms. Turns document-shaped topics into real-world-subject topics., Not in this version — answers are evidence-only (no AI model)" [491,1596 695x59] actions=AXPress
+          AXCheckBox value="0" desc="AI topic prose, Smooth each topic's fact spine into 2–4 sentences of connected prose with the on-device model, under a fact-preserving guard (never adds/removes a name, number, or date). Off leaves the plain fact list., Not in this version — answers are evidence-only (no AI model)" [491,1665 702x59] actions=AXPress
+          AXCheckBox value="1" desc="Auto-build topics, Rebuild deduplicated, minimized topics automatically while the Mac is idle — no manual button." [491,1734 480x31] actions=AXPress
+          AXCheckBox value="0" desc="Event detail fill (5W+H), Fill missing who/where/when/why/how event details with the on-device model, under a fact-preserving guard., Not in this version — answers are evidence-only (no AI model)" [491,1775 547x46] actions=AXPress
+          AXCheckBox value="1" desc="Group by real-world subject, Find every document that names an identifier — a patent, application, case, contract or registration number — and group topics and histories by that real-world matter instead of by file. One patent’s hearing notice, grant letter, forms and emails become one topic, and its application and patent numbers are recognised as the same matter. Deterministic; nothing is changed or deleted, and off returns to one topic per file." [491,1831 703x57] actions=AXPress
+          AXCheckBox value="1" desc="History at idle, Reconstruct and store per-subject history chapters during idle maintenance." [491,1898 390x31] actions=AXPress
+          AXCheckBox value="0" desc="Plain-document subject binding, Attach facts from plain documents to the subject they name, so prose archives produce subject-scoped answers (not just source-scoped). Off keeps the current, more conservative behaviour." [491,1939 710x44] actions=AXPress
+          AXCheckBox value="1" desc="Summaries at idle, Build per-document and per-community summaries during idle maintenance." [491,1993 391x31] actions=AXPress
+          AXCheckBox value="1" desc="Topic minimization, A topic with too little evidence folds into its closest substantive topic, keeping topics few and meaningful." [491,2034 530x31] actions=AXPress
+          AXStaticText value="Retrieval" [491,2081 48x14]
+          AXCheckBox value="1" desc="Boilerplate embed-skip, Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked." [491,2105 537x31] actions=AXPress
+          AXCheckBox value="1" desc="Corrective re-retrieval, When first-pass evidence is weak, re-retrieve once with expanded terms before answering or abstaining." [491,2146 525x31] actions=AXPress
+          AXCheckBox value="1" desc="Cross-encoder reranking, Reorder retrieved passages with a cross-encoder so the most on-target passage leads. Reorder-only; never drops evidence." [491,2187 620x31] actions=AXPress
+          AXCheckBox value="0" desc="Hypothetical query expansion, On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited., Not in this version — answers are evidence-only (no AI model)" [491,2228 561x46] actions=AXPress
+          AXCheckBox value="1" desc="Import & coverage lifecycle, Show one honest lifecycle state per source (queued / processing / searchable / partial / needs-password / couldn't-read / excluded) and disclose when results may omit a source." [491,2284 678x44] actions=AXPress
+          AXCheckBox value="1" desc="Password-protected files, Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently." [491,2338 701x44] actions=AXPress
+          AXCheckBox value="1" desc="Transcribe audio & video, Turn the words spoken in recordings and videos into text using Apple's on-device speech model, so a recording becomes quotable evidence with timecodes (“the call at 12:04”). Nothing leaves your Mac. It reads what is said — not what a video shows, and not who is speaking — and is as accurate as the recording, so check a quote you rely on against the recording. On by default. Transcription is slow and the first run asks permission and installs Apple's speech model; turn it OFF for faster ingest — audio/video are still kept and searchable by name and date either way. Takes effect on next app launch, for newly-ingested files." [491,2392 710x83] actions=AXPress
+          AXStaticText value="Universality" [491,2491 65x14]
+          AXCheckBox value="1" desc="Ask about any field we found, Let a question reach any field found in your documents, not just the ones built in. Ask “what is the chassis number” and it resolves against the fields actually present in your library — no synonym list to maintain. It can only match a field that genuinely exists, so the worst case is the same honest “not found” you get today. Pairs with “Read labelled fields from any document”: extraction without this fills a library you cannot question." [491,2515 708x70] actions=AXPress
+          AXCheckBox value="1" desc="Group unfamiliar document kinds, Group documents of a kind the app does not have a built-in name for. A vehicle service record, a shipping manifest and a school report are none of the eleven built-in kinds, so today each is filed as “unclassified” and the health panel counts it as a problem. With this on, such a document is grouped by the fields it actually contains, so two service records from different garages land together — without the app inventing a name it cannot justify. Needs “Read labelled fields from any document”." [491,2595 692x70] actions=AXPress
+          AXCheckBox value="0" desc="Read documents no built-in rule recognises, For a document that produced NO details at all — a kind the app has no built-in reader for — let the on-device model name the fields it records (“policy holder”, “cover starts”), then keep only those whose value it can find written in the document itself. The model never supplies a value: anything it cannot point to in your text is discarded, not stored. Runs in the background, only on documents that yielded nothing, and its results are marked so you can always tell them from rule-read details. Off means such documents keep only their searchable text., Not in this version — answers are evidence-only (no AI model)" [491,2675 710x85] actions=AXPress
+          AXCheckBox value="1" desc="Read labelled fields from any document, Pull facts out of any document that states them as a label and a value — “Policy Number: 4471-99812”, “Registration No: MH-12-AB-1234”, “Roll No: 21BCE1043” — no matter what kind of document it is. Until now facts came only from eleven built-in document types (patents, invoices, contracts, medical, property and so on), so a shipping manifest, a car service record or a school report produced searchable text but no structured facts. Fields the built-in types already handle are left to them, so nothing about those changes. Off keeps the built-in types only." [491,2770 710x70] actions=AXPress
+          AXCheckBox value="1" desc="Report what each format can give you, Add a section to the import report saying, per file format, exactly what the app got: full structure, text only, expanded container, held for later, or stored but not interpreted — plus any format it recognises but cannot read. The list is read off the parsers actually loaded for that run, so it cannot claim support that is switched off or absent. Off omits the section rather than showing a hand-written list that may have drifted." [491,2850 707x57] actions=AXPress
+          AXCheckBox value="1" desc="State the English-only limit, Say which languages your documents are in, and state plainly that structured extraction — dates, names, identifiers, labelled fields — is English-only in this version. Non-English documents are still stored in full and searchable by their own words; only the structured layer is missing. Off stays silent, which makes a language limit look like an empty archive." [491,2917 682x57] actions=AXPress
+          AXStaticText value="Connection" [491,3007 63x14]
+          AXRadioGroup value="<AXUIElement 0x798d056010> {pid=45922}" desc="Connection" [491,3027 312x24]
+            AXRadioButton/AXSegment value="1" desc="Private" [491,3027 156x24] actions=AXPress
+            AXRadioButton/AXSegment value="0" desc="Online (your own key)" [647,3027 156x24] actions=AXPress
+          AXStaticText value="Everything happens on this Mac. Nothing is sent anywhere." [491,3057 285x13]
+          AXStaticText value="This app has no network permission (checked from its signature). Online mode uses a separate helper that Private mode never starts." [492,3076 676x13]
+          AXStaticText value="Features" [491,3105 48x14]
+          AXCheckBox value="0" desc="Show preview features, Features that are built but not yet verified on real data or hardware (team review, places, iPhone/iPad snapshot). Use them knowing they may change." [491,3129 680x44] actions=AXPress
+          AXStaticText value="Email evidence" [491,3183 75x13]
+          AXCheckBox value="0" desc="Deleted email recovery, Finds deleted mail that is still present: files in Deleted Items / Trash / Bin folders and messages whose headers mark them deleted or trashed. Shown as recovered and partial, never mixed with live mail. Carving unlisted messages out of Outlook/Notes free space is not included., Off: Only live mail is read." [491,3206 705x59] actions=AXPress
+          AXCheckBox value="0" desc="Email authenticity checks, Checks DKIM and ARC signatures and S/MIME, and reads hidden time values in message identifiers. No internet lookups: keys come from the message or from you., Off: Emails are read as before; no authenticity result." [491,3275 703x59] actions=AXPress
+          AXCheckBox value="0" desc="Outlook PST reader (MS-PST), Reads Outlook PST and OST files by Microsoft's published format: every folder, message, recipient and attachment., Off: The current PST reader is used." [491,3344 579x46] actions=AXPress
+          AXCheckBox value="1" desc="Who talks to whom, A communication graph with message counts and volume over time, and a marker on any reply whose original message is not in your archive., Off: Threads only." [491,3400 701x46] actions=AXPress
+          AXStaticText value="Evidence & proof" [491,3456 86x13]
+          AXCheckBox value="0" desc="Accuracy on your archive, The app tests itself with questions whose answers your ledger already proves, plus questions it must refuse, and shows a personal accuracy score; displayed confidence is tuned to that score., Off: No self-test runs; confidence uses the built-in scale." [491,3479 700x59] actions=AXPress
+          AXCheckBox value="0" desc="Corroboration meter, Beside each claim, how many INDEPENDENT sources support it. Copies and forwards of one message count once; a claim with a single source is marked as a lead, not a fact., Off: Citations only." [491,3548 710x59] actions=AXPress
+          AXCheckBox value="0" desc="How this answer was found, For every answer, which kinds of search ran, what each found, what the evidence check kept or dropped and why, and how many AI calls were used., Off: The answer and its citations only." [491,3617 682x59] actions=AXPress
+          AXCheckBox value="0" desc="Look for contradicting evidence, Before an answer is shown, the app searches your archive for evidence against it and reports either the conflict, with both sources, or how many sources it checked., Off: Contradictions are shown only when they are found during the normal search." [491,3686 691x59] actions=AXPress
+          AXCheckBox value="0" desc="Proof bundles, Export an answer as one signed file with every quote, its exact location and the fingerprint of each source. Anyone can check it offline with the included verifier page, without this app., Off: Answers export as before, without a bundle." [491,3755 710x59] actions=AXPress
+          AXCheckBox value="0" desc="Signed import and export receipts, Every import and export ends in a receipt listing what was read or written with its hashes, signed with this Mac's key so a changed byte or a different signer fails verification., Off: Unsigned receipts as before." [491,3824 697x59] actions=AXPress
+          AXStaticText value="Integration" [491,3893 55x13]
+          AXCheckBox value="1" desc="Command palette, Reach every screen and main action from one search box (⌘K); press ? for the list of keyboard shortcuts. This existed before the module matrix, so it is on by default., Off: Menus and toolbar only; ⌘K does nothing." [491,3916 683x59] actions=AXPress
+          AXCheckBox value="1" desc="Import a DEVONthink database, Read the files stored in a DEVONthink database in place, keeping its groups as collections and its tags. Nothing is written into the database., Off: DEVONthink databases are not recognised." [491,3985 695x46] actions=AXPress
+          AXCheckBox value="1" desc="Send to DEVONthink, Send an answer to DEVONthink as a Markdown note with a link back to each quoted passage; when DEVONthink is not installed the note is shown in Finder., Off: Not offered." [491,4041 691x59] actions=AXPress
+          AXStaticText value="Investigation" [491,4110 65x13]
+          AXCheckBox value="0" desc="Alerts, Tells you when a new document contradicts what the ledger said, fills or opens a gap, or mentions someone you watch., Off: No alerts; contradictions still appear in answers." [491,4133 595x46] actions=AXPress
+          AXCheckBox value="0" desc="As of a date, Ask again using only evidence whose file date is on or before a chosen day, and see which later documents changed the answer. Later material cannot enter the evidence or the citations., Off: Answers always use all evidence." [491,4189 710x59] actions=AXPress
+          AXCheckBox value="0" desc="How an account changed, For one person, line up everything they said or wrote about a topic in date order and flag where dates, amounts, who was present or denials changed, with both quotes., Off: Contradictions between documents only." [491,4258 698x59] actions=AXPress
+          AXCheckBox value="0" desc="Living dossiers, A profile per person or organisation that updates after each import, with 'what changed since you last looked'., Off: Dossiers are built when opened, without the since-last-time strip." [491,4327 551x46] actions=AXPress
+          AXCheckBox value="0" desc="Places (preview), Photo locations and addresses found in documents: a list with coordinates and an offline plot on a latitude/longitude grid. Nothing is looked up online; in Online mode a place can be handed to Apple Maps., Off: Not shown., Preview — not yet verified; turn on “Show preview features” to try it" [491,4383 710x74] actions=AXPress
+          AXCheckBox value="0" desc="Similar images, Find copies and crops of a photo across your archive, on this Mac. Face grouping is not part of this version., Off: Images are searchable by their text only." [491,4467 539x46] actions=AXPress
+          AXCheckBox value="0" desc="Watch a question, Pin a question; after each import it is asked again and you are told when the answer, its sources or a contradiction changes, with the old and new answers., Off: Pinned questions are kept but not re-asked." [491,4523 700x59] actions=AXPress
+          AXCheckBox value="1" desc="Watchlists, Paste or import a list of names, phone numbers and email addresses and screen it against the whole archive or one case: per term, the documents and mentions found as a named entity (including other spellings) or as words in the text, the terms with no match, a passage per document that opens its source, and a CSV export., Off: Lists are kept but not matched." [491,4592 700x72] actions=AXPress
+          AXCheckBox value="0" desc="What is missing, Shows items your documents imply should exist but are absent: a missing number in a series, a missing month, a reply to an email you do not have, a referenced attachment. Each gap states the pattern behind it and is never presented as fact., Off: The existing Insights gap list stays; the grouped map and per-answer gaps are hidden." [491,4674 703x59] actions=AXPress
+          AXCheckBox value="0" desc="What to read first, A score per document and person from contradictions, watchlist matches, failed authenticity checks and recency. Every point of the score is explained., Off: No score., Requires “Review coding”" [491,4743 690x74] actions=AXPress
+          AXStaticText value="Legal" [491,4827 27x13]
+          AXCheckBox value="0" desc="Issues and chronology, Tag facts and events with the issues of a matter, read the chronology by issue and draft a statement of facts or deposition outline in which every sentence is cited., Off: Chronology without issues." [491,4850 691x59] actions=AXPress
+          AXCheckBox value="0" desc="Production sets, Bates-numbered PDFs, Concordance/Relativity load files and legal holds that block removal., Off: Exports without Bates numbers or load files. Existing holds still block removal." [491,4919 465x46] actions=AXPress
+          AXCheckBox value="0" desc="Review coding, Mark documents responsive, privileged or hot; suggestions learn from your choices and show why. Suggestions never change the evidence., Off: No coding." [491,4975 695x46] actions=AXPress
+          AXStaticText value="Online (your own key)" [491,5031 109x13]
+          AXCheckBox value="0" desc="Answers with your own cloud AI key, Use Claude, OpenAI or Gemini with your own key. You see exactly what will be sent before it goes, every send is logged, and answers pass the same evidence check as private ones., Off: All answers are made on your Mac., Needs Online mode" [491,5054 709x74] actions=AXPress
+          AXCheckBox value="0" desc="Mask personal details before sending, Before anything goes online, names, emails, phone numbers, addresses, ID and account numbers are replaced with placeholders; the answer is restored on your Mac., Off: Passages are sent unmasked, still previewed first., Needs Online mode" [491,5138 703x74] actions=AXPress
+          AXCheckBox value="0" desc="Send the least data, Answers the ledger can give without AI never go online; for the rest, a daily limit on bytes sent (lower it to zero to send nothing), with every send measured and logged., Off: Online answers send the passages the question needs, still previewed and logged; no daily limit., Needs Online mode" [491,5222 693x74] actions=AXPress
+          AXStaticText value="Personas" [491,5306 46x13]
+          AXCheckBox value="0" desc="Content creator persona, The Content creator persona and its Publish Package studio. The app is for investigation documentation; the creator's pre-publish disclosure check now lives in Compliance (Endorsement & disclosure review)., Off: The persona and its studio are hidden; saved publish packages are kept and return when this is turned on." [491,5329 703x59] actions=AXPress
+          AXStaticText value="Search & organise" [491,5398 91x13]
+          AXCheckBox value="0" desc="Near-duplicates, Links drafts, forwards and re-saved copies as versions of one another. Nothing is merged or deleted., Off: Exact duplicates only." [491,5421 507x46] actions=AXPress
+          AXCheckBox value="0" desc="Search coverage badge, Under every result list: which fields matched and how much of the archive was searchable for this query, naming any source still being indexed., Off: Results only; coverage is still recorded." [491,5477 641x59] actions=AXPress
+          AXStaticText value="Sharing" [491,5546 39x13]
+          AXCheckBox value="0" desc="Signed case slices, Share a redacted, signed, read-only part of a case as one file that another Mac can open and verify. No server., Off: Work products export as documents only." [491,5569 553x46] actions=AXPress
+          AXCheckBox value="0" desc="Team review over a shared folder (preview), Reviewers work on one case through a shared folder with signed logs; tampering is reported at the exact entry. No server., Off: Single-user cases., Not part of this version (single-user)" [491,5625 607x61] actions=AXPress
+          AXStaticText value="Storage" [491,5696 39x13]
+          AXCheckBox value="0" desc="Import queue, See pending, running and finished imports; pause, resume, stop one source or reorder. Resuming never processes a record twice., Off: Imports run in the order added, with progress in the toolbar." [491,5719 646x46] actions=AXPress
+          AXCheckBox value="0" desc="Very large items, A message or record larger than the per-record budget is read by byte range: only its leading part is decoded (memory stays flat), indexed with the exact byte range and marked partial, instead of being recorded as failed., Off: Very large items are recorded as too large." [491,5775 692x59] actions=AXPress
+          AXStaticText value="Writing" [491,5844 36x13]
+          AXCheckBox value="0" desc="Briefings, FAQs and mind maps, One-click briefing, FAQ and mind map built from the ledger (no AI writes them), and a spoken briefing read by your Mac's own voice. The cited chronology is in Issues and chronology., Off: Not offered." [491,5867 710x59] actions=AXPress
+          AXCheckBox value="0" desc="Fact-check my writing, Write or paste a draft and each sentence is checked against your evidence after you pause: supported (with the source), contradicted (with the conflicting sentence) or unsupported., Off: The fact-check tool is hidden." [491,5936 697x59] actions=AXPress
+          AXStaticText value="Also in DEVONthink — off until you turn them on" [491,6005 240x13]
+          AXStaticText value="Investigations Made Easy works beside DEVONthink. These features overlap with what DEVONthink already does, so they start switched off; turn on any you want here too." [491,6028 694x26]
+          AXButton desc="Use on its own: turn all of these on" help="For using Investigations Made Easy without DEVONthink. Switches on every feature in this list; nothing else changes, and you can turn any of them off again." [491,6065 202x20] actions=AXPress
+          AXCheckBox value="1" desc="Advanced search syntax, AND, OR, NOT, "exact phrase", NEAR/5, wildcards and field filters such as from:, date:, type:, tag: and entity:. An operator the app does not understand is reported, never silently treated as a word., Off: Plain keyword search, as before." [491,6094 695x59] actions=AXPress
+          AXCheckBox value="0" desc="Ask from anywhere, A menu-bar panel reachable from any app: ask or search, and the answer opens in the main window with its sources. (A system-wide keyboard shortcut would need Accessibility permission, which the app does not request.), Off: Ask from the main window only." [491,6163 710x59] actions=AXPress
+          AXCheckBox value="1" desc="Highlights and notes, Highlight and annotate any passage. Notes are stored beside the source, never written into it, and count as your own confirmed or corrected evidence., Off: Highlights are hidden but kept." [491,6232 651x59] actions=AXPress
+          AXCheckBox value="0" desc="Import notes apps, Read Obsidian vaults (links between notes become relations), Notion exports and notes exported from Apple Notes., Off: These folders import as plain files." [491,6301 579x46] actions=AXPress
+          AXCheckBox value="0" desc="Improved text recognition, Reads scanned PDF pages at 300 dpi instead of 144, re-reads earlier scans once on request (keeping the earlier reading if the new one is worse), shows scans whose recognised text is thin, and saves searchable PDF copies., Off: The current text recognition." [491,6357 686x59] actions=AXPress
+          AXCheckBox value="0" desc="Links to passages (kalsmritikosh://), Copy a link to a document, an exact passage, a citation or a saved answer and paste it into any app; opening it jumps to that place, or says plainly that it is no longer in this archive., Off: Links are not offered; existing links show a 'links are off' message." [491,6426 691x59] actions=AXPress
+          AXCheckBox value="0" desc="Lock with Touch ID, Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. This controls who can open the app; separately, the ledger database is always encrypted on disk (AES-256, key in this Mac's Keychain), and copies of original files in the evidence vault are protected by FileVault., Off: No app lock; the Mac's own login protects the data." [491,6495 710x72] actions=AXPress
+          AXCheckBox value="0" desc="More export formats, mbox, EML, MSG, PDF, TIFF, CSV, Word, Markdown, JSON and HTML, with a check before export and resume after interruption., Off: The current export formats." [491,6577 634x46] actions=AXPress
+          AXCheckBox value="0" desc="More file types, Reads Messages history, Safari and Chrome history, PowerPoint 97–2003 (.ppt) and Keynote text (partial). Takes effect the next time the app starts., Off: These files are kept but not read." [491,6633 682x59] actions=AXPress
+          AXCheckBox value="0" desc="Move the ledger to another disk, Copy the ledger to an external disk, verify the copy by hash, then use it from there; the app says clearly when the disk is not connected., Off: Boot uses the copy on this Mac; a copy on another disk is left in place." [491,6702 676x46] actions=AXPress
+          AXCheckBox value="0" desc="Rich text notes and PDF marks, Write notes in rich text as well as Markdown, and highlight, underline, strike out or comment on PDFs. Marks are kept beside the PDF — the original file is never changed — and you can export an annotated copy., Off: Rich notes and PDF marks are hidden but kept." [491,6758 694x59] actions=AXPress
+          AXCheckBox value="0" desc="See Also and filing suggestions, For any document: the documents most like it, and the groups and tags it most resembles, computed on this Mac from the documents' own meaning. Suggestions only — nothing is filed until you choose., Off: No suggestions; groups and tags work as before., Requires “Your own folders”" [491,6827 696x74] actions=AXPress
+          AXCheckBox value="0" desc="Share and capture, “Save to Investigations Made Easy” in the Share menu and the Services menu: files, selected text (from Safari, Mail or any app) and web addresses go into the intake with a custody record. Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that. File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad., Off: Add files from inside the app only." [491,6911 699x72] actions=AXPress
+          AXCheckBox value="0" desc="Shortcuts actions, Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app or the command line, and ask, search, add files and open links from AppleScript., Off: Actions refuse with a message to turn them on." [491,6993 689x59] actions=AXPress
+          AXCheckBox value="0" desc="Show in Spotlight, Make document titles and summaries findable from Spotlight. This copies that text into macOS's own search index, so it is off by default., Off: Nothing is given to Spotlight, and any earlier entries are removed." [491,7062 681x46] actions=AXPress
+          AXCheckBox value="0" desc="Smart collections and rules, Saved searches that stay up to date, and rules such as 'when a document from this sender arrives, tag it'. Rules show a dry run first., Off: Saved searches run only when opened; rules do not run." [491,7118 658x46] actions=AXPress
+          AXCheckBox value="0" desc="Sync through a folder, Keep your notes, tags, groups, highlights, PDF marks and the files you added inside the app in step between your Macs and your iPhone or iPad, through a folder you choose (iCloud Drive, Dropbox, a shared or USB disk). Everything in the folder is encrypted with a passphrase you set; the app itself makes no connection — the folder's own service moves the files., Off: Nothing is written to or read from the sync folder; everything stays on this Mac." [491,7174 701x72] actions=AXPress
+          AXCheckBox value="1" desc="Tags, Tag documents, facts and entities; use a tag as a search or question scope. Tags are your organisation only — they never change what the evidence says., Off: Tags are hidden but kept; turning this back on restores them." [491,7256 689x59] actions=AXPress
+          AXCheckBox value="0" desc="Timeline and relationship views, An interactive timeline and a graph of people and organisations; every point and line opens its evidence., Off: Lists only." [491,7325 523x46] actions=AXPress
+          AXCheckBox value="0" desc="Your own folders, Arrange documents in groups and sub-groups of your own. One document can sit in several groups at once without being copied. Search or ask inside a group with group:Name. Optionally build groups from a source folder's sub-folders — files on disk are never moved., Off: Groups are hidden but kept, with their members." [491,7381 698x59] actions=AXPress
+          AXCheckBox value="0" desc="Your own notes, Write and edit notes in Markdown inside the app. Each note is read into your archive like any document, so you can search it and ask about it. Every save keeps the earlier version, which you can restore., Off: Notes are hidden but kept, with their versions; what the archive learned from them stays." [491,7450 705x59] actions=AXPress
+          AXCheckBox value="0" desc="Your own record types, Define types such as 'Contract: parties, value, start date'. Fields fill from your documents where the value is written, and show where it was found., Off: Types are kept but not filled." [491,7519 674x59] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Privacy" [466,7613 106x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Background maintenance" [466,7668 222x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Ingest options" [466,7724 153x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Subscription" [466,7778 143x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Your data" [466,7833 119x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Help & feedback" [466,7887 167x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Legal & privacy" [466,7941 155x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Advanced, Answering depth and diagnostics — power users only. The app works fully without touching these." [466,8017 534x33] actions=AXPress
+            AXImage desc="Wrench And Screwdriver Crossed" id=wrench.and.screwdriver [502,8026 16x16]
+            AXStaticText value="Advanced" [527,8017 71x19]
+            AXStaticText value="Answering depth and diagnostics — power users only. The app works fully without touching these." [527,8037 473x13]
+          AXScrollBar value="0" [1207,171 19x672]
+            AXValueIndicator value="0" [1216,175 6x56]
+            AXButton/AXIncrementPage [1216,231 6x607] actions=AXPress
+            AXButton/AXDecrementPage [1216,175 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Settings" [345,33 1077x52] actions=AXPress
+  AXSheet [355,190 760x530] actions=AXRaise
+    AXGroup/AXHostingView [355,190 760x530]
+      AXStaticText value="Who talks to whom" [371,208 136x19]
+      AXRadioGroup value="<AXUIElement 0x798d0541b0> {pid=45922}" desc="Show" id=communication.lane [828,206 262x24]
+        AXRadioButton/AXSegment value="1" desc="Email" [828,206 131x24] actions=AXPress
+        AXRadioButton/AXSegment value="0" desc="Calls & messages" [959,206 131x24] actions=AXPress
+      AXGroup desc="Emails per month" [371,240 728x140]
+        AXUnknown desc="2024-01" [371,240 179x122]
+        AXUnknown desc="2024-04" [550,240 179x122]
+        AXUnknown desc="2024-05" [729,240 179x122]
+        AXUnknown desc="2024-06" [908,240 179x122]
+      AXStaticText value="Most frequent sender → recipient" [371,390 168x13]
+      AXStaticText value="Replies whose original is missing (0)" [741,390 183x13]
+      AXScrollArea [371,409 358x261] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXOutline [371,409 358x261]
+          AXRow/AXOutlineRow [371,419 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+            AXCell [381,419 338x24]
+              AXStaticText value="ar@supplier-abc.com → ap@northwind.example" [387,424 230x13]
+              AXStaticText value="2" [706,424 6x13]
+          AXRow/AXOutlineRow [371,443 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+            AXCell [381,443 338x24]
+              AXStaticText value="maria.lopez@supplier-abc.com → john.carter@northwind.example" [387,448 311x13]
+              AXStaticText value="2" [706,448 6x13]
+          AXRow/AXOutlineRow [371,467 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+            AXCell [381,467 338x24]
+              AXStaticText value="john.carter@northwind.example → maria.lopez@supplier-abc.com" [387,472 311x13]
+              AXStaticText value="1" [706,472 6x13]
+          AXRow/AXOutlineRow [371,491 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+            AXCell [381,491 338x24]
+              AXStaticText value="maria.lopez@supplier-abc.com → program-office@northwind.example" [387,496 306x13]
+              AXStaticText value="1" [706,496 6x13]
+          AXRow/AXOutlineRow [371,515 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+            AXCell [381,515 338x24]
+              AXStaticText value="program-office@northwind.example → program-leads@northwind.example" [387,520 311x13]
+              AXStaticText value="1" [706,520 6x13]
+          AXColumn id=ListColumn [381,409 338x261]
+      AXScrollArea [741,409 358x261] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXOutline [741,409 358x261]
+          AXColumn id=ListColumn [751,409 338x261]
+      AXButton desc="Done" [1043,680 56x24] actions=AXPress
+AXSheet [355,190 760x530] actions=AXRaise
+  AXGroup/AXHostingView [355,190 760x530]
+    AXStaticText value="Who talks to whom" [371,208 136x19]
+    AXRadioGroup value="<AXUIElement 0x798d0541b0> {pid=45922}" desc="Show" id=communication.lane [828,206 262x24]
+      AXRadioButton/AXSegment value="1" desc="Email" [828,206 131x24] actions=AXPress
+      AXRadioButton/AXSegment value="0" desc="Calls & messages" [959,206 131x24] actions=AXPress
+    AXGroup desc="Emails per month" [371,240 728x140]
+      AXUnknown desc="2024-01" [371,240 179x122]
+      AXUnknown desc="2024-04" [550,240 179x122]
+      AXUnknown desc="2024-05" [729,240 179x122]
+      AXUnknown desc="2024-06" [908,240 179x122]
+    AXStaticText value="Most frequent sender → recipient" [371,390 168x13]
+    AXStaticText value="Replies whose original is missing (0)" [741,390 183x13]
+    AXScrollArea [371,409 358x261] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXOutline [371,409 358x261]
+        AXRow/AXOutlineRow [371,419 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+          AXCell [381,419 338x24]
+            AXStaticText value="ar@supplier-abc.com → ap@northwind.example" [387,424 230x13]
+            AXStaticText value="2" [706,424 6x13]
+        AXRow/AXOutlineRow [371,443 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+          AXCell [381,443 338x24]
+            AXStaticText value="maria.lopez@supplier-abc.com → john.carter@northwind.example" [387,448 311x13]
+            AXStaticText value="2" [706,448 6x13]
+        AXRow/AXOutlineRow [371,467 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+          AXCell [381,467 338x24]
+            AXStaticText value="john.carter@northwind.example → maria.lopez@supplier-abc.com" [387,472 311x13]
+            AXStaticText value="1" [706,472 6x13]
+        AXRow/AXOutlineRow [371,491 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+          AXCell [381,491 338x24]
+            AXStaticText value="maria.lopez@supplier-abc.com → program-office@northwind.example" [387,496 306x13]
+            AXStaticText value="1" [706,496 6x13]
+        AXRow/AXOutlineRow [371,515 358x24] actions=AXShowDefaultUI,AXShowAlternateUI
+          AXCell [381,515 338x24]
+            AXStaticText value="program-office@northwind.example → program-leads@northwind.example" [387,520 311x13]
+            AXStaticText value="1" [706,520 6x13]
+        AXColumn id=ListColumn [381,409 338x261]
+    AXScrollArea [741,409 358x261] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+      AXOutline [741,409 358x261]
+        AXColumn id=ListColumn [751,409 338x261]
+    AXButton desc="Done" [1043,680 56x24] actions=AXPress
+FOCUSED: AXSheet [355,190 760x530] actions=AXRaise

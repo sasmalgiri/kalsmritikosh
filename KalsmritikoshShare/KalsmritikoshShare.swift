@@ -25,7 +25,7 @@ enum ShareInboxWire {
     static let appGroup = "6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh"
     static let inboxFolder = "Inbox"
     static let itemFile = "item.json"
-    /// Mirrored by the app from the "Share and capture" module switch.
+    /// Mirrored by the app: Share-menu capture is core unless the person switched it off.
     static let enabledKey = "kalsmritikosh.share.enabled"
 }
 
@@ -60,7 +60,7 @@ final class ShareViewController: NSViewController {
     private func run() async {
         let defaults = UserDefaults(suiteName: ShareInboxWire.appGroup)
         guard defaults?.bool(forKey: ShareInboxWire.enabledKey) == true else {
-            await finish("“Share and capture” is switched off. Turn it on in Investigations Made Easy ▸ Settings ▸ Modules.", error: true)
+            await finish("Saving from other apps is switched off. Open Investigations Made Easy once, or turn “Import from iPhone or iPad” on in Settings ▸ Modules.", error: true)
             return
         }
         guard let inbox = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: ShareInboxWire.appGroup)?

@@ -79,9 +79,15 @@ public actor SmartCollectionsRepository {
 // MARK: - Running
 
 extension AppState {
+    /// Rules (the optional part of W3-5): nil while "Automatic rules" is off, so no rule runs.
     var smartCollections: SmartCollectionsRepository? {
         guard ProductModuleFlags.isEnabled(.smartCollections), let database else { return nil }
         return SmartCollectionsRepository(database: database)
+    }
+
+    /// Saved searches — core since 2026-11-06: available with every module off.
+    var savedSearches: SmartCollectionsRepository? {
+        database.map { SmartCollectionsRepository(database: $0) }
     }
 
     /// Documents matching a saved query (all of them, or only those added since `since`).
@@ -143,14 +149,22 @@ struct SmartCollectionsView: View {
     @State private var ruleValue = ""
     @State private var dryRun: (query: String, count: Int, sample: [String])?
 
+    private var rulesOn: Bool { ProductModuleFlags.isEnabled(.smartCollections) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Smart collections and rules").font(.title3.bold())
+            Text(rulesOn ? "Saved searches and rules" : "Saved searches").font(.title3.bold())
             Text("Use the search syntax, e.g. `type:email org:acme after:2024-01-01 \"invoice\"`.")
                 .font(.caption).foregroundStyle(.secondary)
-            HSplitView {
-                collectionsPane.frame(minWidth: 320)
-                rulesPane.frame(minWidth: 320)
+            if rulesOn {
+                HSplitView {
+                    collectionsPane.frame(minWidth: 320)
+                    rulesPane.frame(minWidth: 320)
+                }
+            } else {
+                collectionsPane
+                Text("Rules that tag or alert on new documents come with “Automatic rules” in Settings ▸ Modules.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
@@ -167,7 +181,7 @@ struct SmartCollectionsView: View {
 
     private var collectionsPane: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Collections").font(.headline)
+            Text("Saved searches").font(.headline)
             List(collections, selection: Binding(get: { selected?.id }, set: { id in
                 selected = collections.first { $0.id == id }
                 Task { await loadMembers() }
@@ -181,7 +195,7 @@ struct SmartCollectionsView: View {
                     Text(counts[c.id].map(String.init) ?? "…").monospacedDigit().foregroundStyle(.secondary)
                 }
                 .tag(c.id)
-                .contextMenu { Button("Remove collection") { Task { try? await appState.smartCollections?.retire(c.id); await reload() } } }
+                .contextMenu { Button("Remove saved search") { Task { await removeCollection(c.id) } } }
             }
             .frame(minHeight: 160)
             if !members.isEmpty {
@@ -190,10 +204,14 @@ struct SmartCollectionsView: View {
             }
             TextField("Name", text: $newName)
             TextField("Search", text: $newQuery)
-            Button("Save collection") {
+            Button("Save search") {
                 Task {
-                    try? await appState.smartCollections?.create(name: newName, query: newQuery)
-                    newName = ""; newQuery = ""
+                    do {
+                        try await appState.savedSearches?.create(name: newName, query: newQuery)
+                        newName = ""; newQuery = ""
+                    } catch {
+                        KalsmritikoshLog.app.error("Saved search not saved: \(error.localizedDescription, privacy: .public)")
+                    }
                     await reload()
                 }
             }
@@ -256,10 +274,16 @@ struct SmartCollectionsView: View {
         .padding(.leading, 6)
     }
 
+    private func removeCollection(_ id: UUID) async {
+        do { try await appState.savedSearches?.retire(id) }
+        catch { KalsmritikoshLog.app.error("Saved search not removed: \(error.localizedDescription, privacy: .public)") }
+        await reload()
+    }
+
     private func reload() async {
-        guard let repo = appState.smartCollections else { return }
+        guard let repo = appState.savedSearches else { return }
         collections = (try? await repo.all()) ?? []
-        rules = (try? await repo.rules()) ?? []
+        rules = rulesOn ? ((try? await repo.rules()) ?? []) : []
         var c: [UUID: Int] = [:]
         for col in collections { c[col.id] = await appState.documentsMatching(col.query).count }
         counts = c

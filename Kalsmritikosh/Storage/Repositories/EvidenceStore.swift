@@ -590,6 +590,33 @@ public actor EvidenceStore: EvidenceBlockResolving {
         return out
     }
 
+    /// Candidate UI run (B35/B36) — the DOCUMENT each source version is: its recorded file name, or
+    /// the last path component of its original location when only a placeholder name was migrated.
+    /// Versions with neither map to nothing (the citation keeps its unresolved/unnamed rendering).
+    public func sourceNames(forSourceVersionIDs ids: Set<UUID>) async throws -> [UUID: String] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [UUID: String] = [:]
+        let all = Array(ids)
+        for chunk in stride(from: 0, to: all.count, by: 500).map({ Array(all[$0..<min($0 + 500, all.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT id, filename, original_url FROM source_versions WHERE id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows {
+                guard let id = r.uuid(0) else { continue }
+                let filename = (r.string(1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !filename.isEmpty, filename != "legacy-source" {
+                    out[id] = filename
+                } else if let url = r.string(2), !url.isEmpty {
+                    let last = URL(fileURLWithPath: url).lastPathComponent
+                    let name = last.isEmpty ? (URL(string: url)?.lastPathComponent ?? url) : last
+                    if !name.isEmpty { out[id] = name }
+                }
+            }
+        }
+        return out
+    }
+
     /// A content hash is accepted only as a 64-char hex SHA-256 (case/space-insensitive input),
     /// returned lowercase. Anything else → nil (treated as "no recorded hash").
     nonisolated static func normalizedSHA256(_ raw: String) -> String? {

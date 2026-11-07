@@ -1,0 +1,137 @@
+AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField value="was invoice 432 paid" [273,138 1121x16] actions=AXConfirm,AXCancel
+        AXButton desc="Clear" [1405,139 13x13] actions=AXCancel,AXPress
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [241,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Investigator sample case" [307,184 178x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [497,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7cff43c690> {pid=45922}" desc="Section" [240,215 1008x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Overview" id=doc.text.magnifyingglass [240,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [384,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [528,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="People & interviews" id=person.2 [672,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=archivebox [816,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Chronology & notes" id=calendar.day.timeline.left [960,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Log & exports" id=square.and.arrow.up [1104,215 144x24] actions=AXPress
+        AXScrollArea [220,250 980x592] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Next steps" [254,284 69x16]
+          AXStaticText value="From what this case holds now. They suggest; you decide." [254,302 281x13]
+          AXStaticText value="Rate the complaint and decide whether to investigate, decline or refer it." [277,325 437x16]
+          AXStaticText value="Overview" [1121,328 45x13]
+          AXStaticText value="Stage" [254,381 38x16]
+          AXStaticText value="Move the case along. Closing is a recorded decision below." [254,399 284x13]
+          AXStaticText value="Stage: Intake" [254,424 47x19]
+          AXTextField [309,422 260x24] actions=AXConfirm
+          AXButton desc="Move to Triage" [577,422 114x24] actions=AXPress
+          AXStaticText value="Triage" [254,486 41x16]
+          AXStaticText value="Rate it and decide whether to investigate. Declining or referring needs a reason." [254,504 385x13]
+          AXStaticText value="Severity" [322,531 49x16]
+          AXPopUpButton value="Not rated" [380,527 105x24] actions=AXPress
+          AXTextField [254,561 912x24] actions=AXConfirm
+          AXStaticText value="Decision" [312,599 52x16]
+          AXPopUpButton value="Not decided" [373,595 122x24] actions=AXPress
+          AXTextField [254,629 912x24] actions=AXConfirm
+          AXButton desc="Record triage" [1060,663 106x24] actions=AXPress
+          AXStaticText value="Who is working on it" [254,727 130x16]
+          AXTextField [254,753 912x24] actions=AXConfirm
+          AXTextField [254,787 912x24] actions=AXConfirm
+          AXTextField [254,821 912x24] actions=AXConfirm
+          AXStaticText value="Intake" [254,885 40x16]
+          AXStaticText value="Received" [254,913 55x16]
+          AXDateTimeArea value="2026-10-30 04:02:25 +0000" [317,911 95x20] actions=AXIncrement,AXDecrement
+            AXIncrementor value="0.5" [399,910 20x20] actions=AXIncrement,AXDecrement
+              AXButton/AXIncrementArrow [399,910 20x10] actions=AXPress
+              AXButton/AXDecrementArrow [399,920 20x10] actions=AXPress
+          AXStaticText value="Channel" [312,945 49x16]
+          AXPopUpButton value="Other" [370,941 125x24] actions=AXPress
+          AXCheckBox value="0" desc="Anonymous" [254,975 92x16] actions=AXPress
+          AXTextField [254,1001 912x24] actions=AXConfirm
+          AXTextField [254,1035 912x24] actions=AXConfirm
+          AXTextField [254,1069 912x24] actions=AXConfirm
+          AXTextField [254,1103 912x24] actions=AXConfirm
+          AXTextField [254,1137 912x24] actions=AXConfirm
+          AXTextField [254,1171 912x24] actions=AXConfirm
+          AXStaticText value="Retention" [254,1235 63x16]
+          AXStaticText value="When the review date passes the case shows in Cases for review. Nothing is deleted automatically." [254,1253 476x13]
+          AXTextField [254,1276 912x24] actions=AXConfirm
+          AXCheckBox value="0" desc="Review date" [254,1310 94x16] actions=AXPress
+          AXButton desc="Save" [1126,1353 53x24] actions=AXPress
+          AXStaticText value="Conflict-of-interest check" [254,1402 169x16]
+          AXStaticText value="Compares the investigator and anyone they declare a relationship with against the people in this case. A match is recorded; a person may waive it with a reason." [254,1420 772x13]
+          AXTextField [254,1444 912x24] actions=AXConfirm
+          AXTextField [254,1478 912x24] actions=AXConfirm
+          AXButton desc="Run check for Shirshendu Sasmal" [939,1512 227x24] actions=AXPress
+          AXStaticText value="Close the case" [254,1575 94x16]
+          AXStaticText value="A recorded decision with your reasons and anything left unresolved. It is sealed with the case scope." [254,1593 485x13]
+          AXTextField [254,1617 912x40] actions=AXConfirm
+          AXTextField [254,1667 912x24] actions=AXConfirm
+          AXButton value="Unavailable: A closing rationale is required." desc="Close case" help="Type it in “Closing rationale”." [1075,1701 90x24] actions=AXPress
+          AXStaticText value="Erase this case" [254,1764 97x16]
+          AXStaticText value="Removes everything recorded for this case — its work, notes, results and history — and keeps only a record that it was erased (who, when, why; never the content). A legal hold refuses it. Documents another case or workspace uses are always kept." [254,1782 901x26]
+          AXTextField [254,1819 912x24] actions=AXConfirm
+          AXTextField [254,1853 912x24] actions=AXConfirm
+          AXCheckBox value="0" desc="Also erase the documents only this case uses" [254,1886 297x16] actions=AXPress
+          AXButton desc="Information about Encryption, backup, recovery key, erasure and holds" id=info.task-keys-backup-erase help="Shows what this does, what it needs and what follows" [1039,1916 18x18] actions=AXPress
+          AXButton value="Unavailable: A reason for the erasure is required." desc="Erase case…" help="Type the reason first; a legal basis is optional." [1065,1913 100x24] actions=AXPress
+          AXScrollBar value="0" [1182,249 19x594]
+            AXValueIndicator value="0" [1191,253 6x200]
+            AXButton/AXIncrementPage [1191,453 6x385] actions=AXPress
+            AXButton/AXDecrementPage [1191,253 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Investigator sample case" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x845] actions=AXRaise

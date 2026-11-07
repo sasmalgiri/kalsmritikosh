@@ -398,12 +398,17 @@ public struct NotebookView: View {
     /// files when KnowledgeObjectRepository can map them.
     private func exportReport(for inv: Investigation) async {
         let builder = InvestigationReportBuilder()
-        let markdown = await builder.render(
+        let rendered = await builder.render(
             investigation: inv,
             objects: appState.objects
         )
         await MainActor.run {
             #if canImport(AppKit)
+            let markdown: String
+            switch ProtectedExport.prepare(rendered) {
+            case .success(let safe): markdown = safe
+            case .failure(let refusal): refusal.present(); return
+            }
             let savePanel = NSSavePanel()
             savePanel.title = "Save investigation report"
             savePanel.nameFieldStringValue = Self.suggestedFilename(for: inv)

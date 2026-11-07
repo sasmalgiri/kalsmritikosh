@@ -175,6 +175,10 @@ public actor IngestCoordinator {
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
+    /// Consecutive failed reads after which a folder pass stops re-reading an unchanged file (N8).
+    nonisolated static let passiveRereadLimit = 3
+    /// Set by Sources ▸ Read again for its own ingest: re-read whatever the failure streak.
+    @TaskLocal nonisolated static var explicitReread = false
     /// A2 §7.6 — parent→child source provenance (email→attachment, …). nil =
     /// relations not recorded.
     private let sourceRelations: SourceRelationsRepository?
@@ -1473,8 +1477,18 @@ public actor IngestCoordinator {
            universalExecutor.registry.plugin(for: type)?.executionMode != .immediate {
             return skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
         }
-        // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser.
-        guard handle.shouldProcess else {
+        // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser. Except an
+        // unchanged file whose last read FAILED: it is read again (the failure may have been the Mac's
+        // state — text recognition under load — not the file), so "Read again" and a re-import work.
+        // N8 — bounded: a folder pass re-reads such a file while it has failed fewer than
+        // `passiveRereadLimit` times in a row (so a permanently unreadable file is not re-OCR'd on every
+        // pass); Sources ▸ Read again (`explicitReread`) always tries.
+        var rereadFailed = false
+        if handle.outcome == .unchanged, !isMember, await ingestAttempts?.lastProcessingFailed(url: url) == true {
+            let streak = await ingestAttempts?.failureStreak(url: url) ?? 0
+            rereadFailed = Self.explicitReread || streak < Self.passiveRereadLimit
+        }
+        guard handle.shouldProcess || rereadFailed else {
             let status: IngestAttemptsRepository.Status =
                 handle.outcome == .moved ? .moved : (handle.outcome == .aliased ? .aliased : .unchanged)
             return skipResult(status, stage: "intake", detail: "\(handle.outcome.rawValue) — parsing skipped")
@@ -2823,7 +2837,14 @@ public actor IngestCoordinator {
                 sourceObjectID: object.id,
                 entityIDs: extractedEntities.map(\.id)
             )
-            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents).map { event in
+            // The steps of a proceeding against a person named in the document (charged, pleaded
+            // guilty, sentenced …), dated as the document dates them (closed-case simulation 2026-10-26).
+            let proceedingEvents = ProceedingEventExtractor.extract(
+                text: object.content,
+                sourceObjectID: object.id,
+                people: extractedEntities.filter { $0.kind == .person }.map { (name: $0.value, entityID: $0.id) }
+            )
+            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents + proceedingEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             })
             // P1.2 — a failed event INSERT loses dated evidence silently, so

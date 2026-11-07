@@ -37,6 +37,11 @@ struct CaseBenchRunner {
         /// Generations that returned text while this question was answered, per provider ID —
         /// the proof of which model (if any) wrote the answer.
         let aiCalls: [String: Int]
+        /// The question as the app answered it, when it was rewritten (normalised or canonical form).
+        var resolved: String? = nil
+        /// Which path wrote the answer (VerifiedAnswerComposer.writer): "ai-verified", "needs-review",
+        /// "ai-not-stated", "rules-ai-failed" or "rules".
+        var writer: String? = nil
     }
     struct CaseResult: Encodable {
         let `case`: String; let source: String
@@ -58,6 +63,41 @@ struct CaseBenchRunner {
         let findingsSections: Int; let findingsClaims: Int; let findingsCitations: Int
         let findingsCitationsInScope: Int; let findingsText: String
         let error: String?
+        /// P3 — the case contradiction check: every contradiction in scope with both quotes, its kind and
+        /// how it was found, and what the check cost.
+        var contradictionList: [ContradictionLine] = []
+        var contradictionCheck: ContradictionCheck? = nil
+        /// P5 — the case drafts (rules; the AI reading too when a key is given): chronology, cast,
+        /// gaps and leads, with what verified, what was dropped and what it cost.
+        var drafts: DraftsResult? = nil
+    }
+    struct DraftsResult: Encodable {
+        struct Item: Encodable { let date: String; let what: String; let who: String?; let quote: String; let doc: String; let provenance: String }
+        struct Member: Encodable { let name: String; let kind: String; let role: String; let group: String; let documents: Int; let quote: String?; let provenance: String? }
+        struct Lead: Encodable { let source: String; let notEstablished: String; let records: String; let quote: String; let doc: String; let otherQuote: String? }
+        let timeline: [Item]; let cast: [Member]; let leads: [Lead]
+        let documents: Int; let readerAvailable: Bool; let verified: Int; let agreedWithRules: Int; let dropped: Int
+        let droppedReasons: [String]; let calls: Int; let roleBatches: Int; let roleReadings: Int; let failedCalls: Int
+        let passagesSent: Int; let deniedForCloud: Int; let notSent: String?
+        /// Why each failed reader call failed, and why each role reading was dropped.
+        var failures: [String] = []
+        var roleDropped: [String] = []
+        /// The interview plan drafted for each of the case's subjects (rules).
+        struct Question: Encodable { let question: String; let quote: String; let doc: String; let basis: String; let otherQuote: String? }
+        struct Interview: Encodable { let person: String; let questions: [Question] }
+        var interviews: [Interview] = []
+    }
+    struct ContradictionLine: Encodable {
+        let kind: String; let provenance: String; let description: String
+        let quoteA: String; let docA: String; let quoteB: String; let docB: String
+    }
+    struct ContradictionCheck: Encodable {
+        let documents: Int; let rules: Int; let ai: Int; let aiDropped: Int; let aiAgreedWithRules: Int
+        let calls: Int; let failedCalls: Int; let passagesSent: Int; let deniedForCloud: Int
+        let notSent: String?; let claimLinks: Int
+        /// Why each AI pair was dropped (with what it proposed) and why each failed call failed.
+        var droppedReasons: [String] = []
+        var failures: [String] = []
     }
     struct ShardSummary: Encodable {
         let shard: String; let cases: Int; let ingestSeconds: Double; let embedSeconds: Double
@@ -69,15 +109,105 @@ struct CaseBenchRunner {
         /// Model calls by purpose over the whole shard (ingest and asking) — which features spend
         /// the on-device model.
         let modelCallsByPurpose: [String: Int]
+        /// The cloud readers the run installed (CASEBENCH_CLOUD_KEY_FILE) with their model, the calls each
+        /// made, and the failures each met, in the provider's words. Empty: no cloud reader.
+        var cloudModel: String? = nil
+        var cloudReaders: [String: CloudReaderUse] = [:]
+        /// One line for the run footer: which readers ran and what each did.
+        var cloudSummary: String { Self.cloudSummary(model: cloudModel, readers: cloudReaders) }
+
+        static func cloudSummary(model: String?, readers: [String: CloudReaderUse]) -> String {
+            guard let model else { return "cloud readers: none" }
+            let used = readers.filter { $0.value.calls > 0 }.sorted { $0.key < $1.key }
+            guard !used.isEmpty else { return "cloud readers (\(model)): installed, no calls made" }
+            return "cloud readers (\(model)): " + used.map { "\($0.key) \($0.value.calls) call(s)" + ($0.value.failed > 0 ? " (\($0.value.failed) failed: \($0.value.failures.first ?? "?"))" : "") }
+                .joined(separator: ", ")
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case shard, cases, ingestSeconds, embedSeconds, askSeconds, control, aiModel, modulesOn, modelCallsByPurpose, cloudModel, cloudReaders, cloudSummary
+        }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(shard, forKey: .shard); try c.encode(cases, forKey: .cases)
+            try c.encode(ingestSeconds, forKey: .ingestSeconds); try c.encode(embedSeconds, forKey: .embedSeconds)
+            try c.encode(askSeconds, forKey: .askSeconds); try c.encodeIfPresent(control, forKey: .control)
+            try c.encodeIfPresent(aiModel, forKey: .aiModel); try c.encode(modulesOn, forKey: .modulesOn)
+            try c.encode(modelCallsByPurpose, forKey: .modelCallsByPurpose); try c.encodeIfPresent(cloudModel, forKey: .cloudModel)
+            try c.encode(cloudReaders, forKey: .cloudReaders); try c.encode(cloudSummary, forKey: .cloudSummary)
+        }
+    }
+    struct CloudReaderUse: Encodable, Equatable {
+        var calls = 0
+        var failed = 0
+        var failures: [String] = []
     }
 
-    static var env: [String: String] { ProcessInfo.processInfo.environment }
+    /// The run's settings: the process environment, or — for a bundled pack run — the pack's
+    /// settings (`BundledPack.overrides`), which stand in for the TEST_RUNNER_* variables.
+    static var env: [String: String] { ProcessInfo.processInfo.environment.merging(BundledPack.overrides) { _, pack in pack } }
+
+    /// A bundled pack (`scripts/casebench/pack_local.py`): the shards and settings of one bench run,
+    /// packed into a single JSON resource because the sandboxed Xcode test host can read neither
+    /// ~/CaseBench nor TEST_RUNNER_* variables. Materialised into the temporary folder and run
+    /// exactly as an environment-driven run; each shard result is attached to the test result.
+    enum BundledPack {
+        nonisolated(unsafe) static var overrides: [String: String] = [:]
+        struct File: Decodable { let name: String; let b64: String }
+        struct Case: Decodable { let `case`: String; let files: [File] }
+        struct Shard: Decodable { let name: String; let truth: String; let cases: [Case] }
+        struct Pack: Decodable { let set: String; let env: [String: String]; let shards: [Shard] }
+
+        static func url() -> URL? {
+            let bundle = Bundle(for: Marker.self)
+            if let u = bundle.url(forResource: "casebench-pack", withExtension: "json") { return u }
+            guard let root = bundle.resourceURL, let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
+            while let u = e.nextObject() as? URL { if u.lastPathComponent == "casebench-pack.json" { return u } }
+            return nil
+        }
+
+        /// Materialise the pack: returns the cases root and the results folder.
+        static func materialise(_ packURL: URL) throws -> (cases: URL, results: URL, set: String, shards: Int) {
+            let pack = try JSONDecoder().decode(Pack.self, from: Data(contentsOf: packURL))
+            let base = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-pack-\(UUID().uuidString)", isDirectory: true)
+            let cases = base.appendingPathComponent("cases", isDirectory: true), results = base.appendingPathComponent("results", isDirectory: true)
+            try FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
+            for s in pack.shards {
+                let dir = cases.appendingPathComponent(s.name, isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try s.truth.write(to: dir.appendingPathComponent("truth.jsonl"), atomically: true, encoding: .utf8)
+                for c in s.cases {
+                    let folder = dir.appendingPathComponent(c.case, isDirectory: true)
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    for f in c.files { try (Data(base64Encoded: f.b64) ?? Data()).write(to: folder.appendingPathComponent(f.name)) }
+                }
+            }
+            overrides = pack.env
+            return (cases, results, pack.set, pack.shards.count)
+        }
+    }
+    private final class Marker {}
 
     @Test("Run every shard under CASEBENCH_DIR")
     func runShards() async throws {
-        guard let root = Self.env["CASEBENCH_DIR"] else { return }   // owner-run only
-        let out = URL(fileURLWithPath: Self.env["CASEBENCH_OUT"] ?? root + "/../results", isDirectory: true)
+        var bundled: (cases: URL, results: URL, set: String, shards: Int)?
+        if ProcessInfo.processInfo.environment["CASEBENCH_DIR"] == nil, let pack = BundledPack.url() {
+            bundled = try BundledPack.materialise(pack)
+        }
+        defer { if let b = bundled { try? FileManager.default.removeItem(at: b.cases.deletingLastPathComponent()) } }
+        guard let root = bundled?.cases.path ?? Self.env["CASEBENCH_DIR"] else { return }   // owner-run only
+        let out = bundled?.results ?? URL(fileURLWithPath: Self.env["CASEBENCH_OUT"] ?? root + "/../results", isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        defer {
+            // A bundled run hands its results back through the test result (the sandboxed host's
+            // folders are not readable from outside): one attachment per shard.
+            if let b = bundled, let files = try? FileManager.default.contentsOfDirectory(at: out, includingPropertiesForKeys: nil) {
+                for f in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) where f.pathExtension == "jsonl" {
+                    if let data = try? Data(contentsOf: f) { Attachment.record(data, named: f.lastPathComponent) }
+                }
+                Attachment.record(Data("set: \(b.set)\nshards: \(b.shards)\nsettings: \(BundledPack.overrides.sorted { $0.key < $1.key })\n".utf8), named: "MEASUREMENT-pack.txt")
+            }
+        }
         let maxShards = Int(Self.env["CASEBENCH_MAX_SHARDS"] ?? "") ?? .max
         let embed = Self.env["CASEBENCH_EMBED"] != "0"
         let askEvery = max(1, Int(Self.env["CASEBENCH_ASK_EVERY"] ?? "") ?? 1)
@@ -137,7 +267,7 @@ struct CaseBenchRunner {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("casebench-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("bench.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             Issue.record("ledger did not boot for \(name)"); return
@@ -166,7 +296,10 @@ struct CaseBenchRunner {
                     if let v = r.sourceVersionID { versionsByCase[line.case, default: []].append(v) }
                     filesByCase[line.case, default: []].append(r.fileRecord.id)
                     docsByCase[line.case, default: []].append(.init(doc: file.lastPathComponent, chunks: r.chunkCount,
-                        entities: r.entityCount, events: r.eventCount, seconds: Date().timeIntervalSince(s), error: nil))
+                        entities: r.entityCount, events: r.eventCount, seconds: Date().timeIntervalSince(s),
+                        // A file the pipeline could not read returns (it is recorded under Needs attention)
+                        // rather than throwing; the bench reports it as an error, never as a 0-chunk success.
+                        error: r.processingStatus == .failed ? "failed: \(r.processingDetail ?? "no reason recorded")" : nil))
                 } catch {
                     docsByCase[line.case, default: []].append(.init(doc: file.lastPathComponent, chunks: 0, entities: 0,
                         events: 0, seconds: Date().timeIntervalSince(s), error: String(describing: error)))
@@ -184,23 +317,87 @@ struct CaseBenchRunner {
         if embed { await ingest.drainEmbeddingsNow() }
         let embedSeconds = Date().timeIntervalSince(t1)
 
+        // The gap layer the app builds on its idle pass, built now so an opened case can show it
+        // (closed-case simulation 2026-10-26: without it every case reported 0 gaps).
+        if workflowEvery > 0 { _ = await state.scanForGaps() }
+
         // 2. Ask each case's questions over the whole shard's ledger (an archive holds many cases).
         let brain = await state.brain
+        var cloudModel: String?
+        await BenchClaude.Usage.shared.resetReaders()
+        // CASEBENCH_CLOUD_KEY_FILE — the cloud step of the understanding cascade, measured with the
+        // owner's Claude key (read from a file outside the repo; the app itself reaches the cloud only
+        // through its network helper, which a test host does not have). The question's wording goes to
+        // the interpreter and rewriter; the retrieved passages go to the record extractor and the verified
+        // answer composer, whose every claim is checked against its passage. Without a key the readers
+        // the app installed at boot stand (no Online provider here → nothing is sent, evidence-only).
+        if let keyFile = Self.env["CASEBENCH_CLOUD_KEY_FILE"],
+           let key = try? String(contentsOfFile: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
+            let model = Self.env["CASEBENCH_CLOUD_MODEL"] ?? "claude-opus-5"
+            func asks(_ reader: String) -> @Sendable (String) async throws -> String {
+                { prompt in try await BenchClaude.send(prompt, key: key, model: model, reader: reader) }
+            }
+            // Verified record extraction reads the person's documents — a stronger reader than the
+            // question rewriter; every answer it proposes is checked verbatim against the documents.
+            let extractModel = Self.env["CASEBENCH_CLOUD_EXTRACT_MODEL"] ?? "claude-opus-5"
+            // Each document reader is counted under its own name (the run footer lists them).
+            func reads(_ reader: String, _ maxTokens: Int) -> @Sendable (String, CloudSourceClearance?) async throws -> String {
+                { prompt, _ in try await BenchClaude.send(prompt, key: key, model: extractModel, maxTokens: maxTokens, reader: reader) }
+            }
+            // P1 — the verified answer composer reads the retrieved passages with the same model; every
+            // claim it writes is checked against its passage. One reader set for the archive brain and,
+            // through the app's holder, for every case-scoped brain.
+            let baseReaders = CloudReaders(
+                interpreterCloud: CloudQuestionInterpreter(generate: asks("questionInterpreter")),
+                rewriterCloud: CloudQuestionRewriter(generate: asks("questionRewriter")),
+                recordExtractor: VerifiedRecordExtractor(generate: reads("recordExtractor", 600)),
+                answerComposer: VerifiedAnswerComposer(generate: reads("answerComposer", 1_500)),
+                // P3 — the case contradiction check reads the case's cleared passages with the same model.
+                contradictionReader: CaseContradictionReader(generate: reads("contradictionReader", 1_500)),
+                modelsAllowedOverride: true)
+            var readers = baseReaders
+            // P4/P5 — the role reader and the case drafts read the case's cleared passages with the same model.
+            readers.roleReader = VerifiedRoleReader(generate: reads("roleReader", 800))
+            readers.draftReader = CaseDraftReader(generate: reads("draftReader", CaseDraftBuilder.readerReplyTokens))
+            // Plan A — questions inside a case: the whole case read with the same model, through the app's
+            // own case-reading request (cache breakpoint, effort, usage). The bench allows the permission.
+            readers.caseReader = CaseReader { send in try await BenchClaude.readCase(send, key: key, model: extractModel) }
+            await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }
+            cloudModel = extractModel == model ? model : "\(model) (questions), \(extractModel) (documents)"
+            state.cloudReaderHolder.set(readers)
+            await brain.setCloudReaders(readers)
+        }
+        // Plan A — CASEBENCH_CASE_READER_REPLAY: a JSON file {question: recorded reply} replayed as the
+        // whole-case reader (no network, no API spend); questions inside a case then take the whole-case
+        // path. The permission sheet is answered "Allow" for the bench.
+        if let replayFile = Self.env["CASEBENCH_CASE_READER_REPLAY"],
+           let data = FileManager.default.contents(atPath: replayFile),
+           let recorded = try? JSONDecoder().decode([String: String].self, from: data) {
+            var readers = state.cloudReaderHolder.current
+            readers.caseReader = Self.replayReader(recorded)
+            readers.modelsAllowedOverride = true
+            state.cloudReaderHolder.set(readers)
+            await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }
+        }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         func ask(_ id: String, _ q: String) async -> AnswerResult {
             let s = Date()
             let before = await LLMCallCounters.shared.snapshot().completedByProvider
+            let claudeBefore = await BenchClaude.Usage.shared.calls
             let a = await brain.answer(question: q, access: access)
+            let claudeCalls = await BenchClaude.Usage.shared.calls - claudeBefore
             let after = await LLMCallCounters.shared.snapshot().completedByProvider
-            let calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
+            var calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
                 let d = kv.value - (before[kv.key] ?? 0)
                 if d > 0 { out[kv.key] = d }
             }
+            if claudeCalls > 0 { calls["claude"] = claudeCalls }
             return AnswerResult(id: id, q: q, body: a.body, refused: a.refused, refusal: a.refusalReason,
                                 cited: a.citations.map { caseOfObject[$0.objectID] ?? "?" },
                                 snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
                                 confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s),
-                                aiCalls: calls)
+                                aiCalls: calls, resolved: a.resolvedQuestion == q ? nil : a.resolvedQuestion,
+                                writer: VerifiedAnswerComposer.writer(of: a))
         }
         var lines: [String] = []
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -247,7 +444,8 @@ struct CaseBenchRunner {
         let summary = ShardSummary(shard: name, cases: truth.count, ingestSeconds: ingestSeconds, embedSeconds: embedSeconds,
                                    askSeconds: Date().timeIntervalSince(t2), control: control, aiModel: aiModel,
                                    modulesOn: KnowledgeModule.allCases.filter { KnowledgeModuleFlags.isEnabled($0) }.count + ProductModule.allCases.filter { ProductModuleFlags.isEnabled($0) }.count,
-                                   modelCallsByPurpose: await LLMCallCounters.shared.snapshot().byPurpose)
+                                   modelCallsByPurpose: await LLMCallCounters.shared.snapshot().byPurpose,
+                                   cloudModel: cloudModel, cloudReaders: await BenchClaude.Usage.shared.readers)
         lines.append(String(decoding: try enc.encode(["summary": summary]), as: UTF8.self))
         try (lines.joined(separator: "\n") + "\n").write(to: target, atomically: true, encoding: .utf8)
     }
@@ -293,15 +491,53 @@ struct CaseBenchRunner {
             var asked: [AnswerResult] = []
             for q in line.questions {
                 let s = Date()
+                // Real model calls for in-case answers too (the case-scoped brain gets the same readers).
+                let before = await LLMCallCounters.shared.snapshot().completedByProvider
+                let claudeBefore = await BenchClaude.Usage.shared.calls
                 let a = try await answersService.answer(caseID: c.id, question: q.q, access: access).verified
+                let claudeCalls = await BenchClaude.Usage.shared.calls - claudeBefore
+                let after = await LLMCallCounters.shared.snapshot().completedByProvider
+                var calls = after.compactMapValues { $0 }.reduce(into: [String: Int]()) { out, kv in
+                    let d = kv.value - (before[kv.key] ?? 0)
+                    if d > 0 { out[kv.key] = d }
+                }
+                if claudeCalls > 0 { calls["claude"] = claudeCalls }
                 asked.append(AnswerResult(id: q.id, q: q.q, body: a.body, refused: a.refused, refusal: a.refusalReason,
                                           cited: a.citations.map { caseOf[$0.objectID] ?? "?" },
                                           snippets: a.citations.prefix(5).map { String($0.snippet.prefix(300)) },
-                                          confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s), aiCalls: [:]))
+                                          confidence: String(describing: a.confidence), seconds: Date().timeIntervalSince(s), aiCalls: calls,
+                                          writer: VerifiedAnswerComposer.writer(of: a)))
             }
             let manifest = try await custody.manifest(caseID: c.id)
-            let contradictions = try await cg.contradictions(caseID: c.id).count
+            // P3 — the case's own contradiction check (rules; the cloud reader too when a key is given),
+            // run before the findings so their conflicts section reflects it.
+            let check = try await cg.findContradictions(caseID: c.id, at: now)
+            let inScope = try await cg.contradictions(caseID: c.id)
+            let contradictions = inScope.count
+            let contradictionList = inScope.map { item -> ContradictionLine in
+                let x = item.contradiction
+                return ContradictionLine(kind: CaseContradictionFinder.kindLabel(of: x) ?? x.kind.rawValue,
+                                         provenance: CaseContradictionFinder.provenance(of: x)?.rawValue ?? "archive-scan",
+                                         description: x.description,
+                                         quoteA: x.claimA, docA: x.evidenceA.flatMap { caseOf[$0] } ?? "?",
+                                         quoteB: x.claimB, docB: x.evidenceB.flatMap { caseOf[$0] } ?? "?")
+            }
             let gaps = try await cg.gaps(caseID: c.id).count
+            // P5 — the case drafts, after the contradiction check (its rows feed the leads). With a key the
+            // bench reader drafts too (the readers above); without one the rules alone.
+            let d = try await cg.buildDrafts(caseID: c.id, useAI: true)
+            let drafts = DraftsResult(
+                timeline: d.timeline.map { .init(date: $0.dateText, what: $0.what, who: $0.who, quote: $0.quote, doc: caseOf[$0.objectID] ?? "?", provenance: $0.provenance.rawValue) },
+                cast: d.cast.map { .init(name: $0.name, kind: $0.kind.rawValue, role: $0.roleLabel, group: $0.group.rawValue, documents: $0.documentCount,
+                                         quote: $0.roleQuote, provenance: $0.roleProvenance?.rawValue) },
+                leads: d.leads.map { .init(source: $0.source.rawValue, notEstablished: $0.notEstablished, records: $0.records, quote: $0.quote,
+                                           doc: caseOf[$0.objectID] ?? "?", otherQuote: $0.otherQuote) },
+                documents: d.documents, readerAvailable: d.readerAvailable, verified: d.verified, agreedWithRules: d.agreedWithRules,
+                dropped: d.dropped.count, droppedReasons: Array(d.dropped.prefix(40)), calls: d.calls, roleBatches: d.roleBatches,
+                roleReadings: d.roleReadings, failedCalls: d.failedCalls, passagesSent: d.passagesSent, deniedForCloud: d.deniedForCloud,
+                notSent: d.notSentReason, failures: d.failures, roleDropped: Array(d.roleDropped.prefix(40)),
+                interviews: d.interviews.map { iv in .init(person: iv.person, questions: iv.questions.map {
+                    .init(question: $0.question, quote: $0.quote, doc: caseOf[$0.objectID] ?? "?", basis: $0.basis.rawValue, otherQuote: $0.otherQuote) }) })
             let findings = try await findingsService.buildFindings(caseID: c.id, access: exportAccess, actor: "case-bench", at: now)
             let product = findings.assembled.workProduct
             let claims = product.sections.flatMap(\.claims)
@@ -316,9 +552,106 @@ struct CaseBenchRunner {
                 findingsSections: product.sections.count, findingsClaims: claims.count,
                 findingsCitations: citations.count,
                 findingsCitationsInScope: citations.filter { $0.sourceVersionID.map(authorized.contains) ?? false }.count,
-                findingsText: String(text.prefix(4000)), error: nil)
+                findingsText: String(text.prefix(4000)), error: nil,
+                contradictionList: contradictionList,
+                contradictionCheck: ContradictionCheck(
+                    documents: check.documents, rules: check.ruleFindings.count, ai: check.aiFindings.count,
+                    aiDropped: check.aiDropped.count, aiAgreedWithRules: check.aiAgreedWithRules, calls: check.calls,
+                    failedCalls: check.failedCalls, passagesSent: check.passagesSent, deniedForCloud: check.deniedForCloud,
+                    notSent: check.notSentReason, claimLinks: check.claimLinks,
+                    droppedReasons: Array(check.aiDropped.prefix(40)), failures: check.failures),
+                drafts: drafts)
         } catch {
             return failed(error)
+        }
+    }
+}
+
+extension CaseBenchRunner {
+    /// Plan A — a whole-case reader that replays recorded replies by question (the question is read
+    /// from the request's task text); an unknown question gets "not stated". No network.
+    static func replayReader(_ recorded: [String: String]) -> CaseReader {
+        CaseReader { send in
+            let question = send.suffix.components(separatedBy: "\n").first { $0.hasPrefix("Question: ") }
+                .map { String($0.dropFirst("Question: ".count)) } ?? ""
+            await BenchClaude.Usage.shared.record(reader: "caseReader", failure: nil)
+            return CaseReader.Reply(text: recorded[question] ?? #"{"status":"not_stated","claims":[],"answer":""}"#,
+                                    usage: CloudCallUsage(inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: CaseReader.estimatedTokens(send.prefix),
+                                                          outputTokens: 0, purpose: send.purpose, provider: "replay"))
+        }
+    }
+}
+
+/// The bench's direct Claude call (test target only). The request and the reading of the reply are the
+/// app's own (`OnlineRequestBuilder`) — model floor on output tokens, refusal fallbacks, error mapping —
+/// so the bench measures what Online mode sends; only the transport differs (the test host has no
+/// network helper).
+enum BenchClaude {
+    /// `reader`: which cloud reader made the call (the run footer counts calls and failures per reader).
+    static func send(_ prompt: String, key: String, model: String, maxTokens: Int = 400, reader: String = "other") async throws -> String {
+        do {
+            let text = try await transport(prompt, key: key, model: model, maxTokens: maxTokens)
+            await Usage.shared.record(reader: reader, failure: nil)
+            return text
+        } catch {
+            await Usage.shared.record(reader: reader, failure: VerifiedRoleReader.reason(error))
+            throw error
+        }
+    }
+
+    /// Plan A — the app's whole-case request, sent directly (the test host has no network helper).
+    static func readCase(_ send: CaseReadSend, key: String, model: String) async throws -> CaseReader.Reply {
+        do {
+            let outbound = try OnlineRequestBuilder.buildCaseReading(kind: .anthropic, model: model, apiKey: key, system: nil, prefix: send.prefix,
+                                                                     suffix: send.suffix, replyTokens: send.replyTokens, ttl: send.ttl, effort: send.effort)
+            guard let url = URL(string: outbound.url) else { throw URLError(.badURL) }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 600
+            for (k, v) in outbound.headers { request.setValue(v, forHTTPHeaderField: k) }
+            request.httpBody = outbound.body
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let http = OutboundHTTPResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+            let text = try OnlineRequestBuilder.parse(kind: .anthropic, response: http)
+            let usage = OnlineRequestBuilder.usage(kind: .anthropic, response: http, purpose: send.purpose)
+            await Usage.shared.add((usage?.totalInputTokens ?? 0) + (usage?.outputTokens ?? 0))
+            await Usage.shared.record(reader: "caseReader", failure: nil)
+            return CaseReader.Reply(text: text, usage: usage)
+        } catch {
+            await Usage.shared.record(reader: "caseReader", failure: VerifiedRoleReader.reason(error))
+            throw error
+        }
+    }
+
+    private static func transport(_ prompt: String, key: String, model: String, maxTokens: Int) async throws -> String {
+        let outbound = try OnlineRequestBuilder.build(kind: .anthropic, model: model, apiKey: key,
+                                                      system: nil, prompt: prompt, maxTokens: maxTokens)
+        guard let url = URL(string: outbound.url) else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        for (k, v) in outbound.headers { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = outbound.body
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let text = try OnlineRequestBuilder.parse(kind: .anthropic, response: OutboundHTTPResponse(status: status, body: data))
+        let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        await BenchClaude.Usage.shared.add((object?["usage"] as? [String: Any]).map { ($0["input_tokens"] as? Int ?? 0) + ($0["output_tokens"] as? Int ?? 0) } ?? 0)
+        return text
+    }
+
+    actor Usage {
+        static let shared = Usage()
+        private(set) var tokens = 0, calls = 0
+        /// Calls and failures per reader, since the last reset (one shard).
+        private(set) var readers: [String: CaseBenchRunner.CloudReaderUse] = [:]
+        func add(_ n: Int) { tokens += n; calls += 1 }
+        func resetReaders() { readers = [:] }
+        func record(reader: String, failure: String?) {
+            var use = readers[reader] ?? CaseBenchRunner.CloudReaderUse()
+            use.calls += 1
+            if let failure { use.failed += 1; if use.failures.count < 20 { use.failures.append(failure) } }
+            readers[reader] = use
         }
     }
 }

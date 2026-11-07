@@ -34,3 +34,13 @@ struct ResearchDomainPackTests {
         #expect(ResearchDomainPack.registry().tags(forText: "doi:10.1/x, Journal of Things").contains { $0.role == "citationLine" })
     }
 }
+
+@Suite("Research year only from citations")
+struct ResearchYearScopeTests {
+    @Test("A record's text with a year is not a publication")
+    func recordIsNotCitation() {
+        let facts = ResearchDomainPack.extractFacts(fromText: "NTSB WPR13LA112 — factual record\nDate: February 2, 2013\nLocation: Camarillo, CA",
+                                                    subjectLabel: "x", blockID: UUID())
+        #expect(!facts.contains { $0.field == "date" })
+    }
+}

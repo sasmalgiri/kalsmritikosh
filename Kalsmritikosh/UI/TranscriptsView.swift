@@ -347,7 +347,13 @@ public struct TranscriptsView: View {
             citationStyle: .general,
             manifest: manifest
         )
-        let text = WorkProductExporter.render(doc, as: .markdown)
+        let rendered = WorkProductExporter.render(doc, as: .markdown)
+        // Practitioner review 2026-11-02 — protected source identities never leave in a quote export.
+        let text: String
+        switch await appState.protectedExportText(rendered) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): await MainActor.run { refusal.present() }; return
+        }
         #if canImport(AppKit)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "quotes-\(file.url.deletingPathExtension().lastPathComponent).md"

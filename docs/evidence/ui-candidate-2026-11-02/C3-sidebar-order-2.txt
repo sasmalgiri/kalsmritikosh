@@ -1,0 +1,4 @@
+Outputs(now): desc="Case Story" desc="Competing Hypotheses" desc="Cases" desc="Guide" desc="Home" desc="Ask, ⌘1" desc="Projects" desc="Files, ⌘6" desc="Outputs" desc="Settings, ⌘9" 
+Home:  desc="Case Story" desc="Competing Hypotheses" desc="Cases" desc="Guide" desc="Home" desc="Ask, ⌘1" desc="Projects" desc="Files, ⌘6" desc="Outputs" desc="Settings, ⌘9" 
+Ask:   desc="Case Story" desc="Competing Hypotheses" desc="Cases" desc="Guide" desc="Home" desc="Ask, ⌘1" desc="Projects" desc="Files, ⌘6" desc="Outputs" desc="Settings, ⌘9" 
+Files: desc="Case Story" desc="Competing Hypotheses" desc="Cases" desc="Home" desc="Ask, ⌘1" desc="Projects" desc="Files, ⌘6" desc="Outputs" desc="Settings, ⌘9" 

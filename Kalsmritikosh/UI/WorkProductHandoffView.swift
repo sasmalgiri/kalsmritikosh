@@ -258,7 +258,7 @@ public final class WorkProductHandoffModel {
 
     /// A verification bundle left the app — record the export act (v111).
     public func noteBundleExported(revision: Int, at date: Date) async {
-        await recordGovernance(.bundleExported, actor: "me",
+        await recordGovernance(.bundleExported, actor: InvestigatorProfile.name,
                                detail: "revision=\(revision)", at: date)
     }
 
@@ -372,6 +372,7 @@ public final class WorkProductHandoffModel {
 
     /// Record the human approval of the built findings run as the matter's findings.
     public func approve(actor: String, at date: Date) async {
+        do { try PaidUse.require("approve findings") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot, let f = built else { lastError = "Build findings first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for approval."; return }
@@ -414,6 +415,8 @@ public final class WorkProductHandoffModel {
             // collapses into a single transition — compensation no longer
             // exists because no partial state can ever be observed.
             if !FeatureFlags.classicConformanceValue(), let txn = self.approvalTxn, self.assessments != nil {
+                // Same currency checks as the service path: this case's findings, unchanged scope, intact receipt.
+                try await self.findings.requireCurrent(f, caseID: snap.caseID)
                 let projected = self.currentAssessment(at: date, assumingApproval: true)
                 let nextRevision = try await txn.nextRevision(caseID: snap.caseID)
                 var linkage = ConformanceSealLinkage(caseID: snap.caseID,
@@ -481,6 +484,7 @@ public final class WorkProductHandoffModel {
 
     /// Withdraw a prior approval (a new recorded decision; the prior approval is preserved).
     public func withdraw(actor: String, at date: Date) async {
+        do { try PaidUse.require("withdraw findings") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot, let f = built else { lastError = "Build findings first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for withdrawal."; return }
@@ -510,22 +514,29 @@ public final class WorkProductHandoffModel {
     /// Close the matter by a recorded human decision. Accepted unresolved items are retained (honest closure).
     /// Optionally pins the built findings run + its receipt seal.
     public func close(actor: String, at date: Date) async {
+        do { try PaidUse.require("close a matter") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot else { lastError = "Load a matter first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for closure."; return }
         let unresolved = unresolvedText.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        // Only APPROVED findings are pinned to the closure (brief §6); built-but-unapproved findings are
+        // not, and the outcome says the matter closed without approved findings.
+        let approved = snap.latestApproval.flatMap { $0.decision == .approved ? $0 : nil }
+        let pinned = approved.flatMap { a in self.built.flatMap { $0.run.id == a.workProductRunID ? $0 : nil } }
         await perform {
             _ = try await self.closure.closeCase(
                 caseID: snap.caseID, expectedRevision: snap.revision, rationale: why, unresolvedItems: unresolved,
-                workProductRunID: self.built?.run.id, receiptSeal: self.built?.receipt.seal, actor: actor, at: date)
+                workProductRunID: pinned?.run.id, receiptSeal: pinned?.receipt.seal, actor: actor, at: date)
             await self.refresh()
-            return unresolved.isEmpty ? "Matter closed." : "Matter closed with \(unresolved.count) recorded unresolved item(s)."
+            let findings = pinned == nil ? " No approved findings were attached." : ""
+            return (unresolved.isEmpty ? "Matter closed." : "Matter closed with \(unresolved.count) recorded unresolved item(s).") + findings
         }
     }
 
     /// Reopen a closed matter by a recorded human decision; the prior closure is preserved.
     public func reopen(actor: String, at date: Date) async {
+        do { try PaidUse.require("reopen a matter") } catch { lastError = error.localizedDescription; return }   // N4
         guard let snap = snapshot else { lastError = "Load a matter first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for reopening."; return }
@@ -563,9 +574,21 @@ public final class WorkProductHandoffModel {
         return try exporter.data(for: doc, format: exportFormat, redaction: redactionPolicy)
     }
 
-    /// Render the built findings and write them to a user-chosen file.
-    public func export(to url: URL) {
-        guard let doc = exportableDocument() else { lastError = "Build findings first."; return }
+    /// K5 — the check run immediately before a case report leaves the app (set by the app): the
+    /// findings are still this case's, its scope is unchanged, the receipt is intact, and every source
+    /// they use is still cleared for export. Nil only where no ledger is wired (previews).
+    public var exportCheck: (@Sendable (InvestigationFindings) async throws -> Void)?
+
+    /// Render the built findings and write them to a user-chosen file — after the export check.
+    public func export(to url: URL) async {
+        guard let f = built, let doc = exportableDocument() else { lastError = "Build findings first."; return }
+        if let exportCheck {
+            do { try await exportCheck(f) } catch {
+                lastError = "Not exported: \(error.localizedDescription) Rebuild the findings to export the case as it is now."
+                lastOutcome = nil
+                return
+            }
+        }
         do {
             _ = try exporter.write(doc, format: exportFormat, to: url, redaction: redactionPolicy)
             lastOutcome = "Exported \(exportFormat.displayName) → \(url.lastPathComponent)"; lastError = nil
@@ -737,17 +760,17 @@ public struct WorkProductHandoffView: View {
             // the sealed assessment or certificate.
             sopReviewStatus
             HStack(spacing: 10) {
-                Button { Task { await model.buildFindings(actor: "me", at: Date()) } } label: {
+                Button { Task { await model.buildFindings(actor: InvestigatorProfile.name, at: Date()) } } label: {
                     Label("Build findings", systemImage: "doc.badge.gearshape")
                 }.buttonStyle(.bordered).disabled(model.busy)
-                Button { Task { await model.approve(actor: "me", at: Date()) } } label: {
+                Button { Task { await model.approve(actor: InvestigatorProfile.name, at: Date()) } } label: {
                     Label("Approve", systemImage: "checkmark.seal.fill")
                 }.buttonStyle(.borderedProminent).disabled(model.busy || model.built == nil)
                     .guidance(GuidanceTip("Approve findings",
                                           what: "Records your human approval of the built findings under the chosen standard of proof. Approval authorizes the report — it does not verify the world or close the matter.",
                                           enabledWhen: "Build findings, choose a standard of proof, and enter a rationale (below) first."),
                               enabled: !(model.busy || model.built == nil))
-                Button { Task { await model.withdraw(actor: "me", at: Date()) } } label: {
+                Button { Task { await model.withdraw(actor: InvestigatorProfile.name, at: Date()) } } label: {
                     Label("Withdraw", systemImage: "xmark.seal")
                 }.buttonStyle(.bordered).disabled(model.busy || model.built == nil || !snap.isApproved)
             }
@@ -993,7 +1016,7 @@ public struct WorkProductHandoffView: View {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(title).\(model.exportFormat.fileExtension)"
         panel.canCreateDirectories = true
-        if panel.runModal() == .OK, let url = panel.url { model.export(to: url) }
+        if panel.runModal() == .OK, let url = panel.url { Task { await model.export(to: url) } }
     }
 
     @ViewBuilder
@@ -1008,11 +1031,11 @@ public struct WorkProductHandoffView: View {
             }
             HStack(spacing: 10) {
                 if snap.isClosed {
-                    Button { Task { await model.reopen(actor: "me", at: Date()) } } label: {
+                    Button { Task { await model.reopen(actor: InvestigatorProfile.name, at: Date()) } } label: {
                         Label("Reopen matter", systemImage: "lock.open")
                     }.buttonStyle(.bordered).disabled(model.busy)
                 } else {
-                    Button { Task { await model.close(actor: "me", at: Date()) } } label: {
+                    Button { Task { await model.close(actor: InvestigatorProfile.name, at: Date()) } } label: {
                         Label("Close matter", systemImage: "lock")
                     }.buttonStyle(.borderedProminent).disabled(model.busy)
                 }
@@ -1069,6 +1092,7 @@ public struct WorkProductHandoffView: View {
                                                  governance: appState.governanceEvents,
                                                  approvalTxn: appState.approvalTransactions,
                                                  phaseObservation: appState.phaseObservation)
+        m.exportCheck = appState.findingsExportCheck()
         await m.load(caseID: id)
         model = m
     }

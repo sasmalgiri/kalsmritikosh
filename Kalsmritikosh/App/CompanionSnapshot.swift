@@ -90,6 +90,7 @@ extension AppState {
         defer { try? FileManager.default.removeItem(at: scratch) }
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let consistent = scratch.appendingPathComponent("consistent.sqlite")
+        try await StudioStorage.requireAllSaved()   // review R5: no pending studio change left out
         try await database.backupSnapshot(to: consistent)
         let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
         let ledgerKey = database.key

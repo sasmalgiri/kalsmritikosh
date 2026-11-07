@@ -60,6 +60,7 @@ public actor EvidenceDatasetBuilder {
     public func buildTimeline(workspaceID: UUID, title: String,
                               allowedObjectIDs: Set<UUID>?, limit: Int = 500,
                               actor: String, at date: Date) async throws -> BuildResult {
+        try PaidUse.require("build a dataset from the evidence")
         var all = try await events.recent(limit: max(limit, 1))
         if let allow = allowedObjectIDs {
             all = all.filter { allow.contains($0.sourceObjectID) }
@@ -111,6 +112,7 @@ public actor EvidenceDatasetBuilder {
     public func buildEntities(workspaceID: UUID, title: String,
                               kinds: [Entity.Kind], limit: Int = 500,
                               actor: String, at date: Date) async throws -> BuildResult {
+        try PaidUse.require("build a dataset from the evidence")
         var collected: [(id: UUID, name: String, kind: String)] = []
         for kind in kinds {
             let rows = try await entities.list(kind: kind, limit: limit)
@@ -213,7 +215,8 @@ public actor EvidenceDatasetBuilder {
     /// Payments: payer → payee (Forensic / SIU daily work).
     public func buildPayments(workspaceID: UUID, title: String, limit: Int = 500,
                               actor: String, at date: Date) async throws -> BuildResult {
-        try await buildEdgeTable(kinds: [.paid], fromName: "Payer", toName: "Payee",
+        try PaidUse.require("build a dataset from the evidence")
+        return try await buildEdgeTable(kinds: [.paid], fromName: "Payer", toName: "Payee",
                                  countName: "Times observed", workspaceID: workspaceID, title: title,
                                  limit: limit, actor: actor, at: date)
     }
@@ -221,7 +224,8 @@ public actor EvidenceDatasetBuilder {
     /// Communications: who contacted whom (Investigator / Journalist daily work).
     public func buildCommunications(workspaceID: UUID, title: String, limit: Int = 500,
                                     actor: String, at date: Date) async throws -> BuildResult {
-        try await buildEdgeTable(kinds: [.emailed, .sent, .received], fromName: "From", toName: "To",
+        try PaidUse.require("build a dataset from the evidence")
+        return try await buildEdgeTable(kinds: [.emailed, .sent, .received], fromName: "From", toName: "To",
                                  countName: "Messages", workspaceID: workspaceID, title: title,
                                  limit: limit, actor: actor, at: date)
     }
@@ -233,6 +237,7 @@ public actor EvidenceDatasetBuilder {
     public func buildContradictions(contradictions repo: ContradictionsRepository,
                                     workspaceID: UUID, title: String, limit: Int = 500,
                                     actor: String, at date: Date) async throws -> BuildResult {
+        try PaidUse.require("build a dataset from the evidence")
         let items = await repo.all(limit: limit)
         var rec = try await datasets.createDataset(workspaceID: workspaceID, title: title,
                                                    mode: .advanced, actor: actor, at: date)
@@ -275,6 +280,7 @@ public actor EvidenceDatasetBuilder {
     public func buildGaps(gaps repo: GapNodeRepository,
                           workspaceID: UUID, title: String, limit: Int = 500,
                           actor: String, at date: Date) async throws -> BuildResult {
+        try PaidUse.require("build a dataset from the evidence")
         let items = await repo.all(includeDismissed: false, limit: limit)
         var rec = try await datasets.createDataset(workspaceID: workspaceID, title: title,
                                                    mode: .advanced, actor: actor, at: date)

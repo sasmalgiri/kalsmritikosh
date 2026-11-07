@@ -25,6 +25,7 @@ public actor WorkbenchScenarioRepository {
     /// Open a new scenario over a dataset at its current revision (pointer at origin, `created` event).
     @discardableResult
     public func createScenario(datasetID: UUID, title: String, actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw WorkbenchScenarioError.blankTitle }
         try requireActor(actor)
@@ -49,6 +50,7 @@ public actor WorkbenchScenarioRepository {
     public func applyOperation(scenarioID: UUID, kind: WorkbenchScenarioOpKind, rowID: UUID, fieldID: UUID?,
                                afterValue: String?, reason: String?, expectedRevision: Int,
                                actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(actor)
         let sc = try await requireActiveScenario(scenarioID); try requireRevision(sc, expectedRevision)
         let targetKind: WorkbenchScenarioTargetKind = (kind == .rowInclusion || kind == .rowExclusion || (kind == .classification && fieldID == nil) || (kind == .annotation && fieldID == nil)) ? .row : .cell
@@ -89,6 +91,7 @@ public actor WorkbenchScenarioRepository {
 
     @discardableResult
     public func undo(scenarioID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(actor)
         let sc = try await requireActiveScenario(scenarioID); try requireRevision(sc, expectedRevision)
         guard sc.currentOpSeq > 0, try await liveOpExists(scenarioID, atOrBelow: sc.currentOpSeq) else { throw WorkbenchScenarioError.nothingToUndo }
@@ -99,6 +102,7 @@ public actor WorkbenchScenarioRepository {
 
     @discardableResult
     public func redo(scenarioID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(actor)
         let sc = try await requireActiveScenario(scenarioID); try requireRevision(sc, expectedRevision)
         guard let next = try await smallestLiveSeq(scenarioID, above: sc.currentOpSeq) else { throw WorkbenchScenarioError.nothingToRedo }
@@ -110,6 +114,7 @@ public actor WorkbenchScenarioRepository {
     /// preserved (all operations remain, redoable), so reset is itself reversible via redo.
     @discardableResult
     public func reset(scenarioID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(actor)
         let sc = try await requireActiveScenario(scenarioID); try requireRevision(sc, expectedRevision)
         try await pointerMutation(scenarioID, to: 0, revision: sc.revision + 1, action: .reset, actor: actor, at: date)
@@ -122,6 +127,7 @@ public actor WorkbenchScenarioRepository {
     /// audit trail of what was proposed and what happened survives). Canonical state is unchanged.
     @discardableResult
     public func discard(scenarioID: UUID, actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(actor)
         let sc = try await requireActiveScenario(scenarioID)
         let newRev = sc.revision + 1
@@ -141,6 +147,7 @@ public actor WorkbenchScenarioRepository {
     /// on the source; the new scenario opens with a `created` event.
     @discardableResult
     public func duplicate(scenarioID: UUID, newTitle: String, actor: String, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(actor)
         let clean = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw WorkbenchScenarioError.blankTitle }
@@ -188,6 +195,7 @@ public actor WorkbenchScenarioRepository {
                                      decision: WorkbenchScenarioReviewDecision, reviewer: String,
                                      reason: String?, resultingReference: String?,
                                      expectedRevision: Int, at date: Date) async throws -> WorkbenchScenarioRecord {
+        try PaidUse.require("work on scenarios")
         try requireActor(reviewer)
         let sc = try await requireActiveScenario(scenarioID); try requireRevision(sc, expectedRevision)
         guard let op = try await operation(id: operationID), op.scenarioID == scenarioID else { throw WorkbenchScenarioError.operationNotFound(operationID) }
@@ -259,6 +267,7 @@ public actor WorkbenchScenarioRepository {
     /// with the ONE existing engine over the projected record and returns the outcome — it persists
     /// nothing and NEVER mutates the canonical LAB-002 derivations.
     public func transformOverScenario(scenarioID: UUID, spec: WorkbenchTransformSpec) async throws -> WorkbenchTransformOutcome {
+        try PaidUse.require("work on scenarios")
         let projected = try await projection(scenarioID: scenarioID).projectedRecord()
         return try WorkbenchTransformEngine.compute(spec, over: projected)
     }

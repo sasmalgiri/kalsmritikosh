@@ -1,0 +1,18 @@
+Date,Date precision,Kind,Event,Summary,Source,Event confidence,Date confidence
+"on Jan 12, 2024",day,contractModified,Contract modified,amendment to,amendment-7.md,66 %,70 %
+"on Jan 22, 2024 10:14 UTC",instant,emailReceived,Invoice No. 401 — Project Delta milestone 1,,invoice-401.eml,90 %,95 %
+"on Jan 22, 2024",day,invoiceIssued,Invoice issued,invoice issued,invoice-401.eml,66 %,95 %
+"on Jan 22, 2024",day,invoicePaid,Invoice paid,payment received,invoice-401.eml,66 %,95 %
+"on Apr 8, 2024 17:43 UTC",instant,emailReceived,Project Delta — material certification delays affecting first lot,,supplier_abc_22.eml,90 %,95 %
+"on Apr 8, 2024",day,contractModified,Contract modified,amendment to,supplier_abc_22.eml,66 %,95 %
+"on Apr 8, 2024",day,deliveryDelayed,Delivery delayed,delivery delayed,supplier_abc_22.eml,66 %,95 %
+April 2024,month,taskAssigned,Commitment: stated intent,formalize the slip via an amendment to the contract,supplier_abc_22.eml,66 %,76 %
+"on Apr 18, 2024 11:12 UTC",instant,emailReceived,Project Delta — confirmed delivery delayed for first lot,,supplier_abc_23.eml,90 %,95 %
+"on Apr 18, 2024",day,deliveryDelayed,Delivery delayed,delivery delayed,supplier_abc_23.eml,66 %,95 %
+April 2024,month,taskAssigned,Commitment: stated intent,route this week,supplier_abc_23.eml,66 %,76 %
+"on Apr 23, 2024 09:55 UTC",instant,emailReceived,Project Delta — internal review on the proposed amendment,,supplier_abc_24.eml,90 %,95 %
+"on May 24, 2024 16:00 UTC",instant,emailReceived,Project Delta status — weekly digest,,supplier_abc_25.eml,90 %,95 %
+"on May 24, 2024",day,deliveryDelayed,Delivery delayed,delivery delayed,supplier_abc_25.eml,66 %,95 %
+"on Jun 14, 2024 09:02 UTC",instant,emailReceived,Invoice No. 432 — Project Delta milestone 2 — OVERDUE,,invoice-432.eml,90 %,95 %
+"on Jun 14, 2024",day,invoiceIssued,Invoice issued,invoice issued,invoice-432.eml,66 %,95 %
+"on Jun 14, 2024",day,deliveryDelayed,Delivery delayed,delivery delayed,invoice-432.eml,66 %,95 %

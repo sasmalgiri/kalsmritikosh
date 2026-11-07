@@ -47,7 +47,13 @@ extension AppState {
     @MainActor
     public func sendToDevonthink(question: String, answer: VerifiedAnswer) async -> SendToDevonthinkOutcome {
         guard ProductModuleFlags.isEnabled(.sendToDevonthink) else { return .failed("Send to DEVONthink is switched off.") }
-        let note = await devonthinkNote(question: question, answer: answer)
+        // The note leaves the app for another app's database: the same protected-identity gate as every export
+        // (candidate re-review P-B1).
+        let note: String
+        switch ProtectedExport.prepare(await devonthinkNote(question: question, answer: answer)) {
+        case .success(let safe): note = safe
+        case .failure(let refusal): return .failed(refusal.reason)
+        }
         do {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kalsmritikosh-devonthink", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -26,11 +26,23 @@ public nonisolated struct OnlinePIIMasker: Sendable {
         self.names = names.filter { $0.count >= 4 }.sorted { $0.count > $1.count }
     }
 
-    public func mask(_ input: String) -> Masked {
+    /// `prior`: the mapping of text masked before this one in the same request (plan A: the case's
+    /// documents are masked first, the question after them). The same detail keeps its placeholder and
+    /// new ones are numbered after the prior ones — so the masked case text, the cached prefix, does
+    /// not change with the question.
+    public func mask(_ input: String, continuing prior: [String: String] = [:]) -> Masked {
         var text = input
-        var mapping: [String: String] = [:]
+        var mapping: [String: String] = prior
         var reverse: [String: String] = [:]
         var counters: [String: Int] = [:]
+        for (p, v) in prior {
+            reverse[v.lowercased()] = p
+            let inner = p.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+            if let cut = inner.lastIndex(of: "_"), let n = Int(inner[inner.index(after: cut)...]) {
+                let kind = String(inner[..<cut])
+                counters[kind] = max(counters[kind] ?? 0, n)
+            }
+        }
 
         func placeholder(_ kind: String, for value: String) -> String {
             if let existing = reverse[value.lowercased()] { return existing }

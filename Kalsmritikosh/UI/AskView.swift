@@ -30,6 +30,9 @@ public struct AskView: View {
     /// can render the quality strip directly (instead of folding it
     /// into a plain-text body line).
     @State private var verifiedAnswers: [UUID: VerifiedAnswer] = [:]
+    /// A6 / A7 — the AI challenge or draft of an answer, shown in a sheet (never filed on its own).
+    @State private var aiReview: AIAssist.Review?
+    @State private var aiReviewMessage: String?
     /// GK — the general-knowledge blocks, keyed by the archive answer's turn.
     /// UI STATE ONLY, deliberately: never a persisted turn (the brain may read
     /// prior turns as context), never in the ledger, never exportable.
@@ -64,7 +67,11 @@ public struct AskView: View {
     /// positioned at the quoted passage.
     @State private var openSource: CitationOpenTarget?
 
-    public init() {}
+    /// Navigation merge (scope §3) — Ask inside the open case: questions are answered only from that case's
+    /// documents (InvestigationAnswerService, the same path as a case's Ask job). nil: the whole library.
+    let caseScope: AskCaseScope?
+
+    public init(caseScope: AskCaseScope? = nil) { self.caseScope = caseScope }
 
     public var body: some View {
         // The middle is ALWAYS a ScrollView (empty-state hero centered via
@@ -114,7 +121,7 @@ public struct AskView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task { await loadOrCreateConversation() }
+        .task(id: caseScope?.caseID) { await loadOrCreateConversation() }
         .onAppear {
             inputFocused = true
             // Seed from a Home persona "try asking" example, if any.
@@ -500,6 +507,7 @@ public struct AskView: View {
         panel.allowedContentTypes = SourceType.attachableContentTypes
         panel.prompt = "Attach"
         panel.message = "Attach a supported document, spreadsheet, email, image, audio or video — it's ingested into your private archive and becomes citable evidence."
+        guard PurchaseCenter.shared.allowPaidAction("attach documents", importing: true) else { return }   // N4
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
             let attachment = AskAttachment(url: url, state: .ingesting)
@@ -564,14 +572,33 @@ public struct AskView: View {
                         if !turn.body.isEmpty {
                             Button {
                                 #if canImport(AppKit)
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(turn.body, forType: .string)
+                                // User evaluation 2026-11-02, M2: the copy kept markdown ("**Effective Date:**") and
+                                // named no source file. It is now plain text ending with the sources by name.
+                                let ids = Array(Set((verifiedAnswers[turn.id]?.citations ?? []).map(\.objectID)))
+                                let body = turn.body
+                                Task { @MainActor in
+                                    let names = ids.isEmpty ? [:] : ((try? await appState.objects?.sourceFilenames(for: Set(ids))) ?? [:])
+                                    let text = AnswerCopyText.make(body: body, sourceNames: ids.compactMap { names[$0] })
+                                    NSPasteboard.general.clearContents()
+                                    switch ProtectedExport.prepare(text) {
+                                    case .success(let safe): NSPasteboard.general.setString(safe, forType: .string)
+                                    case .failure(let refusal): refusal.present()
+                                    }
+                                }
                                 #endif
                             } label: { Label("Copy", systemImage: "doc.on.doc").labelStyle(.iconOnly)
                                     .imageScale(.small) }
                             .buttonStyle(.borderless)
                             .foregroundStyle(.secondary)
                             .help("Copy this answer")
+                            // M2: saving an answer was only a right-click "receipt" in JSON; a plain save is here.
+                            Button {
+                                saveAnswerText(for: turn)
+                            } label: { Label("Save", systemImage: "square.and.arrow.down").labelStyle(.iconOnly)
+                                    .imageScale(.small) }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("Save this answer, with its sources, as a text file")
                         }
                     }
                     // U-1 — ANSWER/EVIDENCE SEPARATION. The Answer section
@@ -653,8 +680,11 @@ public struct AskView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Evidence for this answer")
+                        // UI run i, I-1: `.accessibilityElement(children: .contain)` + `.accessibilityLabel` on this
+                        // container (which holds the AppKit-backed horizontal chip row) sent SwiftUI's label
+                        // resolver into unbounded recursion the moment any assistive client read a chip —
+                        // four crashes. The heading is a real (visually hidden) element instead.
+                        .accessibilityIdentifier("ask.evidence")
                     }
                     // §1.3 — closest match on a not-found answer: explicitly
                     // NOT an answer, openable at the passage.
@@ -683,8 +713,7 @@ public struct AskView: View {
                         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3])))
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityLabel("Not an answer. The closest passage in your documents: \(near.quote)")
+                        .accessibilityIdentifier("ask.closestPassage")
                     }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block
@@ -707,12 +736,23 @@ public struct AskView: View {
                     }
                 }
                 .frame(maxWidth: 620, alignment: .leading)
+                .sheet(item: Binding(get: { aiReview.map { AIReviewItem(review: $0) } }, set: { if $0 == nil { aiReview = nil } })) { item in
+                    AIReviewSheet(review: item.review) { aiReview = nil }
+                }
+                .alert("Online AI", isPresented: Binding(get: { aiReviewMessage != nil }, set: { if !$0 { aiReviewMessage = nil } })) {
+                    Button("OK", role: .cancel) { aiReviewMessage = nil }
+                } message: { Text(aiReviewMessage ?? "") }
                 .contextMenu {
                     if verifiedAnswers[turn.id] != nil {
                         Button {
+                            saveAnswerText(for: turn)
+                        } label: {
+                            Label("Save answer as text…", systemImage: "square.and.arrow.down")
+                        }
+                        Button {
                             exportAnswerReceipt(for: turn)
                         } label: {
-                            Label("Export verifiable receipt…", systemImage: "checkmark.seal")
+                            Label("Export verifiable receipt (for checking later)…", systemImage: "checkmark.seal")
                         }
                         // W3-2 — hand the answer to DEVONthink with links back to each passage.
                         if ProductModuleFlags.isEnabled(.sendToDevonthink), let verified = verifiedAnswers[turn.id] {
@@ -725,6 +765,21 @@ public struct AskView: View {
                                 }
                             } label: {
                                 Label("Send to DEVONthink", systemImage: "square.and.arrow.up.on.square")
+                            }
+                        }
+                        // A6 / A7 — Online AI reviews of this answer from its own passages.
+                        if let verified = verifiedAnswers[turn.id], OnlineSettings.cloudAllowed {
+                            let idx = turns.firstIndex(where: { $0.id == turn.id })
+                            let q = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+                            Button {
+                                runAIReview(verified, question: q, draft: false)
+                            } label: {
+                                Label("Challenge this answer with AI…", systemImage: "exclamationmark.bubble")
+                            }
+                            Button {
+                                runAIReview(verified, question: q, draft: true)
+                            } label: {
+                                Label("Draft a report paragraph with AI…", systemImage: "doc.text")
                             }
                         }
                         // I-1 — a bundle anyone can verify without this app.
@@ -759,6 +814,9 @@ public struct AskView: View {
                 return
             }
             #if canImport(AppKit)
+            // Re-review 2026-11-02: a signed proof bundle holding a protected identity is refused, never altered.
+            let content = ([question, answer.answerText ?? answer.body] + answer.citations.map(\.snippet) + Array(names.values)).joined(separator: "\n")
+            if case .failure(let refusal) = ProtectedExport.prepare(content, refuseIfPresent: true) { refusal.present(); return }
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true
             panel.canChooseFiles = false
@@ -775,6 +833,36 @@ public struct AskView: View {
             }
             #endif
         }
+    }
+
+    /// Save the answer as plain text with its question and its sources by file name (user evaluation
+    /// 2026-11-02, M2), through the same protected-export gate as Copy.
+    private func saveAnswerText(for turn: ConversationTurn) {
+        #if canImport(AppKit)
+        let idx = turns.firstIndex(where: { $0.id == turn.id })
+        let question = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+        let ids = Array(Set((verifiedAnswers[turn.id]?.citations ?? []).map(\.objectID)))
+        let body = turn.body
+        Task { @MainActor in
+            let names = ids.isEmpty ? [:] : ((try? await appState.objects?.sourceFilenames(for: Set(ids))) ?? [:])
+            let answer = AnswerCopyText.make(body: body, sourceNames: ids.compactMap { names[$0] })
+            let text = (question.isEmpty ? "" : "Question: \(question)\n\n") + answer + "\n"
+            let safeText: String
+            switch ProtectedExport.prepare(text) {
+            case .success(let s): safeText = s
+            case .failure(let refusal): refusal.present(); return
+            }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.plainText]
+            let safe = String(question.prefix(40)).replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            panel.nameFieldStringValue = "Answer — \(safe.isEmpty ? "untitled" : safe).txt"
+            panel.canCreateDirectories = true
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do { try safeText.write(to: url, atomically: true, encoding: .utf8) }
+            catch { KalsmritikoshLog.ui.error("Answer save failed: \(String(describing: error), privacy: .public)") }
+        }
+        #endif
     }
 
     /// Export a tamper-evident receipt for this answer: the answer text plus each
@@ -809,18 +897,25 @@ public struct AskView: View {
     }
 
     @MainActor
-    private func saveReceipt(_ json: String, suggestedName: String) {
+    private func saveReceipt(_ raw: String, suggestedName: String) {
         #if canImport(AppKit)
+        Task { @MainActor in
+        // Re-review 2026-11-02: a sealed receipt is never altered after sealing (that breaks verification and
+        // its passage hashes would confirm a guessed name) — one holding a protected identity is refused.
+        let json = raw
+        if case .failure(let refusal) = ProtectedExport.prepare(raw, refuseIfPresent: true) { refusal.present(); return }
         let panel = NSSavePanel()
         if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
         let safe = String(suggestedName.prefix(40))
             .replacingOccurrences(of: "/", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "answer" : safe).json"
+        panel.nameFieldStringValue = "Verifiable receipt — \(safe.isEmpty ? "answer" : safe).json"
+        panel.message = "A sealed record of this answer and its passages. Open it later in Verify Receipt to check nothing was changed. To keep a readable copy, use Save answer as text."
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try json.write(to: url, atomically: true, encoding: .utf8) }
         catch { KalsmritikoshLog.ui.error("Answer receipt export failed: \(String(describing: error), privacy: .public)") }
+        }
         #endif
     }
 
@@ -864,17 +959,20 @@ public struct AskView: View {
 
     private func loadOrCreateConversation() async {
         guard let repo = appState.conversations else { return }
-        // Pick the most recent conversation if it has any turns;
-        // otherwise create a fresh one.
-        if let recent = (try? await repo.recent(limit: 1))?.first {
-            let existing = (try? await repo.turns(for: recent.id)) ?? []
+        // LS24 — the most recent conversation of THIS scope only (this case's, or the library's), or a new
+        // one bound to it: Ask in case B never shows case A's or the library's questions.
+        do {
+            let (conv, existing) = try await repo.resumeOrCreate(caseID: caseScope?.caseID)
             await MainActor.run {
-                self.conversationID = recent.id
+                self.conversationID = conv.id
                 self.turns = existing
+                self.verifiedAnswers = [:]
+                self.nearestPassages = [:]
+                self.generalKnowledgeBlocks = [:]
             }
-            if !existing.isEmpty { return }
+        } catch {
+            KalsmritikoshLog.ui.error("Failed to open the Ask conversation: \(String(describing: error), privacy: .public)")
         }
-        await startNewConversation()
     }
 
     // MARK: - Conversation history
@@ -882,7 +980,7 @@ public struct AskView: View {
     /// Load the list of past conversations for the history sheet.
     private func loadHistory() async {
         guard let repo = appState.conversations else { return }
-        let convs = (try? await repo.recent(limit: 200)) ?? []
+        let convs = (try? await repo.recent(limit: 200, caseID: caseScope?.caseID)) ?? []
         await MainActor.run { self.pastConversations = convs }
     }
 
@@ -925,7 +1023,7 @@ public struct AskView: View {
     private func startNewConversation() async {
         guard let repo = appState.conversations else { return }
         do {
-            let conv = try await repo.create()
+            let conv = try await repo.create(caseID: caseScope?.caseID)
             await MainActor.run {
                 self.conversationID = conv.id
                 self.turns = []
@@ -941,6 +1039,9 @@ public struct AskView: View {
     private func submit() {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, !asking else { return }
+        // §11 — asking the archive is analysis, a paid action. Decided before anything is written (N4: it
+        // used to run after the question was saved, and a refusal left Ask stuck "asking").
+        guard PurchaseCenter.shared.allowPaidAction("ask questions") else { return }
         asking = true
         question = ""
         // Chips are transient composer UI; the attached files are already
@@ -992,8 +1093,22 @@ public struct AskView: View {
             //    brain answer, so nothing ungrounded ever reaches the user.
             // OPS-003D — production screen scope (not DEBUG-only testUnrestricted).
             // Global Q&A: no workspace restriction, full sensitivity ceiling, privilege hidden.
-            let answer = await appState.brain.answer(question: q,
-                                                      access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            let answer: VerifiedAnswer
+            if let caseScope {
+                // In a case: the case's own answering path (its source scope, its AI permission, its
+                // offline search results) — nothing outside the case can enter the answer.
+                answer = await appState.answerInCase(caseScope, question: q)
+            } else {
+                let pipelineAnswer = await appState.brain.answer(question: q,
+                                                                  access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+                // Plan A — without an AI reader, Ask returns search results (the best matching passages),
+                // never rules-written prose; a verified exact field value shows as "Found in the record".
+                // Candidate review UB1: the search results name the missing setup step, and the prompt above
+                // the window offers the one action that fixes it.
+                answer = await appState.aiReadsDocuments()
+                    ? pipelineAnswer
+                    : OfflineSearchResults.present(pipelineAnswer, question: q, reason: AISetupCenter.shared.noteOffline()?.note)
+            }
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)
@@ -1019,16 +1134,20 @@ public struct AskView: View {
             // G2/Stage-3 — bind this turn to its durable answer so reopening
             // the conversation restores citations/status/receipt from the
             // ledger instead of losing them.
-            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer) {
+            // LS24 — an answer made in a case is stamped with the case (origin_scope_id), so erasing the case
+            // removes it even when it was refused or cites only shared documents.
+            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer, originScopeID: caseScope?.caseID) {
                 try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
             }
 
             // §1.3 — closest match: after a genuine not-found (never a
             // conversational brush-off, never an out-of-scope question), show
             // the single passage sharing the most question terms, if any.
+            // Both extra lanes read beyond the case (the whole archive's text; general knowledge), so a
+            // question asked in a case gets neither (AskCaseScope.extraLanesAllowed).
             let notFound = answer.answerState == .notFound
                 || GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason)
-            if notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
+            if AskCaseScope.extraLanesAllowed(caseScope), notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
                let chunksRepo = appState.chunks {
                 let hits = (try? await chunksRepo.searchFTS(q, limit: 12)) ?? []
                 if let near = NearestPassageFinder.pick(
@@ -1042,7 +1161,7 @@ public struct AskView: View {
             // retrieval; FM unavailable → the honest note. The block is UI
             // state keyed to this turn — nothing here is persisted, recorded,
             // cited, or exportable.
-            if FeatureFlags.generalKnowledgeLaneValue(),
+            if AskCaseScope.extraLanesAllowed(caseScope), FeatureFlags.generalKnowledgeLaneValue(),
                GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason) {
                 if let caps = appState.capabilities {
                     let gkText = await GeneralKnowledgeLane.answer(question: q, capabilities: caps)
@@ -1381,3 +1500,135 @@ private struct AskAttachment: Identifiable {
 #endif
 
 
+
+
+// MARK: - A6 / A7 — AI review of an answer
+
+private struct AIReviewItem: Identifiable {
+    let id = UUID()
+    let review: AIAssist.Review
+}
+
+extension AskView {
+    fileprivate func runAIReview(_ verified: VerifiedAnswer, question: String, draft: Bool) {
+        Task { @MainActor in
+            do { aiReview = try await appState.reviewAnswerWithAI(verified, question: question, draft: draft) }
+            catch is CancellationError {}
+            catch { aiReviewMessage = error.localizedDescription }
+        }
+    }
+}
+
+/// Shows an AI challenge or draft with what it rests on and the citation check. Copy only — it is never
+/// saved as a finding or into a report by itself.
+struct AIReviewSheet: View {
+    let review: AIAssist.Review
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(review.kind, systemImage: "sparkles").font(.title3.bold())
+            if review.isFullyCited {
+                Label("Every point cites a passage that was sent.", systemImage: "checkmark.seal").font(.caption).foregroundStyle(.green)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    if !review.unknownCitations.isEmpty {
+                        Text("Cites passages that were never sent: \(review.unknownCitations.joined(separator: ", ")) — treat those points as unsupported.")
+                    }
+                    if !review.uncitedSentences.isEmpty {
+                        Text("\(review.uncitedSentences.count) sentence(s) cite no passage — treat them as unsupported.")
+                    }
+                }
+                .font(.caption).foregroundStyle(.orange)
+            }
+            ScrollView {
+                Text(review.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                Divider().padding(.vertical, 6)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(review.passages, id: \.label) { p in
+                        Text("[\(p.label)] \(p.source)").font(.caption.weight(.semibold))
+                        Text(p.text.prefix(600)).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(minHeight: 320)
+            HStack {
+                Text("Written by an AI from the passages listed. Not a finding; check it before using any of it.").font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                Button("Copy") {
+                    // The same protected-identity gate as every copy and export (candidate re-review P-B1).
+                    switch ProtectedExport.prepare(review.text) {
+                    case .success(let safe): NSPasteboard.general.clearContents(); NSPasteboard.general.setString(safe, forType: .string)
+                    case .failure(let refusal): refusal.present()
+                    }
+                }
+                Button("Done", action: done).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16).frame(width: 680)
+    }
+}
+
+/// The text "Copy this answer" puts on the clipboard: the answer without markdown marks, then the
+/// sources it cites by file name (user evaluation 2026-11-02, M2).
+nonisolated enum AnswerCopyText {
+    static func make(body: String, sourceNames: [String]) -> String {
+        var lines = body.components(separatedBy: "\n").map { line -> String in
+            var l = line.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
+            if let r = l.range(of: #"^#{1,6}\s+"#, options: .regularExpression) { l.removeSubrange(r) }
+            return l
+        }
+        while lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeLast() }
+        let names = Array(NSOrderedSet(array: sourceNames).compactMap { $0 as? String }).sorted()
+        if !names.isEmpty {
+            lines.append("")
+            lines.append(names.count == 1 ? "Source: \(names[0])" : "Sources:")
+            if names.count > 1 { lines += names.map { "• \($0)" } }
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Ask inside a case (navigation merge, scope §3)
+
+/// The case a question is asked in: its id, its workspace (the access scope) and its title (for the label).
+public nonisolated struct AskCaseScope: Equatable, Sendable {
+    public let caseID: UUID
+    public let workspaceID: UUID
+    public let title: String
+
+    public init(caseID: UUID, workspaceID: UUID, title: String) {
+        self.caseID = caseID; self.workspaceID = workspaceID; self.title = title
+    }
+
+    /// The closest-passage note and the general-knowledge block read outside the case, so they run only
+    /// for a question asked across the whole library.
+    public static func extraLanesAllowed(_ scope: AskCaseScope?) -> Bool { scope == nil }
+
+    /// The access a case question is read under — the same as a case's Ask job (PersonaJobsView.run).
+    public var access: SensitiveAccessContext {
+        SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: workspaceID, maximumSensitivity: .restricted, permitsPrivilegedMaterial: false, purpose: .export))
+    }
+
+    /// What is shown when the case could not answer (the reason is logged; nothing is guessed).
+    static func failure(_ reason: String) -> VerifiedAnswer {
+        VerifiedAnswer(body: "This question could not be answered in this case: \(reason) Nothing was guessed.",
+                       citations: [], confidence: .zero, refused: true, refusalReason: reason, answerState: .notFound)
+    }
+}
+
+extension AppState {
+    /// Answer a question from the case's documents only, through the case's answering service.
+    func answerInCase(_ scope: AskCaseScope, question: String) async -> VerifiedAnswer {
+        guard let service = investigationAnswers else {
+            return AskCaseScope.failure("the ledger isn't ready yet.")
+        }
+        do {
+            return try await service.answer(caseID: scope.caseID, question: question, access: scope.access).verified
+        } catch {
+            KalsmritikoshLog.ui.error("Case question failed: \(error.localizedDescription, privacy: .public)")
+            return AskCaseScope.failure(error.localizedDescription)
+        }
+    }
+}

@@ -6,7 +6,7 @@
 //  Add Sketch. macOS hands the result to the focused window as item providers; each one is
 //  saved into the capture intake (same custody line as a dropped file) and read with text
 //  recognition like any image or PDF. The phone and the Mac talk to each other through the
-//  system; this app makes no connection. Part of the "Share and capture" module.
+//  system; this app makes no connection. Part of the "Import from iPhone or iPad" module.
 //
 
 import Foundation

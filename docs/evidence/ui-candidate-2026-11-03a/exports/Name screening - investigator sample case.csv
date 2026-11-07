@@ -1,0 +1,14 @@
+Name screening — scope: Case “Investigator sample case” — run 2026-11-03T04:45:26Z — 8 documents searched
+Term,Kind,Documents,Mentions,Document,How found,Passage
+Maria Lopez,Name,5,6,supplier_abc_23.eml,named entity — exact: “Maria Lopez”; text match — exact words,"maria.lopez@supplier-abc.com john.carter@northwind.example Project Delta — confirmed delivery delayed for first lot Thu, 18 Apr 202…"
+Maria Lopez,Name,5,6,amendment-7.md,named entity — exact: “Maria Lopez”; text match — exact words,"Signatures Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024."
+Maria Lopez,Name,5,6,contract.md,named entity — exact: “Maria Lopez”; text match — exact words,"Signatures This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties."
+Maria Lopez,Name,5,6,supplier_abc_22.eml,text match — exact words,maria.lopez@supplier-abc.com john.carter@northwind.example program-office@northwind.example Project Delta — material certification …
+Maria Lopez,Name,5,6,supplier_abc_24.eml,text match — exact words,"john.carter@northwind.example maria.lopez@supplier-abc.com Re: Project Delta — internal review on the proposed amendment Tue, 23 Apr 2024 09:55:00 +0000 Maria, A…"
+John Carter,Name,5,6,supplier_abc_24.eml,named entity — exact: “John Carter”; text match — exact words,"john.carter@northwind.example maria.lopez@supplier-abc.com Re: Project Delta — internal review on the proposed amendment Tue, 23 Ap…"
+John Carter,Name,5,6,amendment-7.md,named entity — exact: “John Carter”; text match — exact words,"Signatures Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024."
+John Carter,Name,5,6,contract.md,named entity — exact: “John Carter”; text match — exact words,"Signatures This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties…"
+John Carter,Name,5,6,supplier_abc_22.eml,text match — exact words,maria.lopez@supplier-abc.com john.carter@northwind.example program-office@northwind.example Project Delta — material certification delays affecting first lot Mo…
+John Carter,Name,5,6,supplier_abc_23.eml,text match — exact words,"maria.lopez@supplier-abc.com john.carter@northwind.example Project Delta — confirmed delivery delayed for first lot Thu, 18 Apr 2024 11:12:00 +0000 John, Confir…"
+Nobody Imaginary,Name,0,0,,,No match in 8 documents searched
++1 555 000 0000,Phone,0,0,,,No match in 8 documents searched

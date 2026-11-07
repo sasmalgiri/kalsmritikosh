@@ -1,0 +1,97 @@
+          AXCheckBox value="0" desc="Use AI to write answers" [491,510 163x16] actions=AXPress
+          AXCheckBox value="0" desc="AI writes every answer, When the on-device model is available, compose every grounded answer as fluent 
+          AXCheckBox value="1" desc="Actor answers (who did X), Route who-did-this questions to the passage naming the acting party and comp
+          AXCheckBox value="0" desc="Let your cloud AI read the documents about a person (Online), Online mode only, off until you turn it o
+          AXCheckBox value="1" desc="Progressive answer streaming, Render the answer as it forms — instant context, then synthesis, then t
+          AXCheckBox value="1" desc="Story review (approve / correct / reject), Let you approve, correct, or reject individual beats of a re
+          AXCheckBox value="0" desc="Topic-first composition, Give the model composer the matched topic first, so answers lead with the topi
+          AXCheckBox value="1" desc="Understand any wording of a question, When the built-in rules cannot tell which fact a question asks fo
+          AXCheckBox value="1" desc="Read names from authorisation forms, Read the person's name out of a power-of-attorney or authorisation
+          AXCheckBox value="1" desc="Story chapters & recorded disagreements, Read back the chapter structure of a reconstructed story, and 
+          AXCheckBox value="1" desc="Whole-document keyword search, Also search each document's full text, not only its individual passages.
+          AXCheckBox value="1" desc="Record why an import step failed, When a step of an import fails in a way that can be tolerated — an 
+          AXCheckBox value="1" desc="Strict derivation (stop on a failed step), If a file's people-and-organisations step fails, stop proces
+          AXCheckBox value="1" desc="Track unfinished imports, Mark each file as fully processed only when every step finished, so an import
+          AXCheckBox value="0" desc="AI subject resolution (merge duplicate topics), Before topics are built, the on-device model groups lab
+          AXCheckBox value="0" desc="AI topic prose, Smooth each topic's fact spine into 2–4 sentences of connected prose with the on-devi
+          AXCheckBox value="1" desc="Auto-build topics, Rebuild deduplicated, minimized topics automatically while the Mac is idle — no ma
+          AXCheckBox value="0" desc="Event detail fill (5W+H), Fill missing who/where/when/why/how event details with the on-device model, u
+          AXCheckBox value="1" desc="Group by real-world subject, Find every document that names an identifier — a patent, application, ca
+          AXCheckBox value="1" desc="History at idle, Reconstruct and store per-subject history chapters during idle maintenance." [491,1898
+          AXCheckBox value="0" desc="Plain-document subject binding, Attach facts from plain documents to the subject they name, so prose ar
+          AXCheckBox value="1" desc="Summaries at idle, Build per-document and per-community summaries during idle maintenance." [491,1993 3
+          AXCheckBox value="1" desc="Topic minimization, A topic with too little evidence folds into its closest substantive topic, keeping 
+          AXCheckBox value="1" desc="Boilerplate embed-skip, Skip embedding of learned, cross-document boilerplate templates. Still fully se
+          AXCheckBox value="1" desc="Corrective re-retrieval, When first-pass evidence is weak, re-retrieve once with expanded terms before 
+          AXCheckBox value="1" desc="Cross-encoder reranking, Reorder retrieved passages with a cross-encoder so the most on-target passage 
+          AXCheckBox value="0" desc="Hypothetical query expansion, On a weak vector pass, expand the query with a hypothetical answer and fu
+          AXCheckBox value="1" desc="Import & coverage lifecycle, Show one honest lifecycle state per source (queued / processing / searchab
+          AXCheckBox value="1" desc="Password-protected files, Open encrypted PDFs that use owner-only protection (empty user password); fil
+          AXCheckBox value="1" desc="Transcribe audio & video, Turn the words spoken in recordings and videos into text using Apple's on-dev
+          AXCheckBox value="1" desc="Ask about any field we found, Let a question reach any field found in your documents, not just the ones
+          AXCheckBox value="1" desc="Group unfamiliar document kinds, Group documents of a kind the app does not have a built-in name for. A
+          AXCheckBox value="0" desc="Read documents no built-in rule recognises, For a document that produced NO details at all — a kind t
+          AXCheckBox value="1" desc="Read labelled fields from any document, Pull facts out of any document that states them as a label and 
+          AXCheckBox value="1" desc="Report what each format can give you, Add a section to the import report saying, per file format, exact
+          AXCheckBox value="1" desc="State the English-only limit, Say which languages your documents are in, and state plainly that structu
+          AXCheckBox value="0" desc="Show preview features, Features that are built but not yet verified on real data or hardware (team revi
+          AXCheckBox value="1" desc="Deleted email recovery, Finds deleted mail that is still present: files in Deleted Items / Trash / Bin 
+          AXCheckBox value="1" desc="Email authenticity checks, Checks DKIM and ARC signatures and S/MIME, and reads hidden time values in m
+          AXCheckBox value="0" desc="Outlook PST reader (MS-PST), Reads Outlook PST and OST files by Microsoft's published format: every fol
+          AXCheckBox value="1" desc="Who talks to whom, A communication graph with message counts and volume over time, and a marker on any 
+          AXCheckBox value="0" desc="Accuracy on your archive, The app tests itself with questions whose answers your ledger already proves,
+          AXCheckBox value="1" desc="Corroboration meter, Beside each claim, how many INDEPENDENT sources support it. Copies and forwards of
+          AXCheckBox value="1" desc="How this answer was found, For every answer, which kinds of search ran, what each found, what the evide
+          AXCheckBox value="1" desc="Look for contradicting evidence, Before an answer is shown, the app searches your archive for evidence 
+          AXCheckBox value="0" desc="Proof bundles, Export an answer as one signed file with every quote, its exact location and the fingerp
+          AXCheckBox value="1" desc="Signed import and export receipts, Every import and export ends in a receipt listing what was read or w
+          AXCheckBox value="1" desc="Command palette, Reach every screen and main action from one search box (⌘K); press ? for the list of
+          AXCheckBox value="1" desc="Import a DEVONthink database, Read the files stored in a DEVONthink database in place, keeping its grou
+          AXCheckBox value="1" desc="Send to DEVONthink, Send an answer to DEVONthink as a Markdown note with a link back to each quoted pas
+          AXCheckBox value="1" desc="Alerts, Tells you when a new document contradicts what the ledger said, fills or opens a gap, or mentio
+          AXCheckBox value="0" desc="As of a date, Ask again using only evidence whose file date is on or before a chosen day, and see which
+          AXCheckBox value="0" desc="How an account changed, For one person, line up everything they said or wrote about a topic in date ord
+          AXCheckBox value="1" desc="Living dossiers, A profile per person or organisation that updates after each import, with 'what change
+          AXCheckBox value="0" desc="Places (preview), Photo locations and addresses found in documents: a list with coordinates and an offl
+          AXCheckBox value="1" desc="Similar images, Find copies and crops of a photo across your archive, on this Mac. Face grouping is not
+          AXCheckBox value="0" desc="Watch a question, Pin a question; after each import it is asked again and you are told when the answer,
+          AXCheckBox value="1" desc="Watchlists, Paste or import a list of names, phone numbers and email addresses and screen it against th
+          AXCheckBox value="1" desc="What is missing, Shows items your documents imply should exist but are absent: a missing number in a se
+          AXCheckBox value="0" desc="What to read first, A score per document and person from contradictions, watchlist matches, failed auth
+          AXCheckBox value="0" desc="Issues and chronology, Tag facts and events with the issues of a matter, read the chronology by issue a
+          AXCheckBox value="0" desc="Production sets, Bates-numbered PDFs, Concordance/Relativity load files and legal holds that block remo
+          AXCheckBox value="0" desc="Review coding, Mark documents responsive, privileged or hot; suggestions learn from your choices and sh
+          AXCheckBox value="0" desc="Answers with your own cloud AI key, Use Claude, OpenAI or Gemini with your own key. You see exactly wha
+          AXCheckBox value="0" desc="Mask personal details before sending, Before anything goes online, names, emails, phone numbers, addres
+          AXCheckBox value="0" desc="Send the least data, Answers the ledger can give without AI never go online; for the rest, a daily limi
+          AXCheckBox value="0" desc="Content creator persona, The Content creator persona and its Publish Package studio. The app is for inv
+          AXCheckBox value="1" desc="Near-duplicates, Links drafts, forwards and re-saved copies as versions of one another. Nothing is merg
+          AXCheckBox value="1" desc="Search coverage badge, Under every result list: which fields matched and how much of the archive was se
+          AXCheckBox value="0" desc="Signed case slices, Share a redacted, signed, read-only part of a case as one file that another Mac can
+          AXCheckBox value="0" desc="Team review over a shared folder (preview), Reviewers work on one case through a shared folder with sig
+          AXCheckBox value="0" desc="Import queue, See pending, running and finished imports; pause, resume, stop one source or reorder. Res
+          AXCheckBox value="0" desc="Very large items, A message or record larger than the per-record budget is read by byte range: only its
+          AXCheckBox value="0" desc="Briefings, FAQs and mind maps, One-click briefing, FAQ and mind map built from the ledger (no AI writes
+          AXCheckBox value="0" desc="Fact-check my writing, Write or paste a draft and each sentence is checked against your evidence after 
+          AXCheckBox value="1" desc="Advanced search syntax, AND, OR, NOT, "exact phrase", NEAR/5, wildcards and field filters such as from:
+          AXCheckBox value="0" desc="Ask from anywhere, A menu-bar panel reachable from any app: ask or search, and the answer opens in the 
+          AXCheckBox value="1" desc="Highlights and notes, Highlight and annotate any passage. Notes are stored beside the source, never wri
+          AXCheckBox value="0" desc="Import notes apps, Read Obsidian vaults (links between notes become relations), Notion exports and note
+          AXCheckBox value="0" desc="Improved text recognition, Reads scanned PDF pages at 300 dpi instead of 144, re-reads earlier scans on
+          AXCheckBox value="0" desc="Links to passages (kalsmritikosh://), Copy a link to a document, an exact passage, a citation or a save
+          AXCheckBox value="0" desc="Lock with Touch ID, Lock the app when the Mac sleeps or the screen locks, and when you come back after 
+          AXCheckBox value="0" desc="More export formats, mbox, EML, MSG, PDF, TIFF, CSV, Word, Markdown, JSON and HTML, with a check before
+          AXCheckBox value="0" desc="More file types, Reads Messages history, Safari and Chrome history, PowerPoint 97–2003 (.ppt) and Key
+          AXCheckBox value="0" desc="Move the ledger to another disk, Copy the ledger to an external disk, verify the copy by hash, then use
+          AXCheckBox value="0" desc="Rich text notes and PDF marks, Write notes in rich text as well as Markdown, and highlight, underline, 
+          AXCheckBox value="0" desc="See Also and filing suggestions, For any document: the documents most like it, and the groups and tags 
+          AXCheckBox value="0" desc="Share and capture, “Save to Investigations Made Easy” in the Share menu and the Services menu: file
+          AXCheckBox value="0" desc="Shortcuts actions, Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app
+          AXCheckBox value="0" desc="Show in Spotlight, Make document titles and summaries findable from Spotlight. This copies that text in
+          AXCheckBox value="0" desc="Smart collections and rules, Saved searches that stay up to date, and rules such as 'when a document fr
+          AXCheckBox value="0" desc="Sync through a folder, Keep your notes, tags, groups, highlights, PDF marks and the files you added ins
+          AXCheckBox value="1" desc="Tags, Tag documents, facts and entities; use a tag as a search or question scope. Tags are your organis
+          AXCheckBox value="1" desc="Timeline and relationship views, An interactive timeline and a graph of people and organisations; every
+          AXCheckBox value="0" desc="Your own folders, Arrange documents in groups and sub-groups of your own. One document can sit in sever
+          AXCheckBox value="0" desc="Your own notes, Write and edit notes in Markdown inside the app. Each note is read into your archive li
+          AXCheckBox value="0" desc="Your own record types, Define types such as 'Contract: parties, value, start date'. Fields fill from yo

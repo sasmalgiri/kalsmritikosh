@@ -1,0 +1,124 @@
+AXWindow/AXDialog [455,608 280x168] actions=AXRaise
+  AXGroup/AXHostingView [455,608 280x168]
+    AXButton desc="Siri Waveform Orb" id=siri [610,632 25x23] actions=AXPress
+AXWindow/AXStandardWindow title="Work Center" id=<swiftui> [0,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1421x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1287,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1421x721]
+      AXGroup/AXHostingView [0,121 244x721]
+        AXScrollArea [0,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Work Center" help="Work Center — Run a guided workflow step by step — gated steps, per-field guidance, and a numbered document for every confirmed step" [8,302 228x38] actions=AXPress
+          AXButton desc="DataLab" help="DataLab — Build cited datasets over your evidence — transform, test scenarios, check quality; every cell drills to its source" [8,343 228x38] actions=AXPress
+          AXButton desc="Case Story" help="Case Story — The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps" [8,384 228x38] actions=AXPress
+          AXButton desc="Competing Hypotheses" help="Competing Hypotheses — Weigh competing explanations against your evidence — an Analysis of Competing Hypotheses matrix that ranks by fewest inconsistencies" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x721]
+      AXGroup/AXHostingView [0,121 1421x721]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1073x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1380,139 12x13] actions=AXCancel,AXPress
+        AXSplitGroup [0,172 1421x670]
+          AXGroup/AXHostingView [0,172 594x670]
+            AXButton desc="All workflows" [258,187 79x13] actions=AXPress
+            AXMenuButton title="Options" help="Automation — turn auto-save and auto-complete on or off" [522,186 35x14] actions=AXPress
+            AXButton desc="Help" id=questionmark.circle help="How this job works — show the step-by-step guide again" [566,187 13x13] actions=AXPress
+            AXStaticText value="Source map" [258,207 77x16]
+            AXStaticText value="WF-2026-0001" [258,231 74x13]
+              AXStaticText value="WF-2026-0001" [258,231 74x13]
+            AXStaticText value="Released" [347,231 46x13]
+            AXStaticText value="Client / matter" [258,256 71x13]
+            AXTextField value="Source map" [333,252 247x21] actions=AXConfirm
+            AXProgressIndicator value="0.5" [258,279 322x12]
+            AXStaticText value="Step 3 of 4 · Now: Note source protection → Next: Produce the source map" [258,297 312x26]
+            AXButton desc="Summary" help="A clean, plain-language summary you can hand to a non-technical reader — counsel, a manager. Copy or print it." [258,330 84x19] actions=AXPress
+            AXButton desc="Copy Report" help="Copy the full technical report — every step, value, attestation and document number" [348,329 100x20] actions=AXPress
+            AXButton desc="Variant" help="Save this run's entries as a reusable variant — next time, start pre-filled in one click" [454,329 75x21] actions=AXPress
+            AXButton desc="Print" id=printer help="Print the technical report" [535,330 33x19] actions=AXPress
+            AXScrollArea [244,365 350x476] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXButton desc="List the sources & people, 2 Nov 2026 at 4:46 AM · Shirshendu Sasmal" help="Done — click to review this step" [252,373 334x43] actions=AXPress
+              AXButton desc="Map the relationships, 2 Nov 2026 at 4:47 AM · Shirshendu Sasmal" help="Done — click to review this step" [252,420 334x43] actions=AXPress
+              AXButton desc="Note source protection" help="You are here — Which sources are confidential and how they're shielded." [252,467 334x29] actions=AXPress
+              AXButton desc="Produce the source map, Complete the previous step first." help="Locked — Complete the previous step first." [252,500 334x43] actions=AXPress
+          AXSplitter value="594" [594,172 1x670]
+          AXGroup/AXHostingView [595,172 826x670]
+            AXStaticText value="How this job works" [624,200 129x15]
+            AXButton desc="Close" id=xmark help="Hide — reopen any time with the ? button" [1383,204 8x8] actions=AXPress
+            AXStaticText value="Map sources, people, and relationships — the app has already linked who appears with whom, so you refine rather than draw from scratch." [623,224 667x13]
+            AXStaticText value="1" [627,246 5x13]
+            AXStaticText value="Work top to bottom on the left rail. Each step explains itself; fill its fields on the right." [644,245 410x13]
+            AXStaticText value="2" [627,269 7x13]
+            AXStaticText value="For a step that needs a tool, press Open — do the work there, then come back to Work Center; this run reopens where you left off." [644,268 627x13]
+            AXStaticText value="3" [627,292 7x13]
+            AXStaticText value="Press Confirm on each step to finalize it (auto-complete is off)." [644,291 304x13]
+            AXStaticText value="4" [627,315 7x13]
+            AXStaticText value="Everything auto-saves — close any time and resume from the Work Center list." [644,314 378x13]
+            AXStaticText value="The 4 steps:  1. List the sources & people  →  2. Map the relationships  →  3. Note source protection  →  4. Produce the source map" [623,337 643x13]
+            AXButton desc="Got it" [623,358 49x20] actions=AXPress
+            AXScrollArea [595,390 826x451] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXStaticText value="Step 3 of 4" [619,414 55x13]
+              AXStaticText value="Note source protection" [619,431 187x20]
+              AXStaticText value="What to do here" [632,481 99x13]
+              AXStaticText value="Which sources are confidential and how they're shielded. Press “Open” to do this in the app, then come back and fill the fields below. Entries save as you type; press Confirm to finalize it." [631,498 682x30]
+              AXButton desc="Open Review — do this step's work there" help="Open the tool to do this step now — this run reopens when you come back" [619,559 296x24] actions=AXPress
+              AXStaticText value="Protection" [635,617 60x15]
+              AXScrollArea [635,636 680x76] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+                AXTextArea [635,636 680x76]
+                AXScrollBar value="0" [1297,635 19x78]
+              AXStaticText value="Confidential-source handling — never expose a protected source." [635,716 316x13]
+              AXStaticText value="Evidence attached" [635,746 107x15]
+              AXButton desc="Attach files" help="Attach the files this step rests on — the app reads them into your archive so they're searchable and citable. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [1214,743 100x20] actions=AXPress
+              AXStaticText value="Attach a supported file and the app reads it — so this step can cite and answer over it. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [635,770 675x39]
+              AXStaticText value="Note (optional)" [635,823 87x15]
+              AXTextField [635,842 680x24] actions=AXConfirm
+              AXButton desc="Previous" help="Go back a step — nothing is lost" [619,900 94x24] actions=AXPress
+              AXButton desc="Next" help="Jump to the next step" [723,900 70x24] actions=AXPress
+              AXButton desc="Confirm step" help="Confirm step — Finalizes this step and records who did it and when. Nothing is uploaded." [1203,900 127x25] actions=AXPress
+              AXScrollBar value="0" [1403,389 19x453]
+                AXValueIndicator value="0" [1412,393 6x360]
+                AXButton/AXIncrementPage [1412,754 6x85] actions=AXPress
+                AXButton/AXDecrementPage [1412,393 6x0] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1326,848 83x24] actions=AXPress
+  AXToolbar [0,33 1421x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1373,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Work Center" [369,33 1004x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Work Center" id=<swiftui> [0,33 1421x845] actions=AXRaise

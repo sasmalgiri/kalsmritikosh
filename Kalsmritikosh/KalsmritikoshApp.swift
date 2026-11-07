@@ -18,9 +18,24 @@ import TipKit
 struct KalsmritikoshApp: App {
     /// §1.1 — in sample-archive mode the folder store is in-memory only, so
     /// the user's saved folders are neither loaded nor overwritten.
-    @State private var appState = SampleArchiveMode.isActive
+    @State private var appState = KalsmritikoshApp.ephemeralFolderStoreRequested
         ? AppState(bookmarks: BookmarkStore(ephemeral: true))
         : AppState()
+
+    /// The saved folders are neither loaded nor overwritten in sample-archive mode, nor (DEBUG only)
+    /// under the acceptance-case fixture. The fixture's launch argument is not read in Release
+    /// (App Store completion §5).
+    private static var ephemeralFolderStoreRequested: Bool {
+        if SampleArchiveMode.isActive { return true }
+        #if DEBUG
+        return AcceptanceCaseGUIFixture.isRequested
+        #else
+        return false
+        #endif
+    }
+
+    /// K7 — on Quit, pending studio writes finish (or the person is asked) before the app exits.
+    @NSApplicationDelegateAdaptor(AppTerminationGuard.self) private var terminationGuard
 
     /// N-6 — the menu-bar panel's switch (the module's own persisted key).
     @AppStorage("kalsmritikosh.product.menuBarAsk") private var menuBarAskOn = false
@@ -35,6 +50,8 @@ struct KalsmritikoshApp: App {
         }
         #endif
         DiagnosticsReporter.shared.start()   // U-4 — MetricKit crash/hang reports, saved on this Mac only
+        ModuleScopeMigration.run()                // 2026-11-06 scope: an earlier install keeps its old defaults
+        ModulePreset.refreshInvestigationRole()   // an earlier Investigator gets the role's current tools, once
     }
 
     var body: some Scene {
@@ -48,12 +65,23 @@ struct KalsmritikoshApp: App {
                                      set: { if $0 == nil, OutboundConsent.shared.pending != nil { OutboundConsent.shared.resolve(allow: false) } })) { preview in
                     OutboundConsentSheet(preview: preview)
                 }
+                // Plan A — the once-per-case AI permission (no case document goes to the AI without it).
+                .sheet(item: Binding(get: { CaseReadConsent.shared.pending },
+                                     set: { if $0 == nil, CaseReadConsent.shared.pending != nil { CaseReadConsent.shared.resolve(allow: false) } })) { request in
+                    CaseReadConsentSheet(request: request)
+                }
+                // UB1 — after a verified AI plan purchase or restore, or "Turn on AI…": the one-step setup
+                // (terms + "Allow AI to read case documents you permit"); never over the plans sheet.
+                .sheet(item: Binding(get: { PurchaseCenter.shared.paywallRequested == nil ? AISetupCenter.shared.offer : nil },
+                                     set: { AISetupCenter.shared.offer = $0 })) { kind in
+                    AISetupSheet(kind: kind).environment(appState)
+                }
                 .preferredColorScheme(.light)   // light UI across all phases
-                .purchaseGate()                 // free 14-day trial, then one purchase (Purchase.swift)
+                .purchaseGate()                 // subscription with a 14-day introductory trial; legacy unlock honoured (Purchase.swift)
                 .appLockOverlay()               // W2-7 — Touch ID / password lock
                 // W1-5 — kalsmritikosh:// links (scheme registered in the target's URL Types).
                 .onOpenURL { url in Task { await appState.handleDeepLink(url) } }
-                // P-3 — File ▸ Import from iPhone or iPad (Continuity Camera), with "Share and capture" on.
+                // P-3 — File ▸ Import from iPhone or iPad (Continuity Camera), with "Import from iPhone or iPad" on.
                 .importsItemProviders(ProductModuleFlags.isEnabled(.captureExtensions) ? DeviceImport.acceptedTypes : []) { providers in
                     Task { await appState.importFromDevice(providers) }
                     return true
@@ -81,7 +109,7 @@ struct KalsmritikoshApp: App {
                     // W2-7 — when this process is only the unit-test host, never open the person's
                     // ledger: tests boot their own AppState on temporary ledgers. Booting the real
                     // one here would convert it with the TEST Keychain key and lock the person out.
-                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+                    if TestHost.isActive { return }
                     IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
                     CaptureServiceProvider.shared.install(appState: appState)   // W3-6 — Services menu
                     #if DEBUG
@@ -90,6 +118,12 @@ struct KalsmritikoshApp: App {
                     // VALID/BLOCKED workspaces instead of the normal path. Absent from release.
                     if PAProdGUISmokeFixture.isRequested {
                         await PAProdGUISmokeFixture.bootAndSeed(appState)
+                        return
+                    }
+                    // Investigator workflow review 2026-10-30 — DEBUG-only: `--acceptance-case` boots a
+                    // disposable ledger holding the supplier-payment acceptance case for a UI walk-through.
+                    if AcceptanceCaseGUIFixture.isRequested {
+                        await AcceptanceCaseGUIFixture.boot(appState)
                         return
                     }
                     #endif
@@ -113,6 +147,7 @@ struct KalsmritikoshApp: App {
         .defaultSize(width: 1100, height: 720)
         .commands {
             ImportFromDevicesCommands()   // P-3 — Take Photo / Scan Documents from a nearby iPhone or iPad
+            CaseReviewCommands()          // ⌥⌘↓ ⌥⌘↑ ⌥⌘Y ⌥⌘N ⌥⌘L in a case's contradiction review, the note field focused too
             // D-10 — menu-bar mirrors of palette entries. Each item posts its
             // catalog entry id; RootView resolves it through the SAME target
             // router as ⌘K, so the menu can never drift from the palette.
@@ -126,6 +161,25 @@ struct KalsmritikoshApp: App {
                 // The type-to-confirm sheet there remains the sole erase trigger.
                 Button("Delete All My Data…") { postPaletteEntry("act.deleteAllData") }
             }
+            // §6.6 — the Help menu: the searchable offline help, the Get started guide, the replayable
+            // tutorial and introduction, subscription management and the support page. All of it stays
+            // reachable before a purchase and after a subscription ends.
+            CommandGroup(replacing: .help) {
+                Button("Investigations Made Easy Help") { SurfaceOpener.open(.guide) }
+                    .keyboardShortcut("?", modifiers: .command)
+                Button("Get Started Guide") { SurfaceOpener.openHelp(HelpRegistry.getStarted.id) }
+                Divider()
+                Button("Replay the Tutorial (Sample Case)") { HelpTutorial.replay() }
+                Button("Replay the Case Map Tutorial") { HelpTutorial.replay(.caseMap) }
+                Button("Case Map Keyboard Shortcuts") { SurfaceOpener.openHelp("task-case-map-keyboard") }
+                Button("Replay the Introduction") { SurfaceOpener.replayOnboarding() }
+                Divider()
+                Button("Subscription, Trial and Cancelling") { SurfaceOpener.openHelp("subscription-plans") }
+                Button("Manage Subscription (Apple Account)…") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }
+                Divider()
+                Button("Support (Privacy-Safe Bug Reports)…") { NSWorkspace.shared.open(HelpLinks.support) }
+                Button("Privacy Policy…") { NSWorkspace.shared.open(HelpLinks.privacy) }
+            }
         }
     }
 
@@ -133,3 +187,38 @@ struct KalsmritikoshApp: App {
         NotificationCenter.default.post(name: .kalsmritikoshPaletteEntry, object: id)
     }
 }
+
+/// K7 — pending studio saves are written before the app quits. Edits are saved as they happen, but a
+/// write still in flight at Quit used to be abandoned; one that failed is now named, not lost silently.
+final class AppTerminationGuard: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // The test host quits at the runner's request; it must never wait on a dialog.
+        if TestHost.isActive { return .terminateNow }
+        Task { @MainActor in
+            let saved = await Self.flushWithin(seconds: 5)
+            if saved {
+                sender.reply(toApplicationShouldTerminate: true)
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = "A studio change has not been saved"
+            alert.informativeText = "One or more studio changes could not be written to the ledger. If you quit now, they are lost. Cancel to go back and choose Retry."
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Quit Anyway")
+            sender.reply(toApplicationShouldTerminate: alert.runModal() == .alertSecondButtonReturn)
+        }
+        return .terminateLater
+    }
+
+    /// True when every open studio's writes landed within the time allowed.
+    @MainActor static func flushWithin(seconds: Double) async -> Bool {
+        await withTaskGroup(of: Bool?.self) { group in
+            group.addTask { @MainActor in await StudioStorage.flushAll() }
+            group.addTask { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? false
+        }
+    }
+}
+

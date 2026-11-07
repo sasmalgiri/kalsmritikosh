@@ -35,9 +35,11 @@ public struct EmailThreadsView: View {
                 if loading {
                     ProgressView().frame(maxWidth: .infinity, alignment: .center).padding(.top, 40)
                 } else if (result?.threads.isEmpty ?? true) {
-                    ContentUnavailableView("No email found",
-                        systemImage: "envelope.badge.person.crop",
-                        description: Text("Ingest a mailbox (mbox, eml, msg, pst…) and its messages will be deduplicated and threaded here."))
+                    LedgerEmptyState {
+                        ContentUnavailableView("No email found",
+                            systemImage: "envelope.badge.person.crop",
+                            description: Text("Ingest a mailbox (mbox, eml, msg, pst…) and its messages will be deduplicated and threaded here."))
+                    }
                 } else if let result {
                     summaryStrip(result)
                     TextField("Filter by subject or participant", text: $query)

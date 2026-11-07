@@ -77,6 +77,19 @@ public actor InvestigationClosureRepository {
             guard Int(revision) == expectedRevision else {
                 throw InvestigationClosureError.revisionConflict(expected: expectedRevision, actual: Int(revision))
             }
+            // Brief §6: a closure that pins findings pins THIS case's currently approved run (its latest
+            // approval decision is 'approved' for that run, with that receipt seal) — never an unapproved,
+            // withdrawn or other case's run. Closing without findings (declined, referred) pins none.
+            if let workProductRunID {
+                let latest = try db.query("""
+                    SELECT decision, work_product_run_id, receipt_seal FROM investigation_findings_approvals
+                     WHERE case_id = ? ORDER BY sequence DESC LIMIT 1;
+                    """, [.uuid(caseID)]).first
+                let approved = latest?.string(0) == FindingsApprovalKind.approved.rawValue
+                    && latest?.string(1)?.uppercased() == workProductRunID.uuidString.uppercased()
+                    && (receiptSeal.map { $0.isEmpty || $0 == latest?.string(2) } ?? true)
+                guard approved else { throw InvestigationClosureError.findingsNotApproved(workProductRunID) }
+            }
             let next = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_case_closures WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             try db.exec("""

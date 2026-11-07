@@ -28,7 +28,7 @@ public struct InvestigationFindingsComposer: WorkProductSectionComposer {
             return (sel, r.workProductClaim)
         }
 
-        let findings = Self.distinctFindings(rendered)
+        let findings = Self.distinctFindings(Self.hygienic(rendered))
 
         // Materials-reviewed counts — SELECTED CONTEXT ONLY (no global event/contradiction/gap reads).
         var objects = Set<KnowledgeObject.ID>()
@@ -95,9 +95,109 @@ public struct InvestigationFindingsComposer: WorkProductSectionComposer {
 
     /// The number of distinct findings the report shows — what the executive summary counts.
     static func distinctFindingCount(_ context: WorkProductContext) -> Int {
-        distinctFindings(context.selectedClaims.compactMap { sel in
+        distinctFindings(hygienic(context.selectedClaims.compactMap { sel in
             ResolvedClaimRenderer.render(sel).map { (sel, $0.workProductClaim) }
-        }).count
+        })).count
+    }
+
+    // MARK: - P4 findings hygiene (real-case evaluation 2026-11-03, D5)
+
+    /// The rows a report may carry: no "field: value" row whose field is a person's surname or whose
+    /// value is a list item or a defence-counsel line ("gillar: Thomas Ashley Esq., Newark",
+    /// "hutchins: • Rapids Theatre Niagara Falls, USA, Inc."), and one row per person and step — two
+    /// documents dating one plea a few weeks apart are one step with a date discrepancy, shown as
+    /// such, never two pleas.
+    static func hygienic(_ rendered: [(selected: SelectedClaim, claim: WorkProductClaim)]) -> [(selected: SelectedClaim, claim: WorkProductClaim)] {
+        // The people the case's claims are about (participant subjects of event claims).
+        var surnames = Set<String>()
+        for pair in rendered where pair.selected.resolved.claim.derivedFrom.contains(where: { $0.kind == .event }) && pair.selected.resolved.claim.subjectID != nil {
+            let words = pair.selected.resolved.claim.subjectLabel.lowercased()
+                .components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'-")).inverted).filter { $0.count >= 2 }
+            if words.count >= 2, let last = words.last { surnames.insert(last) }
+        }
+        let kept = rendered.filter { pair in
+            guard pair.selected.resolved.claim.derivedFrom.contains(where: { $0.kind == .genericFact }),
+                  let colon = pair.claim.text.range(of: ": ") else { return true }
+            let field = pair.claim.text[..<colon.lowerBound].lowercased().trimmingCharacters(in: .whitespaces)
+            let value = pair.claim.text[colon.upperBound...].trimmingCharacters(in: .whitespaces)
+            if surnames.contains(field) { return false }
+            if let head = value.first, "•·▪◦‣●".contains(head) { return false }
+            if value.range(of: #"(?i)\besq\b"#, options: .regularExpression) != nil { return false }
+            return true
+        }
+        return collapsingStepDiscrepancies(withoutOtherMatters(kept))
+    }
+
+    static let stepStatement = #"\s(?:charged|arrested|arraigned|pleaded guilty|convicted|acquitted|sentenced|pardoned|released)\.?$"#
+
+    static func isStep(_ c: Claim) -> Bool {
+        c.subjectID != nil && c.derivedFrom.contains(where: { $0.kind == .event }) && c.statement.range(of: stepStatement, options: .regularExpression) != nil
+    }
+
+    /// Real-case v2 (2026-11-04): the findings listed "Judge John Michael Vazquez convicted" (the entity's name
+    /// carries the title) and the steps of other matters' people a case's documents also name — "Nakita
+    /// Walker convicted" from a crash release, "Suliaman Kamara sentenced" from a 2013 release — among the
+    /// case's own. A step row of a titled official goes; people whose step rows cite documents together form
+    /// a matter, and a matter covering a third of the main matter's documents or fewer is another matter's: its step rows go. Ties keep every tied matter.
+    static func withoutOtherMatters(_ rendered: [(selected: SelectedClaim, claim: WorkProductClaim)]) -> [(selected: SelectedClaim, claim: WorkProductClaim)] {
+        var docsOf: [String: Set<UUID>] = [:]
+        for pair in rendered where isStep(pair.selected.resolved.claim) {
+            let c = pair.selected.resolved.claim
+            guard ProceedingRoleClassifier.titleRole(c.subjectLabel) == nil else { continue }
+            docsOf[CaseDraftBuilder.nameKey(c.subjectLabel), default: []].formUnion(c.evidence.map(\.objectID))
+        }
+        let people = docsOf.keys.sorted()
+        var parent = Array(people.indices)
+        func root(_ i: Int) -> Int { var i = i; while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }; return i }
+        for i in people.indices { for j in people.indices where j > i && !(docsOf[people[i]] ?? []).isDisjoint(with: docsOf[people[j]] ?? []) { parent[root(j)] = root(i) } }
+        var coverage: [Int: Set<UUID>] = [:]
+        for i in people.indices { coverage[root(i), default: []].formUnion(docsOf[people[i]] ?? []) }
+        let main = coverage.values.map(\.count).max() ?? 0
+        var other = Set<String>()
+        for i in people.indices {
+            let c = coverage[root(i)]?.count ?? 0
+            if c < main, c * 3 <= main { other.insert(people[i]) }
+        }
+        return rendered.filter { pair in
+            let c = pair.selected.resolved.claim
+            guard isStep(c) else { return true }
+            if ProceedingRoleClassifier.titleRole(c.subjectLabel) != nil { return false }
+            return !other.contains(CaseDraftBuilder.nameKey(c.subjectLabel))
+        }
+    }
+
+    /// "Guy R. Miller sentenced" from two documents, dated May 28 and May 29: one row, at the earlier
+    /// day, carrying both documents' citations and the discrepancy.
+    static func collapsingStepDiscrepancies(_ rendered: [(selected: SelectedClaim, claim: WorkProductClaim)]) -> [(selected: SelectedClaim, claim: WorkProductClaim)] {
+        let stepSuffix = #"\s(?:charged|arrested|arraigned|pleaded guilty|convicted|acquitted|sentenced|pardoned|released)\.?$"#
+        var out: [(selected: SelectedClaim, claim: WorkProductClaim)] = []
+        var groups: [String: [Int]] = [:]
+        var extraDays: [Int: [String]] = [:]
+        for pair in rendered {
+            let c = pair.selected.resolved.claim
+            guard let anchor = pair.selected.temporalAnchor, let subject = c.subjectID,
+                  c.derivedFrom.contains(where: { $0.kind == .event }),
+                  c.statement.range(of: stepSuffix, options: .regularExpression) != nil else { out.append(pair); continue }
+            let key = subject.uuidString + "|" + c.statement.lowercased()
+            if let i = groups[key, default: []].first(where: { i in
+                guard let a = out[i].selected.temporalAnchor else { return false }
+                return abs(a.start.timeIntervalSince(anchor.start)) <= 60 * 86_400
+            }) {
+                let day = SelectedClaimDatePhrase.phrase(for: pair.selected).replacingOccurrences(of: "On ", with: "")
+                let first = SelectedClaimDatePhrase.phrase(for: out[i].selected).replacingOccurrences(of: "On ", with: "")
+                if day != first, !(extraDays[i] ?? []).contains(day) { extraDays[i, default: []].append(day) }
+                for citation in pair.claim.supporting where !out[i].claim.supporting.contains(citation) { out[i].claim.supporting.append(citation) }
+                for citation in pair.claim.contradicting where !out[i].claim.contradicting.contains(citation) { out[i].claim.contradicting.append(citation) }
+                continue
+            }
+            groups[key, default: []].append(out.count)
+            out.append(pair)
+        }
+        for (i, days) in extraDays {
+            let first = SelectedClaimDatePhrase.phrase(for: out[i].selected).replacingOccurrences(of: "On ", with: "")
+            out[i].claim.text += " (the sources give different dates: " + ([first] + days).joined(separator: ", ") + " — one step, a date discrepancy)"
+        }
+        return out
     }
 }
 

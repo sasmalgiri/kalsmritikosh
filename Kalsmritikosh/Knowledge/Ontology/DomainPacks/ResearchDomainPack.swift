@@ -37,7 +37,12 @@ public enum ResearchDomainPack {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "doi", value: doi,
                                      status: .sourceAsserted, confidence: 0.85, sourceBlockIDs: [blockID]))
         }
-        if let year = firstMatch(#"\b(?:19|20)\d{2}\b"#, in: text) {
+        // A publication's year — only of text that reads as a citation (a DOI, "et al.", a journal or
+        // proceedings mark). Any year in any text became a "Date: 2013" fact for NTSB records and
+        // press releases, and answered "when did it happen?" with a bare year (closed-case
+        // simulation 2026-10-26).
+        let citationLike = firstMatch(#"10\.\d{4,9}/|\bet al\.|\b(?:J\.|Journal|Proc\.|Proceedings|Vol\.|vol\.|pp\.|arXiv|ISBN|ISSN)\b"#, in: text) != nil
+        if citationLike, let year = firstMatch(#"\b(?:19|20)\d{2}\b"#, in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: year, unit: "year",
                                      status: .sourceAsserted, confidence: 0.5, sourceBlockIDs: [blockID]))
         }

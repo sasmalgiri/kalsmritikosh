@@ -1,0 +1,1 @@
+22368 /Users/shirshendusasmal/Library/Developer/Xcode/DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh -kalsmritikosh.sampleArchiveMode YES

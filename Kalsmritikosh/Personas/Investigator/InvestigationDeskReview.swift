@@ -93,4 +93,7 @@ public nonisolated enum InvestigationDeskError: Error, Sendable, Equatable {
     case gapNotFound(UUID)
     case gapOutOfScope(UUID)             // its evidence is not inside the case scope
     case blankActor
+    /// v170 — a dismissal needs its reason; "other" needs the note that says it.
+    case reasonRequired
+    case noteRequired
 }
