@@ -4,23 +4,22 @@ Decision: APPROVED
 By: AGENT (Claude) — agent review per owner decision 2026-11-01
 Role: AGENT legal/privacy reviewer
 Date: 2026-11-07
-Commit: 06487e9560a140639c566a1e0cc63ceaf3e62295
+Commit: 54ed48b94811dd7a4d46d71da1b441b1572e54f4
 
 This is an agent review, not a lawyer's opinion. It is a read-only review of the code and the release package; I did not build, run tests or use the GUI.
 
-Summary: this confirmation review covers 06487e95, which fixes the should-fixes LS19–LS22 from the e3ac8bf8 review (APPROVED). It adds no sending, consent, network or preference path.
+Summary: this confirmation review covers 06487e95..54ed48b9: the CI script, the contradiction-finder determinism fix, the history time rounding, the regenerated verifier, LS23 erasure-report matching and paging, case-map speed (fence query, journal cache, projection memo, smaller snapshot) and the navigation merge (Cases / Evidence / Search / Outputs, Ask and Search in the active case). It adds no network, sending, consent or content-holding preference path. No privacy policy, terms or listing text change is needed.
 
-- LS19 fixed: person erasure now deletes saved map views and saved searches whose name, filters, words or results name the person. It clears recorded states that name the person in their content or milestone name to stubs and replaces their names. It removes the before/after revisions naming the person. It reports the link reasons it keeps. Names match ignoring case, accents and width in any script. The updates stay within what the v173 triggers allow.
-- LS20 fixed: DATA_FLOW_INVENTORY L3 and L12 now describe the current capture and DEVONthink defaults.
-- LS21 fixed: DATA_FLOW, THREAT_MODEL T16, help and the manual disclose that a recorded state keeps the names and quotes of documents forgotten later, until a case, person or full erasure.
-- LS22 fixed: the remaining module texts state the per-case AI permission instead of "previewed".
+- LS23 fixed: the "still named in" counts (documents, studio drafts, saved answers, topics, conversation turns) use the same Unicode matcher as the erasure itself, paged 256 rows at a time; a failed count is logged.
+- LN7 fixed: checkpoint and other name matching is paged by rowid; only matching ids are held.
+- Journal cache and projection memo: memory only, one case, created per map view; an erased case clears both on the next read, and a case switch replaces them. Every in-place journal write (verification, removal) changes the digest, so no stale journal text survives.
+- Ask in a case uses the case's answering service (fail-closed case scope, the case's AI permission and send marker); the closest-passage and general-knowledge lanes run only without a case. Help and onboarding copy matches.
 
 New items, none blocking:
-- LS23 (should-fix): the erasure report's "still named in" count for studio drafts, answers, topics, conversation turns and documents still uses ASCII-only lower-casing. It can undercount for non-ASCII names.
-- LN7 (note): checkpoint matching reads every checkpoint's content into memory.
-- LN8 (note, existing behaviour): short aliases can over-match and cause over-erasure.
-- LN4, LN6 and the owner steps LS6 and LS10 carry over.
+- LS24 (should-fix): Ask in a case resumes and writes to the shared Ask conversation history and the global answers ledger. This has two effects. Earlier questions from another case or the library can show under "This case". Case questions and answers, including refused ones and ones citing shared documents, also survive case erasure, and this is not disclosed. The fix is a per-case conversation erased with the case, or at least a fresh conversation for a case, or disclosure in DATA_FLOW, help and the erasure report.
+- LN9 (note): the journal digest omits text, quote and event date; it is safe while no path edits those columns or deletes single rows. It must be extended if one ever does.
+- LN4, LN6, LN8 and the owner steps LS6 and LS10 carry over.
 
-If the uploaded commit is not 06487e95, re-point this record after a confirmation review.
+If the uploaded commit is not 54ed48b9, re-point this record after a confirmation review.
 
-Review: [docs/agent-reviews/candidate-review-06487e95-legal-privacy.md](../../docs/agent-reviews/candidate-review-06487e95-legal-privacy.md)
+Review: [docs/agent-reviews/candidate-review-54ed48b9-legal-privacy.md](../../docs/agent-reviews/candidate-review-54ed48b9-legal-privacy.md)
