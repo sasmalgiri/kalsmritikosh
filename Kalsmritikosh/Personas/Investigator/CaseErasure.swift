@@ -462,7 +462,9 @@ public actor CaseEraser {
         // records (a link is withdrawn with a reason, never edited), and the names of recorded states already
         // erased before (a stub is never edited again).
         for (kind, table, cols, filter) in [("case map link reasons", "case_map_links", ["rationale", "withdrawn_reason"], nil as String?),
-                                            ("erased recorded-state names", "case_checkpoints", ["name"], "erased_at IS NOT NULL")]
+                                            ("erased recorded-state names", "case_checkpoints", ["name"], "erased_at IS NOT NULL"),
+                                            // LS25 — derived contradictions quote both documents; a rescan rebuilds them.
+                                            ("contradiction quotes", "contradictions", ["claim_a", "claim_b", "description"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {
                 let n = try matchingIDs(db, table: table, columns: cols, where: filter, terms: nameTerms).count
@@ -718,7 +720,8 @@ public actor CaseEraser {
             if cols.contains("source_version_id") { clauses.append("source_version_id IN (\(versionSQL))") }
             if cols.contains("logical_source_id") { clauses.append("logical_source_id IN (\(lMarks))") }
             if cols.contains("file_id") { clauses.append("file_id IN (\(lMarks))") }
-            for c in ["source_object_id", "knowledge_object_id", "object_id", "source_ko_id"] where cols.contains(c) {
+            // LS25: contradictions name their two documents in evidence_a / evidence_b and quote both sides.
+            for c in ["source_object_id", "knowledge_object_id", "object_id", "source_ko_id", "evidence_a", "evidence_b"] where cols.contains(c) {
                 clauses.append("\(c) IN (\(objectSQL))")
             }
             if !clauses.isEmpty { plan.append((t, clauses.joined(separator: " OR "))) }

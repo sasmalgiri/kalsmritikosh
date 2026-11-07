@@ -90,9 +90,20 @@ struct CaseErasureTests {
         await #expect(throws: CaseErasureError.blankReason) {
             _ = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: " ", legalBasis: nil, actor: "Tester")
         }
+        // LS25 — contradictions quoting the case's own document go with it; one between shared documents stays.
+        let exclusiveKO = try #require(try await f.db.query("SELECT id FROM knowledge_objects WHERE file_id = ? LIMIT 1;", [.uuid(f.exclusiveFile)]).first?.uuid(0))
+        let sharedKO = try #require(try await f.db.query("SELECT id FROM knowledge_objects WHERE file_id = ? LIMIT 1;", [.uuid(f.sharedFile)]).first?.uuid(0))
+        let contradictions = ContradictionsRepository(database: f.db)
+        let quoting = Contradiction(kind: .date, description: "Conflicting dates", claimA: "SECRET erased quote", claimB: "other side",
+                                    evidenceA: sharedKO, evidenceB: exclusiveKO)
+        let sharedOnly = Contradiction(kind: .date, description: "Conflicting dates", claimA: "kept quote", claimB: "kept other",
+                                       evidenceA: sharedKO, evidenceB: sharedKO)
+        await contradictions.insertMany([quoting, sharedOnly])
         let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: "GDPR art. 17", actor: "Tester")
         #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
         #expect(out.report.sourcesErased == 1 && out.report.sourcesKeptShared == 1)
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM contradictions WHERE id = ?;", [.uuid(quoting.id)]) == 0, "LS25: the quote of the erased document is gone")
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM contradictions WHERE id = ?;", [.uuid(sharedOnly.id)]) == 1)
         // Every table that carries case_id holds nothing for case A — append-only case_actions included.
         let tables = try await f.db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';", [])
             .compactMap { $0.string(0) }

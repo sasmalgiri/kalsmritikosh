@@ -82,7 +82,7 @@ erasing the case removes those conversations, their question and answer turns, a
 refused or not-found answers and answers citing documents other cases share included. Questions asked in the library
 (conversations without a case, which includes every conversation saved before v174) or in another case are kept.
 When asked, it also removes the documents no other case or workspace uses, with:
-- every row derived from them;
+- every row derived from them, including contradictions that quote them (`evidence_a`/`evidence_b`, LS25);
 - the saved answers and topics that quote them;
 - their vault copies (recorded before the commit and finished at the next launch if interrupted);
 - the vector cache and the live index.
