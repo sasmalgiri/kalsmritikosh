@@ -157,12 +157,10 @@ struct CaseMapCanvas: View {
         }
     }
 
-    /// Where each collapsed group's card sits: the centre of its members' stored positions.
+    /// Where each collapsed group's card sits: on one of its own members' slots (see CaseMapLayout.groupCardPoint).
     private var groupCards: [(CaseMapGroup, CaseMapPoint)] {
         result.collapsedGroups.compactMap { g in
-            let pts = g.members.compactMap { map.displayPlacements[$0]?.point }
-            guard let b = CaseMapLayout.bounds(of: pts) else { return nil }
-            return (g, b.center)
+            CaseMapLayout.groupCardPoint(g.members.compactMap { map.displayPlacements[$0]?.point }).map { (g, $0) }
         }
     }
 

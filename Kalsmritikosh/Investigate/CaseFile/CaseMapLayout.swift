@@ -209,6 +209,20 @@ public nonisolated enum CaseMapLayout {
         return CaseMapRect(minX: r.minX - nodeWidth / 2, minY: r.minY - nodeHeight / 2, maxX: r.maxX + nodeWidth / 2, maxY: r.maxY + nodeHeight / 2)
     }
 
+    /// Where a collapsed group's card is drawn: the slot of the member nearest the centre of the group. The centre
+    /// itself can fall on a visible item of another group (UI walk 2026-11-07: "Events — 4 (collapsed)" drawn over a
+    /// contradiction); a member's own slot is free while the group is collapsed, because the layout never puts two
+    /// items on one slot and the members are not drawn.
+    public static func groupCardPoint(_ memberPoints: [CaseMapPoint]) -> CaseMapPoint? {
+        guard let b = bounds(of: memberPoints) else { return nil }
+        let c = b.center
+        return memberPoints.min { l, r in
+            let dl = (l.x - c.x) * (l.x - c.x) + (l.y - c.y) * (l.y - c.y)
+            let dr = (r.x - c.x) * (r.x - c.x) + (r.y - c.y) * (r.y - c.y)
+            return dl != dr ? dl < dr : (l.x, l.y) < (r.x, r.y)
+        }
+    }
+
     /// The viewport that fits the given world bounds into a view of this size (fit = the actual bounds).
     public static func fit(_ rect: CaseMapRect, width: Double, height: Double, margin: Double = 40) -> CaseMapViewport {
         let r = rect.insetBy(margin)

@@ -252,6 +252,18 @@ struct CaseMapAccessibilityTests {
 
 @Suite("Case map — Fit all on a map too large for the smallest zoom")
 struct CaseMapFitAllTests {
+    @Test("A collapsed group's card sits on one of its own member slots, nearest the centre, so it cannot cover a visible item")
+    func groupCardOnAMemberSlot() {
+        // Members spread around an empty middle where another group's visible item sits (the walk's overlap).
+        let members = [CaseMapPoint(x: 0, y: 0), CaseMapPoint(x: 400, y: 0), CaseMapPoint(x: 0, y: 300), CaseMapPoint(x: 380, y: 290)]
+        let visibleOther = CaseMapPoint(x: 200, y: 150)   // the old card position: the bounds' centre
+        let card = CaseMapLayout.groupCardPoint(members)
+        #expect(card.map { members.contains($0) } == true)
+        #expect(card != visibleOther)
+        #expect(CaseMapLayout.groupCardPoint([]) == nil)
+        #expect(CaseMapLayout.groupCardPoint(members) == CaseMapLayout.groupCardPoint(members.reversed()), "deterministic")
+    }
+
     @Test("Bounds larger than the smallest zoom can show: Fit all shows the start of the map, not its empty middle")
     func oversizedFitShowsStart() {
         // A map whose corner items sit far apart, with nothing in the middle (like the grouped stress layout).
@@ -268,3 +280,4 @@ struct CaseMapFitAllTests {
         #expect(shown.contains(CaseMapPoint(x: 0, y: 0)) && shown.contains(CaseMapPoint(x: 800, y: 400)))
     }
 }
+
