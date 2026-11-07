@@ -32,28 +32,32 @@ struct ContradictionStableIdentityTests {
         #expect(ids1 == ids2)
     }
 
-    @Test("Revised claim text keeps the id (the decision reopens through its source version); other documents get another id")
-    func identityIsKindDescriptionAndDocuments() {
+    @Test("The side reported first does not matter; other documents or other claim text are another finding")
+    func identityIsKindDescriptionDocumentsAndClaims() {
         let before = Contradiction.stableIdentities([finding("Conflicting dates for \"Delivery delayed\"", "3 March", "9 March")])[0]
-        let revised = Contradiction.stableIdentities([finding("Conflicting dates for \"Delivery delayed\"", "3 March", "12 March")])[0]
         let swapped = Contradiction.stableIdentities([finding("Conflicting dates for \"Delivery delayed\"", "9 March", "3 March",
                                                               docs: (docB, docA))])[0]
+        let revised = Contradiction.stableIdentities([finding("Conflicting dates for \"Delivery delayed\"", "3 March", "12 March")])[0]
         let otherDocs = Contradiction.stableIdentities([finding("Conflicting dates for \"Delivery delayed\"", "3 March", "9 March",
                                                                 docs: (UUID(), docB))])[0]
-        #expect(before.id == revised.id)
-        #expect(before.id == swapped.id, "the pair of documents, not their order")
+        #expect(before.id == swapped.id, "the pair of documents and the pair of claims, not their order")
+        #expect(before.id != revised.id)
         #expect(before.id != otherDocs.id)
-        #expect(revised.claimB == "12 March", "content is carried unchanged")
+        #expect(swapped.claimA == "9 March", "content is carried unchanged")
     }
 
-    @Test("Two findings with the same identity are both kept, with distinct, repeatable ids")
-    func collisionsKeepBoth() {
-        let pair = [finding("Conflicting amounts", "$500", "$650"), finding("Conflicting amounts", "$500", "$700")]
-        let one = Contradiction.stableIdentities(pair)
-        let two = Contradiction.stableIdentities(pair.reversed())
-        #expect(Set(one.map(\.id)).count == 2)
-        #expect(Set(one.map(\.id)) == Set(two.map(\.id)))
-        #expect(Dictionary(uniqueKeysWithValues: one.map { ($0.claimB, $0.id) }) == Dictionary(uniqueKeysWithValues: two.map { ($0.claimB, $0.id) }))
+    @Test("Two same-description findings between the same documents keep their own ids whatever the order, orientation or company")
+    func sameDescriptionFindingsDoNotSwap() {
+        let a = finding("Conflicting dates for \"Contract modified\"", "1 May", "4 May")
+        let b = finding("Conflicting dates for \"Contract modified\"", "2 June", "9 June")
+        let flippedA = finding("Conflicting dates for \"Contract modified\"", "4 May", "1 May", docs: (docB, docA))
+        let first = Contradiction.stableIdentities([a, b])
+        let later = Contradiction.stableIdentities([b, flippedA])
+        let idA = first.first { $0.claimA == "1 May" }?.id, idB = first.first { $0.claimA == "2 June" }?.id
+        #expect(idA != nil && idB != nil && idA != idB)
+        #expect(later.first { $0.claimA == "4 May" }?.id == idA && later.first { $0.claimA == "2 June" }?.id == idB)
+        #expect(Contradiction.stableIdentities([flippedA])[0].id == idA, "a finding's id does not depend on which other findings exist")
+        #expect(Contradiction.stableIdentities([a, a]).count == 1, "the very same finding twice is one row")
     }
 
     @Test("A decision recorded against an item still matches after a rescan replaces the rows")
