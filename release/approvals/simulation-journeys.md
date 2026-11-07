@@ -1,6 +1,9 @@
 # Evidence — simulated end-to-end journeys per plan (gate `simulation-journeys`)
 
-Candidate: not yet bound — the run below was on the working tree over 7bb6323b while the case-reader agent had uncommitted product changes in it; re-run on the committed candidate and replace this line with `Candidate: <full commit>`
+Candidate: 93a3870ddd0a6020559b038af4baf9560b51a294
+Re-run on the candidate: agent (Claude), 2026-11-07 15:21 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
+93a3870d, no network. `PurchaseStoreKitTests` 16/16 passed, including all five `PlanJourneySimulationTests` (workbenchJourney,
+aiIncludedJourney, aiProJourney, proLimitMatchesRelaySizeLimit, offlineJourney). The 2026-11-04 record below is kept as history.
 Run by: agent (Claude), 2026-11-04, Xcode MCP `RunSomeTests` on the Debug test host (this Mac), no network.
 Suite: `KalsmritikoshTests/PlanJourneySimulationTests.swift` (new, test code only), nested in `PurchaseStoreKitTests` so it is
 serialised with the other StoreKit sessions (it therefore inherits that suite's "disabled on hosted CI" trait).
