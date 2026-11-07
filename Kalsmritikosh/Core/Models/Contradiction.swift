@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codable {
     public typealias ID = UUID
@@ -141,5 +142,38 @@ public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codab
         self.severity = try c.decode(Severity.self, forKey: .severity)
         self.status = try c.decode(Status.self, forKey: .status)
         self.detectedAt = try c.decode(Date.self, forKey: .detectedAt)
+    }
+}
+
+extension Contradiction {
+    /// The same contradiction keeps the same id across archive rescans. A rescan clears its own rows and inserts
+    /// what it finds again; with a random id every decision recorded against an item (confirm, dismiss, defer),
+    /// its map item and its change-feed identity were orphaned on the next scan (UI walk 2026-11-07: decisions
+    /// recorded, items shown as "Not reviewed yet" after relaunch). The identity is the kind, the description and
+    /// the two documents — not the claim text, so a revised document reopens the decision through its source
+    /// version instead of silently becoming a new item. Same-identity findings get a deterministic ordinal.
+    nonisolated static func stableIdentities(_ found: [Contradiction]) -> [Contradiction] {
+        func key(_ c: Contradiction) -> String {
+            let docs = [c.evidenceA?.uuidString ?? "-", c.evidenceB?.uuidString ?? "-"].sorted().joined(separator: "|")
+            return "archive-scan|\(c.kind.rawValue)|\(c.description)|\(docs)"
+        }
+        var groups: [String: [Contradiction]] = [:]
+        for c in found { groups[key(c), default: []].append(c) }
+        var out: [Contradiction] = []
+        out.reserveCapacity(found.count)
+        for (k, members) in groups.sorted(by: { $0.key < $1.key }) {
+            let ordered = members.sorted { ($0.claimA, $0.claimB) < ($1.claimA, $1.claimB) }
+            for (n, c) in ordered.enumerated() {
+                let digest = Array(SHA256.hash(data: Data("\(k)|\(n)".utf8)))
+                var b = Array(digest.prefix(16))
+                b[6] = (b[6] & 0x0F) | 0x50   // RFC 4122 name-based layout (version 5 style)
+                b[8] = (b[8] & 0x3F) | 0x80
+                let id = UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+                out.append(Contradiction(id: id, kind: c.kind, description: c.description, claimA: c.claimA, claimB: c.claimB,
+                                         evidenceA: c.evidenceA, evidenceB: c.evidenceB, severity: c.severity,
+                                         status: c.status, detectedAt: c.detectedAt))
+            }
+        }
+        return out
     }
 }

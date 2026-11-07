@@ -3652,7 +3652,8 @@ public final class AppState {
         if Task.isCancelled { return found.count }   // stopped by the user — prior layer stands
         // P3 — the case contradiction check's rows are not this scan's to replace.
         await contradictions.clearKeepingCaseChecks()
-        await contradictions.insertMany(found)
+        // Stable ids: decisions, map items and the change feed keep matching the same finding after a rescan.
+        await contradictions.insertMany(Contradiction.stableIdentities(found))
         let openCount = await contradictions.count()
         self.proactiveContradictionCount = openCount
         KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflict(s) (date + amount + location + signature + causal + statement)")
