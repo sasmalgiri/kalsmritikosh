@@ -1,3 +1,37 @@
+# UI walk of the running macOS app (UI only, not AI answers) — AGENT run, 2026-11-07/08 (third run, main session)
+
+**Result: PARTIAL — not a gate record.** Every check below was seen on screen in the running Debug app (sample mode, only
+`DemoArchive/sample-knowledge.sqlite` open; "Back to my archive" never pressed; nothing bought, no key, nothing sent).
+The walk found three real bugs, fixed in the commits named, each re-checked in the app.
+
+Cause of the earlier stalls, found in this run: the "hook did not respond" errors were Xcode's **"Allow command?"**
+prompts timing out unanswered (screenshot evidence in the session); commands calling the accessibility tool by path
+were prompted, wrapper scripts were not. A second session's LawyerFleet UI tests ("XCTest is trying to Enable UI
+Automation" Touch ID prompt) also held the screen and blocked every local test-runner launch from 02:18.
+
+| # | Check | Result (build) |
+|---|---|---|
+| 1 | Sidebar Cases/Evidence/Search/Outputs, ⌘1–⌘4, More tools | PASS (earlier runs; re-seen this run) |
+| 2 | Case overview: question, coverage, counts, next step; counts clickable | PASS |
+| 3 | Confirm; Dismiss with a reason ("Dismissed by … — Different event or transaction"); Defer; decision history; ⌥⌘Y/⌥⌘↓ with the note focused; long note keeps the width | PASS |
+| 3b | Decisions survive relaunch **and archive rescan** | **FAIL → fixed.** Archive rescans re-inserted contradictions with random ids, orphaning decisions (e2d7b20e); the first fix still swapped ids between same-description findings (2379084e). Re-checked: confirm + defer → Insights ▸ Scan → relaunch → both kept |
+| 4 | Evidence request: three monthly items; link a document to September → "Open, 1 of 3 received · still missing: … October 2026; … November 2026"; a document linked to no item fulfils nothing; an already-linked document is not offered again; draft letter asks only for the missing months, "the app does not send it"; Copy works | PASS (r4-request-partial.png) |
+| 5 | Search defaults to this case; "Whole library" is explicit; "invoice" → "3 matching documents · 9 occurrences · 3 passages · every match is listed"; receipt "Searched 8 documents of this case in full" | PASS |
+| 6 | Case map: view strip (Overview…Changes), Map/List, inspector, legend, Reset view, What changed, History, Previous/Next | PASS for presence. **Overlap FAIL → fixed**: a collapsed group card covered a contradiction (r6-map-overlap-before.png); now placed clear of every shown item (r6-map-fixed.png). Switch restored to off |
+| 7 | Case file report exported through the Save panel to a temp folder: has "What the app could read", "Evidence requests" (1 of 3 received …), unresolved questions, case log (r7-exported-case-report.md) | PASS. The confirmed contradiction was not chosen for the report in this walk, so it is correctly absent (carrying is covered by BaseCaseJourneyTests) |
+| 8 | Help menu: tutorials, "Replay the Case Map Tutorial", "Case Map Keyboard Shortcuts" | PASS (menu). Help search not exercised |
+| 9 | Plans sheet: Workbench $4.99/month and $39.99/year, 14-day free trial, cancel link | PASS. AI Included/AI Pro are hidden **by design** while the relay address is not configured (PlanOffer.forSale). AI setup sheet not reachable without a key or plan (its text is unit-tested) |
+| 10 | Introduction: "in Private mode … no case document goes to the AI until you allow it for that case", "14-day free trial of Workbench (no AI)"; no "every send"/"one plan"; "Resume a case" opens Cases | PASS |
+
+What the three UI gates still need (so no approval file is written):
+- acceptance-case-ui: this walk used the sample case, not the `--acceptance-case` fixture.
+- ui-consent-and-plans: the once-per-case permission sheet and the credit meter only appear with an AI plan (needs the
+  deployed relay) or an Anthropic key; offline search results in Ask were not exercised.
+- output-routes: only the case report file export and the draft-letter clipboard copy were retested, not every route in
+  docs/OUTPUT_ROUTES_INVENTORY.md.
+
+---
+
 # UI walk of the running macOS app (UI only, not AI answers) — AGENT run, 2026-11-07 (second run)
 
 **Result: INCOMPLETE. Do not use this record to pass a gate.** Items 1 and 2 were re-checked and passed. Item 3 was partly run. Items 4–10 were not run, because the agent's shell calls stalled again at the host's PreToolUse hook (about 10 minutes per failed call, from 17:44 to 18:35).

@@ -252,16 +252,24 @@ struct CaseMapAccessibilityTests {
 
 @Suite("Case map — Fit all on a map too large for the smallest zoom")
 struct CaseMapFitAllTests {
-    @Test("A collapsed group's card sits on one of its own member slots, nearest the centre, so it cannot cover a visible item")
-    func groupCardOnAMemberSlot() {
-        // Members spread around an empty middle where another group's visible item sits (the walk's overlap).
-        let members = [CaseMapPoint(x: 0, y: 0), CaseMapPoint(x: 400, y: 0), CaseMapPoint(x: 0, y: 300), CaseMapPoint(x: 380, y: 290)]
-        let visibleOther = CaseMapPoint(x: 200, y: 150)   // the old card position: the bounds' centre
-        let card = CaseMapLayout.groupCardPoint(members)
-        #expect(card.map { members.contains($0) } == true)
-        #expect(card != visibleOther)
-        #expect(CaseMapLayout.groupCardPoint([]) == nil)
-        #expect(CaseMapLayout.groupCardPoint(members) == CaseMapLayout.groupCardPoint(members.reversed()), "deterministic")
+    @Test("A collapsed group's card never overlaps a shown item or another card, and is placed deterministically")
+    func groupCardClearOfShownItems() {
+        let w = CaseMapLayout.nodeWidth, h = CaseMapLayout.nodeHeight
+        func overlaps(_ a: CaseMapPoint, _ b: CaseMapPoint) -> Bool { abs(a.x - b.x) < w && abs(a.y - b.y) < h }
+        // The walk's case: a shown contradiction placed right next to the Events members (half a card away).
+        let members = [CaseMapPoint(x: 0, y: 0), CaseMapPoint(x: 0, y: 70), CaseMapPoint(x: 0, y: 140), CaseMapPoint(x: 0, y: 210)]
+        let shown = [CaseMapPoint(x: 100, y: 105), CaseMapPoint(x: 100, y: 35), CaseMapPoint(x: 100, y: 175)]
+        let card = CaseMapLayout.groupCardPoint(members, avoiding: shown)
+        #expect(card != nil)
+        if let card {
+            #expect(!shown.contains { overlaps($0, card) }, "the card covers no shown item")
+            let second = CaseMapLayout.groupCardPoint(members, avoiding: shown + [card])
+            #expect(second.map { s in !(shown + [card]).contains { overlaps($0, s) } } == true, "a second card avoids the first")
+        }
+        #expect(CaseMapLayout.groupCardPoint(members, avoiding: shown) == CaseMapLayout.groupCardPoint(members.reversed(), avoiding: shown), "deterministic")
+        #expect(CaseMapLayout.groupCardPoint([], avoiding: shown) == nil)
+        // With nothing in the way the card sits on the member slot nearest the centre.
+        #expect(CaseMapLayout.groupCardPoint(members).map { members.contains($0) } == true)
     }
 
     @Test("Bounds larger than the smallest zoom can show: Fit all shows the start of the map, not its empty middle")

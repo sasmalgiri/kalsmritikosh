@@ -209,18 +209,33 @@ public nonisolated enum CaseMapLayout {
         return CaseMapRect(minX: r.minX - nodeWidth / 2, minY: r.minY - nodeHeight / 2, maxX: r.maxX + nodeWidth / 2, maxY: r.maxY + nodeHeight / 2)
     }
 
-    /// Where a collapsed group's card is drawn: the slot of the member nearest the centre of the group. The centre
-    /// itself can fall on a visible item of another group (UI walk 2026-11-07: "Events — 4 (collapsed)" drawn over a
-    /// contradiction); a member's own slot is free while the group is collapsed, because the layout never puts two
-    /// items on one slot and the members are not drawn.
-    public static func groupCardPoint(_ memberPoints: [CaseMapPoint]) -> CaseMapPoint? {
+    /// Where a collapsed group's card is drawn: the first spot, nearest the group's centre, whose card would not
+    /// overlap any shown item or an earlier card (UI walk 2026-11-07/08: "Events — 4 (collapsed)" drawn over a
+    /// contradiction, first at the bounds' centre, then — with members placed close to related items — on a member
+    /// slot). Candidates: the members' own slots, then rings around the centre one card-height apart. Deterministic;
+    /// falls back to the nearest member slot when nothing free is found within the search.
+    public static func groupCardPoint(_ memberPoints: [CaseMapPoint], avoiding occupied: [CaseMapPoint] = []) -> CaseMapPoint? {
         guard let b = bounds(of: memberPoints) else { return nil }
         let c = b.center
-        return memberPoints.min { l, r in
-            let dl = (l.x - c.x) * (l.x - c.x) + (l.y - c.y) * (l.y - c.y)
-            let dr = (r.x - c.x) * (r.x - c.x) + (r.y - c.y) * (r.y - c.y)
-            return dl != dr ? dl < dr : (l.x, l.y) < (r.x, r.y)
+        func d2(_ p: CaseMapPoint) -> Double { (p.x - c.x) * (p.x - c.x) + (p.y - c.y) * (p.y - c.y) }
+        func free(_ p: CaseMapPoint) -> Bool {
+            !occupied.contains { abs($0.x - p.x) < nodeWidth + 8 && abs($0.y - p.y) < nodeHeight + 8 }
         }
+        let members = memberPoints.sorted { d2($0) != d2($1) ? d2($0) < d2($1) : ($0.x, $0.y) < ($1.x, $1.y) }
+        if let m = members.first(where: free) { return m }
+        let step = nodeHeight + 12
+        for ring in 1...40 {
+            let r = Double(ring) * step
+            // Points on a square ring around the centre, in a fixed order.
+            var ringPoints: [CaseMapPoint] = []
+            let n = ring * 8
+            for i in 0..<n {
+                let t = Double(i) / Double(n) * 2 * Double.pi
+                ringPoints.append(CaseMapPoint(x: (c.x + r * 2.2 * cos(t)).rounded(), y: (c.y + r * sin(t)).rounded()))
+            }
+            if let p = ringPoints.first(where: free) { return p }
+        }
+        return members.first
     }
 
     /// The viewport that fits the given world bounds into a view of this size (fit = the actual bounds).

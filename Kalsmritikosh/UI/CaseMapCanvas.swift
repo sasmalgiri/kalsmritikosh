@@ -157,11 +157,17 @@ struct CaseMapCanvas: View {
         }
     }
 
-    /// Where each collapsed group's card sits: on one of its own members' slots (see CaseMapLayout.groupCardPoint).
+    /// Where each collapsed group's card sits: clear of every shown item and every earlier card
+    /// (CaseMapLayout.groupCardPoint), so a card never covers an item; same result whatever is on screen.
     private var groupCards: [(CaseMapGroup, CaseMapPoint)] {
-        result.collapsedGroups.compactMap { g in
-            CaseMapLayout.groupCardPoint(g.members.compactMap { map.displayPlacements[$0]?.point }).map { (g, $0) }
+        var occupied = result.shown.compactMap { map.displayPlacements[$0]?.point }
+        var out: [(CaseMapGroup, CaseMapPoint)] = []
+        for g in result.collapsedGroups {
+            guard let p = CaseMapLayout.groupCardPoint(g.members.compactMap { map.displayPlacements[$0]?.point }, avoiding: occupied) else { continue }
+            out.append((g, p))
+            occupied.append(p)
         }
+        return out
     }
 
     // MARK: Interaction
