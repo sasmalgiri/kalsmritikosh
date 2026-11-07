@@ -24,7 +24,7 @@ extension AppState {
             if report.sourcesErased > 0 { parts.append("\(report.sourcesErased) document(s) used only by this case were erased.") }
             if report.sourcesKeptShared > 0 { parts.append("\(report.sourcesKeptShared) document(s) are kept because another case or workspace uses them.") }
             if report.sourcesKeptInLibrary > 0 { parts.append("\(report.sourcesKeptInLibrary) document(s) stay in your library; erase them from Sources to remove their content.") }
-            if report.answersRemoved > 0 { parts.append("\(report.answersRemoved) saved answer(s) that quoted the erased documents were removed.") }
+            if report.answersRemoved > 0 { parts.append("\(report.answersRemoved) saved answer(s) asked in this case or quoting the erased documents were removed.") }
             if report.documentsStillNaming > 0 { parts.append("\(report.documentsStillNaming) original document(s) still name this person; erase or redact them to remove the name.") }
             if !report.stillNamedIn.isEmpty {
                 parts.append("Still naming them (not erased): " + report.stillNamedIn.sorted { $0.key < $1.key }.map { "\($0.value) \($0.key)" }.joined(separator: ", ") + ".")

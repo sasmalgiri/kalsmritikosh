@@ -196,6 +196,10 @@ public actor CaseEraser {
                 """, [.text("case erasure \(erasureID.uuidString): \(reason)"), .date(date), .text(rid)])
             if legacy > 0 { counts["studio_legacy_blobs", default: 0] += legacy }
         }
+        // LS24 — what was asked in the case: its Ask conversations' turns and every answer made in the case
+        // (refused, not found, or citing documents other cases share), before the conversations themselves go
+        // with the other case tables below. Questions asked in the library or in another case are not touched.
+        let ask = try eraseCaseAsk(db, caseID: caseID, tables: Set(tables), counts: &counts)
         for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
@@ -216,10 +220,10 @@ public actor CaseEraser {
 
         // 4. The documents only this case used, when asked: every row derived from them.
         var vault: [String] = []
-        var answersRemoved = 0
+        var answersRemoved = ask.answers.count
         if eraseExclusive && !exclusive.isEmpty {
             vault = try vaultAddressesOnlyUsedBy(db, logical: exclusive)
-            answersRemoved = try eraseDerivedProse(db, logical: exclusive, tables: Set(tables), counts: &counts)
+            answersRemoved += try eraseDerivedProse(db, logical: exclusive, tables: Set(tables), counts: &counts)
             for (t, n) in try eraseSources(db, logical: exclusive, tables: tables) { counts[t, default: 0] += n }
         }
 
@@ -238,6 +242,7 @@ public actor CaseEraser {
             if try count(db, "SELECT COUNT(*) FROM files WHERE id IN (\(marks));", exclusive.map { .text($0) }) > 0 { left.append("files") }
             if try count(db, "SELECT COUNT(*) FROM source_versions WHERE logical_source_id IN (\(marks));", exclusive.map { .text($0) }) > 0 { left.append("source_versions") }
         }
+        left += try askLeft(db, ask, tables: Set(tables))
         if !left.isEmpty { throw Refused(why: "Not erased: rows in \(left.joined(separator: ", ")) could not be removed. Nothing was deleted.") }
 
         try db.exec("DELETE FROM ledger_case_erase WHERE case_id = ?;", [.uuid(caseID)])
@@ -605,16 +610,7 @@ public actor CaseEraser {
                 SELECT DISTINCT c.answer_id FROM answer_claims c JOIN claim_evidence e ON e.claim_id = c.id WHERE e.object_id IN (\(oMarks));
                 """, oBinds).compactMap { $0.string(0) }
         }
-        if !answers.isEmpty {
-            let aMarks = answers.map { _ in "?" }.joined(separator: ",")
-            let aBinds = answers.map { SQLValue.text($0) }
-            for (t, c) in [("conversation_turns", "answer_ledger_id"), ("answer_revision_events", "answer_id"), ("answer_revisions", "answer_id"),
-                           ("answer_claims", "answer_id"), ("answers", "id")] where tables.contains(t) {
-                let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE \(c) IN (\(aMarks));", aBinds)
-                try db.exec("DELETE FROM \"\(t)\" WHERE \(c) IN (\(aMarks));", aBinds)
-                if n > 0 { counts[t, default: 0] += n }
-            }
-        }
+        try eraseAnswers(db, ids: answers, tables: tables, counts: &counts)
         if tables.contains("memory_objects") {
             var topics = Set<String>()
             for o in objects {
@@ -632,6 +628,69 @@ public actor CaseEraser {
             }
         }
         return answers.count
+    }
+
+    /// The answer tables, children first: (table, column holding the answer id).
+    nonisolated static let answerTables: [(String, String)] = [
+        ("conversation_turns", "answer_ledger_id"), ("answer_revision_events", "answer_id"), ("answer_revisions", "answer_id"),
+        ("answer_claims", "answer_id"), ("answers", "id")]
+
+    /// Remove saved answers (their revisions, claims and the conversation turns linked to them), 400 ids at a time.
+    static func eraseAnswers(_ db: isolated Database, ids: [String], tables: Set<String>, counts: inout [String: Int]) throws {
+        for chunk in chunked(ids) {
+            let aMarks = chunk.map { _ in "?" }.joined(separator: ",")
+            let aBinds = chunk.map { SQLValue.text($0) }
+            for (t, c) in answerTables where tables.contains(t) {
+                let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE \(c) IN (\(aMarks));", aBinds)
+                try db.exec("DELETE FROM \"\(t)\" WHERE \(c) IN (\(aMarks));", aBinds)
+                if n > 0 { counts[t, default: 0] += n }
+            }
+        }
+    }
+
+    /// What a case erasure removed from Ask (LS24): the case's conversations and the answers made in it.
+    struct CaseAsk { var conversations: [String] = []; var answers: [String] = [] }
+
+    /// LS24 — the case's Ask conversations (v174 `conversations.case_id`) lose their turns, and every answer
+    /// made in the case goes: stamped with the case (`answers.origin_scope_id`) or linked from one of its
+    /// turns — refused and not-found answers and answers citing shared documents included. The conversation
+    /// rows themselves go with the other case tables.
+    static func eraseCaseAsk(_ db: isolated Database, caseID: UUID, tables: Set<String>, counts: inout [String: Int]) throws -> CaseAsk {
+        var ask = CaseAsk()
+        guard tables.contains("conversations"), tables.contains("conversation_turns"), tables.contains("answers") else { return ask }
+        ask.conversations = try db.query("SELECT id FROM conversations WHERE case_id = ?;", [.uuid(caseID)]).compactMap { $0.string(0) }
+        var answers = Set(try db.query("SELECT id FROM answers WHERE origin_scope_id = ?;", [.uuid(caseID)]).compactMap { $0.string(0) })
+        for chunk in chunked(ask.conversations) {
+            // Only links to answers still saved (a turn's link may point at an answer removed earlier).
+            answers.formUnion(try db.query("""
+                SELECT DISTINCT a.id FROM conversation_turns t JOIN answers a ON a.id = t.answer_ledger_id
+                WHERE t.conversation_id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));
+                """, chunk.map { .text($0) }).compactMap { $0.string(0) })
+        }
+        ask.answers = answers.sorted()
+        try eraseAnswers(db, ids: ask.answers, tables: tables, counts: &counts)
+        for chunk in chunked(ask.conversations) {
+            let marks = chunk.map { _ in "?" }.joined(separator: ",")
+            let binds = chunk.map { SQLValue.text($0) }
+            let n = try count(db, "SELECT COUNT(*) FROM conversation_turns WHERE conversation_id IN (\(marks));", binds)
+            try db.exec("DELETE FROM conversation_turns WHERE conversation_id IN (\(marks));", binds)
+            if n > 0 { counts["conversation_turns", default: 0] += n }
+        }
+        return ask
+    }
+
+    /// The Ask rows a case erasure must have removed and did not (counted back inside the savepoint).
+    static func askLeft(_ db: isolated Database, _ ask: CaseAsk, tables: Set<String>) throws -> [String] {
+        var left: [String] = []
+        for chunk in chunked(ask.conversations) {
+            if try count(db, "SELECT COUNT(*) FROM conversation_turns WHERE conversation_id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));",
+                         chunk.map { .text($0) }) > 0 { left.append("conversation_turns"); break }
+        }
+        for chunk in chunked(ask.answers) {
+            if try count(db, "SELECT COUNT(*) FROM answers WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));",
+                         chunk.map { .text($0) }) > 0 { left.append("answers"); break }
+        }
+        return left
     }
 
     /// Content addresses of the documents' versions that no remaining version shares.

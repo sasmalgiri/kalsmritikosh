@@ -121,7 +121,7 @@ public struct AskView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task { await loadOrCreateConversation() }
+        .task(id: caseScope?.caseID) { await loadOrCreateConversation() }
         .onAppear {
             inputFocused = true
             // Seed from a Home persona "try asking" example, if any.
@@ -959,17 +959,20 @@ public struct AskView: View {
 
     private func loadOrCreateConversation() async {
         guard let repo = appState.conversations else { return }
-        // Pick the most recent conversation if it has any turns;
-        // otherwise create a fresh one.
-        if let recent = (try? await repo.recent(limit: 1))?.first {
-            let existing = (try? await repo.turns(for: recent.id)) ?? []
+        // LS24 — the most recent conversation of THIS scope only (this case's, or the library's), or a new
+        // one bound to it: Ask in case B never shows case A's or the library's questions.
+        do {
+            let (conv, existing) = try await repo.resumeOrCreate(caseID: caseScope?.caseID)
             await MainActor.run {
-                self.conversationID = recent.id
+                self.conversationID = conv.id
                 self.turns = existing
+                self.verifiedAnswers = [:]
+                self.nearestPassages = [:]
+                self.generalKnowledgeBlocks = [:]
             }
-            if !existing.isEmpty { return }
+        } catch {
+            KalsmritikoshLog.ui.error("Failed to open the Ask conversation: \(String(describing: error), privacy: .public)")
         }
-        await startNewConversation()
     }
 
     // MARK: - Conversation history
@@ -977,7 +980,7 @@ public struct AskView: View {
     /// Load the list of past conversations for the history sheet.
     private func loadHistory() async {
         guard let repo = appState.conversations else { return }
-        let convs = (try? await repo.recent(limit: 200)) ?? []
+        let convs = (try? await repo.recent(limit: 200, caseID: caseScope?.caseID)) ?? []
         await MainActor.run { self.pastConversations = convs }
     }
 
@@ -1020,7 +1023,7 @@ public struct AskView: View {
     private func startNewConversation() async {
         guard let repo = appState.conversations else { return }
         do {
-            let conv = try await repo.create()
+            let conv = try await repo.create(caseID: caseScope?.caseID)
             await MainActor.run {
                 self.conversationID = conv.id
                 self.turns = []
@@ -1131,7 +1134,9 @@ public struct AskView: View {
             // G2/Stage-3 — bind this turn to its durable answer so reopening
             // the conversation restores citations/status/receipt from the
             // ledger instead of losing them.
-            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer) {
+            // LS24 — an answer made in a case is stamped with the case (origin_scope_id), so erasing the case
+            // removes it even when it was refused or cites only shared documents.
+            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer, originScopeID: caseScope?.caseID) {
                 try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
             }
 

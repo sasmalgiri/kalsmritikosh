@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 173
+    public static let latestVersion = 174
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -806,7 +806,8 @@ public enum SchemaMigrations {
         (170, v170),
         (171, v171),
         (172, v172),
-        (173, v173)
+        (173, v173),
+        (174, v174)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8362,5 +8363,16 @@ public enum SchemaMigrations {
     WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
     BEGIN SELECT RAISE(ABORT, 'case_checkpoints are kept'); END;
+    """
+
+    // MARK: - v174 — Ask conversations bound to their case (candidate review LS24, 2026-11-07).
+    // A conversation started by Ask inside an open case carries that case's id; Ask in a case resumes and lists
+    // only that case's conversations, library Ask only the unbound ones (case_id NULL — every conversation that
+    // existed before this migration stays a library conversation). The column is named case_id, so case erasure's
+    // generic case-table pass removes the conversation with the case (its turns and in-case answers are removed
+    // explicitly first, CaseErasure.eraseCaseAsk); a full erase empties the table as before.
+    private static let v174: String = """
+    ALTER TABLE conversations ADD COLUMN case_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_conversations_case ON conversations(case_id, started_at);
     """
 }

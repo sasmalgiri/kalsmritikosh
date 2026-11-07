@@ -3281,7 +3281,9 @@ public final class AppState {
     /// this durable revision (for evidence restoration on reopen). nil when
     /// no ledger is wired or persistence failed.
     @discardableResult
-    public func recordAnswer(question: String, answer: VerifiedAnswer) async -> UUID? {
+    /// `originScopeID` (LS24) — the case the question was asked in, stamped on the saved answer so erasing the
+    /// case removes it; nil for a library question.
+    public func recordAnswer(question: String, answer: VerifiedAnswer, originScopeID: UUID? = nil) async -> UUID? {
         // The brain already committed this answer's durable revision (AEE-M2): writing it again made
         // every answer appear twice in the Answer Journal (user evaluation 2026-11-02, minor 4).
         if let committed = answer.ledgerAnswerID {
@@ -3296,7 +3298,8 @@ public final class AppState {
             persistedID = try await ledger.persist(
                 question: question,
                 answer: answer,
-                corpusSnapshotID: snapshot?.id
+                corpusSnapshotID: snapshot?.id,
+                originScopeID: originScopeID
             )
         } catch {
             KalsmritikoshLog.app.error("recordAnswer failed: \(String(describing: error), privacy: .public)")

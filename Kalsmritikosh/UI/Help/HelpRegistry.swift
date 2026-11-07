@@ -518,6 +518,7 @@ public nonisolated enum HelpRegistry {
                 "The ledger is encrypted (SQLCipher, AES-256) with a key in this Mac’s Keychain. Original files in the vault rely on FileVault for encryption at rest — turn FileVault on.",
                 "Settings ▸ Your data ▸ “Complete backup”: the ledger and every original, each with its SHA-256. Keep the recovery key shown there; a backup cannot be opened without it. Restore checks integrity and refuses a backup made by a newer version.",
                 "Erase a case, a person or everything: the app either completes the erasure and verifies it empty, or refuses and says why. A legal hold, a draft, or a document that another case still needs blocks the erasure until released.",
+                "Ask keeps each case's questions with that case: erasing a case also removes the questions asked in it and every answer given there, including answers it could not give and answers quoting documents other cases share. Questions asked across the whole library or in another case are kept.",
                 "Not reached by erasure: your original files outside the app, backups you made, exports, sync folders and Spotlight entries — delete those yourself."
             ],
             controls: ["Complete backup"], destination: .settings, keywords: ["encryption", "sqlcipher", "filevault", "backup", "restore", "recovery key", "erase", "hold", "forget"]),

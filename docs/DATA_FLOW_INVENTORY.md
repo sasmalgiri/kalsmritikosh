@@ -76,7 +76,12 @@ preference store (R4) still holds a copy of migrated drafts, and the erasure rep
 **Case erasure (v164, K10 + audit A3–A5):** Case file › Erase this case, with a required reason. It is refused, with
 nothing deleted, when a legal hold covers the case, one of its drafts, documents or source versions, or when a hold notice
 is unreleased. It removes every case-scoped row, and the case's drafts are erased as recorded studio erasures, including
-their captured legacy stores. When asked, it also removes the documents no other case or workspace uses, with:
+their captured legacy stores. It also removes what was asked in the case (v174, LS24): Ask opened in a case keeps its own
+conversation (`conversations.case_id`) and stamps each answer made there with the case (`answers.origin_scope_id`), so
+erasing the case removes those conversations, their question and answer turns, and every saved answer made in the case —
+refused or not-found answers and answers citing documents other cases share included. Questions asked in the library
+(conversations without a case, which includes every conversation saved before v174) or in another case are kept.
+When asked, it also removes the documents no other case or workspace uses, with:
 - every row derived from them;
 - the saved answers and topics that quote them;
 - their vault copies (recorded before the commit and finished at the next launch if interrupted);
