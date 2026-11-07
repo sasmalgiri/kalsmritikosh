@@ -356,11 +356,11 @@ public nonisolated enum CaseContradictionFinder {
     static let moneyPattern = #"\$\s?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s*(?:million|billion|thousand|mn|bn|m|k)\b)?"#
     static let approxPattern = #"(?i)(?:approximately|about|nearly|roughly|around|more than|over|at least|almost|in excess of|some|close to|less than|under)\s*$"#
 
-    static func money(_ s: String) -> Double? { VerifiedAnswerComposer.values(in: s).money.first }
+    static func money(_ s: String) -> Double? { VerifiedAnswerComposer.values(in: s).money.min() }
 
     static func number(_ s: String) -> Double? {
         let v = VerifiedAnswerComposer.values(in: s)
-        return v.money.first ?? v.numbers.first
+        return v.money.min() ?? v.numbers.min()
     }
 
     static func display(_ amount: Double) -> String {
@@ -772,7 +772,7 @@ public nonisolated enum CaseContradictionFinder {
     static func amountRole(_ value: String, in quote: String) -> String? {
         let q = quote as NSString
         var at = q.range(of: value, options: .caseInsensitive)
-        if at.location == NSNotFound, let target = VerifiedAnswerComposer.values(in: value).money.first {
+        if at.location == NSNotFound, let target = VerifiedAnswerComposer.values(in: value).money.min() {
             at = matches(moneyPattern, in: quote).first { money(q.substring(with: $0.range)) == target }?.range ?? at
         }
         guard at.location != NSNotFound else { return nil }
@@ -1199,9 +1199,13 @@ public nonisolated enum CaseContradictionFinder {
         case .amount:
             let ra = amountRole(va, in: qa) ?? amountRole(va, in: sa), rb = amountRole(vb, in: qb) ?? amountRole(vb, in: sb)
             if let ra, let rb, ra != rb { return "different amounts (\(ra) vs \(rb))" }
-            if let x = VerifiedAnswerComposer.values(in: va).money.first ?? VerifiedAnswerComposer.values(in: va).numbers.first,
-               let y = VerifiedAnswerComposer.values(in: vb).money.first ?? VerifiedAnswerComposer.values(in: vb).numbers.first {
-                if compatible(x, bound(of: va, in: qa), y, bound(of: vb, in: qb)) { return "both can be true (a bound, not an exact figure)" }
+            let fa = VerifiedAnswerComposer.values(in: va), fb = VerifiedAnswerComposer.values(in: vb)
+            // Sorted: the figures are a Set, so ".first" used to be arbitrary (a flaky verdict on ranges).
+            let la = (fa.money.isEmpty ? fa.numbers : fa.money).sorted(), lb = (fb.money.isEmpty ? fb.numbers : fb.money).sorted()
+            // A range ("$400 to $2,000") is compared whole: two ranges sharing an endpoint still differ.
+            let rangesDiffer = (la.count > 1 || lb.count > 1) && la != lb
+            if let x = la.first, let y = lb.first {
+                if !rangesDiffer, compatible(x, bound(of: va, in: qa), y, bound(of: vb, in: qb)) { return "both can be true (a bound, not an exact figure)" }
                 if aggregate("", role: ra ?? rb), grew(x, dateX: docA?.date, y, dateY: docB?.date) {
                     return "the case grew between the documents (the later one gives the higher figure)"
                 }
@@ -1212,8 +1216,10 @@ public nonisolated enum CaseContradictionFinder {
                 let a = [ra.noun, ra.step].compactMap { $0 }.joined(separator: " "), b = [rb.noun, rb.step].compactMap { $0 }.joined(separator: " ")
                 return "different counts (\(a) vs \(b))"
             }
-            if let x = VerifiedAnswerComposer.values(in: va).numbers.first, let y = VerifiedAnswerComposer.values(in: vb).numbers.first {
-                if compatible(x, bound(of: va, in: qa), y, bound(of: vb, in: qb)) { return "both can be true (a bound, not an exact figure)" }
+            let na = VerifiedAnswerComposer.values(in: va).numbers.sorted(), nb = VerifiedAnswerComposer.values(in: vb).numbers.sorted()
+            let countRangesDiffer = (na.count > 1 || nb.count > 1) && na != nb
+            if let x = na.first, let y = nb.first {
+                if !countRangesDiffer, compatible(x, bound(of: va, in: qa), y, bound(of: vb, in: qb)) { return "both can be true (a bound, not an exact figure)" }
                 if grew(x, dateX: docA?.date, y, dateY: docB?.date) { return "the case grew between the documents (the later one gives the higher count)" }
             }
         case .role, .account:

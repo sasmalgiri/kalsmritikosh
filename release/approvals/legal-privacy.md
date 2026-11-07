@@ -4,28 +4,23 @@ Decision: APPROVED
 By: AGENT (Claude) — agent review per owner decision 2026-11-01
 Role: AGENT legal/privacy reviewer
 Date: 2026-11-07
-Commit: e3ac8bf83b2d5367ada83014e29a6c6b964c09a4
+Commit: 06487e9560a140639c566a1e0cc63ceaf3e62295
 
 This is an agent review, not a lawyer's opinion. It is a read-only review of the code and the release package; I did not build, run tests or use the GUI.
 
-Summary: LS17 and LS18 are fixed. Scope package S and the Living Case Map M1–M9 (schema v171–v173) add no sending, consent or network path.
+Summary: this confirmation review covers 06487e95, which fixes the should-fixes LS19–LS22 from the e3ac8bf8 review (APPROVED). It adds no sending, consent, network or preference path.
 
-- The new case content is kept only in the encrypted ledger. This covers saved map views and their search words, map links, saved searches, before/after revisions, checkpoints and the seen position.
-- The map's preference state holds identifiers and geometry only, under the existing per-case key.
-- Case erasure and full erasure cover every new table. Person erasure clears recorded states that name the person.
-- Checkpoints cannot be edited or brought back after an erasure.
-- Map export, copy and print go only through CaseOutputService.
-- No preset, migration or the preview switch turns on Online, Spotlight, sync or monitors.
-- The reworded review priority, source counts, the self-test diagnostic and "Filter by document date" make no accuracy or culpability claim.
-- No entitlement is revoked and no paywall is added. The privacy label needs no change.
+- LS19 fixed: person erasure now deletes saved map views and saved searches whose name, filters, words or results name the person. It clears recorded states that name the person in their content or milestone name to stubs and replaces their names. It removes the before/after revisions naming the person. It reports the link reasons it keeps. Names match ignoring case, accents and width in any script. The updates stay within what the v173 triggers allow.
+- LS20 fixed: DATA_FLOW_INVENTORY L3 and L12 now describe the current capture and DEVONthink defaults.
+- LS21 fixed: DATA_FLOW, THREAT_MODEL T16, help and the manual disclose that a recorded state keeps the names and quotes of documents forgotten later, until a case, person or full erasure.
+- LS22 fixed: the remaining module texts state the per-case AI permission instead of "previewed".
 
-New should-fix items, none blocking:
-- LS19: person erasure misses saved map view names and search words, map link reasons and milestone names. They are not erased and not reported.
-- LS20: DATA_FLOW_INVENTORY L3 and L12 still describe the old capture and DEVONthink defaults.
-- LS21: disclose that a checkpoint keeps the names and quotes of documents that are later forgotten, until a case, person or full erasure.
-- LS22: two module texts (ProductModule.swift:178, :359) still say "previewed".
+New items, none blocking:
+- LS23 (should-fix): the erasure report's "still named in" count for studio drafts, answers, topics, conversation turns and documents still uses ASCII-only lower-casing. It can undercount for non-ASCII names.
+- LN7 (note): checkpoint matching reads every checkpoint's content into memory.
+- LN8 (note, existing behaviour): short aliases can over-match and cause over-erasure.
 - LN4, LN6 and the owner steps LS6 and LS10 carry over.
 
-If the uploaded commit is not e3ac8bf8, re-point this record after a confirmation review.
+If the uploaded commit is not 06487e95, re-point this record after a confirmation review.
 
-Review: [docs/agent-reviews/candidate-review-e3ac8bf8-legal-privacy.md](../../docs/agent-reviews/candidate-review-e3ac8bf8-legal-privacy.md)
+Review: [docs/agent-reviews/candidate-review-06487e95-legal-privacy.md](../../docs/agent-reviews/candidate-review-06487e95-legal-privacy.md)
