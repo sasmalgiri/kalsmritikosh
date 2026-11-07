@@ -1,91 +1,89 @@
-# UI walk of the running macOS app (UI only, not AI answers) — AGENT run, 2026-11-07
+# UI walk of the running macOS app (UI only, not AI answers) — AGENT run, 2026-11-07 (second run)
 
-**Result: INCOMPLETE. Do not use this record to pass a gate.** Items 1 and 2 were checked and passed. Items 3–10 were not run, because the agent's tool calls stalled for about 40 minutes and the 60-minute time box ran out.
+**Result: INCOMPLETE. Do not use this record to pass a gate.** Items 1 and 2 were re-checked and passed. Item 3 was partly run. Items 4–10 were not run, because the agent's shell calls stalled again at the host's PreToolUse hook (about 10 minutes per failed call, from 17:44 to 18:35).
 
 **AGENT run.** An agent (Claude) did this run, not a person. Only what was observed is recorded.
 
-Candidate: 54ed48b94811dd7a4d46d71da1b441b1572e54f4
+Candidate: 93a3870ddd0a6020559b038af4baf9560b51a294
 
 ## Setup
 
-- **Branch:** investigations-next. HEAD is 54ed48b9, which is also the last commit that touches `Kalsmritikosh/` (00-build.txt).
-  - The working tree has Xcode-made edits to the two InfoPlist.xcstrings files and an xcuserdata plist, which are not app code.
-- **Build:** xcode-tools BuildProject, Debug, 14:05 IST, "The project built successfully."
-  - The binary is dated 14:05:27 and the debug dylib 14:05:23. No Swift file is newer than the dylib.
-- **Keeping the Mac awake:** `caffeinate -dimsu` ran from 14:05 (pid 10375). It was killed at 15:02.
-  - Another caffeinate (pid 10641) was running too. This walk did not start it and left it alone.
-- **Launch:** `open -n -a <Debug app> --args -kalsmritikosh.sampleArchiveMode YES` at 14:06:07 gave **pid 10738**.
+- **Branch:** investigations-next. HEAD is cad7c50f, which changes only gate records. The last commit that touches `Kalsmritikosh/` is 93a3870d (00-build.txt).
+  - The working tree has Xcode-made edits to the two InfoPlist.xcstrings files and an xcuserdata plist. These are not app code.
+- **Before starting:** `pgrep -lf LawyerFleet` matched only a sleeping watcher shell. The LawyerFleet UI-test run it watched had already ended at 17:35 ("== exit build-failed" in ~/LFRelease/uitestrun.log). No LawyerFleet app, xcodebuild or test runner was running. Nothing of it was touched.
+- **Build:** xcode-tools BuildProject, Debug, 17:41:36 IST, "The project built successfully." The binary is dated 17:41:35 and the dylib 17:41:31. No Swift file is newer than the dylib.
+- **Keeping the Mac awake:** `caffeinate -dimsu` (pid 33741) ran from 17:41:26. It was killed at 18:35. No other caffeinate was running.
+- **Launch:** `open -n -a <Debug app> --args -kalsmritikosh.sampleArchiveMode YES` at 17:41:48 gave **pid 33836**.
   - `lsof` showed only `…/DemoArchive/sample-knowledge.sqlite` (+wal/shm) as a ledger, plus the TipKit store (01-launch.txt).
   - The owner's ledger was not opened, and "Back to my archive" was never pressed.
-- **Method:** the same as the 2026-11-06 attempts:
+- **Method:** the same as the first run:
   - `build/axdrive/axdrive` for AX reads and presses;
-  - `/tmp/walk/safe.sh` checked the frontmost app before every keystroke;
-  - `screencapture -l` captured the app window only.
+  - `/tmp/walk/safe.sh` checked the frontmost app before every keystroke, and `/tmp/walk2/k.sh` re-activated the app once if needed;
+  - `/tmp/walk2/shot.sh` (`screencapture -l`) captured the app window only.
 - **Stall:**
-  - The safe wrapper stopped keystrokes twice because Xcode, and later "LawyerFleet", was frontmost: "ABORT: not frontmost -> FRONT: Xcode pid=68528". Those keystrokes were never sent.
-  - From about 14:21 to 15:01, almost every shell call that drove the app failed at the host with "PreToolUse hook did not respond before its timeout". Each failure took about 10 minutes.
-  - The screen was not locked: `CGSSessionScreenIsLocked` was absent at 14:51.
-- **Quit:** `kill -TERM 10738` at 15:02:03. No instance remained.
-- **Data and settings:**
-  - Two AX presses changed the case's tab or scroll position: the "0, open evidence request(s)" count and the "2, contradiction(s)" count.
-  - The Overview segment was pressed once.
-  - No decision, note, request or setting was written. "Case map (preview)" was never turned on and stayed off.
-  - The contradiction-note text was never typed. Screenshot 03a-after-stall shows the note field still empty.
+  - From 17:44 to 18:35, five of the seven shell calls that drove or read the app failed with "PreToolUse hook did not respond before its timeout (host client may be unreachable)". Each failure took about 10 minutes. Plain `date` calls went through.
+  - When the stall began, Xcode had taken the front, and the open reason menu closed.
+- **Quit:** `kill -TERM 33836` at 18:35:19. No instance remained.
+- **Data written to the sample ledger:**
+  - Contradiction "Contract modified" was **confirmed** with a long note.
+  - On "Delivery delayed", the reason "Changed or updated estimate" was chosen but never saved. Its note was not typed and Dismiss was not sent, so the app quit with it still unsaved.
+  - No evidence request was created, and no setting was changed. "Case map (preview)" was never turned on and stayed off.
 - **Network:** no purchase, no key entered, no AI send, no consent sheet opened.
 
 ## Checks
 
 | # | Check | Result |
 | --- | --- | --- |
-| 1 | Sidebar: Cases, Evidence, Search, Outputs, More tools, Settings, Help; ⌘1–⌘4 switch; More tools lists the other screens | **PASS** (see the notes below) |
-| 2 | Cases: sample case, "This case at a glance" with question, coverage, counts, next step; counts clickable | **PASS** |
-| 3 | Contradictions: confirm one, dismiss one with a reason, ⌥⌘ keys with the note focused, long note does not widen, persists after kill and relaunch | **NOT RUN** (stall; the typing was blocked by the frontmost guard, then by the hook timeouts) |
-| 4 | Evidence request: 3 monthly items, linked document, partial with the missing months, copy the draft letter | **NOT RUN** |
-| 5 | Search: defaults to the active case; witness, counts, receipt; "Whole library" is an explicit choice | **NOT RUN** |
-| 6 | Case map (preview on): view strip, map/list, inspector, legend, Reset view, What changed, history state with Return to current | **NOT RUN** (the switch was never turned on) |
-| 7 | Outputs: export the case report with the coverage and evidence-request sections and the confirmed contradiction | **NOT RUN** |
-| 8 | Help: tutorials, keyboard help in the Help menu, help search for "evidence request" | **NOT RUN** |
-| 9 | Plans sheet and AI setup sheet wording | **NOT RUN** |
-| 10 | Copy on Home and onboarding; "Resume a case" opens Cases | **NOT RUN** |
+| 1 | Sidebar: Cases, Evidence, Search, Outputs with ⌘1–⌘4 | **PASS** (r1-cmd1…r1-cmd4) |
+| 2 | Case overview "This case at a glance" | **PASS** (r1-cmd1) |
+| 3 | Contradictions: confirm, dismiss with a reason, ⌥⌘ keys with the note focused, long note does not widen, kill and relaunch | **INCOMPLETE**: confirm, ⌥⌘Y, ⌥⌘↓ and the long note PASS. The dismissal with a reason, ⌥⌘N and the kill/relaunch restore were NOT RUN. |
+| 4 | Evidence request | **NOT RUN** |
+| 5 | Search: active case by default, witness, counts, receipt, explicit "Whole library" | **NOT RUN** |
+| 6 | Case map (preview on) | **NOT RUN** (the switch was never turned on) |
+| 7 | Outputs: case report export | **NOT RUN** |
+| 8 | Help | **NOT RUN** |
+| 9 | Plans sheet and AI setup sheet | **NOT RUN** |
+| 10 | Home and onboarding copy, "Resume a case" | **NOT RUN** |
 
-### Item 1 notes (observed)
+### Item 1 (observed on 93a3870d)
 
-- The sidebar shows, under "GO TO":
-  - "Cases ⌘1", "Evidence ⌘2", "Search ⌘3", "Outputs ⌘4";
-  - then, below a divider, "More tools ⌘6", "Settings ⌘9" and "Help".
-  - Screenshot: 01-sidebar-case-overview.png.
-- Above "GO TO", the persona block "PERSONA · INVESTIGATOR" also lists "Professional Jobs" and "Review". This is not a failure, but it means the sidebar has more than the seven entries.
-- Each shortcut opened its area (screenshots 01-cmd1 to 01-cmd6):
-  - ⌘2 opened the Evidence screen (title "Evidence").
-  - ⌘3 opened Search on "Search case evidence", with the text "Searches only this case's documents, word for word, on this Mac…".
-  - ⌘4 opened Outputs on the Answer Journal.
-  - ⌘6 opened More tools.
-  - ⌘1 returned to the case.
-- More tools lists the other screens in groups.
-  - "Case analysis views" has Timeline, History, Case Story, Dossier, Explore, Connections, Findings, Assertions, Competing Hypotheses, Review, Insights, What Changed, Cross-Doc Matrix, Compare Documents, Fund Flow, Email Threads and Transcripts.
-  - "Professional workspaces" has Professional Jobs, Work Center, Logs & Trackers and more.
+- The AX descriptions read "Cases, ⌘1", "Evidence, ⌘2", "Search, ⌘3" and "Outputs, ⌘4". Below them are "More tools, ⌘6" and "Settings, ⌘9".
+- Each key opened its screen:
+  - ⌘2 opened "Evidence";
+  - ⌘3 opened "Search";
+  - ⌘4 opened "Outputs";
+  - ⌘1 returned to "Investigator sample case".
 
-### Item 2 notes (observed)
+### Item 2 (observed)
 
-- The app opened on "Investigator sample case" (Stage: Intake), on the Overview tab.
 - "This case at a glance" shows:
-  - **Question:** "No question recorded yet — write what was reported in Intake below, or give the case a purpose."
-  - **Counts:** "2 contradiction(s) waiting for a decision", "74 job-result row(s) not yet reviewed" and "0 open evidence request(s)".
-  - **Coverage:** "What the app could read — Read: 8 · Partly read: 0 · Not read: 0".
-  - **Reading limits:** two lines.
-  - **Next step:** "Next: Rate the complaint and decide whether to investigate, decline or refer it."
-- The counts are clickable:
-  - Pressing "0, open evidence request(s)" opened the case's Evidence tab ("Sources in the case", "Evidence requests") (02-glance-evreq-click.png).
-  - Pressing "2, contradiction(s)…" scrolled to the Contradictions list ("2 listed · 2 waiting for a decision") (02-glance-contra-click.png).
-  - The "74 job-result row(s)" count was not pressed.
-- The ⌥⌘ key hint is shown on screen: "Keys: ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers." It was not tested.
-- The change feed lists "2 × Review decided". Those decisions are left over in the sample ledger from an earlier walk. Both contradictions show "Not reviewed".
+  - the Question;
+  - "2, contradiction(s) waiting for a decision" and "0, open evidence request(s)", both clickable;
+  - "Read: 8 · Partly read: 0 · Not read: 0";
+  - "Next: Rate the complaint and decide whether to investigate, decline or refer it."
+- Pressing the contradiction count scrolled the list into view.
+
+### Item 3 (partly observed)
+
+- **Long note:** a single-line note of about 380 characters was typed into `case.contradictions.note` (r3a-long-note). The field stayed 443 pt wide and the window stayed 1100 pt. The content scroll area stayed 856 pt. The page did not widen.
+- **⌥⌘Y with the note focused:** this confirmed the item (r3b-after-optcmdY). The row now reads "Conflicting dates for "Contract modified". Confirmed by Shirshendu Sasmal on 7 Nov 2026 at 5:43 PM: Confirmed by agent walk 2026-11-07: …".
+- **⌥⌘↓ with the note focused:** this moved to "Delivery delayed" (sources supplier_abc_22.eml and invoice-432.eml, "Not reviewed yet"). The focus stayed in the note field (r3c-optcmd-down).
+- **Reason menu:** it offers "No reason chosen", "Different event or transaction", "Different person", "Changed or updated estimate", "Transcription or typing error", "Not enough context to decide" and "Other (say why in the note)". Dismiss reads "Unavailable: Choose why you are dismissing it." until a reason is chosen. "Changed or updated estimate" was then selected.
+- **Not run:** the note, ⌥⌘N, Dismiss, and the kill/relaunch restore. The stall began at this point.
+
+## Earlier run (54ed48b9, 14:05–15:02 IST)
+
+Items 1 and 2 passed and items 3–10 were not run. Shell calls stalled at the host's PreToolUse hook for about 40 minutes, and the frontmost guard blocked the typing twice (Xcode or LawyerFleet took the front). Its screenshots are the 01-*, 02-* and 03a-* files in this folder.
 
 ## Gates
 
-No approval file was written. ui-consent-and-plans, acceptance-case-ui and output-routes all depend on items that were not run (3–10).
+No approval file was written.
+
+- **acceptance-case-ui:** needs items 3–7 and 10, which are incomplete or not run.
+- **ui-consent-and-plans:** needs the consent sheet, the plan picker, the credit meter and offline search, none of which were run.
+- **output-routes:** needs every route in docs/OUTPUT_ROUTES_INVENTORY.md (file, clipboard, print), none of which were run. This walk's item 7 alone would not cover it.
 
 ## To re-run
 
-- Keep the screen unlocked, and avoid switching to other apps during the run. Xcode and LawyerFleet took the front twice.
-- Expect host hook stalls. Keep each shell call short and simple; the plain calls (`date`, `screencapture`, `kill`) went through while the longer driving calls timed out.
+- The owner must be at the Mac to answer the host's permission prompts. The stalls match prompts that went unanswered. Only `date` passed without a prompt.
+- The sample ledger now holds one confirmed contradiction ("Contract modified"). Item 3 can reuse it for the relaunch restore check and for item 7 (reviewed results).
